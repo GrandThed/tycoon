@@ -62,8 +62,11 @@ SOURCES = {
     "CrowdService": "src/combat/server/Services/CrowdService.luau",
     "VitalsService": "src/combat/server/Services/VitalsService.luau",
     "LevelGeometry": "src/combat/server/Services/LevelGeometry.luau",
+    "SwingGate": "src/shared/SwingGate.luau",
     "CampBrain": "src/combat/server/Services/CampBrain.luau",
     "StageFlow": "src/combat/server/Services/StageFlow.luau",
+    # L1b Wave 2: the client's pure reading of a spawn info (the lead's routing: tested here).
+    "SpawnSeed": "src/combat/client/Controllers/SpawnSeed.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -77,6 +80,8 @@ TESTS = [
     "tests_l1.luau",
     "tests_l1b_crowd.luau",
     "tests_l1b.luau",
+    "tests_l1b_w2_crowd.luau",
+    "tests_l1b_w2.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -170,10 +175,25 @@ def fixtures(repo: Path) -> dict:
     }
 
 
+# The interpreter's typeof answers "table" for the cases' Vector3 shim; a module that checks
+# `typeof(x) == "Vector3"` (SpawnSeed reads one off the network) must see "Vector3" for it.
+TYPEOF = (
+    "local typeof = function(value: any): string\n"
+    '\tif type(value) == "table" and getmetatable(value) == getmetatable(Vector3.new(0, 0, 0)) then\n'
+    '\t\treturn "Vector3"\n'
+    "\tend\n"
+    "\treturn typeof(value)\n"
+    "end\n"
+)
+
+
 def wrap(name: str, text: str) -> str:
     """A module's source as `SOURCES.<name>`: a function of the globals the cases stub."""
     text = re.sub(r"(?m)^export type", "type", text)
-    return f"SOURCES.{name} = function(game, script, require, Vector3, os, task, warn, RaycastParams, Enum)\n{text}\nend\n"
+    return (
+        f"SOURCES.{name} = function(game, script, require, Vector3, os, task, warn, RaycastParams, Enum)\n"
+        f"{TYPEOF}{text}\nend\n"
+    )
 
 
 def prelude(repo: Path) -> str:

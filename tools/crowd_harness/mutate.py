@@ -2145,7 +2145,11 @@ for label in RETIRED:
     del MUTATIONS[label]
 
 CLEARED = "\tstate.settled = wave\n\tlocal lastWave = wave >= stage.waves"
-CAMP_CLEAR = "if zone.locks or zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then"
+# L1b Wave 2 added the tent clause (L1b-W2-8): the camp's clear is one line per clause.
+CAMP_CLEAR = (
+    "\t\t\tzone.locks\n\t\t\tor zone.residents <= 0\n\t\t\tor state.done[index]\n"
+    "\t\t\tor byFloor[index] ~= 0\n\t\t\tor (tentLeft[index] or 0) ~= 0\n"
+)
 SPLIT = "local paid = math.floor(exact + 1e-9)\n\treturn paid, math.max(exact - paid, 0)"
 KILL = "return math.round(reward.cash * rewardMult), math.round(reward.materials * rewardMult)"
 # From luau-engineer B (the run): StageFlow, Combat, LevelGeometry, tests_l1b.luau.
@@ -2164,17 +2168,17 @@ L1B_RUN_MUTATIONS = {
     "l1b: campClear twice": (
         FLOW,
         CAMP_CLEAR,
-        "if zone.locks or zone.residents <= 0 or byFloor[index] ~= 0 then",
+        CAMP_CLEAR.replace("\t\t\tor state.done[index]\n", ""),
     ),
     "l1b: campClear for a zone with no residents": (
         FLOW,
         CAMP_CLEAR,
-        "if zone.locks or state.done[index] or byFloor[index] ~= 0 then",
+        CAMP_CLEAR.replace("\t\t\tor zone.residents <= 0\n", ""),
     ),
     "l1b: campClear for the locking zone": (
         FLOW,
         CAMP_CLEAR,
-        "if zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then",
+        CAMP_CLEAR.replace("\t\t\tzone.locks\n\t\t\tor ", "\t\t\t"),
     ),
     "l1b: a reach from a downed root": (
         FLOW,
@@ -2228,8 +2232,8 @@ L1B_RUN_MUTATIONS = {
     ),
     "l1b: countMult applied to residents": (
         FLOW,
-        "local groups, residents = groupsOf(level, layout, rank, ranks)",
-        "local groups, residents = groupsOf(level, layout, rank, ranks)\n\tfor _, def in groups do\n\t\tfor _, unit in def.units do\n\t\t\tunit.count = math.round(unit.count * level.difficulties[difficulty].countMult)\n\t\tend\n\tend",
+        "local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks)",
+        "local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks)\n\tfor _, def in groups do\n\t\tfor _, unit in def.units do\n\t\t\tunit.count = math.round(unit.count * level.difficulties[difficulty].countMult)\n\t\tend\n\tend",
     ),
     "l1b: minDifficulty ignored for residents": (
         FLOW,
@@ -2238,8 +2242,8 @@ L1B_RUN_MUTATIONS = {
     ),
     "l1b: the population gate without the reserve": (
         FLOW,
-        "return placed + room + reserve",
-        "return placed + room",
+        "return placed + tents + room + reserve",
+        "return placed + tents + room",
     ),
     "l1b: a locking camp's residents not held": (
         FLOW,
@@ -2258,8 +2262,8 @@ L1B_RUN_MUTATIONS = {
     ),
     "l1b: Validate lets a post hang its widest kind over the edge": (
         FLOW,
-        "not onFloor(camp, post.at.X, post.at.Z, widest)",
-        "not onFloor(camp, post.at.X, post.at.Z, 0)",
+        "for index, post in posts :: { CampBrain.Post } do\n\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest)",
+        "for index, post in posts :: { CampBrain.Post } do\n\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, 0)",
     ),
     "l1b: Validate lets the boss room's residents fill its cap": (
         FLOW,
@@ -2336,11 +2340,9 @@ L1B_RUN_MUTATIONS = {
         'if type(value) == "number" and not (value > 0) then',
         "if false then",
     ),
-    "l1b: Validate takes a negative populationReserve": (
-        FLOW,
-        'if type(reserve) == "number" and not (reserve >= 0) then',
-        "if false then",
-    ),
+    # L1b Wave 2 removed the flat population reserve key: its refusal became the clear bonus share's
+    # (and the reserve itself the boss reserve: "l1b w2: BossReserve reads the smallest summon").
+    "l1b w2: Validate takes a clear bonus share under 0": (FLOW, "or bonus.share < 0", ""),
     "l1b: Validate takes two camps entries for one camp": (FLOW, "elseif entries[id] then", "elseif false then"),
     "l1b: Validate takes a spot id used twice": (FLOW, "elseif seen[id] then", "elseif false then"),
     "l1b: Validate takes a fire of radius 0": (
@@ -2473,6 +2475,135 @@ FIX_A_MUTATIONS = {
     ),
 }
 MUTATIONS.update(FIX_A_MUTATIONS)
+
+# L1b Wave 2, luau-engineer B (docs/INTERFACES.md "Wave 2 — the long road" → "Mutations (B)"):
+# tents in Plan and Validate, the population rule, the clear bonus, the dead fraction, the tent
+# marker. And the ui-engineer's SpawnSeed (two mutations, routed to B by the lead).
+SPAWN_SEED = "src/combat/client/Controllers/SpawnSeed.luau"
+W2_RUN_MUTATIONS = {
+    "l1b w2: campClear with tent stock left": (
+        FLOW,
+        CAMP_CLEAR,
+        CAMP_CLEAR.replace("\t\t\tor (tentLeft[index] or 0) ~= 0\n", ""),
+    ),
+    "l1b w2: the tent stock left out of the population": (
+        FLOW,
+        "return placed + tents + room + reserve",
+        "return placed + room + reserve",
+    ),
+    "l1b w2: BossReserve reads the smallest summon": (
+        FLOW,
+        "calls = math.max(calls, attack.count or 0)",
+        "calls = if calls == 0 then attack.count or 0 else math.min(calls, attack.count or 0)",
+    ),
+    "l1b w2: BossReserve leaves the boss out": (
+        FLOW,
+        "reserve = math.max(reserve, 1 + calls)",
+        "reserve = math.max(reserve, calls)",
+    ),
+    "l1b w2: countMult applied to a tent's stock": (
+        FLOW,
+        "\t\t\tfor _ = 1, unit.count do\n\t\t\t\ttable.insert(kinds, unit.kind)",
+        "\t\t\tfor _ = 1, math.round(unit.count * level.difficulties.hard.countMult) do\n\t\t\t\ttable.insert(kinds, unit.kind)",
+    ),
+    "l1b w2: minDifficulty ignored for a tent": (
+        FLOW,
+        "local units = fieldedUnits(tent.units or {}, rank, ranks)",
+        "local units = fieldedUnits(tent.units or {}, math.huge, ranks)",
+    ),
+    "l1b w2: a tent allowed on a locking camp": (
+        FLOW,
+        "if camp ~= nil and camp.locks == true then",
+        "if false then",
+    ),
+    "l1b w2: Validate takes a clear bonus share above 1": (FLOW, "or bonus.share > 1", ""),
+    "l1b w2: Validate takes a tent stock with no layout block": (
+        FLOW,
+        "elseif camp ~= nil and camp.tent == nil then",
+        "elseif false then",
+    ),
+    "l1b w2: Validate takes a tent on a camp with no residents": (
+        FLOW,
+        "if stock > 0 and (residents[id] or 0) == 0 then",
+        "if false then",
+    ),
+    "l1b w2: Validate takes a tent's every of 0": (
+        FLOW,
+        "if not (isFinite(tent.every) and tent.every > 0) then",
+        "if not isFinite(tent.every) then",
+    ),
+    "l1b w2: Validate takes a tent block of radius 0": (
+        FLOW,
+        "and block.radius > 0",
+        "",
+    ),
+    "l1b w2: Validate lets a ring post hang its widest kind over the edge": (
+        FLOW,
+        "for index, post in tent.posts do\n\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest)",
+        "for index, post in tent.posts do\n\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, 0)",
+    ),
+    "l1b w2: a tent's posts counted by its units, not its bodies": (
+        FLOW,
+        "pcall(CampBrain.Posts, def, #kinds)",
+        "pcall(CampBrain.Posts, def, #units)",
+    ),
+    "l1b w2: a zone's stock without its tent": (
+        FLOW,
+        "stock[kind] = (stock[kind] or 0) + 1",
+        "stock[kind] = stock[kind]",
+    ),
+    "l1b w2: ClearBonus floors": (
+        COMBAT,
+        "return math.round(share * cash), math.round(share * materials)",
+        "return math.floor(share * cash), math.floor(share * materials)",
+    ),
+    "l1b w2: ClearBonus ignores rewardMult": (
+        COMBAT,
+        "local each, eachMaterials = Combat.KillReward(rewards, kind, rewardMult)",
+        "local each, eachMaterials = Combat.KillReward(rewards, kind, 1)",
+    ),
+    "l1b w2: ClearBonus counts the boss (WaveStock)": (
+        COMBAT,
+        "\tif elite ~= nil then\n\t\tstock[elite] = (stock[elite] or 0) + 1\n\tend",
+        "\tif elite ~= nil then\n\t\tstock[elite] = (stock[elite] or 0) + 1\n\tend\n"
+        "\tif spec.boss ~= nil then\n\t\tstock[spec.boss.kind] = (stock[spec.boss.kind] or 0) + 1\n\tend",
+    ),
+    "l1b w2: WaveStock drops the director's elite": (
+        COMBAT,
+        "\t\tstock[elite] = (stock[elite] or 0) + 1\n",
+        "",
+    ),
+    # DeadFraction is handed queuedAlive with the residents already taken out (WaveService, read
+    # by review); its own rules are the guard and the clamps.
+    "l1b w2: DeadFraction goes under 0": (
+        COMBAT,
+        "return math.min(math.max((spawned - math.max(queuedAlive, 0)) / spawned, 0), 1)",
+        "return math.min((spawned - math.max(queuedAlive, 0)) / spawned, 1)",
+    ),
+    "l1b w2: DeadFraction divides by nothing spawned": (
+        COMBAT,
+        "if spawned <= 0 then\n\t\treturn 0\n\tend\n\treturn math.min(math.max(",
+        "if spawned < 0 then\n\t\treturn 0\n\tend\n\treturn math.min(math.max(",
+    ),
+    "l1b w2: the tent marker built colliding": (
+        GEOMETRY,
+        'look = "tent",\n\t\t\t\tcamp = id,\n\t\t\t\tcollide = false,',
+        'look = "tent",\n\t\t\t\tcamp = id,\n\t\t\t\tcollide = true,',
+    ),
+    "l1b w2: no tent marker": (
+        GEOMETRY,
+        "local tent = LevelGeometry.TentBox(camp)\n\t\tif tent ~= nil then",
+        "local tent = LevelGeometry.TentBox(camp)\n\t\tif false and tent ~= nil then",
+    ),
+    "l1b w2 ui: seed of a dead body": (SPAWN_SEED, 'if state == "dead" then', "if false then"),
+    "l1b w2 ui: seed keeps an attack": (
+        SPAWN_SEED,
+        '\telseif state == "rise" then\n\t\tpose = "rise"\n\tend',
+        '\telseif state == "rise" then\n\t\tpose = "rise"\n\telseif typeof(state) == "string" then\n\t\tpose = state :: any\n\tend',
+    ),
+}
+MUTATIONS.update(W2_RUN_MUTATIONS)
+FILES += ["src/shared/SwingGate.luau", SPAWN_SEED]
 
 
 def harness(root: Path) -> tuple:

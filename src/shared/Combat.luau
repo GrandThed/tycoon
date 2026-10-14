@@ -861,6 +861,46 @@ function Combat.KillReward(
 	return math.round(reward.cash * rewardMult), math.round(reward.materials * rewardMult)
 end
 
+-- L1b-W2-21: a camp's clear bonus, `share` of what its whole `stock` (bodies by kind) pays at
+-- the difficulty's price: KillReward per kind, so a kind with no rewards entry adds nothing.
+-- Rounded once, at the end. A share of 0 or an empty stock pays 0, 0.
+function Combat.ClearBonus(
+	stock: { [string]: number },
+	rewards: { [string]: MissionCrowdReward },
+	rewardMult: number,
+	share: number
+): (number, number)
+	local cash = 0
+	local materials = 0
+	for kind, count in stock do
+		local each, eachMaterials = Combat.KillReward(rewards, kind, rewardMult)
+		cash += count * each
+		materials += count * eachMaterials
+	end
+	return math.round(share * cash), math.round(share * materials)
+end
+
+-- L1b-W2-21: what a wave queued, added to a locking camp's `stock` by kind: every group of
+-- `spec`, and the director's extra elite when it took one. Never the boss or its calls.
+function Combat.WaveStock(stock: { [string]: number }, spec: CrowdWaveSpec, elite: string?): ()
+	for _, group in spec.groups do
+		stock[group.kind] = (stock[group.kind] or 0) + group.count
+	end
+	if elite ~= nil then
+		stock[elite] = (stock[elite] or 0) + 1
+	end
+end
+
+-- L1b-W2-26: the merge test's dead fraction counts only the bodies the waves queued:
+-- `queuedAlive` is the floor's living bodies less those that belong to a group (residents, a
+-- tent's). 0 when nothing was spawned; never under 0 or over 1.
+function Combat.DeadFraction(spawned: number, queuedAlive: number): number
+	if spawned <= 0 then
+		return 0
+	end
+	return math.min(math.max((spawned - math.max(queuedAlive, 0)) / spawned, 0), 1)
+end
+
 -- KillReward at the spec's rewardMult (the mission-shaped callers' form).
 function Combat.CampReward(
 	rewards: { [string]: MissionCrowdReward },

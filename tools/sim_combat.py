@@ -124,14 +124,14 @@ CROWD_TARGET_MINUTES_SLACK = 1.5
 # simulator's this many times the mission's targetMinutes (C1 shipped 1200 s against 8 minutes,
 # x2.5), or it cuts off runs that are merely slow.
 CROWD_RUN_CAP_RATIO = 2.0
-# L1 levels (docs/INTERFACES.md "L1 contracts" -> "Balance bands"). L1b Wave 1 ("Balance bands"):
-# what a Normal clear pays is REPORTED, not banded, against L1's measured clear (88,200 cash,
-# 155 Timber, 10 Valor): the residents replace the waves of camps A and B, and the pay bands come
-# back at Wave 2's size. The Valor stays exact (the boss's x rewardMult), and so does rewardMult.
-# How many times Normal a whole clear pays on the harder difficulties is reported too.
-LEVEL_PAY_TARGETS = {"forestRoad": {"cash": 88200, "materials": 155, "valor": 10}}
-LEVEL_PAY_TOLERANCE = 0.10  # reported against, not gated, in L1b Wave 1
-LEVEL_PAY_TIMES = {"hard": (2.0, 3.0), "brutal": (4.0, 6.0)}  # reported, not gated, in L1b Wave 1
+# L1 levels (docs/INTERFACES.md "L1 contracts" -> "Balance bands"). L1b Wave 2 ("Balance bands"):
+# what a Normal clear pays is REPORTED against the layout draft's arithmetic (152,820 cash, 373
+# Timber, 10 Valor); its per-minute band is sim_range's. The Valor stays exact (the boss's x
+# rewardMult). How many times Normal a whole clear pays on the harder difficulties is gated
+# again (L1's bands back), and the camps' clear bonuses are a small share of a Normal clear.
+LEVEL_PAY_TARGETS = {"forestRoad": {"cash": 152820, "materials": 373, "valor": 10}}
+LEVEL_PAY_TIMES = {"hard": (2.0, 3.0), "brutal": (4.0, 6.0)}
+LEVEL_BONUS_SHARE = (0.05, 0.10)  # L1b-W2-21: the bonuses of a Normal clear, as a share of its cash
 # Assertion 22 (L1b-15): Combat.SplitCarry over a seeded fuzz.
 CARRY_FUZZ_SEED = 1407
 CARRY_FUZZ_RUNS = 400
@@ -710,6 +710,34 @@ def kill_reward(rewards, kind, reward_mult):
 def camp_reward(rewards, kind, spec):
     """Combat.CampReward -- KillReward at the spec's rewardMult."""
     return kill_reward(rewards, kind, spec["rewardMult"])
+
+
+def clear_bonus(stock, rewards, reward_mult, share):
+    """Combat.ClearBonus (L1b-W2-21) -- `share` of what a camp's whole stock {kind: bodies} pays:
+    KillReward per kind (an unpriced kind adds nothing), summed, rounded once at the end."""
+    cash = materials = 0
+    for kind, count in stock.items():
+        each, each_materials = kill_reward(rewards, kind, reward_mult)
+        cash += count * each
+        materials += count * each_materials
+    return luau_round(share * cash), luau_round(share * materials)
+
+
+def wave_stock(stock, spec, elite=None):
+    """Combat.WaveStock (L1b-W2-21) -- what a wave queued, added to a locking camp's stock: every
+    group of the spec and the director's extra elite. Never the boss or its calls."""
+    for group in spec["groups"]:
+        stock[group["kind"]] = stock.get(group["kind"], 0) + group["count"]
+    if elite is not None:
+        stock[elite] = stock.get(elite, 0) + 1
+
+
+def dead_fraction(spawned, queued_alive):
+    """Combat.DeadFraction (L1b-W2-26) -- the merge test's share of the waves' bodies dead:
+    `queued_alive` leaves out every body of a group (residents, a tent's)."""
+    if spawned <= 0:
+        return 0
+    return min(max((spawned - max(queued_alive, 0)) / spawned, 0), 1)
 
 
 def split_carry(pool, shares, carry, cash_mults=None):
@@ -2528,33 +2556,46 @@ def level_gates(file, level, layout, expeditions, proving, combat_cfg):
 
 def level_pay(level, difficulty, ranks, combat_cfg, summon_kills):
     """What a whole solo clear of a level pays at a difficulty (Combat.KillReward per kill, L1b-15):
-    every resident of every camp (by minDifficulty, never countMult: L1b-10), every configured
-    body of the boss room's waves, every boss with its Valor, crowd.clearBonus per clear, and
-    `summon_kills` {boss kind: {kind: kills}} of what the bosses call. Returns (totals, per-camp and per-stage rows, kills by kind)."""
+    every resident of every camp and every body of its tent's stock (by minDifficulty, never
+    countMult: L1b-10, L1b-W2-6), every configured body of the boss room's waves, every boss with
+    its Valor, each camp's clear bonus (L1b-W2-21: Combat.ClearBonus over its whole stock), and
+    `summon_kills` {boss kind: {kind: kills}} of what the bosses call. Returns (totals, per-camp
+    and per-stage rows, kills by kind, each camp's bonus {camp id: (cash, materials)})."""
     import sim_range as sr
 
     scales = level["difficulties"][difficulty]
+    rewards = level["crowd"]["rewards"]
     totals = {"cash": 0, "materials": 0, "valor": 0}
     rows = []
     kills = {}
+    stocks = {}  # each camp's whole stock by kind, the clear bonus's base
+    locking = {stage.get("zone") for stage in level["stages"] if stage["kind"] == "camp"}
     for config in level.get("camps") or []:
         cash = materials = bodies = 0
-        for group in config.get("residents") or []:
-            for unit in sr.fielded_units(group.get("units") or [], ranks[difficulty], ranks)[0]:
-                c, m = kill_reward(level["crowd"]["rewards"], unit["kind"], scales["rewardMult"])
-                cash += c * unit["count"]
-                materials += m * unit["count"]
-                bodies += unit["count"]
-                kills[unit["kind"]] = kills.get(unit["kind"], 0) + unit["count"]
-        rows.append((f"{config['name']} (residents)", bodies, cash, materials, 0))
+        stock = stocks.setdefault(config["id"], {})
+        units = [u for group in config.get("residents") or []
+                 for u in sr.fielded_units(group.get("units") or [], ranks[difficulty], ranks)[0]]
+        tent = config.get("tent")
+        if tent is not None and config["id"] not in locking:
+            units += sr.fielded_units(tent.get("units") or [], ranks[difficulty], ranks)[0]
+        for unit in units:
+            c, m = kill_reward(rewards, unit["kind"], scales["rewardMult"])
+            cash += c * unit["count"]
+            materials += m * unit["count"]
+            bodies += unit["count"]
+            kills[unit["kind"]] = kills.get(unit["kind"], 0) + unit["count"]
+            stock[unit["kind"]] = stock.get(unit["kind"], 0) + unit["count"]
+        rows.append((f"{config['name']} (residents{', tent' if tent is not None else ''})", bodies, cash, materials, 0))
         totals["cash"] += cash
         totals["materials"] += materials
     for stage in level["stages"]:
         if stage["kind"] != "camp":
             continue
         cash = materials = valor = bodies = 0
+        stock = stocks.setdefault(stage.get("zone"), {})
         for wave in stage.get("waves") or []:
             spec = camp_wave(wave, level["crowd"]["regenShare"], scales, ranks[difficulty], ranks, 1, combat_cfg)
+            wave_stock(stock, spec)
             fielded = [(group["kind"], group["count"]) for group in spec["groups"]]
             boss = spec["boss"]
             if boss is not None:
@@ -2571,26 +2612,23 @@ def level_pay(level, difficulty, ranks, combat_cfg, summon_kills):
         totals["cash"] += cash
         totals["materials"] += materials
         totals["valor"] += valor
-    # crowd.clearBonus x rewardMult, once per clear (L1b-17, WaveService.campCleared): every open
-    # camp that holds a resident at this difficulty (its `campClear`) and every locking camp (its
-    # `open`; a Studio skip pays nothing and never happens in a clear).
-    bonus = level["crowd"].get("clearBonus") or {}
-    locking = {stage.get("zone") for stage in level["stages"] if stage["kind"] == "camp"}
-    clears = sum(1 for stage in level["stages"] if stage["kind"] == "camp")
-    for config in level.get("camps") or []:
-        if config["id"] in locking:
+    # The clear bonus (L1b-W2-21), once per camp that clears: every open camp that holds a
+    # resident at this difficulty (its `campClear`) and every locking camp (its `open`; a Studio
+    # skip pays nothing and never happens in a clear).
+    bonus = level["crowd"].get("clearBonus")
+    share = bonus.get("share") if isinstance(bonus, dict) else None
+    paid = {}
+    for camp_id, stock in stocks.items():
+        if not share or not stock:
             continue
-        fielded = [unit for group in config.get("residents") or []
-                   for unit in sr.fielded_units(group.get("units") or [], ranks[difficulty], ranks)[0]]
-        if sum(unit["count"] for unit in fielded) > 0:
-            clears += 1
-    c, m = kill_reward({"clear": {"cash": bonus.get("cash") or 0, "materials": bonus.get("materials") or 0}}, "clear",
-                       scales["rewardMult"])
-    if clears and (c or m):
-        rows.append((f"clear bonus x {clears}", 0, c * clears, m * clears, 0))
-        totals["cash"] += c * clears
-        totals["materials"] += m * clears
-    return totals, rows, kills
+        c, m = clear_bonus(stock, rewards, scales["rewardMult"], share)
+        paid[camp_id] = (c, m)
+        totals["cash"] += c
+        totals["materials"] += m
+    if paid:
+        rows.append(("clear bonus (" + ", ".join(f"{k} {c:,}/{m}" for k, (c, m) in paid.items()) + ")", 0,
+                     sum(c for c, _m in paid.values()), sum(m for _c, m in paid.values()), 0))
+    return totals, rows, kills, paid
 
 
 def forest_summons(proving, report):
@@ -2622,7 +2660,7 @@ def print_level(level_id, combat_cfg):
           f"{level['runCapSeconds']} s, burst {level['crowd']['burst']}")
     normal = None
     for difficulty, row in report["difficulties"].items():
-        pay, rows, kills = level_pay(level, difficulty, ctx["ranks"], combat_cfg, summons[difficulty])
+        pay, rows, kills, _bonus = level_pay(level, difficulty, ctx["ranks"], combat_cfg, summons[difficulty])
         normal = normal or pay
         clears = ", ".join(f"{r['end']} {se.fmt_time(r['at'])}" for r in row["runs"])
         print(f"  {names.get(difficulty, difficulty)} (recommended tier {row['scales']['recommendedTier']}, measured at "
@@ -3361,13 +3399,21 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
             continue
         level = report["level"]
         summons = forest_summons(proving_cfg, report)
-        pays = {d: level_pay(level, d, ranks, combat_cfg, summons[d])[0] for d in report["difficulties"]}
+        full = {d: level_pay(level, d, ranks, combat_cfg, summons[d]) for d in report["difficulties"]}
+        pays = {d: entry[0] for d, entry in full.items()}
         normal = pays["normal"]
         good = normal["valor"] == target["valor"]
         parts = [f"{level_id} Normal {normal['cash']:,.0f} cash ({100 * (normal['cash'] / target['cash'] - 1):+.1f}% of "
-                 f"L1's {target['cash']:,}, reported), {normal['materials']:.0f} {level['material']} "
-                 f"({100 * (normal['materials'] / target['materials'] - 1):+.1f}% of L1's {target['materials']}, reported), "
-                 f"{normal['valor']} Valor (needs {target['valor']})"]
+                 f"the draft's {target['cash']:,}, reported), {normal['materials']:.0f} {level['material']} "
+                 f"({100 * (normal['materials'] / target['materials'] - 1):+.1f}% of the draft's {target['materials']}, "
+                 f"reported), {normal['valor']} Valor (needs {target['valor']})"]
+        # The clear bonus is a small part of a Normal clear (L1b-W2-21's band).
+        bonus_cash = sum(c for c, _m in full["normal"][3].values())
+        lo_b, hi_b = LEVEL_BONUS_SHARE
+        bonus_share = bonus_cash / normal["cash"] if normal["cash"] else 0
+        good = good and lo_b <= bonus_share <= hi_b
+        parts.append(f"the camp bonuses pay {bonus_cash:,} cash = {bonus_share:.1%} of a Normal clear "
+                     f"({lo_b:.0%}-{hi_b:.0%})")
         for difficulty, (lo, hi) in LEVEL_PAY_TIMES.items():
             pay = pays.get(difficulty)
             if pay is None:
@@ -3377,9 +3423,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
             cash_times = pay["cash"] / normal["cash"]
             mat_times = pay["materials"] / normal["materials"]
             valor = normal["valor"] * LEVEL_REWARD_MULT[difficulty]
-            good = good and pay["valor"] == valor
+            good = good and pay["valor"] == valor and lo <= cash_times <= hi and lo <= mat_times <= hi
             parts.append(f"{difficulty} {pay['cash']:,.0f} cash (x{cash_times:.2f}), {pay['materials']:.0f} "
-                         f"{level['material']} (x{mat_times:.2f}; L1's band x{lo:g}-x{hi:g}, reported), {pay['valor']} "
+                         f"{level['material']} (x{mat_times:.2f}; band x{lo:g}-x{hi:g}), {pay['valor']} "
                          f"Valor (needs {valor})")
         runs = report["difficulties"]["normal"]["runs"]
         clears = [r["at"] for r in runs if r["end"] == "cleared"]
@@ -3401,11 +3447,15 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
                     continue
                 cleared += 1
                 extra = r["killed"].get(called, 0) - written.get(called, 0) if called else 0
-                owed, _rows, kills = level_pay(level, difficulty, ranks, combat_cfg, {boss_kind: {called: extra}})
+                owed, _rows, kills, bonuses = level_pay(level, difficulty, ranks, combat_cfg,
+                                                        {boss_kind: {called: extra}})
                 if r["wallet"] != owed or r["killed"] != kills:
                     unpaid.append(f"{difficulty}: paid {r['wallet']['cash']:,}/{r['wallet']['materials']}/"
                                   f"{r['wallet']['valor']}, the file pays {owed['cash']:,}/{owed['materials']}/"
                                   f"{owed['valor']} for its kills")
+                # Each camp's bonus as the run paid it equals Combat.ClearBonus on its stock by hand.
+                if {k: tuple(v) for k, v in r["bonuses"].items() if tuple(v) != (0, 0)} != bonuses:
+                    unpaid.append(f"{difficulty}: the run's bonuses {r['bonuses']} are not ClearBonus by hand {bonuses}")
         good = good and cleared > 0 and not unpaid
         parts.append(f"{cleared} cleared runs each paid exactly what the file pays for its kills" if not unpaid
                      else "paid is not what the file pays: " + "; ".join(unpaid[:3]))
@@ -3486,42 +3536,58 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
                    f"exact shares, never a unit under, every carry in [0, 1); solo exact, 0.9/0.1 pays 9 and 1, x1.5, an "
                    f"absent member's carry kept, a bad share pays nothing")
 
-    # 23. L1b-11: the population of every difficulty of every level with residents, worked by hand
-    #     from the files (residents by minDifficulty, never countMult; the most room a boss room's
-    #     maxAlive leaves over its own residents; levels.populationReserve), equals StageFlow.Plan's
-    #     (sim_range.plan_level, held to the Luau by tools/check_stage_mirror.py) and is at most
-    #     ProvingGrounds.json crowd.maxAlive.
+    # 23. L1b-W2-5: the population of every difficulty of every level with residents, worked by
+    #     hand from the files (residents and every tent's stock by minDifficulty, never countMult;
+    #     the most room a boss room's maxAlive leaves over its own residents; the boss reserve,
+    #     1 + the largest summon count of a camp stage's boss kind in ProvingGrounds.json), equals
+    #     StageFlow.Plan's (sim_range.plan_level, held to the Luau by tools/check_stage_mirror.py)
+    #     and is at most ProvingGrounds.json crowd.maxAlive.
     problems = []
     notes = []
+    proving_kinds = sr.load_config(sr.CONFIG_PATH)["crowd"]["kinds"]
     crowd_max = sr.load_config(sr.CONFIG_PATH)["crowd"]["maxAlive"]
-    reserve = combat_cfg["levels"]["populationReserve"]
     for level_id, (file, level, layout) in levels.items():
         if level is None or layout is None or not level.get("camps"):
             continue
+        locking = {stage.get("zone") for stage in level["stages"] if stage["kind"] == "camp"}
+        open_tents = {camp["id"] for camp in layout["camps"] if camp.get("tent") and camp["id"] not in locking}
+        reserve = 0
+        for stage in level["stages"]:
+            for wave in stage.get("waves") or [] if stage["kind"] == "camp" else []:
+                if wave.get("boss"):
+                    kind = proving_kinds.get(wave["boss"]["kind"]) or {}
+                    calls = max([0] + [a["count"] for a in kind.get("attacks") or [] if a["shape"] == "summon"])
+                    reserve = max(reserve, 1 + calls)
         row = []
         for difficulty in level["difficulties"]:
             rank = ranks[difficulty]
             by_camp = {}
+            tents = 0
             for config in level["camps"]:
-                for group in config["residents"]:
-                    for unit in group["units"]:
-                        needs = unit.get("minDifficulty")
-                        if needs is None or ranks[needs] <= rank:
-                            by_camp[config["id"]] = by_camp.get(config["id"], 0) + unit["count"]
+                units = [u for group in config["residents"] for u in group["units"]]
+                stock = (config.get("tent") or {}).get("units") or [] if config["id"] in open_tents else []
+                for unit in units:
+                    needs = unit.get("minDifficulty")
+                    if needs is None or ranks[needs] <= rank:
+                        by_camp[config["id"]] = by_camp.get(config["id"], 0) + unit["count"]
+                for unit in stock:
+                    needs = unit.get("minDifficulty")
+                    if needs is None or ranks[needs] <= rank:
+                        tents += unit["count"]
             room = 0
             for stage in level["stages"]:
                 if stage["kind"] == "camp":
                     cap = stage["maxAlive"] if stage.get("maxAlive") is not None else level["crowd"]["maxAlive"]
                     room = max(room, cap - by_camp.get(stage["zone"], 0))
-            by_hand = sum(by_camp.values()) + room + reserve
-            plan = sr.plan_level(level, layout, difficulty, combat_cfg["levels"], ranks)
+            by_hand = sum(by_camp.values()) + tents + room + reserve
+            plan = sr.plan_level(level, layout, difficulty, combat_cfg["levels"], ranks, proving_kinds)
             if plan is None or plan["population"] != by_hand:
                 problems.append(f"{level_id} {difficulty}: by hand {by_hand}, Plan "
                                 f"{plan['population'] if plan else 'refused'}")
             if by_hand > crowd_max:
                 problems.append(f"{level_id} {difficulty}: {by_hand} is over crowd.maxAlive {crowd_max}")
             row.append(f"{difficulty} {by_hand} (" + ", ".join(f"{k} {v}" for k, v in by_camp.items())
-                       + f"; room {room}; reserve {reserve})")
+                       + f"; tents {tents}; room {room}; boss reserve {reserve})")
         notes.append(f"{level_id}: " + "; ".join(row))
     checks.verdict(not problems and bool(notes), "23 population      ",
                    "; ".join(problems[:4]) if problems else " | ".join(notes) + f" (crowd.maxAlive {crowd_max})")

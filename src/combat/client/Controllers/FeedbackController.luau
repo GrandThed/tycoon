@@ -1707,6 +1707,8 @@ end
 -- (the plate's colour), "blocked" = the plate turned them (a small grey word, never a 0),
 -- "broke" = the plate shattered (its own line). nil = an ordinary hit. Stop 3: "guarded" = the
 -- plate turned them because its body's guard lives (its own word, in the guard's colour).
+-- L1b-W2-19: a crit that came off a plate is still a crit, in the crit colour (its size is the
+-- crit's already); a plate hit without one keeps the plate's colour.
 local function paintBurst(
 	burst: Burst,
 	total: number,
@@ -1723,6 +1725,7 @@ local function paintBurst(
 	local color = if tone == "blocked"
 		then Theme.COMBAT_RANGE_BLOCKED_COLOR
 		elseif tone == "guarded" then Theme.COMBAT_RANGE_WARD_COLOR
+		elseif tone == "plate" and crit then Theme.COMBAT_RANGE_CRIT_COLOR
 		elseif tone ~= nil then Theme.COMBAT_RANGE_PLATE_COLOR
 		elseif crit then Theme.COMBAT_RANGE_CRIT_COLOR
 		else Theme.COLOR_TEXT
@@ -2896,6 +2899,10 @@ local function onStrike(strike: Strike): ()
 	local landed = strike
 	local onPlate: Strike? = nil
 	local flesh = strike
+	-- L1b-W2-19: each number is a crit by its own hits, so a crit on one body cannot turn the
+	-- plate's number (or the flesh's) yellow. Without a plate both are the strike's.
+	local plateCrit = false
+	local fleshCrit = crit
 	if blockedCount > 0 or plateTotal > 0 then
 		local blockedHits: { Types.StrikeHit } = {}
 		local guardedHits: { Types.StrikeHit } = {}
@@ -2912,7 +2919,14 @@ local function onStrike(strike: Strike): ()
 			else
 				table.insert(landedHits, hit)
 				table.insert(if hit.plate then plateHits else fleshHits, hit)
+				if hit.plate then
+					plateCrit = plateCrit or hit.crit
+				end
 			end
+		end
+		fleshCrit = false
+		for _, hit in fleshHits do
+			fleshCrit = fleshCrit or hit.crit
 		end
 		landed = table.clone(strike)
 		landed.hits = landedHits
@@ -3009,9 +3023,9 @@ local function onStrike(strike: Strike): ()
 		-- The plate's share is its own number over the plated bodies, in the plate's colour;
 		-- what is left is the ordinary one (neither shows when it has nothing to say).
 		if onPlate ~= nil then
-			showNumbers(onPlate, plateTotal, crit, numbers, "plate", plateRow)
+			showNumbers(onPlate, plateTotal, plateCrit, numbers, "plate", plateRow)
 		end
-		showNumbers(flesh, total - plateTotal, crit, numbers)
+		showNumbers(flesh, total - plateTotal, fleshCrit, numbers)
 		local hitstopSeconds = math.min(
 			Theme.COMBAT_RANGE_HITSTOP_BASE + Theme.COMBAT_RANGE_HITSTOP_PER_HIT * (landedCount - 1),
 			Theme.COMBAT_RANGE_HITSTOP_MAX,

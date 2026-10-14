@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 """Level layout and map gates for Era City Tycoon's Expeditions (L1, "Forest Road in grey"; L1b
 Wave 1, "the camp is alive": only a camp that locks has gates and a wall, residents, checkpoints
-off the open camps' floors and out of every resting member's sight).
+off the open camps' floors and out of every resting member's sight; L1b Wave 2, "the long road":
+the winding road's sizes, tents and their rings, the sneak path, post spacing, the population
+rule with tents and the boss reserve, dormancy and the join-in's chain table).
 
 A level is built in Studio from `src/shared/Layouts/Levels/<Name>.json`, and nobody sees it there
 before the owner does. This tool proves the layout on paper instead: it walks the level's `route`
@@ -65,20 +67,20 @@ CONFIG_DIR = REPO_ROOT / "src" / "shared" / "Config"
 # What a named layout must be. A layout with no entry here is held to the general gates only.
 EXPECTED = {
     "ForestRoad": {
-        "camps": {"A": (60, 60), "B": (100, 94), "C": (81, 81)},
+        # L1b Wave 2 (INTERFACES "Wave 2 — the long road", the gates table): the winding road.
+        "camps": {"A": (85, 85), "B": (141, 133), "C": (115, 115)},
         "campTolerance": 0.10,
-        "routeStuds": (500, 600),
+        "routeStuds": (900, 1100),
         "secrets": {"lookout": "doubleJump", "cache": "fire", "shrine": "ice"},
         "climbs": 1,
         "gaps": 1,
         "creek": True,
-        # L1b Wave 1: the camps that lock, residents per camp at the highest difficulty (C: at
-        # least 4 and under its stage's maxAlive), and L1's Part count, which an open camp lowers
-        # by its two gates and four barrier boxes and each fire marker raises by one.
+        # The camps that lock, residents per camp at the highest difficulty (C: at least 4 and
+        # under its stage's maxAlive), and a sneak path past the open camps (L1b-W2-3).
         "locks": ["C"],
-        "residents": {"A": (12, 18), "B": (30, 40)},
+        "residents": {"A": (30, 36), "B": (40, 50)},
         "lockedResidentsMin": 4,
-        "partsL1": 73,
+        "sneak": True,
     },
 }
 # What a sign must say for each key, so a player knows what to bring.
@@ -116,8 +118,8 @@ DENSITY_AREA = 200.0  # a camp's maxAlive is at most its floor area over this (t
 BAND_SHARE = 0.45  # a keepAway kind's bandMin is at most this share of the camp's shorter side
 RUN_CAP_RATIO = 2.0
 REQUIRED_LOOKS = ("ground", "path", "campFloor", "wall", "gate", "checkpoint", "checkpointDone", "secret",
-                  "sign", "water", "lobby", "fire")
-COLOUR_LOOKS = ("gate", "checkpoint", "checkpointDone", "secret", "fire")  # each must read at a glance
+                  "sign", "water", "lobby", "fire", "tent")
+COLOUR_LOOKS = ("gate", "checkpoint", "checkpointDone", "secret", "fire", "tent")  # each must read at a glance
 GREY_SPREAD = 40  # a grey's channels lie within this of each other; a colour's do not
 # The engine's Enum.Material names. LevelService leaves a Part of an unknown look or material as
 # the engine makes it, with one warn, so a look must name one of these, and a layout may name
@@ -129,17 +131,21 @@ ENGINE_MATERIALS = frozenset((
     "Ground", "Asphalt", "Salt", "Ice", "Glacier", "Glass", "ForceField", "Cardboard", "Carpet", "CeramicTiles",
     "ClayRoofTiles", "RoofShingles", "Leather", "Plaster", "Rubber"))
 # The `levels` numbers of L1b, held by their own gate in check_rules.
-L1B_RULES = ("checkpointReach", "populationReserve", "walletSendSeconds")
+L1B_RULES = ("checkpointReach", "walletSendSeconds")
 # The `levels` numbers this tool itself reads to measure a layout.
 READ_RULES = ("fenceThickness", "floorThickness", "triggerHeight", "crowdCeiling", "startSpacing", "maxParts")
-GEAR_PRESETS = ((2, 1), (4, 4), (6, 6))  # fix round, ruling 8: the Studio gear presets (melee, ranged)
+GEAR_PRESETS = ((2, 2), (4, 4), (6, 6))  # L1b-W2-20: the Studio gear presets (melee, ranged)
 # L1b Wave 1 (docs/INTERFACES.md "L1b contracts" -> "Config", the gates table).
 POST_SPARE = 1.0  # a post stands its group's widest radius and this much inside its floor and off cover
 FIRE_SPARE = 0.5  # neighbours round a fire stand two widest radii and this much apart
 CHECKPOINT_RISE = 1.0  # an open camp's checkpoint stands on ground within this of its floor's height
 WALLET_SEND_SECONDS = 1.0  # L1b-16, fixed
-POPULATION_RESERVE_MIN = 21  # L1b-11: the boss, 12 summons, 8 for Wave 2's tents
 PATROL_SAMPLE = 1.0  # studs between two samples of a patrol's loop
+# L1b Wave 2.
+SPACING_SPARE = 0.5  # L1b-W2-4: two posts of a camp stand r_a + r_b + this apart
+SNEAK_STEP = 2.0  # L1b-W2-3: the sneak path is sampled this often
+CONE_SAMPLE = 0.5  # studs between two samples of the sneak path for the cone-aware margins
+JOIN_FACTOR_FIXED = 2  # L1b-W2-12 / Ben's "at least double": Combat.json camps.joinFactor
 BODY_HEIGHT = 6.0  # a character, feet to head: what stands this far under a barrier's foot is in it
 CLOSE_SPARE = 1.0  # a camp's entry point lies this far inside the close rule's inset rectangle
 SAMPLE = 0.25  # studs between two samples of a walked leg
@@ -277,10 +283,10 @@ def fire_spots(camp):
 def part_count(layout, fire_marker=None):
     """The Parts LevelService.Build makes (LevelGeometry.Pieces): one per block; per camp the
     floor, the fence cut at its gates (four sides, one more piece per gate), the obstacles, the
-    checkpoint marker and one marker per fire spot (only when Combat.json levels.fireMarkerSize
-    is given); only a camp that locks (L1b-12) also has its gates and the four barrier boxes; per
-    secret the marked block and its sign. `fire_marker` = levels.fireMarkerSize (default: read
-    from Combat.json)."""
+    checkpoint marker, one marker per fire spot (only when Combat.json levels.fireMarkerSize
+    is given) and one tent marker per layout `tent` block (L1b-W2-9); only a camp that locks
+    (L1b-12) also has its gates and the four barrier boxes; per secret the marked block and its
+    sign. `fire_marker` = levels.fireMarkerSize (default: read from Combat.json)."""
     if fire_marker is None:
         fire_marker = sr.load_config(sr.COMBAT_PATH)["levels"].get("fireMarkerSize") or False
     parts = len(layout["blocks"])
@@ -291,6 +297,7 @@ def part_count(layout, fire_marker=None):
         parts += 1 + (4 + gates if camp.get("fence") else 0) + (gates if locks else 0) + obstacles
         parts += (1 if camp.get("checkpoint") else 0) + (4 if layout.get("barrier") and locks else 0)
         parts += len(fire_spots(camp)) if fire_marker else 0
+        parts += 1 if camp.get("tent") else 0
     return parts + 2 * len(layout["secrets"])
 
 
@@ -771,13 +778,10 @@ def check_layout(name, layout, ctx, expect):
 
     check_kill_height(tag, layout, solids, levels, expect)
     parts = part_count(layout, levels.get("fireMarkerSize") or False)
-    expect(parts <= levels["maxParts"], f"{tag} {parts} Parts (levels.maxParts {levels['maxParts']})")
-    if "partsL1" in spec:
-        opened = sum(1 for c in layout["camps"] if c.get("locks") is not True)
-        fires = sum(len(fire_spots(c)) for c in layout["camps"]) if levels.get("fireMarkerSize") else 0
-        wanted = spec["partsL1"] - 6 * opened + fires
-        expect(parts == wanted, f"{tag} {parts} Parts = L1's {spec['partsL1']} less 6 for each of {opened} open camps "
-               f"(two gates, four barrier boxes) plus {fires} fire markers ({wanted})")
+    tents = sum(1 for c in layout["camps"] if c.get("tent"))
+    expect(parts <= levels["maxParts"], f"{tag} {parts} Parts, {tents} of them tent markers (levels.maxParts "
+           f"{levels['maxParts']}; tools/crowd_harness holds the count to LevelGeometry.Pieces')")
+    facts["parts"] = parts
     return facts
 
 
@@ -1161,7 +1165,7 @@ def check_residents(name, level, layout, ctx, expect):
         seen = []
         closest = (math.inf, None)
         for difficulty in difficulties:
-            defs, _res = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
+            defs, _tents = all_defs(level, layout, ranks.get(difficulty, 0), ranks)  # tents included
             for defn in defs:
                 sight = sr.cb_posture(defn, rules)["sight"]
                 for member in resting_eyes(defn):
@@ -1191,7 +1195,7 @@ def check_residents(name, level, layout, ctx, expect):
             continue
         hits, nearest = [], None
         for difficulty in difficulties:
-            defs, _res = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
+            defs, _tents = all_defs(level, layout, ranks.get(difficulty, 0), ranks)  # tents included
             for defn in defs:
                 count = sum(u["count"] for u in defn["units"])
                 posts = sr.cb_posts(defn, count)
@@ -1226,7 +1230,7 @@ def check_residents(name, level, layout, ctx, expect):
     locking = {c["id"] for c in camps if c.get("locks") is True}
     reach = []
     for difficulty in difficulties:
-        defs, _res = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
+        defs, _tents = all_defs(level, layout, ranks.get(difficulty, 0), ranks)  # tents included
         rushers = sorted({u["kind"] for d in defs if d["camp"] not in locking for u in d["units"]
                           if u["kind"] in kinds and kinds[u["kind"]].get("brain") != "keepAway"})
         for kind in rushers:
@@ -1250,7 +1254,7 @@ def check_residents(name, level, layout, ctx, expect):
             continue
         cx0, cx1, cz0, cz1 = camp_rect(camp)
         names = sorted({u["kind"] for difficulty in difficulties
-                        for d in sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)[0]
+                        for d in all_defs(level, layout, ranks.get(difficulty, 0), ranks)[0]
                         if d["camp"] == camp["id"] for u in d["units"]
                         if u["kind"] in kinds and kinds[u["kind"]].get("brain") != "keepAway"})
         low = ground_reach(names, kinds)
@@ -1291,17 +1295,294 @@ def check_residents(name, level, layout, ctx, expect):
                f"{name} camp {camp['id']} (open): every standable top on its floor is at most {highest:g} studs up: "
                f"{len(tops)} obstacles, the tallest {max(tops, default=0):g}")
 
-    # L1b-11 at every difficulty, as StageFlow.Validate reads it.
-    reserve = ctx["levels"].get("populationReserve") or 0
+    # L1b-W2-5 at every difficulty, as StageFlow.Validate reads it.
+    reserve = sr.boss_reserve(level, kinds)
     rows = []
-    over = False
+    over = []
     for difficulty in difficulties:
         _defs, res = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
-        population = sr.population_of(res, caps, reserve)
-        over = over or population > ctx["crowdMaxAlive"]
-        rows.append(f"{difficulty} {population} (" + ", ".join(f"{c['id']} {res.get(c['id'], 0)}" for c in camps) + ")")
-    expect(not over, f"{name}: the population (every resident, the boss room's cap over its residents, the reserve "
-           f"{reserve:g}) is at most crowd.maxAlive {ctx['crowdMaxAlive']} at every difficulty: " + "; ".join(rows))
+        _tents, stocks = sr.tents_of(level, layout, ranks.get(difficulty, 0), ranks)
+        population = sr.population_of(res, sum(stocks.values()), caps, reserve)
+        room = max([0] + [cap - res.get(cid, 0) for cid, cap in caps.items()])
+        if population > ctx["crowdMaxAlive"]:
+            over.append(f"{difficulty}: {population} > {ctx['crowdMaxAlive']}")
+        rows.append(f"{difficulty} {population} = residents {sum(res.values())} ("
+                    + ", ".join(f"{c['id']} {res.get(c['id'], 0)}" for c in camps) + f") + tents {sum(stocks.values())} ("
+                    + ", ".join(f"{k} {v}" for k, v in stocks.items()) + f") + room {room} + boss reserve {reserve}")
+    ctx["gate16"].setdefault(level["layout"], {})["population"] = rows
+    expect(not over, f"{name}: the population (every resident, every tent's stock, the boss room's cap over its "
+           f"residents, the boss reserve {reserve} = 1 + its largest summon) is at most crowd.maxAlive "
+           f"{ctx['crowdMaxAlive']} at every difficulty (L1b-W2-5): " + "; ".join(over or rows))
+    check_wave2(name, level, layout, ctx, expect, caps, solids)
+
+
+def member_kinds(defn):
+    """The kind of each member of a group, in post order (units expanded in the file's order)."""
+    return [unit["kind"] for unit in defn["units"] for _ in range(unit["count"])]
+
+
+def all_defs(level, layout, rank, ranks):
+    """Every group a run places at `rank`, in AddGroup order: the residents', then the tents'
+    (a tent's def carries its whole stock as its units: every body it will send)."""
+    defs, _res = sr.groups_of(level, layout, rank, ranks)
+    tents, _stocks = sr.tents_of(level, layout, rank, ranks)
+    return defs + [tent["def"] for tent in tents], tents
+
+
+def segment_gap(px, pz, a, b):
+    """The flat distance from (px, pz) to the segment a-b (points (x, z))."""
+    dx, dz = b[0] - a[0], b[1] - a[1]
+    run = dx * dx + dz * dz
+    f = 0.0 if run <= EPS else max(0.0, min(1.0, ((px - a[0]) * dx + (pz - a[1]) * dz) / run))
+    return math.hypot(px - (a[0] + dx * f), pz - (a[1] + dz * f))
+
+
+def polyline_samples(points, step):
+    """(x, z) every `step` studs along a polyline of (x, z) points, every vertex included."""
+    found = [points[0]]
+    for a, b in zip(points, points[1:]):
+        run = math.hypot(b[0] - a[0], b[1] - a[1])
+        cuts = max(int(math.ceil(run / step)), 1)
+        found += [(a[0] + (b[0] - a[0]) * k / cuts, a[1] + (b[1] - a[1]) * k / cuts) for k in range(1, cuts + 1)]
+    return found
+
+
+def check_wave2(name, level, layout, ctx, expect, caps, solids):
+    """The L1b Wave 2 gates on a level's camps (INTERFACES "Wave 2 — the long road", the gates
+    table): tents and their rings, post spacing (L1b-W2-4), the sneak path (L1b-W2-3) and the
+    join-in's chain table (L1b-W2-12), at every difficulty."""
+    kinds, ranks, rules = ctx["kinds"], ctx["ranks"], ctx["camps"]
+    spec = EXPECTED.get(level["layout"]) or {}
+    difficulties = list(level["difficulties"])
+    camps = {c["id"]: c for c in layout["camps"]}
+    locking = {c["id"] for c in layout["camps"] if c.get("locks") is True}
+    configs = {c["id"]: c for c in level.get("camps") or []}
+    facts = ctx["gate16"].setdefault(level["layout"], {})
+
+    def radius(kind):
+        return kinds[kind]["radius"] if kind in kinds else ctx["widest"]
+
+    # Tents: a stock only on an open camp with residents and a layout tent block; the block's
+    # centre on its floor; `every` above 0; the ring on the floor less the widest radius + 1, off
+    # every obstacle by as much, and clear of its own marker.
+    bad = []
+    told = []
+    for cid, config in configs.items():
+        tent = config.get("tent")
+        camp = camps.get(cid)
+        if tent is None or camp is None:
+            continue
+        block = camp.get("tent")
+        if cid in locking:
+            bad.append(f"camp {cid} locks and has a tent stock")
+        if block is None:
+            bad.append(f"camp {cid} has a tent stock and no layout tent block")
+        if not (sr.is_num(tent.get("every")) and tent["every"] > 0):
+            bad.append(f"camp {cid}: every {tent.get('every')}")
+    for camp in layout["camps"]:
+        block = camp.get("tent")
+        if block is None:
+            continue
+        x0, x1, z0, z1 = camp_rect(camp)
+        if not (x0 <= block["x"] <= x1 and z0 <= block["z"] <= z1):
+            bad.append(f"camp {camp['id']}: its tent's centre ({block['x']:g}, {block['z']:g}) is off its floor")
+        if not (sr.is_num(block.get("radius")) and block["radius"] > 0):
+            bad.append(f"camp {camp['id']}: its tent's radius {block.get('radius')}")
+    for difficulty in difficulties:
+        _defs, tents = all_defs(level, layout, ranks.get(difficulty, 0), ranks)
+        _d, residents = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
+        for tent in tents:
+            defn = tent["def"]
+            camp = camps[defn["camp"]]
+            if residents.get(defn["camp"], 0) <= 0:
+                bad.append(f"{difficulty} {defn['id']}: a stock on a camp with no residents")
+            x0, x1, z0, z1 = camp_rect(camp)
+            block = camp["tent"]
+            mark = (block["x"] - block["sx"] / 2, block["x"] + block["sx"] / 2,
+                    block["z"] - block["sz"] / 2, block["z"] + block["sz"] / 2)
+            widest = max(radius(k) for k in tent["kinds"])
+            spare = widest + POST_SPARE
+            for k, (post, kind) in enumerate(zip(tent["posts"], tent["kinds"]), 1):
+                x, _y, z = post["at"]
+                inside = min(x - x0, x1 - x, z - z0, z1 - z)
+                if inside < spare - EPS:
+                    bad.append(f"{difficulty} {defn['id']} ring post {k} is {inside:.2f} inside its floor (needs {spare:g})")
+                for cx0, cx1, cz0, cz1, n in obstacle_rects(camp):
+                    away = rect_distance(x, z, cx0, cx1, cz0, cz1)
+                    if away < spare - EPS:
+                        bad.append(f"{difficulty} {defn['id']} ring post {k} is {away:.2f} from obstacle {n}")
+                clear = rect_distance(x, z, *mark)
+                if clear < radius(kind) - EPS:
+                    bad.append(f"{difficulty} {defn['id']} ring post {k} ({kind}) stands in its marker ({clear:.2f})")
+            if difficulty == difficulties[-1]:
+                told.append(f"{defn['id']} {len(tent['kinds'])} bodies every {tent['every']:g} s on a ring of "
+                            f"{defn['radius']:g} round ({defn['points'][0][0]:g}, {defn['points'][0][2]:g})")
+    expect(not bad, f"{name}: tents: a stock only on an open camp with residents and a tent block, its centre on the "
+           f"floor, every above 0, its ring {POST_SPARE:g} + the widest radius inside the floor and off cover, clear "
+           f"of its marker (every difficulty)" + (": " + "; ".join(bad[:4]) if bad else f" ({'; '.join(told)})"))
+    expect(all(c.get("tent", {}).get("collide") is not True for c in layout["camps"]),
+           f"{name}: every tent marker is walk-through (LevelGeometry builds it collide = false): not cover, not a "
+           f"perch, no shot or camera ray stops on it")
+
+    # Post spacing (L1b-W2-4): any two posts of a camp, any groups, the tent's ring included, at
+    # least r_a + r_b + SPACING_SPARE apart; a patrol's loop as far from every other group's post.
+    bad = []
+    tightest = (math.inf, "")
+    for difficulty in difficulties:
+        defs, _tents = all_defs(level, layout, ranks.get(difficulty, 0), ranks)
+        by_camp = {}
+        for defn in defs:
+            posts = sr.group_posts(defn)
+            for post, kind in zip(posts, member_kinds(defn)):
+                by_camp.setdefault(defn["camp"], []).append((defn["id"], post["at"][0], post["at"][2], radius(kind)))
+        for cid, posts in by_camp.items():
+            for i in range(len(posts)):
+                for j in range(i + 1, len(posts)):
+                    a, b = posts[i], posts[j]
+                    gap = math.hypot(a[1] - b[1], a[2] - b[2]) - (a[3] + b[3] + SPACING_SPARE)
+                    if gap < tightest[0]:
+                        tightest = (gap, f"{difficulty} {a[0]} and {b[0]}")
+                    if gap < -EPS:
+                        bad.append(f"{difficulty} {a[0]} / {b[0]} at ({a[1]:g}, {a[2]:g}) and ({b[1]:g}, {b[2]:g}): "
+                                   f"{gap + a[3] + b[3] + SPACING_SPARE:.2f} apart, needs {a[3] + b[3] + SPACING_SPARE:g}")
+        for defn in defs:
+            if defn["posture"] != "patrol":
+                continue
+            mine = max(radius(k) for k in member_kinds(defn))
+            for x, z, _yaw in loop_samples(defn["points"]):
+                for other_id, px, pz, r in by_camp.get(defn["camp"], []):
+                    if other_id == defn["id"]:
+                        continue
+                    gap = math.hypot(x - px, z - pz) - (mine + r + SPACING_SPARE)
+                    if gap < tightest[0]:
+                        tightest = (gap, f"{difficulty} {defn['id']}'s loop and {other_id}")
+                    if gap < -EPS:
+                        bad.append(f"{difficulty} {defn['id']}'s loop at ({x:g}, {z:g}) is {gap:+.2f} from a post of "
+                                   f"{other_id}")
+                        break
+    expect(not bad, f"{name}: post spacing (L1b-W2-4): any two posts of a camp, tent rings included, at least r_a + r_b "
+           f"+ {SPACING_SPARE:g} apart, a patrol's loop as far from every other group's post, every difficulty"
+           + (": " + "; ".join(bad[:4]) if bad else f" (the tightest: {tightest[1]}, {tightest[0]:+.2f} to spare)"))
+
+    # The sneak path (L1b-W2-3).
+    sneak = layout.get("sneak")
+    if spec.get("sneak") and not sneak:
+        expect(False, f"{name}: the layout has a sneak path (layout.sneak)")
+    if sneak:
+        check_sneak(name, level, layout, ctx, expect, solids, sneak, facts)
+
+    # The join-in (L1b-W2-12): the chain each group's wake brings in, from rest, on Normal (a
+    # tent's group has sent nobody yet, so it joins nothing at the first wake).
+    first = difficulties[0]
+    defs, tents = all_defs(level, layout, ranks.get(first, 0), ranks)
+    empty = {i: 0 for i, d in enumerate(defs, 1) if d["posture"] == "tent"}
+    living = {i: sum(u["count"] for u in d["units"]) for i, d in enumerate(defs, 1)}
+    living.update(empty)
+    table = sr.chain_table(defs, rules, living)
+    rows = []
+    for defn in defs:
+        if defn["camp"] in locking:
+            continue
+        reach = rules["joinFactor"] * sr.cb_posture(defn, rules)["sight"]
+        rows.append(f"{defn['id']} ({defn['posture']}, reach {reach:g}) -> "
+                    + (", ".join(table[defn["id"]]) or "nobody")
+                    + f" [{sum(living[j] for j, d in enumerate(defs, 1) if d['id'] in table[defn['id']]) + living[defs.index(defn) + 1]} bodies]")
+    facts["chain"] = rows
+    ctx["chains"][level["id"]] = table
+    expect(sr.finite(rules.get("joinFactor")) and rules["joinFactor"] > 0,
+           f"{name}: camps.joinFactor {rules.get('joinFactor')} is above 0; the chain each wake brings in on {first} "
+           f"(from rest; tents not out yet): " + "; ".join(rows))
+
+
+def check_sneak(name, level, layout, ctx, expect, solids, sneak, facts):
+    """L1b-W2-3: the sneak path runs from the start to the locking camp's entry on standable tops
+    (the route's rules for its climbs and its gap), and lies farther than every open-camp group's
+    sight from every one of its resting places, every difficulty, cones ignored; the cone-aware
+    margins are reported."""
+    move = ctx["move"]
+    jump = jump_facts(move)
+    kinds, ranks, rules = ctx["kinds"], ctx["ranks"], ctx["camps"]
+    start = layout["start"]
+    locking = [c for c in layout["camps"] if c.get("locks") is True]
+    entry = locking[0]["entry"] if locking else None
+    points = [(p["x"], p["z"]) for p in sneak]
+    ends = (math.hypot(points[0][0] - start["x"], points[0][1] - start["z"]) < 0.01 and entry is not None
+            and math.hypot(points[-1][0] - entry["x"], points[-1][1] - entry["z"]) < 0.01)
+    # Standable: walked at WALK_RISE a sample, a climb at most the route's, a hole no wider than
+    # the route's gap that lands no higher.
+    problems = []
+    height = start["y"]
+    hole_from = None
+    last = points[0]
+    climbs = gaps = 0
+    length = 0.0
+    samples = polyline_samples(points, SNEAK_STEP)
+    for prev, here in zip(samples, samples[1:]):
+        length += math.hypot(here[0] - prev[0], here[1] - prev[1])
+        top, _solid = ground(solids, here[0], here[1], height + jump["climb"] + EPS)
+        if top is None:
+            if hole_from is None:
+                hole_from = (last, height)
+            continue
+        if hole_from is not None:
+            (hx, hz), took = hole_from
+            span = math.hypot(here[0] - hx, here[1] - hz)
+            if span > jump["gap"] + EPS or top > took + EPS:
+                problems.append(f"a hole from ({hx:g}, {hz:g}) to ({here[0]:g}, {here[1]:g}) of {span:.1f} studs "
+                                f"(the gap may span {jump['gap']}), landing {top - took:+g}")
+            gaps += 1
+            hole_from = None
+        rise = top - height
+        if rise > WALK_RISE + EPS:
+            climbs += 1
+        height = top
+        last = here
+    if hole_from is not None:
+        problems.append(f"it ends over a hole after ({hole_from[0][0]:g}, {hole_from[0][1]:g})")
+    expect(ends and not problems, f"{name}: the sneak path runs from the start to the boss room's entry on standable "
+           f"ground at every {SNEAK_STEP:g} studs (walked, {climbs} climb(s) of at most {jump['climb']}, {gaps} gap(s) of "
+           f"at most {jump['gap']}): {length:.0f} studs" + ("" if ends else " (it does not start at the start and end at "
+                                                            "the entry)") + (": " + "; ".join(problems[:3]) if problems else ""))
+    # Every resting place of every open-camp group farther than its sight (flat, cones ignored).
+    seen = []
+    margins = {}
+    cones = {}
+    fine = polyline_samples(points, CONE_SAMPLE)
+    for difficulty in level["difficulties"]:
+        defs, _tents = all_defs(level, layout, ranks.get(difficulty, 0), ranks)
+        for defn in defs:
+            if defn["held"]:
+                continue
+            sight = sr.cb_posture(defn, rules)["sight"]
+            for member in resting_eyes(defn):
+                ex, ez = member["at"][0], member["at"][2]
+                d = min(segment_gap(ex, ez, a, b) for a, b in zip(points, points[1:]))
+                spare = d - sight
+                if spare < margins.get(defn["id"], (math.inf,))[0]:
+                    margins[defn["id"]] = (spare, difficulty, sight)
+                if spare <= EPS:
+                    seen.append(f"{difficulty} {defn['id']} at ({ex:g}, {ez:g}): {d:.1f} studs, sight {sight:g}")
+                # Cone-aware: the nearest sample its cone holds.
+                posture = sr.cb_posture(defn, rules)
+                for x, z in fine:
+                    dx, dz = x - ex, z - ez
+                    dist = math.hypot(dx, dz)
+                    if dist - sight >= cones.get(defn["id"], (math.inf,))[0]:
+                        continue
+                    if posture["cone"] < 360 and dist >= sr.CB_CONE_NEAR:
+                        yaw = member["post"]["yaw"]
+                        cosine = (-math.sin(yaw) * dx - math.cos(yaw) * dz) / dist
+                        if math.degrees(math.acos(min(max(cosine, -1.0), 1.0))) > posture["cone"] / 2:
+                            continue
+                    cones[defn["id"]] = (dist - sight, difficulty, sight)
+    ordered = sorted(margins.items(), key=lambda kv: kv[1][0])
+    told = [f"{gid} {m[0]:+.1f} (sight {m[2]:g}; in its cone {cones[gid][0]:+.1f})" if gid in cones
+            else f"{gid} {m[0]:+.1f} (sight {m[2]:g})" for gid, m in ordered]
+    facts["sneak"] = [f"{length:.0f} studs; tightest margins (flat distance less sight, every difficulty): "
+                      + ", ".join(told[:6])]
+    expect(not seen, f"{name}: the sneak path lies farther than its posture's sight from every resting place of every "
+           f"open-camp group, tents included, every difficulty, cones ignored (L1b-W2-3)"
+           + (": " + "; ".join(seen[:4]) if seen else f": the tightest {', '.join(told[:4])}"))
 
 
 def three_positive(value):
@@ -1343,7 +1624,7 @@ def check_map(expeditions, level_files, layouts, expect):
     spread = {k: max(v["color"]) - min(v["color"]) for k, v in looks.items()}
     greys = [k for k in REQUIRED_LOOKS if k in looks and k not in COLOUR_LOOKS and spread[k] > GREY_SPREAD]
     dull = [k for k in COLOUR_LOOKS if k in looks and spread[k] <= GREY_SPREAD * 2]
-    expect(not greys and not dull, "map: the looks are greys, except gate, checkpoint, checkpointDone, secret and fire (L1b), "
+    expect(not greys and not dull, "map: the looks are greys, except " + ", ".join(COLOUR_LOOKS) + " (L1b, L1b-W2-9), "
            "each a colour" + (f" (not grey: {greys}; not a colour: {dull})" if greys or dull else ""))
     lobby = (expeditions.get("lobby") or {}).get("layout")
     expect(lobby in layouts, f"map: the lobby's layout {lobby} exists")
@@ -1490,7 +1771,8 @@ def load_all():
            "campRadius": {}, "signSize": size if three_positive(size) else None,
            "missions": {m["id"]: m for m in (sr.load_config(path) for path in sorted(sr.MISSIONS_DIR.glob("*.json")))},
            "runCap": combat["director"]["runCapSeconds"], "camps": combat.get("camps"),
-           "ranks": sr.difficulty_ranks(expeditions)}
+           "ranks": sr.difficulty_ranks(expeditions), "snapshotHz": proving["crowd"]["snapshotHz"],
+           "gate16": {}, "chains": {}}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 
@@ -1524,14 +1806,15 @@ def check_rules(combat, level_files, ctx, expect):
            "crowdCeiling, floorThickness, fenceThickness and startSpacing are over 0; triggerInset is gone (a camp "
            "triggers on its whole fenced rectangle)" + (f" (not: {', '.join(odd)})" if odd else "")
            + (" (triggerInset is still there)" if "triggerInset" in levels else ""))
-    # L1b: the checkpoint's reach, the population reserve, the wallet's pace and the fire marker.
-    reach, reserve, wallet = levels.get("checkpointReach"), levels.get("populationReserve"), levels.get("walletSendSeconds")
+    # L1b: the checkpoint's reach, the wallet's pace and the fire marker; the population reserve
+    # is gone (L1b-W2-5: the boss reserve is derived from ProvingGrounds.json).
+    reach, wallet = levels.get("checkpointReach"), levels.get("walletSendSeconds")
     fire = levels.get("fireMarkerSize")
-    expect(is_number(reach) and reach > 0 and is_number(reserve) and reserve >= POPULATION_RESERVE_MIN
-           and is_number(wallet) and wallet == WALLET_SEND_SECONDS and three_positive(fire),
-           f"Combat.json levels (L1b): checkpointReach over 0 ({reach}), populationReserve at least "
-           f"{POPULATION_RESERVE_MIN} ({reserve}), walletSendSeconds exactly {WALLET_SEND_SECONDS:g} ({wallet}), "
-           f"fireMarkerSize three positive numbers ({fire})")
+    expect(is_number(reach) and reach > 0 and is_number(wallet) and wallet == WALLET_SEND_SECONDS
+           and three_positive(fire) and "populationReserve" not in levels,
+           f"Combat.json levels (L1b): checkpointReach over 0 ({reach}), walletSendSeconds exactly "
+           f"{WALLET_SEND_SECONDS:g} ({wallet}), fireMarkerSize three positive numbers ({fire}), no populationReserve "
+           f"(L1b-W2-5)")
     camps = combat.get("camps")
     problems = sr.cb_problems(camps)
     expect(not problems, "Combat.json camps: every key CampBrain.Problems reads is there, finite and in range"
@@ -1539,6 +1822,19 @@ def check_rules(combat, level_files, ctx, expect):
               f" (sight guard {camps['guard']['sight']:g}/{camps['guard']['cone']:g} deg, patrol "
               f"{camps['patrol']['sight']:g}, fire {camps['fire']['sight']:g}; rise fire {camps['fire']['rise']:g} s; "
               f"leash {camps['leashSeconds']:g} s; chaseMargin {camps['chaseMargin']:g})"))
+    if not problems:
+        # L1b-W2-10: a group sleeps only where no member could see a player, nor see one arrive
+        # within one snapshot of the fastest legal move.
+        move = ctx["move"]
+        dash = move["dashDistance"] / move["dashSeconds"] if move.get("dashSeconds", 0) > 0 else 0
+        fastest = max(move["walkSpeed"], move["slamFallSpeed"], dash, 0)
+        need = max(camps[p]["sight"] for p in sr.CB_POSTURES) + fastest / ctx["snapshotHz"]
+        expect(camps["dormantRadius"] >= need - EPS,
+               f"Combat.json camps.dormantRadius {camps['dormantRadius']:g} is at least every posture's sight + "
+               f"Tuning.FastestMove / crowd.snapshotHz ({max(camps[p]['sight'] for p in sr.CB_POSTURES):g} + "
+               f"{fastest:g} / {ctx['snapshotHz']:g} = {need:.2f})")
+        expect(camps["joinFactor"] == JOIN_FACTOR_FIXED,
+               f"Combat.json camps.joinFactor is {JOIN_FACTOR_FIXED} (fixed: Ben's \"at least double\"): {camps['joinFactor']}")
     expect(is_number(levels.get("gateSeconds")) and levels["gateSeconds"] >= 1,
            f"Combat.json levels.gateSeconds {levels.get('gateSeconds')} is at least 1 (the client learns the floor that "
            f"long before the first body)")
@@ -1609,6 +1905,20 @@ def main():
                 facts[name] = check_layout(name, layout, ctx, expect)
         orphan = [name for name in layouts if name != lobby_name and name not in by_layout]
         expect(not orphan, "every layout but the lobby's belongs to a level file" + (f" ({orphan})" if orphan else ""))
+        # Gate 16 (INTERFACES "Wave 2 — the long road" -> "Gates"): the numbers QA copies.
+        print()
+        print("GATE 16 (the numbers QA copies into its report)")
+        for name, found in ctx["gate16"].items():
+            print(f"  {name}:")
+            for line in found.get("population") or []:
+                print(f"    population  {line}")
+            if name in facts:
+                print(f"    parts       {facts[name].get('parts')}")
+                print(f"    route       {facts[name]['length']:.0f} studs ({facts[name]['walked']:.0f} outside the camps)")
+            for line in found.get("sneak") or []:
+                print(f"    sneak       {line}")
+            for line in found.get("chain") or []:
+                print(f"    chain       {line}")
     if not args.no_plan:
         scale_x, scale_z = args.scale
         for name, layout in layouts.items():

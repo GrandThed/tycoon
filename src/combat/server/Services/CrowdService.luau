@@ -41,6 +41,12 @@
 -- go home together (CampBrain decides, the camp step here executes): a resident thinks with the
 -- brain only while its group fights, and then only of the targets in play for its group. The
 -- range keeps one floor (SetBounds) and no group, byte for byte as before.
+-- L1b Wave 2 ("Wave 2 — the long road", L1b-W2-7, -10, -11, -12, -23): a resting group no player
+-- is near is dormant (its bodies neither move, push nor go in a snapshot, and stay in the grid so
+-- a hit still finds and wakes them); a wake by sight or a hit brings in the camp's nearby resting
+-- groups (CampBrain.JoinIn on post gaps worked out once, at AddGroup); a tent's group is roused by
+-- RouseGroup; every spawn info carries where the body stands, its yaw and its state at each send,
+-- so a client draws a body it has no snapshot of.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -108,6 +114,8 @@ type Enemy = {
 	-- A resident's records for the camp step, kept so the step allocates nothing per body.
 	member: CampBrain.Member?,
 	shooter: CampBrain.Shooter?,
+	-- L1b-W2-10: its group is dormant; set at every camp step, false for every other body.
+	dormant: boolean,
 }
 
 -- One resident group: CampBrain's state, the floor it lives on, its living members, and the
@@ -117,6 +125,8 @@ type CampGroup = {
 	floor: number,
 	bodies: { Enemy },
 	input: CampBrain.StepInput,
+	-- L1b-W2-12: its posts at the sum of its def's unit counts, for the gaps of the join-in.
+	posts: { CampBrain.Post },
 }
 
 -- A group's change of state, for WaveService (DrainGroupEvents). held = `from` was a held rest
@@ -247,6 +257,18 @@ local camp = {
 	seen = {} :: { CampBrain.Seen },
 	seenPool = {} :: { [number]: CampBrain.Seen },
 	warnedFloors = {} :: { [number]: boolean },
+	-- L1b Wave 2. Each group's CampBrain state by index (JoinIn reads them), the post-to-post gap
+	-- between two groups of one camp (set only within a camp), groups RouseGroup asked to rise at
+	-- the next step, and this step's scratch: the groups Step woke, living members per group, and
+	-- every player root (down or not) for dormancy.
+	brains = {} :: { CampBrain.Group },
+	gaps = {} :: { [number]: { [number]: number } },
+	rouse = {} :: { [number]: boolean },
+	woke = {} :: { number },
+	living = {} :: { number },
+	roots = {} :: { Vector3 },
+	-- Living bodies per floor that belong to a group, kept with aliveOn (never a scan).
+	groupedOn = {} :: { [number]: number },
 }
 
 local grid: { [number]: { Enemy } } = {}
@@ -272,6 +294,8 @@ local perf = {
 	count = 0,
 	peak = 0,
 	since = 0,
+	-- L1b-W2-23: the Workspace attribute each line also sets to its p95; nil = none.
+	attribute = nil :: string?,
 }
 
 -- Scratch tables reused every step so the loop allocates nothing per enemy.
@@ -405,6 +429,12 @@ end
 local function noteGone(enemy: Enemy): ()
 	aliveCount -= 1
 	aliveOn[enemy.floor] = math.max((aliveOn[enemy.floor] or 0) - 1, 0)
+	if enemy.resident ~= nil then
+		local grouped = camp.groupedOn
+		grouped[enemy.floor] = math.max((grouped[enemy.floor] or 0) - 1, 0)
+	end
+	-- Its group's dormancy is no longer stamped on it: a dead body lies and is sent as any.
+	enemy.dormant = false
 	leaveGroup(enemy)
 end
 
@@ -536,6 +566,8 @@ local function gatherTargets(shooting: Types.RangeShootingConfig): ()
 	table.clear(targets)
 	local seenList = camp.seen
 	table.clear(seenList)
+	local roots = camp.roots
+	table.clear(roots)
 	local hooks = threatHooks
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
@@ -544,6 +576,10 @@ local function gatherTargets(shooting: Types.RangeShootingConfig): ()
 		end
 		local root = character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if root ~= nil and root:IsA("BasePart") then
+			-- L1b-W2-10: any player's body keeps the camps round it awake, down or not.
+			table.insert(roots, root.Position)
+		end
 		if root ~= nil and root:IsA("BasePart") and humanoid ~= nil and humanoid.Health > 0 then
 			table.insert(targets, root.Position)
 			if hooks == nil or hooks.canTarget(player) then
@@ -727,7 +763,7 @@ local function shoulder(widest: number, largeRadius: number): ()
 					continue
 				end
 				for _, other in cell do
-					if other == giant or other.deadAt ~= nil then
+					if other == giant or other.deadAt ~= nil or other.dormant then
 						continue
 					end
 					local otherDef = other.def
@@ -797,7 +833,8 @@ local function separate(largeRadius: number): ()
 	local widest = 0
 	table.clear(giants)
 	for _, enemy in order do
-		if enemy.deadAt == nil then
+		-- L1b-W2-10: a dormant body neither moves nor pushes.
+		if enemy.deadAt == nil and not enemy.dormant then
 			local radius = enemy.def.radius
 			if radius >= largeRadius then
 				table.insert(giants, enemy)
@@ -807,7 +844,7 @@ local function separate(largeRadius: number): ()
 		end
 	end
 	for _, enemy in order do
-		if enemy.deadAt ~= nil then
+		if enemy.deadAt ~= nil or enemy.dormant then
 			continue
 		end
 		local def = enemy.def
@@ -827,7 +864,7 @@ local function separate(largeRadius: number): ()
 					continue
 				end
 				for _, other in cell do
-					if other.id <= enemy.id or other.deadAt ~= nil then
+					if other.id <= enemy.id or other.deadAt ~= nil or other.dormant then
 						continue
 					end
 					local otherDef = other.def
@@ -922,21 +959,33 @@ local function queueEvent(
 	)
 end
 
--- The camp step (L1b-3 to L1b-8, L1b-13): once per step, after the targets are gathered and before
--- any body is committed or thinks. Each group's input is rebuilt in its own tables, a pending
--- WakeFloor releases a held group, every other group takes one CampBrain.Step, and a change of
--- state is queued for DrainGroupEvents. A resident at its post while its group goes home is healed
--- first, so the step that finds them all home has healed every one. Nothing here yields, casts a
--- ray or allocates per body; a group with no living member engages nobody. Engagement is stamped
--- with this step's clock and outlives play by camps.engagedHoldSeconds.
+-- The camp step (L1b-3 to L1b-8, L1b-13; L1b Wave 2 "Flow"): once per step, after the targets
+-- are gathered and before any body is committed or thinks. For each group in index order its input
+-- is rebuilt in its own tables, then (1) a pending WakeFloor releases a held group, or else (2) it
+-- takes one CampBrain.Step, and (3) a pending RouseGroup rises it. A change of state is queued for
+-- DrainGroupEvents. A resident at its post while its group goes home is healed first, so the step
+-- that finds them all home has healed every one. After every group: (4) the join-in of the groups
+-- Step woke, (5) dormancy, stamped on each group's bodies, and (6) engagement, stamped with this
+-- step's clock and kept for camps.engagedHoldSeconds. Nothing here yields or casts a ray, and
+-- nothing allocates per body (the join-in only on a step where a group woke).
 local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
 	local engaged = camp.engaged
 	local rules = camp.rules
 	if rules == nil then
 		table.clear(engaged)
+		table.clear(camp.rouse)
+		-- No rules, no dormancy: a group left from a run whose rules went keeps moving.
+		for _, group in camp.groups do
+			for _, body in group.bodies do
+				body.dormant = false
+			end
+		end
 		return
 	end
 	local wake = camp.wake
+	local rouse = camp.rouse
+	local woke = camp.woke
+	table.clear(woke)
 	for index, group in camp.groups do
 		local brain = group.brain
 		local input = group.input
@@ -983,15 +1032,51 @@ local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
 			local to: Types.CampGroupState? = CampBrain.Step(brain, input, rules)
 			if to ~= nil then
 				queueEvent(index, group, from, to, false)
+				if from == "rest" and to == "rise" then
+					-- By sight or by a hit: the only wakes that bring the neighbours in.
+					table.insert(woke, index)
+				end
 			end
 		end
-		if #members > 0 and (brain.state == "rise" or brain.state == "fight") then
+		-- After the step, as a release is, so even a rise of 0 shows.
+		if rouse[index] and CampBrain.Rouse(brain, simTime) then
+			queueEvent(index, group, "rest", "rise", false)
+		end
+	end
+	table.clear(wake)
+	table.clear(rouse)
+	local groups = camp.groups
+	if #woke > 0 then
+		local living = camp.living
+		table.clear(living)
+		for index, group in groups do
+			living[index] = #group.bodies
+		end
+		for _, index in CampBrain.JoinIn(camp.brains, living, camp.gaps, woke, rules) do
+			local group = groups[index]
+			if group ~= nil and CampBrain.Rouse(group.brain, simTime) then
+				queueEvent(index, group, "rest", "rise", false)
+			end
+		end
+	end
+	local roots = camp.roots
+	for _, group in groups do
+		local brain = group.brain
+		local dormant = CampBrain.Dormant(brain, roots, rules)
+		for _, body in group.bodies do
+			if dormant and not body.dormant then
+				-- Frozen where it is, showing what it shows standing at rest (a patroller stops
+				-- walking), for the spawn info a client may draw it from.
+				body.state = CampBrain.Shows(brain, false) or body.state
+			end
+			body.dormant = dormant
+		end
+		if #group.bodies > 0 and (brain.state == "rise" or brain.state == "fight") then
 			for userId in brain.inPlay do
 				engaged[userId] = simTime
 			end
 		end
 	end
-	table.clear(wake)
 	for userId, at in engaged do
 		if not CampBrain.Engaged(at, simTime, rules) then
 			engaged[userId] = nil
@@ -1032,6 +1117,10 @@ local function simulate(dt: number, clock: number): ()
 			table.insert(expired, enemy)
 			continue
 		end
+		if enemy.dormant then
+			-- L1b-W2-10: not integrated, so it neither walks to a goal nor falls.
+			continue
+		end
 		integrate(enemy, currentDef(enemy, kinds), crowd, dt, g)
 	end
 	for _, enemy in expired do
@@ -1041,12 +1130,22 @@ local function simulate(dt: number, clock: number): ()
 	gridRebuild()
 	separate(crowd.largeRadius)
 	for _, enemy in order do
-		if enemy.deadAt == nil then
+		if enemy.deadAt == nil and not enemy.dormant then
 			clampToBounds(enemy, currentDef(enemy, kinds).radius)
 		end
 	end
 	-- Rebuilt after separation so Query's cells match the positions it reads.
 	gridRebuild()
+end
+
+-- L1b-W2-11: the body as it stands, written into its stored spawn info (in place, no new table)
+-- before the info goes in any batch, so a client can draw a body it has no snapshot of.
+local function refreshInfo(enemy: Enemy): Types.CrowdSpawnInfo
+	local info = enemy.spawnInfo
+	info.at = enemy.position
+	info.yaw = enemy.yaw
+	info.state = enemy.state
+	return info
 end
 
 local function flushLifecycle(): ()
@@ -1061,7 +1160,7 @@ local function flushLifecycle(): ()
 			if pendingSpawnSet[id] and enemy ~= nil then
 				-- Cleared as it goes so an id queued twice is announced once.
 				pendingSpawnSet[id] = nil
-				table.insert(batch, enemy.spawnInfo)
+				table.insert(batch, refreshInfo(enemy))
 			end
 		end
 		table.clear(pendingSpawnOrder)
@@ -1078,6 +1177,10 @@ local function sendSnapshot(serverTime: number): ()
 	end
 	local count = 0
 	for _, enemy in order do
+		if enemy.dormant then
+			-- L1b-W2-10: far from every player; its spawn info is what a client draws.
+			continue
+		end
 		local entry = enemy.entry
 		local mind = enemy.mind
 		local state: Types.CrowdState = enemy.state
@@ -1171,6 +1274,11 @@ local function notePerf(clock: number, ms: number): ()
 			perf.peak
 		)
 	)
+	local attribute = perf.attribute
+	if attribute ~= nil then
+		-- L1b-W2-23: the number Ben reads off the HUD, set only where the line is printed.
+		Workspace:SetAttribute(attribute, p95)
+	end
 	perf.count = 0
 end
 
@@ -1208,7 +1316,7 @@ local function onPlayerAdded(player: Player): ()
 	local batch: { Types.CrowdSpawnInfo } = {}
 	for _, enemy in order do
 		if not pendingSpawnSet[enemy.id] then
-			table.insert(batch, enemy.spawnInfo)
+			table.insert(batch, refreshInfo(enemy))
 		end
 	end
 	if #batch > 0 then
@@ -1233,11 +1341,16 @@ local function forgetGroups(): ()
 		enemy.resident = nil
 		enemy.member = nil
 		enemy.shooter = nil
+		enemy.dormant = false
 	end
 	camp.groups = {}
+	camp.brains = {}
+	camp.gaps = {}
 	table.clear(camp.events)
 	table.clear(camp.wake)
 	table.clear(camp.engaged)
+	table.clear(camp.rouse)
+	table.clear(camp.groupedOn)
 end
 
 local function setFloors(list: { Types.CrowdFloor }, caller: string): boolean
@@ -1339,9 +1452,12 @@ end
 
 -- Ruling 26: Main turns the [Perf] line on in Studio with Combat.json debug.perfLogSeconds; 0 or
 -- less turns it off. (This module reads no Combat.json and asks nothing of RunService itself.)
-function CrowdService.SetPerfLog(seconds: number): ()
+-- L1b-W2-23: with an attribute name, each line also sets that Workspace number attribute to the
+-- line's p95 in ms; nil = no attribute.
+function CrowdService.SetPerfLog(seconds: number, attribute: string?): ()
 	perf.every = if isFinite(seconds) and seconds > 0 then seconds else 0
 	perf.count = 0
+	perf.attribute = if typeof(attribute) == "string" and attribute ~= "" then attribute else nil
 end
 
 -- Returns the new id, or 0 when refused (unknown kind, non-finite position, maxAlive reached).
@@ -1440,6 +1556,7 @@ function CrowdService.Spawn(
 		resident = nil,
 		member = nil,
 		shooter = nil,
+		dormant = false,
 	}
 	clampToBounds(enemy, def.radius)
 	enemies[id] = enemy
@@ -1879,8 +1996,23 @@ function CrowdService.AddGroup(def: Types.CampGroupDef): number
 		return 0
 	end
 	local index = #camp.groups + 1
+	-- L1b-W2-12: its posts (they never move) and its gap to every earlier group of its camp, once.
+	local count = 0
+	if typeof(def.units) == "table" then
+		for _, unit in def.units do
+			if
+				typeof(unit) == "table"
+				and typeof(unit.count) == "number"
+				and isFinite(unit.count)
+			then
+				count += math.max(math.floor(unit.count), 0)
+			end
+		end
+	end
+	local posts = CampBrain.Posts(def, count)
+	local brain = CampBrain.NewGroup(def, simTime)
 	camp.groups[index] = {
-		brain = CampBrain.NewGroup(def, simTime),
+		brain = brain,
 		floor = def.floor,
 		bodies = {},
 		input = {
@@ -1890,7 +2022,19 @@ function CrowdService.AddGroup(def: Types.CampGroupDef): number
 			shooters = {},
 			striking = false,
 		},
+		posts = posts,
 	}
+	camp.brains[index] = brain
+	local row: { [number]: number } = {}
+	camp.gaps[index] = row
+	for other = 1, index - 1 do
+		local earlier = camp.groups[other]
+		if earlier.brain.def.camp == def.camp then
+			local gap = CampBrain.Gap(posts, earlier.posts)
+			row[other] = gap
+			camp.gaps[other][index] = gap
+		end
+	end
 	return index
 end
 
@@ -1911,8 +2055,32 @@ function CrowdService.SpawnResident(kind: string, group: number, post: CampBrain
 	enemy.shooter = { at = enemy.position, reach = 0 }
 	enemy.yaw = post.yaw
 	enemy.entry.yaw = post.yaw
+	-- Shown as its group shows at rest from the first send (a sitter seated), even should it be
+	-- dormant before it is ever integrated.
+	local shown: Types.CrowdState = CampBrain.Shows(record.brain, false) or enemy.state
+	enemy.state = shown
+	enemy.entry.state = shown
 	table.insert(record.bodies, enemy)
+	camp.groupedOn[record.floor] = (camp.groupedOn[record.floor] or 0) + 1
 	return id
+end
+
+-- L1b-W2-7: a tent's group rises at the next camp step (CampBrain.Rouse: only from an unheld rest).
+function CrowdService.RouseGroup(group: number): ()
+	if typeof(group) == "number" and camp.groups[group] ~= nil then
+		camp.rouse[group] = true
+	end
+end
+
+-- Living members of that group (0 for an unknown one).
+function CrowdService.GroupAlive(group: number): number
+	local record = camp.groups[group]
+	return if record ~= nil then #record.bodies else 0
+end
+
+-- L1b-W2-26: living bodies of that floor that belong to a group (residents and tent bodies).
+function CrowdService.GroupedOn(floor: number): number
+	return camp.groupedOn[floor] or 0
 end
 
 -- The close (L1b-13): every held group of that floor is released at the next step.

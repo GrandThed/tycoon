@@ -64,3 +64,23 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
 |---|---|---|
 | Headshot on big bodies (read-only) | `docs/prompts/l1b-w2-headshot.md` | `docs/prompts/l1b-w2-reports/headshot.md` |
 | Long-road layout plan + arithmetic | `docs/prompts/l1b-w2-layout.md` | `docs/prompts/l1b-w2-reports/layout.md` |
+
+## Build routing
+
+- **ui done (build-ui.md).** Its three own decisions are confirmed: seed only calm poses (idle,
+  move, rest, rise), landing from `StateChanged` → `Landed` only, perf text with one tenths digit.
+- ui → A (relayed): `info.at` is feet in world coordinates in the snapshot's frame; `yaw` in
+  radians; the perf attribute in milliseconds; a resting tent group arrives as `idle`.
+- ui → B: **taken** (pure rules are tested): B adds the `SpawnSeed` harness cases and two
+  mutations from build-ui.md, with the `typeof` stub for the Vector3 shim.
+- QA runs `proving_project.py` (it writes a shared file at the root): never an owner.
+- **A done (build-A.md), harness 1,897 PASS.** Its own decisions confirmed. Ruling on the one
+  difference from the client section: **range bodies also carry `at`** (refreshed at every send,
+  per the Remotes table); accepted, since the client seeds only calm poses. The reviewers check the
+  range (`fight`, `colossus`, `warlord` sets) looks as before.
+- A → B (relayed): `mutate.py` gains `SWING` in `FILES`, `L1B_W2_CROWD_MUTATIONS`, three stale
+  Wave 1 mutations replaced, "in play has square corners" retired; B's own stale StageFlow
+  mutations fixed. The "[Perf] attribute set with no name" mutation: keep it if `mutate.py` counts
+  a stopped bundle as caught, else drop it.
+- A → econ (relayed): `stage_mirror.luau`'s `Brain.Problems` count expects the new lines; the
+  `RayUpright` / `CrowdRay` rules and the tent yaw are in build-A.md for `sim_range`.

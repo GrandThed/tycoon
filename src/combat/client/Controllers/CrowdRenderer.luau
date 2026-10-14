@@ -80,6 +80,14 @@
 --   rest, `idle` on the wire) never sits. The seat is information, so it is not thinned on
 --   reducedMotion. The server's hit shapes do not sit: a seated head is drawn lower than the
 --   head the server judges a crit on.
+-- * L1b Wave 2 ("Wave 2 — the long road" -> Client, L1b-W2-11). A spawn info carries the body
+--   as it stood when it was sent (SpawnSeed reads it), and that is the body's first sample,
+--   stamped at this client's render time: every resident is drawn on arrival, and a dormant
+--   body, which is in no snapshot, is drawn where it rests. Its first snapshot then takes over
+--   as if it were the second sighting (the seed's stamp is pulled under it, so the move blends
+--   and is never refused as stale), but everything that is timed off a sighting (a tell, the
+--   plate's break, the enrage beat) treats it as the first. An info with no `at` (the range)
+--   keeps the old rule: not drawn before its first snapshot. Absence never removes a body.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -95,6 +103,7 @@ local CameraController = require(script.Parent:WaitForChild("CameraController"))
 -- P4 wave 2: what hangs on a body. Children of ThreatFx (never ThreatFx itself, which
 -- requires this module).
 local Cues = require(script.Parent:WaitForChild("ThreatFx"):WaitForChild("Cues"))
+local SpawnSeed = require(script.Parent:WaitForChild("SpawnSeed"))
 local PlateBar = require(script.Parent:WaitForChild("ThreatFx"):WaitForChild("PlateBar"))
 
 -- "block" (P4 wave 2): a plate turned the hit. Nothing moves; the shell glints.
@@ -331,6 +340,8 @@ type Entity = {
 	-- seat = how far it sits (0 standing, 1 seated at a fire), eased toward the wire's state.
 	floorIndex: number,
 	seat: number,
+	-- L1b Wave 2: the body's only sample is its spawn info's (SpawnSeed), no snapshot yet.
+	seeded: boolean,
 
 	dirty: boolean,
 	lastShown: Vector3,
@@ -675,6 +686,7 @@ local function newEntity(): Entity?
 		glow = false,
 		floorIndex = 1,
 		seat = 0,
+		seeded = false,
 		dirty = true,
 		lastShown = Vector3.zero,
 		lastYaw = 0,
@@ -1115,6 +1127,7 @@ local function spawnEntity(
 	entity.summonerId = summonerId
 	entity.floorIndex = floorIndex
 	entity.seat = 0
+	entity.seeded = false
 	entity.wards = 0
 	entity.called = false
 	entity.opened = false
@@ -1517,6 +1530,15 @@ local function pushSample(
 	stamp: number
 ): ()
 	local first = entity.samples == 0
+	-- L1b Wave 2: the first snapshot of a body drawn so far from its spawn info alone. The
+	-- seed's stamp (the render time it arrived at) may lie past this packet's; it is pulled an
+	-- interval under it, so the body blends from the seed instead of ignoring the packet.
+	local seeded = entity.seeded
+	if seeded then
+		entity.seeded = false
+		local before = math.min(entity.timeC, stamp - interval)
+		entity.timeA, entity.timeB, entity.timeC = before, before, before
+	end
 	if first then
 		entity.posA, entity.posB, entity.posC = position, position, position
 		entity.yawA, entity.yawB, entity.yawC = yaw, yaw, yaw
@@ -1550,9 +1572,12 @@ local function pushSample(
 	-- under way therefore shows its blow late, by up to its windup less a step, until the
 	-- wire's `attack` state starts the thrust instead. Only a player who joins mid-fight can
 	-- meet this, and it is accepted (contract ruling 25).
-	local previous = if entity.samples > 1 then entity.timeB else stamp - 2 * interval
+	local previous = if entity.samples > 1 and not seeded
+		then entity.timeB
+		else stamp - 2 * interval
 	if plated ~= entity.plated or hpFraction ~= entity.hpFraction then
-		if entity.plated and not plated then
+		-- A plate already gone before this client's first snapshot broke unseen: no burst.
+		if entity.plated and not plated and not seeded then
 			-- Wave 2: the plate broke. The shell bursts, and the body reels for
 			-- crowd.plateBreakSeconds from the hit that did it, which fell after the previous
 			-- sighting: the opening is drawn from there, so it never outlasts the server's.
@@ -1589,7 +1614,7 @@ local function pushSample(
 		local isBusy = state == "windup"
 			or state == "attack"
 			or ((state == "stagger" or state == "airborne") and attack > 0)
-		if first or not (wasBusy and isBusy) then
+		if first or seeded or not (wasBusy and isBusy) then
 			entity.enraged = true
 			local def = kindDef(entity.kind)
 			if def ~= nil then
@@ -1607,7 +1632,7 @@ local function pushSample(
 					entity.recoverSeconds *= math.max(phase.recoverScale, 0)
 				end
 			end
-			if not first then
+			if not first and not seeded then
 				-- The beat on the body itself: a white flash and a burst as its colours turn.
 				-- A client that first sees it already enraged gets the look and no beat.
 				entity.flashUntil = os.clock() + FLASH_SECONDS * 3
@@ -1736,6 +1761,33 @@ local function onSpawn(payload: any): ()
 					then math.floor(index)
 					else 1
 			)
+			-- L1b Wave 2: drawn at once from the info, unless a snapshot already drew it.
+			local at: Vector3?, yaw: number, state: Types.CrowdState = SpawnSeed.Read(info)
+			local entity = byId[info.id]
+			if
+				at == nil
+				or entity == nil
+				or entity.phase ~= "alive"
+				or not (entity.samples == 0 or entity.seeded)
+			then
+				continue
+			end
+			local renderTime = Workspace:GetServerTimeNow()
+				- (lagEstimate or 0)
+				- interval * INTERP_SNAPSHOTS
+			if entity.samples == 0 then
+				-- A full bar: the plate's for a kind that has one.
+				pushSample(entity, at, yaw, state, 1, entity.plateMax > 0, 0, renderTime)
+				entity.seeded = true
+			else
+				-- A refreshed info for a body still drawn from its last one: moved in place,
+				-- with none of a first sighting's effects again.
+				entity.posA, entity.posB, entity.posC = at, at, at
+				entity.yawA, entity.yawB, entity.yawC = yaw, yaw, yaw
+				entity.timeA, entity.timeB, entity.timeC = renderTime, renderTime, renderTime
+				entity.state = state
+				entity.dirty = true
+			end
 		end
 	end
 end

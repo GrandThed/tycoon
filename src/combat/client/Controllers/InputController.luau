@@ -88,6 +88,16 @@
 -- next wave, exactly as while knocked down: the server refuses those anyway, and this keeps
 -- the client from drawing swings it would take back. That one rule (CanAct) also gates the
 -- slot switch and is what the HUD dims its ability tiles and buttons by.
+--
+-- L1b Wave 2 (docs/INTERFACES.md "Wave 2 — the long road" -> Client):
+--  * One swing per jump (L1b-W2-14). Before a melee swing is predicted or sent, AirSwing asks
+--    the server's question at the swing's own origin; the second airborne swing of a jump is
+--    dropped (no effect, no send, nothing queued for the landing). A held button or the phone's
+--    auto-swing simply swings again at its rate once grounded. Abilities and shots are not gated.
+--  * Auto-target's camp rule measures with HitShapes.FlatToRect (L1b-W2-24), and while the run
+--    phase is `gate` (the boss room's countdown) it takes no body with a camp floor at all
+--    (L1b-W2-25): every one in reach then is a held resident whose hit would read "BLOCKED".
+--    Deliberate shots are untouched.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -110,6 +120,7 @@ local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local MovementController = require(script.Parent:WaitForChild("MovementController"))
 local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 local RangeTouchButtons = require(script.Parent:WaitForChild("RangeTouchButtons"))
+local AirSwing = require(script.Parent:WaitForChild("AirSwing"))
 
 export type Stance = "melee" | "ranged"
 export type SlotTiers = { melee: number, ranged: number }
@@ -1073,23 +1084,26 @@ end
 -- rectangle at most camps.chaseMargin (so the corners are rounded), inside the sight band.
 -- Leaving out the keepAway reach clause only makes this stricter. A shot from out of play is
 -- "blocked" and still wakes a resting group (L1b-4, L1b-7), so a phone must never take one by
--- itself. Bodies with no camp floor (the range) keep the old rule.
+-- itself. Bodies with no camp floor (the range) keep the old rule. L1b-W2-25: in the boss
+-- room's countdown (`gate`) no body with a camp floor is taken, engaged or not.
 local function campInPlay(id: number, root: Vector3): boolean
-	local cfg = combatConfig
-	if cfg == nil or rangeState.engaged then
-		return true
-	end
 	local centre, half = CrowdRenderer.CampFloor(id)
 	if centre == nil or half == nil then
+		return true
+	end
+	if missionState.phase == "gate" then
+		return false
+	end
+	local cfg = combatConfig
+	if cfg == nil or rangeState.engaged then
 		return true
 	end
 	local camps = cfg.camps
 	if root.Y < centre.Y - camps.sightBelow or root.Y > centre.Y + camps.sightAbove then
 		return false
 	end
-	local dx = math.max(math.abs(root.X - centre.X) - half.X, 0)
-	local dz = math.max(math.abs(root.Z - centre.Z) - half.Z, 0)
-	return dx * dx + dz * dz <= camps.chaseMargin * camps.chaseMargin
+	return HitShapes.FlatToRect(root.X, root.Z, centre.X, centre.Z, half.X, half.Z)
+		<= camps.chaseMargin
 end
 
 -- CrowdRenderer reports the ground point; the body sphere is centred at height/2 and the
@@ -1349,6 +1363,17 @@ local function rangeAttack(
 	if remote == nil then
 		return
 	end
+	-- L1b-W2-14: a swing the server would refuse is never sent. Asked before anything moves (the
+	-- seq, the pacing, the combo, a queued tap), so a dropped swing leaves no trace.
+	local swingAirborne = false
+	if not isRanged(variant) then
+		local allowed, inAir = AirSwing.Judge(rig.root.Position, rig.root, rig.humanoid)
+		if not allowed then
+			rangeState.tapQueuedAt = nil
+			return
+		end
+		swingAirborne = inAir
+	end
 	local now = os.clock()
 	rangeState.lastRangeAttackAt = now
 	rangeState.tapQueuedAt = nil
@@ -1387,6 +1412,7 @@ local function rangeAttack(
 	local origin = rig.root.Position
 	local forward = flatCameraLook()
 	remote:FireServer(family, rangeState.rangeSeq, origin, forward, false, charge)
+	AirSwing.Took(swingAirborne)
 	forgetStaleSwings(now)
 	local chain = variant.chain
 	local length = if chain ~= nil and #chain > 0 then #chain else 1
@@ -2494,6 +2520,7 @@ function InputController.Destroy(): ()
 		MovementController.Destroy()
 	end
 	RangeTouchButtons.Destroy()
+	AirSwing.Destroy()
 	table.clear(rangeState.rangeTouches)
 	table.clear(rangeState.pendingSwings)
 	table.clear(rangeState.confirmedSteps)

@@ -40,6 +40,12 @@ function L1BC.rules(): any
 		patrolPace = 0.5,
 		homeTolerance = 1,
 		engagedHoldSeconds = 1.5,
+		-- L1b Wave 2 keys (CampBrain.Problems refuses rules without them). A tent's rules as the
+		-- contract starts them; a dormantRadius wider than any case here, so these Wave 1 cases
+		-- (players 170+ studs from a floor they read on the wire) never see a group go dormant.
+		tent = { sight = 24, cone = 360, rise = 0 },
+		joinFactor = 2,
+		dormantRadius = 1000,
 	}
 end
 

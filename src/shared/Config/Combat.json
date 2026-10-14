@@ -120,13 +120,14 @@
 		"provingDifficulty": "normal",
 		"provingAutoStart": false,
 		"provingStartDelay": 3,
-		"provingGear": { "melee": 2, "ranged": 1 },
+		"provingGear": { "melee": 2, "ranged": 2 },
 		"gearPresets": [
-			{ "name": "2 / 1", "melee": 2, "ranged": 1 },
+			{ "name": "2 / 2", "melee": 2, "ranged": 2 },
 			{ "name": "4 / 4", "melee": 4, "ranged": 4 },
 			{ "name": "6 / 6", "melee": 6, "ranged": 6 }
 		],
-		"perfLogSeconds": 10
+		"perfLogSeconds": 10,
+		"perfAttribute": "CrowdPerfMs"
 	},
 	"levels": {
 		"gateSeconds": 3,
@@ -143,7 +144,6 @@
 		"maxParts": 600,
 		"checkpointSize": [2, 10, 2],
 		"checkpointReach": 8,
-		"populationReserve": 21,
 		"walletSendSeconds": 1,
 		"fireMarkerSize": [3, 1, 3]
 	},
@@ -151,6 +151,7 @@
 		"guard": { "sight": 30, "cone": 140, "rise": 0 },
 		"patrol": { "sight": 24, "cone": 360, "rise": 0 },
 		"fire": { "sight": 16, "cone": 360, "rise": 1.5 },
+		"tent": { "sight": 24, "cone": 360, "rise": 0 },
 		"sightBelow": 4,
 		"sightAbove": 30,
 		"chaseMargin": 2.5,
@@ -158,7 +159,9 @@
 		"homePace": 1,
 		"patrolPace": 0.5,
 		"homeTolerance": 1,
-		"engagedHoldSeconds": 1.5
+		"engagedHoldSeconds": 1.5,
+		"joinFactor": 2,
+		"dormantRadius": 120
 	},
 	"crowdSkeleton": [
 		{ "introduces": ["fodder"] },

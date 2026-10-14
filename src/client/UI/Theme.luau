@@ -1313,6 +1313,12 @@ local Theme = {
 	COMBAT_CHECKPOINT_NOTICE_SECONDS = 2,
 	COMBAT_CHECKPOINT_NOTICE_WIDTH = 128,
 	COMBAT_CHECKPOINT_NOTICE_HEIGHT = 24,
+	-- L1b Wave 2: Studio's "Server 1.4 ms" line (the crowd step's p95), dim, over the run's
+	-- bottom-left buttons and hints. Never a tap target.
+	COMBAT_PERF_TEXT_SIZE = 12,
+	COMBAT_PERF_TRANSPARENCY = 0.35,
+	COMBAT_PERF_WIDTH = 140,
+	COMBAT_PERF_HEIGHT = 16,
 
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,

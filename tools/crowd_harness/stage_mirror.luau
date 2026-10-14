@@ -141,14 +141,19 @@ local Combat = M.load("Combat")
 local Brain = M.load("CampBrain")
 local Flow = M.load("StageFlow")
 local Geo = M.load("LevelGeometry")
+local Shapes = M.load("HitShapes")
+local Gate = M.load("SwingGate")
 local data: any = DATA
 local rules = data.combat.levels
 local director = data.combat.director
 
 -- What the module exports: the Python lists a comparison whose function is not there.
 do
-	local names: { [string]: { string } } = { Combat = {}, StageFlow = {}, CampBrain = {} }
-	for module, value in { Combat = Combat, StageFlow = Flow, CampBrain = Brain } do
+	local names: { [string]: { string } } =
+		{ Combat = {}, StageFlow = {}, CampBrain = {}, HitShapes = {}, SwingGate = {} }
+	for module, value in
+		{ Combat = Combat, StageFlow = Flow, CampBrain = Brain, HitShapes = Shapes, SwingGate = Gate }
+	do
 		for name, item in value do
 			if type(item) == "function" then
 				table.insert(names[module], name)
@@ -202,6 +207,8 @@ function L.zone(zone: any): any
 		name = zone.name,
 		checkpoint = zone.checkpoint,
 		residents = zone.residents,
+		stock = zone.stock,
+		tentStock = zone.tentStock,
 		floorY = zone.floorY,
 		rect = L.rect(zone.rect),
 		inner = L.rect(zone.inner),
@@ -247,12 +254,21 @@ function L.plan(plan: any): any
 		stages = stages,
 		zones = zones,
 		groups = plan.groups,
+		tents = plan.tents or {},
 		population = plan.population,
 	}
 end
 -- { plan = ... } or { refused = reason }.
 function L.planned(level: any, layout: any, difficulty: string): (any, any)
-	local plan, why = Flow.Plan(level, layout, difficulty, rules, Geo.Bounds(layout), data.ranks)
+	local plan, why = Flow.Plan(
+		level,
+		layout,
+		difficulty,
+		rules,
+		Geo.Bounds(layout),
+		data.ranks,
+		data.proving.crowd.kinds
+	)
 	if plan == nil then
 		return nil, { refused = why or "nil" }
 	end
@@ -412,8 +428,10 @@ for _, trace in data.traces do
 				breatherSeconds = tick.breatherSeconds,
 				fallen = tick.fallen,
 				runCap = tick.runCap,
+				tentLeft = tick.tentLeft,
 			}
 			local clear = Flow.FieldClear(plan, state, input)
+			local standsUp = Flow.StandsUp(plan, state, input)
 			local actions
 			if tick.op == "skip" then
 				actions = Flow.Skip(plan, state, tick.which, tick.now, rules, tick.fighters)
@@ -460,6 +478,7 @@ for _, trace in data.traces do
 				closing = Flow.StillClosing(state, tick.now, rules),
 				clear = clear,
 				safe = safe,
+				standsUp = standsUp,
 			}
 		end
 		local stars = {}
@@ -560,6 +579,70 @@ for _, case in data.campCases do
 			return if shown ~= nil then shown else "nil"
 		elseif op == "problems" then
 			return #Brain.Problems(case.rules)
+		elseif op == "dormant" then
+			local group = C.group(case.def, case.state, case.held)
+			local found = {}
+			for index, roots in case.rootSets do
+				local points = {}
+				for k, root in roots do
+					points[k] = C.v(root)
+				end
+				found[index] = Brain.Dormant(group, points, campRules)
+			end
+			return found
+		elseif op == "gap" then
+			local posts = {}
+			for index, list in case.posts do
+				local converted = {}
+				for k, row in list do
+					converted[k] = C.post(row)
+				end
+				posts[index] = converted
+			end
+			local found = {}
+			for index, pair in case.pairs do
+				found[index] = Brain.Gap(posts[pair[1]] or {}, posts[pair[2]] or {})
+			end
+			return found
+		elseif op == "joinIn" then
+			local groups = {}
+			for index, row in case.defs do
+				groups[index] = Brain.NewGroup(C.def(row), 0)
+			end
+			for _, entry in case.states do
+				groups[entry[1]].state = entry[2]
+				groups[entry[1]].held = entry[3]
+			end
+			local living = {}
+			for _, entry in case.living do
+				living[entry[1]] = entry[2]
+			end
+			local gaps = {}
+			for _, entry in case.gaps do
+				gaps[entry[1]] = gaps[entry[1]] or {}
+				gaps[entry[1]][entry[2]] = entry[3]
+			end
+			return Brain.JoinIn(groups, living, gaps, case.woke, campRules)
+		elseif op == "rouse" then
+			local group = C.group(case.def, case.state, case.held)
+			group.hit = true
+			local ret = Brain.Rouse(group, 4.5)
+			return { ret = ret, group = C.snapshot(group) }
+		elseif op == "tent" then
+			local tent = Brain.NewTent(case.stock)
+			local rows = {}
+			for index, step in case.ops do
+				local ret: any = "nil"
+				if step[1] == "active" then
+					ret = Brain.TentActive(step[2], step[3])
+				elseif step[1] == "due" then
+					ret = Brain.TentDue(tent, step[2], step[3])
+				else
+					Brain.TentSent(tent, step[2], case.every)
+				end
+				rows[index] = { ret = ret, left = tent.left, nextAt = tent.nextAt }
+			end
+			return rows
 		elseif op == "engaged" then
 			local found = {}
 			for index, row in case.rows do
@@ -597,6 +680,103 @@ for _, case in data.campCases do
 			return rows
 		end
 		error("unknown op " .. tostring(op))
+	end)
+end
+
+-- L1b Wave 2: HitShapes' ray rules, SwingGate, Combat's bonus and merge numbers, BossReserve ------------
+for _, case in data.rayCases do
+	J.try(case.id, function()
+		local found = {}
+		for index, row in case.rows do
+			if case.op == "crowdRay" then
+				local entry, crit = Shapes.CrowdRay(
+					C.v(row[1]),
+					C.v(row[2]),
+					row[3],
+					row[4],
+					row[5],
+					C.v(row[6]),
+					row[7],
+					row[8],
+					row[9]
+				)
+				found[index] = { if entry ~= nil then entry else "nil", crit }
+			elseif case.op == "rayUpright" then
+				local entry =
+					Shapes.RayUpright(C.v(row[1]), C.v(row[2]), row[3], row[4], row[5], C.v(row[6]), row[7], row[8], row[9])
+				found[index] = if entry ~= nil then entry else "nil"
+			else
+				found[index] = Shapes.FlatToRect(row[1], row[2], row[3], row[4], row[5], row[6])
+			end
+		end
+		return found
+	end)
+end
+for _, case in data.swingCases do
+	J.try(case.id, function()
+		if case.op == "margin" then
+			return Gate.AIR_MARGIN_STUDS
+		elseif case.op == "isAir" then
+			local found = {}
+			for index, height in case.heights do
+				found[index] = Gate.IsAir(if height == "nil" then nil else height, case.stand)
+			end
+			return found
+		end
+		local state = Gate.New()
+		local rows = {}
+		for index, step in case.ops do
+			local ret: any = "nil"
+			if step[1] == "allows" then
+				ret = Gate.Allows(state, step[2])
+			elseif step[1] == "took" then
+				Gate.Took(state, step[2])
+			else
+				Gate.Landed(state)
+			end
+			rows[index] = { ret = ret, used = state.used }
+		end
+		return rows
+	end)
+end
+local waveById: { [string]: any } = {}
+for _, case in data.waveCases do
+	waveById[case.id] = case
+end
+for _, case in data.combatCases do
+	J.try(case.id, function()
+		local found = {}
+		for index, row in case.rows do
+			if case.op == "clearBonus" then
+				local cash, materials = Combat.ClearBonus(row[1], row[2], row[3], row[4])
+				found[index] = { cash, materials }
+			elseif case.op == "deadFraction" then
+				found[index] = Combat.DeadFraction(row[1], row[2])
+			else
+				local wave = waveById[row[1]]
+				local level = L.resolve(data.levels[wave.level])
+				local stage = level.stages[wave.stage]
+				local spec = Combat.CampWave(
+					stage.waves[wave.wave],
+					level.crowd.regenShare,
+					level.difficulties[wave.difficulty],
+					data.ranks[wave.difficulty],
+					data.ranks,
+					wave.party,
+					data.combat
+				)
+				local stock = { fodder = 2 }
+				Combat.WaveStock(stock, spec, if row[2] == "nil" then nil else row[2])
+				found[index] = stock
+			end
+		end
+		return found
+	end)
+end
+for _, case in data.reserveCases do
+	J.try(case.id, function()
+		local level = L.resolve(data.levels[case.level])
+		return { Flow.BossReserve(level, data.proving.crowd.kinds), Flow.BossReserve(level, nil) }
 	end)
 end
 

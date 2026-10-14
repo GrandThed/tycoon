@@ -20,7 +20,7 @@ local L1: any = {
 	Geo = load("LevelGeometry"),
 	village = FIXTURES.village,
 	combat = FIXTURES.combat,
-	rules = { gateSeconds = 3, triggerBelow = 4, triggerHeight = 30, closeInset = 2, closeGraceSeconds = 0.5, crowdCeiling = 200, floorThickness = 4, startSpacing = 4, startCooldownSeconds = 2, fenceThickness = 1, boxMargin = 40, maxParts = 600, checkpointReach = 8, populationReserve = 21, walletSendSeconds = 1 },
+	rules = { gateSeconds = 3, triggerBelow = 4, triggerHeight = 30, closeInset = 2, closeGraceSeconds = 0.5, crowdCeiling = 200, floorThickness = 4, startSpacing = 4, startCooldownSeconds = 2, fenceThickness = 1, boxMargin = 40, maxParts = 600, checkpointReach = 8, walletSendSeconds = 1 },
 	-- ProvingGrounds.json crowd.maxAlive, for Validate's population gate.
 	crowdMax = 160,
 	ranks = { normal = 1, hard = 2, brutal = 3 },
@@ -1725,7 +1725,7 @@ end
 -- leader `unavailable`, with one warn); here a throw is reported as a refusal, so the case says
 -- which level made it throw.
 function L1.real.plan(level: any, layout: any, difficulty: string, bounds: any): (any, string?)
-	local ok, plan, why = pcall(L1.Flow.Plan, level, layout, difficulty, L1.real.rules, bounds, L1.real.ranks())
+	local ok, plan, why = pcall(L1.Flow.Plan, level, layout, difficulty, L1.real.rules, bounds, L1.real.ranks(), L1.real.kinds)
 	if not ok then
 		return nil, `Plan threw: {tostring(plan)}`
 	end
@@ -2263,7 +2263,7 @@ function L1.realLevelTests(): ()
 	-- Every number a level's start, its run, the session and the builder read from Combat.json.
 	-- A missing one is arithmetic on nil in the remote's thread or in the tick, not a refusal.
 	local needs = {
-		levels = { "gateSeconds", "triggerBelow", "triggerHeight", "closeInset", "closeGraceSeconds", "crowdCeiling", "floorThickness", "startSpacing", "startCooldownSeconds", "fenceThickness", "boxMargin", "maxParts", "checkpointReach", "populationReserve", "walletSendSeconds" },
+		levels = { "gateSeconds", "triggerBelow", "triggerHeight", "closeInset", "closeGraceSeconds", "crowdCeiling", "floorThickness", "startSpacing", "startCooldownSeconds", "fenceThickness", "boxMargin", "maxParts", "checkpointReach", "walletSendSeconds" },
 		director = { "windowSeconds", "tempoWarmupSeconds", "eliteTempo", "runCapSeconds" },
 		coop = { "maxParty", "joinUntilWave", "contributionFloor", "countPerExtraPlayer", "bossHpPerExtraPlayer", "mentorMinDamageShare", "mentorValor", "lobbyWaitSeconds", "returnGroupSeconds" },
 		remotes = { "combatStateHz" },

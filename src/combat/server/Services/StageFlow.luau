@@ -1,6 +1,7 @@
 --!strict
 -- The rules of a run through a level (docs/INTERFACES.md "L1 contracts", rulings 1, 2, 9, 10,
--- 13–19, 25, 27, 28 and "A run"; "L1b contracts", rulings L1b-1 to L1b-22). A level is an
+-- 13–19, 25, 27, 28 and "A run"; "L1b contracts", rulings L1b-1 to L1b-22; L1b Wave 2 "the
+-- long road", L1b-W2-5 to -8 and -21: tents, the population rule, the clear bonus). A level is an
 -- ordered list of stages, `travel` and `camp`; since L1b only a camp that locks (the boss room)
 -- is a stage, and every other camp of the layout is open and inhabited. This module decides
 -- everything that is a rule: which stage is next, when the boss room triggers, when its gates
@@ -40,6 +41,11 @@ export type Zone = {
 	checkpoint: Vector3?,
 	-- Bodies placed in it at the start, at the played difficulty.
 	residents: number,
+	-- L1b-W2-21: its residents and its tent's stock at the played difficulty, by kind (a locking
+	-- camp: its residents only; the run adds the bodies its waves queue).
+	stock: { [string]: number },
+	-- L1b-W2-6: its tent's stock at the played difficulty; 0 for none.
+	tentStock: number,
 	floorY: number,
 	rect: Rect,
 	-- The floor inset by levels.closeInset: whoever is not inside it when the gates close is
@@ -67,6 +73,16 @@ export type Stage = {
 	targetWaveSeconds: number,
 	maxAlive: number,
 }
+-- L1b-W2-6: a tent's stock as one group of its camp, posture "tent": kinds[k] stands on posts[k].
+export type PlanTent = {
+	-- The zone index (= its floor index).
+	zone: number,
+	def: Types.CampGroupDef,
+	-- The stock in file order, filtered by minDifficulty; never scaled by countMult.
+	kinds: { string },
+	posts: { CampBrain.Post },
+	every: number,
+}
 export type Plan = {
 	levelId: string,
 	difficulty: string,
@@ -79,7 +95,10 @@ export type Plan = {
 	zones: { Zone },
 	-- Every resident group, in the level file's order (its camps, then their groups).
 	groups: { Types.CampGroupDef },
-	-- L1b-11's left side at the played difficulty: what the client prewarms its pool with.
+	-- One per open camp with a tent stock, in the layout's order. Their groups follow `groups`
+	-- in the crowd's list.
+	tents: { PlanTent },
+	-- L1b-W2-5's left side at the played difficulty: what the client prewarms its pool with.
 	population: number,
 }
 export type State = {
@@ -124,6 +143,8 @@ export type Input = {
 	awake: number,
 	-- Living bodies on each zone's floor, by zone index (CrowdService.AliveOn).
 	aliveByFloor: { number },
+	-- L1b-W2-8: per zone index, its tent's stock not sent yet (0 where none).
+	tentLeft: { number },
 	mergeOk: boolean,
 	-- The director's breather, used by a stage that names none.
 	breatherSeconds: number,
@@ -177,7 +198,6 @@ local NEEDED = {
 		"startSpacing",
 		"boxMargin",
 		"checkpointReach",
-		"populationReserve",
 		"walletSendSeconds",
 	},
 	level = { "id", "name", "material" },
@@ -187,6 +207,7 @@ local NEEDED = {
 	camp = { "x", "y", "z", "sx", "sz" },
 	point = { "x", "z" },
 	start = { "x", "y", "z" },
+	tent = { "x", "y", "z", "sx", "sy", "sz", "radius" },
 }
 -- Where the members of a party start, in units of `spacing` round the start point: the first on
 -- it, the next eight round it, then the ring again.
@@ -394,18 +415,29 @@ local function fieldedUnits(
 	return fielded, bodies
 end
 
+-- Adds every unit's count to `stock`, by its kind.
+local function addUnits(stock: { [string]: number }, units: { Types.CampUnit }): ()
+	for _, unit in units do
+		stock[unit.kind] = (stock[unit.kind] or 0) + unit.count
+	end
+end
+
 -- One CampGroupDef per resident group at `rank`, in the level file's order (its camps, then
 -- their groups): what Plan places, and what Validate checks the posts of, so the two can never
 -- build a group differently. A camp the layout lacks, a spot its camp lacks and a group whose
--- units all drop are left out. Also returns each layout camp's residents by its id.
+-- units all drop are left out. Also returns each layout camp's residents by its id, and its
+-- residents by kind (L1b-W2-21's stock).
 local function groupsOf(
 	level: Types.LevelConfig,
 	layout: Types.LevelLayout,
 	rank: number,
 	ranks: { [string]: number }?
-): ({ Types.CampGroupDef }, { [string]: number })
+): ({ Types.CampGroupDef }, { [string]: number }, {
+	[string]: { [string]: number },
+})
 	local groups: { Types.CampGroupDef } = {}
 	local residents: { [string]: number } = {}
+	local stocks: { [string]: { [string]: number } } = {}
 	local configs: { Types.LevelCampConfig } = level.camps or {}
 	for _, config in configs do
 		local floor, camp = campIndex(layout.camps, config.id)
@@ -438,16 +470,124 @@ local function groupsOf(
 				units = units,
 			})
 			residents[camp.id] = (residents[camp.id] or 0) + bodies
+			local stock = stocks[camp.id] or {}
+			stocks[camp.id] = stock
+			addUnits(stock, units)
 		end
 	end
-	return groups, residents
+	return groups, residents, stocks
 end
 
--- L1b-11's left side: every resident, the most room a boss room's cap leaves over its own
--- residents (`caps`: each locking stage's cap, by its camp's id), and the reserve for what the
--- crowd raises by itself (the boss, summons, tents).
+-- L1b-W2-6: one PlanTent per open camp of the layout whose camps entry carries a tent stock and
+-- whose layout camp carries a `tent` block, in the layout's order, at `rank`: units filtered by
+-- minDifficulty as residents are, never scaled by countMult or the party, expanded in file order.
+-- A tent whose units all drop is left out; so is a locking camp's (its tent is a marker only:
+-- Validate refuses a stock there). Also returns each camp's tent stock by its id. CampBrain.Posts
+-- is asked with pcall: Validate reads a throw as a problem, Plan as no posts.
+local function tentsOf(
+	level: Types.LevelConfig,
+	layout: Types.LevelLayout,
+	rank: number,
+	ranks: { [string]: number }?
+): ({ PlanTent }, { [string]: number })
+	local tents: { PlanTent } = {}
+	local stocks: { [string]: number } = {}
+	local configs: { Types.LevelCampConfig } = level.camps or {}
+	for floor, camp in layout.camps do
+		local config: Types.LevelCampConfig? = nil
+		for _, entry in configs do
+			if entry.id == camp.id then
+				config = entry
+				break
+			end
+		end
+		local tent = if config ~= nil then config.tent else nil
+		local block = camp.tent
+		if tent == nil or block == nil or camp.locks == true then
+			continue
+		end
+		local units = fieldedUnits(tent.units or {}, rank, ranks)
+		local kinds: { string } = {}
+		for _, unit in units do
+			for _ = 1, unit.count do
+				table.insert(kinds, unit.kind)
+			end
+		end
+		if #kinds == 0 then
+			continue
+		end
+		local def: Types.CampGroupDef = {
+			id = `{camp.id}.tent`,
+			camp = camp.id,
+			floor = floor,
+			floorY = camp.y,
+			rect = { x = camp.x, z = camp.z, hx = camp.sx / 2, hz = camp.sz / 2 },
+			posture = "tent",
+			points = { Vector3.new(block.x, camp.y, block.z) },
+			yaw = 0,
+			radius = block.radius,
+			held = false,
+			units = units,
+		}
+		local placed, posts = pcall(CampBrain.Posts, def, #kinds)
+		table.insert(tents, {
+			zone = floor,
+			def = def,
+			kinds = kinds,
+			posts = if placed then posts else {},
+			every = tent.every,
+		})
+		stocks[camp.id] = #kinds
+	end
+	return tents, stocks
+end
+
+-- L1b-W2-5: the bodies a boss raises by itself. Over the bosses of the camp stages (only a camp
+-- that locks is a stage), the largest 1 + the largest `count` of its kind's "summon" attacks; a
+-- kind `kinds` lacks (or no `kinds`) counts 1, the boss alone. 0 when no stage has a boss.
+function StageFlow.BossReserve(
+	level: Types.LevelConfig,
+	kinds: { [string]: Types.CrowdKindDef }?
+): number
+	local reserve = 0
+	local stages: any = level.stages
+	if type(stages) ~= "table" then
+		return reserve
+	end
+	for _, stage in stages do
+		local waves = if stage.kind == KIND_CAMP then stage.waves else nil
+		if type(waves) ~= "table" then
+			continue
+		end
+		for _, wave in waves do
+			local boss = wave.boss
+			if type(boss) ~= "table" then
+				continue
+			end
+			local def = if kinds ~= nil and type(boss.kind) == "string"
+				then kinds[boss.kind]
+				else nil
+			local calls = 0
+			local attacks: { Types.CrowdAttackDef } = if def ~= nil and def.attacks ~= nil
+				then def.attacks
+				else {}
+			for _, attack in attacks do
+				if attack.shape == "summon" then
+					calls = math.max(calls, attack.count or 0)
+				end
+			end
+			reserve = math.max(reserve, 1 + calls)
+		end
+	end
+	return reserve
+end
+
+-- L1b-W2-5's left side: every resident, every tent's stock (`tents`, the sum), the most room a
+-- boss room's cap leaves over its own residents (`caps`: each locking stage's cap, by its camp's
+-- id), and the boss reserve.
 local function populationOf(
 	residents: { [string]: number },
+	tents: number,
 	caps: { [string]: number },
 	reserve: number
 ): number
@@ -459,7 +599,19 @@ local function populationOf(
 	for id, cap in caps do
 		room = math.max(room, cap - (residents[id] or 0))
 	end
-	return placed + room + reserve
+	return placed + tents + room + reserve
+end
+
+local function sumOf(byId: { [string]: number }): number
+	local total = 0
+	for _, value in byId do
+		total += value
+	end
+	return total
+end
+
+local function isFinite(value: any): boolean
+	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
 
 -- Validate's L1b lines, one per problem, into `problems`: the numbers the run reads, which camps
@@ -486,23 +638,19 @@ local function campProblems(
 			problem(`levels.{key} is {value}, not above 0`)
 		end
 	end
-	local reserve = numbers.populationReserve
-	if type(reserve) == "number" and not (reserve >= 0) then
-		problem(`levels.populationReserve is {reserve}, under 0`)
-	end
 	local crowd: any = level.crowd
 	local bonus = if type(crowd) == "table" then crowd.clearBonus else nil
+	-- L1b-W2-21: a share of what the camp's whole stock pays.
 	if
 		bonus ~= nil
 		and (
 			type(bonus) ~= "table"
-			or type(bonus.cash) ~= "number"
-			or type(bonus.materials) ~= "number"
-			or not (bonus.cash >= 0)
-			or not (bonus.materials >= 0)
+			or not isFinite(bonus.share)
+			or bonus.share < 0
+			or bonus.share > 1
 		)
 	then
-		problem("crowd.clearBonus needs a cash and a materials of 0 or more")
+		problem("crowd.clearBonus needs a share from 0 to 1")
 	end
 
 	-- L1b-12: a stage names only a camp that locks, and every camp that locks is named once.
@@ -526,6 +674,21 @@ local function campProblems(
 	end
 
 	for _, camp in camps do
+		-- L1b-W2-6: a tent's marker and ring (a boss room's is a marker only, checked the same).
+		local block: any = camp.tent
+		if block ~= nil then
+			local broken = type(block) ~= "table"
+			for _, key in NEEDED.tent do
+				broken = broken or not isFinite(block[key])
+			end
+			if broken then
+				problem(`camp {camp.id}: its tent needs a finite {table.concat(NEEDED.tent, ", ")}`)
+			elseif not (block.sx > 0 and block.sy > 0 and block.sz > 0 and block.radius > 0) then
+				problem(`camp {camp.id}: its tent's size and radius must be above 0`)
+			elseif not onFloor(camp, block.x, block.z, 0) then
+				problem(`camp {camp.id}: its tent's centre lies off the floor`)
+			end
+		end
 		local spots: any = camp.spots
 		if spots == nil then
 			continue
@@ -581,6 +744,28 @@ local function campProblems(
 		problem("camps is not a list")
 		configs = {}
 	end
+	-- A resident's or a tent's units, broken in any way a unit can be.
+	local function unitProblems(at: string, units: any): ()
+		if type(units) ~= "table" or #units == 0 then
+			problem(`{at} has no units`)
+			return
+		end
+		for unitIndex, unit in units do
+			local which = `{at} unit {unitIndex}`
+			if type(unit.kind) ~= "string" then
+				problem(`{which} has no kind`)
+			else
+				checkKind(which, unit.kind)
+			end
+			if not isCap(unit.count) then
+				problem(`{which}: count {tostring(unit.count)} is not a whole number of at least 1`)
+			end
+			local needs = unit.minDifficulty
+			if needs ~= nil and ranks[needs] == nil then
+				problem(`{which}: minDifficulty "{tostring(needs)}" is no difficulty`)
+			end
+		end
+	end
 	local entries: { [string]: boolean } = {}
 	for index, config in configs do
 		local id = config.id
@@ -597,6 +782,25 @@ local function campProblems(
 		if type(config.name) ~= "string" or config.name == "" then
 			problem(`{here} has no name`)
 		end
+		-- L1b-W2-6: a tent's stock, on an open camp whose layout camp has a tent block.
+		local tent = config.tent
+		if tent ~= nil then
+			if type(tent) ~= "table" then
+				problem(`{here}: its tent is not a table`)
+			else
+				if not (isFinite(tent.every) and tent.every > 0) then
+					problem(
+						`{here}: its tent's every is {tostring(tent.every)}, not a time above 0`
+					)
+				end
+				unitProblems(`{here} tent`, tent.units)
+				if camp ~= nil and camp.locks == true then
+					problem(`{here}: camp {camp.id} locks, and a boss room's tent has no stock`)
+				elseif camp ~= nil and camp.tent == nil then
+					problem(`{here} has a tent stock, and camp {camp.id} has no tent block`)
+				end
+			end
+		end
 		local residents = config.residents
 		if type(residents) ~= "table" then
 			problem(`{here} has no residents list`)
@@ -607,28 +811,7 @@ local function campProblems(
 			if camp ~= nil and spotOf(camp, group.spot) == nil then
 				problem(`{at} names the spot "{tostring(group.spot)}", which camp {camp.id} lacks`)
 			end
-			local units = group.units
-			if type(units) ~= "table" or #units == 0 then
-				problem(`{at} has no units`)
-				continue
-			end
-			for unitIndex, unit in units do
-				local which = `{at} unit {unitIndex}`
-				if type(unit.kind) ~= "string" then
-					problem(`{which} has no kind`)
-				else
-					checkKind(which, unit.kind)
-				end
-				if not isCap(unit.count) then
-					problem(
-						`{which}: count {tostring(unit.count)} is not a whole number of at least 1`
-					)
-				end
-				local needs = unit.minDifficulty
-				if needs ~= nil and ranks[needs] == nil then
-					problem(`{which}: minDifficulty "{tostring(needs)}" is no difficulty`)
-				end
-			end
+			unitProblems(at, group.units)
 		end
 	end
 	if #problems > 0 then
@@ -670,10 +853,40 @@ local function campProblems(
 			end
 		end
 	end
+	local tents = tentsOf(level, layout, top, ranks)
+	for _, tent in tents do
+		local widest = 0
+		for _, kind in tent.kinds do
+			local def = kinds[kind]
+			widest = math.max(widest, if def ~= nil then def.radius else 0)
+		end
+		local _floor, camp = campIndex(camps, tent.def.camp)
+		if #tent.posts ~= #tent.kinds then
+			problem(`group {tent.def.id}: its posts could not be placed`)
+			continue
+		end
+		for index, post in tent.posts do
+			if camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest) then
+				problem(
+					`group {tent.def.id}: ring post {index} lies off its floor less {widest}, its widest radius`
+				)
+				break
+			end
+		end
+	end
+	local reserve = StageFlow.BossReserve(level, kinds)
 
-	-- A boss room's own residents, and the population gate (L1b-11), at every difficulty.
+	-- A boss room's own residents, a tent with residents to go with it, and the population gate
+	-- (L1b-W2-5), at every difficulty.
 	for name in level.difficulties do
-		local _groups, residents = groupsOf(level, layout, ranks[name] or 0, ranks)
+		local rank = ranks[name] or 0
+		local _groups, residents = groupsOf(level, layout, rank, ranks)
+		local _tents, tentStocks = tentsOf(level, layout, rank, ranks)
+		for id, stock in tentStocks do
+			if stock > 0 and (residents[id] or 0) == 0 then
+				problem(`on {name} camp {id} has a tent stock of {stock} and no residents`)
+			end
+		end
 		local caps: { [string]: number } = {}
 		for _, stage in stages do
 			local _floor, camp =
@@ -690,7 +903,7 @@ local function campProblems(
 				)
 			end
 		end
-		local population = populationOf(residents, caps, reserve or 0)
+		local population = populationOf(residents, sumOf(tentStocks), caps, reserve)
 		if population > crowdMax then
 			problem(
 				`on {name} the population is {population}, over ProvingGrounds.json crowd.maxAlive ({crowdMax})`
@@ -951,9 +1164,10 @@ local function inRect(rect: Rect, x: number, z: number): boolean
 end
 
 -- The level as the run walks it, at one difficulty: a zone for every camp of the layout (its
--- floor index is its place in `layout.camps`), the stages, every resident group and the
--- population. `ranks` (the place of every difficulty in Expeditions.json) decides which
--- minDifficulty units are fielded; without it none is. nil, with the reason, for a difficulty
+-- floor index is its place in `layout.camps`), the stages, every resident group, every tent and
+-- the population. `ranks` (the place of every difficulty in Expeditions.json) decides which
+-- minDifficulty units are fielded; without it none is. `kinds` (ProvingGrounds.json crowd.kinds)
+-- gives the boss reserve; without it each boss counts 1. nil, with the reason, for a difficulty
 -- the level lacks, a camp stage whose zone the layout lacks, or a stage's camp whose entry lies
 -- within levels.closeInset of its floor's edge (the close would move a fighter who stands on the
 -- entry back onto it, into a body the gate overlaps). Asked after Validate: it reads the keys
@@ -964,13 +1178,15 @@ function StageFlow.Plan(
 	difficulty: string,
 	rules: Types.CombatLevelsConfig,
 	bounds: LevelGeometry.Bounds,
-	ranks: { [string]: number }?
+	ranks: { [string]: number }?,
+	kinds: { [string]: Types.CrowdKindDef }?
 ): (Plan?, string?)
 	if level.difficulties[difficulty] == nil then
 		return nil, `{level.id} has no difficulty "{difficulty}"`
 	end
 	local rank = if ranks ~= nil then ranks[difficulty] or 0 else 0
-	local groups, residents = groupsOf(level, layout, rank, ranks)
+	local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks)
+	local tents, tentStocks = tentsOf(level, layout, rank, ranks)
 	-- What a zone is called: its camps entry's name, else the name of the stage that names it.
 	local names: { [string]: string } = {}
 	for _, stage in level.stages do
@@ -1001,6 +1217,14 @@ function StageFlow.Plan(
 			table.insert(spawns, Vector3.new(point.x, camp.y, point.z))
 		end
 		local mark = camp.checkpoint
+		local stock = table.clone(residentStocks[camp.id] or {})
+		for _, tent in tents do
+			if tent.zone == index then
+				for _, kind in tent.kinds do
+					stock[kind] = (stock[kind] or 0) + 1
+				end
+			end
+		end
 		local zone: Zone = {
 			id = camp.id,
 			floor = index,
@@ -1008,6 +1232,8 @@ function StageFlow.Plan(
 			name = names[camp.id] or camp.id,
 			checkpoint = if mark ~= nil then Vector3.new(mark.x, camp.y, mark.z) else nil,
 			residents = residents[camp.id] or 0,
+			stock = stock,
+			tentStock = tentStocks[camp.id] or 0,
 			floorY = camp.y,
 			rect = rect,
 			inner = inner,
@@ -1077,7 +1303,13 @@ function StageFlow.Plan(
 		stages = stages,
 		zones = zones,
 		groups = groups,
-		population = populationOf(residents, caps, rules.populationReserve or 0),
+		tents = tents,
+		population = populationOf(
+			residents,
+			sumOf(tentStocks),
+			caps,
+			StageFlow.BossReserve(level, kinds)
+		),
 	}
 end
 
@@ -1241,7 +1473,8 @@ end
 -- L1b-18 and L1b-17, in every live step before the rows, each zone at most once per run. A
 -- checkpoint is reached by a standing root within levels.checkpointReach of it on the flat, in
 -- the trigger's height band over its camp's floor. An open camp that had residents is cleared
--- when none of them lives: sneaking past it is allowed, so a run never waits for it.
+-- when no body on its floor lives and its tent's stock is spent (L1b-W2-8): sneaking past it is
+-- allowed, so a run never waits for it.
 local function progress(
 	plan: Plan,
 	state: State,
@@ -1271,8 +1504,16 @@ local function progress(
 		end
 	end
 	local byFloor = input.aliveByFloor or {}
+	-- L1b-W2-8: and its tent's stock is spent (what is left of it is still to come out).
+	local tentLeft = input.tentLeft or {}
 	for index, zone in plan.zones do
-		if zone.locks or zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then
+		if
+			zone.locks
+			or zone.residents <= 0
+			or state.done[index]
+			or byFloor[index] ~= 0
+			or (tentLeft[index] or 0) ~= 0
+		then
 			continue
 		end
 		state.done[index] = true

@@ -39,6 +39,7 @@ local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
+local SwingGate = require(sharedFolder:WaitForChild("SwingGate"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
@@ -71,7 +72,8 @@ local CONST = {
 	-- refused rather than let the step grow without bound.
 	MAX_PROJECTILES = 256,
 	-- Height above standing height before a character counts as airborne (steps and slopes).
-	AIRBORNE_MARGIN_STUDS = 0.75,
+	-- L1b-W2-13: SwingGate's, so the client's air-swing gate and this one share one number.
+	AIRBORNE_MARGIN_STUDS = SwingGate.AIR_MARGIN_STUDS,
 	-- Server-set character attribute while an i-frame window is open (a dash, an ability's leap,
 	-- P4: after a knockback and on getting up), so the flag is visible in Studio's Properties
 	-- panel and to the client.
@@ -166,6 +168,9 @@ type Shooter = {
 	-- The peak of the airborne phase that ended at landedAt (for a slam request that trails it).
 	lastPeakY: number,
 	landedAt: number,
+	-- L1b-W2-13: one melee swing per jump; set by an airborne swing, cleared by a grounded one
+	-- or the landing (a double jump is not one).
+	airSwing: SwingGate.State,
 	-- Fastest fall the server saw in this airtime (studs/s, downward positive), and in the one
 	-- that ended at landedAt.
 	diveSpeed: number,
@@ -677,7 +682,9 @@ local function gather(
 		body: Vector3,
 		bodyRadius: number,
 		head: Vector3,
-		headRadius: number
+		headRadius: number,
+		feet: Vector3,
+		height: number
 	) -> (number?, boolean)
 ): { Candidate }
 	local found: { Candidate } = {}
@@ -692,7 +699,7 @@ local function gather(
 		end
 		local body = enemy.position + Vector3.new(0, def.height / 2, 0)
 		local head = enemy.position + Vector3.new(0, def.height - def.headRadius, 0)
-		local order, crit = test(body, def.radius, head, def.headRadius)
+		local order, crit = test(body, def.radius, head, def.headRadius, enemy.position, def.height)
 		if order ~= nil then
 			table.insert(found, { id = id, order = order, body = body, crit = crit })
 		end
@@ -986,10 +993,9 @@ local function resolveMelee(
 	variant: Variant,
 	root: BasePart,
 	seq: number,
-	claimed: Vector3,
+	origin: Vector3,
 	direction: Vector3
 ): ()
-	local origin = meleeOrigin(shooter, root, claimed, config)
 	local heading = flatten(direction) or flatten(root.CFrame.LookVector) or Vector3.new(0, 0, -1)
 	local chain = variant.chain
 	local step = shooter.combo[weapon] or 0
@@ -1062,8 +1068,9 @@ local function resolveMelee(
 	})
 end
 
--- One ray against the crowd: the enemies it touches before `reach`, entry order, crit when it
--- also passes the head sphere (unpadded: the pad forgives a miss, it does not make a headshot).
+-- One ray against the crowd: the enemies it touches before `reach`, entry order. L1b-W2-15:
+-- HitShapes.CrowdRay, the body capsule or the head sphere, both padded; crit when the unpadded
+-- ray touches the head (the pad forgives a miss, it does not make a headshot).
 local function rayCandidates(
 	config: Types.ProvingGroundsConfig,
 	origin: Vector3,
@@ -1077,12 +1084,25 @@ local function rayCandidates(
 		config,
 		center,
 		reach / 2 + pad + width / 2,
-		function(body: Vector3, r: number, head: Vector3, headRadius: number): (number?, boolean)
-			local entry = HitShapes.Ray(origin, direction, reach, width, pad, body, r)
-			if entry == nil then
-				return nil, false
-			end
-			return entry, HitShapes.Ray(origin, direction, reach, width, 0, head, headRadius) ~= nil
+		function(
+			_body: Vector3,
+			r: number,
+			_head: Vector3,
+			headRadius: number,
+			feet: Vector3,
+			height: number
+		): (number?, boolean)
+			return HitShapes.CrowdRay(
+				origin,
+				direction,
+				reach,
+				width,
+				pad,
+				feet,
+				r,
+				height,
+				headRadius
+			)
 		end
 	)
 end
@@ -1804,6 +1824,7 @@ local function trackAir(now: number, deltaTime: number): ()
 			-- The landing frame's own fall counts: the dive ends on it.
 			shooter.lastDiveSpeed = math.max(shooter.diveSpeed, fallSpeed)
 			shooter.landedAt = now
+			SwingGate.Landed(shooter.airSwing)
 		end
 		shooter.airborne = airborne
 	end
@@ -1819,6 +1840,7 @@ local function resetAir(shooter: Shooter): ()
 	shooter.diveSpeed = 0
 	shooter.lastDiveSpeed = 0
 	shooter.lastY = nil
+	shooter.airSwing = SwingGate.New()
 	PositionRing.Clear(shooter.history)
 end
 
@@ -1959,6 +1981,7 @@ function WeaponService.AddPlayer(player: Player): ()
 		peakY = 0,
 		lastPeakY = -math.huge,
 		landedAt = 0,
+		airSwing = SwingGate.New(),
 		diveSpeed = 0,
 		lastDiveSpeed = 0,
 		lastY = nil,
@@ -2139,7 +2162,7 @@ function WeaponService.OnAttack(
 		sendRefused(shooter, seq)
 		return
 	end
-	local _character, root = rootOf(player)
+	local _character, root, humanoid = rootOf(player)
 	if root == nil then
 		return
 	end
@@ -2174,16 +2197,35 @@ function WeaponService.OnAttack(
 			sendRefused(shooter, seq)
 			return
 		end
-	elseif now - previousAttackAt > config.controls.comboResetSeconds then
-		-- A pause breaks the combo: the next swing is step 1 again.
-		shooter.combo[weapon] = 0
+	end
+	-- L1b-W2-13: one melee swing per jump, judged at the swing's own origin (the claim, clamped
+	-- by the claim slack) against the floor under it, so a swing on the take-off frame is
+	-- airborne and one on the landing frame grounded: an honest client is never refused.
+	local swingAt = origin
+	local airSwing = false
+	if variant.kind == "melee" then
+		swingAt = meleeOrigin(shooter, root, origin, config)
+		local floorY = floorUnder(swingAt, worldParams())
+		local standOffset = if humanoid ~= nil
+			then standingOffset(root, humanoid)
+			else root.Size.Y / 2
+		airSwing = SwingGate.IsAir(if floorY ~= nil then swingAt.Y - floorY else nil, standOffset)
+		if not SwingGate.Allows(shooter.airSwing, airSwing) then
+			sendRefused(shooter, seq)
+			return
+		end
+		if now - previousAttackAt > config.controls.comboResetSeconds then
+			-- A pause breaks the combo: the next swing is step 1 again.
+			shooter.combo[weapon] = 0
+		end
 	end
 	shooter.lastSeq[slot] = seq
 	shooter.lastAttackAt[slot] = now
 	shooter.credit[slot] = credit - 1
 	shooter.creditAt[slot] = now
 	if variant.kind == "melee" then
-		resolveMelee(config, shooter, weapon, variantKey, variant, root, seq, origin, direction)
+		SwingGate.Took(shooter.airSwing, airSwing)
+		resolveMelee(config, shooter, weapon, variantKey, variant, root, seq, swingAt, direction)
 	else
 		local used, scale, full =
 			resolveCharge(shooter, weapon, variant, charge or 0, previousAttackAt, now)

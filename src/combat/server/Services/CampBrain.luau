@@ -1,9 +1,11 @@
 --!strict
 -- The rules of a camp's resident groups (docs/INTERFACES.md "L1b contracts — the living road",
 -- rulings L1b-3 to L1b-9 and L1b-13; MISSIONS_DESIGN §16.1, §16.2 and §16.5). A group is a set of
--- bodies of one camp with one posture (guard, patrol, fire) and one state (rest, rise, fight,
+-- bodies of one camp with one posture (guard, patrol, fire, tent) and one state (rest, rise, fight,
 -- home): its whole membership changes state together, which is what "a raider of their group
 -- wakes" means. CrowdService keeps the groups and executes what this module decides.
+-- L1b Wave 2 ("Wave 2 — the long road", L1b-W2-6, -7, -10, -12) adds a tent's own group and its
+-- sending rule, dormancy far from every player, and the join-in of nearby resting groups.
 --
 -- Pure on purpose, as StageFlow is: tables, numbers and Vector3 values within the harness shim
 -- (X Y Z, + - * /, unary minus, Magnitude, Unit, Dot); no service, no Instance, no clock of its
@@ -14,6 +16,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local Types = require(sharedFolder:WaitForChild("Types"))
 
 export type Post = {
@@ -53,6 +56,8 @@ export type Group = {
 	-- the userIds in play at the last Step
 	inPlay: { [number]: boolean },
 }
+-- A tent's stock not sent yet, and the clock its next body is due (L1b-W2-7).
+export type TentState = { left: number, nextAt: number }
 
 -- A rise or a leash that ends exactly on a step must not wait one more because the summed step
 -- times came out a hair short (CrowdBrain's TIME_EPSILON).
@@ -64,7 +69,7 @@ local CONE_EPSILON_DEGREES = 1e-6
 -- A patrol member whose arc length falls this close to a vertex stands on it (and takes the next).
 local ARC_EPSILON = 1e-9
 
-local POSTURES: { Types.CampPosture } = { "guard", "patrol", "fire" }
+local POSTURES: { Types.CampPosture } = { "guard", "patrol", "fire", "tent" }
 local POSTURE_KEYS = { "sight", "cone", "rise" }
 local RULE_KEYS = {
 	"sightBelow",
@@ -75,6 +80,8 @@ local RULE_KEYS = {
 	"patrolPace",
 	"homeTolerance",
 	"engagedHoldSeconds",
+	"joinFactor",
+	"dormantRadius",
 }
 
 local CampBrain = {}
@@ -109,6 +116,8 @@ local function postureRules(
 		return rules.patrol
 	elseif posture == "fire" then
 		return rules.fire
+	elseif posture == "tent" then
+		return rules.tent
 	end
 	return rules.guard
 end
@@ -120,7 +129,9 @@ local function inBand(def: Types.CampGroupDef, root: Vector3, rules: Types.CampR
 end
 
 -- One line per key of Combat.json `camps` that is missing, not a number, not finite or negative;
--- a `sight` of 0 or less; a `cone` outside (0, 360]; a `homeTolerance` of 0 or less. nil = one line.
+-- a `sight` of 0 or less; a `cone` outside (0, 360]; a `homeTolerance` or `joinFactor` of 0 or
+-- less; a `dormantRadius` not above every posture's sight (a group must never sleep where one of
+-- its members could see a player). nil = one line.
 function CampBrain.Problems(rules: Types.CampRulesConfig?): { string }
 	local problems: { string } = {}
 	if typeof(rules) ~= "table" then
@@ -153,8 +164,21 @@ function CampBrain.Problems(rules: Types.CampRulesConfig?): { string }
 			table.insert(problems, `camps.{key}: missing or not a finite number`)
 		elseif value < 0 then
 			table.insert(problems, `camps.{key}: negative ({value})`)
-		elseif key == "homeTolerance" and value <= 0 then
-			table.insert(problems, `camps.homeTolerance: must be above 0 ({value})`)
+		elseif (key == "homeTolerance" or key == "joinFactor") and value <= 0 then
+			table.insert(problems, `camps.{key}: must be above 0 ({value})`)
+		end
+	end
+	local dormantRadius = given.dormantRadius
+	if isFinite(dormantRadius) then
+		for _, posture in POSTURES do
+			local entry = given[posture]
+			local sight = if typeof(entry) == "table" then entry.sight else nil
+			if isFinite(sight) and dormantRadius <= sight then
+				table.insert(
+					problems,
+					`camps.dormantRadius: must be above camps.{posture}.sight ({dormantRadius} <= {sight})`
+				)
+			end
 		end
 	end
 	return problems
@@ -176,7 +200,8 @@ end
 -- guard: member k on points[k], all facing def.yaw. patrol: spaced evenly by arc length round
 -- the closed loop from points[1], each walking to the end of the leg it stands on (one exactly on
 -- a vertex walks to the next point) and facing it. fire: evenly round the circle of def.radius
--- about points[1], the first north of the centre, each facing the centre.
+-- about points[1], the first north of the centre, each facing the centre. tent: the fire's circle
+-- (round the tent's marker), each facing away from it.
 function CampBrain.Posts(def: Types.CampGroupDef, count: number): { Post }
 	local posts: { Post } = {}
 	local points = def.points
@@ -223,8 +248,11 @@ function CampBrain.Posts(def: Types.CampGroupDef, count: number): { Post }
 			local yaw = if dx * dx + dz * dz > ARC_EPSILON then yawToward(dx, dz) else def.yaw
 			table.insert(posts, { at = at, yaw = yaw, leg = leg })
 		end
-	elseif posture == "fire" then
+	elseif posture == "fire" or posture == "tent" then
 		local centre = points[1]
+		-- A member at bearing theta stands at (-sin, -cos) x radius from the centre, so yaw theta
+		-- faces away from it and theta + pi faces it.
+		local turn = if posture == "fire" then math.pi else 0
 		for k = 1, count do
 			local theta = 2 * math.pi * (k - 1) / count
 			local at = Vector3.new(
@@ -232,7 +260,7 @@ function CampBrain.Posts(def: Types.CampGroupDef, count: number): { Post }
 				floorY,
 				centre.Z - math.cos(theta) * def.radius
 			)
-			local yaw = theta + math.pi
+			local yaw = theta + turn
 			while yaw > math.pi do
 				yaw -= 2 * math.pi
 			end
@@ -297,10 +325,9 @@ function CampBrain.InPlay(
 		return false
 	end
 	local rect = def.rect
-	local margin = rules.chaseMargin
-	local outX = math.max(math.abs(root.X - rect.x) - rect.hx, 0)
-	local outZ = math.max(math.abs(root.Z - rect.z) - rect.hz, 0)
-	if math.sqrt(outX * outX + outZ * outZ) <= margin then
+	if
+		HitShapes.FlatToRect(root.X, root.Z, rect.x, rect.z, rect.hx, rect.hz) <= rules.chaseMargin
+	then
 		return true
 	end
 	for _, shooter in shooters do
@@ -466,7 +493,8 @@ function CampBrain.Goal(
 end
 
 -- The wire state of a member that is not fighting; nil = the brain's (fight). `moving` is the
--- executor's: a flat speed over its move threshold this step.
+-- executor's: a flat speed over its move threshold this step. Only a fire sits: a tent's group
+-- stands round its tent.
 function CampBrain.Shows(group: Group, moving: boolean): Types.CrowdState?
 	local state = group.state
 	if group.held or state == "rest" then
@@ -480,6 +508,121 @@ function CampBrain.Shows(group: Group, moving: boolean): Types.CrowdState?
 		return "rise"
 	end
 	return nil
+end
+
+-- L1b-W2-10: a resting group (held or not) is dormant while no player's root is within
+-- dormantRadius (flat) of its camp's floor rectangle; an empty `roots` is dormant. A group in
+-- rise, fight or home is never dormant.
+function CampBrain.Dormant(group: Group, roots: { Vector3 }, rules: Types.CampRulesConfig): boolean
+	if group.state ~= "rest" then
+		return false
+	end
+	local rect = group.def.rect
+	local radius = rules.dormantRadius
+	for _, root in roots do
+		if HitShapes.FlatToRect(root.X, root.Z, rect.x, rect.z, rect.hx, rect.hz) <= radius then
+			return false
+		end
+	end
+	return true
+end
+
+-- L1b-W2-12: the gap between two groups, the least flat distance between a post of one and a post
+-- of the other; math.huge if either has none.
+function CampBrain.Gap(a: { Post }, b: { Post }): number
+	local best = math.huge
+	for _, one in a do
+		for _, other in b do
+			local distance = flatDistance(one.at, other.at)
+			if distance < best then
+				best = distance
+			end
+		end
+	end
+	return best
+end
+
+-- L1b-W2-12: the groups that join a wake. Breadth first from `woke`, in its order: each waker X
+-- brings in, in index order, every resting, unheld, living group Y of its camp (gaps[X][Y] is set
+-- only within a camp) whose gap is at most joinFactor x X's own posture sight, edge included; each
+-- one brought in wakes its own neighbours in turn. Mutates nothing and never answers an index of
+-- `woke`.
+function CampBrain.JoinIn(
+	groups: { Group },
+	living: { number },
+	gaps: { [number]: { [number]: number } },
+	woke: { number },
+	rules: Types.CampRulesConfig
+): { number }
+	local answer: { number } = {}
+	local taken: { [number]: boolean } = {}
+	local queue: { number } = {}
+	for _, index in woke do
+		taken[index] = true
+		table.insert(queue, index)
+	end
+	local head = 1
+	while head <= #queue do
+		local waker = queue[head]
+		head += 1
+		local row = gaps[waker]
+		local group = groups[waker]
+		if row == nil or group == nil then
+			continue
+		end
+		local reach = rules.joinFactor * postureRules(group.def, rules).sight
+		for other = 1, #groups do
+			local gap = row[other]
+			if gap == nil or other == waker or taken[other] then
+				continue
+			end
+			local candidate = groups[other]
+			if
+				candidate.state == "rest"
+				and not candidate.held
+				and (living[other] or 0) > 0
+				and gap <= reach
+			then
+				taken[other] = true
+				table.insert(answer, other)
+				table.insert(queue, other)
+			end
+		end
+	end
+	return answer
+end
+
+-- A wake from outside Step and Release (a tent's rouse, a join-in): a resting, unheld group rises.
+-- True when it did; anything else is left as it is.
+function CampBrain.Rouse(group: Group, now: number): boolean
+	if group.held or group.state ~= "rest" then
+		return false
+	end
+	group.state = "rise"
+	group.since = now
+	group.hit = false
+	return true
+end
+
+-- L1b-W2-7: a tent's stock, its first body due at once.
+function CampBrain.NewTent(stock: number): TentState
+	return { left = stock, nextAt = -math.huge }
+end
+
+-- A tent sends while its camp is busy, or once its camp has no resident left alive (its own
+-- bodies not counted), so a camp can always be cleared.
+function CampBrain.TentActive(busy: boolean, residentsAlive: number): boolean
+	return busy or residentsAlive <= 0
+end
+
+-- A pause keeps both the stock and nextAt, so after a long rest the next body comes at once.
+function CampBrain.TentDue(tent: TentState, active: boolean, now: number): boolean
+	return active and tent.left > 0 and now >= tent.nextAt - TIME_EPSILON
+end
+
+function CampBrain.TentSent(tent: TentState, now: number, every: number): ()
+	tent.left = math.max(tent.left - 1, 0)
+	tent.nextAt = now + every
 end
 
 return CampBrain

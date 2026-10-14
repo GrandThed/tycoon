@@ -40,14 +40,14 @@ export type Sizes = { fence: number, floor: number?, checkpoint: Size?, fire: Si
 -- invisible wall); `material` and `color` are the piece's own and win over the look's.
 export type Piece = {
 	name: string,
-	-- "block" | "floor" | "fence" | "gate" | "obstacle" | "checkpoint" | "fire" | "barrier" |
-	-- "secret" | "sign"
+	-- "block" | "floor" | "fence" | "gate" | "obstacle" | "checkpoint" | "fire" | "tent" |
+	-- "barrier" | "secret" | "sign"
 	role: string,
 	box: Box,
 	look: string?,
 	material: string?,
 	color: { number }?,
-	-- The camp a floor, fence, gate, obstacle, checkpoint, fire or barrier belongs to.
+	-- The camp a floor, fence, gate, obstacle, checkpoint, fire, tent or barrier belongs to.
 	camp: string?,
 	-- false = nothing collides with it, touches it or is stopped by it in a ray.
 	collide: boolean,
@@ -387,6 +387,16 @@ function LevelGeometry.FireBox(camp: Types.LevelCamp, spot: Types.LevelSpot, siz
 	}
 end
 
+-- L1b-W2-9: a camp's tent marker, the layout's block as it stands (its centre and its size);
+-- nil for a camp with no tent.
+function LevelGeometry.TentBox(camp: Types.LevelCamp): Box?
+	local tent = camp.tent
+	if tent == nil then
+		return nil
+	end
+	return { x = tent.x, y = tent.y, z = tent.z, sx = tent.sx, sy = tent.sy, sz = tent.sz }
+end
+
 function LevelGeometry.SecretBox(secret: Types.LevelSecret): Box
 	return {
 		x = secret.x,
@@ -634,10 +644,10 @@ function LevelGeometry.BareLobby(): Types.LevelLayout
 end
 
 -- Every Part a layout becomes, in build order: the blocks; per camp its floor, fence, gates,
--- cover, checkpoint marker, fire markers and invisible wall; per secret its marked block and its
--- sign. Only a camp that locks (L1b-12) has gates and a wall: an open camp's fence is cut at its
--- gates and the road runs through. A marker or a sign whose size `sizes` does not give is left
--- out.
+-- cover, checkpoint marker, fire markers, tent marker and invisible wall; per secret its marked
+-- block and its sign. Only a camp that locks (L1b-12) has gates and a wall: an open camp's fence
+-- is cut at its gates and the road runs through. A marker or a sign whose size `sizes` does not
+-- give is left out (a tent marker carries its own size).
 -- Names are what Studio's Explorer shows (Camp_A_Floor, Gate_A_1, Barrier_A_3,
 -- Secret_lookout). nil and one line saying why when the layout cannot be built: it still
 -- names an arena, a camp has gates and no fence, a camp's floor has no depth (`sizes.floor`),
@@ -758,6 +768,19 @@ function LevelGeometry.Pieces(
 					})
 				end
 			end
+		end
+		local tent = LevelGeometry.TentBox(camp)
+		if tent ~= nil then
+			-- A marker only (L1b-W2-9): walked through, no shot or camera ray stops at it, and it
+			-- is neither cover nor a perch.
+			table.insert(pieces, {
+				name = `Camp_{id}_Tent`,
+				role = "tent",
+				box = tent,
+				look = "tent",
+				camp = id,
+				collide = false,
+			})
 		end
 		if barrier ~= nil and locks then
 			for index, box in LevelGeometry.BarrierBoxes(camp, sizes.fence, barrier) do

@@ -65,16 +65,26 @@
 --    name shrinks to its room before it would truncate ("Raider Arena · Normal" did).
 --  * The wallet's material chip is not shown where there is no material (the lobby read "0").
 --  * `HudEdges.noticeBottom` is where the notice line ends, for the banner's place.
+--
+-- L1b Wave 2 (docs/INTERFACES.md "Wave 2 — the long road", L1b-W2-23): in Studio only, a dim
+-- "Server 1.4 ms" line in every live phase: the crowd step's p95, which CrowdService writes
+-- into the Workspace attribute Combat.json debug.perfAttribute names with each [Perf] line.
+-- Hidden while the attribute is missing (a live server never sets it). It sits over the
+-- bottom-left stack (the buttons, then the two key hints where a keyboard shows them), so it
+-- is clear of the header, the objective line, "Camps 1 / 3", the notice line and the boss bar
+-- at the top on a PC and on a 667 x 375 phone; it is a label, never a tap target.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Format = require(sharedFolder:WaitForChild("Format"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
@@ -180,6 +190,8 @@ local RANGED_SLOT = "ranged"
 local DIAGONAL = math.sqrt(0.5)
 local ALT_HINT_LOCKED = "Alt · free cursor"
 local ALT_HINT_FREE = "Alt · aim"
+-- L1b-W2-23: the perf line reads in tenths of a millisecond; past this it drops the decimal.
+local PERF_TENTHS_BELOW = 100
 
 local CombatHud = {}
 
@@ -738,6 +750,30 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		Parent = parent,
 	}) :: TextLabel
 	local keyHintScale = Create("UIScale", { Parent = keyHint }) :: UIScale
+	-- L1b-W2-23: the Studio perf line (see the header). `name` = the Workspace attribute it
+	-- reads, nil outside Studio or without the config: then it never shows.
+	local perfConfig = Catalog.GetCombatConfig()
+	local perf = {
+		name = if RunService:IsStudio() and perfConfig ~= nil
+			then perfConfig.debug.perfAttribute
+			else nil :: string?,
+		line = Create("TextLabel", {
+			Name = "ServerPerf",
+			Active = false,
+			AnchorPoint = Vector2.new(0, 1),
+			BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(Theme.COMBAT_PERF_WIDTH, Theme.COMBAT_PERF_HEIGHT),
+			Font = Theme.FONT,
+			TextSize = Theme.COMBAT_PERF_TEXT_SIZE,
+			TextColor3 = Theme.COLOR_TEXT_DIM,
+			TextTransparency = Theme.COMBAT_PERF_TRANSPARENCY,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Text = "",
+			Visible = false,
+			Parent = parent,
+		}) :: TextLabel,
+	}
+	local perfScale = Create("UIScale", { Parent = perf.line }) :: UIScale
 
 	-- Reticle: a separate ScreenGui with no top-bar inset, so (0.5, 0.5) is the exact
 	-- viewport centre the camera's aim ray passes through. Nothing in it takes input.
@@ -1073,6 +1109,29 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		end
 	end
 
+	-- L1b-W2-23: shown in a live phase while the attribute holds a number, rounded to 0.1 ms.
+	local function paintPerf(): ()
+		local name = perf.name
+		local value = if name ~= nil then Workspace:GetAttribute(name) else nil
+		local shown = fighting
+			and typeof(value) == "number"
+			and value == value
+			and value >= 0
+			and value < math.huge
+		perf.line.Visible = shown
+		if not shown then
+			return
+		end
+		local tenths = math.round(value * 10)
+		perf.line.Text = if tenths < PERF_TENTHS_BELOW * 10
+			then `Server {Format.Cash(tenths // 10)}.{tenths % 10} ms`
+			else `Server {Format.Cash(math.round(value))} ms`
+	end
+	local perfName = perf.name
+	if perfName ~= nil then
+		table.insert(connections, Workspace:GetAttributeChangedSignal(perfName):Connect(paintPerf))
+	end
+
 	local function setRunState(run: Types.RunState): ()
 		local phase = run.phase
 		local live = LIVE_PHASES[phase] == true
@@ -1206,6 +1265,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			objective.noticeUntil = 0
 			noticeFrame.Visible = false
 		end
+		paintPerf()
 	end
 
 	-- Between broadcasts (combatStateHz is 4) the run timer and the cooldowns are counted
@@ -1466,6 +1526,11 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 				1,
 				-(altBottom + (Theme.COMBAT_ALT_HINT_HEIGHT + Theme.ROW_SPACING) * scale)
 			)
+			-- L1b-W2-23: over the stack, a slot above each key hint a keyboard can show.
+			local hintSlot = (Theme.COMBAT_ALT_HINT_HEIGHT + Theme.ROW_SPACING) * scale
+			local hintSlots = if not keyHints then 0 elseif keyHintText ~= nil then 2 else 1
+			perfScale.Scale = scale
+			perf.line.Position = UDim2.new(0, margin, 1, -(altBottom + hintSlot * hintSlots))
 			local headerWidth = Theme.TOP_BAR_WIDTH * scale
 			return {
 				headerBottom = margin
@@ -1492,6 +1557,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			controls:Destroy()
 			altHint:Destroy()
 			keyHint:Destroy()
+			perf.line:Destroy()
 			reticleGui:Destroy()
 			waitingFrame:Destroy()
 		end,

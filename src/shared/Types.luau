@@ -1266,6 +1266,8 @@ export type CombatDebugConfig = {
 	provingStartDelay: number,
 	provingGear: { melee: number, ranged: number, ascension: { melee: number, ranged: number }? }?,
 	perfLogSeconds: number,
+	-- L1b-W2-23: Workspace number attribute set to each [Perf] line's p95 (Studio only)
+	perfAttribute: string,
 }
 -- Enemy AI tunables (EnemyService) and client presentation tunables (CombatFxController).
 export type CombatEnemyConfig = {
@@ -2230,12 +2232,18 @@ export type CrowdState =
 	| "rise"
 -- summonerId (P4 Stop 3): the crowd id of the boss that called this body; nil for a set's own.
 -- L1b: floor = the body's floor index in RunState.floors (nil = 1).
+-- L1b Wave 2 (docs/INTERFACES.md "Wave 2 — the long road")
+-- CrowdSpawnInfo, replacing the type. at, yaw and state: the body as it stood when this info was
+-- sent (CrowdService refreshes them at every send), so a client draws a body with no snapshot.
 export type CrowdSpawnInfo = {
 	id: number,
 	kind: string,
 	maxHp: number,
 	summonerId: number?,
 	floor: number?,
+	at: Vector3?,
+	yaw: number?,
+	state: CrowdState?,
 }
 -- L1b: one floor of the crowd: centre = the floor's top centre; half.X and half.Z its half extents;
 -- half.Y the highest a launch may carry a body over it (levels.crowdCeiling).
@@ -2486,8 +2494,8 @@ export type LevelCrowdConfig = {
 	burstSpacing: number,
 	eliteKind: string?,
 	rewards: { [string]: MissionCrowdReward },
-	-- L1b: per camp cleared, x rewardMult; nil = nothing
-	clearBonus: MissionCrowdReward?,
+	-- L1b Wave 2: share of what a camp's whole stock pays at the difficulty's price; nil = nothing
+	clearBonus: LevelClearBonus?,
 }
 export type LevelStage = {
 	-- kind: "travel" | "camp"
@@ -2569,6 +2577,8 @@ export type LevelCamp = {
 	-- L1b: true = the boss room (gates, the wall, a stage of its own); nil = open
 	locks: boolean?,
 	spots: { LevelSpot }?,
+	-- L1b Wave 2: the tent's marker and the ring its bodies stand on
+	tent: LevelTentBlock?,
 }
 export type LevelSecret = {
 	id: string,
@@ -2597,6 +2607,8 @@ export type LevelLayout = {
 	blocks: { LevelBlock },
 	secrets: { LevelSecret },
 	route: { LevelRoutePoint },
+	-- L1b Wave 2: tool-only (check_levels.py, the simulators); the game never reads it
+	sneak: { ArenaPoint }?,
 }
 
 -- Config/Expeditions.json
@@ -2654,8 +2666,6 @@ export type CombatLevelsConfig = {
 	closeInset: number,
 	-- L1b-18: how near (flat) a standing fighter's root must come to reach a camp's checkpoint.
 	checkpointReach: number,
-	-- L1b-11: bodies the crowd may raise by itself (the boss, summons, tents) beyond the residents.
-	populationReserve: number,
 	-- L1b-16: the least time between two wallet sends to one member during a run.
 	walletSendSeconds: number,
 	-- A fire spot's marker block, { x, y, z } studs (nil = no marker is built).
@@ -2695,25 +2705,30 @@ export type CombatFxNotice = { kind: "notice", text: string }
 -- L1b (docs/INTERFACES.md "L1b contracts — the living road", Wave 1)
 
 -- Combat.json `camps` (CampBrain)
-export type CampPosture = "guard" | "patrol" | "fire"
+-- CampPosture, replacing the line. "tent": a tent stock's own group, standing on a ring round the tent.
+export type CampPosture = "guard" | "patrol" | "fire" | "tent"
 export type CampGroupState = "rest" | "rise" | "fight" | "home"
 export type CampPostureRules = {
 	sight: number, -- studs on the flat, from each member
 	cone: number, -- degrees, the whole angle about the post's facing; 360 = all round
 	rise: number, -- seconds from a wake to the fight
 }
+-- CampRulesConfig, replacing the type.
 export type CampRulesConfig = {
 	guard: CampPostureRules,
 	patrol: CampPostureRules,
 	fire: CampPostureRules,
+	tent: CampPostureRules,
 	sightBelow: number, -- studs a root may be under the camp's floor and still be seen or in play
 	sightAbove: number, -- studs a root may be over it
-	chaseMargin: number, -- studs the in-play rectangle reaches past the floor's edge
+	chaseMargin: number, -- studs (flat, to the floor rectangle) a root may be past its edge and in play
 	leashSeconds: number,
 	homePace: number, -- x the kind's speed: walking home, and a resting body drifting back
 	patrolPace: number, -- x the kind's speed: a patrol at rest
 	homeTolerance: number, -- studs from its post that count as at its post
 	engagedHoldSeconds: number, -- seconds a player stays engaged after last in play for a group in rise or fight
+	joinFactor: number, -- x the waking group's sight: a resting group of its camp this near (post to post) wakes too
+	dormantRadius: number, -- studs (flat) from a camp's floor rectangle: no player root nearer = its resting groups are dormant
 }
 export type CampRect = { x: number, z: number, hx: number, hz: number }
 export type CampUnit = { kind: string, count: number }
@@ -2743,6 +2758,30 @@ export type LevelSpot = {
 
 -- Config/Levels/<n>_<Name>.json: residents. MissionCrowdGroup.perExtra is not read for them.
 export type LevelResidentGroup = { spot: string, units: { MissionCrowdGroup } }
-export type LevelCampConfig = { id: string, name: string, residents: { LevelResidentGroup } }
+
+-- L1b Wave 2. Layouts/Levels/<Name>.json: a tent's marker (centre and size, as a LevelBlock) and
+-- the ring its bodies stand on.
+export type LevelTentBlock = {
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
+	radius: number,
+}
+
+-- Config/Levels/<n>_<Name>.json.
+-- units: as residents (perExtra is not read); every: seconds between two bodies.
+export type LevelTentConfig = { every: number, units: { MissionCrowdGroup } }
+-- LevelCampConfig, replacing the type.
+export type LevelCampConfig = {
+	id: string,
+	name: string,
+	residents: { LevelResidentGroup },
+	tent: LevelTentConfig?,
+}
+-- share of what a camp's whole stock pays at the difficulty's price (L1b-W2-21)
+export type LevelClearBonus = { share: number }
 
 return {}

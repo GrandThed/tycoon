@@ -15,11 +15,10 @@ local L1B: any = {
 	Geo = load("LevelGeometry"),
 	rules = L1.copy(L1.rules),
 	ranks = { normal = 1, hard = 2, brutal = 3 },
-	kinds = { fodder = { radius = 1.3 }, slinger = { radius = 1.2 }, armoured = { radius = 1.7 }, brute = { radius = 2.2 }, colossus = { radius = 4 }, stray = { radius = 1 } },
+	-- L1b-W2-5: the colossus here calls 20, so its boss reserve is 21, Wave 1's flat reserve.
+	kinds = { fodder = { radius = 1.3 }, slinger = { radius = 1.2 }, armoured = { radius = 1.7 }, brute = { radius = 2.2 }, colossus = { radius = 4, attacks = { { shape = "summon", reach = 60, count = 20, summon = "fodder" } } }, stray = { radius = 1 } },
 	crowdMax = 160,
 	bounds = { minX = -60, minY = -1, minZ = -20, maxX = 160, maxY = 40, maxZ = 600 },
-	-- L1's Forest Road was 73 Parts with all three camps locking (INTERFACES "L1b contracts").
-	L1_PARTS = 73,
 }
 
 -- A camp whose floor's top centre is (x, y, z), with a fence cut by a north and a south gate,
@@ -82,7 +81,7 @@ function L1B.level(): any
 		crowd = {
 			regenShare = 0.07, maxAlive = 40, burst = 8, burstSpacing = 3.5,
 			rewards = { fodder = { cash = 100, materials = 0 }, slinger = { cash = 500, materials = 1 }, armoured = { cash = 1200, materials = 2 }, brute = { cash = 2000, materials = 6 }, colossus = { cash = 29000, materials = 70 } },
-			clearBonus = { cash = 0, materials = 0 },
+			clearBonus = { share = 0.1 },
 		},
 		stages = {
 			{ kind = "travel", name = "Follow the road" },
@@ -112,7 +111,7 @@ end
 -- Plan with the fixture's ranks; `ranks` false = Plan given none.
 function L1B.plan(level: any?, layout: any?, difficulty: string?, ranks: any?): any
 	local given = if ranks == false then nil else ranks or L1B.ranks
-	return L1B.Flow.Plan(level or L1B.level(), layout or L1B.layout(), difficulty or "normal", L1B.rules, L1B.bounds, given)
+	return L1B.Flow.Plan(level or L1B.level(), layout or L1B.layout(), difficulty or "normal", L1B.rules, L1B.bounds, given, L1B.kinds)
 end
 
 function L1B.problems(level: any?, layout: any?, rules: any?, crowdMax: number?): { string }
@@ -276,20 +275,25 @@ function L1B.validateTests(): ()
 		end
 	end)
 
-	print(" Validate: the population gate (L1b-11), at each difficulty, worked by hand")
-	-- Normal: A 4 + 2 + 3, B 6 + 2, C 3 = 20; the boss room's cap leaves 30 - 3 = 27; reserve 21: 68.
+	print(" Validate: the population gate (L1b-W2-5), at each difficulty, worked by hand")
+	-- Normal: A 4 + 2 + 3, B 6 + 2, C 3 = 20; the boss room's cap leaves 30 - 3 = 27; the boss
+	-- reserve 1 + the colossus's 20 calls = 21: 68. No tent here.
 	-- Hard: A 4 + 3 + 3, B 6 + 3 + 1, C 3 = 23; 30 - 3 = 27; 21: 71.
 	-- Brutal: Hard and C's armoured: 24; 30 - 4 = 26; 21: 71.
 	names("a crowd cap of 70", "on hard the population is 71, over ProvingGrounds.json crowd.maxAlive (70)", function() end, 70)
 	names("a crowd cap of 70, Brutal", "on brutal the population is 71", function() end, 70)
 	check(not L1.has(problems(nil, nil, nil, 70), "on normal"), "(Normal's 68 is under 70)")
 	check(#problems(nil, nil, nil, 71) == 0, "a crowd cap of 71 holds every difficulty")
-	local rules = L1.copy(L1B.rules)
-	rules.populationReserve = 0
-	check(#problems(nil, nil, rules, 50) == 0 and L1.has(problems(nil, nil, rules, 49), "the population is 50"), "with no reserve Hard's left side is 50: residents and the boss room's room alone")
+	local quiet = L1.copy(L1B.kinds)
+	quiet.colossus = { radius = 4 }
+	local function quietProblems(crowdMax: number): { string }
+		local ok, list = pcall(L1B.Flow.Validate, L1B.level(), L1B.layout(), quiet, L1B.ranks, L1B.rules, crowdMax)
+		return if ok then list else { "Validate threw: " .. tostring(list) }
+	end
+	check(#quietProblems(51) == 0 and L1.has(quietProblems(50), "the population is 51"), "a colossus that calls nobody reserves 1, itself: Hard's left side is 51")
 
 	print(" Validate: the numbers the run reads")
-	for _, key in { "checkpointReach", "walletSendSeconds", "populationReserve" } do
+	for _, key in { "checkpointReach", "walletSendSeconds" } do
 		names(`Combat.json levels without {key}`, `Combat.json lacks levels.{key}`, function(_level, _layout, given)
 			given[key] = nil
 		end)
@@ -300,14 +304,11 @@ function L1B.validateTests(): ()
 	names("a walletSendSeconds of -1", "levels.walletSendSeconds is -1, not above 0", function(_level, _layout, given)
 		given.walletSendSeconds = -1
 	end)
-	names("a populationReserve of -1", "levels.populationReserve is -1, under 0", function(_level, _layout, given)
-		given.populationReserve = -1
+	names("a clear bonus share of -0.1", "crowd.clearBonus needs a share from 0 to 1", function(given)
+		given.crowd.clearBonus = { share = -0.1 }
 	end)
-	names("a clear bonus of -5 cash", "crowd.clearBonus needs a cash and a materials of 0 or more", function(given)
-		given.crowd.clearBonus = { cash = -5, materials = 0 }
-	end)
-	names("a clear bonus with no materials", "crowd.clearBonus needs a cash and a materials of 0 or more", function(given)
-		given.crowd.clearBonus = { cash = 5 }
+	names("a clear bonus of Wave 1's shape (cash and materials, no share)", "crowd.clearBonus needs a share from 0 to 1", function(given)
+		given.crowd.clearBonus = { cash = 5, materials = 0 }
 	end)
 	level = L1B.level()
 	level.crowd.clearBonus = nil
@@ -665,7 +666,10 @@ function L1B.worldTests(): ()
 	end
 	local count = if shipped ~= nil then #shipped else -1
 	check(every ~= nil and count == #every - opened and markers == fires, `Forest Road: as if every camp locked, less each open camp's gates and 4 wall boxes; one marker per fire spot ({count} Parts, {markers} fires)`)
-	check(count == L1B.L1_PARTS - 6 * open + fires, `and L1's {L1B.L1_PARTS} Parts less 6 per open camp ({open}) plus one per fire ({fires}): {L1B.L1_PARTS - 6 * open + fires} ({count})`)
+	-- L1b-W2-2: L1's formula ("73 less 6 per open camp plus one per fire") is dropped with L1's
+	-- road; the cap is levels.maxParts, and check_levels.py's own count is held to Pieces' in
+	-- tests_l1.luau's real-files cases.
+	check(open == 2 and count > 0 and count <= L1.combat.levels.maxParts, `and at most levels.maxParts, with its two open camps ({count} Parts, {open} open)`)
 end
 L1.group("l1b worldTests", L1B.worldTests)
 

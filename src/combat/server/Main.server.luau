@@ -495,7 +495,7 @@ end)
 -- Ruling 26: the crowd's [Perf] line, Studio only, in both modes.
 local combatConfig = Catalog.GetCombatConfig()
 if RunService:IsStudio() and combatConfig ~= nil then
-	CrowdService.SetPerfLog(combatConfig.debug.perfLogSeconds)
+	CrowdService.SetPerfLog(combatConfig.debug.perfLogSeconds, combatConfig.debug.perfAttribute)
 end
 
 -- The levels this build can play, in the map's order (a node with a level file); without a map,

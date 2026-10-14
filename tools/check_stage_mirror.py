@@ -65,6 +65,15 @@ and compares what they answer, value by value:
   * `Combat.KillReward` against `sim_combat.kill_reward` on the reward grid, and
     `Combat.SplitCarry` against `sim_combat.split_carry` over seeded sequences of kills, the
     payments and every carry compared after each.
+  * L1b Wave 2 ("Wave 2 — the long road", L1b-W2-27): `HitShapes.CrowdRay`, `RayUpright` and
+    `FlatToRect` against sim_range's hs_* on grids of kinds, origins, aims and widths; `SwingGate`
+    on scripted sequences; `CampBrain.Dormant`, `Gap`, `JoinIn` (the shipped chains from rest and
+    grid chains), `Rouse`, the tent rule (`NewTent`, `TentActive`, `TentDue`, `TentSent` on
+    scripted timelines), the tent posture's `Posts` and `Shows`, and `Problems`' new lines;
+    `Combat.ClearBonus`, `DeadFraction` and `WaveStock`; `StageFlow.StandsUp` on every tick of
+    the scripted runs, `BossReserve`, `Plan`'s tents, stocks and population, the new `Validate`
+    refusals, and scripted runs whose `tentLeft` holds a `campClear`. The Luau mutants that prove
+    each comparison are in docs/BALANCE.md "L1b Wave 2".
 
 It fails when either side changes alone. A function of the Luau that the simulators do not
 mirror (the rescue, the skips, the map) is listed, not compared: tools/crowd_harness tests those.
@@ -105,14 +114,25 @@ import sim_range as sr  # noqa: E402
 
 HARNESS = ROOT / "tools" / "crowd_harness"
 DRIVER = HARNESS / "stage_mirror.luau"
-MODULES = ("Economy", "Armory", "Combat", "LevelGeometry", "CampBrain", "StageFlow")  # in load order
+MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Combat", "LevelGeometry", "CampBrain",
+           "StageFlow")  # in load order
 # The functions each comparison needs; one that is missing fails the run by name.
 NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
-                     "BreatherSeconds"),
+                     "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint",
-                        "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint"),
+                        "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve"),
           "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
-                        "Struck", "Goal", "Shows", "Engaged")}
+                        "Struck", "Goal", "Shows", "Engaged", "Dormant", "Gap", "JoinIn", "Rouse", "NewTent",
+                        "TentActive", "TentDue", "TentSent"),
+          "HitShapes": ("RayUpright", "CrowdRay", "FlatToRect", "Ray"),
+          "SwingGate": ("New", "IsAir", "Allows", "Took", "Landed")}
+# L1b Wave 2's grids.
+RAY_ORIGINS = ((0.0, 5.0, 30.0), (3.0, 1.0, -25.0), (0.0, 22.0, 0.5), (-18.0, 9.0, 4.0))
+RAY_WIDTHS = ((0.0, 0.0), (0.6, 0.6), (0.2, 1.5))  # (width, pad)
+RAY_SEED = 2214
+RAY_RANDOM = 160
+DORMANT_EDGES = (-1e-6, 0.0, 1e-6)
+BONUS_SHARES = (0.0, 0.1, 0.5, 1.0)
 TOLERANCE = 1e-9  # relative; the two sides do the same arithmetic on the same doubles
 TEMPO_GRID = (-1.0, 0.0, 0.5, 0.7, 1.0, 1.25, 1.6, 2.0)
 KILL_GRID = (0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89)
@@ -172,11 +192,33 @@ L1B_REFUSALS = (
     ("a resident group on a spot its camp lacks", lambda f, l, r: level_camp(f, "A")["residents"][0]
      .__setitem__("spot", "nowhere")),
     ("a resident group with no units", lambda f, l, r: level_camp(f, "A")["residents"][0].__setitem__("units", [])),
-    ("the boss room's residents at its maxAlive", lambda f, l, r: level_camp(f, "C")["residents"][0]["units"].append(
-        {"kind": "fodder", "count": 40})),
+    ("the boss room's residents at its maxAlive", lambda f, l, r: next(
+        g for g in level_camp(f, "C")["residents"] if g["spot"] == "chiefFire")["units"].append({"kind": "fodder", "count": 40})),
     ("a population over crowd.maxAlive", lambda f, l, r: level_camp(f, "B")["residents"][0]["units"].append(
         {"kind": "fodder", "count": 200})),
-    ("a negative clearBonus", lambda f, l, r: f["crowd"].__setitem__("clearBonus", {"cash": -1, "materials": 0})),
+    ("a negative clearBonus share", lambda f, l, r: f["crowd"].__setitem__("clearBonus", {"share": -0.1})),
+    ("a clearBonus share over 1", lambda f, l, r: f["crowd"].__setitem__("clearBonus", {"share": 1.5})),
+    ("a clearBonus with no share", lambda f, l, r: f["crowd"].__setitem__("clearBonus", {"cash": 0, "materials": 0})),
+    ("a tent with no every", lambda f, l, r: level_camp(f, "A")["tent"].pop("every")),
+    ("a tent every of 0", lambda f, l, r: level_camp(f, "A")["tent"].__setitem__("every", 0)),
+    ("a tent with no units", lambda f, l, r: level_camp(f, "A")["tent"].__setitem__("units", [])),
+    ("a tent unit of an unknown kind", lambda f, l, r: level_camp(f, "A")["tent"]["units"].append(
+        {"kind": "nobody", "count": 1})),
+    ("a tent unit count of 0", lambda f, l, r: level_camp(f, "A")["tent"]["units"][0].__setitem__("count", 0)),
+    ("a tent unit minDifficulty that is none", lambda f, l, r: level_camp(f, "A")["tent"]["units"][0]
+     .__setitem__("minDifficulty", "nope")),
+    ("a tent stock on the boss room", lambda f, l, r: level_camp(f, "C").__setitem__(
+        "tent", copy.deepcopy(level_camp(f, "A")["tent"]))),
+    ("a tent stock whose camp has no tent block", lambda f, l, r: layout_camp(l, "A").pop("tent")),
+    ("a tent block with no radius", lambda f, l, r: layout_camp(l, "A")["tent"].pop("radius")),
+    ("a tent block of size 0", lambda f, l, r: layout_camp(l, "A")["tent"].__setitem__("sx", 0)),
+    ("a tent radius of 0", lambda f, l, r: layout_camp(l, "A")["tent"].__setitem__("radius", 0)),
+    ("a tent's centre off its floor", lambda f, l, r: layout_camp(l, "A")["tent"].__setitem__(
+        "x", layout_camp(l, "A")["x"] + layout_camp(l, "A")["sx"] / 2 + 1)),
+    ("a tent ring post off its floor", lambda f, l, r: layout_camp(l, "A")["tent"].__setitem__("radius", 200)),
+    ("a tent stock on a camp with no residents", lambda f, l, r: level_camp(f, "A").__setitem__("residents", [])),
+    ("a population one body over on Hard", lambda f, l, r: level_camp(f, "A")["tent"]["units"].append(
+        {"kind": "fodder", "count": 4})),
     ("a stage naming an open camp", lambda f, l, r: layout_camp(l, "C").pop("locks", None)),
     ("a locking camp no stage names", lambda f, l, r: layout_camp(l, "A").__setitem__("locks", True)),
     ("a spot with no id", lambda f, l, r: layout_camp(l, "A")["spots"][0].pop("id")),
@@ -199,7 +241,6 @@ L1B_REFUSALS = (
         "x", layout_camp(l, "A")["x"] + layout_camp(l, "A")["sx"] / 2 - 0.5)),
     ("levels.checkpointReach 0", lambda f, l, r: r.__setitem__("checkpointReach", 0)),
     ("levels.walletSendSeconds 0", lambda f, l, r: r.__setitem__("walletSendSeconds", 0)),
-    ("levels.populationReserve -1", lambda f, l, r: r.__setitem__("populationReserve", -1)),
 )
 
 
@@ -376,6 +417,8 @@ class Scripted(sr.LevelRun):
             def breather_seconds(_tempo, _director):
                 return run.given["breatherSeconds"]
 
+            dead_fraction = staticmethod(sc.dead_fraction)
+
         self.sc = Director
         self.spawned = 1
 
@@ -385,7 +428,8 @@ class Scripted(sr.LevelRun):
         return {"roots": [tuple(root) for root in g["roots"]], "standing": g.get("standing"),
                 "fighters": list(g["fighters"]) if g.get("fighters") is not None else [],
                 "spawningDone": g["spawningDone"], "alive": g["alive"], "awake": g["awake"],
-                "aliveByFloor": list(g["aliveByFloor"]), "fallen": g["fallen"]}
+                "aliveByFloor": list(g["aliveByFloor"]), "fallen": g["fallen"],
+                "tentLeft": list(g.get("tentLeft") or [])}
 
     def on_gate(self, index, t):
         pass
@@ -440,6 +484,7 @@ class Scripted(sr.LevelRun):
         self.fighters_now = list(tick["fighters"]) if tick.get("fighters") is not None else []
         before = len(self.actions)
         clear = self.field_clear(self.flow_input(tick["now"]))
+        up = self.stands_up(self.flow_input(tick["now"]))
         if tick["op"] == "skip":
             self.skip(tick["which"], tick["now"], tick.get("fighters"))
         elif tick["op"] == "force":
@@ -454,7 +499,7 @@ class Scripted(sr.LevelRun):
                  "done": sorted(k for k, v in self.done.items() if v), "closedAt": self.closed_at,
                  "fought": list(self.fought), "ended": self.end_reason}
         safe = [list(self.safe_point(busy_of(case, len(self.zones)), threats_of(case, self.zones))) for case in BUSY_CASES]
-        return actions, state, self.directs(), self.still_closing(tick["now"]), clear, safe
+        return actions, state, self.directs(), self.still_closing(tick["now"]), clear, safe, up
 
 
 # SafePoint's `busy`, per tick: none, every floor, the first, the last (as lists of floor indices);
@@ -497,6 +542,7 @@ def script_run(run, variant, rules, start_y):
     # Living bodies per floor: the open camps' residents, and nothing on a locking camp's floor
     # (so a locking camp would clear as an open one if a side forgot `locks`).
     by_floor = [0 if zone["locks"] else zone["residents"] for zone in zones]
+    tent_left = [0 for _zone in zones]  # L1b-W2-8: a tent's stock not sent yet, per zone
     walked = set()
 
     def tick(root=None, at=None, fieldClear=True, **given):
@@ -505,7 +551,7 @@ def script_run(run, variant, rules, start_y):
             spot[0] = root
         entry = {"op": "tick", "now": clock[0], "roots": [list(spot[0])], "fighters": [1], "spawningDone": True,
                  "alive": 0 if fieldClear else 1, "awake": 0, "aliveByFloor": list(by_floor), "mergeOk": False,
-                 "breatherSeconds": BREATHER_INPUT, "fallen": None, "runCap": False}
+                 "breatherSeconds": BREATHER_INPUT, "fallen": None, "runCap": False, "tentLeft": list(tent_left)}
         entry.update(given)
         ticks.append((entry,) + run.play(entry))
 
@@ -535,6 +581,19 @@ def script_run(run, variant, rules, start_y):
                 continue  # the open camps are left standing
             by_floor[index - 1] = 1
             tick(awake=1)  # one resident left
+            if zone["tentStock"] > 0:
+                # L1b-W2-8: the last resident falls with the tent's stock still to come out: no
+                # clear while any is left, a down on the quiet floor stands up, then the last.
+                tent_left[index - 1] = zone["tentStock"]
+                by_floor[index - 1] = 0
+                tick()  # every body dead, the whole stock left: not cleared
+                tick(standing=[False], fallen="down")  # a downed root on a quiet road
+                tent_left[index - 1] = 1
+                by_floor[index - 1] = 1
+                tick(awake=1)  # a tent body out and awake
+                by_floor[index - 1] = 0
+                tick()  # it falls, one left: still not cleared
+                tent_left[index - 1] = 0
             by_floor[index - 1] = 0
             tick()  # the last falls: the camp is cleared
             tick()  # once
@@ -670,6 +729,7 @@ def zone_row(zone):
     mark = zone["checkpoint"]
     return {"id": zone["id"], "floor": zone["floor"], "locks": zone["locks"], "name": zone["name"],
             "checkpoint": None if mark is None else [mark[0], floor, mark[1]], "residents": zone["residents"],
+            "stock": dict(zone["stock"]), "tentStock": zone["tentStock"],
             "floorY": floor, "rect": list(zone["rect"]), "inner": list(zone["inner"]), "trigger": list(zone["trigger"]),
             "entry": [zone["entry"][0], floor, zone["entry"][1]], "exit": [zone["exit"][0], floor, zone["exit"][1]],
             "spawns": [[x, floor, z] for x, z in zone["spawns"]]}
@@ -693,6 +753,282 @@ def as_def(row):
 
 def post_row(post):
     return {"at": list(post["at"]), "yaw": post["yaw"], "leg": post["leg"]}
+
+
+def tent_row(tent):
+    """A PlanTent as plain values."""
+    return {"zone": tent["zone"], "def": def_row(tent["def"]), "kinds": list(tent["kinds"]),
+            "posts": [post_row(p) for p in tent["posts"]], "every": tent["every"]}
+
+
+def wire(value):
+    """A Python answer as the Luau's JSON prints it: infinities as the strings it writes."""
+    if isinstance(value, float) and math.isinf(value):
+        return "inf" if value > 0 else "-inf"
+    if isinstance(value, (list, tuple)):
+        return [wire(v) for v in value]
+    if isinstance(value, dict):
+        return {k: wire(v) for k, v in value.items()}
+    return value
+
+
+def ray_cases(data, expected, kinds):
+    """HitShapes.CrowdRay, RayUpright and FlatToRect (L1b-W2-15, -16, -24) on grids: every kind,
+    origins round it, aims at its shins, its body, its head's base, centre and top and past them,
+    beside the capsule, at several widths and pads; RayUpright with low == high against Ray on
+    seeded rays; FlatToRect on a rectangle's inside, edges, corners and beyond."""
+    import random
+
+    rows, mine = [], []
+    for name, kind in sorted(kinds.items()):
+        r, h, hr = kind["radius"], kind["height"], kind["headRadius"]
+        feet = (2.0, 1.0, -3.0)
+        top = max(h - 2 * hr, h / 2 + r)
+        aims = [(0.0, 0.5, 0.0), (0.0, h / 2, 0.0), (0.0, top, 0.0), (0.0, h - hr, 0.0),
+                (0.0, h - 0.25 * hr, 0.0), (0.0, h + 0.05, 0.0), (0.0, h + hr + 0.3, 0.0),
+                (r + 0.4, h / 2, 0.0), (r + 1.2, 0.2, 0.0), (0.0, h + 3.0, 0.0)]
+        for origin in RAY_ORIGINS:
+            o = (feet[0] + origin[0], feet[1] + origin[1], feet[2] + origin[2])
+            for aim in aims:
+                target = (feet[0] + aim[0], feet[1] + aim[1], feet[2] + aim[2])
+                direction = sr.v_sub(target, o)
+                for width, pad in RAY_WIDTHS:
+                    for reach in (60.0, 10.0):
+                        rows.append([list(o), list(direction), reach, width, pad, list(feet), r, h, hr])
+                        entry, crit = sr.hs_crowd_ray(o, direction, reach, width, pad, feet, r, h, hr)
+                        mine.append(["nil" if entry is None else entry, crit])
+    case = "ray.crowdRay"
+    data["rayCases"].append({"id": case, "op": "crowdRay", "rows": rows})
+    expected[case] = ("HitShapes.CrowdRay", f"{len(rows)} rays over {len(kinds)} kinds", mine)
+    rng = random.Random(RAY_SEED)
+    rows, mine = [], []
+    for _ in range(RAY_RANDOM):
+        o = (rng.uniform(-20, 20), rng.uniform(-5, 25), rng.uniform(-20, 20))
+        direction = (rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1))
+        feet = (rng.uniform(-4, 4), rng.uniform(-2, 2), rng.uniform(-4, 4))
+        width, pad = rng.choice(RAY_WIDTHS)
+        radius = rng.uniform(0.5, 4)
+        low = rng.uniform(0, 3)
+        high = low if rng.random() < 0.3 else low + rng.uniform(0, 8)
+        reach = rng.choice((5.0, 30.0, 80.0))
+        rows.append([list(o), list(direction), reach, width, pad, list(feet), low, high, radius])
+        got = sr.hs_ray_upright(o, direction, reach, width, pad, feet, low, high, radius)
+        mine.append("nil" if got is None else got)
+    # A ray down the axis, a ray starting inside, one stopping short, one along a cap.
+    for o, direction, reach in (((0.0, 20.0, 0.0), (0.0, -1.0, 0.0), 40.0), ((0.0, 2.0, 0.0), (1.0, 0.0, 0.0), 10.0),
+                                ((-30.0, 2.0, 0.0), (1.0, 0.0, 0.0), 20.0), ((-30.0, 7.9, 0.0), (1.0, 0.0, 0.0), 60.0)):
+        rows.append([list(o), list(direction), reach, 0.0, 0.0, [0.0, 0.0, 0.0], 1.0, 6.0, 1.0])
+        got = sr.hs_ray_upright(o, direction, reach, 0.0, 0.0, (0.0, 0.0, 0.0), 1.0, 6.0, 1.0)
+        mine.append("nil" if got is None else got)
+    case = "ray.rayUpright"
+    data["rayCases"].append({"id": case, "op": "rayUpright", "rows": rows})
+    expected[case] = ("HitShapes.RayUpright", f"{len(rows)} rays (a third with low == high)", mine)
+    rows = [[x, z, 1.0, -2.0, 4.0, 3.0] for x in (-8.0, -3.0, -3.0 - 1e-7, 0.0, 1.0, 5.0, 5.0 + 1e-7, 9.0)
+            for z in (-9.0, -5.0, -5.0 - 1e-7, 0.0, 1.0, 1.0 + 1e-7, 4.0)]
+    case = "ray.flatToRect"
+    data["rayCases"].append({"id": case, "op": "flatToRect", "rows": rows})
+    expected[case] = ("HitShapes.FlatToRect", f"{len(rows)} points round a 8 x 6 rectangle",
+                      [sr.hs_flat_to_rect(*row) for row in rows])
+
+
+def swing_cases(data, expected):
+    """SwingGate (L1b-W2-13): IsAir at the margin and past it and with no floor; the contract's
+    sequence of swings and landings, the state after every call."""
+    margin = sr.SG_AIR_MARGIN_STUDS
+    stand = 3.0
+    heights = ["nil", 0.0, stand, stand + margin - 1e-7, stand + margin, stand + margin + 1e-7, stand + 5.0, -1.0]
+    case = "swing.isAir"
+    data["swingCases"].append({"id": case, "op": "isAir", "heights": heights, "stand": stand})
+    expected[case] = ("SwingGate.IsAir", f"{len(heights)} heights over a stand of {stand:g}",
+                      [sr.sg_is_air(None if h == "nil" else h, stand) for h in heights])
+    ops = [("allows", False), ("took", False), ("allows", True), ("took", True), ("allows", True), ("allows", False),
+           ("landed", None), ("allows", True), ("took", True), ("took", False), ("allows", True), ("took", True),
+           ("took", True), ("allows", True)]
+    state = sr.sg_new()
+    rows = []
+    for op, airborne in ops:
+        ret = None
+        if op == "allows":
+            ret = sr.sg_allows(state, airborne)
+        elif op == "took":
+            sr.sg_took(state, airborne)
+        else:
+            sr.sg_landed(state)
+        rows.append({"ret": "nil" if ret is None else ret, "used": state["used"]})
+    case = "swing.sequence"
+    data["swingCases"].append({"id": case, "op": "sequence", "ops": [[op, airborne] for op, airborne in ops]})
+    expected[case] = ("SwingGate: a sequence of swings and landings", f"{len(ops)} calls", rows)
+    case = "swing.margin"
+    data["swingCases"].append({"id": case, "op": "margin"})
+    expected[case] = ("SwingGate.AIR_MARGIN_STUDS", "the margin the mirror uses", margin)
+
+
+def wave2_camp_cases(data, expected, rules, plans):
+    """CampBrain's Wave 2 rules (L1b-W2-6, -7, -10, -12): Dormant on the edge of dormantRadius in
+    every state, Gap and JoinIn on the shipped camps (every group alone, from rest, and with
+    states mixed) and on a grid chain, Rouse in every state, and the tent rule on timelines."""
+    radius = rules["dormantRadius"]
+    # Dormant: a 20 x 10 floor round (5, -3); roots on the flat edge of dormantRadius.
+    defn = {"id": "grid.dormant", "camp": "G", "floor": 1, "floorY": 8.0, "rect": {"x": 5.0, "z": -3.0, "hx": 10.0,
+            "hz": 5.0}, "posture": "patrol", "points": [(0.0, 8.0, 0.0), (6.0, 8.0, 0.0)], "yaw": 0.0, "radius": 0.0,
+            "held": False, "units": [{"kind": "fodder", "count": 2}]}
+    corner = radius / math.sqrt(2)
+    places = ([[15.0 + radius + d, 11.0, -3.0] for d in DORMANT_EDGES] + [[5.0, 11.0, -8.0 - radius + d] for d in DORMANT_EDGES]
+              + [[15.0 + corner + d, 11.0, 2.0 + corner + d] for d in DORMANT_EDGES] + [[5.0, 400.0, -3.0]])
+    root_sets = [[]] + [[p] for p in places] + [[places[2], places[-1]]]
+    for state, held in (("rest", False), ("rest", True), ("rise", False), ("fight", False), ("home", False)):
+        group = sr.cb_new_group(defn, 0.0)
+        group["state"], group["held"] = state, held
+        case = f"camp.dormant.{state}.{held}"
+        data["campCases"].append({"id": case, "op": "dormant", "def": def_row(defn), "state": state, "held": held,
+                                  "rootSets": root_sets})
+        expected[case] = ("CampBrain.Dormant", f"{state}{' held' if held else ''}, {len(root_sets)} sets of roots",
+                          [sr.cb_dormant(group, [tuple(r) for r in roots], rules) for roots in root_sets])
+    # Gap and JoinIn on the shipped plans.
+    for label, plan in plans:
+        defs = plan["groups"] + [tent["def"] for tent in plan["tents"]]
+        posts = [[post_row(p) for p in sr.group_posts(d)] for d in defs]
+        pairs = [(i, j) for i in range(1, len(defs) + 1) for j in range(1, len(defs) + 1)
+                 if i != j and defs[i - 1]["camp"] == defs[j - 1]["camp"]]
+        case = f"camp.gap.{label}"
+        data["campCases"].append({"id": case, "op": "gap", "posts": posts, "pairs": [list(p) for p in pairs] + [[1, 0]]})
+        gaps = {}
+        found = []
+        for i, j in pairs:
+            gap = sr.cb_gap(sr.group_posts(defs[i - 1]), sr.group_posts(defs[j - 1]))
+            gaps.setdefault(i, {})[j] = gap
+            found.append(gap)
+        found.append(sr.cb_gap(sr.group_posts(defs[0]), []))
+        expected[case] = ("CampBrain.Gap", f"{label}: {len(pairs)} pairs of one camp, and one with no posts", wire(found))
+        triples = [[i, j, gaps[i][j]] for i, j in pairs]
+        scenarios = []
+        living_full = {i: sum(u["count"] for u in d["units"]) for i, d in enumerate(defs, 1)}
+        for i in range(1, len(defs) + 1):
+            scenarios.append(("alone", [i], {}, living_full))
+        # States mixed: every third group held, every fourth at home, every fifth dead, two wakers.
+        mixed = {i: ("home" if i % 4 == 0 else "fight" if i % 7 == 0 else "rest", i % 3 == 0) for i in range(1, len(defs) + 1)}
+        living_mixed = {i: (0 if i % 5 == 0 else n) for i, n in living_full.items()}
+        scenarios.append(("mixed", [1, len(defs)], mixed, living_mixed))
+        scenarios.append(("mixed, a tent empty", [2], mixed, {i: (0 if defs[i - 1]["posture"] == "tent" else n)
+                                                             for i, n in living_full.items()}))
+        for name, woke, states, living in scenarios:
+            groups = [sr.cb_new_group(d, 0.0) for d in defs]
+            for i, (state, held) in states.items():
+                groups[i - 1]["state"], groups[i - 1]["held"] = state, held
+            case = f"camp.joinIn.{label}.{len(data['campCases'])}"
+            data["campCases"].append({"id": case, "op": "joinIn", "defs": [def_row(d) for d in defs],
+                                      "states": [[i, s, h] for i, (s, h) in states.items()],
+                                      "living": [[i, n] for i, n in living.items()], "gaps": triples, "woke": woke})
+            expected[case] = ("CampBrain.JoinIn", f"{label} {name}, woke {woke}",
+                              sr.cb_join_in(groups, living, gaps, woke, rules))
+    # A grid chain: guard (sight 30) -> fire (16) -> fire, directed; the factor's edge.
+    sight_guard, sight_fire = rules["guard"]["sight"], rules["fire"]["sight"]
+    factor = rules["joinFactor"]
+    guard = grid_def("guard", [(0.0, 0.0)], yaw=0.0)
+    fire_a = grid_def("fire", [(0.0, factor * sight_guard)], radius=0.0, units=(("fodder", 1),))
+    fire_b = grid_def("fire", [(0.0, factor * sight_guard + factor * sight_fire)], radius=0.0, units=(("fodder", 1),))
+    fire_c = grid_def("fire", [(0.0, factor * sight_guard + 2 * factor * sight_fire + 1e-6)], radius=0.0,
+                      units=(("fodder", 1),))
+    defs = [guard, fire_a, fire_b, fire_c]
+    gaps = {}
+    for i, a in enumerate(defs, 1):
+        for j, b in enumerate(defs, 1):
+            if i != j:
+                gaps.setdefault(i, {})[j] = sr.cb_gap(sr.group_posts(a), sr.group_posts(b))
+    triples = [[i, j, g] for i, row in gaps.items() for j, g in row.items()]
+    living = {1: 1, 2: 1, 3: 1, 4: 1}
+    for woke in ([1], [2], [3], [4], [3, 1]):
+        groups = [sr.cb_new_group(d, 0.0) for d in defs]
+        case = f"camp.joinIn.grid.{len(data['campCases'])}"
+        data["campCases"].append({"id": case, "op": "joinIn", "defs": [def_row(d) for d in defs], "states": [],
+                                  "living": [[i, n] for i, n in living.items()], "gaps": triples, "woke": woke})
+        expected[case] = ("CampBrain.JoinIn", f"grid chain guard -> fire -> fire -> fire (just past), woke {woke}",
+                          sr.cb_join_in(groups, living, gaps, woke, rules))
+    # Rouse in every state.
+    for state, held in (("rest", False), ("rest", True), ("rise", False), ("fight", False), ("home", False)):
+        group = sr.cb_new_group(guard, 0.0)
+        group["state"], group["held"], group["hit"] = state, held, True
+        ret = sr.cb_rouse(group, 4.5)
+        case = f"camp.rouse.{state}.{held}"
+        data["campCases"].append({"id": case, "op": "rouse", "def": def_row(guard), "state": state, "held": held})
+        expected[case] = ("CampBrain.Rouse", f"{state}{' held' if held else ''}", {"ret": ret, "group": group_row(group)})
+    # The tent rule on timelines: wake at 0 (0, 6, 12), a pause from 13 to 40 (the next at 40),
+    # the residents dead with the camp at rest (it keeps sending), the stock spent (never).
+    every = 6.0
+    ops = [("active", True, 5), ("due", True, 0.0), ("sent", 0.0), ("due", True, 3.0), ("due", True, 6.0 - 1e-7),
+           ("sent", 6.0), ("due", True, 12.0), ("sent", 12.0), ("active", False, 5), ("due", False, 18.0),
+           ("due", False, 39.0), ("active", True, 5), ("due", True, 40.0), ("sent", 40.0), ("active", False, 0),
+           ("active", False, -1), ("due", True, 46.0), ("sent", 46.0), ("sent", 52.0), ("sent", 58.0), ("due", True, 64.0),
+           ("sent", 64.0), ("sent", 70.0), ("due", True, 76.0), ("due", True, 1e6)]
+    rows = []
+    tent = sr.cb_new_tent(8)
+    for op in ops:
+        if op[0] == "active":
+            ret = sr.cb_tent_active(op[1], op[2])
+        elif op[0] == "due":
+            ret = sr.cb_tent_due(tent, op[1], op[2])
+        else:
+            sr.cb_tent_sent(tent, op[1], every)
+            ret = "nil"
+        rows.append({"ret": ret, "left": tent["left"], "nextAt": wire(tent["nextAt"])})
+    case = "camp.tent.timeline"
+    data["campCases"].append({"id": case, "op": "tent", "stock": 8, "every": every, "ops": [list(op) for op in ops]})
+    expected[case] = ("CampBrain: the tent rule on a timeline", f"a stock of 8 every {every:g} s, {len(ops)} calls", rows)
+
+
+def combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds, below):
+    """Combat.ClearBonus, DeadFraction and WaveStock (L1b-W2-21, -26): every camp's stock of every
+    level at every difficulty under several shares (the boss room's with what its waves queue), a
+    grid of prices that round at halves and an unpriced kind; DeadFraction on a grid; WaveStock on
+    every wave with and without an elite."""
+    rows, mine = [], []
+    for file in files:
+        level = sr.resolve_level(file, None, 0, "normal") if not file.get("mission") else None
+        if level is None or not level.get("camps"):
+            continue
+        layout = sr.load_level_layout(file["layout"], below)
+        for difficulty, scales in level["difficulties"].items():
+            plan = sr.plan_level(level, layout, difficulty, rules, ranks, crowd_kinds)
+            if plan is None:
+                continue
+            for zone in plan["zones"]:
+                stock = dict(zone["stock"])
+                if zone["locks"]:
+                    for stage in level["stages"]:
+                        if stage.get("zone") == zone["id"]:
+                            for wave in stage.get("waves") or []:
+                                spec = sc.camp_wave(wave, level["crowd"]["regenShare"], scales, ranks[difficulty], ranks,
+                                                    1, data["combat"])
+                                sc.wave_stock(stock, spec)
+                for share in BONUS_SHARES:
+                    rows.append([stock, level["crowd"]["rewards"], scales["rewardMult"], share])
+                    mine.append(list(sc.clear_bonus(stock, level["crowd"]["rewards"], scales["rewardMult"], share)))
+    for cash, materials, mult in REWARD_GRID:
+        for share in (0.5, 0.1, 1 / 3):
+            stock = {"probe": 3, "nobody": 2}
+            prices = {"probe": {"cash": cash, "materials": materials}}
+            rows.append([stock, prices, mult, share])
+            mine.append(list(sc.clear_bonus(stock, prices, mult, share)))
+    rows.append([{}, {"probe": {"cash": 5, "materials": 1}}, 1, 0.1])
+    mine.append(list(sc.clear_bonus({}, {"probe": {"cash": 5, "materials": 1}}, 1, 0.1)))
+    case = "combat.clearBonus"
+    data["combatCases"].append({"id": case, "op": "clearBonus", "rows": rows})
+    expected[case] = ("Combat.ClearBonus", f"{len(rows)} stocks, shares and prices", mine)
+    rows = [[spawned, alive] for spawned in (-1, 0, 1, 10, 40) for alive in (-5, 0, 1, 9, 10, 11, 50)]
+    case = "combat.deadFraction"
+    data["combatCases"].append({"id": case, "op": "deadFraction", "rows": rows})
+    expected[case] = ("Combat.DeadFraction", f"{len(rows)} pairs", [sc.dead_fraction(s, a) for s, a in rows])
+    rows, mine = [], []
+    for case_ in data["waveCases"][:60]:
+        spec = expected[case_["id"]][2]
+        for elite in (None, "armoured"):
+            stock = {"fodder": 2}
+            sc.wave_stock(stock, spec, elite)
+            rows.append([case_["id"], elite or "nil"])
+            mine.append(stock)
+    case = "combat.waveStock"
+    data["combatCases"].append({"id": case, "op": "waveStock", "rows": rows})
+    expected[case] = ("Combat.WaveStock", f"{len(rows)} waves, with and without an elite", mine)
 
 
 def group_row(group):
@@ -852,7 +1188,7 @@ def grid_camp_cases(data, expected, rules):
     square = [(-20.0, -20.0), (20.0, -20.0), (20.0, 20.0), (-20.0, 20.0)]
     grids = [grid_def("patrol", square), grid_def("patrol", [(-10.0, 0.0), (10.0, 0.0)]),
              grid_def("fire", [(5.0, -5.0)], radius=4.0), grid_def("guard", [(0.0, -25.0), (6.0, -25.0)], yaw=math.pi / 2),
-             grid_def("guard", [(0.0, 25.0)], yaw=-2.5, held=True)]
+             grid_def("guard", [(0.0, 25.0)], yaw=-2.5, held=True), grid_def("tent", [(-6.0, 4.0)], radius=8.0)]
     for defn in grids:
         for count in range(1, 8):
             case = f"camp.posts.grid.{defn['posture']}.{len(data['campCases'])}"
@@ -921,7 +1257,14 @@ def grid_camp_cases(data, expected, rules):
               ("a leash that is text", lambda r: r.__setitem__("leashSeconds", "3")),
               ("no sightAbove", lambda r: r.pop("sightAbove")),
               ("no engagedHoldSeconds", lambda r: r.pop("engagedHoldSeconds")),
-              ("an engagedHoldSeconds of -1", lambda r: r.__setitem__("engagedHoldSeconds", -1))]
+              ("an engagedHoldSeconds of -1", lambda r: r.__setitem__("engagedHoldSeconds", -1)),
+              ("no tent", lambda r: r.pop("tent")), ("a tent sight of 0", lambda r: r["tent"].__setitem__("sight", 0)),
+              ("a joinFactor of 0", lambda r: r.__setitem__("joinFactor", 0)), ("no joinFactor", lambda r: r.pop("joinFactor")),
+              ("no dormantRadius", lambda r: r.pop("dormantRadius")),
+              ("a dormantRadius at the guard's sight", lambda r: r.__setitem__("dormantRadius", r["guard"]["sight"])),
+              ("a dormantRadius just above every sight",
+               lambda r: r.__setitem__("dormantRadius", max(r[p]["sight"] for p in sr.CB_POSTURES) + 1e-6)),
+              ("a dormantRadius under the fire's sight", lambda r: r.__setitem__("dormantRadius", r["fire"]["sight"] - 1))]
     for label, change in broken:
         changed = copy.deepcopy(rules)
         change(changed)
@@ -1003,7 +1346,9 @@ def main():
     data = {"combat": combat, "expeditions": expeditions, "proving": cfg, "levels": files, "missions": missions,
             "layouts": raw_layouts, "ranks": ranks, "planDifficulties": plan_difficulties, "pointCases": [],
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
-            "campRules": combat["camps"], "campCases": [], "splitCases": []}
+            "campRules": combat["camps"], "campCases": [], "splitCases": [], "rayCases": [], "swingCases": [],
+            "combatCases": [], "reserveCases": []}
+    shipped_plans = []  # (label, plan) of every level with residents at every difficulty: Wave 2's camp cases
     bursts, tempos = {}, {}
     scripted = {}  # trace id -> (label, the Python's ticks)
     stars = {}  # trace id -> the Python's earns_star for STAR_USERS, at the run's end
@@ -1016,8 +1361,12 @@ def main():
             continue
         expected[f"level.{number}.validate"] = ("StageFlow.Validate: the shipped level is playable", name,
                                                 sr.level_problems(level, layout, rules, crowd_kinds, ranks, crowd_max))
+        reserve_case = f"level.{number}.bossReserve"
+        data["reserveCases"].append({"id": reserve_case, "level": number})
+        expected[reserve_case] = ("StageFlow.BossReserve", f"{name}: with the kinds, and with none",
+                                  [sr.boss_reserve(level, crowd_kinds), sr.boss_reserve(level, None)])
         for difficulty in plan_difficulties:
-            plan = sr.plan_level(level, layout, difficulty, rules, ranks)
+            plan = sr.plan_level(level, layout, difficulty, rules, ranks, crowd_kinds)
             key = f"level.{number}.plan.{difficulty}"
             if plan is None:
                 expected[key] = ("StageFlow.Plan", f"{name} {difficulty}", None)
@@ -1036,7 +1385,16 @@ def main():
                 "levelId": plan["levelId"], "difficulty": plan["difficulty"], "start": (start["x"], start["y"], start["z"]),
                 "killY": plan["killY"], "camps": plan["camps"], "stages": stages,
                 "zones": [zone_row(zone) for zone in plan["zones"]],
-                "groups": [def_row(defn) for defn in plan["groups"]], "population": plan["population"]}}))
+                "groups": [def_row(defn) for defn in plan["groups"]], "tents": [tent_row(t) for t in plan["tents"]],
+                "population": plan["population"]}}))
+            if plan["groups"]:
+                shipped_plans.append((f"{name} {difficulty}", plan))
+            # CampBrain.Posts on every tent's ring (the tent posture, L1b-W2-6).
+            for t, tent in enumerate(plan["tents"], 1):
+                case = f"camp.posts.{number}.{difficulty}.tent.{t}"
+                data["campCases"].append({"id": case, "op": "posts", "def": def_row(tent["def"]), "count": len(tent["kinds"])})
+                expected[case] = ("CampBrain.Posts", f"{name} {difficulty} {tent['def']['id']} ({len(tent['kinds'])})",
+                                  plain(sr.cb_posts(tent["def"], len(tent["kinds"]))))
             # CampBrain.Posts on every resident group of the plan.
             for g, defn in enumerate(plan["groups"], 1):
                 count = sum(unit["count"] for unit in defn["units"])
@@ -1147,7 +1505,11 @@ def main():
     breathers = [0.0, director["tempoMin"] / 2, director["tempoMin"], (1 + director["tempoMin"]) / 2, 1.0 - EDGE, 1.0,
                  director["mergeTempo"], director["tempoMax"]]
     grid_camp_cases(data, expected, combat["camps"])
+    wave2_camp_cases(data, expected, combat["camps"], shipped_plans[:2])
     split_cases(data, expected)
+    ray_cases(data, expected, crowd_kinds)
+    swing_cases(data, expected)
+    combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds, below)
     data["burstCases"] = [list(key) for key in bursts]
     data["tempoCases"] = [list(key) for key in tempos]
     data["mergeCases"] = [list(key) for key in merges]
@@ -1255,7 +1617,7 @@ def main():
             report.compare(kind, label, got if isinstance(got, dict) else {"threw": "no answer"}, None)
             continue
         parted = None
-        for index, (entry, actions, state, directs, closing, clear, safe) in enumerate(ticks):
+        for index, (entry, actions, state, directs, closing, clear, safe, up) in enumerate(ticks):
             theirs = got["ticks"][index] if index < len(got["ticks"]) else {}
             their_state = theirs.get("state") or {}
             extra_state |= set(their_state) - set(STATE_FIELDS)
@@ -1275,6 +1637,8 @@ def main():
                 report.compare("StageFlow.FieldClear: may the fallen lose (L1b-19)", here, theirs.get("clear"), clear)
                 report.compare("StageFlow.SafePoint: no floor busy, every floor, the first, the last (L1b-18)", here,
                                theirs.get("safe"), safe)
+                report.compare("StageFlow.StandsUp: a down on the quiet road stands up (L1b-W2-27)", here,
+                               theirs.get("standsUp"), up)
         if parted is None:
             report.compare(kind, f"{label} ({len(ticks)} ticks, ended {ticks[-1][2]['ended']})", True, True)
             report.compare("StageFlow.EarnsStar: a fighter of the last clear, one who was not, a stranger",
@@ -1284,7 +1648,7 @@ def main():
             report.differ(kind, parted)
 
     failed = report.print()
-    mirrored = {"Combat": NEEDED["Combat"], "StageFlow": NEEDED["StageFlow"], "CampBrain": NEEDED["CampBrain"]}
+    mirrored = dict(NEEDED)
     loose = [name for name in exports.get("StageFlow") or [] if name not in mirrored["StageFlow"]]
     print(f"  note  StageFlow functions the simulators do not mirror (tools/crowd_harness tests them): "
           f"{', '.join(loose) or 'none'}")

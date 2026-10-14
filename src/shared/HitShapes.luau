@@ -220,6 +220,166 @@ function HitShapes.Ray(
 	return math.clamp(entry, 0, range)
 end
 
+-- The span of t (along a unit ray from the origin, `offset` = centre - origin) inside a sphere of
+-- radius `reach`, or nil when the line misses it.
+local function sphereSpan(offset: Vector3, unit: Vector3, reach: number): (number?, number)
+	local along = offset:Dot(unit)
+	local perpendicularSquared = math.max(0, offset:Dot(offset) - along * along)
+	local reachSquared = reach * reach
+	if perpendicularSquared > reachSquared then
+		return nil, 0
+	end
+	local half = math.sqrt(reachSquared - perpendicularSquared)
+	return along - half, along + half
+end
+
+-- The earliest t in [0, range] of the span [enter, exit], or nil when the span misses [0, range].
+local function firstIn(enter: number?, exit: number, range: number): number?
+	if enter == nil or exit < 0 or enter > range or enter > exit then
+		return nil
+	end
+	return math.max(enter, 0)
+end
+
+-- The smaller of two optional distances.
+local function earlier(a: number?, b: number?): number?
+	if a == nil then
+		return b
+	elseif b == nil then
+		return a
+	end
+	return math.min(a, b)
+end
+
+-- L1b-W2-16: a bullet or beam against an upright capsule, every point within `radius` of the
+-- vertical segment feet + (0, low, 0) .. feet + (0, high, 0). The capsule is the union of two end
+-- spheres and the finite cylinder between them, all convex, so the ray's first contact with it is
+-- the earliest first contact with any of the three. low == high is the sphere, answered by Ray
+-- itself so the two can never disagree.
+function HitShapes.RayUpright(
+	origin: Vector3,
+	direction: Vector3,
+	reach: number,
+	width: number,
+	pad: number,
+	feet: Vector3,
+	low: number,
+	high: number,
+	radius: number
+): number?
+	if high - low <= 0 then
+		return HitShapes.Ray(
+			origin,
+			direction,
+			reach,
+			width,
+			pad,
+			feet + Vector3.new(0, low, 0),
+			radius
+		)
+	end
+	local unit = unitOf(direction)
+	if unit == nil or reach <= 0 then
+		return nil
+	end
+	local grown = width / 2 + pad + radius
+	local bottom = feet + Vector3.new(0, low, 0)
+	local topCentre = feet + Vector3.new(0, high, 0)
+	-- (Each span is read into locals: a call's two results passed on before another argument
+	-- would be cut to the first.)
+	local lowEnter, lowExit = sphereSpan(bottom - origin, unit, grown)
+	local highEnter, highExit = sphereSpan(topCentre - origin, unit, grown)
+	local best = earlier(firstIn(lowEnter, lowExit, reach), firstIn(highEnter, highExit, reach))
+	-- The finite cylinder: inside the infinite vertical cylinder and inside the height slab.
+	local ox = origin.X - feet.X
+	local oz = origin.Z - feet.Z
+	local flatSquared = unit.X * unit.X + unit.Z * unit.Z
+	local roundEnter, roundExit
+	if flatSquared < EPSILON * EPSILON then
+		if ox * ox + oz * oz > grown * grown then
+			return best
+		end
+		roundEnter, roundExit = -math.huge, math.huge
+	else
+		local b = ox * unit.X + oz * unit.Z
+		local c = ox * ox + oz * oz - grown * grown
+		local discriminant = b * b - flatSquared * c
+		if discriminant < 0 then
+			return best
+		end
+		local root = math.sqrt(discriminant)
+		roundEnter, roundExit = (-b - root) / flatSquared, (-b + root) / flatSquared
+	end
+	local slabEnter, slabExit
+	if math.abs(unit.Y) < EPSILON then
+		if origin.Y < bottom.Y or origin.Y > topCentre.Y then
+			return best
+		end
+		slabEnter, slabExit = -math.huge, math.huge
+	else
+		slabEnter = (bottom.Y - origin.Y) / unit.Y
+		slabExit = (topCentre.Y - origin.Y) / unit.Y
+		if slabEnter > slabExit then
+			slabEnter, slabExit = slabExit, slabEnter
+		end
+	end
+	return earlier(
+		best,
+		firstIn(math.max(roundEnter, slabEnter), math.min(roundExit, slabExit), reach)
+	)
+end
+
+-- L1b-W2-15: the crowd's ray rule. A ray hits a body when the padded ray touches its body capsule
+-- (ground to the head's base, or to today's sphere top when that is higher, so no ray that hit
+-- the old body sphere misses) or its head sphere; the entry is the nearer of the two. It crits
+-- only when the unpadded ray touches the head: the pad forgives a miss, it never makes a headshot.
+function HitShapes.CrowdRay(
+	origin: Vector3,
+	direction: Vector3,
+	reach: number,
+	width: number,
+	pad: number,
+	feet: Vector3,
+	radius: number,
+	height: number,
+	headRadius: number
+): (number?, boolean)
+	local top = math.max(height - 2 * headRadius, height / 2 + radius)
+	local head = feet + Vector3.new(0, height - headRadius, 0)
+	local bodyEntry = HitShapes.RayUpright(
+		origin,
+		direction,
+		reach,
+		width,
+		pad,
+		feet,
+		radius,
+		top - radius,
+		radius
+	)
+	local headEntry = HitShapes.Ray(origin, direction, reach, width, pad, head, headRadius)
+	local entry = earlier(bodyEntry, headEntry)
+	if entry == nil then
+		return nil, false
+	end
+	return entry, HitShapes.Ray(origin, direction, reach, width, 0, head, headRadius) ~= nil
+end
+
+-- L1b-W2-24: the flat distance from a point to a rectangle (centre, half extents); 0 inside or on
+-- its edge.
+function HitShapes.FlatToRect(
+	x: number,
+	z: number,
+	cx: number,
+	cz: number,
+	hx: number,
+	hz: number
+): number
+	local dx = math.max(math.abs(x - cx) - hx, 0)
+	local dz = math.max(math.abs(z - cz) - hz, 0)
+	return math.sqrt(dx * dx + dz * dz)
+end
+
 -- The cosmetic pellet pattern of a cone gun: `count` (at most MAX_PELLETS) unit directions
 -- spread uniformly over the disc of half-angle `spreadDegrees` around `direction`, fully
 -- determined by `seed` (the strike's `seq`), so every client draws the same tracers.

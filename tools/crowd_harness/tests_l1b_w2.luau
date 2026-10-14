@@ -1,0 +1,515 @@
+-- Cases for L1b Wave 2, the run (docs/INTERFACES.md "Wave 2 — the long road" → "B —
+-- StageFlow", "B — Combat", "B — LevelGeometry"): a tent's stock in Plan and its refusals in
+-- Validate, the boss reserve and the population rule (L1b-W2-5), a camp's clear held by its tent
+-- (L1b-W2-8), the clear bonus and the merge test's dead fraction (L1b-W2-21, -26), the tent
+-- marker (L1b-W2-9), and the shipped Forest Road. Appended after tests_l1b.luau, so every local
+-- of the earlier files is in scope (vec, check, near, load, L1, L1W, L1B). Everything hangs off
+-- the W2B table (the 200-local limit), and every group runs behind L1.group, so one that throws
+-- fails a check and the bundle goes on to its verdict.
+
+print("L1b Wave 2: the run (tents, the population, the clear bonus)")
+
+local W2B: any = {
+	Flow = load("StageFlow"),
+	Combat = load("Combat"),
+	Geo = load("LevelGeometry"),
+	-- The real crowd kinds: the colossus calls 12, the warlord 4.
+	real = FIXTURES.proving.crowd.kinds,
+}
+
+-- L1B's road with two tents: A's (2 fodder, a slinger from Hard, a brute; one every 6 s) round
+-- (10, 110), B's (3 fodder; every 4 s) round (120, 320), and a marker only on the boss room C.
+function W2B.level(): any
+	local level = L1B.level()
+	level.camps[1].tent = {
+		every = 6,
+		units = { { kind = "fodder", count = 2 }, { kind = "slinger", count = 1, minDifficulty = "hard" }, { kind = "brute", count = 1 } },
+	}
+	level.camps[2].tent = { every = 4, units = { { kind = "fodder", count = 3 } } }
+	return level
+end
+
+function W2B.layout(): any
+	local layout = L1B.layout()
+	layout.camps[1].tent = { x = 10, y = 12, z = 110, sx = 4, sy = 8, sz = 4, radius = 5 }
+	layout.camps[2].tent = { x = 120, y = 16, z = 320, sx = 6, sy = 8, sz = 6, radius = 6 }
+	layout.camps[3].tent = { x = 20, y = 9, z = 500, sx = 8, sy = 10, sz = 8, radius = 5 }
+	return layout
+end
+
+function W2B.plan(level: any?, layout: any?, difficulty: string?, kinds: any?): any
+	local given = if kinds == false then nil else kinds or L1B.kinds
+	return W2B.Flow.Plan(level or W2B.level(), layout or W2B.layout(), difficulty or "normal", L1B.rules, L1B.bounds, L1B.ranks, given)
+end
+
+function W2B.problems(level: any?, layout: any?, crowdMax: number?): { string }
+	local ok, problems = pcall(W2B.Flow.Validate, level or W2B.level(), layout or W2B.layout(), L1B.kinds, L1B.ranks, L1B.rules, crowdMax or L1B.crowdMax)
+	if not ok then
+		return { "Validate threw: " .. tostring(problems) }
+	end
+	return problems
+end
+
+-- "kind count, kind count", sorted, of a stock by kind.
+function W2B.stock(stock: any): string
+	local out = {}
+	for kind, count in stock or {} do
+		table.insert(out, `{kind} {count}`)
+	end
+	table.sort(out)
+	return table.concat(out, ", ")
+end
+
+-- Validate ------------------------------------------------------------------------------------
+
+function W2B.validateTests(): ()
+	print(" Validate: a tent's refusals (L1b-W2-6), the clear bonus's share (L1b-W2-21)")
+	local problems = W2B.problems
+	local has = L1.has
+	local good = problems()
+	check(#good == 0, `the fixture (two tents on open camps, a marker on the boss room) has no problem ({good[1] or "none"})`)
+	local function names(what: string, text: string, edit: (level: any, layout: any) -> (), crowdMax: number?): ()
+		local level, layout = W2B.level(), W2B.layout()
+		edit(level, layout)
+		local list = problems(level, layout, crowdMax)
+		check(not has(list, "Validate threw") and has(list, text), `{what}: "{text}" ({list[1] or "no problem"})`)
+	end
+	names("a tent with no every", `camps entry 1 ("A"): its tent's every is nil, not a time above 0`, function(level)
+		level.camps[1].tent.every = nil
+	end)
+	names("a tent's every of 0", "its tent's every is 0, not a time above 0", function(level)
+		level.camps[1].tent.every = 0
+	end)
+	names("a tent's every that is not a number", 'its tent\'s every is soon, not a time above 0', function(level)
+		level.camps[2].tent.every = "soon"
+	end)
+	names("a tent's every that is infinite", "its tent's every is inf, not a time above 0", function(level)
+		level.camps[1].tent.every = math.huge
+	end)
+	names("a tent's every that is NaN", "not a time above 0", function(level)
+		level.camps[1].tent.every = 0 / 0
+	end)
+	names("a tent with no units", `camps entry 2 ("B") tent has no units`, function(level)
+		level.camps[2].tent.units = {}
+	end)
+	names("a tent unit with no kind", `camps entry 1 ("A") tent unit 3 has no kind`, function(level)
+		level.camps[1].tent.units[3].kind = nil
+	end)
+	names("a tent unit of a kind ProvingGrounds.json lacks", 'tent unit 1 names the unknown kind "ghost"', function(level)
+		level.camps[1].tent.units[1].kind = "ghost"
+	end)
+	names("a tent unit the rewards do not price", 'tent unit 1 fields "stray", which rewards does not price', function(level)
+		level.camps[2].tent.units[1].kind = "stray"
+	end)
+	names("a tent unit of count 0", "tent unit 1: count 0 is not a whole number of at least 1", function(level)
+		level.camps[1].tent.units[1].count = 0
+	end)
+	names("a tent unit of count 2.5", "count 2.5 is not a whole number of at least 1", function(level)
+		level.camps[2].tent.units[1].count = 2.5
+	end)
+	names("a tent unit's minDifficulty that is no difficulty", 'tent unit 2: minDifficulty "nightmare" is no difficulty', function(level)
+		level.camps[1].tent.units[2].minDifficulty = "nightmare"
+	end)
+	names("a tent stock on the boss room", `camps entry 3 ("C"): camp C locks, and a boss room's tent has no stock`, function(level)
+		level.camps[3].tent = { every = 6, units = { { kind = "fodder", count = 2 } } }
+	end)
+	names("a tent stock whose layout camp has no tent block", `camps entry 2 ("B") has a tent stock, and camp B has no tent block`, function(_level, layout)
+		layout.camps[2].tent = nil
+	end)
+	names("a tent stock on a camp with no residents", "on normal camp A has a tent stock of 3 and no residents", function(level)
+		level.camps[1].residents = {}
+	end)
+	-- Residents of Hard alone: Normal's camp has none, Hard's has one.
+	local hardOnly = W2B.level()
+	hardOnly.camps[1].residents = { { spot = "gate", units = { { kind = "slinger", count = 1, minDifficulty = "hard" } } } }
+	local hardList = problems(hardOnly)
+	check(has(hardList, "on normal camp A has a tent stock of 3 and no residents") and not has(hardList, "on hard camp A"), "it is judged at each difficulty: Normal has no resident there, Hard has its slinger")
+	names("a tent block with a radius of 0", "camp A: its tent's size and radius must be above 0", function(_level, layout)
+		layout.camps[1].tent.radius = 0
+	end)
+	names("a tent block with no radius (Wave 1's draft shape)", "camp A: its tent needs a finite x, y, z, sx, sy, sz, radius", function(_level, layout)
+		layout.camps[1].tent.radius = nil
+	end)
+	names("a tent block of height 0", "camp B: its tent's size and radius must be above 0", function(_level, layout)
+		layout.camps[2].tent.sy = 0
+	end)
+	names("a tent block at NaN", "camp A: its tent needs a finite", function(_level, layout)
+		layout.camps[1].tent.x = 0 / 0
+	end)
+	names("a tent block with an infinite size", "camp A: its tent needs a finite", function(_level, layout)
+		layout.camps[1].tent.sz = math.huge
+	end)
+	names("a boss room's marker off its floor", "camp C: its tent's centre lies off the floor", function(_level, layout)
+		layout.camps[3].tent.x = 41
+	end)
+	local edge = W2B.layout()
+	edge.camps[1].tent.x = 30
+	edge.camps[1].tent.radius = 0.5
+	check(not has(problems(nil, edge), "its tent's centre lies off the floor"), "(a centre on the floor's edge is on it; A's floor ends at x 30)")
+	-- A's floor ends at x 30, the brute's radius is 2.2: a ring of 4 round x 25 reaches x 29.
+	names("a ring that reaches past its floor less its widest kind", "group A.tent: ring post", function(_level, layout)
+		layout.camps[1].tent.x = 25
+		layout.camps[1].tent.z = 100
+		layout.camps[1].tent.radius = 4
+	end)
+	local inside = W2B.layout()
+	inside.camps[1].tent.x = 25
+	inside.camps[1].tent.z = 100
+	inside.camps[1].tent.radius = 2.7
+	check(not has(problems(nil, inside), "ring post"), "(a ring of 2.7 round x 25 keeps to x 27.7, inside the floor less 2.2)")
+	names("a clear bonus share of 1.5", "crowd.clearBonus needs a share from 0 to 1", function(level)
+		level.crowd.clearBonus = { share = 1.5 }
+	end)
+	names("a clear bonus share that is NaN", "crowd.clearBonus needs a share from 0 to 1", function(level)
+		level.crowd.clearBonus = { share = 0 / 0 }
+	end)
+	names("a clear bonus that is a number", "crowd.clearBonus needs a share from 0 to 1", function(level)
+		level.crowd.clearBonus = 0.1
+	end)
+	for _, share in { 0, 1 } do
+		local level = W2B.level()
+		level.crowd.clearBonus = { share = share }
+		check(not has(problems(level), "clearBonus"), `(a share of {share} is legal)`)
+	end
+
+	print(" Validate: the population rule at each difficulty (L1b-W2-5), worked by hand")
+	-- Normal: residents 20 (as L1b's fixture), tents A 3 (2 fodder, a brute) + B 3 = 6, the boss
+	-- room's room 30 - 3 = 27, the boss reserve 1 + 20 = 21: 74.
+	-- Hard: 23 residents, tents 4 + 3 = 7 (the slinger joins), 27, 21: 78.
+	-- Brutal: 24 residents, 7, 30 - 4 = 26, 21: 78.
+	names("a crowd cap of 77", "on hard the population is 78, over ProvingGrounds.json crowd.maxAlive (77)", function() end, 77)
+	names("a crowd cap of 77, Brutal", "on brutal the population is 78", function() end, 77)
+	check(not has(problems(nil, nil, 77), "on normal"), "(Normal's 74 is under 77)")
+	check(#problems(nil, nil, 78) == 0, "a crowd cap of 78 holds every difficulty")
+	-- One level one body over 160: A's tent 82 fodder more makes Hard 160; 83 makes it 161.
+	names("Hard one body over 160", "on hard the population is 161, over ProvingGrounds.json crowd.maxAlive (160)", function(level)
+		level.camps[1].tent.units[1].count = 2 + 83
+	end)
+	local full = W2B.level()
+	full.camps[1].tent.units[1].count = 2 + 82
+	check(#problems(full) == 0, "and 82 more is 160 exactly: legal")
+	local summoner = L1.copy(L1B.kinds)
+	summoner.colossus = W2B.real.colossus
+	local ok, list = pcall(W2B.Flow.Validate, W2B.level(), W2B.layout(), summoner, L1B.ranks, L1B.rules, 70)
+	check(ok and #list == 0, `with the real colossus (1 + its 12 calls = 13) Hard is 23 + 7 + 27 + 13 = 70: under a cap of 70 ({if ok then list[1] or "none" else tostring(list)})`)
+	ok, list = pcall(W2B.Flow.Validate, W2B.level(), W2B.layout(), summoner, L1B.ranks, L1B.rules, 69)
+	check(ok and has(list, "on hard the population is 70, over ProvingGrounds.json crowd.maxAlive (69)"), "and over a cap of 69, naming the difficulty and both numbers")
+end
+L1.group("l1b w2 validateTests", W2B.validateTests)
+
+-- BossReserve and Plan --------------------------------------------------------------------------
+
+function W2B.planTests(): ()
+	print(" BossReserve (L1b-W2-5)")
+	local Flow = W2B.Flow
+	local level = W2B.level()
+	check(Flow.BossReserve(level, W2B.real) == 13, `the Colossus: 1 + its 12 calls = 13 ({Flow.BossReserve(level, W2B.real)})`)
+	local warlord = W2B.level()
+	warlord.stages[2].waves[2].boss.kind = "warlord"
+	check(Flow.BossReserve(warlord, W2B.real) == 5, `the Warlord: 1 + his guard of 4 = 5 ({Flow.BossReserve(warlord, W2B.real)})`)
+	local unknown = W2B.level()
+	unknown.stages[2].waves[2].boss.kind = "dragon"
+	check(Flow.BossReserve(unknown, W2B.real) == 1 and Flow.BossReserve(level, nil) == 1, "an unknown kind, or no kinds at all: 1, the boss alone")
+	local none = W2B.level()
+	none.stages[2].waves[2].boss = nil
+	check(Flow.BossReserve(none, W2B.real) == 0, "no stage with a boss: 0")
+	local two = W2B.level()
+	table.insert(two.stages[2].waves, { groups = {}, boss = { kind = "warlord", at = { 0, 0 }, valor = 5 } })
+	check(Flow.BossReserve(two, W2B.real) == 13, "two bosses: the larger reserve (13), not their sum")
+	local calls = {
+		boss = { radius = 3, attacks = { { shape = "ring", reach = 14 }, { shape = "summon", reach = 60, count = 3, summon = "fodder" }, { shape = "summon", reach = 60, count = 12, summon = "fodder" }, { shape = "lob", reach = 60, count = 40 } } },
+	}
+	local own = W2B.level()
+	own.stages[2].waves[2].boss.kind = "boss"
+	check(Flow.BossReserve(own, calls) == 13, `of two summons the largest count (12), and a lob's count is no call: 13 ({Flow.BossReserve(own, calls)})`)
+
+	print(" Plan: tents, stock, the population (L1b-W2-5, -6)")
+	local plan = W2B.plan()
+	local tents = plan.tents
+	check(#tents == 2 and tents[1].zone == 1 and tents[2].zone == 2, "one tent per open camp with a stock, in the layout's order; none for the boss room's marker")
+	local a = tents[1]
+	check(table.concat(a.kinds, " ") == "fodder fodder brute", `A on Normal: its units in file order, the Hard slinger left out ({table.concat(a.kinds, " ")})`)
+	check(#a.posts == #a.kinds and a.every == 6 and tents[2].every == 4, "kinds and posts paired, one post a body; each its own every")
+	local def = a.def
+	check(def.id == "A.tent" and def.camp == "A" and def.floor == 1 and def.floorY == 8 and def.posture == "tent" and def.radius == 5 and def.held == false, "its group: A.tent, camp A's floor and height, posture tent, the layout's radius, never held")
+	check(#def.points == 1 and L1.same(def.points[1], vec(10, 8, 110)) and def.rect.x == 0 and def.rect.z == 100 and def.rect.hx == 30 and def.rect.hz == 30, "its point the marker's centre at the floor's height, its rect the camp's floor")
+	check(L1B.units(def) == "fodder 2, brute 1", `its units the stock's ({L1B.units(def)})`)
+	local onRing = true
+	for _, post in a.posts do
+		onRing = onRing and near(vec(post.at.X - 10, 0, post.at.Z - 110).Magnitude, 5, 1e-6) and near(post.at.Y, 8)
+	end
+	check(onRing, "every post on the ring of radius 5 round the marker, on the floor")
+	local hard = W2B.plan(nil, nil, "hard")
+	check(table.concat(hard.tents[1].kinds, " ") == "fodder fodder slinger brute" and #hard.tents[1].posts == 4, "on Hard the slinger joins, in file order")
+	check(#hard.tents[2].kinds == 3 and #W2B.plan(nil, nil, "brutal").tents[2].kinds == 3, "and countMult (Hard 1.25, Brutal 1.5) never scales a tent: B's 3 stay 3")
+	local dropped = W2B.level()
+	dropped.camps[2].tent.units[1].minDifficulty = "hard"
+	check(#W2B.plan(dropped).tents == 1 and W2B.plan(dropped).zones[2].tentStock == 0, "a tent whose units all drop on Normal is left out (tentStock 0)")
+	local marker = W2B.level()
+	marker.camps[3].tent = { every = 6, units = { { kind = "fodder", count = 2 } } }
+	check(#W2B.plan(marker).tents == 2, "a boss room's tent stock is never planned (Validate refuses it)")
+
+	local zones = plan.zones
+	check(zones[1].tentStock == 3 and zones[2].tentStock == 3 and zones[3].tentStock == 0, "tentStock: A 3, B 3, C 0")
+	check(W2B.stock(zones[1].stock) == "brute 1, fodder 11", `A's stock, residents 9 fodder and the tent's 2 fodder and a brute ({W2B.stock(zones[1].stock)})`)
+	check(W2B.stock(zones[2].stock) == "brute 1, fodder 8, slinger 2", `B's: 5 fodder, a brute, 2 slingers and the tent's 3 fodder ({W2B.stock(zones[2].stock)})`)
+	check(W2B.stock(zones[3].stock) == "fodder 3", `C's, the boss room: its residents only ({W2B.stock(zones[3].stock)})`)
+	check(W2B.stock(hard.zones[1].stock) == "brute 1, fodder 11, slinger 2", `A on Hard: the gate's slinger and the tent's ({W2B.stock(hard.zones[1].stock)})`)
+	check(plan.population == 74 and hard.population == 78 and W2B.plan(nil, nil, "brutal").population == 78, `population by hand: Normal 74, Hard 78, Brutal 78 ({plan.population}, {hard.population})`)
+	check(W2B.plan(nil, nil, nil, false).population == 74 - 21 + 1, "without kinds the boss reserve is 1: 54")
+	check(W2B.plan(nil, nil, nil, W2B.real).population == 74 - 21 + 13, "with the real kinds, 13: 66")
+	local wave1 = L1B.plan()
+	check(#wave1.tents == 0 and wave1.zones[1].tentStock == 0 and W2B.stock(wave1.zones[1].stock) == "fodder 9", "a level with no tent plans none; its zones' stock is their residents")
+end
+L1.group("l1b w2 planTests", W2B.planTests)
+
+-- Advance: a tent holds its camp's clear ---------------------------------------------------------
+
+function W2B.advanceTests(): ()
+	print(" Advance: an open camp clears when its bodies are dead and its tent is spent (L1b-W2-8)")
+	local Flow = W2B.Flow
+	local plan = W2B.plan()
+	local state = Flow.Begin(plan)
+	local function names(over: any): string
+		return L1.names(L1B.advance(plan, state, over))
+	end
+	check(names({ aliveByFloor = { 0, 8, 3 }, tentLeft = { 2, 0, 0 } }) == "", "A's floor empty with 2 of its stock to come: no campClear")
+	check(names({ aliveByFloor = { 0, 8, 3 }, tentLeft = { 1, 0, 0 } }) == "" and not state.done[1], "nor with 1")
+	local actions = L1B.advance(plan, state, { aliveByFloor = { 0, 8, 3 }, tentLeft = { 0, 0, 0 } })
+	check(L1.names(actions) == "campClear" and L1.get(actions, "campClear").zone == 1 and state.cleared == 1, "once the stock is spent: one campClear, zone 1")
+	check(names({ aliveByFloor = { 0, 8, 3 }, tentLeft = { 0, 0, 0 } }) == "", "never twice")
+	check(names({ aliveByFloor = { 0, 0, 3 }, tentLeft = { 0, 3, 0 } }) == "", "B empty with its whole stock to come: held")
+	check(names({ aliveByFloor = { 0, 1, 3 }, tentLeft = { 0, 0, 0 } }) == "", "B with its stock spent and one tent body alive: held")
+	check(names({ aliveByFloor = { 0, 0, 3 }, tentLeft = { 0, 0, 0 } }) == "campClear" and state.cleared == 2, "B, both: it clears")
+	local old = Flow.Begin(plan)
+	check(L1.names(Flow.Advance(plan, old, L1B.input({ aliveByFloor = { 0, 8, 3 } }), L1B.rules)) == "campClear", "an input with no tentLeft (no tents in the run) reads 0 left")
+	local locked = Flow.Begin(plan)
+	check(L1.names(L1B.advance(plan, locked, { aliveByFloor = { 9, 8, 0 }, tentLeft = { 0, 0, 0 } })) == "", "the boss room never clears this way, its own floor empty or not")
+
+	print(" a skipped boss room's open carries skipped (no bonus)")
+	local skip = Flow.Begin(plan)
+	local road = Flow.Skip(plan, skip, "stage", 0, L1B.rules, { 1 })
+	local gate = Flow.Skip(plan, skip, "stage", 1, L1B.rules, { 1 })
+	local drop = Flow.Skip(plan, skip, "stage", 2, L1B.rules, { 1 })
+	check(L1.names(road) == "move gate" and L1.names(gate) == "close wave", `the road's skip moves to the boss room and starts its countdown, the countdown's closes it ({L1.names(road)}; {L1.names(gate)})`)
+	check(L1.get(drop, "open").skipped == true and L1.names(drop) == "drop boundary open end", `a fight's skip: drop, boundary, open marked skipped ({L1.names(drop)})`)
+end
+L1.group("l1b w2 advanceTests", W2B.advanceTests)
+
+-- Combat: the clear bonus and the dead fraction ----------------------------------------------------
+
+function W2B.combatTests(): ()
+	print(" Combat.ClearBonus (L1b-W2-21), WaveStock and DeadFraction (L1b-W2-26)")
+	local Combat = W2B.Combat
+	local rewards = L1B.level().crowd.rewards
+	local function bonus(stock: any, mult: number, share: number): string
+		local cash, materials = Combat.ClearBonus(stock, rewards, mult, share)
+		return `{cash}/{materials}`
+	end
+	-- The fixture's A on Normal: 11 fodder (100, 0) and a brute (2000, 6): 3100 cash, 6
+	-- materials; a tenth: 310 and 0.6 -> 1.
+	check(bonus({ fodder = 11, brute = 1 }, 1, 0.1) == "310/1", `the fixture's A on Normal: 310 cash, 1 material ({bonus({ fodder = 11, brute = 1 }, 1, 0.1)})`)
+	-- Hard's rewardMult 2 and its slingers (500, 1): (1100 + 2000 + 1000) x 2 = 8200, (6 + 2) x 2 = 16.
+	check(bonus({ fodder = 11, brute = 1, slinger = 2 }, 2, 0.1) == "820/2", `on Hard (x2, the slingers): 820, 1.6 -> 2 ({bonus({ fodder = 11, brute = 1, slinger = 2 }, 2, 0.1)})`)
+	check(bonus({ fodder = 11, brute = 1, slinger = 2 }, 4, 0.1) == "1640/3", `on Brutal (x4): 1640, 3.2 -> 3 ({bonus({ fodder = 11, brute = 1, slinger = 2 }, 4, 0.1)})`)
+	check(bonus({ fodder = 11, brute = 1 }, 1, 0) == "0/0" and bonus({}, 4, 0.1) == "0/0", "a share of 0, or a stock of nothing: 0, 0")
+	check(bonus({ fodder = 1, ghost = 40 }, 1, 0.1) == "10/0", "an unpriced kind adds nothing")
+	local half = { fodder = { cash = 5, materials = 1 } }
+	local cash, materials = Combat.ClearBonus({ fodder = 1 }, half, 1, 0.5)
+	check(cash == 3 and materials == 1, `rounded to the nearest, .5 away from 0: 2.5 -> 3, 0.5 -> 1 ({cash}, {materials})`)
+	cash = Combat.ClearBonus({ fodder = 3 }, { fodder = { cash = 1, materials = 0 } }, 1, 0.1)
+	check(cash == 0, `0.3 -> 0 ({cash})`)
+	-- KillReward rounds each kill first: 1.4 x 3 = 4.2 -> 4 each, 12 for 3, 1.2 -> 1.
+	cash = Combat.ClearBonus({ fodder = 3 }, { fodder = { cash = 1.4, materials = 0 } }, 3, 0.1)
+	check(cash == 1, `each kill priced as KillReward prices it (4.2 -> 4), the bonus rounded once (1.2 -> 1) ({cash})`)
+
+	local stock: any = {}
+	local spec = { groups = { { kind = "fodder", count = 16 }, { kind = "brute", count = 2 }, { kind = "fodder", count = 16 } }, boss = nil }
+	Combat.WaveStock(stock, spec, nil)
+	check(W2B.stock(stock) == "brute 2, fodder 32", `WaveStock: every group of the wave by kind ({W2B.stock(stock)})`)
+	Combat.WaveStock(stock, { groups = { { kind = "slinger", count = 2 } }, boss = nil }, "armoured")
+	check(W2B.stock(stock) == "armoured 1, brute 2, fodder 32, slinger 2", `a merged wave adds to it, with the director's elite ({W2B.stock(stock)})`)
+	Combat.WaveStock(stock, { groups = {}, boss = { kind = "colossus", at = { 14, 0 }, valor = 10 } }, nil)
+	check(stock.colossus == nil and W2B.stock(stock) == "armoured 1, brute 2, fodder 32, slinger 2", "the boss wave adds nothing: the boss is not in the stock")
+
+	local dead = Combat.DeadFraction
+	check(dead(0, 0) == 0 and dead(0, 5) == 0 and dead(-3, 0) == 0, "nothing spawned: 0")
+	check(dead(10, 10) == 0 and dead(10, 14) == 0, "all alive, or more alive than spawned: 0")
+	check(near(dead(10, 3), 0.7) and dead(10, 0) == 1 and dead(10, -4) == 1, "7 of 10 dead: 0.7; none alive: 1; never over 1")
+	-- The boss room's floor holds 12: 5 of them residents. The waves spawned 10: 3 of 10 dead.
+	check(near(dead(10, 12 - 5), 0.3), "the residents left out: 12 alive less 5 grouped of 10 spawned is 0.3, not 0")
+end
+L1.group("l1b w2 combatTests", W2B.combatTests)
+
+-- LevelGeometry: the tent marker -------------------------------------------------------------------
+
+function W2B.worldTests(): ()
+	print(" LevelGeometry: one tent marker per tent block (L1b-W2-9)")
+	local Geo = W2B.Geo
+	local pieces = Geo.Pieces(W2B.layout(), L1W.sizes, 600)
+	local tents: { any } = {}
+	for _, piece in pieces or {} do
+		if piece.role == "tent" then
+			table.insert(tents, piece)
+		end
+	end
+	check(pieces ~= nil and #tents == 3, `one per camp with a tent block, the boss room's marker included ({#tents})`)
+	local a = tents[1] or {}
+	check(a.name == "Camp_A_Tent" and a.look == "tent" and a.collide == false and a.camp == "A", "named for its camp, look tent, walked through (collide false)")
+	check(a.box ~= nil and L1W.is(a.box, 10, 12, 110, 4, 8, 4), `the block's own centre and size ({a.box and L1W.show(a.box)})`)
+	local without = Geo.Pieces(L1B.layout(), L1W.sizes, 600)
+	check(without ~= nil and pieces ~= nil and #without == #pieces - 3, "a camp with no tent block builds none")
+	check(Geo.TentBox(L1B.layout().camps[1]) == nil, "TentBox: nil with no block")
+	local flat = W2B.layout()
+	flat.camps[2].tent.sy = 0
+	local refused, why = Geo.Pieces(flat, L1W.sizes, 600)
+	check(refused == nil and type(why) == "string" and string.find(why, "Camp_B_Tent", 1, true) ~= nil, `a tent block of height 0 refuses the layout, by name ({tostring(why)})`)
+
+	print(" the shipped Forest Road (Config/Levels/1_ForestRoad.json, Layouts/Levels/ForestRoad.json)")
+	local file = L1.real.file("forestRoad")
+	local layout = L1.real.layouts.ForestRoad
+	if file == nil or layout == nil then
+		check(false, "the shipped Forest Road's level and layout are there")
+		return
+	end
+	local shipped = Geo.Pieces(layout, L1.real.sizes(), L1.real.rules.maxParts)
+	local markers, blocks = 0, 0
+	for _, piece in shipped or {} do
+		if piece.role == "tent" then
+			markers += 1
+			check(piece.collide == false and piece.look == "tent", `{piece.name}: a marker only`)
+		end
+	end
+	for _, camp in layout.camps do
+		if camp.tent ~= nil then
+			blocks += 1
+		end
+	end
+	local count = if shipped ~= nil then #shipped else -1
+	local gate = if L1.real.gate.parts ~= nil then L1.real.gate.parts.ForestRoad else nil
+	print(`   Forest Road: {count} Parts, {markers} tent markers`)
+	check(shipped ~= nil and markers == blocks and markers == 3, `one marker per tent block (A, B and C's) ({markers})`)
+	check(count > 0 and count <= L1.real.rules.maxParts and count == gate, `its Part count is Pieces', at most levels.maxParts, and check_levels.py's ({count}, {tostring(gate)})`)
+end
+L1.group("l1b w2 worldTests", W2B.worldTests)
+
+-- The shipped files ----------------------------------------------------------------------------------
+
+-- The population of a level file at one difficulty, counted here from the files as the contract
+-- words it (L1b-W2-5), apart from StageFlow: residents, every open camp's tent stock, the boss
+-- room's room over its own residents, and the boss reserve `reserve`.
+function W2B.counted(file: any, layout: any, difficulty: string, reserve: number): (number, { [string]: number })
+	local ranks = L1.real.ranks()
+	local rank = ranks[difficulty] or 0
+	local function fielded(units: any): number
+		local bodies = 0
+		for _, unit in units or {} do
+			local needs = unit.minDifficulty
+			if needs == nil or (ranks[needs] ~= nil and ranks[needs] <= rank) then
+				bodies += unit.count
+			end
+		end
+		return bodies
+	end
+	local locks: { [string]: boolean } = {}
+	for _, camp in layout.camps do
+		locks[camp.id] = camp.locks == true
+	end
+	local residents: { [string]: number } = {}
+	local total = 0
+	for _, camp in file.camps or {} do
+		local bodies = 0
+		for _, group in camp.residents or {} do
+			bodies += fielded(group.units)
+		end
+		residents[camp.id] = bodies
+		total += bodies
+		if camp.tent ~= nil and not locks[camp.id] then
+			total += fielded(camp.tent.units)
+		end
+	end
+	local room = 0
+	for _, stage in file.stages do
+		if stage.kind == "camp" then
+			room = math.max(room, (stage.maxAlive or file.crowd.maxAlive) - (residents[stage.zone] or 0))
+		end
+	end
+	return total + room + reserve, residents
+end
+
+function W2B.realTests(): ()
+	print(" the shipped Forest Road: Validate clean, the population and the clear bonus by count")
+	local file = L1.real.file("forestRoad")
+	local layout = L1.real.layouts.ForestRoad
+	if file == nil or layout == nil then
+		check(false, "the shipped Forest Road's level and layout are there")
+		return
+	end
+	local resolved = L1.real.resolve("forestRoad")
+	local level = resolved.level
+	if level == nil then
+		check(false, "the shipped Forest Road resolves")
+		return
+	end
+	local ok, problems = pcall(W2B.Flow.Validate, level, layout, L1.real.kinds, L1.real.ranks(), L1.real.rules, FIXTURES.proving.crowd.maxAlive)
+	check(ok and #problems == 0, `Validate finds nothing ({if ok then problems[1] or "none" else tostring(problems)})`)
+	-- Its boss is the Colossus, which calls 12: the reserve is 13.
+	check(W2B.Flow.BossReserve(level, L1.real.kinds) == 13, "its boss reserve is the Colossus's 13")
+	for _, difficulty in L1.real.map.difficulties do
+		if level.difficulties[difficulty] == nil then
+			continue
+		end
+		local plan = L1.real.plan(level, layout, difficulty, L1.real.bounds(layout))
+		local counted = W2B.counted(file, layout, difficulty, 13)
+		print(`   {difficulty}: population {plan and plan.population or "none"}`)
+		check(plan ~= nil and plan.population == counted and counted <= FIXTURES.proving.crowd.maxAlive, `{difficulty}: Plan's population is the one counted from the files, within crowd.maxAlive ({plan and plan.population}, {counted})`)
+		if plan == nil then
+			continue
+		end
+		check(#plan.tents == 2 and plan.tents[1].def.id == "A.tent" and plan.tents[2].def.id == "B.tent", `{difficulty}: two tents, A's and B's, none for the Chief's Clearing`)
+		-- The clear bonus of A, priced kill by kill from its stock.
+		local zone = plan.zones[1]
+		local scales = level.difficulties[difficulty]
+		local share = level.crowd.clearBonus.share
+		local cash, materials = 0, 0
+		for kind, count in zone.stock do
+			local reward = level.crowd.rewards[kind]
+			if reward ~= nil then
+				cash += count * math.round(reward.cash * scales.rewardMult)
+				materials += count * math.round(reward.materials * scales.rewardMult)
+			end
+		end
+		local paid, paidMaterials = W2B.Combat.ClearBonus(zone.stock, level.crowd.rewards, scales.rewardMult, share)
+		print(`   {difficulty}: Pickets' clear bonus {paid} cash, {paidMaterials} {level.material} (stock {W2B.stock(zone.stock)})`)
+		check(paid == math.round(share * cash) and paidMaterials == math.round(share * materials) and paid > 0, `{difficulty}: Pickets' bonus is {share} of its whole stock ({paid}, {paidMaterials})`)
+		local tentBodies = 0
+		for _, unit in file.camps[1].tent.units do
+			tentBodies += unit.count
+		end
+		check(zone.tentStock == #plan.tents[1].kinds and zone.tentStock <= tentBodies, `{difficulty}: Pickets' tentStock is its tent's stock ({zone.tentStock})`)
+	end
+end
+L1.group("l1b w2 realTests", W2B.realTests)
+
+-- SpawnSeed (the ui-engineer's pure module, tested here on the lead's routing) -------------------
+
+function W2B.seedTests(): ()
+	print(" SpawnSeed: a spawn info's body, read off the network (L1b-W2-11)")
+	local Seed = load("SpawnSeed")
+	local at = vec(4, 8, -2)
+	local p, y, s = Seed.Read({ id = 1, kind = "fodder", maxHp = 10, at = at, yaw = 1.5, state = "rest" })
+	check(p == at and y == 1.5 and s == "rest", "SpawnSeed: a resting body seeds where it rests, seated")
+	local _, _, s2 = Seed.Read({ at = at, state = "windup" })
+	check(s2 == "idle", "SpawnSeed: an attack state seeds standing")
+	check(Seed.Read({ at = at, state = "dead" }) == nil, "SpawnSeed: a dead body is not seeded")
+	check(Seed.Read({ id = 1, kind = "fodder" }) == nil, "SpawnSeed: no at, no seed (the range)")
+	local _, y2 = Seed.Read({ at = at, yaw = math.huge })
+	check(y2 == 0, "SpawnSeed: a bad yaw faces 0")
+	local _, _, s3 = Seed.Read({ at = at, state = "move" })
+	local _, _, s4 = Seed.Read({ at = at, state = "rise" })
+	check(s3 == "move" and s4 == "rise", "SpawnSeed: walking and rising seed as they are")
+	check(Seed.Read({ at = { X = 1, Y = 2, Z = 3 } }) == nil and Seed.Read({ at = vec(0 / 0, 0, 0) }) == nil, "SpawnSeed: an at that is no Vector3, or not finite, seeds nothing")
+end
+L1.group("l1b w2 seedTests", W2B.seedTests)
+
+print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)
