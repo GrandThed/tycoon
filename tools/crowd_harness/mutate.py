@@ -2903,6 +2903,90 @@ L1B_W2_CROWD_REPLACED = {
 MUTATIONS.update(L1B_W2_CROWD_MUTATIONS)
 # A's edits moved the text of three Wave 1 mutations: same labels, same rules, new texts.
 MUTATIONS.update(L1B_W2_CROWD_REPLACED)
+
+# The L1b Wave 2 fix round, luau-engineer A (fix-A.md "For B", texts as given): SwingGate's one
+# landing rule (A-1), the frozen patroller's state (A-2), `resting` on the spawn info (ui-2).
+L1B_W2_FIX_A_MUTATIONS = {
+    # A-1: SwingGate's one landing rule
+    "l1b w2 fix A: a turn near the floor is no landing": (
+        SWING,
+        "if math.min(state.lowest, excess) <= reach then",
+        "if false then",
+    ),
+    "l1b w2 fix A: a fall that ends grounded is no landing": (
+        SWING,
+        "if state.airborne or state.falling then\n\t\t\tlanded = true",
+        "if false then\n\t\t\tlanded = true",
+    ),
+    "l1b w2 fix A: the fall's lowest sample not kept": (
+        SWING,
+        "state.lowest = math.min(state.lowest, excess)\n\t\t\tstate.fallSpeed",
+        "state.lowest = state.lowest\n\t\t\tstate.fallSpeed",
+    ),
+    "l1b w2 fix A: direction from the replicated speed first": (
+        SWING,
+        "local sinking = step < 0 or (step == 0 and vy < -SwingGate.STILL_SPEED)",
+        "local sinking = vy < -SwingGate.STILL_SPEED or (step < 0 and vy <= SwingGate.STILL_SPEED)",
+    ),
+    "l1b w2 fix A: the footprint is the centre only": (
+        SWING,
+        "SwingGate.FOOTPRINT = { { 0, 0 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } }",
+        "SwingGate.FOOTPRINT = { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } }",
+    ),
+    "l1b w2 fix A: Higher keeps the lower floor": (
+        SWING,
+        "return math.max(floorY, hitY)",
+        "return math.min(floorY, hitY)",
+    ),
+    "l1b w2 fix A: ProbePoint's back axis not turned": (
+        SWING,
+        "local bx, bz = -rz, rx",
+        "local bx, bz = rx, rz",
+    ),
+    "l1b w2 fix A: a down does not clear": (
+        SWING,
+        "if down then\n\t\tstate.used = false",
+        "if down then\n\t\tstate.used = state.used",
+    ),
+    "l1b w2 fix A: the claim's landing ahead never taken": (
+        SWING,
+        "state.used = false\n\t\t\tstate.ahead = true",
+        "state.used = true\n\t\t\tstate.ahead = true",
+    ),
+    "l1b w2 fix A: Judge without the lag": (
+        SWING,
+        "(SwingGate.TURN_WINDOW_SECONDS + lag)",
+        "(SwingGate.TURN_WINDOW_SECONDS)",
+    ),
+    "l1b w2 fix A: a landing taken ahead counted again": (
+        SWING,
+        "if state.ahead then\n\t\tstate.ahead = false\n\telse",
+        "if false then\n\t\tstate.ahead = false\n\telse",
+    ),
+    # A-2: the freeze-time reset (the reviewer's mutation)
+    "l1b w2 fix A: a frozen patroller keeps its walking state": (
+        CROWD,
+        "body.state = CampBrain.Shows(brain, false) or body.state",
+        "body.state = body.state",
+    ),
+    # ui-2: resting on the spawn info
+    "l1b w2 fix A: no re-announce at a change to or from rest": (
+        CROWD,
+        'local restChanged = from == "rest" or to == "rest"',
+        "local restChanged = false",
+    ),
+    "l1b w2 fix A: refreshInfo never writes resting": (
+        CROWD,
+        'info.resting = if group ~= nil and (group.brain.held or group.brain.state == "rest")',
+        'info.resting = if false and (group.brain.held or group.brain.state == "rest")',
+    ),
+    "l1b w2 fix A: a batch of re-announces alone is never sent": (
+        CROWD,
+        "if #pendingSpawnOrder > 0 or #camp.reannounceOrder > 0 then",
+        "if #pendingSpawnOrder > 0 then",
+    ),
+}
+MUTATIONS.update(L1B_W2_FIX_A_MUTATIONS)
 # Retired, never silently: the rectangle distance moved into HitShapes.FlatToRect, whose own
 # "l1b w2 crowd: FlatToRect with square corners" holds the rule now.
 del MUTATIONS["l1b crowd: in play has square corners"]

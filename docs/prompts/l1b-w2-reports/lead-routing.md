@@ -121,3 +121,6 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
   `Judge`, `ProbePoint`, `Higher`, `TURN_WINDOW_SECONDS`, `STILL_SPEED`, `FOOTPRINT`,
   `PROBE_POINTS`; `Landed` a full reset), `CrowdService.SeparationCells`, `CrowdSpawnInfo.resting`
   with re-announces on rest changes, `CampAim.Takes`, tent bodies rising (B-4).
+- **econ fix done (fix-econ.md):** E-1 to E-3, plus the mirror of B-2 / B-4 (doors, rings at every
+  difficulty) taken unrouted in its own files: confirmed. `py tools/crowd_harness/mirror_mutants.py`
+  (42 of 42) joins gate 10; never beside `mutate.py`.

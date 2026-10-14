@@ -4465,7 +4465,7 @@ Its files are frozen, and every band holds:
 | Pay ×2–×3 and ×4–×6; bonus 5–10%; Valor exact; calls under half | sim_combat 21 | PASS |
 | Population = Validate's, ≤ 160 | sim_combat 23 | 147 / 157 / 157: PASS |
 | The Wave 2 table | check_levels | PASS. Post spacing proved on the draft's tent (fails by 2.9); the marker clearance on C's tent at z 0 (fails, the two lobbers 1.40 inside) |
-| The mirrors | check_stage_mirror | all equal; **39 of 39 Luau mutants caught** by `py tools/crowd_harness/mirror_mutants.py` (below; about 2 min) |
+| The mirrors | check_stage_mirror | all equal; **42 of 42 Luau mutants caught** by `py tools/crowd_harness/mirror_mutants.py` (below; about 2.5 min) |
 
 The Wave 2 table covers sizes, route, residents, sneak, post spacing, population, tents, markers,
 looks, `dormantRadius`, `joinFactor`, and checkpoints with tents. Since the fix round, every
@@ -4485,10 +4485,17 @@ text no longer occurs once reports STALE and fails, so a module edit must re-aim
 | SwingGate | IsAir with `>=`; Took ignoring `airborne`; Landed doing nothing; Allows ignoring `used`; another margin |
 | CampBrain | Dormant true while home; Dormant ignoring `dormantRadius`; Gap taking the largest; JoinIn not chaining, using the first waker's sight, joining a held group, excluding the factor's edge; Rouse waking a held group; TentActive ignoring the dead residents; TentDue ignoring `active`; TentSent not moving `nextAt`; a tent's posts facing its centre; a tent seated at rest; Problems passing a joinFactor of 0 and a dormantRadius at a sight |
 | Combat | ClearBonus flooring; ClearBonus ignoring rewardMult; DeadFraction not clamped at 0; WaveStock ignoring the elite |
-| StageFlow | StandsUp outside the countdown; BossReserve without the boss; Plan leaving the tents out of the population, a tent's ring one post more, a tent body counted twice in the stock; Validate passing a share over 1, leaving the tents out of the population, passing a tent on the boss room; Advance clearing a camp with tent stock left |
+| StageFlow | StandsUp outside the countdown; BossReserve without the boss; Plan leaving the tents out of the population, a tent's ring one post more, a tent body counted twice in the stock; Validate passing a share over 1, leaving the tents out of the population, passing a tent on the boss room; Advance clearing a camp with tent stock left; (fix round) Validate judging the posts at the highest difficulty only, Plan's tent door on the wall whatever the kind |
+| LevelGeometry | (fix round) TentDoor with no clearance past the wall |
 
 A first "DeadFraction not clamped at 1" was equivalent (the fraction can never exceed 1) and was
-replaced.
+replaced. The fix round added three (39 → 42) for B's B-2 and B-4, which the mirrors now follow: Validate
+checks the posts at every difficulty (the new refusal "a tent ring post only Normal pushes off its
+floor" is refused by both sides, and the Luau before B-2 passed it), and a tent body's door
+(`LevelGeometry.TentDoor`, its kind's radius past the marker's wall) is compared in every plan.
+"TentDoor past the post" would survive on the shipped data (every door stands short of its post),
+so its cap is left to the harness's own TentDoor cases. The driver refuses to judge anything while
+the unmutated mirror is red, so a standing DIFF cannot pass for a catch.
 
 ### L1b W2: flags for the owner
 
