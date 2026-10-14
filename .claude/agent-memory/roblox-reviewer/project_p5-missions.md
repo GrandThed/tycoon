@@ -49,3 +49,16 @@ crowd blocks; EnemyService/CombatService deleted in wave 3).
 - Carried for later waves: the pellet seed is broadcast (`seq = seed` in shot fx) and
   invertible to the salt, so a client could pick seqs with tight patterns (P1 note, now live
   once the publish freeze lifts); `WeaponService.SetArena` state is write-only.
+
+**L1b Wave 1 "the camp is alive", slice 3 client (2026-10-14, diff 8e8990c..e2479c3 on `l1b-living-road`):
+0 Critical, 2 Major, 3 Minor.** The review was split into four slices from `docs/prompts/l1b-w1-review.md`;
+the findings are in `docs/prompts/l1b-w1-review/client.md`.
+- Major: touch auto-fire (`ProvingGrounds controls.touchMode "autoFire"`, `InputController.targetOnAuto`
+  over `CrowdRenderer.ForEach`) shoots any drawn body, including resting, held and home residents. A
+  blocked hit still wakes a group, so a phone player approaching a camp wakes it from bow range in an
+  endless loop. **Pattern: when the server adds "untouchable or asleep" body states, check every
+  client consumer of `ForEach` (auto-fire, auto-swing, aim) and not only the renderer.** A contract
+  that lists a file as "not changed" can still be where the bug lives.
+- Major: a fixed-width header label (`headerRight`, 74 px) truncates a longer contract string. When a
+  contract changes HUD text, measure it against the label's box: there is no TextScaled there.
+- Minor: a per-step server flag (`engaged`) that drives a phone button needs client hysteresis.
