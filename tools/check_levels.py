@@ -1180,21 +1180,99 @@ def check_residents(name, level, layout, ctx, expect):
                    + (f"inside its sight {closest[3]:g} but outside its cone)" if closest[0] <= 0
                       else f"{closest[0]:.1f} past its sight {closest[3]:g})") if closest[1] else "")))
 
-    # camps.chaseMargin against the rushers of the open camps (L1b-7's farm).
+    # The open camps' checkpoints out of every resident shooter's reach (fix round, data Minor 1):
+    # a checkpoint a keepAway resident reaches from its post (a patrol: anywhere on its loop) is in
+    # play for that group, so the safe point would put a fallen player under fire with no i-frames.
+    # Where a fighting shooter has walked to is StageFlow.SafePoint's business (it skips a
+    # checkpoint a busy group's living shooter reaches); this gate holds the resting layout.
+    for camp in camps:
+        mark = camp.get("checkpoint")
+        if camp.get("locks") is True or mark is None:
+            continue
+        hits, nearest = [], None
+        for difficulty in difficulties:
+            defs, _res = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
+            for defn in defs:
+                count = sum(u["count"] for u in defn["units"])
+                posts = sr.cb_posts(defn, count)
+                k = 0
+                for unit in defn["units"]:
+                    for _n in range(unit["count"]):
+                        post = posts[k]
+                        k += 1
+                        kind = kinds.get(unit["kind"]) or {}
+                        if kind.get("brain") != "keepAway":
+                            continue
+                        far = max((a["reach"] for a in kind.get("attacks") or [] if a.get("reach") is not None),
+                                  default=0.0)
+                        spots = [(post["at"][0], post["at"][2])]
+                        if defn["posture"] == "patrol":
+                            spots += [(x, z) for x, z, _yaw in loop_samples(defn["points"])]
+                        d = min(math.hypot(x - mark["x"], z - mark["z"]) for x, z in spots)
+                        spare = d - far
+                        if spare <= EPS:
+                            hits.append(f"{difficulty} {defn['id']} {unit['kind']} ({far:g}) {d:.1f} away")
+                        elif nearest is None or spare < nearest[0]:
+                            nearest = (spare, f"{difficulty} {defn['id']} {unit['kind']}", d, far)
+        expect(not hits, f"{name} camp {camp['id']} (open): its checkpoint ({mark['x']:g}, {mark['z']:g}) lies beyond "
+               f"every resident shooter's attack reach from its post (a patrol's: its loop), every difficulty"
+               + (": " + "; ".join(hits[:4]) if hits else
+                  (f" (the nearest: {nearest[1]} {nearest[2]:.1f} away, reach {nearest[3]:g})" if nearest else " (none)")))
+
+    # camps.chaseMargin against the rushers of the open camps (L1b-7's farm). In-play has rounded
+    # corners (fix round, crowd Major 1): a rusher clamped radius inside both edges of a corner is
+    # sqrt(2) x radius from it, so it reaches a player chaseMargin off the corner only when
+    # chaseMargin <= reach - sqrt(2) x radius (an edge needs reach - radius, which this covers).
     locking = {c["id"] for c in camps if c.get("locks") is True}
-    rushers = sorted({u["kind"] for d in groups if d["camp"] not in locking for u in d["units"]
-                      if u["kind"] in kinds and kinds[u["kind"]].get("brain") != "keepAway"})
     reach = []
-    for kind in rushers:
-        attacks = [a for a in kinds[kind].get("attacks") or [] if a.get("reach") is not None]
-        if attacks:
-            shortest = min(attacks, key=lambda a: a["reach"])
-            reach.append((shortest["reach"] - kinds[kind]["radius"], kind, shortest["shape"]))
+    for difficulty in difficulties:
+        defs, _res = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
+        rushers = sorted({u["kind"] for d in defs if d["camp"] not in locking for u in d["units"]
+                          if u["kind"] in kinds and kinds[u["kind"]].get("brain") != "keepAway"})
+        for kind in rushers:
+            attacks = [a for a in kinds[kind].get("attacks") or [] if a.get("reach") is not None]
+            if attacks:
+                shortest = min(attacks, key=lambda a: a["reach"])
+                reach.append((shortest["reach"] - math.sqrt(2) * kinds[kind]["radius"], kind, shortest["shape"],
+                              difficulty))
     limit = min(reach) if reach else None
     margin = rules["chaseMargin"]
     expect(limit is None or margin <= limit[0] + EPS,
-           f"{name}: camps.chaseMargin {margin:g} is at most the smallest reach - radius of the shortest attack of every "
-           f"rusher resident in an open camp" + (f" (the {limit[1]}'s {limit[2]}: {limit[0]:g})" if limit else " (none)"))
+           f"{name}: camps.chaseMargin {margin:g} is at most the smallest reach - sqrt(2) x radius of the shortest "
+           f"attack of every rusher resident in an open camp, every difficulty (a body clamped in a floor's corner)"
+           + (f" (the {limit[1]}'s {limit[2]} on {limit[3]}: {limit[0]:.2f})" if limit else " (none)"))
+
+    # Perches by an open camp: a standable top (a block, a fence, an obstacle, a secret, another
+    # floor) within chaseMargin of the floor on the flat whose standing root is in the height
+    # band is in play, so the camp's rushers' ground shapes must reach feet on it.
+    for camp in camps:
+        if camp.get("locks") is True:
+            continue
+        cx0, cx1, cz0, cz1 = camp_rect(camp)
+        names = sorted({u["kind"] for difficulty in difficulties
+                        for d in sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)[0]
+                        if d["camp"] == camp["id"] for u in d["units"]
+                        if u["kind"] in kinds and kinds[u["kind"]].get("brain") != "keepAway"})
+        low = ground_reach(names, kinds)
+        if low is None:
+            continue
+        highest = low[0] - COVER_MARGIN
+        floor_name = f"Camp_{camp['id']}_Floor"
+        perches = []
+        for solid in solids:
+            if solid.name == floor_name:
+                continue
+            gap = math.hypot(max(cx0 - solid.x1, solid.x0 - cx1, 0.0), max(cz0 - solid.z1, solid.z0 - cz1, 0.0))
+            if gap > margin + EPS:
+                continue
+            rise = solid.top - camp["y"]
+            in_band = -rules["sightBelow"] - EPS <= rise + sr.ROOT_HEIGHT <= rules["sightAbove"] + EPS
+            if in_band and rise > highest + EPS:
+                perches.append(f"{solid.name} top {rise:g} up, {gap:.2f} off the floor")
+        expect(not perches, f"{name} camp {camp['id']} (open): every standable top within chaseMargin {margin:g} of its "
+               f"floor whose root is in the height band stands at most {highest:g} over the floor (the {low[1]}'s "
+               f"{low[2]} height {low[0]:g} - {COVER_MARGIN:g}; fences and obstacles included)"
+               + (": " + "; ".join(perches[:4]) if perches else ""))
 
     # keepAway bands and cover in the open camps (the locking camp keeps its stage's gates).
     for camp in camps:

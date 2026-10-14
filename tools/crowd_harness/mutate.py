@@ -2372,6 +2372,108 @@ L1B_RUN_MUTATIONS = {
 }
 MUTATIONS.update(L1B_RUN_MUTATIONS)
 
+# The L1b Wave 1 fix round, B (docs/prompts/l1b-w1-fix-round.md): the stand-up on a clear road,
+# a skip that pays nothing, progress in every live step, the safe point out of every threat.
+FIX_B_MUTATIONS = {
+    "l1b fix: StandsUp in the boss room's fight": (
+        FLOW,
+        'if step ~= "travel" and step ~= "armed" and step ~= "gate" then\n\t\treturn false',
+        'if step == "over" then\n\t\treturn false',
+    ),
+    "l1b fix: StandsUp ignores the field": (
+        FLOW,
+        "if standing == nil or not StageFlow.FieldClear(plan, state, input) then",
+        "if standing == nil then",
+    ),
+    "l1b fix: StandsUp with nobody down": (
+        FLOW,
+        "\tfor _, up in standing do\n\t\tif up == false then",
+        "\tfor _, up in standing do\n\t\tif up ~= nil then",
+    ),
+    "l1b fix: a stage skip's open is not marked skipped": (
+        FLOW,
+        "leaveCamp(plan, state, actions, true)",
+        "leaveCamp(plan, state, actions, false)",
+    ),
+    "l1b fix: a cleared camp's open is marked skipped": (
+        FLOW,
+        "leaveCamp(plan, state, actions, false)",
+        "leaveCamp(plan, state, actions, true)",
+    ),
+    "l1b fix: a boss skip's passed camps are not marked skipped": (
+        FLOW,
+        'table.insert(actions, { kind = "open", stage = index, skipped = true })',
+        'table.insert(actions, { kind = "open", stage = index })',
+    ),
+    "l1b fix: progress only on the road": (
+        FLOW,
+        "\tprogress(plan, state, input, rules, actions)\n",
+        '\tif step == "travel" or step == "armed" then\n\t\tprogress(plan, state, input, rules, actions)\n\tend\n',
+    ),
+    "l1b fix: SafePoint ignores the threats": (
+        FLOW,
+        "if mark ~= nil and threatened(mark, threats) then",
+        "if mark ~= nil and false then",
+    ),
+    "l1b fix: a threat's reach judged in 3D": (
+        FLOW,
+        "if Vector3.new(mark.X - threat.at.X, 0, mark.Z - threat.at.Z).Magnitude <= threat.reach then",
+        "if (mark - threat.at).Magnitude <= threat.reach then",
+    ),
+    "l1b fix: a threat's reach edge left out": (
+        FLOW,
+        "mark.Z - threat.at.Z).Magnitude <= threat.reach then",
+        "mark.Z - threat.at.Z).Magnitude < threat.reach then",
+    ),
+    "l1b fix: LongestReach takes the last attack": (
+        FLOW,
+        "longest = math.max(longest, attack.reach)",
+        "longest = attack.reach",
+    ),
+}
+MUTATIONS.update(FIX_B_MUTATIONS)
+
+# The L1b Wave 1 fix round, A (docs/prompts/l1b-w1-reports/fix-A.md): rounded in-play corners,
+# the engaged hold, and the three `home` survivors of the crowd review.
+FIX_A_MUTATIONS = {
+    "l1b crowd: in play has square corners": (
+        CAMP,
+        "if math.sqrt(outX * outX + outZ * outZ) <= margin then",
+        "if outX <= margin and outZ <= margin then",
+    ),
+    "l1b crowd: no engaged hold": (
+        CAMP,
+        "return lastAt ~= nil and now - lastAt <= rules.engagedHoldSeconds + TIME_EPSILON",
+        "return lastAt ~= nil and now - lastAt <= TIME_EPSILON",
+    ),
+    "l1b crowd: the engaged hold never ends": (
+        CAMP,
+        "return lastAt ~= nil and now - lastAt <= rules.engagedHoldSeconds + TIME_EPSILON",
+        "return lastAt ~= nil",
+    ),
+    "l1b crowd: Engaged reads the last step only": (
+        CROWD,
+        "return rules ~= nil and CampBrain.Engaged(camp.engaged[userId], simTime, rules)",
+        "return rules ~= nil and camp.engaged[userId] == simTime",
+    ),
+    "l1b crowd: Awake leaves out a group walking home": (
+        CROWD,
+        'if #group.bodies > 0 and not group.brain.held and state ~= "rest" then',
+        'if #group.bodies > 0 and not group.brain.held and (state == "rise" or state == "fight") then',
+    ),
+    "l1b crowd: Busy counts a group walking home": (
+        CROWD,
+        'if #group.bodies > 0 and not group.brain.held and (state == "rise" or state == "fight") then',
+        'if #group.bodies > 0 and not group.brain.held and state ~= "rest" then',
+    ),
+    "l1b crowd: a group walking home engages": (
+        CROWD,
+        'if #members > 0 and (brain.state == "rise" or brain.state == "fight") then',
+        'if #members > 0 and brain.state ~= "rest" then',
+    ),
+}
+MUTATIONS.update(FIX_A_MUTATIONS)
+
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

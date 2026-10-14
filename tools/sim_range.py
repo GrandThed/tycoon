@@ -5297,7 +5297,8 @@ CB_CONE_NEAR = 0.001  # CampBrain.CONE_NEAR
 CB_CONE_EPSILON_DEGREES = 1e-6  # CampBrain.CONE_EPSILON_DEGREES
 CB_ARC_EPSILON = 1e-9  # CampBrain.ARC_EPSILON
 CB_POSTURE_KEYS = ("sight", "cone", "rise")
-CB_RULE_KEYS = ("sightBelow", "sightAbove", "chaseMargin", "leashSeconds", "homePace", "patrolPace", "homeTolerance")
+CB_RULE_KEYS = ("sightBelow", "sightAbove", "chaseMargin", "leashSeconds", "homePace", "patrolPace", "homeTolerance",
+                "engagedHoldSeconds")
 
 
 def finite(value):
@@ -5429,16 +5430,34 @@ def cb_sees(defn, member, target, rules):
     return angle <= posture["cone"] / 2 + CB_CONE_EPSILON_DEGREES
 
 
+def cb_rect_distance(rect, root):
+    """CampBrain's flat distance from a root to a floor rectangle (0 inside or on it)."""
+    dx = max(abs(root[0] - rect["x"]) - rect["hx"], 0.0)
+    dz = max(abs(root[2] - rect["z"]) - rect["hz"], 0.0)
+    return math.sqrt(dx * dx + dz * dz)
+
+
 def cb_in_play(defn, target, shooters, rules):
-    """CampBrain.InPlay: in the band, and inside the floor grown by chaseMargin, or within reach
-    of one of the group's living keepAway members."""
+    """CampBrain.InPlay: in the band, and within chaseMargin of the floor rectangle on the flat
+    (rounded corners: a rusher clamped in a corner reaches a circle, fix round crowd Major 1), or
+    within reach of one of the group's living keepAway members."""
     root = target["root"]
     if not cb_in_band(defn, root, rules):
         return False
-    rect, margin = defn["rect"], rules["chaseMargin"]
-    if abs(root[0] - rect["x"]) <= rect["hx"] + margin and abs(root[2] - rect["z"]) <= rect["hz"] + margin:
+    if cb_rect_distance(defn["rect"], root) <= rules["chaseMargin"]:
         return True
     return any(flat_distance(shooter["at"], root) <= shooter["reach"] for shooter in shooters)
+
+
+def longest_reach(kind):
+    """StageFlow.LongestReach: the longest reach among a kind's attacks (0 for none)."""
+    return max([0] + [a["reach"] for a in (kind or {}).get("attacks") or []])
+
+
+def cb_engaged(last_at, now, rules):
+    """CampBrain.Engaged (fix round, crowd Minor 1): a player last in play for a group in rise or
+    fight at `last_at` (the crowd's step clock) stays engaged for engagedHoldSeconds, edge included."""
+    return last_at is not None and now - last_at <= rules["engagedHoldSeconds"] + CB_TIME_EPSILON
 
 
 def cb_at_post(post, at, rules):
@@ -5754,6 +5773,7 @@ class LevelRun(ThreatRun):
         self.blocked = {}  # group index -> his hits it blocked
         self.wake_floors = set()  # CrowdService.WakeFloor: released at the next step
         self.engaged = False
+        self.engaged_at = None  # CrowdService's camp.engaged for him: the step he was last in play
         self.stood_at = None
         self.crossing = None  # the still player: the open camp he is walking across
         self.kite = None
@@ -5816,6 +5836,12 @@ class LevelRun(ThreatRun):
         """CrowdService.Busy: floors with a group in rise or fight."""
         return {g["def"]["floor"]: True for g in self.groups
                 if g["state"] in ("rise", "fight") and not g["held"] and any(b.alive for b in g["members"])}
+
+    def safe_threats(self):
+        """WaveService's threats for StageFlow.SafePoint (fix round, data Minor 1): every living
+        member of a group in rise or fight, where it stands, with StageFlow.LongestReach."""
+        return [{"at": (b.x, g["def"]["floorY"], b.z), "reach": longest_reach(b.kind)} for g in self.groups
+                if g["state"] in ("rise", "fight") for b in g["members"] if b.alive]
 
     def may_target(self, e):
         """L1b-6: a resident in fight goes only for a target in play for its group; one that is
@@ -5885,7 +5911,11 @@ class LevelRun(ThreatRun):
             if group["state"] in ("rise", "fight") and not group["held"] and group["inPlay"].get(LEVEL_USER):
                 engaged = True
         self.wake_floors = set()
-        self.engaged = engaged
+        if engaged:
+            self.engaged_at = now
+        elif not cb_engaged(self.engaged_at, now, rules):
+            self.engaged_at = None
+        self.engaged = cb_engaged(self.engaged_at, now, rules)
         for group in self.groups:
             resting = group["held"] or group["state"] in ("rest", "home")
             y = group["def"]["floorY"]
@@ -5935,7 +5965,7 @@ class LevelRun(ThreatRun):
     def near(self, zone):
         cx, cz, hx, hz = zone["rect"]
         margin = self.camp_rules["chaseMargin"] if self.camp_rules else 0
-        return abs(self.x - cx) <= hx + margin and abs(self.z - cz) <= hz + margin
+        return cb_rect_distance({"x": cx, "z": cz, "hx": hx, "hz": hz}, (self.x, 0.0, self.z)) <= margin
 
     def residents_left(self, floor):
         return [b for g in self.groups if g["def"]["floor"] == floor for b in g["members"] if b.alive]
@@ -6216,13 +6246,27 @@ class LevelRun(ThreatRun):
                 if record["spawnEnd"] is None:
                     record["spawnEnd"] = t
 
-    def on_open(self, t, index=None):
+    def on_open(self, t, index=None, skipped=False):
+        """`open` (WaveService.campCleared): the locking camp is behind him; unless a Studio skip
+        passed it, crowd.clearBonus x rewardMult, split evenly among the fighting humans (L1b-17)."""
+        if not skipped:
+            self.pay_clear_bonus()
         if index is not None and (self.camp is None or self.camp["stage"] != index):
             return
         self.live = None
         if self.camp is not None:
             self.camp["clearedAt"] = t
             self.cleared_at[self.camp["floor"]] = t
+
+    def pay_clear_bonus(self):
+        """WaveService.campCleared: Combat.KillReward({clear = bonus}, "clear", rewardMult), credited
+        when either part is above 0."""
+        bonus = self.crowd.get("clearBonus") or {}
+        mult = self.scales["rewardMult"]
+        pool = {"cash": luau_round((bonus.get("cash") or 0) * mult),
+                "materials": luau_round((bonus.get("materials") or 0) * mult), "valor": 0}
+        if pool["cash"] or pool["materials"]:
+            self.credit(pool, {LEVEL_USER: 1.0})
 
     def on_rearm(self, t):
         if self.camp in self.camps:
@@ -6257,12 +6301,7 @@ class LevelRun(ThreatRun):
     def on_camp_clear(self, floor, t):
         """`campClear` (L1b-17): the bonus x rewardMult, split evenly among the fighting humans."""
         self.cleared_at[floor] = t
-        bonus = self.crowd.get("clearBonus") or {}
-        mult = self.scales["rewardMult"]
-        pool = {"cash": luau_round((bonus.get("cash") or 0) * mult),
-                "materials": luau_round((bonus.get("materials") or 0) * mult), "valor": 0}
-        if pool["cash"] or pool["materials"]:
-            self.credit(pool, {LEVEL_USER: 1.0})
+        self.pay_clear_bonus()
         if self.stop_zone == floor:
             self.end("stopped", t)
 
@@ -6344,7 +6383,9 @@ class LevelRun(ThreatRun):
         self.on_close(t)
         self.on_wave(first, False, t)
 
-    def leave_camp(self, t):
+    def leave_camp(self, t, skipped=False):
+        """StageFlow's leaveCamp: `open` (`skipped` when a Studio skip passed the camp: L1b-22,
+        a skip pays nothing), then the next stage or the end."""
         stages = self.plan["stages"]
         index = self.stage
         zone = stages[index - 1]["zone"]
@@ -6352,8 +6393,8 @@ class LevelRun(ThreatRun):
             self.done[zone["floor"]] = True
         self.cleared += 1
         self.last_cleared = index
-        self.emit("open", stage=index)
-        self.on_open(t)
+        self.emit("open", stage=index, skipped=skipped)
+        self.on_open(t, skipped=skipped)
         if index >= len(stages):
             self.emit("end", stage=index, reason="cleared")
             self.end("cleared", t)
@@ -6501,7 +6542,7 @@ class LevelRun(ThreatRun):
                 self.on_drop(t)
                 self.emit("boundary", stage=self.stage, release=not ending)
                 self.stand_up(t)
-                self.leave_camp(t)
+                self.leave_camp(t, skipped=True)
             return
         if which != "boss":
             return
@@ -6544,8 +6585,8 @@ class LevelRun(ThreatRun):
                     self.done[zone["floor"]] = True
                 self.cleared += 1
                 self.last_cleared = index
-                self.emit("open", stage=index)
-                self.on_open(t, index)
+                self.emit("open", stage=index, skipped=True)
+                self.on_open(t, index, skipped=True)
         self.first_wave = target_wave
         self.wave = 0
         self.emit("move", stage=target)
@@ -6576,15 +6617,21 @@ class LevelRun(ThreatRun):
     def earns_star(self, user_id):
         return self.end_reason == "cleared" and user_id in self.fought
 
-    def safe_point(self, busy=None):
-        """StageFlow.SafePoint (L1b-18): (x, y, z)."""
+    def safe_point(self, busy=None, threats=None):
+        """StageFlow.SafePoint (L1b-18; the fix round skips a checkpoint a threat reaches on the
+        flat): (x, y, z)."""
         if self.flow in ("gate", "fight", "breather"):
             zone = self.live_zone()
             if zone is not None:
                 return zone["entry"][0], zone["floorY"], zone["entry"][1]
         for index in range(len(self.zones), 0, -1):
             zone = self.zones[index - 1]
-            if zone["checkpoint"] is not None and self.reached.get(index) and not (busy or {}).get(index):
+            mark = zone["checkpoint"]
+            quiet = not (busy or {}).get(index)
+            if mark is not None and any(math.sqrt((mark[0] - th["at"][0]) ** 2 + (mark[1] - th["at"][2]) ** 2)
+                                        <= th["reach"] for th in threats or []):
+                quiet = False
+            if mark is not None and self.reached.get(index) and quiet:
                 return zone["checkpoint"][0], zone["floorY"], zone["checkpoint"][1]
         stages = self.plan["stages"]
         cleared = stages[self.last_cleared - 1] if self.last_cleared >= 1 else None
@@ -6613,7 +6660,7 @@ class LevelRun(ThreatRun):
                 and self.field_clear(self.flow_input(t)):
             # A down on a quiet road (nothing awake): WaveService's placer puts him on the safe
             # point and he gets up (never met in the gated runs; it is here so a run cannot hang).
-            x, y, z = self.safe_point(self.busy())
+            x, y, z = self.safe_point(self.busy(), self.safe_threats())
             self.x, self.z, self.ground = x, z, y
             self.stand_up(t)
 
@@ -7299,7 +7346,7 @@ def check_forest(cfg, report, expect):
                 lo_c, hi_c = FOREST_CLEAR_SECONDS
                 expect(r["end"] == "cleared" and lo_c <= r["at"] <= hi_c,
                        f"{tag} at gear {gear}: seed {seed}, the reacting player's first clear takes "
-                       f"{lo_c / 60:.0f}-{hi_c / 60:.0f} min, walking included: {r['end']} at {r['at'] / 60:.2f} min, "
+                       f"{lo_c / 60:g}-{hi_c / 60:g} min, walking included: {r['end']} at {r['at'] / 60:.2f} min, "
                        f"{r['downs']} down(s)")
             else:
                 print(f"  note  {tag} at gear {gear}: seed {seed}, the reacting player's clear (reported, not banded in "

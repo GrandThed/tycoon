@@ -75,3 +75,17 @@ Filled as owners report; routed after A and B finish (both edit Types/run files)
 - Timber per minute up ~75% on L1: told to Ben at the stop.
 - Checklist steps 3 and 5: the lead edits INTERFACES (step 3: run well past a slinger's 32 studs;
   step 5: N puts you inside the Chief's Clearing with the countdown running).
+
+## Fix round, ui reported (2026-10-14)
+- All five client items done (fix-ui.md). Carried to Wave 2 (ui + A): during the boss room's
+  3-second countdown a phone's auto-fire can target held residents (cosmetic "BLOCKED"; the wire's
+  `rest` state could exclude them on the locking floor); a shared pure flat-distance-to-rectangle
+  helper so CampBrain and InputController use one tested function.
+
+## Fix round finished (2026-10-14)
+- A (fix-A.md), B (fix-B.md), ui (fix-ui.md), economy-designer (fix-econ.md) all green.
+- Lead confirms B's choice: a downed member stands up at the safe point, not where they fell.
+- docs-keeper: INTERFACES L1b text gains `SafePoint(..., busy?, threats?)`, `StageFlow.StandsUp`,
+  `StageFlow.LongestReach`, `Action.skipped`, `CampBrain.Engaged`, `camps.engagedHoldSeconds`,
+  `chaseMargin` 2.5 with the rounded in-play test; B's residents moved (Hard marksmen to
+  southWatch, the lobber to fire3, the patrol's Hard plated elite to fire1).

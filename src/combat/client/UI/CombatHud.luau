@@ -1022,7 +1022,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		if not LIVE_PHASES[run.phase] then
 			return ""
 		elseif run.camps > 1 then
-			return "Camps cleared "
+			-- "Camps cleared 1 / 3" overflows the 74 px label (fix round); this fits.
+			return "Camps "
 				.. Format.Cash(math.min(run.campsCleared, run.camps))
 				.. " / "
 				.. Format.Cash(run.camps)
@@ -1200,6 +1201,11 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		if phase == "summary" or phase == "ended" then
 			table.clear(seenFighting) -- nothing carries past a run
 		end
+		if phase == "summary" or phase == "ended" or inLobby then
+			-- A checkpoint reached just before the end must not sit over the summary or the map.
+			objective.noticeUntil = 0
+			noticeFrame.Visible = false
+		end
 	end
 
 	-- Between broadcasts (combatStateHz is 4) the run timer and the cooldowns are counted
@@ -1315,6 +1321,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		PressAbandon = pressAbandon,
 		SetRunState = setRunState,
 		ShowNotice = function(text: string, seconds: number)
+			local run = objective.run
+			if run ~= nil and not LIVE_PHASES[run.phase] then
+				return -- a late event after the run ended (see setRunState)
+			end
 			noticeLabel.Text = text
 			objective.noticeUntil = os.clock() + math.max(seconds, 0)
 			noticeFrame.Visible = seconds > 0

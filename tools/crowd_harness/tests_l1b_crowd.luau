@@ -39,6 +39,7 @@ function L1BC.rules(): any
 		homePace = 1,
 		patrolPace = 0.5,
 		homeTolerance = 1,
+		engagedHoldSeconds = 1.5,
 	}
 end
 
@@ -175,9 +176,23 @@ function L1BC.sightTests(): ()
 	check(inPlay(0, 10, 23) and inPlay(0, 10, -23), "on Z too")
 	check(not inPlay(0, 10, 23.01) and not inPlay(0, 10, -23.01), "and not past it")
 	check(not inPlay(0, 38.01, 0) and not inPlay(0, 3.99, 0), "a root over or under the band is not in play, on the floor or not")
+	-- The margin is a distance to the rectangle (30 x 20 half), so its corners are round.
+	check(inPlay(33, 10, 20) and inPlay(-33, 10, -20), "past a corner straight out along X: at the margin exactly, in play")
+	check(not inPlay(33, 10, 20.01) and not inPlay(30.01, 10, 23), "a hair round the corner from either edge's end: not (a square corner says yes)")
+	check(inPlay(32.12, 10, 22.12) and inPlay(-32.12, 10, 22.12), "off a corner on the diagonal 2.998 from it: in play")
+	check(not inPlay(32.2, 10, 22.2) and not inPlay(32.2, 10, -22.2), "off a corner on the diagonal 3.11 from it: not, though inside the square grown by 3")
 	local shooters = { { at = vec(50, 8, 0), reach = 12 } }
 	check(inPlay(62, 10, 0, shooters), "within a shooter's reach exactly: in play")
 	check(not inPlay(62.01, 10, 0, shooters), "just past it: not")
+
+	print(" CampBrain.Engaged (the hold)")
+	check(not CB.Engaged(nil, 10, R), "never in play: not engaged")
+	check(CB.Engaged(10, 10, R), "in play at this step: engaged")
+	check(CB.Engaged(10, 11, R) and CB.Engaged(10, 11.5, R), "for engagedHoldSeconds (1.5) after it, edge included")
+	check(not CB.Engaged(10, 11.51, R), "and not past it")
+	local none = L1BC.rules()
+	none.engagedHoldSeconds = 0
+	check(CB.Engaged(10, 10, none) and not CB.Engaged(10, 10 + 1 / 15, none), "a hold of 0: engaged at that step only")
 end
 L1BC.group("sight", L1BC.sightTests)
 
@@ -343,7 +358,7 @@ function L1BC.goalTests(): ()
 	print(" CampBrain.Problems")
 	check(#CB.Problems(R) == 0, "the contract's rules have no problem")
 	check(#CB.Problems(nil) == 1, "nil: one line")
-	local keys = { "sightBelow", "sightAbove", "chaseMargin", "leashSeconds", "homePace", "patrolPace", "homeTolerance" }
+	local keys = { "sightBelow", "sightAbove", "chaseMargin", "leashSeconds", "homePace", "patrolPace", "homeTolerance", "engagedHoldSeconds" }
 	local each = true
 	for _, key in keys do
 		local copy = L1BC.rules()
@@ -373,7 +388,8 @@ function L1BC.goalTests(): ()
 	check(with("guard", "cone", 0) == 1 and with("guard", "cone", 361) == 1 and with("guard", "cone", 360) == 0, "a cone of 0 and of 361 are problems; 360 is not")
 	check(with("fire", "sight", 0) == 1 and with(nil, "homeTolerance", 0) == 1, "a sight or a homeTolerance of 0 is a problem")
 	check(with(nil, "chaseMargin", -1) == 1 and with(nil, "leashSeconds", 0 / 0) == 1 and with(nil, "homePace", "1") == 1 and with(nil, "sightAbove", math.huge) == 1, "negative, NaN, a string, infinite: each a problem")
-	check(with(nil, "chaseMargin", 0) == 0 and with("guard", "rise", 0) == 0, "0 is fine where 0 means something")
+	check(with(nil, "chaseMargin", 0) == 0 and with("guard", "rise", 0) == 0 and with(nil, "engagedHoldSeconds", 0) == 0, "0 is fine where 0 means something")
+	check(with(nil, "engagedHoldSeconds", -1) == 1, "a negative engagedHoldSeconds is a problem")
 end
 L1BC.group("goal", L1BC.goalTests)
 
@@ -636,6 +652,14 @@ function L1BC.restTests(): ()
 	local fought = L1BC.events()
 	check(#fought == 1 and fought[1].to == "fight", "then one event, rise to fight")
 	check(Crowd.Awake() == 1 and Crowd.Busy()[1] == true and Crowd.Busy()[2] == nil and Crowd.Engaged(7), "a fighting group: awake, its floor busy, the player engaged")
+	-- A fall off the floor's edge mid-fight: out of the band (4 under the top at y 8) at once,
+	-- then under killY. Engaged holds, so the rescue grants no get-up i-frames.
+	root.Position = vec(0, 3.5, 34)
+	step2()
+	local fell = Crowd.Engaged(7)
+	root.Position = vec(0, -14, 34)
+	step2(8)
+	check(fell and Crowd.Engaged(7), "a fall out of the fight (out of the band, then under killY 0.6 s later) is still engaged")
 end
 L1BC.crowdGroup("rest", L1BC.restTests)
 
@@ -700,6 +724,13 @@ function L1BC.leashTests(): ()
 		end
 	end
 	check(wentHome, "with nobody in play for leashSeconds the group goes home")
+	check(Crowd.Awake() == 1, "a group walking home is awake (L1b-19: the field is not clear)")
+	check(Crowd.Busy()[1] == nil, "but its floor is not busy (the safe point may use it)")
+	-- Back into play while they walk home, and out again before they rest (sight would wake them).
+	root.Position = vec(0, 11, -25)
+	step2()
+	check(not Crowd.Engaged(7), "a player in play for a group walking home is not engaged")
+	root.Position = vec(0, 11, -60)
 	local before = Crowd.Get(ids[1])
 	local value, killed, verdict = Crowd.Damage(ids[1], 30, 7, vec(0, 0, 60), 6)
 	local zero, _, leverVerdict = Crowd.Damage(ids[1], 30, 0, nil, nil)
@@ -767,7 +798,11 @@ function L1BC.wakeTests(): ()
 	check(#L1BC.events() == 1 and seen(east[1]).state ~= "rise", "a released guard rises for one step, then fights")
 	root.Position = vec(0, 11, -200)
 	step2()
-	check(not Crowd.Engaged(7), "out of play for every awake group: not engaged")
+	check(Crowd.Engaged(7), "out of play for every awake group a step later: still engaged (the hold)")
+	step2(21)
+	check(Crowd.Engaged(7), "22 steps (1.47 s) after the last in play: still engaged")
+	step2()
+	check(not Crowd.Engaged(7), "23 steps (1.53 s, past engagedHoldSeconds 1.5): not engaged")
 	Crowd.ClearFloor(2)
 	check(Crowd.Awake() == 0 and Crowd.Busy()[2] == nil, "a group with no living member is neither awake nor busy")
 end

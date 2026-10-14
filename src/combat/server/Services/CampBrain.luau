@@ -74,6 +74,7 @@ local RULE_KEYS = {
 	"homePace",
 	"patrolPace",
 	"homeTolerance",
+	"engagedHoldSeconds",
 }
 
 local CampBrain = {}
@@ -280,8 +281,11 @@ function CampBrain.Sees(
 	return angle <= posture.cone / 2 + CONE_EPSILON_DEGREES
 end
 
--- Is this target in play for the group: in the height band, and inside the camp's floor grown by
--- chaseMargin on every side, or within reach of one of its living keepAway members?
+-- Is this target in play for the group: in the height band, and within chaseMargin (flat) of the
+-- camp's floor rectangle, or within reach of one of its living keepAway members?
+-- The margin is a distance to the rectangle, so its corners are round: a rusher clamped in a
+-- floor's corner stands √2 × its radius from it, and a square corner would leave a player who can
+-- hit it out of its reach (L1b-7; the gate is chaseMargin ≤ reach − √2 × radius).
 function CampBrain.InPlay(
 	def: Types.CampGroupDef,
 	target: Seen,
@@ -294,10 +298,9 @@ function CampBrain.InPlay(
 	end
 	local rect = def.rect
 	local margin = rules.chaseMargin
-	if
-		math.abs(root.X - rect.x) <= rect.hx + margin
-		and math.abs(root.Z - rect.z) <= rect.hz + margin
-	then
+	local outX = math.max(math.abs(root.X - rect.x) - rect.hx, 0)
+	local outZ = math.max(math.abs(root.Z - rect.z) - rect.hz, 0)
+	if math.sqrt(outX * outX + outZ * outZ) <= margin then
 		return true
 	end
 	for _, shooter in shooters do
@@ -306,6 +309,15 @@ function CampBrain.InPlay(
 		end
 	end
 	return false
+end
+
+-- Is a player still engaged (L1b-20) at `now`, the crowd's step clock, when `lastAt` is the last
+-- step that found them in play for a group in rise or fight (nil = never)? True for
+-- engagedHoldSeconds after it, edge included: a fall out of a fight leaves the height band a few
+-- steps before it reaches killY and must still get no get-up i-frames, and a player on a camp's
+-- edge must not flicker in and out (the phone's Abandon button reads it).
+function CampBrain.Engaged(lastAt: number?, now: number, rules: Types.CampRulesConfig): boolean
+	return lastAt ~= nil and now - lastAt <= rules.engagedHoldSeconds + TIME_EPSILON
 end
 
 function CampBrain.AtPost(post: Post, at: Vector3, rules: Types.CampRulesConfig): boolean

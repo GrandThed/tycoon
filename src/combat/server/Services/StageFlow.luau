@@ -148,6 +148,9 @@ export type Action = {
 	-- On `boundary`: whether those who wait in the lobby camp are let into the level now. False
 	-- when the same batch ends the run: nobody is brought into a level that is about to go.
 	release: boolean?,
+	-- On `open`: a Studio skip passed the camp (L1b-22, "a skip pays nothing"). It still counts
+	-- as cleared on the summary, but pays no clear bonus and counts no wave in anyone's stats.
+	skipped: boolean?,
 }
 -- levelId -> difficulty -> cleared
 export type Stars = { [string]: { [string]: boolean } }
@@ -1115,6 +1118,29 @@ function StageFlow.FieldClear(_plan: Plan, state: State, input: Input): boolean
 	return input.spawningDone and input.awake == 0
 end
 
+-- The fix round's ruling on a downed party member (the run slice's Major): open camps have no
+-- boundary, so a member who went down on the road or in an open camp's fight stands up as soon
+-- as the road's field is clear (L1b-19: nothing queued, no group rising, fighting or going home).
+-- Only outside the boss room's fight and breathers, where the boundary stands them up (P5 ruling
+-- 18). True when somebody in `input.standing` is down and that moment has come. Revive by a
+-- teammate is L5's.
+function StageFlow.StandsUp(plan: Plan, state: State, input: Input): boolean
+	local step = state.step
+	if step ~= "travel" and step ~= "armed" and step ~= "gate" then
+		return false
+	end
+	local standing = input.standing
+	if standing == nil or not StageFlow.FieldClear(plan, state, input) then
+		return false
+	end
+	for _, up in standing do
+		if up == false then
+			return true
+		end
+	end
+	return false
+end
+
 -- L1b-20: the get-up i-frames a rescued body is given: none while it is engaged (in play for a
 -- group that is rising or fighting), so a fall out of a resident fight is no free escape.
 function StageFlow.RescueGrace(engaged: boolean, iframes: number): number
@@ -1187,9 +1213,9 @@ local function close(state: State, actions: { Action }, now: number): ()
 	table.insert(actions, { kind = "wave", stage = state.stage, wave = first })
 end
 
--- The live camp is behind the party (cleared, or skipped): on to the next stage, or the end.
+-- The live camp is behind the party (cleared, or `skipped`): on to the next stage, or the end.
 -- Appends `open`, then `travel` when a road follows, or `end` `cleared` after the last stage.
-local function leaveCamp(plan: Plan, state: State, actions: { Action }): ()
+local function leaveCamp(plan: Plan, state: State, actions: { Action }, skipped: boolean): ()
 	local index = state.stage
 	local left = plan.stages[index]
 	local zone = if left ~= nil then left.zone else nil
@@ -1198,7 +1224,7 @@ local function leaveCamp(plan: Plan, state: State, actions: { Action }): ()
 	end
 	state.cleared += 1
 	state.lastCleared = index
-	table.insert(actions, { kind = "open", stage = index })
+	table.insert(actions, { kind = "open", stage = index, skipped = skipped })
 	local following = plan.stages[index + 1]
 	if following == nil then
 		table.insert(actions, over(state, "cleared"))
@@ -1365,7 +1391,7 @@ function StageFlow.Advance(
 		table.insert(actions, { kind = "breather", stage = state.stage, at = state.breatherUntil })
 		return actions
 	end
-	leaveCamp(plan, state, actions)
+	leaveCamp(plan, state, actions, false)
 	return actions
 end
 
@@ -1425,7 +1451,7 @@ function StageFlow.Skip(
 			local ending = plan.stages[state.stage + 1] == nil
 			table.insert(actions, { kind = "drop", stage = state.stage })
 			table.insert(actions, { kind = "boundary", stage = state.stage, release = not ending })
-			leaveCamp(plan, state, actions)
+			leaveCamp(plan, state, actions, true)
 		end
 		return actions
 	end
@@ -1483,7 +1509,7 @@ function StageFlow.Skip(
 			end
 			state.cleared += 1
 			state.lastCleared = index
-			table.insert(actions, { kind = "open", stage = index })
+			table.insert(actions, { kind = "open", stage = index, skipped = true })
 		end
 	end
 	state.firstWave = targetWave
@@ -1549,12 +1575,47 @@ end
 
 -- Where a body goes --------------------------------------------------------------------------
 
+-- Is `mark` within a threat's reach, on the flat?
+local function threatened(mark: Vector3, threats: { CampBrain.Shooter }?): boolean
+	if threats == nil then
+		return false
+	end
+	for _, threat in threats do
+		if Vector3.new(mark.X - threat.at.X, 0, mark.Z - threat.at.Z).Magnitude <= threat.reach then
+			return true
+		end
+	end
+	return false
+end
+
+-- The longest reach among a kind's attacks (0 for none, or an unknown kind): what a body of it
+-- can strike at from where it stands, on the flat.
+function StageFlow.LongestReach(def: Types.CrowdKindDef?): number
+	local longest = 0
+	local attacks = if def ~= nil then def.attacks else nil
+	if attacks == nil then
+		return longest
+	end
+	for _, attack in attacks do
+		longest = math.max(longest, attack.reach)
+	end
+	return longest
+end
+
 -- Ruling 18 and L1b-18: the entry of the locking camp that is counting down, live or between
 -- waves. Otherwise, from the furthest camp down, the checkpoint of the first one that has been
--- reached and whose floor is not `busy` (a group there is rising or fighting, so a body put
--- there would land in that fight); else the exit of the last cleared locking camp; else the
--- level's start. `busy` is CrowdService.Busy(), by floor index (nil = no floor is).
-function StageFlow.SafePoint(plan: Plan, state: State, busy: { [number]: boolean }?): Vector3
+-- reached, whose floor is not `busy` (a group there is rising or fighting, so a body put there
+-- would land in that fight) and that no threat reaches (the fix round: a shooter clamped at the
+-- edge of its own floor still reaches a checkpoint on the road beside it); else the exit of the
+-- last cleared locking camp; else the level's start. `busy` is CrowdService.Busy(), by floor
+-- index (nil = no floor is); `threats` is every living member of a group in rise or fight, at
+-- its position, with its kind's LongestReach (nil = none).
+function StageFlow.SafePoint(
+	plan: Plan,
+	state: State,
+	busy: { [number]: boolean }?,
+	threats: { CampBrain.Shooter }?
+): Vector3
 	local step = state.step
 	if step == "gate" or step == "fight" or step == "breather" then
 		local stage = plan.stages[state.stage]
@@ -1566,6 +1627,9 @@ function StageFlow.SafePoint(plan: Plan, state: State, busy: { [number]: boolean
 	for index = #plan.zones, 1, -1 do
 		local mark = plan.zones[index].checkpoint
 		local quiet = busy == nil or busy[index] ~= true
+		if mark ~= nil and threatened(mark, threats) then
+			quiet = false
+		end
 		if mark ~= nil and state.reached[index] and quiet then
 			return mark
 		end

@@ -4086,9 +4086,10 @@ seeds, the gate's Python (64-bit 3.12). L1's numbers are the starting point (Ben
 | `camps.patrol` | sight 24, cone 360°, rise 0 | contract start |
 | `camps.fire` | sight 16, cone 360°, rise 1.5 s | sitters are slow to stand: the first strike lands 1.3–1.5 s before any windup |
 | `sightBelow` / `sightAbove` | 4 / 30 | contract start |
-| `chaseMargin` | 3 | at most the fodder's lunge reach − radius, 4.5 − 1.3 = 3.2 (a `check_levels.py` gate) |
+| `chaseMargin` | **3 → 2.5** (fix round) | in-play now has rounded corners (CampBrain.InPlay: flat distance to the floor ≤ chaseMargin); a rusher clamped in a corner stands √2 × radius from it, so the gate is reach − √2 × radius for every resident rusher at every difficulty: fodder 4.5 − 1.84 = **2.66** (`check_levels.py`) |
 | `leashSeconds` | 3 | contract start; the kiting player finds a group at rest again 4.5 s after he steps out |
 | `homePace` / `patrolPace` / `homeTolerance` | 1 / 0.5 / 1 | contract start |
+| `engagedHoldSeconds` | **1.5** (new, fix round) | `CrowdService.Engaged` holds this long after he was last in play for a rising or fighting group: a fall from a fight reaches `killY` in 0.4–0.6 s, so the rescue sees him engaged (no get-up i-frames), and the phone Abandon button stops flickering at a camp's edge |
 | `levels.checkpointReach` | 8 | contract start |
 | `levels.populationReserve` | 21 (fixed) | the boss, 12 summons, 8 for Wave 2's tents |
 | `levels.walletSendSeconds` | 1 (fixed) | L1b-16 |
@@ -4096,7 +4097,7 @@ seeds, the gate's Python (64-bit 3.12). L1's numbers are the starting point (Ben
 | `looks.fire` | Neon (255, 150, 30) | a warm colour that reads at 60 studs |
 | Forest Road `targetMinutes` | **7 → 3** | the contract sets it to the measured first clear (mean 3.1 min) |
 | Forest Road `runCapSeconds` | 1050 (unchanged) | ×5.8 of the target, ×3.3 of the slowest clear |
-| `crowd.clearBonus` | 0 / 0 | Ben's "disregarding clearing status"; a config change if he asks for one |
+| `crowd.clearBonus` | 0 / 0 (now written in `1_ForestRoad.json`) | Ben's "disregarding clearing status"; a config change if he asks for one. Both simulators now pay it on every `campClear` and on the locking camp's `open` (not on a skip); a scratch run at 1,000 cash / 5 Timber kept `sim_combat` 21 green (+3,000 cash, +15 Timber on Normal: A, B and C) |
 
 Nothing else moved: the difficulties, rewards, `regenShare`, `burst` and C's stage are L1's
 (C keeps its one wave of 35 and the Colossus at `[14, 0]`, Valor 10).
@@ -4108,11 +4109,11 @@ Nothing else moved: the difficulties, rewards, `regenShare`, `burst` and C's sta
 | A, Pickets | fire1 (r 4) | fire | 4 fodder, 1 slinger | 1 slinger |
 | | eastGate | guard, faces west | 4 fodder | 1 plated elite |
 | | fire2 (r 5) | fire | 4 fodder, 1 slinger | 1 plated elite, 1 slinger |
-| B, Main Camp | fire1 (r 4) | fire | 4 fodder, 1 slinger | 1 marksman |
-| | loop (32 × 36) | patrol | 5 fodder | 1 plated elite |
-| | southWatch | guard, faces north | 2 slingers, 2 fodder, 1 brute | |
-| | fire3 (r 5.5) | fire | 1 brute, 3 fodder, 1 slinger | 1 marksman |
-| | fire2 (r 5) | fire | 4 fodder, 1 lobber, 1 slinger | 1 marksman |
+| B, Main Camp | fire1 (r 4) | fire | 4 fodder, 1 slinger | 1 plated elite |
+| | loop (32 × 36) | patrol | 5 fodder | |
+| | southWatch (7 points) | guard, faces north | 2 slingers, 2 fodder, 1 brute | 2 marksmen |
+| | fire3 (r 6, at (100, −64.5)) | fire | 1 brute, 3 fodder, 1 slinger, 1 lobber | 1 marksman |
+| | fire2 (r 5) | fire | 4 fodder, 1 slinger | |
 | | eastGate | guard, faces west | 2 brutes | 2 plated elites |
 | C, Chief's Clearing (held) | gate | guard, faces west | 4 fodder | |
 | | chiefFire (r 4) | fire | 1 brute, 2 fodder | 1 plated elite |
@@ -4132,14 +4133,24 @@ Nothing else moved: the difficulties, rewards, `regenShare`, `burst` and C's sta
   ground whose top is 8 = the floors' height. The nearest resting eye is a guard of the east
   gate, 28.1 and 20.1 studs off, inside its sight but behind its 140° cone (gated: no resting
   member sees a checkpoint, a patrol anywhere on its loop).
+- **Fix round: no resting shooter reaches a checkpoint** (new gate: farther than every keepAway
+  resident's longest reach from its post, a patrol's from its loop, every difficulty). Both
+  checkpoints failed it: A's (16, −42) lay 44.6 from B.fire1's Hard marksman (48); B's (150, −42)
+  37.0 from B.fire2's lobber (42) and 33.8 from its Hard marksman. Neither checkpoint can move far
+  enough (RoadAB is 44 long between A.fire2's slinger and B.fire1's marksman; RoadBC1 ends at x
+  164), so B's shooters moved inward: B.fire1's marksman and B.fire2's to the south watch, the
+  lobber to fire3 (radius 6 for seven on Hard), and the patrol's plated elite to B.fire1 (one pace on
+  the loop, no conga line). Totals unchanged. Nearest now: 40.0 from A.fire2's slinger (32) and 34.1
+  from B.fire2's slinger (32). Where a fighting shooter has walked to is `StageFlow.SafePoint`'s
+  business (B: it skips a checkpoint a rising or fighting body reaches).
 
 ### L1b: results
 
 | | Normal at 2/1 | Hard at 4/4 | Brutal at 6/6 |
 |---|---|---|---|
-| **The reacting player's first clear** | **2.98–3.18 min** (band 5–8: **fails**) | 3.44–3.46 min (reported) | 3.46–3.52 min (reported) |
+| **The reacting player's first clear** | **3.00–3.13 min** (band 2.5–4, the lead's ruling: **PASS**) | 3.46–3.49 min (reported) | 3.47–3.52 min (reported) |
 | Hits he took | 0 | 0 | 0 |
-| The human's clear (reported) | 2.95–3.04 min, 2–3 hits | 3.30–3.47 min, 4–7 hits | 3.31–3.53 min, 4–7 hits |
+| The human's clear (reported) | 2.93–3.02 min, 1–3 hits | 3.31–3.39 min, 5–7 hits | 3.34–3.39 min, 5–7 hits |
 | The player who never dodges | down in the Main Camp at 0.66–0.83 min | down in the Main Camp at 0.71–0.75 min | the same |
 | The Colossus alone in camp C | **76.3 s** (75.0–77.6) | 79.3 s | 80.8 s |
 | The Colossus in the run | 73.7–75.6 s | 76.7–79.0 s | 78.6–80.6 s |
@@ -4160,8 +4171,10 @@ Colossus in 74.6 s). 422 studs walked outside the fights = 21 s.
 - **The leash** (`kite`: two kills in A, out to the road, wait, back): out at 12.6–13.5 s with
   11–12 alive (2–3 hurt), the groups at rest again 4.5 s later, back in after 2.3 s: every
   survivor whole, the dead still dead, one leash each; then a normal clear. Passes.
-- **The edge** (`edge`, 3.1 studs outside A's east edge by its gate guards, 30 s): 152 hits,
-  every one "blocked", 10 wakes, 0 kills, 0 paid. Passes.
+- **The edge** (`edge`, 2.6 studs outside A's east edge by its gate guards, 30 s; was 3.1 before
+  the fix round's chaseMargin 2.5): 228 hits, every one "blocked", 0 kills, 0 paid. Passes.
+- The numbers above are the fix round's re-run (chaseMargin 2.5, B's shooters moved inward,
+  `engagedHoldSeconds` 1.5): the clear moved by hundredths, the pay not at all (the same bodies).
 
 ### L1b: what a clear pays (reported, not banded)
 
@@ -4186,20 +4199,21 @@ Colossus in 74.6 s). 422 studs walked outside the fights = 21 s.
 
 | Band | Where | Value | Now |
 |---|---|---|---|
-| **Normal: the first clear, every seed** | sim_range | **5–8 min** | **2.98–3.18 min: FAILS** (see the flag) |
+| **Normal: the first clear, every seed** | sim_range | **2.5–4 min** (the lead's ruling, option c, for Wave 1's size) | **3.00–3.13 min: PASS** |
 | Normal: the Colossus alone / in the run | sim_range | 64–90 s | 75.0–77.6 / 73.7–75.6 s |
 | Normal: no hit over | sim_range | 25% of 145 | 24.8% |
 | Still in a woken group of camp A | sim_range | 6–12 s from the wake | 9.7–9.8 s |
 | A first strike on every fire group | sim_range | his hit before any windup | 15 of 15 |
 | The leash (`kite`) | sim_range | whole on return, the dead dead, paid only for kills | 3 of 3 |
-| The edge (`edge`) | sim_range | 0 from that group | 0, 152 blocked |
+| The edge (`edge`) | sim_range | 0 from that group | 0, 228 blocked |
 | Every kill paid once, at once; Valor exact | sim_range, sim_combat 21 | solo exact | exact |
 | Hard and Brutal: hit ceiling, the Colossus | sim_range | 30%; 64–100 s | 27.8%, 28.2%; 76.7–80.6 s |
 | Hard and Brutal: the clears, the human gates | sim_range | reported (draft point 8) | above |
 | SplitCarry fuzz | sim_combat 22 | never over the shares, never a unit under, carry < 1 | 400 runs × 60 kills |
 | Population = Validate's | sim_combat 23 | by hand = Plan, ≤ 160 | 93, 103, 103 |
 | The Wave 1 layout table | check_levels | the contract's table | pass; 22 of 23 data mutations caught (the miss left B inside its band) |
-| The mirrors are the Luau | check_stage_mirror | CampBrain, KillReward, SplitCarry, FieldClear, SafePoint, Plan's zones, groups and population, the L1b refusals, scripted runs with checkpoints and open camps | all equal; 28 of 28 Luau mutants caught |
+| chaseMargin, perches, checkpoints (fix round) | check_levels | margin ≤ reach − √2 × radius (2.66); any standable top within the margin and in the band ≤ lowest rusher ground height − 0.5 (4.5; the fence is 4); no resting shooter reaches a checkpoint | pass; proved by mutation (margin 2.7; a 5-tall block 1 off A; a block 2.12 off A's corner; the old B shooters) |
+| The mirrors are the Luau | check_stage_mirror | CampBrain, KillReward, SplitCarry, FieldClear, SafePoint, Plan's zones, groups and population, the L1b refusals, scripted runs with checkpoints and open camps; fix round: InPlay's rounded corners, `Engaged`'s hold, SafePoint's threats, `open`'s `skipped` | all equal; 28 of 28 Luau mutants caught, and the fix round's 5 (square corners, no hold, `<` for `<=` on a threat, threats ignored, a stage skip not `skipped`) |
 
 ### L1b: the Raider Arena
 
@@ -4211,17 +4225,14 @@ keeps 16,800 to 24,960 cash where L1 dropped the wave in progress). A cleared ru
 
 ### L1b: flags for the owner
 
-- **The first-clear band (5–8 min) cannot be met at Wave 1's size, and I did not force it.** The
-  residents replace the waves of A and B: L1 fought 79 bodies in A and 149 in B, spread over
-  `targetWaveSeconds`; Wave 1 holds 14 and 28 (the gates allow at most 18 and 40), and a
-  reacting player kills a fodder in about a second. Road 21 s + A 9 s + B 40 s + C 112 s = 3
-  min; at the gates' maxima about 3.3 min. The one lever that reaches 5 min is more waves in the
-  boss room: three of L1's B waves added to C give 4.96–5.35 min (measured), but C then takes
-  four minutes of the run and "the waves and the Colossus follow as in L1" no longer holds.
-  **The lead must choose:** (a) the band is reported in Wave 1 and comes back at Wave 2's size
-  (about 10 min, 100–120 residents), which I recommend; (b) C gains waves; or (c) a Wave 1 band
-  of 2.5–4 min. Either (a) or (c) is one line in `sim_range.py` (`FOREST_CLEAR_SECONDS` or
-  `check_forest`).
+- **Ruled (the lead, option c): Wave 1's Normal first-clear band is 2.5–4 min.** L1's camp sizes
+  cap the residents (A 18, B 40), so a reacting player clears in about 3 min (road 21 s, A 9 s, B
+  40 s, C 112 s); Wave 2's bigger camps bring the ~10 min band back. `sim_range.py`
+  `FOREST_CLEAR_SECONDS` (150, 240); its label now prints "2.5-4 min".
+- **For Ben: replaying Forest Road Normal roughly doubles Timber per minute until Wave 2.** A Normal
+  clear pays 129 Timber in about 3.1 min, **~42 Timber a minute against L1's ~24 (+~75%)**, and
+  ~19,800 cash a minute against 13,400 (+46%). That makes Forest Road Normal the fastest Timber for
+  the Armory today. Wave 2 should carry a per-minute pay band, not only a per-clear one.
 - **The pay drops with the time:** 60,800 cash on Normal against L1's 88,200, though more by the
   minute. It returns with Wave 2's residents.
 - **The simulated player is never hit by a resident** on Normal. Residents rise into a fight he
@@ -4230,3 +4241,16 @@ keeps 16,800 to 24,960 cash where L1 dropped the wave in progress). A cleared ru
   leash and a walk home, each a "!" on his screen. Ben may find that noisy.
 - **Hard and Brutal residents are the same 60 bodies.** Brutal differs in the open camps only by
   health and damage. Wave 2 can give Brutal its own `minDifficulty` units.
+- **The fix round moved B's shooters inward** (see "who lives where"): the south watch now holds
+  two slingers and, on Hard, two marksmen; fire3 a lobber. Expect the Main Camp's long shots from
+  the south and the middle, not from the fires by the gates.
+
+### L1b: open, carried to Wave 2
+
+- **Post spacing gated beyond fires.** `check_levels.py` keeps neighbours round a fire 2 radii +
+  0.5 apart, but not guard points, patrol posts, or posts of different groups in one camp (data.md
+  Minor 7). Two posts within about a stud keep both bodies off their posts and the group in `home`
+  for good. Wave 1's closest pair is 1.4 studs clear (the two new south-watch points are 5.66 from
+  their neighbours); Wave 2's bigger camps need the gate: every pair of posts of a camp at every
+  difficulty at least r_a + r_b + 0.5 apart, a patrol's loop included.
+- A per-minute pay band (the Timber flag above).

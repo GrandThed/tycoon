@@ -482,6 +482,7 @@ function L1B.walkTests(): ()
 	ask({ now = state.breatherUntil, aliveByFloor = { 0, 8, 0 } })
 	actions = ask({ now = 60, aliveByFloor = { 0, 8, 0 }, alive = 0 })
 	check(L1.names(actions) == "clear boundary open end" and L1.get(actions, "end").reason == "cleared", "its last clears it and ends the run: clear, boundary, open, end")
+	check(L1.get(actions, "open").skipped ~= true, "a camp beaten in play is not marked skipped: its clear pays")
 	check(table.concat(log, " ") == "reach campClear reach gate close wave clear boundary breather wave clear boundary open end", `the whole run (B was sneaked past: never cleared) ({table.concat(log, " ")})`)
 	check(banks == 0 and state.cleared == 2 and state.done[1] and not state.done[2] and state.done[3], "no bank, ever; two camps of three cleared (A and C)")
 end
@@ -519,6 +520,7 @@ function L1B.safeTests(): ()
 	actions = Flow.Skip(plan, state, "stage", 7, L1B.rules)
 	local drop = L1.get(actions, "drop")
 	check(L1.names(actions) == "drop boundary open end" and drop.stage == 2 and plan.stages[2].zone.floor == 3 and state.done[3] and not state.done[1], "N in its fight drops it (a drop of the boss room's stage: floor 3 alone) and counts it cleared")
+	check(L1.get(actions, "open").skipped == true and state.cleared == 1, "its `open` is marked skipped (a skip pays nothing: no clear bonus, no wave in the stats), yet the summary counts it")
 	state = Flow.Begin(plan)
 	actions = Flow.Skip(plan, state, "boss", 5, L1B.rules)
 	check(L1.names(actions) == "move gate" and state.firstWave == 2, "B on the road: the boss room's countdown, to open on the boss")
@@ -666,5 +668,92 @@ function L1B.worldTests(): ()
 	check(count == L1B.L1_PARTS - 6 * open + fires, `and L1's {L1B.L1_PARTS} Parts less 6 per open camp ({open}) plus one per fire ({fires}): {L1B.L1_PARTS - 6 * open + fires} ({count})`)
 end
 L1.group("l1b worldTests", L1B.worldTests)
+
+-- The fix round (docs/prompts/l1b-w1-fix-round.md, "B") ------------------------------------
+
+-- A Road whose camp B locks too, with a fight of its own before C's: a boss skip from the road
+-- passes B by.
+function L1B.twoLocks(): any
+	local level = L1B.level()
+	local layout = L1B.layout()
+	layout.camps[2].locks = true
+	level.stages = {
+		level.stages[1],
+		{ kind = "camp", zone = "B", name = "Main Camp", targetWaveSeconds = 30, breatherSeconds = 3, maxAlive = 30, waves = { { groups = { { kind = "fodder", count = 6 } } } } },
+		{ kind = "travel", name = "On to the Clearing" },
+		level.stages[2],
+	}
+	return L1B.plan(level, layout)
+end
+
+function L1B.fixTests(): ()
+	local Flow = L1B.Flow
+	local plan = L1B.plan()
+	local a, b, c = plan.zones[1], plan.zones[2], plan.zones[3]
+
+	print(" StandsUp: a downed member stands up once the road's field is clear (the run slice's Major)")
+	local down = { roots = { vec(0, 11, 60) }, standing = { false } }
+	local function stands(state: any, over: any): boolean
+		local input = L1B.input(down)
+		for key, value in over or {} do
+			input[key] = value
+		end
+		return Flow.StandsUp(plan, state, input)
+	end
+	local road = Flow.Begin(plan)
+	check(road.step == "travel" and stands(road, {}), "on a quiet road (no group awake, nothing queued): yes")
+	check(not stands(road, { awake = 1 }), "while a group anywhere is rising, fighting or going home: no (L1b-19)")
+	check(not stands(road, { spawningDone = false }), "with a body queued: no")
+	local nobodyDown = L1B.input({ roots = { vec(0, 11, 60) } })
+	check(not stands(road, { standing = { true } }) and not stands(road, { standing = { true, true } }) and not Flow.StandsUp(plan, road, nobodyDown), "with nobody down (or no standing list): no")
+	check(stands(road, { roots = { vec(0, 11, 60), vec(0, 11, 61) }, standing = { true, false } }), "one down among two: yes")
+	local gate = Flow.Begin(plan)
+	L1B.advance(plan, gate, { now = 0, roots = { L1B.root(c, 0, 490) } })
+	check(gate.step == "gate" and stands(gate, {}) and not stands(gate, { awake = 1 }), "in the boss room's countdown: as on the road")
+	L1B.advance(plan, gate, { now = 3 })
+	check(gate.step == "fight" and not stands(gate, { alive = 0 }), "in the boss room's fight: no, its boundary does it (P5 ruling 18)")
+	L1B.advance(plan, gate, { now = 4, alive = 0 })
+	check(gate.step == "breather" and not stands(gate, { alive = 0 }), "in its breather: no")
+
+	print(" Advance: checkpoints and open camps' clears in every live step (the run slice's Minor 2)")
+	local live = Flow.Begin(plan)
+	L1B.advance(plan, live, { now = 0, roots = { L1B.root(c, 0, 490) } })
+	local actions = L1B.advance(plan, live, { now = 1, roots = { L1B.root(c, 30, 520) } })
+	check(live.step == "gate" and L1.names(actions) == "reach" and L1.get(actions, "reach").zone == 3, `in the countdown, a root on C's checkpoint reaches it ({L1.names(actions)})`)
+	L1B.advance(plan, live, { now = 3 })
+	actions = L1B.advance(plan, live, { now = 3.5, alive = 2, aliveByFloor = { 0, 8, 2 } })
+	check(live.step == "fight" and L1.names(actions) == "campClear" and L1.get(actions, "campClear").zone == 1, `in the fight, A's last resident falls: campClear for zone 1 ({L1.names(actions)})`)
+	L1B.advance(plan, live, { now = 4, alive = 0, aliveByFloor = { 0, 8, 0 } })
+	actions = L1B.advance(plan, live, { now = 4.5, aliveByFloor = { 0, 0, 0 } })
+	check(live.step == "breather" and L1.names(actions) == "campClear" and L1.get(actions, "campClear").zone == 2, `in the breather, B's: campClear for zone 2 ({L1.names(actions)})`)
+
+	print(" SafePoint: never in a threat's reach (the data slice's Minor 1)")
+	local state = Flow.Begin(plan)
+	L1B.advance(plan, state, { roots = { vec(0, 11, 140) } })
+	L1B.advance(plan, state, { roots = { vec(100, 15, 360) } })
+	local function threat(x: number, y: number, z: number, reach: number): any
+		return { at = vec(x, y, z), reach = reach }
+	end
+	check(L1.same(Flow.SafePoint(plan, state, nil, nil), b.checkpoint) and L1.same(Flow.SafePoint(plan, state, nil, {}), b.checkpoint), "no threat: B's, the furthest")
+	check(L1.same(Flow.SafePoint(plan, state, nil, { threat(110, 12, 360, 10) }), a.checkpoint), "a member 10 studs from B's checkpoint with a reach of 10 (the edge counts): the next one down, A's")
+	check(L1.same(Flow.SafePoint(plan, state, nil, { threat(110, 12, 360, 9.99) }), b.checkpoint), "with a reach of 9.99: B's")
+	check(L1.same(Flow.SafePoint(plan, state, nil, { threat(106, 62, 360, 10) }), a.checkpoint), "judged on the flat: a member 50 studs above, 6 along, still reaches it")
+	check(L1.same(Flow.SafePoint(plan, state, nil, { threat(0, 8, 150, 12), threat(100, 12, 330, 48) }), plan.start), "both checkpoints in reach: the start")
+	check(L1.same(Flow.SafePoint(plan, state, { [1] = true }, { threat(0, 8, 150, 12) }), b.checkpoint), "a threat by A and A busy leave B's alone")
+	check(L1.same(Flow.SafePoint(plan, state, { [2] = true }, { threat(0, 8, 150, 12) }), plan.start), "B busy and A in reach: the start")
+	L1B.advance(plan, state, { now = 0, roots = { L1B.root(c, 0, 490) } })
+	check(state.step == "gate" and L1.same(Flow.SafePoint(plan, state, nil, { threat(c.entry.X, c.floorY, c.entry.Z, 50) }), c.entry), "in the boss room's countdown: its entry, threats or not")
+	local reach = Flow.LongestReach
+	check(reach({ attacks = { { reach = 32 }, { reach = 4.5 } } }) == 32 and reach({ attacks = { { reach = 4.5 }, { reach = 48 } } }) == 48, "LongestReach: the longest of a kind's attacks, wherever it stands")
+	check(reach(nil) == 0 and reach({}) == 0 and reach({ attacks = {} }) == 0, "an unknown kind, or one with no attack: 0")
+
+	print(" Skip: a boss skip's passed camps are marked skipped (the run slice's Minor 1)")
+	local two = L1B.twoLocks()
+	state = Flow.Begin(two)
+	actions = Flow.Skip(two, state, "boss", 5, L1B.rules)
+	local open = L1.get(actions, "open")
+	check(L1.names(actions) == "open move gate" and open.stage == 2 and open.skipped == true and state.cleared == 1, `B on the road with a camp between: it opens, marked skipped, and counts on the summary ({L1.names(actions)})`)
+end
+L1.group("l1b fixTests", L1B.fixTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

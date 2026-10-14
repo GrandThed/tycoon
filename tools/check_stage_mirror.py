@@ -56,9 +56,10 @@ and compares what they answer, value by value:
   * `CampBrain` (L1b) against `sim_range`'s cb_* mirror: `Posts` for every resident group of
     every level at every difficulty and for grid groups (a patrol of 3 and of 4 on a square loop,
     a fire of 1 to 7, guards); `Sees` on rings round a member (the sight's edge, the cone's edge,
-    the height band's edges, distance 0); `InPlay` on the grown rectangle's edges and a shooter's
-    reach; `AtPost`, `Goal` (a patrol's legs stepping and wrapping, home restoring the leg),
-    `Struck`, `Shows` and `Problems` (how many lines) on every state; and scripted `Step`
+    the height band's edges, distance 0); `InPlay` on the grown rectangle's edges, its rounded
+    corners and a shooter's reach; `AtPost`, `Goal` (a patrol's legs stepping and wrapping, home
+    restoring the leg), `Struck`, `Shows` and `Problems` (how many lines) on every state;
+    `Engaged` on the hold's edges; and scripted `Step`
     timelines (rest, rise, fight, the leash held while striking, home, rest; held, released;
     woken by a hit; an empty group), the group compared after every call;
   * `Combat.KillReward` against `sim_combat.kill_reward` on the reward grid, and
@@ -111,7 +112,7 @@ NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "Burs
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint"),
           "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
-                        "Struck", "Goal", "Shows")}
+                        "Struck", "Goal", "Shows", "Engaged")}
 TOLERANCE = 1e-9  # relative; the two sides do the same arithmetic on the same doubles
 TEMPO_GRID = (-1.0, 0.0, 0.5, 0.7, 1.0, 1.25, 1.6, 2.0)
 KILL_GRID = (0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89)
@@ -122,7 +123,7 @@ REWARD_GRID = tuple((cash, materials, mult) for cash in (1, 3, 5, 7, 100) for ma
                     for mult in (0.5, 1.5, 2.5, 1 / 3, 4))
 STATE_FIELDS = ("stage", "step", "wave", "firstWave", "gateAt", "breatherUntil", "cleared", "lastCleared", "settled",
                 "reached", "done", "closedAt", "fought", "ended")
-ACTION_FIELDS = ("kind", "stage", "wave", "at", "merged", "count", "zone", "reason")
+ACTION_FIELDS = ("kind", "stage", "wave", "at", "merged", "count", "zone", "reason", "skipped")
 VARIANTS = ("clear", "down", "roadDown", "cap", "standing", "reset", "skipStage", "skipBoss", "force")
 # CampBrain's grids (L1b).
 CB_ANGLES = tuple(range(0, 360, 10))
@@ -404,7 +405,7 @@ class Scripted(sr.LevelRun):
     def on_camp_clear(self, floor, t):
         pass
 
-    def on_open(self, t, index=None):
+    def on_open(self, t, index=None, skipped=False):
         pass
 
     def on_rearm(self, t):
@@ -452,16 +453,27 @@ class Scripted(sr.LevelRun):
                  "reached": sorted(k for k, v in self.reached.items() if v),
                  "done": sorted(k for k, v in self.done.items() if v), "closedAt": self.closed_at,
                  "fought": list(self.fought), "ended": self.end_reason}
-        safe = [list(self.safe_point(busy_of(case, len(self.zones)))) for case in BUSY_CASES]
+        safe = [list(self.safe_point(busy_of(case, len(self.zones)), threats_of(case, self.zones))) for case in BUSY_CASES]
         return actions, state, self.directs(), self.still_closing(tick["now"]), clear, safe
 
 
-# SafePoint's `busy`, per tick: none, every floor, the first, the last (as lists of floor indices).
-BUSY_CASES = ("none", "all", "first", "last")
+# SafePoint's `busy`, per tick: none, every floor, the first, the last (as lists of floor indices);
+# and its `threats` (the fix round): a threat 5 studs off every checkpoint (3, 4 on the flat) whose
+# reach is exactly 5 (it reaches: the edge is included) or a hair under it (it does not).
+BUSY_CASES = ("none", "all", "first", "last", "threatAll", "threatShort")
+THREAT_REACH = {"threatAll": 5.0, "threatShort": 5.0 - 1e-6}
+
+
+def threats_of(case, zones):
+    reach = THREAT_REACH.get(case)
+    if reach is None:
+        return None
+    return [{"at": (z["checkpoint"][0] + 3.0, z["floorY"] + 7.0, z["checkpoint"][1] + 4.0), "reach": reach}
+            for z in zones if z["checkpoint"] is not None]
 
 
 def busy_of(case, zones):
-    if case == "none" or zones == 0:
+    if case not in ("all", "first", "last") or zones == 0:
         return None
     return {"all": {i: True for i in range(1, zones + 1)}, "first": {1: True}, "last": {zones: True}}[case]
 
@@ -628,6 +640,7 @@ def script_run(run, variant, rules, start_y):
 def action_row(action):
     row = {field: action.get(field) for field in ACTION_FIELDS}
     row["merged"] = bool(row["merged"])
+    row["skipped"] = bool(row["skipped"])
     return plain(row)
 
 
@@ -731,6 +744,17 @@ def camp_cases(data, expected, label, defn, rules):
           rect["z"] + rect["hz"] + margin, rect["z"] + rect["hz"] + margin + EDGE]
     band = [floor - rules["sightBelow"], floor + sr.ROOT_HEIGHT, floor + rules["sightAbove"] + EDGE]
     targets = [{"userId": 1, "root": [x, y, z]} for x in xs for z in zs for y in band]
+    # The rounded corners (fix round, crowd Major 1): off each corner of the floor, just inside and
+    # just outside chaseMargin on the diagonal and at 30 degrees; the grid's square corners above
+    # are out of play now.
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            cx, cz = rect["x"] + sx * rect["hx"], rect["z"] + sz * rect["hz"]
+            for degrees in (45, 30):
+                a = math.radians(degrees)
+                for d in (margin - EDGE, margin + EDGE, margin / 2):
+                    targets.append({"userId": 1, "root": [cx + sx * d * math.cos(a), floor + sr.ROOT_HEIGHT,
+                                                          cz + sz * d * math.sin(a)]})
     shooter = {"at": list(posts[0]["at"]), "reach": 32.0}
     targets += ring(posts[0]["at"], 0.0, [32.0 - EDGE, 32.0, 32.0 + EDGE], list(CB_ANGLES), [floor + sr.ROOT_HEIGHT])
     for shooters in ([], [shooter]):
@@ -878,6 +902,15 @@ def grid_camp_cases(data, expected, rules):
            step(1.0, pmembers, [sights[1]]), step(1.0 + leash, pmembers, [sights[1]]),
            step(1.0 + leash, pmembers, [sights[1]])]
     timeline(data, expected, "patrol: two targets, one out of play; one transition a call", patrol, rules, ops)
+    # Engaged: the hold (fix round, crowd Minor 1), its edge either side, never, and a hold of 0.
+    hold = rules["engagedHoldSeconds"]
+    rows = [{"lastAt": "nil", "now": 5.0}] + [{"lastAt": 4.0, "now": 4.0 + d} for d in
+                                              (0.0, 0.5, hold - EDGE, hold, hold + 1e-6 - EDGE, hold + 1e-6 + EDGE,
+                                               hold + 0.25, 60.0)]
+    case = f"camp.engaged.{len(data['campCases'])}"
+    data["campCases"].append({"id": case, "op": "engaged", "rows": rows})
+    expected[case] = ("CampBrain.Engaged", f"hold {hold:g} s, {len(rows)} rows",
+                      [sr.cb_engaged(None if r["lastAt"] == "nil" else r["lastAt"], r["now"], rules) for r in rows])
     # Problems: how many lines, on rules broken one key at a time.
     broken = [("as shipped", lambda r: None), ("no camps", lambda r: r.clear()), ("no guard", lambda r: r.pop("guard")),
               ("a sight of 0", lambda r: r["fire"].__setitem__("sight", 0)),
@@ -886,7 +919,9 @@ def grid_camp_cases(data, expected, rules):
               ("a rise of -1", lambda r: r["fire"].__setitem__("rise", -1)),
               ("a homeTolerance of 0", lambda r: r.__setitem__("homeTolerance", 0)),
               ("a leash that is text", lambda r: r.__setitem__("leashSeconds", "3")),
-              ("no sightAbove", lambda r: r.pop("sightAbove"))]
+              ("no sightAbove", lambda r: r.pop("sightAbove")),
+              ("no engagedHoldSeconds", lambda r: r.pop("engagedHoldSeconds")),
+              ("an engagedHoldSeconds of -1", lambda r: r.__setitem__("engagedHoldSeconds", -1))]
     for label, change in broken:
         changed = copy.deepcopy(rules)
         change(changed)

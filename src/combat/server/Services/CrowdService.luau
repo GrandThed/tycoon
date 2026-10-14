@@ -240,8 +240,9 @@ local camp = {
 	events = {} :: { GroupEvent },
 	-- Floors a WakeFloor has asked to release at the next step.
 	wake = {} :: { [number]: boolean },
-	-- The userIds in play for a group in rise or fight at the last step.
-	engaged = {} :: { [number]: boolean },
+	-- userId -> the step clock at which it was last in play for a group in rise or fight; kept
+	-- for camps.engagedHoldSeconds (CampBrain.Engaged), then dropped.
+	engaged = {} :: { [number]: number },
 	-- This step's targets, as CampBrain reads them, and one reused record per userId.
 	seen = {} :: { CampBrain.Seen },
 	seenPool = {} :: { [number]: CampBrain.Seen },
@@ -926,12 +927,13 @@ end
 -- WakeFloor releases a held group, every other group takes one CampBrain.Step, and a change of
 -- state is queued for DrainGroupEvents. A resident at its post while its group goes home is healed
 -- first, so the step that finds them all home has healed every one. Nothing here yields, casts a
--- ray or allocates per body; a group with no living member engages nobody.
+-- ray or allocates per body; a group with no living member engages nobody. Engagement is stamped
+-- with this step's clock and outlives play by camps.engagedHoldSeconds.
 local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
 	local engaged = camp.engaged
-	table.clear(engaged)
 	local rules = camp.rules
 	if rules == nil then
+		table.clear(engaged)
 		return
 	end
 	local wake = camp.wake
@@ -985,11 +987,16 @@ local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
 		end
 		if #members > 0 and (brain.state == "rise" or brain.state == "fight") then
 			for userId in brain.inPlay do
-				engaged[userId] = true
+				engaged[userId] = simTime
 			end
 		end
 	end
 	table.clear(wake)
+	for userId, at in engaged do
+		if not CampBrain.Engaged(at, simTime, rules) then
+			engaged[userId] = nil
+		end
+	end
 end
 
 -- `clock` = the frame's os.clock(): what the brain times its attacks on.
@@ -1968,9 +1975,11 @@ function CrowdService.Busy(): { [number]: boolean }
 	return busy
 end
 
--- In play for a group in rise or fight, at the last step.
+-- In play for a group in rise or fight at a step within camps.engagedHoldSeconds of the last
+-- one (CampBrain.Engaged, on the crowd's step clock).
 function CrowdService.Engaged(userId: number): boolean
-	return camp.engaged[userId] == true
+	local rules = camp.rules
+	return rules ~= nil and CampBrain.Engaged(camp.engaged[userId], simTime, rules)
 end
 
 -- Every change of a group's state since the last drain, in order.

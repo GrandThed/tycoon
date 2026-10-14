@@ -2529,8 +2529,8 @@ def level_gates(file, level, layout, expeditions, proving, combat_cfg):
 def level_pay(level, difficulty, ranks, combat_cfg, summon_kills):
     """What a whole solo clear of a level pays at a difficulty (Combat.KillReward per kill, L1b-15):
     every resident of every camp (by minDifficulty, never countMult: L1b-10), every configured
-    body of the boss room's waves, every boss with its Valor, and `summon_kills` {boss kind: {kind:
-    kills}} of what the bosses call. Returns (totals, per-camp and per-stage rows, kills by kind)."""
+    body of the boss room's waves, every boss with its Valor, crowd.clearBonus per clear, and
+    `summon_kills` {boss kind: {kind: kills}} of what the bosses call. Returns (totals, per-camp and per-stage rows, kills by kind)."""
     import sim_range as sr
 
     scales = level["difficulties"][difficulty]
@@ -2571,6 +2571,25 @@ def level_pay(level, difficulty, ranks, combat_cfg, summon_kills):
         totals["cash"] += cash
         totals["materials"] += materials
         totals["valor"] += valor
+    # crowd.clearBonus x rewardMult, once per clear (L1b-17, WaveService.campCleared): every open
+    # camp that holds a resident at this difficulty (its `campClear`) and every locking camp (its
+    # `open`; a Studio skip pays nothing and never happens in a clear).
+    bonus = level["crowd"].get("clearBonus") or {}
+    locking = {stage.get("zone") for stage in level["stages"] if stage["kind"] == "camp"}
+    clears = sum(1 for stage in level["stages"] if stage["kind"] == "camp")
+    for config in level.get("camps") or []:
+        if config["id"] in locking:
+            continue
+        fielded = [unit for group in config.get("residents") or []
+                   for unit in sr.fielded_units(group.get("units") or [], ranks[difficulty], ranks)[0]]
+        if sum(unit["count"] for unit in fielded) > 0:
+            clears += 1
+    c, m = kill_reward({"clear": {"cash": bonus.get("cash") or 0, "materials": bonus.get("materials") or 0}}, "clear",
+                       scales["rewardMult"])
+    if clears and (c or m):
+        rows.append((f"clear bonus x {clears}", 0, c * clears, m * clears, 0))
+        totals["cash"] += c * clears
+        totals["materials"] += m * clears
     return totals, rows, kills
 
 

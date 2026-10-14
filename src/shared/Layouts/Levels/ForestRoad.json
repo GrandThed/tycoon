@@ -68,8 +68,8 @@
 			"spots": [
 				{ "id": "fire1", "posture": "fire", "points": [{ "x": 56, "z": -50 }], "radius": 4 },
 				{ "id": "loop", "posture": "patrol", "points": [{ "x": 72, "z": -54 }, { "x": 104, "z": -54 }, { "x": 104, "z": -18 }, { "x": 72, "z": -18 }] },
-				{ "id": "southWatch", "posture": "guard", "points": [{ "x": 76, "z": 2 }, { "x": 84, "z": 2 }, { "x": 92, "z": 2 }, { "x": 100, "z": 2 }, { "x": 88, "z": -2 }], "facing": 0 },
-				{ "id": "fire3", "posture": "fire", "points": [{ "x": 100, "z": -64 }], "radius": 5.5 },
+				{ "id": "southWatch", "posture": "guard", "points": [{ "x": 76, "z": 2 }, { "x": 84, "z": 2 }, { "x": 92, "z": 2 }, { "x": 100, "z": 2 }, { "x": 88, "z": -2 }, { "x": 96, "z": -2 }, { "x": 80, "z": -2 }], "facing": 0 },
+				{ "id": "fire3", "posture": "fire", "points": [{ "x": 100, "z": -64.5 }], "radius": 6 },
 				{ "id": "fire2", "posture": "fire", "points": [{ "x": 118, "z": -20 }], "radius": 5 },
 				{ "id": "eastGate", "posture": "guard", "points": [{ "x": 130, "z": -40 }, { "x": 130, "z": -32 }, { "x": 126, "z": -44 }, { "x": 126, "z": -28 }], "facing": 90 }
 			]

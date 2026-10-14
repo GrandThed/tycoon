@@ -2713,6 +2713,7 @@ export type CampRulesConfig = {
 	homePace: number, -- x the kind's speed: walking home, and a resting body drifting back
 	patrolPace: number, -- x the kind's speed: a patrol at rest
 	homeTolerance: number, -- studs from its post that count as at its post
+	engagedHoldSeconds: number, -- seconds a player stays engaged after last in play for a group in rise or fight
 }
 export type CampRect = { x: number, z: number, hx: number, hz: number }
 export type CampUnit = { kind: string, count: number }

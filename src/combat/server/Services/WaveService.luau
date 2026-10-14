@@ -113,6 +113,9 @@ type Run = {
 	-- Who the live camp's close has brought to its entry, by userId: once each (the close is
 	-- judged again for levels.closeGraceSeconds, and a body just moved still reads as outside).
 	entered: { [number]: boolean },
+	-- The resident groups in rise or fight, by group index: their members' crowd ids at the
+	-- change (DrainGroupEvents). SafePoint keeps out of their reach.
+	awakeGroups: { [number]: { number } },
 }
 
 local function freshRun(): Run
@@ -150,6 +153,7 @@ local function freshRun(): Run
 		walletSentAt = {},
 		warnedResident = false,
 		entered = {},
+		awakeGroups = {},
 	}
 end
 
@@ -744,10 +748,14 @@ end
 -- L1b-17: a camp is cleared (an open one when its last resident falls, the boss room when its
 -- last wave does): the banner, its checkpoint marked done, one more wave cleared in every
 -- fighting human's stats, and crowd.clearBonus x the difficulty's rewardMult split evenly among
--- them (0 by default: Ben's "disregarding clearing status").
-local function campCleared(zone: StageFlow.Zone): ()
+-- them (0 by default: Ben's "disregarding clearing status"). A camp a Studio skip passed
+-- (`skipped`) gets the banner and the mark only: a skip pays nothing (L1b-22).
+local function campCleared(zone: StageFlow.Zone, skipped: boolean): ()
 	LevelService.SetCamp(zone.id, "cleared")
 	RunFx.Push({ kind = "camp", event = "cleared", name = zone.name })
+	if skipped then
+		return
+	end
 	countWaves(0, 1)
 	local level = run.level
 	local scales = run.scales
@@ -779,6 +787,11 @@ end
 -- L1b-6 to L1b-22's executor: a group that wakes (rest to rise, a close's release included)
 -- puts a "!" over each of its living bodies on every member's screen (L1b-21).
 local function onGroupEvent(event: CrowdService.GroupEvent): ()
+	if event.to == "rise" or event.to == "fight" then
+		run.awakeGroups[event.group] = table.clone(event.ids)
+	else
+		run.awakeGroups[event.group] = nil
+	end
 	local plan = run.plan
 	if plan == nil or not isLive(run.phase) then
 		return
@@ -950,6 +963,31 @@ local function humanCounts(): (number, number)
 	return fighters, waitingAlive
 end
 
+-- Every living member of a resident group in rise or fight, where it stands, with its kind's
+-- longest reach: SafePoint keeps a body out of them (the fix round's ruling on the data slice's
+-- Minor 1). Asked only when a body is put into the level, so CrowdService.Get's table is fine.
+local function threats(): { CampBrain.Shooter }
+	local list: { CampBrain.Shooter } = {}
+	local kinds = Tuning.Get().crowd.kinds
+	for _, ids in run.awakeGroups do
+		for _, id in ids do
+			local view = CrowdService.Get(id)
+			if view ~= nil and view.state ~= "dead" and view.hp > 0 then
+				table.insert(
+					list,
+					{ at = view.position, reach = StageFlow.LongestReach(kinds[view.kind]) }
+				)
+			end
+		end
+	end
+	return list
+end
+
+-- L1b-18: the run's safe point, from the crowd as it is now.
+local function safePoint(plan: StageFlow.Plan, flow: StageFlow.State): Vector3
+	return StageFlow.SafePoint(plan, flow, CrowdService.Busy(), threats())
+end
+
 -- Ruling 18: where a member's body belongs right now, and whether they wait. A character added
 -- during `wave` or `boss` waits in the lobby camp until the next boundary; one added in any
 -- other live phase goes to the run's safe point; in the lobby and on the summary, the lobby camp.
@@ -963,7 +1001,7 @@ local function placer(_member: Types.RunMember): (Vector3, boolean)
 	if phase == "wave" or phase == "boss" then
 		return LevelService.LobbyPoint(), true
 	end
-	return StageFlow.SafePoint(plan, flow, CrowdService.Busy()), false
+	return safePoint(plan, flow), false
 end
 
 -- The lobby's kill height: its layout's. With no layout file LevelService stands the party on
@@ -1001,8 +1039,8 @@ local function rescueFallen(combatConfig: Types.CombatConfig): ()
 	local flow = run.flow
 	local lobby = LevelService.LobbyBounds()
 	local lobbyFloor = lobbyKillY()
-	-- Asked only when somebody is put back into the level (it is a new table).
-	local busy: { [number]: boolean }? = nil
+	-- Asked only when somebody is put back into the level (it builds new tables).
+	local safe: Vector3? = nil
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
 		local root = rootOf(member)
@@ -1027,8 +1065,8 @@ local function rescueFallen(combatConfig: Types.CombatConfig): ()
 		if verdict == "lobby" then
 			target = LevelService.LobbyPoint()
 		elseif verdict == "level" and plan ~= nil and flow ~= nil then
-			busy = busy or CrowdService.Busy()
-			target = StageFlow.SafePoint(plan, flow, busy)
+			safe = safe or safePoint(plan, flow)
+			target = safe
 		end
 		if target ~= nil and ArenaService.MoveMember(member, target) then
 			boot.rescuedAt[member.userId] = now
@@ -1064,6 +1102,26 @@ local function moveFighters(feet: Vector3, closing: StageFlow.Zone?, late: boole
 			run.entered[member.userId] = true
 		end
 	end
+end
+
+-- StageFlow.StandsUp said so (the road's field is clear): every fighting member who is down
+-- stands up at the safe point. Not where they fell: that is beside the group that downed them,
+-- which would see them at once and wake again. Whether anybody stood up.
+local function standUpOnRoad(plan: StageFlow.Plan, flow: StageFlow.State): boolean
+	local feet: Vector3? = nil
+	for _, member in ArenaService.GetMembers() do
+		local player = member.player
+		if member.bot or player == nil or not ArenaService.IsFighting(member) then
+			continue
+		end
+		if VitalsService.IsDown(player) then
+			VitalsService.StandUp(player)
+			local at = feet or safePoint(plan, flow)
+			feet = at
+			ArenaService.MoveMember(member, at)
+		end
+	end
+	return feet ~= nil
 end
 
 -- The run's end -------------------------------------------------------------------------------
@@ -1228,17 +1286,17 @@ local function execute(actions: { StageFlow.Action }): ()
 			standUpDowned()
 			-- Not when the same batch ends the run: nobody is brought into a level about to go.
 			if action.release == true then
-				ArenaService.ReleaseWaiting(StageFlow.SafePoint(plan, flow, CrowdService.Busy()))
+				ArenaService.ReleaseWaiting(safePoint(plan, flow))
 			end
 		elseif kind == "open" then
 			if zone ~= nil then
-				campCleared(zone)
+				campCleared(zone, action.skipped == true)
 			end
 			run.spec = nil
 		elseif kind == "campClear" then
 			local cleared = plan.zones[action.zone or 0]
 			if cleared ~= nil then
-				campCleared(cleared)
+				campCleared(cleared, false)
 			end
 		elseif kind == "reach" then
 			local reached = plan.zones[action.zone or 0]
@@ -1311,7 +1369,7 @@ local function advance(combatConfig: Types.CombatConfig): ()
 	local deadFraction = if spawned > 0 then math.max(spawned - alive, 0) / spawned else 0
 	local fallen = fallenReason()
 	local before = run.phase
-	local actions = StageFlow.Advance(plan, flow, {
+	local input: StageFlow.Input = {
 		now = now,
 		roots = roots,
 		standing = standing,
@@ -1324,12 +1382,18 @@ local function advance(combatConfig: Types.CombatConfig): ()
 		breatherSeconds = Combat.BreatherSeconds(run.tempo, combatConfig.director),
 		fallen = fallen,
 		runCap = run.runEndsAt > 0 and now >= run.runEndsAt,
-	}, combatConfig.levels)
+	}
+	local actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)
 	execute(actions)
+	-- Open camps have no boundary: a member down on a road whose field is clear stands up now.
+	local stood = run.flow == flow
+		and isLive(run.phase)
+		and StageFlow.StandsUp(plan, flow, input)
+		and standUpOnRoad(plan, flow)
 	syncPhase()
-	-- RunState goes out at once on every action, and on a phase change no action announced (a
-	-- boss placed, a boss killed).
-	if isLive(run.phase) and (#actions > 0 or run.phase ~= before) then
+	-- RunState goes out at once on every action, on a stand-up, and on a phase change no action
+	-- announced (a boss placed, a boss killed).
+	if isLive(run.phase) and (#actions > 0 or stood or run.phase ~= before) then
 		broadcast()
 	end
 end
@@ -1676,7 +1740,7 @@ local function tick(): ()
 	if fighters == 0 and waitingAlive > 0 and plan ~= nil and flow ~= nil then
 		-- Every fighter LEFT (nobody fell): those waiting in the lobby camp take over now rather
 		-- than watching an unattended run until its cap.
-		ArenaService.ReleaseWaiting(StageFlow.SafePoint(plan, flow, CrowdService.Busy()))
+		ArenaService.ReleaseWaiting(safePoint(plan, flow))
 		broadcast()
 	end
 	if stage ~= nil and zone ~= nil and flow ~= nil and flow.step == FIGHT then

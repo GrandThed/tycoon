@@ -113,9 +113,15 @@ local function give(index: number): ()
 	table.insert(free, mark)
 end
 
--- One frame of every mark: the pop, the fade, and the end (its time, or its body's).
+-- One frame of every mark: the pop, the fade, and the end (its time, or its body's). With
+-- nothing left to draw it lets go of Heartbeat; the next Alert connects again.
 local function step(): ()
 	if #marks == 0 then
+		local connection = state.connection
+		if connection ~= nil then
+			connection:Disconnect()
+			state.connection = nil
+		end
 		return
 	end
 	local now = os.clock()

@@ -153,11 +153,12 @@
 		"fire": { "sight": 16, "cone": 360, "rise": 1.5 },
 		"sightBelow": 4,
 		"sightAbove": 30,
-		"chaseMargin": 3,
+		"chaseMargin": 2.5,
 		"leashSeconds": 3,
 		"homePace": 1,
 		"patrolPace": 0.5,
-		"homeTolerance": 1
+		"homeTolerance": 1,
+		"engagedHoldSeconds": 1.5
 	},
 	"crowdSkeleton": [
 		{ "introduces": ["fodder"] },

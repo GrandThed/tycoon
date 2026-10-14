@@ -439,7 +439,19 @@ for _, trace in data.traces do
 				elseif case == "last" and zones > 0 then
 					busy = { [zones] = true }
 				end
-				safe[which] = Flow.SafePoint(plan, state, busy)
+				-- The fix round's threats: 5 studs off every checkpoint, reach exactly 5 or a hair under.
+				local threats = nil
+				local reach = if case == "threatAll" then 5 elseif case == "threatShort" then 5 - 1e-6 else nil
+				if reach ~= nil then
+					threats = {}
+					for _, zone in plan.zones do
+						local mark = zone.checkpoint
+						if mark ~= nil then
+							table.insert(threats, { at = V.new(mark.X + 3, mark.Y + 7, mark.Z + 4), reach = reach })
+						end
+					end
+				end
+				safe[which] = Flow.SafePoint(plan, state, busy, threats)
 			end
 			ticks[index] = {
 				actions = actions,
@@ -548,6 +560,12 @@ for _, case in data.campCases do
 			return if shown ~= nil then shown else "nil"
 		elseif op == "problems" then
 			return #Brain.Problems(case.rules)
+		elseif op == "engaged" then
+			local found = {}
+			for index, row in case.rows do
+				found[index] = Brain.Engaged(if row.lastAt == "nil" then nil else row.lastAt, row.now, campRules)
+			end
+			return found
 		elseif op == "timeline" then
 			local group = Brain.NewGroup(C.def(case.def), 0)
 			local rows = {}

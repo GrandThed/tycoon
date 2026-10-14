@@ -344,7 +344,9 @@ type Entity = {
 }
 
 -- One floor of the crowd: its top centre and its half extents in X and Z (nil = unknown).
-type Floor = { centre: Vector3, half: Vector3? }
+-- camp = a level camp's floor (SetFloors), not the range's arena (SetFloor): only a camp's
+-- floor gates touch auto-fire (CampFloor).
+type Floor = { centre: Vector3, half: Vector3?, camp: boolean }
 
 local FOLDER_NAME = "CrowdBodies"
 -- The wire's origin is the world origin, for good (L1 ruling 12): CrowdService encodes every
@@ -2562,6 +2564,7 @@ function CrowdRenderer.SetFloor(center: Vector3?, halfSize: Vector3?): ()
 	floors[1] = {
 		centre = center or Vector3.zero,
 		half = if center ~= nil then halfSize else nil,
+		camp = false,
 	}
 end
 
@@ -2585,6 +2588,7 @@ function CrowdRenderer.SetFloors(list: { Types.RunFloor }): ()
 		floors[index] = {
 			centre = Vector3.new(entry.x, entry.y, entry.z),
 			half = Vector3.new(entry.hx, 0, entry.hz),
+			camp = true,
 		}
 	end
 end
@@ -2714,6 +2718,21 @@ function CrowdRenderer.GetHead(id: number): BasePart?
 		return nil
 	end
 	return entity.head
+end
+
+-- L1b fix round: the camp floor a body stands on, as its top centre and half extents (half.Y
+-- is 0); nil for the range's arena, a body not known, or a floor that has not arrived. Touch
+-- auto-fire reads it so it never wakes a camp the player is not in play for.
+function CrowdRenderer.CampFloor(id: number): (Vector3?, Vector3?)
+	local entity = byId[id]
+	if entity == nil then
+		return nil, nil
+	end
+	local floor = floors[entity.floorIndex]
+	if floor == nil or not floor.camp or floor.half == nil then
+		return nil, nil
+	end
+	return floor.centre, floor.half
 end
 
 function CrowdRenderer.GetHeight(id: number): number?
