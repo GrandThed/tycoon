@@ -2248,6 +2248,10 @@ export type CrowdSpawnInfo = {
 	-- included); nil for an awake group (rise, fight, home) or a body with no group. Clients'
 	-- touch auto-target never takes a resting body.
 	resting: boolean?,
+	-- The fix round's B-4: a tent body comes up through the floor at its door as a boss's call
+	-- does; true on its first announce only (CrowdService clears it once that is sent, so a late
+	-- joiner sees it standing), nil for every other body.
+	rises: boolean?,
 }
 -- L1b: one floor of the crowd: centre = the floor's top centre; half.X and half.Z its half extents;
 -- half.Y the highest a launch may carry a body over it (levels.crowdCeiling).

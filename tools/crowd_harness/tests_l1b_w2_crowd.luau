@@ -713,12 +713,17 @@ function W2A.joinTests(): ()
 	roused[2].held = true
 	check(not CB.Rouse(roused[2], 7) and roused[2].state == "rest" and roused[2].held, "held: nothing, false")
 	local unchanged = true
-	for index, state in { [3] = "rise", [4] = "fight", [5] = "home" } do
+	for index, state in { [3] = "rise", [4] = "fight" } do
 		roused[index].state = state
 		roused[index].since = 1
 		unchanged = unchanged and not CB.Rouse(roused[index], 7) and roused[index].state == state and roused[index].since == 1
 	end
-	check(unchanged, "rise, fight, home: nothing, false")
+	check(unchanged, "rise, fight: nothing, false")
+	-- The fix round's B-3: a tent's body is roused at once, also while its group walks home.
+	roused[5].state = "home"
+	roused[5].since = 1
+	roused[5].hit = true
+	check(CB.Rouse(roused[5], 7) and roused[5].state == "rise" and roused[5].since == 7 and roused[5].hit == false, "home: rise, since now, hit cleared, true (B-3)")
 
 	print(" CampBrain: the tent rule")
 	check(CB.TentActive(true, 5) and CB.TentActive(false, 0) and CB.TentActive(false, -1) and not CB.TentActive(false, 3), "TentActive: busy, or no resident alive")
@@ -1168,5 +1173,90 @@ function W2A.perfTests(): ()
 	end
 end
 W2A.crowdGroup("perf", W2A.perfTests)
+
+-- The fix round's tail (docs/prompts/l1b-w2-fix-tail.md): B-4, a tent's body comes out at its door
+-- (SpawnResident's `from`), anchored at its post, rising on its first announce only; B-3, a group
+-- walking home is roused at once and its event names the state it left.
+function W2A.tentDoorTests(): ()
+	print(" CrowdService: a tent's body at its door, a rouse from home (the fix round's tail)")
+	W2A.enter()
+	root.Position = vec(25, 11, 25)
+	local tent, tentIds, def = W2A.place("tent", { vec(-10, 8, -10) }, { "fodder" }, { id = "A.tent", radius = 3 })
+	local post = W2A.CB.Posts(def, 2)[2]
+	-- A third of the way from the marker to the post: 2 studs short of it.
+	local door = vec(-10 + (post.at.X + 10) / 3, 8, -10 + (post.at.Z + 10) / 3)
+	-- What each announce said at the moment it was sent (the stub keeps payloads by reference).
+	local said: { [number]: { any } } = {}
+	local realFire = modules.RemoteService.FireClient
+	modules.RemoteService.FireClient = function(target, name, payload)
+		if target == player and name == "CrowdSpawn" then
+			for _, info in payload do
+				said[info.id] = said[info.id] or {}
+				table.insert(said[info.id], { rises = info.rises, at = info.at })
+			end
+		end
+		realFire(target, name, payload)
+	end
+	local ok, problem = pcall(function()
+		local id = Crowd.SpawnResident("fodder", tent, post, door)
+		local placed = Crowd.Get(id)
+		check(id ~= 0 and placed ~= nil and near(placed.position.X, door.X) and near(placed.position.Z, door.Z), "B-4: a resident spawned with `from` stands at `from` (its door), not on its post")
+		check(Crowd.GroupAlive(tent) == 2, "(it is its group's member)")
+		W2A.clearSent()
+		step2()
+		local first = said[id]
+		-- Announced after the step it took toward its post (the info is where it stands then).
+		local away = if first ~= nil and first[1].at ~= nil then math.sqrt((first[1].at.X - post.at.X) ^ 2 + (first[1].at.Z - post.at.Z) ^ 2) else 0
+		check(first ~= nil and #first == 1 and first[1].rises == true and away > 1, `its first announce asks for the rise, off its post by the door ({away} from the post)`)
+		local onPost = said[tentIds[1]]
+		check(onPost == nil or onPost[1].rises == nil, "a resident placed on its post never rises")
+		local stored = nil
+		for _, info in risen do
+			if info.id == id then
+				stored = info
+			end
+		end
+		check(stored ~= nil and stored.rises == nil, "and once sent the info no longer carries it: a late joiner or a re-announce shows the body standing")
+		step2(60)
+		local walked = Crowd.Get(id)
+		local flat = if walked ~= nil then math.sqrt((walked.position.X - post.at.X) ^ 2 + (walked.position.Z - post.at.Z) ^ 2) else math.huge
+		check(flat <= 1 + 1e-3, `at rest it walks from its door to its post, the post it is anchored to ({flat} from it)`)
+		check(#L1BC.events() == 0, "(nobody saw anybody: the tent is still at rest)")
+	end)
+	modules.RemoteService.FireClient = realFire
+	if not ok then
+		error(problem)
+	end
+
+	fresh()
+	W2A.enter()
+	root.Position = vec(0, 11, -100)
+	local loop = { vec(10, 8, 10), vec(20, 8, 10), vec(20, 8, 20), vec(10, 8, 20) }
+	local group, ids = W2A.place("patrol", loop, { "fodder" }, { id = "A.loop" })
+	local start = Crowd.Get(ids[1]).position
+	step2(20)
+	local walked = Crowd.Get(ids[1]).position
+	check((walked - start).Magnitude > 2, "(the patroller walked off its post)")
+	Crowd.RouseGroup(group)
+	step2()
+	L1BC.events()
+	local homeward = false
+	for _ = 1, 400 do
+		step2()
+		for _, event in L1BC.events() do
+			homeward = homeward or (event.group == group and event.to == "home")
+		end
+		if homeward then
+			break
+		end
+	end
+	check(homeward, "(no target in play: the group leashes and walks home)")
+	Crowd.RouseGroup(group)
+	step2()
+	local back = L1BC.events()
+	check(#back == 1 and back[1].group == group and back[1].from == "home" and back[1].to == "rise" and back[1].held == false, `B-3: a group walking home is roused at the next step, and its event names "home" as the state it left ({#back} events)`)
+	check(seen(ids[1]).state == "rise", "it shows rise where it stands")
+end
+W2A.crowdGroup("tent door, rouse from home", W2A.tentDoorTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

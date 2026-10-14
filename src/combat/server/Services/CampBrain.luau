@@ -592,10 +592,11 @@ function CampBrain.JoinIn(
 	return answer
 end
 
--- A wake from outside Step and Release (a tent's rouse, a join-in): a resting, unheld group rises.
--- True when it did; anything else is left as it is.
+-- A wake from outside Step and Release (a tent's rouse, a join-in): a resting or homeward, unheld
+-- group rises (the fix round's B-3: a tent's body is roused at once, also while its group walks
+-- home; JoinIn skips homeward groups itself). True when it did; anything else is left as it is.
 function CampBrain.Rouse(group: Group, now: number): boolean
-	if group.held or group.state ~= "rest" then
+	if group.held or (group.state ~= "rest" and group.state ~= "home") then
 		return false
 	end
 	group.state = "rise"

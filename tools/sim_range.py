@@ -5899,8 +5899,8 @@ def cb_join_in(groups, living, gaps, woke, rules):
 
 
 def cb_rouse(group, now):
-    """CampBrain.Rouse: a resting, unheld group rises; True when it did."""
-    if group["held"] or group["state"] != "rest":
+    """CampBrain.Rouse: a resting or homeward, unheld group rises (the fix round's B-3); True when it did."""
+    if group["held"] or group["state"] not in ("rest", "home"):
         return False
     group["state"] = "rise"
     group["since"] = now
@@ -6390,10 +6390,12 @@ class LevelRun(ThreatRun):
                     if before == "rest" and changed == "rise":
                         woke.append(index)
             if index in self.rouse_pending:
-                # CrowdService.RouseGroup (L1b-W2-7): after the step, as a release is.
+                # CrowdService.RouseGroup (L1b-W2-7): after the step, as a release is. The event
+                # names the state it left (the fix round's B-3: a group walking home rises too).
                 self.rouse_pending.discard(index)
+                left = group["state"]
                 if cb_rouse(group, now):
-                    self.note(now, index, "rest", "rise", False, "tent")
+                    self.note(now, index, left, "rise", False, "tent")
         self.wake_floors = set()
         if woke:
             # L1b-W2-12: the resting neighbours of every group that woke by sight or by a hit.

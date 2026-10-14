@@ -2816,10 +2816,11 @@ L1B_W2_CROWD_MUTATIONS = {
         "if earlier.brain.def.camp == def.camp then",
         "if true then",
     ),
+    # Re-aimed by the fix round's tail (B-3: Rouse also rises a homeward group): same rule.
     "l1b w2 crowd: Rouse wakes a held group": (
         CAMP,
-        'if group.held or group.state ~= "rest" then\n\t\treturn false\n\tend\n\tgroup.state = "rise"',
-        'if group.state ~= "rest" then\n\t\treturn false\n\tend\n\tgroup.state = "rise"',
+        'if group.held or (group.state ~= "rest" and group.state ~= "home") then',
+        'if group.state ~= "rest" and group.state ~= "home" then',
     ),
     "l1b w2 crowd: TentActive ignores the dead residents": (
         CAMP,
@@ -2858,10 +2859,11 @@ L1B_W2_CROWD_MUTATIONS = {
         "if not pendingSpawnSet[enemy.id] then\n\t\t\ttable.insert(batch, enemy.spawnInfo)",
     ),
     "l1b w2 crowd: the join-in never runs": (CROWD, "\tif #woke > 0 then\n", "\tif false then\n"),
+    # Re-aimed by the fix round's tail (the rouse's event names the state it left): same rule.
     "l1b w2 crowd: a rouse is never executed": (
         CROWD,
-        "if rouse[index] and CampBrain.Rouse(brain, simTime) then",
-        "if false then",
+        "\t\tif rouse[index] then\n",
+        "\t\tif false then\n",
     ),
     "l1b w2 crowd: GroupedOn not taken down at a death": (
         CROWD,
@@ -2990,6 +2992,47 @@ MUTATIONS.update(L1B_W2_FIX_A_MUTATIONS)
 # Retired, never silently: the rectangle distance moved into HitShapes.FlatToRect, whose own
 # "l1b w2 crowd: FlatToRect with square corners" holds the rule now.
 del MUTATIONS["l1b crowd: in play has square corners"]
+
+# The fix round's tail (docs/prompts/l1b-w2-fix-tail.md): B-4's door and rise on SpawnResident,
+# B-3's rouse from home and the event naming the state it left.
+L1B_W2_FIX_TAIL_MUTATIONS = {
+    "l1b w2 fix tail: SpawnResident ignores `from`": (
+        CROWD,
+        'CrowdService.Spawn(kind, from or post.at, "fight", post.at, nil, record.floor)',
+        'CrowdService.Spawn(kind, post.at, "fight", post.at, nil, record.floor)',
+    ),
+    "l1b w2 fix tail: the door taken as its post": (
+        CROWD,
+        "enemy.resident = { group = group, post = post, leg = post.leg }",
+        "enemy.resident = { group = group, post = { at = enemy.position, yaw = post.yaw, leg = post.leg }, leg = post.leg }",
+    ),
+    "l1b w2 fix tail: a body from its door never rises": (
+        CROWD,
+        "enemy.spawnInfo.rises = true",
+        "enemy.spawnInfo.rises = nil",
+    ),
+    "l1b w2 fix tail: every resident rises": (
+        CROWD,
+        "if from ~= nil then\n\t\t-- Shown rising",
+        "if true then\n\t\t-- Shown rising",
+    ),
+    "l1b w2 fix tail: the rise is never cleared after the announce": (
+        CROWD,
+        "info.rises = nil",
+        "info.rises = info.rises",
+    ),
+    "l1b w2 fix tail: Rouse leaves a homeward group home": (
+        CAMP,
+        'if group.held or (group.state ~= "rest" and group.state ~= "home") then',
+        'if group.held or group.state ~= "rest" then',
+    ),
+    "l1b w2 fix tail: a rouse's event says it left rest": (
+        CROWD,
+        'queueEvent(index, group, before, "rise", false)',
+        'queueEvent(index, group, "rest", "rise", false)',
+    ),
+}
+MUTATIONS.update(L1B_W2_FIX_TAIL_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

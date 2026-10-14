@@ -307,12 +307,14 @@ type Entity = {
 	-- the name that bar shows. enrageAt = the health share its second phase begins at (0 = it
 	-- has none); enraged = it is in it, for good: the look, and the scaled times of every
 	-- attack that starts from then on. riseStart = os.clock() a summoned body began to come up
-	-- through the floor.
+	-- through the floor. rises = its first announce asked for that rise (a tent's body at its
+	-- door, the fix round's B-4); a summoned body rises without it.
 	boss: boolean,
 	title: string,
 	enrageAt: number,
 	enraged: boolean,
 	riseStart: number,
+	rises: boolean,
 	-- Stop 3, the guard. phaseLabel = what the bar calls this boss's second phase. guards =
 	-- this kind is the guard some boss calls (it carries the pennant). guardKind / guardTotal
 	-- = for a kind whose plate its guard protects, the kind it calls and how many; "" = none.
@@ -674,6 +676,7 @@ local function newEntity(): Entity?
 		enrageAt = 0,
 		enraged = false,
 		riseStart = -math.huge,
+		rises = false,
 		phaseLabel = "",
 		guards = false,
 		guardKind = "",
@@ -1079,13 +1082,14 @@ local function release(entity: Entity): ()
 end
 
 -- summonerId = the crowd id of the boss that called this body, 0 for a set's own. floorIndex =
--- its floor in `floors` (L1b).
+-- its floor in `floors` (L1b). rises = its info asks for a rise at its first sighting (B-4).
 local function spawnEntity(
 	id: number,
 	kind: string,
 	maxHp: number,
 	summonerId: number,
-	floorIndex: number
+	floorIndex: number,
+	rises: boolean
 ): ()
 	local def = kindDef(kind)
 	if def == nil then
@@ -1128,6 +1132,7 @@ local function spawnEntity(
 	entity.recoverFrom = 0
 	entity.enraged = false
 	entity.riseStart = -math.huge
+	entity.rises = rises
 	entity.summonerId = summonerId
 	entity.floorIndex = floorIndex
 	entity.seat = 0
@@ -1558,8 +1563,9 @@ local function pushSample(
 		entity.model.Parent = folder
 		-- A body a boss called (it was announced with its summoner's id) comes up through
 		-- the floor instead of appearing. A client that joins later sees those already
-		-- standing rise once, as its first sight of them.
-		if entity.summonerId ~= 0 then
+		-- standing rise once, as its first sight of them. A tent's body rises at its door
+		-- (B-4) only on its first announce: a later joiner sees it standing.
+		if entity.summonerId ~= 0 or entity.rises then
 			entity.riseStart = os.clock()
 			burstAt(entity, 1)
 		end
@@ -1764,7 +1770,8 @@ local function onSpawn(payload: any): ()
 						and index >= 1
 						and index < math.huge
 					then math.floor(index)
-					else 1
+					else 1,
+				info.rises == true
 			)
 			local entity = byId[info.id]
 			-- Every info is the newest word on the group, a re-announce of a drawn body too.

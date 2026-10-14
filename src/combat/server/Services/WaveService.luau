@@ -1587,12 +1587,13 @@ end
 
 -- L1b-W2-7's executor, before advance: a tent whose camp is up (a group of its floor in rise or
 -- fight), or whose camp's residents are all dead, sends its next body when CampBrain says it is
--- due, onto its own ring post, and rouses its group so the body joins the fight. One body per
--- tent per tick. A refused spawn warns once per run and counts as sent: the population rule makes
--- it a bug, and the camp must still be able to clear. Never yields.
+-- due, rising at its door (B-4) and walking to its own ring post, and rouses its group so the
+-- body joins the fight. One body per tent per tick. A refused spawn warns once per run and counts
+-- as sent: the population rule makes it a bug, and the camp must still be able to clear. Never
+-- yields.
 -- The fix round: a body that joins a group already up is a threat for the safe point at once
 -- (B-1: its group's state does not change, so no event lists it), and a body sent while its camp
--- fights keeps its group roused until the group is up (B-3: one walking home rises once home).
+-- fights keeps its group roused until the group is up (B-3: one walking home rises at once).
 local function tickTents(): ()
 	local plan = run.plan
 	if plan == nil or #run.tents == 0 then
@@ -1620,7 +1621,7 @@ local function tickTents(): ()
 		local kind = planned.kinds[following]
 		local post = planned.posts[following]
 		local id = if kind ~= nil and post ~= nil
-			then CrowdService.SpawnResident(kind, tent.group, post)
+			then CrowdService.SpawnResident(kind, tent.group, post, planned.doors[following])
 			else 0
 		if id ~= 0 then
 			CrowdService.RouseGroup(tent.group)

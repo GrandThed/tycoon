@@ -128,3 +128,9 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
   decisions confirmed (owed rouse, door never past its post, problem lines without difficulty).
   Its requests 1–3 (A, ui) are **taken** and go to one fresh agent: `docs/prompts/l1b-w2-fix-tail.md`
   (every owner has finished, so one agent may touch the four files).
+- **Fix tail (fix-tail.md):** built; harness 1,983, mutate 613 / 0, mirror mutants 43 / 43; one red:
+  `sim_range --check` Timber 37.1 on seed 37, because a homeward tent group roused with nobody near
+  leashes again (ping-pong, unhittable while home). **Ruling (option b):** `CampBrain.Rouse` lifts a
+  group out of `home` **only while a player is in play for its camp**; from `rest` as before. No band
+  is widened. The same agent finishes it, re-points the StageFlow comment, and spawns the sim's tent
+  bodies at their doors.

@@ -1053,9 +1053,14 @@ local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
 				end
 			end
 		end
-		-- After the step, as a release is, so even a rise of 0 shows.
-		if rouse[index] and CampBrain.Rouse(brain, simTime) then
-			queueEvent(index, group, "rest", "rise", false)
+		-- After the step, as a release is, so even a rise of 0 shows. A tent's rouse may bring a
+		-- group back from its walk home (B-3): the event names the state it left, so a homeward
+		-- group is neither re-announced nor alerted as a fresh wake.
+		if rouse[index] then
+			local before: Types.CampGroupState = brain.state
+			if CampBrain.Rouse(brain, simTime) then
+				queueEvent(index, group, before, "rise", false)
+			end
 		end
 	end
 	table.clear(wake)
@@ -1204,6 +1209,11 @@ local function flushLifecycle(): ()
 		table.clear(pendingSpawnSet)
 		if #batch > 0 then
 			fireAll(SPAWN_EVENT, batch)
+			-- B-4: a rise is shown once, at the body's first announce (the remote has copied the
+			-- batch by now); every later info, a late joiner's too, shows it standing.
+			for _, info in batch do
+				info.rises = nil
+			end
 		end
 	end
 end
@@ -2083,17 +2093,28 @@ function CrowdService.AddGroup(def: Types.CampGroupDef): number
 	return index
 end
 
--- One member of a group, standing on `post` (CampBrain.Posts): it fights (once its group does) on
--- its group's floor. 0 for an unknown group, else exactly Spawn's refusals.
-function CrowdService.SpawnResident(kind: string, group: number, post: CampBrain.Post): number
+-- One member of a group, standing on `post` (CampBrain.Posts), or coming out at `from` (a tent's
+-- door, the fix round's B-4) and walking to it: a resting group walks a member off its post back
+-- to it (CampBrain.Goal), so the post stays its anchor. It fights (once its group does) on its
+-- group's floor. 0 for an unknown group, else exactly Spawn's refusals.
+function CrowdService.SpawnResident(
+	kind: string,
+	group: number,
+	post: CampBrain.Post,
+	from: Vector3?
+): number
 	local record = camp.groups[group]
 	if record == nil then
 		return 0
 	end
-	local id = CrowdService.Spawn(kind, post.at, "fight", post.at, nil, record.floor)
+	local id = CrowdService.Spawn(kind, from or post.at, "fight", post.at, nil, record.floor)
 	local enemy = enemies[id]
 	if enemy == nil then
 		return 0
+	end
+	if from ~= nil then
+		-- Shown rising, as a boss's call is (Types.CrowdSpawnInfo.rises).
+		enemy.spawnInfo.rises = true
 	end
 	enemy.resident = { group = group, post = post, leg = post.leg }
 	enemy.member = { at = enemy.position, post = post }
@@ -2110,7 +2131,8 @@ function CrowdService.SpawnResident(kind: string, group: number, post: CampBrain
 	return id
 end
 
--- L1b-W2-7: a tent's group rises at the next camp step (CampBrain.Rouse: only from an unheld rest).
+-- L1b-W2-7: a tent's group rises at the next camp step (CampBrain.Rouse: from an unheld rest, or
+-- from its walk home).
 function CrowdService.RouseGroup(group: number): ()
 	if typeof(group) == "number" and camp.groups[group] ~= nil then
 		camp.rouse[group] = true
