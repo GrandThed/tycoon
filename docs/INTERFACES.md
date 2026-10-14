@@ -9690,7 +9690,13 @@ The full list with owners is in `docs/PLAN.md` "P5" → "Carried". Two of them a
 # L1 contracts — Forest Road in grey (Ben, 2026-10-13)
 
 **Status: confirmed by the lead on 2026-10-13; the wave is running.** Written from the code the
-same day. Plan of record:
+same day.
+
+**Update 2026-10-13, after the fix round: built (`fc43816`), reviewed, fixed (`de03e36`); QA is
+running; not merged yet.** The current state is "Review round and state (2026-10-13)" at the
+end of this section. Lines below that the fix round changed carry a dated *Fix round* note.
+
+Plan of record:
 `docs/MISSIONS_DESIGN.md` (§2, §4 "Where it runs", §5, §6, §12, §14). Branch `l1-forest-road`,
 worktree `C:\Users\benja\Desktop\tycoon-p5`. The fighting of P5 Wave 1 is kept as built
 (weapons, crowd, bosses, health). L1 replaces the mission layer around it.
@@ -9811,31 +9817,31 @@ the code forced one; the lead confirms or changes it before the wave starts.
 | 6 | **A session is joinable only in the lobby.** The registry entry is published with `wave = 0` in the lobby and `wave = coop.joinUntilWave + 1` in every other phase. That closes the sort key and makes the hub's own `Join` answer `over`, with no hub change. A run's end no longer clears the entry: it goes with the last member, as today. | Joining late is L5. |
 | 7 | **The leader starts a level:** `RequestStartLevel(levelId, difficulty)`, validated in "Start". The leader is the host when the host is in the roster, else the first member in party order. There is no Ready button. `RequestReady` has no handler any more; its definition stays in `CombatRemotes` until L4 and no client sends it. | The brief, points 1 and 15. |
 | 8 | **Phases.** `RunPhase` gains `travel` and `gate`: `lobby`, `travel`, `gate`, `wave`, `boss`, `breather`, `summary`, `ended`. A member may act (attack, cast, dash, slam, switch slot) in the five live phases: `travel`, `gate`, `wave`, `boss`, `breather`. | A dead trigger on the road would read as a bug, and the mobility abilities belong to the road. |
-| 9 | **A camp** is armed when it becomes the current stage. It **triggers** when the root of any fighting member is inside its trigger rectangle (the floor inset by `levels.triggerInset`) and between 4 studs under and `levels.triggerHeight` above its floor. A countdown of `levels.gateSeconds` follows (phase `gate`); it cannot be cancelled. Then the gates **close**: the barrier turns solid, every fighter whose root is outside the floor rectangle is moved to the camp's entry point, and the first wave is queued. | The brief, point 4. |
+| 9 | **A camp** is armed when it becomes the current stage. It **triggers** when the root of any fighting member is inside its trigger rectangle (the floor inset by `levels.triggerInset`) and between 4 studs under and `levels.triggerHeight` above its floor. A countdown of `levels.gateSeconds` follows (phase `gate`); it cannot be cancelled. Then the gates **close**: the barrier turns solid, every fighter whose root is outside the floor rectangle is moved to the camp's entry point, and the first wave is queued. *Fix round (2026-10-13), rulings R1 and R12 below: the trigger rectangle is the whole fenced rectangle (the floor grown by `levels.fenceThickness`, edges included), between `levels.triggerBelow` under and `levels.triggerHeight` above the floor, and only a standing fighter (alive, not down) triggers; `triggerInset` is gone. At the close a fighter whose root is not inside the floor inset by `levels.closeInset` is moved to the entry (`StageFlow.MustEnter`); for `levels.closeGraceSeconds` afterwards one outside the floor rectangle itself is moved (`StageFlow.Strayed`); each fighter at most once per close. A countdown that ends with nobody standing closes nothing: the camp re-arms (action `rearm`).* | The brief, point 4. |
 | 10 | **Only the next camp can trigger,** and the layout leaves no ground beside a camp. | A player with a double jump and a dash can leave the road. |
-| 11 | **The crowd's floor is set at the trigger, with no body alive:** `CrowdService.Clear()`, `VitalsService.ClearThreats()`, then `CrowdService.SetBounds(the camp floor's top centre, its half extents)`. Camps may stand at different heights. `SetBounds` now refuses (one warn, returns false) while a body lives. | The server supports it as built. The guard makes the one unsafe use impossible. |
+| 11 | **The crowd's floor is set at the trigger, with no body alive:** `CrowdService.Clear()`, `VitalsService.ClearThreats()`, then `CrowdService.SetBounds(the camp floor's top centre, its half extents)`. Camps may stand at different heights. `SetBounds` now refuses (one warn, returns false) while a body lives. *Fix round (2026-10-13): the half height is `levels.crowdCeiling` (200; the range's arena reads the same key). When `SetBounds` refuses, `WaveService` warns and ends the run `abandoned`.* | The server supports it as built. The guard makes the one unsafe use impossible. |
 | 12 | **The wire origin is the world origin, for good.** `CrowdService` encodes every snapshot against a constant `WIRE_ORIGIN = Vector3.zero`; `SetBounds` no longer moves it. Every camp of every level lies within 1,000 studs of the world origin on each axis (a gate). The client keeps decoding against `Vector3.zero` and learns the floor from `RunState.floor` (ruling 30). | An origin that reaches the client late would misplace every body by the distance between two camps. A late floor only draws a tell at the old height for a moment. In the range the bytes are today's. |
 | 13 | **Spawns are relative to the camp.** A burst's rows step toward the camp's centre (`StageFlow.BurstPoint`); `boss.at` is `{ x, z }` from the camp's centre (`StageFlow.BossPoint`); the anchor of every spawn is the camp's centre. | The arena's centre is the world origin, so its numbers do not change. |
 | 14 | **Waves inside a camp** run as in P5 (rulings 15–17): bursts at the camp's spawn points round-robin, `Combat.BurstSeconds`, `maxAlive`, the boss first at its own spot with the party HP factor, the phase `boss` while it lives. Between two waves of one camp comes the stage's `breatherSeconds`, or the director's breather when the stage has none. Waves merge only in a stage with `merge`, never into or out of a boss wave. | The arena keeps the director; a short camp does not need it. |
 | 15 | **Only a checkpoint pays.** A camp's clear banks the pool (`flushPool`, the damage split, the Mentor bonus, as in P5). A stage with `bankEachWave` also banks at every wave clear. **Whatever ends the run banks nothing:** a down, a wipe, an abandon and the run cap drop the pool that was not banked. | Ben: "you keep what the checkpoints banked". **This changes the arena:** in P5 a failed run still paid for the wave in progress. The arena banks at every wave clear, so it loses at most one wave's kills, and one rule serves every level. |
-| 16 | **A camp's clear,** in this order: threats cleared; the pool banked; the downed stood up; waiting members released to the safe point; the gates opened and the barrier off; then the next stage, or the end of the run. The last stage of every level is a camp, and clearing it ends the run `cleared`. | The brief, point 4. The stand-up before a cleared end is P5's second-review ruling 5. |
+| 16 | **A camp's clear,** in this order: threats cleared; the pool banked; the downed stood up; waiting members released to the safe point; the gates opened and the barrier off; then the next stage, or the end of the run. The last stage of every level is a camp, and clearing it ends the run `cleared`. *Fix round (2026-10-13): who was fighting is noted (`State.fought`) before the release. The release does not happen when the same batch ends the run: that `boundary` carries `release = false`, so nobody waiting is pulled into a level that is about to go.* | The brief, point 4. The stand-up before a cleared end is P5's second-review ruling 5. |
 | 17 | **Going down.** P5 ruling 18 is unchanged: `VitalsService.RunLost`; solo, the first down ends the run; `down` when a fighter is down, `wipe` when all died outright. **A clear field wins,** now decided in `StageFlow`: the fallen do not lose a run whose field is clear (nothing queued, no boss to place, nothing alive). On the road the field is always clear, so a death there costs a respawn, not the run. | The harness can now prove the rule. A breather behaves this way today. |
-| 18 | **Where a body goes.** One function moves a body: `ArenaService.MoveMember`, which zeroes the root's velocity and calls the moved hook (`WeaponService.ForgetMotion`). One rule says where (`StageFlow.SafePoint`): the level's start; the entry of the camp that is counting down, live or between waves; the exit of the last cleared camp. A character added during `wave` or `boss` waits in the lobby camp (`waiting`) until the next boundary; one added in any other live phase goes to the safe point; in `lobby` and `summary` to the lobby camp. | P5's wave-boundary rule, with the pad replaced by the lobby camp. |
-| 19 | **Rescue.** A human whose root is under the kill height or outside the box is put at the safe point with the get-up i-frames: never a down, no cost, in every phase. While a camp is closed the box is its floor rectangle plus `player.rescue.outside` and the kill height is its floor less `player.rescue.below` (P5's rule, per camp). Otherwise the box is the level's bounds plus `levels.boxMargin` and the kill height is the layout's `killY`. A waiting member, and everyone in `lobby`, is judged against the lobby's bounds and put on a lobby point. | The brief, point 6. |
-| 20 | **Every run ends in a summary, then the lobby.** Reasons: `cleared`, `down`, `wipe`, `abandoned`, `runCap`. The summary lasts `coop.returnGroupSeconds`. Then every member is stood up and moved to the lobby camp, the level is removed, and the phase is `lobby`. The server sends nobody to the city. `ReturnService.SendHomeGroup` is no longer called. | The brief, point 1. The key already means "summary shown this long". |
+| 18 | **Where a body goes.** One function moves a body: `ArenaService.MoveMember`, which zeroes the root's velocity and calls the moved hook (`WeaponService.ForgetMotion`). One rule says where (`StageFlow.SafePoint`): the level's start; the entry of the camp that is counting down, live or between waves; the exit of the last cleared camp. A character added during `wave` or `boss` waits in the lobby camp (`waiting`) until the next boundary; one added in any other live phase goes to the safe point; in `lobby` and `summary` to the lobby camp. *Fix round (2026-10-13): `MoveMember` also tells the owning client. It sets on the character `Placed` (Vector3, the feet point; the root goes 4 studs above it), then `PlacedSeq` (an integer, +1 per move, counted per userId for the server's life).* | P5's wave-boundary rule, with the pad replaced by the lobby camp. |
+| 19 | **Rescue.** A human whose root is under the kill height or outside the box is put at the safe point with the get-up i-frames: never a down, no cost, in every phase. While a camp is closed the box is its floor rectangle plus `player.rescue.outside` and the kill height is its floor less `player.rescue.below` (P5's rule, per camp). Otherwise the box is the level's bounds plus `levels.boxMargin` and the kill height is the layout's `killY`. A waiting member, and everyone in `lobby`, is judged against the lobby's bounds and put on a lobby point. *Fix round (2026-10-13), Major 1: decided by `StageFlow.Rescue`. Once the run is over (its summary), nobody is put INTO the level: a body in the lobby's box stays; one still inside the level's box stays until the return; one in neither (a fall) goes to the lobby.* | The brief, point 6. |
+| 20 | **Every run ends in a summary, then the lobby.** Reasons: `cleared`, `down`, `wipe`, `abandoned`, `runCap`. The summary lasts `coop.returnGroupSeconds`. Then every member is stood up and moved to the lobby camp, the level is removed, and the phase is `lobby`. The server sends nobody to the city. `ReturnService.SendHomeGroup` is no longer called. *Fix round (2026-10-13), R5: every human is healed on the return (`VitalsService.StandUp`: full health). A body already in the lobby's box stays where it stands.* | The brief, point 1. The key already means "summary shown this long". |
 | 21 | **`RequestAbandon()`.** In a live run, from any member when the run has one human, else from the leader: the run ends `abandoned` with what was banked. In `summary`, from the leader or a solo player: the wait ends and the party is in the lobby at once. *(the second meaning is the draft's proposal)* | The brief, point 1. The second meaning lets Ben start the next run with one key. |
 | 22 | **`RequestLeave`** goes to the city alone, as today. It is ignored from a fighting member of a live run (the client shows Abandon there) and in a proving build. | The brief, point 1. In Studio the trip home kicks. |
 | 23 | **Difficulty.** A level has `normal`, `hard` and `brutal`, each with `hpScale`, `damageScale`, `plateScale`, `countMult`, `rewardMult` and `recommendedTier` (shown, never checked). A wave group may carry `minDifficulty`. `rewardMult` multiplies every kill's cash and materials and the boss's Valor. The scales are set once per run (`CrowdService.SetScales`, `VitalsService.SetMission`). | The brief, point 7. They are P5's mission scales, chosen by the player. |
 | 24 | **Overdrive is inert.** No run reads the hint's Overdrive flag or `Combat.json overdrive`. `Combat.CrowdWave` keeps its `overdrive` argument for the simulator's old assertions. | The brief, point 7. It returns as a fourth difficulty after L4. |
-| 25 | **Progress is session memory.** `WaveService` keeps `{ [userId]: { [levelId]: { [difficulty]: true } } }` for the life of the server. A `cleared` run gives the star of its difficulty to every human who was fighting at the end. Each client gets its own stars in the `MapState` event. Which nodes are open is computed on the server from the **leader's** stars. **No `ProfileSchema` change.** | The brief, point 8. Host-gated, as C2 ruled for missions. Stars are per player and change once a run, so they are not in the 4 Hz `RunState` that every member shares. |
+| 25 | **Progress is session memory.** `WaveService` keeps `{ [userId]: { [levelId]: { [difficulty]: true } } }` for the life of the server. A `cleared` run gives the star of its difficulty to every human who was fighting at the end. *Fix round (2026-10-13), R5: the star goes to the humans fighting before the run's last boundary (`State.fought`, copied at every clear; `StageFlow.EarnsStar`). The boundary itself lets in whoever waited, so "fighting at the end" would be everyone.* Each client gets its own stars in the `MapState` event. Which nodes are open is computed on the server from the **leader's** stars. **No `ProfileSchema` change.** | The brief, point 8. Host-gated, as C2 ruled for missions. Stars are per player and change once a run, so they are not in the 4 Hz `RunState` that every member shares. |
 | 26 | **What the profile gets,** through the paths that exist: cash, the level's material, Valor, `stats.kills`, `stats.wavesCleared`, `stats.cashFromCombat`. A mission record (`combat.missions[id]`) is written only by a level that names a `mission` (the arena writes `village`, as before). Forest Road writes none. *(draft's proposal)* | A `forestRoad` key written now would be a profile shape nobody designed. |
 | 27 | **The arena's numbers stay where they are.** `Levels/0_RaiderArena.json` names `"mission": "village"` and `Layouts/Levels/RaiderArena.json` names `"arena": "Village"`. Two pure adapters turn them into a level: `StageFlow.Resolve` and `LevelGeometry.FromArena`. Nothing is copied or moved. *(draft's proposal)* | `sim_combat.py` 15–18 and the Village checks of `sim_range.py` keep guarding the arena unchanged. Both adapters go in L4 with the `Missions` folder. |
 | 28 | **What is on the map.** `forestRoad` and `raiderArena` are open from the start. `castle`, `underworld`, `planet` and `dream` are locked with reason `notBuilt` ("Not built yet"), which wins over any other reason. A node is built when a level file with its `level` id exists. | The brief, point 9. Session stars cannot gate the arena for a Play-and-one-click look. |
-| 29 | **Grey blocks.** `LevelService` builds the lobby camp at boot and the picked level at its start, from a layout, as anchored Parts coloured from `Expeditions.json looks`: no mesh, no upload. Boxes are axis-aligned. A level holds at most `levels.maxParts` Parts. `Build` and `Clear` never yield. The build runs in the remote's own thread; the removal is deferred out of the tick. | The brief, points 12 and 16. |
+| 29 | **Grey blocks.** `LevelService` builds the lobby camp at boot and the picked level at its start, from a layout, as anchored Parts coloured from `Expeditions.json looks`: no mesh, no upload. Boxes are axis-aligned. A level holds at most `levels.maxParts` Parts. `Build` and `Clear` never yield. The build runs in the remote's own thread; the removal is deferred out of the tick. *Fix round (2026-10-13): camp floors, and every ground block with nothing under it, are `levels.floorThickness` (4) deep, top unchanged. `Pieces` and the construction run behind a pcall: on a failure what was built is cleared and `Build` returns false with one warn. The start clears any leftover level before it builds.* | The brief, points 12 and 16. |
 | 30 | **The client is told the floor.** `RunState.floor` (`x`, `y`, `z`, `hx`, `hz`) is the crowd's floor from the trigger until the camp is cleared, nil otherwise. `CrowdRenderer.SetFloor` takes it. The RunState that first carries it is sent at the trigger, `levels.gateSeconds` (at least 1 s, a gate) before the first body. | See "What the code says", the wire origin. |
 | 31 | **Layouts are JSON:** `src/shared/Layouts/Levels/<Name>.json`, world coordinates. *(draft's proposal)* | `check_levels.py` and `sim_range.py` read camps, spawn points and the route without parsing Luau. The Village arena needs a regular expression on one line today. |
 | 32 | **Studio.** `build/proving.rbxl` boots into the lobby with the map open on `debug.provingLevel` at `debug.provingDifficulty`. With `debug.provingAutoStart` (false) the server starts that level `debug.provingStartDelay` seconds after the lobby holds a human, and again after every return. `provingMission` and `provingStartWave` are removed. `provingBoots` `"range"` boots the bench exactly as at P5. | The brief, point 11. |
-| 33 | **Studio keys,** all through `RequestDebug`: **N** = `skip` `"stage"`, **B** = `skip` `"boss"`, **G** = `gear` `"next"`. A skip banks nothing and credits nothing skipped (P5 ruling 25). The `wave` lever stays and forces a wave of the live camp. | The brief, point 11. |
+| 33 | **Studio keys,** all through `RequestDebug`: **N** = `skip` `"stage"`, **B** = `skip` `"boss"`, **G** = `gear` `"next"`. A skip banks nothing and credits nothing skipped (P5 ruling 25). The `wave` lever stays and forces a wave of the live camp. *Fix round (2026-10-13), R5: a skip's `drop` also empties the unbanked pool, the kill counts, the damage tally and the boss clears, so a later bank pays nothing that came before the skip. The `wave` lever is `StageFlow.Force`.* | The brief, point 11. |
 | 34 | **A Studio-only session gear override.** `WeaponService.SetGearOverride` is read first by `gearOf`, is never written to a profile and does nothing outside Studio. In a proving build `setGear` and `gear` set it; elsewhere in Studio `setGear` writes the profile as before. | `provingGear` wins today, so the lever is inert exactly where Ben plays. |
 | 35 | **Hard rules, unchanged:** nothing in a Heartbeat path yields; the server owns all state; the client sends intents, never amounts; every remote is validated and rate-limited; every constant is in Config JSON; `src/shared/Economy.luau` is untouched and `sim_economy.py --check` stays green unchanged; no sound; no attack button. | |
 
@@ -9927,6 +9933,14 @@ ArenaService.MarkRunStarted(); runEndsAt = now + level.runCapSeconds
 broadcast; ArenaService.PublishRun()                      -- closed (ruling 6)
 ```
 
+*Fix round (2026-10-13), Major 5:* reading the files (`Resolve`, the layout, `Validate`) and
+`Plan` each run behind a pcall. A missing or mistyped key is one of `Validate`'s problems, not a
+throw. Each problem is warned (one line each), a throw is one warn, and the leader gets
+`unavailable`. The calls are now `StageFlow.Resolve(file, mission, runCapSeconds,
+map.difficulties[1])`, `StageFlow.Validate(level, layout, kinds, ranks, levels)` and
+`LevelGeometry.Bounds(layout, levels.floorThickness)`. `LevelService.Clear()` comes right before
+`LevelService.Build`.
+
 ### A run (`WaveService.tick`, every Heartbeat, never yields)
 
 ```
@@ -9939,6 +9953,19 @@ step "fight": spawnBoss(); spawnBursts()                                        
 actions = StageFlow.Advance(plan, flow, input, levels); execute each, in order
 phase = StageFlow.Phase(flow, a boss is alive or still to place)
 ```
+
+*Fix round (2026-10-13): the tick is now, in order:*
+1. *rescue, by `StageFlow.Rescue`;*
+2. *lobby; summary;*
+3. *the net: `flow.step == "over"` while the phase is still live → `EndRun(flow.ended)`;*
+4. *the tempo while `StageFlow.Directs` (fight AND breather, as P5 ran it);*
+5. *the release of waiting members;*
+6. *the spawns in step `fight`;*
+7. *the close's grace: while `StageFlow.StillClosing`, fighters `Strayed` off the floor are moved to the entry;*
+8. *`Advance`.*
+
+*`input` gains `standing` (per root: alive and not down; nil = all) and `fighters` (the userIds
+of the humans in the fight).*
 
 `input`, built once per tick: `now`; `roots` (the fighting members' roots); `fieldClear`;
 `spawningDone` (nothing queued, no boss to place); `mergeOk` (`Combat.ShouldMerge` on this
@@ -9963,6 +9990,15 @@ frame's tempo and dead fraction); `breatherSeconds` (`Combat.BreatherSeconds`); 
 
 `firstWave` is 1 unless a boss skip set it.
 
+*Fix round (2026-10-13):*
+- *Row `gate`: when `now >= gateAt` and `input.fallen` is set (nobody standing, for example a
+  solo reset in the countdown), the action is `rearm` and the next step `armed`. Nothing closes
+  and nothing spawns; the camp triggers again when a standing fighter walks in, and a boss
+  skip's `firstWave` is kept.*
+- *Rows with a clear: `State.fought` is copied from `input.fighters` before `boundary`.*
+- *`boundary` carries `release`. It is false when the same batch ends the run.*
+- *`close` sets `State.closedAt`; the grace is judged from it.*
+
 **What `WaveService` does for each action.**
 
 | Action | Execution |
@@ -9980,17 +10016,34 @@ frame's tempo and dead fraction); `breatherSeconds` (`Combat.BreatherSeconds`); 
 | `move` (skips only) | Every fighter is moved to the named camp's entry. |
 | `end` | `WaveService.EndRun(reason)`. |
 
+*Fix round (2026-10-13):*
+- *`gate`: when `SetBounds` refuses, warn and end the run `abandoned`.*
+- *`rearm` (new): `run.floor = nil`.*
+- *`close`: the move comes first, then the gates and the wall turn solid. The fighters moved are
+  those `StageFlow.MustEnter` names (not inside the floor inset by `closeInset`), not "outside
+  `zone.rect`". Each fighter is moved at most once per close, its grace included.*
+- *`boundary`: `ReleaseWaiting` only when `release` is true.*
+- *`drop`: also `dropPool()`: the pool, `killsByUser`, `damageTally` and `bossClearsThisFlush`
+  are emptied.*
+- *`open`: the camp's banner. "Progress saved" is the HUD's notice alone (one message per camp
+  clear).*
+
 **`WaveService.EndRun(reason)`:** the unbanked pool, kill counts and damage tally are dropped
 (ruling 15); the field is cleared; on `down` and `wipe` the fallen are marked as died; on
 `cleared` each fighting human gets the star (`StageFlow.Award`); each member's `RunResult` is
 stored (`ArenaService.SetResults`); phase `summary`, `returnAt = now +
 coop.returnGroupSeconds`; `ArenaService.BroadcastSummary`. The level stays built meanwhile.
+*Fix round (2026-10-13): the star goes by `StageFlow.EarnsStar(flow, userId)` (fighting before
+the last boundary), then `Award`. The signature is `EndRun(asked)`: the reason on the card is
+`flow.ended` when StageFlow ended the run.*
 
 **`backToLobby`** (deferred from the tick, or at once on the leader's `RequestAbandon`): the
 downed stood up; every human member `waiting = false` and moved to `LevelService.LobbyPoint()`;
 `LevelService.Clear()`; crowd, threats and projectiles cleared; `run = fresh` (phase `lobby`);
 `ArenaService.SetLevel(nil)`; `VitalsService.SetMission(neutral rules)`; RunState and MapState
-to everyone; `ArenaService.PublishRun()` (joinable again).
+to everyone; `ArenaService.PublishRun()` (joinable again). *Fix round (2026-10-13), Minor 6:
+every human member is healed (`StandUp`: full health, the downed stood up). Only a body outside
+the lobby's box is moved to `LobbyPoint()`; one already there stays.*
 
 **The last human left:** `ArenaService`'s reset hook calls `WaveService.Reset`, which also
 calls `LevelService.Clear()`. The stars are kept; they are keyed by userId.
@@ -10003,6 +10056,10 @@ calls `LevelService.Clear()`. The stars are kept; they are keyed by userId.
   `wave` that one (P5's `ForceWave`). In a later camp → the stages between are skipped
   (`drop`, `open`), `move` to that camp, `gate`, with `firstWave` that wave. None left →
   nothing.
+- *Fix round (2026-10-13): a stage skip in a camp is `drop`, `boundary` (with `release`, false
+  when it ends the run), then the camp counts as cleared. `fought` is the `fighters` passed to
+  `Skip`. A boss skip from a countdown closes the gates at once on the boss wave. `drop`
+  empties the unbanked pool (R5).*
 
 ## Server modules
 
@@ -10040,6 +10097,25 @@ LevelGeometry.BarrierBoxes(camp, thickness: number, barrier: Types.LevelBarrier)
 LevelGeometry.Bounds(layout: Types.LevelLayout): Bounds            -- blocks, camps, fences, secrets
 ```
 
+*Fix round (2026-10-13). The API as it now stands:*
+
+```luau
+LevelGeometry.FloorBox(camp, depth: number): Box                       -- top at camp.y, `depth` deep (levels.floorThickness)
+LevelGeometry.BarrierBoxes(camp, thickness, barrier): { Box }
+	-- Major 6: the inner face is the FLOOR'S EDGE (not the fence's outer face); max(barrier.thickness,
+	-- fence thickness) deep outward; from the floor's top to barrier.height; the north and south boxes
+	-- run past the west and east ones (corners closed); across the gate gaps. Nobody stands on a fence
+	-- in a closed camp.
+LevelGeometry.BlockBoxes(layout, floorThickness: number?): { Box }   -- new: a solid ground block thinner than
+	-- floorThickness and held up by nothing is made that deep downward, its top unchanged
+LevelGeometry.Bounds(layout, floorThickness: number?): Bounds          -- the box as built (BlockBoxes, deep floors)
+LevelGeometry.Pieces(layout, sizes: Sizes, maxParts: number): ({ Piece }?, string?)
+	-- not in the list above before: every Part to build; nil and a reason for a size of 0 or less, a
+	-- position that is not a number, a camp with gates and no fence, no floor depth, over maxParts
+export type Sizes = { fence: number, floor: number?, checkpoint: Size?, sign: Size? }   -- `floor` is new
+LevelGeometry.ObstacleBoxes, CheckpointBox, SecretBox, SignBox, BareLobby    -- helpers, unchanged
+```
+
 **`LevelService.luau` (new).** Owns every Instance of the lobby and of the level. It moves no
 body and knows nothing of the run.
 
@@ -10056,7 +10132,10 @@ LevelService.SetCamp(zoneId: string, state: string): ()   -- "open" | "closed" |
 ```
 
 - **`Build`** returns false with one warn when a level is already built, when the layout
-  holds more than `levels.maxParts` Parts, or when a camp has gates and no fence. It builds:
+  holds more than `levels.maxParts` Parts, or when a camp has gates and no fence. *Fix round
+  (2026-10-13): also for any problem `Pieces` names. `Pieces` and the construction run in a
+  pcall: a look with a bad colour or material clears what was built, then false and one warn.*
+  It builds:
   - every `blocks` entry as a Part of its `look` (`collide = false`: `CanCollide`, `CanTouch`
     and `CanQuery` false; `text`: a SurfaceGui on its four side faces, `expeditions.sign`);
   - per camp: the floor (`camp.floor`, else look `campFloor`), the fence (`camp.fence`'s own
@@ -10076,6 +10155,10 @@ LevelService.SetCamp(zoneId: string, state: string): ()   -- "open" | "closed" |
   barrier 80 / 8); `BarrierBoxes` (inner faces on the fence's outer face, corners closed,
   thickness, height); `FenceBoxes` and `GateBoxes` (the fence is cut exactly where a gate
   stands and the gate fills the cut); `Bounds` (a block outside every camp widens it).
+  *Fix round (2026-10-13): the inner faces are on the floor's edge. Non-square cases were added
+  (a camp of 100 × 94 off the origin at height 8) for `FloorBox`, `FenceBoxes`, `GateBoxes` on
+  each side, `BarrierBoxes` and `Bounds`, with one mutation per axis mix-up. `Pieces` refusing a
+  size of 0 or less has a test.*
 
 ### B — the run
 
@@ -10119,6 +10202,40 @@ StageFlow.MapState(map, built, leader: Stars, own: Stars, leaderUserId: number):
 StageFlow.Award(stars: Stars, levelId: string, difficulty: string): boolean   -- true when the star is new
 ```
 
+*Fix round (2026-10-13). What changed in the block above, as the code now stands:*
+
+```luau
+-- types
+Zone.inner: Rect          -- the floor inset by levels.closeInset (MustEnter); not listed before
+Zone.trigger: Rect        -- now the floor GROWN by levels.fenceThickness (was: inset by triggerInset)
+State.settled: number     -- the last wave whose kills are banked or skipped; Action.count reads it (not listed before)
+State.closedAt: number    -- the clock the live camp's gates closed at (StillClosing)
+State.fought: { number }  -- userIds fighting when the last boundary was decided (EarnsStar)
+Input.standing: { boolean }?   -- per root: alive and not down; nil = every one. Only a standing body triggers
+Input.fighters: { number }     -- the userIds of the humans in the fight
+Action.kind               -- gains "rearm"
+Action.release: boolean?  -- on `boundary`: false when the same batch ends the run
+
+-- signatures that changed
+StageFlow.Resolve(file, mission, runCapSeconds: number, firstDifficulty: string?): Types.LevelConfig?
+	-- the arena's one difficulty is the map's first (Expeditions.json difficulties[1]); the
+	-- ARENA_DIFFICULTY constant is gone
+StageFlow.Validate(level, layout, kinds, ranks, rules: Types.CombatLevelsConfig): { string }
+StageFlow.Plan(level, layout, difficulty, rules, bounds): (Plan?, string?)   -- the reason when nil
+StageFlow.Skip(plan, state, which, now, rules, fighters: { number }?): { Action }
+
+-- new
+StageFlow.Force(plan, state, wave: number): { Action }       -- the Studio `wave` lever (not listed before)
+StageFlow.Directs(state): boolean                            -- the director's tempo runs: fight and breather
+StageFlow.StillClosing(state, now, rules): boolean           -- within closeGraceSeconds of the close
+StageFlow.MustEnter(zone, position): boolean                 -- the close: not inside zone.inner (not listed before)
+StageFlow.Strayed(zone, position): boolean                   -- the grace: not inside zone.rect
+StageFlow.OutOfBox(bounds, killY, position, margin): boolean -- not listed before; also judges the lobby
+StageFlow.Rescue(plan?, state?, waiting, position, rescue, boxMargin, lobby: Bounds, lobbyKillY): string?
+	-- "level" (the safe point) | "lobby" | nil (stays); see ruling 19's note
+StageFlow.EarnsStar(state, userId): boolean                  -- ended "cleared" and userId in state.fought
+```
+
 - **`Resolve`:** a file with no `mission` is returned as it stands (nil when `stages`,
   `difficulties` or `crowd` is missing). With `mission` (ruling 27) it needs that mission's
   `crowd` block and returns: the mission's `material` and `targetMinutes`; `runCapSeconds` =
@@ -10134,8 +10251,25 @@ StageFlow.Award(stars: Stars, levelId: string, difficulty: string): boolean   --
   `eliteKind` names a kind `ProvingGrounds.json` lacks or `rewards` does not price; a
   `minDifficulty` that is no difficulty; a camp beyond 1,000 studs of the origin; `killY`
   under −450.
+  *Fix round (2026-10-13), Majors 3 and 5 and R6. Validate also names:*
+  - *every missing or mistyped key it or the run reads: the `levels` numbers, the level's
+    `id`, `name`, `material`, the crowd numbers, every reward's `cash` and `materials`, every
+    difficulty's scales, a camp's `x y z sx sz`, `entry`, `exit`, spawn points, the layout's
+    `killY`, `start` and `camps`;*
+  - *zero or empty values: `maxAlive` not a whole number of at least 1 (level or stage), a
+    `burst` under 1, a camp with `targetWaveSeconds` 0 or absent, a negative
+    `breatherSeconds`, a camp with no wave, a wave with no groups, a group without its kind or
+    count, a boss without its kind, place or valor;*
+  - *"it has no stage", a stage with no name;*
+  - *the wire check on X, Z and Y: `camp.y + levels.crowdCeiling` must stay within 1,000.*
+  *A block or obstacle of size 0 or less is refused by `LevelGeometry.Pieces`.
+  `check_levels.py` refuses the same cases.*
 - **`Plan`:** nil for an unknown difficulty. A zone's `trigger` is its floor inset by
-  `rules.triggerInset`. A stage's `maxAlive` is its own, else the level's.
+  `rules.triggerInset`. A stage's `maxAlive` is its own, else the level's. *Fix round
+  (2026-10-13): the trigger is the floor grown by `rules.fenceThickness`; `inner` is the floor
+  inset by `rules.closeInset`. `Plan` also returns nil, with a reason, for a zone the layout
+  lacks and for an entry within `closeInset` of its floor's edge. A stage with no name gets
+  `""`.*
 - **`SafePoint`:** steps `gate`, `fight`, `breather` → the current zone's `entry`; else the
   `exit` of the stage `lastCleared`; else `plan.start`. **`IsOut`:** ruling 19.
 - **`BurstPoint`:** P5's `gridPoint`, its rows stepping toward the zone's centre.
@@ -10165,6 +10299,12 @@ WaveService.SpawnOne(kind: string): ()                     -- at the live camp's
 WaveService.KillAll(): ()
 WaveService.Reset(): ()
 ```
+
+*Fix round (2026-10-13):*
+- *`GetPhase` is removed; it had no caller.*
+- *`EndRun(asked: string)`.*
+- *`WaveService.SendMap(player)` (MapState to one member, sent on `RequestSnapshot`) exists
+  since the build and was not listed here.*
 
 - Removed: `Start`, `GetWave`, `tickProvingLobby`, `restartProving`, the group return.
 - `onCrowdKilled` pays `Combat.CampReward(level.crowd.rewards, info.kind, spec)`. The mission
@@ -10197,7 +10337,16 @@ ArenaService.BuildRunState(phase: Types.RunPhase, summary: Types.RunSummary?, re
   `BarrierGroups`). `BuildProvingArena` and `ProvingSpawn` keep their bodies.
 - `MoveMember` adds the existing `SPAWN_CLEARANCE` above the feet point, zeroes
   `AssemblyLinearVelocity`, pivots and calls the moved hook. `placeBody` asks the placer,
-  then calls `MoveMember`.
+  then calls `MoveMember`. *Fix round (2026-10-13):*
+  - *`MoveMember` then sets the character attributes `Placed` (Vector3, the feet point), then
+    `PlacedSeq` (integer, +1 per move, per userId, kept for the server's life).*
+  - *A new character joins the barrier's collision group before anything else, even with no
+    Humanoid yet.*
+  - *`ArenaService.GetPhase` is removed.*
+  - *`BuildProvingArena`'s half height reads `levels.crowdCeiling`; the `BOUNDS_HALF_HEIGHT`
+    constant is gone.*
+  - *A session nobody departed for prints one plain line (nothing in a proving build) instead
+    of the "no verified ticket" warn.*
 - `RunFields` and `BuildRunState` carry the RunState additions of "Types". `inRun` is true in
   the five live phases. In `summary` each member's RunState carries their own `result`; a
   member with none (admitted during the summary) gets no card.
@@ -10275,7 +10424,27 @@ true` only.
   ten waves `CampWave` on it equals `CrowdWave` on the mission; `minDifficulty` fields and
   drops a group; `countMult` rounds as stated.
 - **Plan and Validate:** the trigger is the floor inset; an unknown difficulty or zone; every
-  `Validate` rule fires on a layout broken for it, and none on a good one.
+  `Validate` rule fires on a layout broken for it, and none on a good one. *Fix round
+  (2026-10-13): the trigger is the fenced rectangle (a root in the edge strip and on the fence
+  line triggers, one outside the fence does not).*
+
+*Fix round (2026-10-13), cases added to `tests_l1.luau`:*
+- *`CampWave`, `CampReward` and `BurstSeconds` against numbers worked by hand from Forest
+  Road's file, at each difficulty and party sizes 1 and 4 (Major 4);*
+- *every refusal of R6, the wire check on X and on Y, a barrier of height 0, "it has no
+  stage";*
+- *"cap before the fallen" with a field that is not clear;*
+- *a boss skip from a non-boss camp's countdown;*
+- *the full-chunk `CrowdCodec.Encode`;*
+- *the rescue after a run (`Rescue`), the re-arm, the grace, the star (`EarnsStar`), the
+  dropped pool, the tempo through a breather (`Directs`);*
+- *"the real files": the shipped level files and layouts through `Resolve`, `Validate`, `Plan`
+  and `Pieces`;*
+- *a seeded fuzz of 2,000 runs mixing `Advance`, `Skip`, `Force` and `Finish`. Invariants: no
+  gate with a body alive or queued; no bank in a losing batch; `end` always last; every run
+  ends; `cleared` equals the camp count without skips.*
+*The bare `L1.find(...).reason` reads are guarded, so a mutant fails a check instead of
+stopping the bundle.*
 - **A three-camp walk-through:** nothing triggers from outside the rectangle, from above
   `triggerHeight`, or in a camp that is not the next; the countdown lasts exactly
   `gateSeconds`; `close` and `wave` come together; no clear while a body is queued, a boss is
@@ -10307,7 +10476,11 @@ clear field; an end that banks; a skip that banks; `SafePoint` of a live camp is
 that was not played; the arena adapter without `bankEachWave`; burst rows stepping outward;
 `minDifficulty` ignored; the wire origin following the bounds; `SetBounds` accepted with a
 body alive; and from A: the barrier's corners open, its inner face off the fence, a gate not
-cut from the fence.
+cut from the fence. *Fix round (2026-10-13): the barrier mutation is now "the inner face off the
+floor's edge". `mutate.py` holds 417 mutations, 0 not caught: 96 `l1:`, 81 `world:` and 9
+`real:` among them. Six of the `real:` ones are caught only because the Main Camp is 100 × 94,
+and one only because the start is at x −260, so both stay. Fixture cases (a camp that is not
+square, a start off the axes) now catch them too.*
 
 ## Client (ui-engineer)
 
@@ -10342,6 +10515,9 @@ cut from the fence.
     \<name\> first", "\<n\> stars needed". Only the leader's Depart is live; the others read
     "Waiting for \<leader\>". Depart is busy for `levels.startCooldownSeconds` after the map
     opens on a return, and after a press until the phase leaves `lobby` or a refusal arrives.
+    *Fix round (2026-10-13): `MapScreen.Rest(seconds)` (new on the handle) starts that rest. A
+    Depart pressed inside it is HELD: it reads "Departing..." and is sent when the rest ends.
+    Picking another node or difficulty, or closing the map, drops it.*
   - **Phones:** laid out for 667 × 375 landscape, the map on the left and the card on the
     right. Every node, difficulty button and Depart is at least 48 design px (44 physical px
     at `Theme.MIN_SCALE`). Portrait is not laid out (carried from P5).
@@ -10357,6 +10533,13 @@ cut from the fence.
     node, **Up / Down** = difficulty, **Enter** (gamepad A) = Depart. In the lobby **M** =
     map. On the summary card **Enter** = Back to camp. Studio: **N**, **B**, **G** (ruling
     33), with the corner hint `N stage · B boss · G gear`.
+    *Fix round (2026-10-13):*
+    - ***Backspace** pressed twice = Abandon (R7), in every live phase for whoever may abandon,
+      never while typing in chat.*
+    - *A key already down when the map's or the summary's keys are bound is not sunk.*
+    - *With no `MapState` the client sends `RequestSnapshot` again every
+      `Theme.MAP_STATE_RETRY_SECONDS` (2), at most `MAP_STATE_RETRIES` (5) times.*
+    - *Studio's debug tab hides while the map is open (`DebugPanel.SetVisible`).*
   - `MapState` → `MapScreen.SetState`. An `ActionResult` with `action = "startLevel"` and
     `ok = false` → `SetBusy(false)` and a toast: "Only the leader can depart", "Not ready
     yet", "That level is locked", "Can't start that level".
@@ -10381,6 +10564,20 @@ cut from the fence.
     press reads "Abandon? Press again" for `Theme.COMBAT_ABANDON_CONFIRM_SECONDS`). No Ready,
     no Return in a run, no Armory button. `deps.runButtons = false` (a proving build) hides
     only Return.
+    *Fix round (2026-10-13), Major 7:*
+    - *On a PC the cursor is locked in every live phase, so the button could not be clicked.
+      `CombatHud.PressAbandon()` (new on the handle) is the button's own press, bound to
+      **Backspace**. The first press arms it and reads "Press again to abandon" for 3 s; the
+      second sends `RequestAbandon`.*
+    - *On keyboard devices the button names the key (`deps.abandonKey`).
+      `deps.onAbandonArmed` tells the host, which keeps an Alt-freed cursor while armed
+      (`CameraController.KeepAltFree`).*
+    - *On touch the button is hidden while the local player fights in `wave` or `boss` (the
+      lead's ruling); it shows on the road, in a countdown, in a breather, and while waiting
+      or down.*
+    - *The header's difficulty is a chip of its own, and the level name shrinks before it
+      truncates.*
+    - *The material chip is hidden where there is no material (the lobby).*
   - `fighting` covers the five live phases. The old boss frame goes with `RunState.boss`.
 - **`SummaryCard`:** shown only for a RunState that carries `result`.
   - Title: the level's name and difficulty. One line for the reason ("Cleared", "You went
@@ -10395,6 +10592,32 @@ cut from the fence.
 - **`InputController`:** `inPlay()` is true in the five live phases; `IDLE_PHASES` is
   unchanged. **`CameraController`:** no rule changes; `travel` and `gate` lock the cursor like
   a fight.
+  *Fix round (2026-10-13), Minors 2 and 3 of part U: the server's placement signal, read by
+  the client.*
+
+  ```luau
+  CameraController.OnPlaced(handler: (position: Vector3, signalled: boolean, far: boolean) -> ())
+  	-- signalled: the character's PlacedSeq changed; position = its Placed feet point.
+  	-- not signalled: a body the camera only just picked up (a respawn); position = its root.
+  	-- far: more than Theme.COMBAT_CAMERA_SNAP_STUDS (40) from the root last seen, or a 40-stud
+  	-- jump of the root inside COMBAT_PLACED_TIMEOUT_SECONDS; always true for a picked-up body.
+  CameraController.LookToward(position: Vector3, from: Vector3?): boolean   -- turns the view (and the body) on the flat
+  CameraController.KeepAltFree(keep: boolean)                                -- Abandon armed: keep an Alt-freed cursor
+  ```
+
+  - *Every signalled move is settled by `MovementController`: velocity zeroed, movers, slam,
+    knock and dash dropped. This happens once the root is seen within
+    `Theme.COMBAT_PLACED_NEAR_STUDS` (6) of the feet point; the word is dropped after
+    `COMBAT_PLACED_TIMEOUT_SECONDS` (1). An unsignalled pick-up settles at once.*
+  - *Only a FAR move turns the view, toward the next point of the level's route from the
+    feet point (`CombatUIController`, through `LookToward`); in the lobby, toward its centre.
+    The close's short move to the entry leaves the view alone. A newly picked-up body (a
+    respawn) faces along the route too.*
+  - *A root jump of more than 40 studs in a frame only drops the camera's lag now.*
+  - *New `Theme` constants: `COMBAT_PLACED_NEAR_STUDS` 6, `COMBAT_PLACED_TIMEOUT_SECONDS` 1,
+    `COMBAT_LOOK_MIN_STUDS` 1, `COMBAT_FORWARD_NEAR_STUDS` 4, the header chip's sizes,
+    `COMBAT_BANNER_MIN_TEXT` 14, `MAP_STATE_RETRY_SECONDS` 2, `MAP_STATE_RETRIES` 5.
+    `COMBAT_CAMERA_SNAP_STUDS` (40) was already there.*
 - **`CrowdRenderer`:** `CrowdRenderer.SetFloor(center: Vector3?, halfSize: Vector3?)` (nil =
   no camp: height 0, no charge bound). Snapshots are decoded against a constant world
   origin; the tell's height, the threat origin's height and the charge clamp read the floor
@@ -10403,7 +10626,12 @@ cut from the fence.
 - **`CombatFxController`:** the kinds `camp` (a banner: the camp's name on `closed`,
   "\<name\> cleared" on `cleared`) and `notice` (a toast). `wave`, `bossDown` and `mentor` as
   today.
+- *Fix round (2026-10-13): one message per camp clear. The banner reads "\<name\> cleared",
+  and the HUD shows "Progress saved" when `banked` rises. There is no toast, and the banner's
+  title shrinks to its frame.*
 - **`DebugPanel`:** its spawn buttons name the level's rewarded kinds; its wave stepper stays.
+  *Fix round (2026-10-13): `DebugPanel.SetVisible(visible)` (new); the tab hides while the map
+  is open, so it never covers the map in the phone emulator.*
 - `src/client/UI/Theme.luau`: add only (the two constants above and the map's sizes).
 - `py tools/check_compile.py` is in every verify. `bootMission` is one function: keep its
   state in tables.
@@ -10487,6 +10715,11 @@ export type CombatLevelsConfig = {
 	gateSeconds: number, triggerInset: number, triggerHeight: number, startSpacing: number,
 	startCooldownSeconds: number, fenceThickness: number, boxMargin: number, maxParts: number,
 }
+-- Fix round (2026-10-13): CombatLevelsConfig as it now stands in Types.luau.
+--   gateSeconds, triggerBelow (new), triggerHeight, closeGraceSeconds (new), crowdCeiling (new),
+--   floorThickness (new), startSpacing, startCooldownSeconds, fenceThickness, boxMargin, maxParts,
+--   checkpointSize: { number }? and closeInset (both there since the build, not listed here);
+--   triggerInset removed.
 -- CombatConfig gains:        levels: CombatLevelsConfig,
 -- CombatDebugConfig loses:   provingMission, provingStartWave
 -- CombatDebugConfig gains:   provingLevel: string, provingDifficulty: string, provingAutoStart: boolean,
@@ -10545,6 +10778,17 @@ Zeros and empty objects below are the designer's to fill.
 `provingMission` and `provingStartWave` leave the file. `missionAttribute` and
 `overdriveAttribute` stay, unread, until L4. `player.rescue`, `director` and `crowdSkeleton`
 are unchanged.
+
+*Fix round (2026-10-13), as shipped:*
+- *`levels`: `gateSeconds` 3, `triggerBelow` 4, `triggerHeight` 30, `closeInset` 2,
+  `closeGraceSeconds` 0.5, `crowdCeiling` 200, `floorThickness` 4, `startSpacing` 4,
+  `startCooldownSeconds` 2, `fenceThickness` 1, `boxMargin` 40, `maxParts` 600,
+  `checkpointSize` [2, 10, 2]. `triggerInset` is gone.*
+- *`debug.gearPresets` (the G key) are **2 / 1, 4 / 4 and 6 / 6** (R8; were 4 / 3 and
+  6 / 5).*
+- *`coop.returnGroupSeconds` 10.*
+- *`Expeditions.json` also has `sign.size` [6, 4, 6] (there since the build, not listed
+  below).*
 
 **`Expeditions.json` (new):**
 
@@ -10636,6 +10880,28 @@ picture, within these constraints. Each is a gate of `check_levels.py`.
 | `killY` | at least 20 under the lowest block, and above −450 |
 | Parts | at most `levels.maxParts` |
 
+*Fix round (2026-10-13). The table as `check_levels.py` now gates it (123 checks):*
+- *Cover: every standable top inside a camp is at most the lowest ground-shape `height` that
+  camp fields, less a margin (R3, Major 8). Every obstacle is 3.5 tall (they were 5 in A, 7 in
+  B, 12 in C). Fences are 4 (were 5).*
+- *The lookout ledge's top is 34: 26 above the road beside it (was 24). Every "needs the
+  double jump" test gives a single jump a 3-stud step-up allowance: 18 + 3 = 21 must not
+  reach it, and jump + double jump − 4 = 26 is the ceiling.*
+- *`killY` is −13 in Forest Road and −12 in the lobby (both were −40): 8 to 16 under the
+  lowest standable surface, and under every Part's bottom. A fall from the road lasts
+  0.40 s.*
+- *Floors, the creek, the pond and the lobby floor are `levels.floorThickness` (4) deep.*
+- *The three secret signs stand on solid pads of road at their own height (they floated over
+  the void).*
+- *The "wall band" starts at the floor's edge (R2); the cache spur stays clear of it, 2 studs
+  past camp B's wall.*
+- *New refusals: a `Config/Levels` file whose name `Catalog` would not read
+  (`<n>_<Name>.json`); a map node whose `level` names no file, unless it is meant to be
+  unbuilt; `eliteKind` in a level file (the simulator does not mirror the director's
+  elite).*
+- *Kept on purpose, because tests depend on both: the Main Camp is 100 × 94 and the start is at
+  x −260. Forest Road is 73 Parts.*
+
 ## Balance bands (economy-designer; checked by the simulators, written up in `docs/BALANCE.md` "L1")
 
 Measured as in P5: gear melee 2 / ranged 1, no Ascension, Broadsword + Longbow, solo, the
@@ -10688,6 +10954,41 @@ reacting player of `sim_range.py` (policy `mission`).
   a `level` names a level file, and every `from` and `requires.node` names a node;
   `gateSeconds` is at least 1.
 
+*Fix round (2026-10-13), Major 9: the bands must be able to see damage. `docs/BALANCE.md` "L1"
+is the record; in short:*
+- *Hard and Brutal are measured at gear **4 / 4** and **6 / 6** (the presets of R8), not 4 / 3
+  and 6 / 5. `damageScale` became Hard 2.0 and Brutal 3.35, so the worst hit stays under 30%
+  of those bars (27.8%, 28.2%).*
+- *The reacting player takes no hit: his planner tries every step, jump and dash against
+  every threat. He gates only the lengths. At 2 / 1 he clears Hard in about 16 minutes
+  (15.3–15.8) without a hit: skill beats gear.*
+- ***The gate for Hard and Brutal is a player with a human's reaction (0.55 s).***
+  - *At the recommended gear he clears without going down, every seed. That is about
+    6.6 min on Normal, 7.3 on Hard, 7.2 on Brutal.*
+  - *One preset below (Hard at 2 / 1, Brutal at 4 / 4) he goes down, or takes ×1.8 (Hard) or
+    ×1.4 (Brutal) as long as his slowest clear at the recommended gear.*
+  - *The Colossus alone there is not killed inside 135 s (Hard) or 180 s (Brutal).*
+  - *The ×1.4 and 180 s are the designer's numbers for Brutal; the lead accepted them in
+    place of ×1.8 and 200 s, which Brutal's closer presets cannot meet.*
+  - *He is only ever hit by slingers' shots, so his gate measures slingers × `damageScale`.
+    A better human model is owed before L4.*
+- *The player who never dodges: he does not clear at the recommended gear (all three
+  difficulties), and he is down in camp A at 2 / 1 on Hard and on Brutal.*
+- *New bands: "under-gearing never pays better" (cash per minute) and "only a checkpoint pays"
+  (priced per camp from the level file).*
+- *Shipped results:*
+  - *Normal pays 88,200 cash, 155 Timber and 10 Valor; Hard about ×2.5, Brutal about ×5.7.*
+  - *The Colossus takes about 76 s on Normal.*
+  - *The worst hit on Normal is 24.8%.*
+  - *Standing still in camp A, you are down at 9.8 s.*
+- *The Raider Arena runs 9.9 to 12.0 min over twelve seeds, one seed (9.93) under its
+  10-minute floor. The fix round did not change that. P5's "11.5 to 11.8 min" was three
+  seeds; over twelve, P5's own simulator gives 10.1 to 11.8.*
+- *Two assertions that could not fail were removed or rewritten (`sim_range.py`,
+  `sim_combat.py` 19 and 21). The gate's Python is the 64-bit 3.12 that `py
+  tools/sim_range.py` follows from the shebang; the same seed differs by up to 0.08 min on
+  3.14.*
+
 ## Remotes
 
 | Remote | Direction | Payload | Bucket | Server checks |
@@ -10717,6 +11018,11 @@ No intent carries an amount, a position or a reward. `CrowdSnapshot`, `CrowdSpaw
 
 - B applies the Types block before anyone else builds. B registers A's `tests_l1_world.luau`
   and adds A's mutations, which A hands over "for the other owner".
+- *Fix round (2026-10-13), owners added:*
+  - *the economy-designer: the new `tools/check_stage_mirror.py` and its driver
+    `tools/crowd_harness/stage_mirror.luau`;*
+  - *the ui-engineer: `MovementController.luau`, for the settle after a server move only.*
+  - *The per-part lists are in `docs/prompts/l1-fix-round.md`.*
 - If an owner needs a change in a file it does not own, it reports it and the lead routes it.
 - No agent writes git, and none kills a process by image name. Each agent keeps its scratch
   in a subfolder of its own.
@@ -10753,6 +11059,23 @@ No intent carries an amount, a position or a reward. `CrowdSnapshot`, `CrowdSpaw
 `streetplan.py` and `check_mirror.py` are skipped as in P5: Pillow is not installed, and L1
 touches no city file.
 
+*Fix round (2026-10-13):*
+- *Gate 12 is new: `py tools/check_stage_mirror.py`. It runs the real `Combat.luau`,
+  `StageFlow.luau` and `LevelGeometry.luau` under `luau.exe` on the shipped files and compares
+  them with the Python mirrors of `sim_range.py` and `sim_combat.py`: about 5,600 comparisons,
+  exit 1 on any difference. In a worktree it uses the main checkout's `tools/bin/luau.exe`,
+  or `--luau <path>`. It bundles into a temporary folder, so it may run beside the harness.*
+- *`check_levels.py` makes 123 checks.*
+- *`run_harness.py` always ends on one verdict line naming the count and the folder:*
+  - *`HARNESS: PASS (1,292 checks, <folder>)` exits 0;*
+  - *`FAIL (n of N checks, …)` and `FAIL (stopped after N checks, …)` exit 1;*
+  - *`SILENT`, `HUNG` and `REFUSED (another checkout's harness, …)` exit 2. It refuses a root
+    that holds another copy of the harness.*
+- *`mutate.py` refuses another checkout's harness (exit 2). It checks every mutation's text
+  occurs once, then runs the unmutated bundle first (`BASELINE: HARNESS: PASS (…)`). It counts
+  a mutant caught only by a failing check, and ends `MUTATIONS: 417 run, 0 not caught`. It
+  exits 1 on a stale mutation, a failing baseline or anything not caught.*
+
 ## Definition of done (L1)
 
 - Every gate above is green. With `provingBoots: "range"`, every P1–P4 set behaves as at P5:
@@ -10778,6 +11101,11 @@ touches no city file.
   freeze until L4) and `docs/PLAN.md`.
 
 ## Playtest checklist (Ben; about 10 minutes; docs-keeper copies it into PLAYTEST "L1")
+
+*Fix round (2026-10-13): superseded by `docs/PLAYTEST.md` "L1 — Forest Road in grey". There,
+Abandon is Backspace pressed twice; a gateway starts the countdown; the close does not turn
+the view; a reset in a countdown keeps the run; N pays nothing; the lobby heals. Kept below as
+the draft.*
 
 File: `tycoon\build\proving.rbxl`, after "Build all". **You have the new build if** Play puts
 you in a small grey camp with a map on the screen, not in the grassy arena.
@@ -10815,7 +11143,9 @@ missing first.
 - **L2 — secrets and keys:** the three sites made to work; Double Jump as a purchase (free in
   L1, and the main path never needs it); the Flamethrower and the frost weapon; deep water.
   **Check first:** Leap Smash rises 10 studs, and jump 18 + 10 passes the lookout's 20–26
-  band without a double jump.
+  band without a double jump. *Fix round (2026-10-13): the ledge is now 26 above the road, and
+  one jump plus Leap Smash rises 28 (31 with the step-up), so it still opens to Leap Smash. No
+  height fixes both; L2 rules on it.*
 - **L3 — the Armory and the profile:** per-weapon tiers; the profile shape for levels, stars,
   secrets, weapons and abilities, designed once; stars and unlocks from the profile; what
   ties combat to the city (MISSIONS_DESIGN §11); weapon models; from P5's suspended Wave 2:
@@ -10858,3 +11188,180 @@ missing first.
 - **Never measured, said plainly:** a move of several hundred studs inside the place on a
   phone; a 550-stud level's Parts on a phone; jumping the gap on a touch screen; the camera
   at a camp's barrier; the crowd on a floor that is not at height 0.
+
+## Review round and state (2026-10-13)
+
+### Build, review, fix
+
+- **Built** by four engineers: luau-engineer A (the world), luau-engineer B (the run),
+  ui-engineer, economy-designer. Commit `fc43816`.
+- **Reviewed** by four Opus reviewers, one slice each: the run; the world; the client; the
+  data and tests. **0 Critical, 9 Major, 44 Minor** in all. The slice counts were not kept in
+  any file: `docs/prompts/l1-fix-round.md`, the whole fix list with the lead's rulings, is
+  ordered by owner, not by reviewer.
+- **Fixed** in one round from that file. The session limit cut it off once (the partial state
+  is `2e4549a`); fresh engineers finished it from the file.
+- **Fix check** (one reviewer on the fix diff): 0 Critical, 0 Major, 6 Minor, all fixed.
+  Commit `de03e36`.
+
+### The nine Majors
+
+| # | Slice | Finding | Resolved |
+|---|---|---|---|
+| 1 | the run | During the summary the rescue judged everyone by the dead level's box. A body in the lobby (a respawn, a member admitted on the summary, a rejoin) was moved about 340 studs into the level and back. | `StageFlow.Rescue`: once a run is over nobody is put INTO the level. Tested. |
+| 2 | the run | A camp triggered only on its floor inset by 4 studs (`levels.triggerInset`), not on the rectangle its fence encloses: a root on the edge strip or the fence line did not start it. | R1: the whole fenced rectangle triggers. `triggerInset` removed. |
+| 3 | the run | `maxAlive: 0` was taken as given, and the camp never spawned. | R6: `Validate` refuses it, and every other zero or empty value, with a test each. |
+| 4 | data and tests | `CampWave`, `CampReward` and `BurstSeconds` were tested only against their own wrappers. Three mutants survived. | Absolute cases worked by hand (each difficulty, parties of 1 and 4), the three mutations, and the new `check_stage_mirror.py`. |
+| 5 | the run | A missing required key (a camp with no `entry`) threw in the remote's thread. The leader's Depart got no answer. | `Validate` names every missing or mistyped key. Reading and `Plan` run behind a pcall. The answer is `unavailable`. |
+| 6 | the world | The invisible wall's inner face was on the fence's outer face, so a fence top was a perch in a closed camp. | R2: the inner face is the floor's edge. |
+| 7 | the client | Abandon could not be clicked on a PC: the cursor is locked in every live phase. | R7: Backspace pressed twice (`CombatHud.PressAbandon`), named on the button. |
+| 8 | the data | Cover up to 12 tall in the camps was a perch the boss's ground attacks could not reach. | R3: every obstacle 3.5 tall, and a `check_levels.py` gate. |
+| 9 | the data | No band could see damage: the reacting player took no hit, and `damageScale` 0.01, 1.8 and 1.95 gave the same run. | A player with a human's reaction (0.55 s) gates Hard and Brutal (see "Balance bands"). |
+
+### The lead's rulings in the round
+
+- **R1.** A camp triggers on its whole fenced rectangle: the floor grown by
+  `levels.fenceThickness`, edges included, between `levels.triggerBelow` under and
+  `levels.triggerHeight` above its floor. `levels.triggerInset` is removed everywhere.
+- **R2.** The wall's inner face is the floor's edge.
+  - It is `barrier.thickness` deep outward, never thinner than the fence.
+  - It runs from the camp's floor to its height, with closed corners and across the gate gaps.
+  - In a closed camp nobody stands on a fence.
+- **R3.** Every obstacle in a camp is at most 3.5 tall.
+- **R4.** New `levels` keys: `triggerBelow` 4, `crowdCeiling` 200, `closeGraceSeconds` 0.5,
+  `floorThickness` 4.
+- **R5.** A skip pays nothing; only a checkpoint pays; everyone is healed on the return to the
+  lobby; the star goes to those fighting before the last boundary.
+- **R6.** Zero and empty mean the same on both sides. `maxAlive` is a whole number of at least
+  1 wherever it appears. A camp with no waves, a `burst` of 0, a `targetWaveSeconds` of 0, and
+  a block or obstacle of size 0 or less are refused by `Validate` / `Pieces` and by
+  `check_levels.py` alike.
+- **R7.** Abandon's key is Backspace, pressed twice. On touch the button is hidden while the
+  local player fights in `wave` or `boss` (the lead's ruling from the build, kept).
+- **R8.** The Studio gear presets (G) are 2 / 1, 4 / 4 and 6 / 6.
+- **R9.** A countdown that ends with nobody standing re-arms the camp, so a solo reset there
+  keeps the run.
+- **R10.** The close is judged again for `levels.closeGraceSeconds`, because the server's copy
+  of each body lags.
+  - Grace moves only a fighter off the floor rectangle itself (`Strayed`), not one inside the
+    `closeInset` strip.
+  - Each fighter is moved at most once per close.
+- **R11.** The director's tempo runs through a breather again (`StageFlow.Directs`), as in P5.
+  It moved no shipped number: no shipped file names an `eliteKind`, the one reader of the value
+  a breather leaves behind.
+- **R12.** The "clearly beyond the gear below" gate.
+  - One preset below, the human goes down OR is much slower: Hard ×1.8, Brutal ×1.4.
+  - The Colossus alone there is not killed in 135 s (Hard at 2 / 1) and 180 s (Brutal at
+    4 / 4).
+  - Brutal's two numbers are the designer's. The lead accepted them, because Brutal's
+    presets are only ×2.17 apart in melee scale.
+  - A stricter first try (26 slingers in Hard's Pickets, Brutal `countMult` 1.2) was taken
+    back. The roster and Brutal's `countMult` are as built.
+- **Carried, not done in the round:**
+  - leadership taken from the first arrival's unverified hint (L5);
+  - the arena's 12-seed clear time and its merged waves banking once (L4);
+  - Hard's and Brutal's rewards are placeholders (L3).
+
+### Every API and config change
+
+**Config.**
+- `Combat.json levels`:
+  - new: `triggerBelow` 4, `crowdCeiling` 200, `closeGraceSeconds` 0.5, `floorThickness` 4;
+  - removed: `triggerInset`;
+  - there since the build and now in the contract: `closeInset` 2, `checkpointSize`
+    [2, 10, 2].
+- `debug.gearPresets`: 2 / 1, 4 / 4, 6 / 6.
+- `Expeditions.json sign.size` [6, 4, 6] (since the build).
+- `1_ForestRoad.json`: `damageScale` Hard 1.8 → 2.0, Brutal 3.1 → 3.35.
+- `ForestRoad.json`:
+  - cover 3.5;
+  - fences 4;
+  - the lookout's top 34;
+  - `killY` −13;
+  - creek and pond 4 deep;
+  - three sign pads.
+- `Lobby.json`: `killY` −12, floor 4 deep.
+- `tools/proving_project.py` merges Workspace `$attributes` instead of replacing them.
+
+**`Types.luau`.** `CombatLevelsConfig`: see the note under "Types".
+
+**`StageFlow`** (full list under "B — the run"):
+- types:
+  - `Zone.inner`, `Zone.trigger` (now grown);
+  - `State.settled`, `State.closedAt`, `State.fought`;
+  - `Input.standing`, `Input.fighters`;
+  - action `rearm`; `boundary.release`.
+- signatures:
+  - `Resolve(file, mission, runCapSeconds, firstDifficulty?)`;
+  - `Validate(level, layout, kinds, ranks, rules)`;
+  - `Plan(...) → (Plan?, string?)`;
+  - `Skip(plan, state, which, now, rules, fighters?)`.
+- new functions: `Rescue`, `Directs`, `StillClosing`, `Strayed`, `EarnsStar`.
+- there since the build and now listed: `Force`, `MustEnter`, `OutOfBox`.
+- removed: the `ARENA_DIFFICULTY` constant (the arena takes the map's first difficulty).
+
+**`LevelGeometry`:**
+- `FloorBox(camp, depth)`;
+- `BlockBoxes(layout, floorThickness?)`, new;
+- `Bounds(layout, floorThickness?)`;
+- `Sizes.floor`;
+- `BarrierBoxes`: inner face on the floor's edge;
+- `Pieces` refuses a size of 0 or less and a missing floor depth;
+- `FLOOR_THICKNESS` constant removed.
+
+**`LevelService`.** `Pieces` and the construction run in a pcall; a failure clears what was
+built, then returns false with one warn.
+
+**`WaveService`:**
+- `GetPhase` removed;
+- `EndRun(asked)`;
+- `SendMap` listed;
+- the tick order and the action table: see their notes under "Flow";
+- `backToLobby` heals;
+- the start clears a leftover level, and `SetBounds` false ends the run.
+
+**`ArenaService`:**
+- `MoveMember` sets `Placed` (Vector3, the feet point), then `PlacedSeq` (+1 per move, per
+  userId);
+- the collision group is joined first;
+- `GetPhase` removed;
+- `BuildProvingArena` reads `levels.crowdCeiling`;
+- the "no verified ticket" warn speaks only for a real hub departure.
+
+**Client:**
+- `CameraController.OnPlaced`, `LookToward`, `KeepAltFree`; the settle in
+  `MovementController`; the Theme constants under "Client";
+- `MapScreen.Rest`;
+- `CombatHud.PressAbandon`, with `deps.abandonKey` and `deps.onAbandonArmed`;
+- `DebugPanel.SetVisible`;
+- the difficulty chip; one message per camp clear; the material chip hidden in the lobby;
+- held keys not sunk; the `MapState` retry.
+
+**Attributes the server writes:** on each character, `Placed` (Vector3) and `PlacedSeq`
+(integer).
+
+**Tools:**
+- `run_harness.py` verdict lines and exit codes, and `mutate.py`'s baseline and verdict: see
+  "Gates";
+- new `tools/check_stage_mirror.py`, with its driver `tools/crowd_harness/stage_mirror.luau`;
+- `check_levels.py` 123 checks.
+
+### Gates at the end of the round (as the engineers reported them; QA is running)
+
+- `py tools/crowd_harness/run_harness.py <worktree> <luau.exe>`: `HARNESS: PASS (1,292 checks, …)`.
+- `py tools/crowd_harness/mutate.py <worktree> <luau.exe>`: baseline passes, `MUTATIONS: 417 run, 0 not caught`.
+- `py tools/check_levels.py`: 123 checks.
+- `py tools/check_stage_mirror.py`: about 5,600 comparisons, all equal.
+- `py tools/sim_range.py --check` and `py tools/sim_combat.py --check`: the bands of "Balance
+  bands" and `docs/BALANCE.md` "L1".
+- `py tools/gen_asset_manifest.py --check`: up to date (no asset changes).
+
+### State (2026-10-13)
+
+- **Not merged yet.** Branch `l1-forest-road` at `de03e36`; QA is running in the worktree.
+- Next: the lead merges to `main` after QA and rebuilds the six place files. Ben's playtest is
+  `docs/PLAYTEST.md` "L1 — Forest Road in grey"; setup in `docs/MANUAL_STEPS.md` "L1".
+- **Publish freeze:** the Expeditions place must not be published from `main` until L4.
+- **Checked by reading only** (nothing loads them): `WaveService`, `ArenaService`,
+  `LevelService`'s Instances, `Main`, every client file. Needs Studio: the wall at a camp's
+  edge, the facing after a move, the settle after a fall, Backspace twice, the phone layout.

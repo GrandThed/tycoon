@@ -160,7 +160,20 @@ local function nextGear(player: Player?): ()
 	if presets == nil or #presets == 0 then
 		return
 	end
-	local index = (gearPreset[player] or 0) % #presets + 1
+	-- The first press steps past the preset the player already holds (a proving build starts on
+	-- the first one), so every press is a visible change.
+	local current = gearPreset[player]
+	if current == nil then
+		current = 0
+		local gear = WeaponService.GearOf(player)
+		for at, entry in presets do
+			if entry.melee == gear.melee and entry.ranged == gear.ranged then
+				current = at
+				break
+			end
+		end
+	end
+	local index = current % #presets + 1
 	local preset = presets[index]
 	if
 		Armory.TierDef(armoryConfig, "melee", preset.melee) == nil

@@ -4393,6 +4393,10 @@ panel.** Silent, placeholder bodies. Judge whether it feels like a mission or li
 **Status 2026-10-13:**
 - Wave 1 is on `main`. A second review (Opus) found two Majors; their fixes wait for the merge.
 - Steps 2 and 3 are new, and steps 4 and 8 gained a check. They cover what no offline test can.
+- **Superseded once L1 is merged.**
+  - Play then opens a grey lobby camp with a map, not this arena.
+  - The arena is the map's **Raider Arena** node; "L1 — Forest Road in grey" step 8 plays it.
+  - A run here then ends on the L1 summary and goes back to the camp, not to a new run.
 
 <!-- FILE TO OPEN: start. Lead: if the second-review fixes are not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
@@ -4459,6 +4463,153 @@ Also, if you have a view:
 - The Warlord at wave 10 (P4 Stop 3 was never played): fun, or a chore?
 - The shooters, brutes and plated elites (waves 3–9): first time you meet them.
 - Anything wrong: step numbers, PC or phone.
+
+## L1 — Forest Road in grey
+
+<!-- FILE TO OPEN: start. Lead: if L1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Only after the lead says L1 is merged.** Then VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** Play puts you in a small grey camp with a map on the screen,
+  not in the grassy arena.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** judge the first level.
+- A grey road with one big raider camp in three parts: A Pickets, B Main Camp, C the chief's
+  clearing.
+- The Colossus stands in for the boss.
+- You pick from three difficulties.
+- After every run you are back in a small lobby camp.
+- **About 10 minutes. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-13:** built, reviewed, fixed; QA is running. **Not merged yet: wait for the
+lead's word, then "Build all".**
+
+Setup: `docs/MANUAL_STEPS.md` "L1".
+
+**Keys:**
+- **Enter** = Depart / Back to camp; **M** = map; **arrows** = level and difficulty.
+- **1** melee, **2** ranged.
+- **Space** jump, **Left Shift** dash, **C** in the air = slam.
+- **Backspace twice** = abandon.
+- Studio only: **N** = finish this part, **B** = jump to the boss, **G** = stronger gear.
+
+You start with Broadsword + Longbow and a health bar of **145**.
+
+**Expected, not bugs:**
+- Grey blocks only. No trees, tents or palisade yet.
+- Stars last only for this Studio session.
+- The Colossus stands in for the Camp Chief.
+- Three spots have signs and do nothing yet: a high ledge, a block off the road, an island in
+  the pond.
+- The city's Expedition panel (in `test.rbxl`) still lists four old missions. Any of them lands
+  you in this lobby.
+- On a phone there is no way out of a boss fight but going down: Abandon hides while you
+  fight.
+- Enemies walk through fences and cover.
+- After a respawn you come back at the start of the road, or at the last cleared camp's exit.
+- The bow is slow on the boss. The sword is the main weapon here.
+
+### The run (no panel)
+
+- [ ] 1. **The lobby.**
+      - **Play** → a small grey camp with the map open.
+      - Forest Road is lit and chosen at **Normal**. Raider Arena is open. Four levels are
+        locked: "Not built yet".
+      - Press **Enter** (or click **Depart**).
+      - Bug: no map; Enter and Depart do nothing; you start in the grassy arena (the old file).
+- [ ] 2. **The road.**
+      - You stand on a grey road, **facing down it**. The top line reads **Follow the road**.
+      - Walk on: one gap to jump over, a bridge over water, one ledge to jump up. One jump
+        each.
+      - Step off the side once → you are back at the start of the road at once, facing down
+        it, with no health lost.
+      - Bug: you face sideways; you need a double jump; you fall for ever; you land in the
+        lobby camp.
+- [ ] 3. **Camp A, the Pickets.**
+      - Step into the first yard's gateway → **Gates close in 3** starts at once.
+      - Turn round in the gateway to watch the gates shut → you are moved a few steps inside
+        and **the view does not spin**.
+      - Red raiders come in groups.
+      - Dash and double-jump at the fence → an invisible wall stops you at the floor's edge.
+        You cannot stand on the fence.
+      - Kill them all → the gates open: one banner, **Pickets cleared**, plus **Progress
+        saved**. The wallet grows.
+      - Bug: nothing starts until you are deep inside; the view swings round at the close;
+        you get out or stand on the fence; enemies outside the yard; messages pile on top of
+        each other; nothing is saved.
+- [ ] 4. **N pays nothing.**
+      - On the road, **N** → you are put just inside the Main Camp, facing into it, and the
+        countdown runs.
+      - Let it close and fight a little.
+      - **N** again → the gates open: **Main Camp cleared**, with **no "Progress saved"**. The
+        wallet does not move.
+      - Bug: N does nothing; you are paid for what you skipped.
+- [ ] 5. **A reset in a countdown keeps the run.**
+      - Walk on and step into the chief's clearing's gateway.
+      - During **Gates close in 3**, reset: **Esc** → **R** → **Enter**.
+      - The gates stay open and no summary shows.
+      - About 8 s later you are back at the Main Camp's exit, facing down the road. Walk in
+        again → the countdown starts again.
+      - Bug: the run ends ("You went down"); the gates shut on an empty camp; you never come
+        back.
+- [ ] 6. **The boss and the star.**
+      - In that countdown press **B** → the gates shut and the **COLOSSUS** stands there with
+        his bar.
+      - Kill him. For stronger gear press **G** first. You start on 2 / 1; each press steps it:
+        "Gear 4 / 4", "Gear 6 / 6", "Gear 2 / 1", then round again.
+      - → the summary: **Cleared** with a star, "Camps cleared 3 / 3", "Back to camp in 10".
+      - **Enter** → the lobby camp, with your health bar full. The map shows the star on Forest
+        Road.
+      - Bug: no star; the summary never ends; you are still hurt in camp.
+- [ ] 7. **Hard, and going down.**
+      - **Up arrow** (Hard), **Enter** → the same road, tougher. If you press Enter in your
+        first 2 s back in camp, Depart reads "Departing..." and goes by itself; that is fine.
+      - In the Pickets, once the gates shut, stand still → **DOWN**, and the run ends. (With G
+        gear it takes longer.)
+      - The summary reads **You went down** and **Nothing was saved**.
+      - **Enter** → back in camp with a full health bar.
+      - Bug: the run goes on; you get up by yourself; camp A pays you anyway; your bar is not
+        full in camp.
+- [ ] 8. **Raider Arena and Abandon.**
+      - **Right arrow** → Raider Arena, **Enter** → the grassy arena with the wooden fence.
+        About 3 s later, **WAVE 1**.
+      - **B** → the Colossus at wave 5.
+      - **Backspace** → the Abandon button reads **Press again to abandon**. **Backspace**
+        again → the summary: **Abandoned**.
+      - **Enter** → camp.
+      - Bug: Backspace does nothing; one press abandons; Backspace typed in the chat abandons.
+- [ ] 9. **Phone.**
+      - Test (Prueba) → Device (Dispositivo) → a 375×667 phone, turned to landscape (667×375)
+        → Play.
+      - The map fits the screen, and every level, difficulty and Depart is easy to tap. No debug
+        tab covers it.
+      - Tap **Depart** → on the road auto-swing and auto-fire work, and there is no Attack
+        button.
+      - The Abandon button shows on the road and in a countdown, and hides once a wave starts.
+      - Bug: the map is cut off; buttons too small to tap; an Attack button; Abandon under
+        your thumb in a fight.
+
+**Optional, two players (not one of the nine):**
+- Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start**
+  (Iniciar).
+- In one window Depart reads **Waiting for** the other player. In that other window press
+  **Enter** → both land on the road.
+- Parties in a level come in L5: anything odd after that, note it and don't hunt it.
+
+### What to tell Claude
+
+Asked afterwards as click questions:
+- Does the road with its camps read as a level? (yes / sort of / no)
+- The length, about seven minutes without the skips: right, too long, too short?
+- Is the map clear? (yes / mostly / no)
+- Camp A: too easy, about right, too hard? A good sword player reaches a slinger there in under
+  a second.
+- Grey aside, what is missing first? (scenery / the Camp Chief / secrets / the Armory /
+  something else)
+
+Also, if you have a view: anything wrong, by step number, PC or phone.
 
 ## M12 — Village growing city
 
