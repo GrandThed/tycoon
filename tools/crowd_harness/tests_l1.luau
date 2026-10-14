@@ -3,6 +3,8 @@
 -- so every local of the earlier files is in scope. Everything hangs off the L1 table (the
 -- 200-local limit). WaveService and ArenaService are Instance and service work and cannot be
 -- loaded here: they only execute what StageFlow returns.
+-- The last group, "the real files", runs the same rules (and LevelGeometry's) on the level
+-- files, layouts and map that ship, not on fixtures.
 
 print("L1: the run (StageFlow)")
 
@@ -829,5 +831,1035 @@ function L1.crowdTests(): ()
 	fresh()
 end
 L1.crowdTests()
+
+-- The real files ---------------------------------------------------------------------------------
+-- Everything above runs on fixtures written for the cases. These run the same rules on the data
+-- that ships, read the way WaveService.resolveLevel, WaveService.startLevel and LevelService read
+-- it: the level files, their layouts, the missions, the map, the crowd kinds, Combat.json
+-- `levels`. tools/check_levels.py passes the same files in Python and never meets these rules;
+-- where the two disagree on a field, the owner's first Depart answers "unavailable".
+-- run_harness.py injects the files (FIXTURES), bundles the arena a layout names, and asks
+-- check_levels.py for its Part counts and its own reading of that arena (FIXTURES.gate).
+
+L1.real = {
+	map = FIXTURES.expeditions,
+	levels = FIXTURES.levels,
+	missions = FIXTURES.missions,
+	layouts = FIXTURES.layouts,
+	kinds = FIXTURES.proving.crowd.kinds,
+	rules = FIXTURES.combat.levels,
+	rescue = FIXTURES.combat.player.rescue,
+	gate = FIXTURES.gate,
+	-- A root's height over the feet in these cases.
+	ROOT = 3,
+	-- Every action WaveService.execute has a branch for.
+	EXECUTED = { gate = true, close = true, wave = true, clear = true, bank = true, boundary = true, breather = true, open = true, travel = true, drop = true, move = true, ["end"] = true },
+	-- The actions that do nothing in WaveService.execute when their stage has no zone.
+	ZONED = { gate = true, close = true, open = true, move = true },
+}
+
+-- WaveService.difficultyRanks: the order of Expeditions.json `difficulties` is the rank.
+function L1.real.ranks(): any
+	local ranks = {}
+	for index, name in L1.real.map.difficulties do
+		ranks[name] = index
+	end
+	return ranks
+end
+
+-- WaveService.builtLevels: a node is built when a level file with its `level` id exists.
+function L1.real.built(): any
+	local built = {}
+	for _, file in L1.real.levels do
+		built[file.id] = true
+	end
+	return built
+end
+
+function L1.real.file(levelId: string): any
+	for _, file in L1.real.levels do
+		if file.id == levelId then
+			return file
+		end
+	end
+	return nil
+end
+
+-- A layout by its file's name; one that names an arena is read through LevelGeometry.FromArena
+-- as WaveService does, the kill height its floor less player.rescue.below. nil and why.
+function L1.real.layout(name: string): (any, string?)
+	local layout = L1.real.layouts[name]
+	if layout == nil then
+		return nil, `no Layouts/Levels/{name}.json`
+	end
+	local arena = layout.arena
+	if arena == nil then
+		return layout, nil
+	end
+	if table.find(FIXTURES.arenas, arena) == nil then
+		return nil, `no Layouts/Arenas/{arena}.luau`
+	end
+	return L1.Geo.FromArena(load("Arena_" .. arena), -L1.real.rescue.below), nil
+end
+
+-- WaveService.resolveLevel: the file, the mission it names, the level, its layout.
+function L1.real.resolve(levelId: string): any
+	local file = L1.real.file(levelId)
+	if file == nil then
+		return { why = "no level file" }
+	end
+	local mission = nil
+	for _, candidate in L1.real.missions do
+		if file.mission ~= nil and candidate.id == file.mission then
+			mission = candidate
+		end
+	end
+	local layout, why = L1.real.layout(file.layout)
+	local read, level = pcall(L1.Flow.Resolve, file, mission, L1.combat.director.runCapSeconds)
+	return { file = file, mission = mission, level = if read then level else nil, layout = layout, why = why }
+end
+
+-- LevelService.sizesOf: what a layout does not say and the config does.
+function L1.real.sizes(): any
+	local function size(value: any): any
+		if value == nil then
+			return nil
+		end
+		local sx, sy, sz = value[1], value[2], value[3]
+		if sx ~= nil and sy ~= nil and sz ~= nil and sx > 0 and sy > 0 and sz > 0 then
+			return { sx = sx, sy = sy, sz = sz }
+		end
+		return nil
+	end
+	return { fence = L1.real.rules.fenceThickness, checkpoint = size(L1.real.rules.checkpointSize), sign = size(L1.real.map.sign.size) }
+end
+
+-- LevelService.piecesOf: Pieces behind a pcall, so a key of the wrong type refuses the layout.
+function L1.real.pieces(layout: any): (any, string?)
+	local ok, pieces, refusal = pcall(L1.Geo.Pieces, layout, L1.real.sizes(), L1.real.rules.maxParts)
+	if not ok then
+		return nil, `the layout could not be read: {tostring(pieces)}`
+	end
+	return pieces, refusal
+end
+
+-- StageFlow.Plan as these cases ask it. WaveService calls it bare: a layout or a level file that
+-- makes it throw gives the leader no answer at all, so a throw is reported here as a refusal.
+function L1.real.plan(level: any, layout: any, difficulty: string, bounds: any): (any, string?)
+	local ok, plan, why = pcall(L1.Flow.Plan, level, layout, difficulty, L1.real.rules, bounds)
+	if not ok then
+		return nil, `Plan threw: {tostring(plan)}`
+	end
+	return plan, why
+end
+
+-- The solid Part whose top face a body with its feet at `feet` stands on (nil = on nothing), and
+-- the name of a solid Part that body would stand INSIDE (nil = none).
+function L1.real.footing(pieces: { any }, feet: any): (any, string?)
+	local under = nil
+	local inside = nil
+	for _, piece in pieces do
+		local box = piece.box
+		if not piece.collide or math.abs(feet.X - box.x) > box.sx / 2 or math.abs(feet.Z - box.z) > box.sz / 2 then
+			continue
+		end
+		local top = box.y + box.sy / 2
+		if math.abs(top - feet.Y) <= 1e-6 then
+			under = piece
+		elseif top > feet.Y and box.y - box.sy / 2 < feet.Y + L1.real.ROOT then
+			inside = piece.name
+		end
+	end
+	return under, inside
+end
+
+function L1.real.list(items: { string }): string
+	return if #items > 0 then ": " .. table.concat(items, "; ") else ""
+end
+
+-- What a run of `level` must answer when every wave is beaten as it is fielded, read from its
+-- stages alone: per camp its countdown, its close, every wave in turn with one bank at the last
+-- (or one per wave in a stage that banks each), its opening; then the road, or the end.
+function L1.real.script(level: any): string
+	local out = {}
+	for index, stage in level.stages do
+		if stage.kind ~= "camp" then
+			if index > 1 then
+				table.insert(out, "travel")
+			end
+			continue
+		end
+		table.insert(out, "gate")
+		table.insert(out, "close")
+		local waves = #(stage.waves or {})
+		for wave = 1, waves do
+			table.insert(out, "wave" .. wave)
+			table.insert(out, "clear")
+			if wave == waves or stage.bankEachWave == true then
+				table.insert(out, "bank")
+			end
+			table.insert(out, "boundary")
+			if wave < waves then
+				table.insert(out, "breather")
+			end
+		end
+		table.insert(out, "open")
+	end
+	table.insert(out, "end")
+	return table.concat(out, " ")
+end
+
+function L1.real.said(log: { any }): string
+	local out = {}
+	for _, action in log do
+		table.insert(out, if action.kind == "wave" then "wave" .. tostring(action.wave) else action.kind)
+	end
+	return table.concat(out, " ")
+end
+
+-- One run through StageFlow alone, asked as WaveService's tick asks it. A party of four stands
+-- where the run puts it (the start, then each cleared camp's exit), walks to the next camp's
+-- entry, waits the countdown out and beats every wave the moment it is fielded. `merging`:
+-- while a wave is up the director answers "merge" every time it is asked.
+-- Returns `log` (every action Advance answered, in order, with the clock it was answered at),
+-- the final `state`, `early` (camps that triggered before anybody walked), `held` (nothing
+-- happened a moment before a countdown or a breather was over), `stuck` (why the walk stopped),
+-- and `safe` / `unsafe`: every state's SafePoint, asked, and those that are no place for a body.
+function L1.real.run(plan: any, pieces: any, merging: boolean): any
+	local Flow = L1.Flow
+	local real = L1.real
+	local rules = real.rules
+	local state = Flow.Begin(plan)
+	local out: any = { log = {}, state = state, early = {}, held = true, stuck = nil, safe = 0, unsafe = {} }
+	local now = 0
+	local breather = L1.Combat.BreatherSeconds(1, L1.combat.director)
+	local party = {}
+	for member = 1, 4 do
+		local feet = Flow.StartPoint(plan, member, rules.startSpacing)
+		table.insert(party, vec(feet.X, feet.Y + real.ROOT, feet.Z))
+	end
+	local function ask(over: any): { any }
+		over.now = now
+		over.roots = party
+		over.breatherSeconds = breather
+		local actions = Flow.Advance(plan, state, L1.input(over), rules)
+		for _, action in actions do
+			action.now = now
+			table.insert(out.log, action)
+		end
+		return actions
+	end
+	local function safe(): ()
+		if state.step == "over" then
+			return
+		end
+		out.safe += 1
+		local at = Flow.SafePoint(plan, state)
+		local bounds = plan.bounds
+		local under, inside = nil, nil
+		if pieces ~= nil then
+			under, inside = real.footing(pieces, at)
+		end
+		local why = nil
+		if at.X < bounds.minX or at.X > bounds.maxX or at.Z < bounds.minZ or at.Z > bounds.maxZ or at.Y > bounds.maxY then
+			why = "outside the level's bounds"
+		elseif at.Y <= plan.killY then
+			why = "not above the kill height"
+		elseif Flow.IsOut(plan, state, vec(at.X, at.Y + real.ROOT, at.Z), real.rescue, rules.boxMargin) then
+			why = "where the rescue takes a body from"
+		elseif pieces ~= nil and under == nil then
+			why = "on nothing"
+		elseif inside ~= nil then
+			why = "inside " .. inside
+		end
+		if why ~= nil then
+			table.insert(out.unsafe, `stage {state.stage} {state.step}: ({at.X}, {at.Y}, {at.Z}) is {why}`)
+		end
+	end
+	safe()
+	for _ = 1, 400 do
+		local step = state.step
+		if step == "over" then
+			break
+		end
+		if step == "travel" or step == "armed" then
+			local camp = if step == "armed" then state.stage else state.stage + 1
+			local stage = plan.stages[camp]
+			local zone = if stage ~= nil then stage.zone else nil
+			if zone == nil then
+				out.stuck = `stage {state.stage}: no camp follows`
+				break
+			end
+			if state.lastCleared > 0 then
+				local at = Flow.SafePoint(plan, state)
+				party = { vec(at.X, at.Y + real.ROOT, at.Z) }
+			end
+			if #ask({}) > 0 then
+				table.insert(out.early, camp)
+			else
+				party = { vec(zone.entry.X, zone.entry.Y + real.ROOT, zone.entry.Z) }
+				if #ask({}) == 0 then
+					out.stuck = `stage {camp}: a body on the camp's entry does not trigger it`
+					break
+				end
+			end
+		elseif step == "gate" then
+			now = state.gateAt - 0.001
+			if #ask({}) > 0 then
+				out.held = false
+			end
+			now = state.gateAt
+			ask({})
+		elseif step == "breather" then
+			now = state.breatherUntil - 0.001
+			if #ask({}) > 0 then
+				out.held = false
+			end
+			now = state.breatherUntil
+			ask({})
+		else
+			now += 1
+			if merging then
+				for _ = 1, 100 do
+					if #ask({ fieldClear = false, mergeOk = true }) == 0 then
+						break
+					end
+				end
+			end
+			ask({ fieldClear = true })
+		end
+		safe()
+	end
+	if state.step ~= "over" and out.stuck == nil then
+		out.stuck = `still in stage {state.stage} ({state.step}) after 400 asks`
+	end
+	return out
+end
+
+-- What holds for one level at one difficulty, whatever the level: the camps the plan gives it,
+-- the waves it fields, where a party starts.
+function L1.real.planChecks(tag: string, level: any, layout: any, plan: any, pieces: any): ()
+	local Flow = L1.Flow
+	local real = L1.real
+	local rules = real.rules
+	local ranks = real.ranks()
+	local scales = level.difficulties[plan.difficulty]
+	local campStages = 0
+	for index, stageDef in level.stages do
+		if stageDef.kind ~= "camp" then
+			continue
+		end
+		campStages += 1
+		local stage = plan.stages[index]
+		local zone = if stage ~= nil then stage.zone else nil
+		local camp = nil
+		for _, candidate in layout.camps do
+			if candidate.id == stageDef.zone then
+				camp = candidate
+			end
+		end
+		local where = `{tag}, camp {tostring(stageDef.zone)}`
+		if zone == nil or camp == nil then
+			check(false, `{where}: the plan has its zone`)
+			continue
+		end
+		local rect = zone.rect
+		local function on(x: number, z: number): boolean
+			return math.abs(x - rect.x) <= rect.hx and math.abs(z - rect.z) <= rect.hz
+		end
+		local strays: { string } = {}
+		if not on(zone.entry.X, zone.entry.Z) then
+			table.insert(strays, "the entry")
+		end
+		if not on(zone.exit.X, zone.exit.Z) then
+			table.insert(strays, "the exit")
+		end
+		local mark = camp.checkpoint
+		if mark ~= nil and not on(mark.x, mark.z) then
+			table.insert(strays, "the checkpoint")
+		end
+		for spawnIndex, point in zone.spawns do
+			if not on(point.X, point.Z) or point.Y ~= zone.floorY then
+				table.insert(strays, `spawn point {spawnIndex}`)
+			end
+		end
+		check(#strays == 0 and #zone.spawns > 0, `{where}: its entry, exit, checkpoint and {#zone.spawns} spawn points are on the floor the plan gives it{real.list(strays)}`)
+		check(not Flow.MustEnter(zone, zone.entry), `{where}: the close leaves a body on its entry where it stands`)
+		-- Ruling 9 and the lead's ruling on the close, on this camp's own numbers and on all four
+		-- of its sides.
+		local function insetBy(inner: any, by: number): boolean
+			return near(inner.x, rect.x) and near(inner.z, rect.z) and near(inner.hx, rect.hx - by) and near(inner.hz, rect.hz - by)
+		end
+		check(insetBy(zone.trigger, rules.triggerInset) and insetBy(zone.inner, rules.closeInset), `{where}: its trigger is its floor inset by levels.triggerInset ({rules.triggerInset}) and its close keeps the floor inset by levels.closeInset ({rules.closeInset}), on both axes`)
+		local edge: { string } = {}
+		local sides = { { "north", 0, -1 }, { "south", 0, 1 }, { "west", -1, 0 }, { "east", 1, 0 } }
+		for _, side in sides do
+			local function at(inside: number): any
+				return vec(rect.x + side[2] * (rect.hx - inside), zone.floorY + real.ROOT, rect.z + side[3] * (rect.hz - inside))
+			end
+			if rules.closeInset > 0 and not Flow.MustEnter(zone, at(rules.closeInset / 2)) then
+				table.insert(edge, `a body {rules.closeInset / 2} inside the {side[1]} edge is left there`)
+			end
+			if Flow.MustEnter(zone, at(rules.closeInset + 1)) then
+				table.insert(edge, `a body {rules.closeInset + 1} inside the {side[1]} edge is moved`)
+			end
+		end
+		check(#edge == 0, `{where}: at the close a body against any of its four edges is brought to the entry, and one a stud clear of the inset is left{real.list(edge)}`)
+		-- Ruling 19 while the camp is closed, on its own numbers: the camp is the place a body may
+		-- be in, its floor plus player.rescue.outside, down to its floor less player.rescue.below.
+		-- (Walked to its fight with the fixture cases' helper: only the state matters here.)
+		local rescue = real.rescue
+		local reached, fight = pcall(L1.toFight, plan, index)
+		local loose: { string } = {}
+		if not reached then
+			table.insert(loose, "the run never reaches its fight")
+		else
+			for _, side in sides do
+				local function past(by: number): any
+					return vec(rect.x + side[2] * (rect.hx + by), zone.floorY + real.ROOT, rect.z + side[3] * (rect.hz + by))
+				end
+				if not Flow.IsOut(plan, fight, past(rescue.outside + 1), rescue, rules.boxMargin) then
+					table.insert(loose, `a body {rescue.outside + 1} past the {side[1]} edge is left out there`)
+				end
+				if rescue.outside >= 1 and Flow.IsOut(plan, fight, past(rescue.outside - 1), rescue, rules.boxMargin) then
+					table.insert(loose, `a body {rescue.outside - 1} past the {side[1]} edge is taken back`)
+				end
+			end
+			if not Flow.IsOut(plan, fight, vec(rect.x, zone.floorY - rescue.below - 1, rect.z), rescue, rules.boxMargin) then
+				table.insert(loose, `a body {rescue.below + 1} under the floor is left there`)
+			end
+			if Flow.IsOut(plan, fight, vec(rect.x, zone.floorY - rescue.below + 1, rect.z), rescue, rules.boxMargin) then
+				table.insert(loose, `a body {rescue.below - 1} under the floor is taken back`)
+			end
+		end
+		check(#loose == 0, `{where}: while it is closed the rescue takes back a body more than player.rescue.outside ({rescue.outside}) past any of its edges or player.rescue.below ({rescue.below}) under its floor, and nobody nearer{real.list(loose)}`)
+		-- Ruling 13: a burst at a spawn point arrives as a block inside the camp.
+		local spilled: { string } = {}
+		local size = math.max(math.floor(level.crowd.burst), 1)
+		for spawnIndex, at in zone.spawns do
+			for body = 0, size - 1 do
+				local point = Flow.BurstPoint(zone, at, size, body, level.crowd.burstSpacing)
+				if not on(point.X, point.Z) or point.Y ~= zone.floorY then
+					table.insert(spilled, `spawn point {spawnIndex}, body {body + 1}`)
+					break
+				end
+			end
+		end
+		check(#spilled == 0, `{where}: every body of a full burst ({size}, {level.crowd.burstSpacing} apart) at each of its spawn points is placed on its floor{real.list(spilled)}`)
+		local floor = nil
+		for _, piece in pieces or {} do
+			if piece.role == "floor" and piece.camp == zone.id then
+				floor = piece.box
+			end
+		end
+		check(pieces == nil or (floor ~= nil and near(floor.x, rect.x) and near(floor.z, rect.z) and near(floor.sx, rect.hx * 2) and near(floor.sz, rect.hz * 2) and near(floor.y + floor.sy / 2, zone.floorY)), `{where}: the floor the run fights on is the floor that is built: its centre, its size, its top`)
+		local empty: { string } = {}
+		local wrong: { string } = {}
+		-- A camp stage with no `waves` key is Validate's to report; nothing here may throw on it.
+		local waveDefs = stageDef.waves or {}
+		for waveIndex, waveDef in waveDefs do
+			local spec = L1.Combat.CampWave(waveDef, level.crowd.regenShare, scales, ranks[plan.difficulty] or 0, ranks, 1, L1.combat)
+			if spec.total <= 0 and spec.boss == nil then
+				table.insert(empty, `wave {waveIndex}`)
+			end
+			local boss = waveDef.boss
+			if boss ~= nil then
+				local def = real.kinds[boss.kind]
+				if def == nil or def.boss ~= true then
+					table.insert(wrong, `wave {waveIndex}: {boss.kind} is not a boss kind`)
+				end
+				for _, attack in (if def ~= nil and def.attacks ~= nil then def.attacks else {}) do
+					local called = attack.summon
+					if called ~= nil and (real.kinds[called] == nil or level.crowd.rewards[called] == nil) then
+						table.insert(wrong, `wave {waveIndex}: {boss.kind} calls {called}, which is unknown or unpriced`)
+					end
+				end
+			end
+		end
+		check(#empty == 0 and #waveDefs > 0, `{where}: each of its {#waveDefs} waves fields a body or a boss at this difficulty{real.list(empty)}`)
+		check(#wrong == 0, `{where}: a wave's boss is a boss kind (only that kill pays the Valor) and what it calls is a priced kind{real.list(wrong)}`)
+		check(stage.waves == #waveDefs and stage.maxAlive >= 1 and stage.maxAlive <= FIXTURES.proving.crowd.maxAlive, `{where}: the plan has its {#waveDefs} waves and a cap the crowd can hold ({stage.maxAlive} of {FIXTURES.proving.crowd.maxAlive})`)
+	end
+	check(plan.camps == campStages and #plan.stages == #level.stages and campStages > 0 and plan.levelId == level.id, `{tag}: the plan is {level.id}'s, with the file's {#level.stages} stages, {campStages} of them camps`)
+
+	local begin = Flow.Begin(plan)
+	local unsound: { string } = {}
+	local taken: { [string]: boolean } = {}
+	for member = 1, 4 do
+		local feet = Flow.StartPoint(plan, member, rules.startSpacing)
+		local under, inside = nil, nil
+		if pieces ~= nil then
+			under, inside = real.footing(pieces, feet)
+		end
+		local key = `{feet.X} {feet.Z}`
+		if pieces ~= nil and under == nil then
+			table.insert(unsound, `member {member} stands on nothing at ({feet.X}, {feet.Y}, {feet.Z})`)
+		elseif inside ~= nil then
+			table.insert(unsound, `member {member} is put inside {inside}`)
+		elseif taken[key] then
+			table.insert(unsound, `member {member} is put where another stands`)
+		elseif Flow.IsOut(plan, begin, vec(feet.X, feet.Y + real.ROOT, feet.Z), real.rescue, rules.boxMargin) then
+			table.insert(unsound, `member {member} starts where the rescue takes a body from`)
+		end
+		taken[key] = true
+	end
+	check(#unsound == 0, `{tag}: a party of four starts on the start: each on solid ground, inside nothing, apart, and not where the rescue would take them from{real.list(unsound)}`)
+end
+
+-- A camp as LevelGeometry built it, against the layout's own points: the fence and its gates
+-- stand on the fence line and nowhere else, the Part straight out from the entry and from the
+-- exit is a gate, and the invisible wall stands behind every side, the gates included (closed,
+-- it is all that holds a body in).
+function L1.real.campChecks(name: string, layout: any, pieces: { any }): ()
+	local real = L1.real
+	local thickness = real.rules.fenceThickness
+	for _, camp in layout.camps or {} do
+		local where = `{name}, camp {camp.id}`
+		local hx, hz = camp.sx / 2, camp.sz / 2
+		-- The Part of `role` of this camp that holds the point (x, z) at the floor's level.
+		local function partAt(role: string, x: number, z: number): any
+			for _, piece in pieces do
+				local box = piece.box
+				if piece.role == role and piece.camp == camp.id and math.abs(x - box.x) <= box.sx / 2 and math.abs(z - box.z) <= box.sz / 2 and box.y - box.sy / 2 <= camp.y + 1e-6 and box.y + box.sy / 2 > camp.y then
+					return piece
+				end
+			end
+			return nil
+		end
+		local stray: { string } = {}
+		local fences = 0
+		for _, piece in pieces do
+			if piece.camp ~= camp.id or (piece.role ~= "fence" and piece.role ~= "gate") then
+				continue
+			end
+			fences += 1
+			local box = piece.box
+			local dx, dz = math.abs(box.x - camp.x), math.abs(box.z - camp.z)
+			-- Inside the floor grown by the fence's thickness, and not over the floor itself.
+			local within = dx + box.sx / 2 <= hx + thickness + 1e-6 and dz + box.sz / 2 <= hz + thickness + 1e-6
+			local onFloor = dx - box.sx / 2 < hx - 1e-6 and dz - box.sz / 2 < hz - 1e-6
+			if not within or onFloor or not near(box.y - box.sy / 2, camp.y) then
+				table.insert(stray, piece.name)
+			end
+		end
+		check(#stray == 0, `{where}: its {fences} fence and gate Parts stand on the fence line: outside the floor's edge, within the fence's thickness of it, on the floor's level{real.list(stray)}`)
+
+		local unwalled: { string } = {}
+		for _, piece in pieces do
+			local box = piece.box
+			-- The wall's inner face is the fence's outer face: a wall that reached over the fence
+			-- line or the floor would hold fighters off the edge of their own camp.
+			if piece.role == "barrier" and piece.camp == camp.id and math.abs(box.x - camp.x) - box.sx / 2 < hx + thickness - 1e-6 and math.abs(box.z - camp.z) - box.sz / 2 < hz + thickness - 1e-6 then
+				table.insert(unwalled, `{piece.name} reaches inside the fence line`)
+			end
+		end
+		local sides = { { "north", 0, -1 }, { "south", 0, 1 }, { "west", -1, 0 }, { "east", 1, 0 } }
+		for _, side in sides do
+			local x = camp.x + side[2] * (hx + thickness + 0.5)
+			local z = camp.z + side[3] * (hz + thickness + 0.5)
+			if layout.barrier ~= nil and partAt("barrier", x, z) == nil then
+				table.insert(unwalled, side[1])
+			end
+		end
+		-- Straight out of the camp from a point on its floor, through the nearest edge: what
+		-- stands on the fence line there, and whether the invisible wall stands behind it.
+		local function way(what: string, point: any): ()
+			local toWest, toEast = point.x - (camp.x - hx), camp.x + hx - point.x
+			local toNorth, toSouth = point.z - (camp.z - hz), camp.z + hz - point.z
+			local least = math.min(toWest, toEast, toNorth, toSouth)
+			local fx, fz, bx, bz = point.x, point.z, point.x, point.z
+			if least == toWest then
+				fx, bx = camp.x - hx - thickness / 2, camp.x - hx - thickness - 0.5
+			elseif least == toEast then
+				fx, bx = camp.x + hx + thickness / 2, camp.x + hx + thickness + 0.5
+			elseif least == toNorth then
+				fz, bz = camp.z - hz - thickness / 2, camp.z - hz - thickness - 0.5
+			else
+				fz, bz = camp.z + hz + thickness / 2, camp.z + hz + thickness + 0.5
+			end
+			if partAt("gate", fx, fz) == nil or partAt("fence", fx, fz) ~= nil then
+				table.insert(unwalled, `the {what} faces no gate`)
+			elseif layout.barrier ~= nil and partAt("barrier", bx, bz) == nil then
+				table.insert(unwalled, `no wall behind the {what}'s gate`)
+			end
+		end
+		local gates = #(camp.gates or {})
+		if gates > 0 and (camp.entry == nil or camp.exit == nil) then
+			table.insert(unwalled, "it has gates and no entry or no exit")
+		elseif gates > 0 then
+			way("entry", camp.entry)
+			way("exit", camp.exit)
+		end
+		check(#unwalled == 0, `{where}: the invisible wall stands behind all four sides and nowhere inside the fence line{if gates > 0 then ", and straight out from its entry and from its exit the fence line holds a gate with the wall across it" else " (it has no gate)"}{real.list(unwalled)}`)
+	end
+end
+
+function L1.realLevelTests(): ()
+	print(" the real files: every built level resolves, validates and plans, as WaveService starts it")
+	local real = L1.real
+	local Flow = L1.Flow
+	local ranks = real.ranks()
+	local built = real.built()
+	-- Catalog reads a level file or a mission only when it is named <n>_<Name>, and keeps one
+	-- file per id; check_levels.py reads every *.json in those folders.
+	check(#FIXTURES.unread == 0, `every file of Config/Levels and Config/Missions is named <n>_<Name>, the only ones Catalog reads{real.list(FIXTURES.unread)}`)
+	local owned: { [string]: boolean } = {}
+	local twice: { string } = {}
+	for _, file in real.levels do
+		local key = tostring(file.id)
+		if owned[key] or type(file.id) ~= "string" then
+			table.insert(twice, key)
+		end
+		owned[key] = true
+	end
+	check(#real.levels > 0 and #twice == 0, `the {#real.levels} level files each have an id of their own{real.list(twice)}`)
+	local played: { string } = {}
+	for _, node in real.map.nodes do
+		local id = node.level
+		if id == nil or not built[id] then
+			continue
+		end
+		table.insert(played, id)
+		local got = real.resolve(id)
+		local file, level, layout = got.file, got.level, got.layout
+		check(level ~= nil and level.id == id, `{id}: Resolve reads its file {if file ~= nil and file.mission ~= nil then "through the mission " .. file.mission else "as it stands"}, and the level keeps the id its node names`)
+		check(layout ~= nil, `{id}: its layout {if file ~= nil then file.layout else "?"} is there{if got.why ~= nil then " (" .. got.why .. ")" else ""}`)
+		if level == nil or layout == nil then
+			continue
+		end
+		local validated, problems = pcall(Flow.Validate, level, layout, real.kinds, ranks)
+		if not validated then
+			problems = { `Validate threw: {tostring(problems)}` }
+		end
+		check(#problems == 0, `{id}: Validate finds no problem{real.list(problems)}`)
+		local strange: { string } = {}
+		local offered = 0
+		for name in level.difficulties do
+			offered += 1
+			if ranks[name] == nil then
+				table.insert(strange, name)
+			end
+		end
+		check(offered > 0 and #strange == 0, `{id}: each of its {offered} difficulties is one of the map's (one that is not has rank 0, and fields no minDifficulty group){real.list(strange)}`)
+		check(level.runCapSeconds > 0 and level.crowd.burst >= 1, `{id}: a run cap ({level.runCapSeconds} s) and a burst size ({level.crowd.burst})`)
+		local pieces = real.pieces(layout)
+		local bounds = L1.Geo.Bounds(layout)
+		for _, difficulty in real.map.difficulties do
+			if level.difficulties[difficulty] == nil then
+				continue
+			end
+			local plan, why = real.plan(level, layout, difficulty, bounds)
+			check(plan ~= nil and why == nil, `{id} {difficulty}: Plan gives a plan and refuses nothing{if why ~= nil then " (" .. why .. ")" else ""}`)
+			-- With a problem Validate named the level is never started: its camps are not judged.
+			if plan ~= nil and #problems == 0 then
+				real.planChecks(`{id} {difficulty}`, level, layout, plan, pieces)
+			end
+		end
+	end
+	check(table.find(played, "forestRoad") ~= nil and table.find(played, "raiderArena") ~= nil, `the map's built levels are played here: {table.concat(played, ", ")}`)
+
+	-- What Play does first in a proving build (ruling 32), and what its panel offers.
+	local debug = L1.combat.debug
+	local proving = real.resolve(debug.provingLevel)
+	check(proving.level ~= nil and proving.level.difficulties[debug.provingDifficulty] ~= nil, `Combat.json debug.provingLevel ({debug.provingLevel}) is a level and offers debug.provingDifficulty ({debug.provingDifficulty})`)
+	local presets = debug.gearPresets
+	local sound = type(debug.provingAutoStart) == "boolean" and type(presets) == "table" and #presets > 0
+	for _, preset in if type(presets) == "table" then presets else {} do
+		sound = sound and type(preset.name) == "string" and type(preset.melee) == "number" and type(preset.ranged) == "number"
+	end
+	check(sound, "Combat.json debug: provingAutoStart is a boolean, and each gear preset (the G key) has a name and its two tiers")
+
+	-- Every number a level's start, its run, the session and the builder read from Combat.json.
+	-- A missing one is arithmetic on nil in the remote's thread or in the tick, not a refusal.
+	local needs = {
+		levels = { "gateSeconds", "triggerInset", "closeInset", "triggerHeight", "startSpacing", "startCooldownSeconds", "fenceThickness", "boxMargin", "maxParts" },
+		director = { "windowSeconds", "tempoWarmupSeconds", "eliteTempo", "runCapSeconds" },
+		coop = { "maxParty", "joinUntilWave", "contributionFloor", "countPerExtraPlayer", "bossHpPerExtraPlayer", "mentorMinDamageShare", "mentorValor", "lobbyWaitSeconds", "returnGroupSeconds" },
+		remotes = { "combatStateHz" },
+		debug = { "provingStartDelay" },
+	}
+	local missing: { string } = {}
+	for block, keys in needs do
+		local holder = L1.combat[block]
+		for _, key in keys do
+			if type(holder) ~= "table" or type(holder[key]) ~= "number" then
+				table.insert(missing, `{block}.{key}`)
+			end
+		end
+	end
+	local rescue = L1.combat.player.rescue
+	if type(rescue) ~= "table" or type(rescue.below) ~= "number" or type(rescue.outside) ~= "number" then
+		table.insert(missing, "player.rescue")
+	end
+	table.sort(missing)
+	check(#missing == 0, `Combat.json holds every number a level's start, its run, the session and the builder read (levels, director, coop, remotes, player.rescue){real.list(missing)}`)
+end
+L1.realLevelTests()
+
+function L1.realWorldTests(): ()
+	print(" the real files: every layout builds (LevelGeometry.Pieces, as LevelService asks it) and check_levels.py counts the same Parts")
+	local real = L1.real
+	local Geo = L1.Geo
+	local counts = real.gate.parts
+	check(counts ~= nil, "tools/check_levels.py gave its Part counts (run_harness.py imports it; its stderr says why not)")
+	local names: { string } = {}
+	for name in real.layouts do
+		table.insert(names, name)
+	end
+	table.sort(names)
+	for _, name in names do
+		local layout, why = real.layout(name)
+		check(layout ~= nil, `{name}: the layout is read{if why ~= nil then " (" .. why .. ")" else ""}`)
+		if layout == nil then
+			continue
+		end
+		local pieces, refusal = real.pieces(layout)
+		check(pieces ~= nil and refusal == nil, `{name}: Pieces builds it and refuses nothing{if refusal ~= nil then " (" .. refusal .. ")" else ""}`)
+		if pieces == nil then
+			continue
+		end
+		local expected = if counts ~= nil then counts[name] else nil
+		check(#pieces == expected and #pieces > 0, `{name}: {#pieces} Parts, the number check_levels.py counts ({tostring(expected)})`)
+		local bounds = Geo.Bounds(layout)
+		local margin = real.rules.boxMargin
+		local outside: { string } = {}
+		local far: { string } = {}
+		local unlooked: { string } = {}
+		local reach = 0
+		for _, piece in pieces do
+			local box = piece.box
+			local over = math.max(bounds.minX - (box.x - box.sx / 2), box.x + box.sx / 2 - bounds.maxX, bounds.minZ - (box.z - box.sz / 2), box.z + box.sz / 2 - bounds.maxZ, 0)
+			local role = piece.role
+			if role == "block" or role == "floor" or role == "obstacle" or role == "secret" then
+				if over > 1e-6 or box.y - box.sy / 2 < bounds.minY - 1e-6 or box.y + box.sy / 2 > bounds.maxY + 1e-6 then
+					table.insert(outside, piece.name)
+				end
+			end
+			reach = math.max(reach, over)
+			if over > margin then
+				table.insert(far, piece.name)
+			end
+			if piece.look ~= nil and real.map.looks[piece.look] == nil then
+				table.insert(unlooked, `{piece.name} ({piece.look})`)
+			end
+			if piece.look == nil and role ~= "barrier" then
+				table.insert(unlooked, `{piece.name} (no look)`)
+			end
+		end
+		check(#outside == 0, `{name}: Bounds holds every block, floor, obstacle and secret whole{real.list(outside)}`)
+		check(#far == 0, `{name}: every other Part (fence, gate, marker, sign, invisible wall) reaches at most {reach} studs past it, inside the rescue's box (Bounds + levels.boxMargin {margin}){real.list(far)}`)
+		check(#unlooked == 0, `{name}: every Part's look is one of Expeditions.json looks (only the invisible wall has none){real.list(unlooked)}`)
+		check(layout.killY < bounds.minY, `{name}: its kill height ({layout.killY}) is under its lowest Part ({bounds.minY})`)
+		real.campChecks(name, layout, pieces)
+	end
+
+	-- The lobby: where LevelService.LobbyPoint puts a body, and what WaveService's rescue judges
+	-- it against (the lobby's bounds + boxMargin, down to its layout's killY).
+	local lobby = real.layouts[real.map.lobby.layout]
+	check(lobby ~= nil and lobby.arena == nil, `the map's lobby layout ({real.map.lobby.layout}) is a layout file of its own`)
+	local lobbyPieces = if lobby ~= nil and lobby.arena == nil then real.pieces(lobby) else nil
+	if lobby ~= nil and lobbyPieces ~= nil then
+		local bounds = Geo.Bounds(lobby)
+		local points = { lobby.start }
+		for _, point in lobby.spawns or {} do
+			table.insert(points, point)
+		end
+		local unsound: { string } = {}
+		for index, point in points do
+			local feet = vec(point.x, point.y, point.z)
+			local under, inside = real.footing(lobbyPieces, feet)
+			if under == nil then
+				table.insert(unsound, `point {index} stands on nothing`)
+			elseif inside ~= nil then
+				table.insert(unsound, `point {index} is inside {inside}`)
+			elseif L1.Flow.OutOfBox(bounds, lobby.killY, vec(point.x, point.y + real.ROOT, point.z), real.rules.boxMargin) then
+				table.insert(unsound, `point {index} is where the rescue takes a body from`)
+			end
+		end
+		check(#unsound == 0 and #points >= 2, `the lobby's start and its {#points - 1} spawn points stand on its floor, inside nothing, and the rescue leaves them be{real.list(unsound)}`)
+	end
+
+	-- The arena's two adapters: LevelGeometry.FromArena on the real module against the layout
+	-- check_levels.py (sim_range.arena_as_layout) reads out of the same file.
+	local seen = 0
+	for name, theirs in real.gate.arenas or {} do
+		seen += 1
+		local ours = real.layout(name)
+		local a = if ours ~= nil then ours.camps[1] else nil
+		local b = theirs.camps[1]
+		if ours == nil or a == nil or b == nil then
+			check(false, `{name}: both adapters read the arena {tostring(theirs.arena)}`)
+			continue
+		end
+		local differs: { string } = {}
+		local function same(what: string, x: any, y: any): ()
+			if type(x) ~= "number" or type(y) ~= "number" or not near(x, y) then
+				table.insert(differs, `{what} {tostring(x)} / {tostring(y)}`)
+			end
+		end
+		same("camp sx", a.sx, b.sx)
+		same("camp sz", a.sz, b.sz)
+		same("camp x", a.x, b.x)
+		same("camp y", a.y, b.y)
+		same("camp z", a.z, b.z)
+		same("fence height", if a.fence ~= nil then a.fence.height else nil, if b.fence ~= nil then b.fence.height else nil)
+		same("gates", #a.gates, #b.gates)
+		same("entry x", a.entry.x, b.entry.x)
+		same("entry z", a.entry.z, b.entry.z)
+		same("exit x", a.exit.x, b.exit.x)
+		same("exit z", a.exit.z, b.exit.z)
+		same("start x", ours.start.x, theirs.start.x)
+		same("start y", ours.start.y, theirs.start.y)
+		same("start z", ours.start.z, theirs.start.z)
+		same("killY", ours.killY, theirs.killY)
+		same("barrier height", if ours.barrier ~= nil then ours.barrier.height else nil, if theirs.barrier ~= nil then theirs.barrier.height else nil)
+		same("barrier thickness", if ours.barrier ~= nil then ours.barrier.thickness else nil, if theirs.barrier ~= nil then theirs.barrier.thickness else nil)
+		same("spawn points", #a.spawns, #b.spawns)
+		for index, point in a.spawns do
+			local other = b.spawns[index]
+			same(`spawn {index} x`, point.x, if other ~= nil then other.x else nil)
+			same(`spawn {index} z`, point.z, if other ~= nil then other.z else nil)
+		end
+		same("obstacles", #(a.obstacles or {}), b.obstacleCount)
+		check(#differs == 0, `{name}: LevelGeometry.FromArena and check_levels.py's adapter read the arena {tostring(theirs.arena)} alike: size, fence, entry, exit, start, kill height, invisible wall, {#a.spawns} spawn points in order, {#(a.obstacles or {})} obstacles (ours / theirs){real.list(differs)}`)
+	end
+	local arenaLayouts = 0
+	for _, layout in real.layouts do
+		if layout.arena ~= nil then
+			arenaLayouts += 1
+		end
+	end
+	check(seen == arenaLayouts, `check_levels.py read every layout that names an arena ({seen} of {arenaLayouts})`)
+end
+L1.realWorldTests()
+
+function L1.realRunTests(): ()
+	print(" the real files: a whole run of every built level at every difficulty, through Begin and Advance")
+	local real = L1.real
+	local Flow = L1.Flow
+	local built = real.built()
+	for _, node in real.map.nodes do
+		local id = node.level
+		local got = if id ~= nil and built[id] then real.resolve(id) else nil
+		local level = if got ~= nil then got.level else nil
+		local layout = if got ~= nil then got.layout else nil
+		if id == nil or level == nil or layout == nil then
+			continue
+		end
+		local pieces = real.pieces(layout)
+		local bounds = L1.Geo.Bounds(layout)
+		local waves = 0
+		local camps = 0
+		local merges = false
+		for _, stage in level.stages do
+			if stage.kind == "camp" then
+				camps += 1
+				waves += #(stage.waves or {})
+				merges = merges or stage.merge == true
+			end
+		end
+		for _, difficulty in real.map.difficulties do
+			local plan = if level.difficulties[difficulty] ~= nil then real.plan(level, layout, difficulty, bounds) else nil
+			if plan == nil then
+				continue
+			end
+			local tag = `{id} {difficulty}`
+			local run = real.run(plan, pieces, false)
+			local log = run.log
+			local last = log[#log]
+			check(run.stuck == nil, `{tag}: the run walks to its end{if run.stuck ~= nil then " (" .. run.stuck .. ")" else ""}`)
+			check(real.said(log) == real.script(level), `{tag}: it answers exactly what its file lists: {camps} camps, {waves} waves in turn, each camp's bank and opening, then the end ({real.said(log)})`)
+			check(last ~= nil and last.kind == "end" and last.reason == "cleared" and run.state.ended == "cleared" and run.state.cleared == camps, `{tag}: it ends "cleared" with {camps} camps cleared`)
+
+			local strange: { string } = {}
+			local banks = 0
+			local banked = 0
+			for _, action in log do
+				local stageDef = level.stages[action.stage]
+				local stage = plan.stages[action.stage]
+				local kind = action.kind
+				if not real.EXECUTED[kind] then
+					table.insert(strange, `{kind} is no action WaveService executes`)
+				elseif real.ZONED[kind] and (stage == nil or stage.zone == nil) then
+					table.insert(strange, `{kind} names stage {action.stage}, which has no zone`)
+				elseif kind == "wave" and (stageDef == nil or stageDef.waves == nil or stageDef.waves[action.wave] == nil) then
+					table.insert(strange, `wave {tostring(action.wave)} of stage {action.stage} is not in the file`)
+				elseif kind == "gate" and not near(action.at, action.now + real.rules.gateSeconds) then
+					table.insert(strange, `stage {action.stage}'s countdown is {action.at - action.now} s, not levels.gateSeconds`)
+				elseif kind == "breather" then
+					local expected = if stageDef ~= nil and stageDef.breatherSeconds ~= nil then stageDef.breatherSeconds else L1.Combat.BreatherSeconds(1, L1.combat.director)
+					if not near(action.at, action.now + expected) then
+						table.insert(strange, `stage {action.stage}'s breather is {action.at - action.now} s, not {expected}`)
+					end
+				elseif kind == "bank" then
+					banks += 1
+					banked += action.count
+					local each = stageDef ~= nil and stageDef.bankEachWave == true
+					local size = if stageDef ~= nil and stageDef.waves ~= nil then #stageDef.waves else 0
+					if each and action.count ~= 1 then
+						table.insert(strange, `stage {action.stage} banks {action.count} waves at wave {action.wave}`)
+					elseif not each and (action.wave ~= size or action.count ~= size) then
+						table.insert(strange, `stage {action.stage} banks {action.count} waves at wave {action.wave} of {size}`)
+					end
+				end
+			end
+			check(#strange == 0, `{tag}: every action is one WaveService executes, on a stage and a wave that are there, with the config's countdown and the stage's breather{real.list(strange)}`)
+			check(banked == waves and banks >= camps, `{tag}: {banks} banks pay for all {waves} waves, and nothing is banked twice`)
+			check(run.held, `{tag}: a moment before a countdown or a breather is over, nothing happens`)
+			check(#run.unsafe == 0 and run.safe > camps * 3, `{tag}: the safe point is asked {run.safe} times (the start, each countdown, each wave, each breather, each cleared camp) and is always inside the level's bounds, above its kill height, on solid ground, inside nothing, and no place the rescue takes a body from{real.list(run.unsafe)}`)
+			local stars = {}
+			local isNew = Flow.Award(stars, plan.levelId, plan.difficulty)
+			local shown = Flow.NodeState(real.map, built, stars, stars, node.id)
+			check(isNew and shown ~= nil and table.find(shown.stars, difficulty) ~= nil, `{tag}: clearing it puts the {difficulty} star on its node, {node.id}`)
+			local first = level.stages[1]
+			local early = table.concat(run.early, ", ")
+			if first ~= nil and first.kind == "camp" then
+				check(early == "1", `{tag}: it opens on a camp, and the party's start is inside it: the countdown begins with nobody walking (stages triggered at a standstill: {early})`)
+			else
+				check(early == "", `{tag}: no camp triggers from where the run puts the party (the start, the last camp's exit){if early ~= "" then ": stage " .. early else ""}`)
+			end
+
+			if merges then
+				-- The director says "merge" at every ask: a wave is folded in unless it, or the wave
+				-- before it, has a boss.
+				local merged = real.run(plan, pieces, true)
+				local folded: { string } = {}
+				local expected: { string } = {}
+				local paid = 0
+				local fielded = 0
+				local wrong: { string } = {}
+				-- Within the stage being played: the waves queued so far, and those since its last bank.
+				local inStage = 0
+				local queued = 0
+				local group = 0
+				for _, action in merged.log do
+					local stage = plan.stages[action.stage]
+					if action.kind == "wave" then
+						if action.stage ~= inStage then
+							inStage = action.stage
+							queued = 0
+							group = 0
+						end
+						fielded += 1
+						queued += 1
+						group += 1
+						if action.merged == true then
+							table.insert(folded, `{action.stage}.{action.wave}`)
+						end
+						if action.wave ~= queued then
+							table.insert(wrong, `stage {action.stage}: wave {action.wave} came as number {queued}`)
+						end
+						if stage ~= nil and stage.merge and action.wave > 1 and not stage.boss[action.wave] and not stage.boss[action.wave - 1] then
+							table.insert(expected, `{action.stage}.{action.wave}`)
+						end
+					elseif action.kind == "bank" then
+						paid += action.count
+						if action.count ~= group then
+							table.insert(wrong, `the bank at wave {action.wave} counts {action.count} waves of a group of {group}`)
+						end
+						group = 0
+					end
+				end
+				local ended = merged.log[#merged.log]
+				check(merged.stuck == nil and ended ~= nil and ended.reason == "cleared" and fielded == waves and #wrong == 0, `{tag}, merging: every wave is still fielded once, in turn, and the run ends "cleared"{real.list(wrong)}`)
+				check(table.concat(folded, " ") == table.concat(expected, " ") and #folded > 0, `{tag}, merging: the waves folded in are those with no boss in them or before them ({table.concat(folded, " ")})`)
+				check(paid == waves, `{tag}, merging: each merged group banks once, for every wave in it ({paid} waves paid)`)
+			end
+		end
+
+		-- The arena as P5 played it (ruling 27, and the skeleton Ben ruled for every era).
+		if id == "raiderArena" then
+			local plan = real.plan(level, layout, "normal", bounds)
+			local stage = if plan ~= nil then plan.stages[1] else nil
+			local bosses: { string } = {}
+			if stage ~= nil then
+				for wave = 1, stage.waves do
+					if stage.boss[wave] then
+						table.insert(bosses, tostring(wave))
+					end
+				end
+			end
+			check(stage ~= nil and #plan.stages == 1 and stage.waves == 10 and table.concat(bosses, " ") == "5 10", `raiderArena: one camp of ten waves, bosses at 5 and 10 ({table.concat(bosses, " ")})`)
+			check(stage ~= nil and stage.bankEachWave and stage.merge and stage.breatherSeconds == nil, "raiderArena: it banks at every wave clear, merges, and takes the director's breather")
+		end
+	end
+end
+L1.realRunTests()
+
+function L1.realMapTests(): ()
+	print(" the real files: the map (Expeditions.json) as a leader with no star sees it")
+	local real = L1.real
+	local map = real.map
+	local state = L1.Flow.MapState(map, real.built(), {}, {}, 7)
+	check(state.kind == "map" and state.leaderUserId == 7 and #state.nodes == #map.nodes, `every one of the {#map.nodes} nodes is on the map`)
+	local byId = {}
+	for _, node in state.nodes do
+		byId[node.id] = node
+	end
+	local open: { string } = {}
+	local unbuilt: { string } = {}
+	local other: { string } = {}
+	for _, node in map.nodes do
+		local got = byId[node.id]
+		local hasFile = node.level ~= nil and real.file(node.level) ~= nil
+		if got ~= nil and got.open == true and got.reason == nil and hasFile then
+			table.insert(open, node.id)
+		elseif got ~= nil and got.open == false and got.reason == "notBuilt" and not hasFile then
+			table.insert(unbuilt, node.id)
+		else
+			table.insert(other, `{node.id} ({if got ~= nil then tostring(got.reason) else "missing"})`)
+		end
+	end
+	check(table.concat(open, " ") == "forestRoad raiderArena", `forestRoad and raiderArena are open ({table.concat(open, " ")})`)
+	check(#unbuilt == #map.nodes - #open and #other == 0, `the other {#unbuilt} have no level file and are locked, each "notBuilt": {table.concat(unbuilt, ", ")}{real.list(other)}`)
+
+	local ids: { [string]: number } = {}
+	for _, node in map.nodes do
+		ids[node.id] = (ids[node.id] or 0) + 1
+	end
+	local loose: { string } = {}
+	for _, node in map.nodes do
+		if ids[node.id] ~= 1 then
+			table.insert(loose, `{node.id} is the id of {ids[node.id]} nodes`)
+		end
+		if node.from ~= nil and ids[node.from] == nil then
+			table.insert(loose, `{node.id}.from names {node.from}`)
+		end
+		local requires = node.requires
+		if requires ~= nil and requires.node ~= nil and ids[requires.node] == nil then
+			table.insert(loose, `{node.id}.requires.node names {requires.node}`)
+		end
+		if map.themes[node.theme] == nil then
+			table.insert(loose, `{node.id}'s theme {tostring(node.theme)} is not in themes`)
+		end
+		if node.level ~= nil and real.file(node.level) == nil and byId[node.id] ~= nil and byId[node.id].open then
+			table.insert(loose, `{node.id} is open and has no level file`)
+		end
+	end
+	check(#loose == 0, `every node has an id of its own, a \`from\` and a \`requires.node\` that are nodes, and a theme that is in themes{real.list(loose)}`)
+	local unnamed: { string } = {}
+	for _, name in map.difficulties do
+		if map.difficultyNames[name] == nil then
+			table.insert(unnamed, name)
+		end
+	end
+	check(#map.difficulties > 0 and #unnamed == 0, `the map's {#map.difficulties} difficulties each have a name{real.list(unnamed)}`)
+
+	-- A star on Forest Road changes nothing a file does not back: the nodes behind it stay
+	-- "notBuilt" (it wins over every other reason) until their level files exist.
+	local starred = L1.Flow.MapState(map, real.built(), { forestRoad = { normal = true } }, { forestRoad = { normal = true } }, 7)
+	local still = 0
+	local shown = false
+	for _, node in starred.nodes do
+		if node.reason == "notBuilt" then
+			still += 1
+		end
+		if node.id == "forestRoad" and #node.stars == 1 and node.stars[1] == "normal" then
+			shown = true
+		end
+	end
+	check(still == #unbuilt and shown, "with the leader's star on forestRoad its star shows, and the unbuilt nodes stay notBuilt")
+end
+L1.realMapTests()
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

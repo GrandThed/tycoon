@@ -6,6 +6,10 @@ the pure PositionRing (the server's own reading of a player's speed).
 L1 adds the pure rules of a run through a level: StageFlow (tests_l1.luau, with Combat and
 Economy, which it is checked against) and LevelGeometry (tests_l1_world.luau). The Village
 mission and Combat.json are injected as FIXTURES, the way Armory.json is.
+"The real files" (tests_l1.luau) runs those same rules on the data that ships: every level
+file, layout, mission and the map are injected as they stand, the arena layouts a level names
+are bundled as modules, and tools/check_levels.py is asked for its Part counts and its own
+reading of each arena, so the Luau rules and the Python gate are held to one answer.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 Usage: py tools/crowd_harness/run_harness.py [repo root] [luau.exe]
 (defaults: this repo, tools/bin/luau.exe, which tools/check_mirror.py fetches)."""
@@ -40,7 +44,7 @@ SOURCES = {
 def to_luau(value) -> str:
     if isinstance(value, dict):
         return "{" + ", ".join(f"[{json.dumps(key)}] = {to_luau(item)}" for key, item in value.items()) + "}"
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return "{" + ", ".join(to_luau(item) for item in value) + "}"
     if value is None:
         return "nil"
@@ -49,11 +53,72 @@ def to_luau(value) -> str:
     return json.dumps(value)
 
 
-armory = json.loads((repo / "src/shared/Config/Armory.json").read_text(encoding="utf-8"))
+def read(path) -> object:
+    return json.loads((repo / path).read_text(encoding="utf-8"))
+
+
+NUMBERED = r"\d+_"
+
+
+def read_folder(folder: str, numbered: bool = False) -> list:
+    """Every JSON file of a folder as (stem, content). `numbered`: only the files Catalog reads
+    there, those named <n>_<Name>, in its order: by that number, then by name."""
+    def order(path: Path):
+        prefix = re.match(r"\d+", path.stem)
+        return (int(prefix.group()) if prefix else 0, path.stem)
+
+    paths = sorted((repo / folder).glob("*.json"), key=order)
+    if numbered:
+        paths = [path for path in paths if re.match(NUMBERED, path.stem)]
+    return [(path.stem, read(path)) for path in paths]
+
+
+def gate_reading() -> dict:
+    """What tools/check_levels.py makes of the layouts: its Part count for each (its `N Parts`
+    lines) and, for a layout that names an arena, the level layout its own adapter reads out of
+    that arena. Always this checkout's files (the tool takes no root; a mutant root holds copies
+    of the same data). Empty when the tool cannot be imported: the cases that need it then fail."""
+    try:
+        sys.path.insert(0, str(here.parent))
+        import check_levels
+
+        layouts = check_levels.load_all()[2]
+        return {
+            "parts": {name: check_levels.part_count(layout) for name, layout in layouts.items()},
+            "arenas": {name: layout for name, layout in layouts.items() if layout.get("arena")},
+        }
+    except (Exception, SystemExit) as problem:  # the harness still runs, and says so
+        print(f"run_harness: tools/check_levels.py could not be read ({problem!r})", file=sys.stderr)
+        return {}
+
+
+armory = read("src/shared/Config/Armory.json")
+layouts = dict(read_folder("src/shared/Layouts/Levels"))
+# An arena a layout names is a .luau data module: bundled like a source, loaded by its name.
+arenas = sorted({layout["arena"] for layout in layouts.values() if layout.get("arena")})
+for arena in arenas:
+    if (repo / f"src/shared/Layouts/Arenas/{arena}.luau").exists():
+        SOURCES[f"Arena_{arena}"] = f"src/shared/Layouts/Arenas/{arena}.luau"
 # One local for every other config a test reads (the bundle is one chunk of at most 200 locals).
 fixtures = {
-    "village": json.loads((repo / "src/shared/Config/Missions/1_Village.json").read_text(encoding="utf-8")),
-    "combat": json.loads((repo / "src/shared/Config/Combat.json").read_text(encoding="utf-8")),
+    "village": read("src/shared/Config/Missions/1_Village.json"),
+    "combat": read("src/shared/Config/Combat.json"),
+    # The real files, as they ship (tests_l1.luau "the real files").
+    "expeditions": read("src/shared/Config/Expeditions.json"),
+    "proving": read("src/shared/Config/ProvingGrounds.json"),
+    "levels": [content for _, content in read_folder("src/shared/Config/Levels", True)],
+    "missions": [content for _, content in read_folder("src/shared/Config/Missions", True)],
+    # Files of those two folders that Catalog does not read (it takes <n>_<Name> only), while
+    # tools/check_levels.py reads every *.json there.
+    "unread": sorted(
+        f"{folder}/{path.name}"
+        for folder in ("Config/Levels", "Config/Missions")
+        for path in (repo / "src/shared" / folder).glob("*.json")
+        if not re.match(NUMBERED, path.stem)
+    ),
+    "layouts": layouts,
+    "arenas": [arena for arena in arenas if f"Arena_{arena}" in SOURCES],
+    "gate": gate_reading(),
 }
 parts = [
     f"local ARMORY: any = {to_luau(armory)}\n",

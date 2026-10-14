@@ -123,16 +123,19 @@
 		"provingGear": { "melee": 2, "ranged": 1 },
 		"gearPresets": [
 			{ "name": "2 / 1", "melee": 2, "ranged": 1 },
-			{ "name": "4 / 3", "melee": 4, "ranged": 3 },
-			{ "name": "6 / 5", "melee": 6, "ranged": 5 }
+			{ "name": "4 / 4", "melee": 4, "ranged": 4 },
+			{ "name": "6 / 6", "melee": 6, "ranged": 6 }
 		],
 		"perfLogSeconds": 10
 	},
 	"levels": {
 		"gateSeconds": 3,
-		"triggerInset": 4,
-		"closeInset": 2,
+		"triggerBelow": 4,
 		"triggerHeight": 30,
+		"closeInset": 2,
+		"closeGraceSeconds": 0.5,
+		"crowdCeiling": 200,
+		"floorThickness": 4,
 		"startSpacing": 4,
 		"startCooldownSeconds": 2,
 		"fenceThickness": 1,

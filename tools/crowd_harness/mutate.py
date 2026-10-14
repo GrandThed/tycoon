@@ -1,7 +1,8 @@
 """Proves the harness cases are not vacuous. Copies the sources into `mutant/` beside this
 file, undoes one rule at a time there, and runs the harness against the copy: every
 mutation must fail at least one check.
-Usage: py tools/crowd_harness/mutate.py <repo root> <luau.exe> [filter]"""
+Usage: py tools/crowd_harness/mutate.py <repo root> <luau.exe> [filter] [from:to]
+(`filter` = only the mutations whose label holds that text; "" = all of them.)"""
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,18 @@ FILES = [
     VITALS,
     FIELD,
 ]
+# The data the harness's "real files" cases read (run_harness.py reads the same folders): copied
+# whole into the mutant root. A mutation undoes a rule, never the data.
+FILES += ["src/shared/Config/Expeditions.json", "src/shared/Config/ProvingGrounds.json"]
+for folder, pattern in (
+    ("src/shared/Config/Levels", "*.json"),
+    ("src/shared/Config/Missions", "*.json"),
+    ("src/shared/Layouts/Levels", "*.json"),
+    ("src/shared/Layouts/Arenas", "*.luau"),
+):
+    for path in sorted((repo / folder).glob(pattern)):
+        if f"{folder}/{path.name}" not in FILES:
+            FILES.append(f"{folder}/{path.name}")
 OVERLAY = "(overlaid and CrowdBrain.IsStriking(mind))"
 BOTH = "elseif planted then\n" + "\t" * 6 + "continue\n" + "\t" * 5 + "end"
 AIMED = "if not held and not (voided and strike.targetUserId == player.UserId) then"
@@ -1149,6 +1162,60 @@ WORLD_MUTATIONS = {
     ),
 }
 MUTATIONS.update(WORLD_MUTATIONS)
+
+# L1, "the real files" (tests_l1.luau): rules that only the data that ships shows broken. The
+# fixture level starts at the world origin and no fixture case reads a camp's depth apart from
+# its width; Forest Road starts at x -260 and its Main Camp is 100 x 94. When these were added
+# no fixture check failed for any of them: each is caught by the real-files group alone. (If a
+# layout change ever leaves one uncaught, the answer is a fixture case, not a data rule.)
+REAL_MUTATIONS = {
+    "real: the plan's start with x and z swapped": (
+        FLOW,
+        "start = Vector3.new(layout.start.x, layout.start.y, layout.start.z),",
+        "start = Vector3.new(layout.start.z, layout.start.y, layout.start.x),",
+    ),
+    "real: a level file's id dropped for its layout's": (
+        FLOW,
+        "\t\t\tversion = file.version,\n\t\t\tid = file.id,\n",
+        "\t\t\tversion = file.version,\n\t\t\tid = file.layout,\n",
+    ),
+    "real: the arena's level takes its mission's id": (
+        FLOW,
+        "\t\tid = file.id,\n\t\tname = file.name,\n\t\tlayout = file.layout,\n\t\tmission = file.mission,",
+        "\t\tid = mission.id,\n\t\tname = file.name,\n\t\tlayout = file.layout,\n\t\tmission = file.mission,",
+    ),
+    "real: the plan's floor as deep as it is wide": (
+        FLOW,
+        "local rect: Rect = { x = camp.x, z = camp.z, hx = camp.sx / 2, hz = camp.sz / 2 }",
+        "local rect: Rect = { x = camp.x, z = camp.z, hx = camp.sx / 2, hz = camp.sx / 2 }",
+    ),
+    "real: an inset rectangle as deep as it is wide": (
+        FLOW,
+        "\t\thz = math.max(rect.hz - by, 0),\n",
+        "\t\thz = math.max(rect.hx - by, 0),\n",
+    ),
+    "real: a rectangle judged by its width on both axes": (
+        FLOW,
+        "return math.abs(x - rect.x) <= rect.hx and math.abs(z - rect.z) <= rect.hz",
+        "return math.abs(x - rect.x) <= rect.hx and math.abs(z - rect.z) <= rect.hx",
+    ),
+    "real: a closed camp's rescue reaches as far in Z as the camp is wide": (
+        FLOW,
+        "\t\t\t\tor math.abs(position.Z - rect.z) > rect.hz + rescue.outside",
+        "\t\t\t\tor math.abs(position.Z - rect.z) > rect.hx + rescue.outside",
+    ),
+    "real: a closed camp's rescue reaches as far in X as the camp is deep": (
+        FLOW,
+        "\t\t\t\tor math.abs(position.X - rect.x) > rect.hx + rescue.outside",
+        "\t\t\t\tor math.abs(position.X - rect.x) > rect.hz + rescue.outside",
+    ),
+    "real: a fence side as long as the camp is wide": (
+        GEOMETRY,
+        "return (if side.alongX then camp.sx else camp.sz) / 2",
+        "return camp.sx / 2",
+    ),
+}
+MUTATIONS.update(REAL_MUTATIONS)
 
 vacuous = []
 ran = 0

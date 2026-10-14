@@ -2605,8 +2605,18 @@ export type ExpeditionsConfig = {
 -- Combat.json `levels`
 export type CombatLevelsConfig = {
 	gateSeconds: number,
-	triggerInset: number,
+	-- A camp triggers on its whole fenced rectangle (the floor grown by fenceThickness), for a
+	-- root between triggerBelow under and triggerHeight above its floor.
+	triggerBelow: number,
 	triggerHeight: number,
+	-- For this long after a camp's gates close, a fighter found outside the close's rectangle is
+	-- still moved to the entry: the server judged the close on a lagged copy of their position.
+	closeGraceSeconds: number,
+	-- The highest a launch may carry a crowd body above a camp's floor (the crowd bounds' half
+	-- height); a camp's floor and this must fit the crowd's wire together.
+	crowdCeiling: number,
+	-- How deep a camp's floor is under its top face.
+	floorThickness: number,
 	startSpacing: number,
 	startCooldownSeconds: number,
 	fenceThickness: number,

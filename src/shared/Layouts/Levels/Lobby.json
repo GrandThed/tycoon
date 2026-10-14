@@ -7,7 +7,7 @@
 		{ "x": 6, "y": 0, "z": -334 },
 		{ "x": -6, "y": 0, "z": -334 }
 	],
-	"killY": -40,
+	"killY": -12,
 	"camps": [],
 	"blocks": [
 		{ "name": "LobbyFloor", "look": "lobby", "x": 0, "y": -1, "z": -340, "sx": 48, "sy": 2, "sz": 48 },
