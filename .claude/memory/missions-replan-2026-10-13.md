@@ -129,3 +129,18 @@ kept at once** (his own words "by the amount killed by the party, disregarding c
 "only a checkpoint pays" is dead); camps never refill; three camps twice L1's size on a ~1,000-stud road,
 ~10 min. Merge rule holds for L1b. Work on branch `l1b-living-road` in `tycoon-p5`; the study brief is
 `docs/prompts/l1b-study.md`, its report `docs/prompts/l1b-study-report.md`.
+
+**L1b Wave 1 "the camp is alive" merged to `main` 2026-10-14** (merge 5423937; branch `l1b-living-road`
+in `tycoon-p5`), the place files rebuilt; waiting on Ben's Studio look (PLAYTEST "L1b Wave 1", six key-only
+steps). Built on L1's road and camp sizes: resident groups (guard / patrol / fire), wake by sight or hit,
+chase to the edge, walk home evading and heal, per-kill pay kept at once, only the Chief's Clearing locks.
+Process that worked: study → Ben's decisions → contract drafted by an Opus agent and checked by the lead →
+four owners → four-slice review (0 Critical, 4 Major, 15 Minor) → fresh fix agents from
+`docs/prompts/l1b-w1-fix-round.md` → one fix-diff reviewer (0/0/2) → QA green (harness 1,571; mutations
+513). Two agents died on the session limit mid-build; fresh agents continued from
+`docs/prompts/l1b-w1-continue.md` with nothing lost. Lead rulings worth keeping: damage only from a player
+in play (L1b-7, else kills from outside the fence are free); in-play has ROUNDED corners
+(`chaseMargin ≤ reach − √2·radius`, 2.5); `engaged` holds 1.5 s (fixes fall i-frames and the phone
+Abandon flicker at once); phone auto-fire never targets a camp you are not in play for; Wave 1 clear band
+2.5–4 min (Wave 2 brings ~10 back). All carried items with owners: PLAN "L1b". Next: Ben's look, then Wave 2
+"the long road" (its own contract) on his word.

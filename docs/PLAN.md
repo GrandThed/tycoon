@@ -3248,7 +3248,7 @@ checkpoints on the road).
 - [x] Wave 1 built (`55dcca0`, `e2479c3`)
 - [x] Wave 1 reviewed, fix round done (`5ff333b`, `18a25fe`; INTERFACES "Review round and state (2026-10-14)")
 - [x] Wave 1 QA green (`18a25fe`)
-- [ ] Wave 1 merged to `main`, six place files rebuilt (lead)
+- [x] Wave 1 merged to `main` (5423937), six place files rebuilt (lead)
 - [ ] Ben's Studio look at Wave 1
 
 ## M12 — Growing city
