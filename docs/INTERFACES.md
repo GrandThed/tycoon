@@ -13981,30 +13981,31 @@ Normal, and your gear is **2 / 2**. Keys:
 - The grey **Server** number in a corner is for one question at the end.
 
 1. **Enter** (Depart). The road is long now: the gap, the bridge, the climb by the lookout, about a
-   minute's walk. As soon as you arrive you can see raiders far ahead: two fires beside the road,
-   a line of guards and a patrol by a tent. *Bug: the camp is empty until you are close; raiders
-   pop in; a raider stands frozen while you watch.*
-2. **One swing per jump:** jump and click as fast as you can: one swing in the air, then nothing
-   until you land. On the ground the combo is as before; **Space** then **C** still slams. *Bug: two
-   or three swings in one jump; a swing that shows and then vanishes.*
+   minute's walk. The first camp stands on a raised floor behind a fence: from the road you see its
+   tent's roof, and at the top of a jump (or from the step by the lookout) the raiders already there,
+   two fires beside the road, a line of guards and a patrol. *Bug: at a jump's top the camp is empty;
+   raiders pop in once you are close; a raider stands frozen while you watch.*
+2. **One swing per jump:** jump and click as fast as you can, also holding **Space** to hop: one
+   swing in each jump, then nothing until you land. On the ground the combo is as before; **Space**
+   then **C** still slams. *Bug: two or three swings in one jump; a swing that shows and then
+   vanishes; no swing at all on a later hop.*
 3. **Pickets, the noisy way:** walk the road into the first camp. A "!" pops over the fire nearest
-   the road, and the other fire joins in with its own "!". Once the camp is up, a raider walks out of the tent
-   about every 6 seconds (eight in all). Kill everything: the banner "Pickets cleared", and your cash
-   jumps a little more than a kill (the camp bonus). *Bug: the tent never sends; it keeps sending
-   forever; no banner.*
-4. **Headshots:** **2** for the bow. In the next camp, shoot a brute in the head: a yellow crit
-   number. Shoot one in the legs: it counts. A plated raider's headshot is yellow too. *Bug: a head
-   shot does nothing; a legs shot does nothing.*
-5. **Main Camp, the quiet way:** go in by the gate on the road, then turn left (north) at once to
+   the road, and the other fire joins in with its own "!". Once the camp is up, a raider steps out of
+   the tent about every 6 seconds (eight in all). Kill everything: the banner "Pickets cleared", and
+   your cash jumps a little more than a kill (the camp bonus). *Bug: the tent never sends; it keeps
+   sending forever; a raider appears out of nowhere; no banner.*
+4. **Main Camp, the quiet way:** go in by the gate on the road, then turn left (north) at once to
    the fence. Walk east along the inside of it, close to it, to the far gate, and step back onto the
-   road. Nobody wakes. *Bug: a "!"
-   while you hug the fence.*
-6. Then wake it if you like (walk into the middle): each group that wakes brings its neighbours.
+   road. Nobody wakes. *Bug: a "!" while you hug the fence.*
+5. Then wake it if you like (walk into the middle): each group that wakes brings its neighbours.
    Clear it, or leave it and walk on: they chase to the edge, go home and heal, as in Wave 1.
-7. **The Chief's Clearing:** walk in (or **N**). The gates close and the waves and the **Colossus**
-   come as before. While he is up, look at the grey **Server** number for a few seconds. Kill him
-   (**G** if you need it): the summary lists your kills and the camp bonuses. **Enter**. *Bug: the
-   summary is empty; a bonus is paid for a camp you skipped with N.*
+6. **The Chief's Clearing:** walk in (or **N**). The gates close and the waves come as before.
+   **Headshots:** **2** for the bow. Shoot a brute in the head: a yellow crit number; shoot one in the
+   legs: it counts. A plated raider's headshot is yellow too. When the **Colossus** is up, the same:
+   a head shot is yellow. While he is up, look at the grey **Server** number for a few seconds. Kill
+   him (**G** if you need it): the summary lists your kills and the camp bonuses. **Enter**. *Bug: a
+   head shot or a legs shot does nothing; the summary is empty; a bonus is paid for a camp you
+   skipped with N.*
 
 Asked afterwards, as click questions:
 - Did the whole road feel the right length (too short / about right / too long)?
