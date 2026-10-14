@@ -144,3 +144,7 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
 - **Fix tail done (fix-tail.md):** `CampBrain.TentRouse` (pure) decides every tent-caused rouse;
   every gate green (harness 1,995, mutate 619 / 0, mirror mutants 46 / 46, sims, check_levels,
   stage mirror); no data retune. Normal 2/2 Timber 40.7 / 39.2 / 40.3 a minute.
+- **Fix-diff review (fix-diff.md): 0 Critical, 1 Major, 2 Minor.** M1 (the client took the server's
+  "landing ahead" branch: two swings in one hop, then none) → guard on `lagSeconds > 0`; m1 → a
+  stricter client turn window (0.05 against 0.1); m2 → `TentOwesRouse` in the stage mirror and the
+  sim's `group_up` on the server's trailing state. One fresh agent: `docs/prompts/l1b-w2-fix-diff-round.md`.
