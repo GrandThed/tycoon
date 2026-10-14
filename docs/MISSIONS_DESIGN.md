@@ -341,3 +341,34 @@ clear") for every camp except the boss's. §5 and §12 describe L1 as built and 
 L1b. Open questions for Ben (resting raiders, running away, what saves progress, refilling camps,
 size, sneaking past a camp) and the technical consequences are in `docs/prompts/l1b-living-road.md`,
 the prompt for the session that builds L1b.
+
+## 16. Ben's L1b decisions (2026-10-14)
+
+Asked with click questions after the L1 verdict, before any study (he chose "decisions first").
+
+1. **Running away:** raiders chase to the camp's edge, then walk back to their posts and heal.
+   Running out resets that fight; slingers still shoot while you are in range. **[Ben]**
+2. **At rest:** all three, mixed per camp: guards at posts, patrols walking loops, groups sitting
+   at fires (slow to stand, so a first strike). They wake on seeing a player near, on being hit,
+   or when a raider of their group wakes. **[Ben; the waking rule is the lead's, in the question]**
+3. **Sneaking past a camp is allowed.** **[Ben]**
+4. **Rewards come from kills**, "by the amount killed by the party, disregarding clearing status",
+   and **every kill is kept the moment it falls**: a down loses nothing already earned. The boss
+   still pays its own reward on a win. This replaces L1's ruling 15 ("only a checkpoint pays"):
+   a checkpoint no longer banks anything. **[Ben]**
+5. **A camp stays as you left it** for the rest of the run: the dead stay dead, survivors heal.
+   No refills, so a camp cannot be farmed. **[Ben]**
+6. **Size: three camps (Pickets, Main Camp, the Chief), each about twice L1's floor, a road of
+   about 1,000 studs, a first clear on Normal of about 10 minutes.** A camp holds 30 to 40 raiders
+   in groups that wake separately, plus a tent that sends reinforcements once the camp is awake;
+   about 100 to 120 raiders in the level, most resting. Estimates before the study: inside the
+   wire's ±1,024 studs, the 160-body cap and about 200 of 600 Parts. **[Ben]**
+7. The merge rule holds for L1b: each step that passes review and QA is merged to `main` and the
+   place files rebuilt. **[Ben]**
+
+Still standing from §15: only the boss's room locks (L1's close: the trigger on the fenced
+rectangle, the wall at the floor's edge, the grace re-judge). **The lead's open points for the
+contract:** whether a camp's clear gives anything at all (Ben's words suggest no bonus); what a
+checkpoint still means (nothing banks there now; it may only mark progress for the summary and
+for co-op later); the Raider Arena stays a closed one-camp node with its own numbers, frozen until
+L4.
