@@ -49,7 +49,7 @@ worked here from the mission file by hand, so it fails when either Python functi
 
 Usage:
   py tools/sim_combat.py                  # unlock table + Village run report
-  py tools/sim_combat.py --check          # the twenty-one C0-L1 assertions; exit 1 on any
+  py tools/sim_combat.py --check          # the twenty-three C0-L1b assertions; exit 1 on any
   py tools/sim_combat.py --era 1          # only that era's mission
   py tools/sim_combat.py --power 84       # model the run at a given Gear Power
   py tools/sim_combat.py --party 4        # party size for the modelled run
@@ -124,14 +124,18 @@ CROWD_TARGET_MINUTES_SLACK = 1.5
 # simulator's this many times the mission's targetMinutes (C1 shipped 1200 s against 8 minutes,
 # x2.5), or it cuts off runs that are merely slow.
 CROWD_RUN_CAP_RATIO = 2.0
-# L1 levels (docs/INTERFACES.md "L1 contracts" -> "Balance bands"). What a first clear of a level
-# pays on Normal at the recommended gear (placeholders in proportion to the arena run by time:
-# 144,250 cash and 258 Timber in about 11.65 minutes, so 7 minutes is 87,000 and 155), its Valor
-# exactly, and how many times Normal a whole clear pays on the harder difficulties (the extra
-# bodies pay too). `rewardMult` itself is exact.
-LEVEL_PAY_TARGETS = {"forestRoad": {"cash": 87000, "materials": 155, "valor": 10}}
-LEVEL_PAY_TOLERANCE = 0.10
-LEVEL_PAY_TIMES = {"hard": (2.0, 3.0), "brutal": (4.0, 6.0)}
+# L1 levels (docs/INTERFACES.md "L1 contracts" -> "Balance bands"). L1b Wave 1 ("Balance bands"):
+# what a Normal clear pays is REPORTED, not banded, against L1's measured clear (88,200 cash,
+# 155 Timber, 10 Valor): the residents replace the waves of camps A and B, and the pay bands come
+# back at Wave 2's size. The Valor stays exact (the boss's x rewardMult), and so does rewardMult.
+# How many times Normal a whole clear pays on the harder difficulties is reported too.
+LEVEL_PAY_TARGETS = {"forestRoad": {"cash": 88200, "materials": 155, "valor": 10}}
+LEVEL_PAY_TOLERANCE = 0.10  # reported against, not gated, in L1b Wave 1
+LEVEL_PAY_TIMES = {"hard": (2.0, 3.0), "brutal": (4.0, 6.0)}  # reported, not gated, in L1b Wave 1
+# Assertion 22 (L1b-15): Combat.SplitCarry over a seeded fuzz.
+CARRY_FUZZ_SEED = 1407
+CARRY_FUZZ_RUNS = 400
+CARRY_FUZZ_KILLS = 60
 LEVEL_REWARD_MULT = {"normal": 1, "hard": 2, "brutal": 4}
 # What a boss's calls pay per second, as a share of what the whole clear pays per second: under
 # this, standing in front of a boss to farm what it calls is always worse than playing on.
@@ -694,13 +698,45 @@ def camp_wave(wave_def, regen_share, scales, rank, ranks, party_size, combat_cfg
     }
 
 
-def camp_reward(rewards, kind, spec):
-    """Combat.CampReward -- (round(cash x rewardMult), round(materials x rewardMult)) for one
-    kill of `kind`; a kind with no rewards entry pays (0, 0)."""
+def kill_reward(rewards, kind, reward_mult):
+    """Combat.KillReward (L1b-15) -- (round(cash x rewardMult), round(materials x rewardMult))
+    for one kill of `kind`; a kind with no rewards entry pays (0, 0)."""
     reward = rewards.get(kind)
     if reward is None:
         return 0, 0
-    return luau_round(reward["cash"] * spec["rewardMult"]), luau_round(reward["materials"] * spec["rewardMult"])
+    return luau_round(reward["cash"] * reward_mult), luau_round(reward["materials"] * reward_mult)
+
+
+def camp_reward(rewards, kind, spec):
+    """Combat.CampReward -- KillReward at the spec's rewardMult."""
+    return kill_reward(rewards, kind, spec["rewardMult"])
+
+
+def split_carry(pool, shares, carry, cash_mults=None):
+    """Combat.SplitCarry (L1b-15) -- one kill's pool split the moment it falls. Each member is
+    paid the whole units of (pool x share, cash x their cash multiplier, + their carry), floored
+    with a 1e-9 allowance, and keeps the fraction in `carry` (mutated) for their next credit. A
+    share that is not a finite number of at least 0 pays nothing and leaves that carry as it
+    was; a member not in `shares` keeps theirs."""
+    split = {}
+    for user, share in shares.items():
+        if not (isinstance(share, (int, float)) and share >= 0 and share < math.inf):
+            continue
+        held = carry.get(user)
+        if held is None:
+            held = {"cash": 0, "materials": 0, "valor": 0}
+            carry[user] = held
+        mult = (cash_mults.get(user) if cash_mults is not None else None)
+        mult = 1 if mult is None else mult
+        paid = {}
+        for key, exact in (("cash", pool["cash"] * share * mult + held["cash"]),
+                           ("materials", pool["materials"] * share + held["materials"]),
+                           ("valor", pool["valor"] * share + held["valor"])):
+            whole_units = math.floor(exact + 1e-9)
+            paid[key] = whole_units
+            held[key] = max(exact - whole_units, 0)
+        split[user] = paid
+    return split
 
 
 def burst_seconds(target_wave_seconds, bursts, tempo_value):
@@ -2491,13 +2527,28 @@ def level_gates(file, level, layout, expeditions, proving, combat_cfg):
 
 
 def level_pay(level, difficulty, ranks, combat_cfg, summon_kills):
-    """What a whole solo clear of a level pays at a difficulty (Combat.CampReward per kill):
-    every configured body, every boss with its Valor, and `summon_kills` {boss kind: {kind:
-    kills}} of what the bosses call. Returns (totals, per-stage rows, kills by kind)."""
+    """What a whole solo clear of a level pays at a difficulty (Combat.KillReward per kill, L1b-15):
+    every resident of every camp (by minDifficulty, never countMult: L1b-10), every configured
+    body of the boss room's waves, every boss with its Valor, crowd.clearBonus per clear, and
+    `summon_kills` {boss kind: {kind: kills}} of what the bosses call. Returns (totals, per-camp and per-stage rows, kills by kind)."""
+    import sim_range as sr
+
     scales = level["difficulties"][difficulty]
     totals = {"cash": 0, "materials": 0, "valor": 0}
     rows = []
     kills = {}
+    for config in level.get("camps") or []:
+        cash = materials = bodies = 0
+        for group in config.get("residents") or []:
+            for unit in sr.fielded_units(group.get("units") or [], ranks[difficulty], ranks)[0]:
+                c, m = kill_reward(level["crowd"]["rewards"], unit["kind"], scales["rewardMult"])
+                cash += c * unit["count"]
+                materials += m * unit["count"]
+                bodies += unit["count"]
+                kills[unit["kind"]] = kills.get(unit["kind"], 0) + unit["count"]
+        rows.append((f"{config['name']} (residents)", bodies, cash, materials, 0))
+        totals["cash"] += cash
+        totals["materials"] += materials
     for stage in level["stages"]:
         if stage["kind"] != "camp":
             continue
@@ -2520,6 +2571,25 @@ def level_pay(level, difficulty, ranks, combat_cfg, summon_kills):
         totals["cash"] += cash
         totals["materials"] += materials
         totals["valor"] += valor
+    # crowd.clearBonus x rewardMult, once per clear (L1b-17, WaveService.campCleared): every open
+    # camp that holds a resident at this difficulty (its `campClear`) and every locking camp (its
+    # `open`; a Studio skip pays nothing and never happens in a clear).
+    bonus = level["crowd"].get("clearBonus") or {}
+    locking = {stage.get("zone") for stage in level["stages"] if stage["kind"] == "camp"}
+    clears = sum(1 for stage in level["stages"] if stage["kind"] == "camp")
+    for config in level.get("camps") or []:
+        if config["id"] in locking:
+            continue
+        fielded = [unit for group in config.get("residents") or []
+                   for unit in sr.fielded_units(group.get("units") or [], ranks[difficulty], ranks)[0]]
+        if sum(unit["count"] for unit in fielded) > 0:
+            clears += 1
+    c, m = kill_reward({"clear": {"cash": bonus.get("cash") or 0, "materials": bonus.get("materials") or 0}}, "clear",
+                       scales["rewardMult"])
+    if clears and (c or m):
+        rows.append((f"clear bonus x {clears}", 0, c * clears, m * clears, 0))
+        totals["cash"] += c * clears
+        totals["materials"] += m * clears
     return totals, rows, kills
 
 
@@ -2541,7 +2611,8 @@ def print_level(level_id, combat_cfg):
     import sim_range as sr
 
     proving = sr.load_config(sr.CONFIG_PATH)
-    report = sr.forest_report(proving, careless=False, level_id=level_id, human=False, ranged=False, below=False)
+    report = sr.forest_report(proving, careless=False, level_id=level_id, human=False, ranged=False, below=False,
+                             scenarios=False)
     if report is None:
         return
     level, ctx = report["level"], report["ctx"]
@@ -2631,7 +2702,7 @@ class Checks:
 
 def run_checks(armory, combat_cfg, places, missions, game, eras):
     checks = Checks()
-    print("sim_combat --check (docs/INTERFACES.md C0 + C1 + C2 + C2.5 + P5 + L1 contracts, twenty-one assertions)")
+    print("sim_combat --check (docs/INTERFACES.md C0 + C1 + C2 + C2.5 + P5 + L1 + L1b contracts, twenty-three assertions)")
     curves = greedy_curves(game, eras)
     # P5: the crowd missions are measured once, by sim_range (bosses and the whole run).
     crowd = {}
@@ -3170,8 +3241,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
 
     # 19. L1 ruling 27: the Raider Arena is its mission behind an adapter. For every wave and
     #     party size, Combat.CampWave on the resolved level equals Combat.CrowdWave on the
-    #     mission; the level is one camp "arena" that merges, takes the director's breather and
-    #     banks at every wave; its rewards, regen and density are the mission's own.
+    #     mission; the level is one camp "arena" that merges and takes the director's breather,
+    #     with no residents; its rewards, regen and density are the mission's own. (L1b-15: no
+    #     stage banks any more, every kill is paid as it falls; sim_range holds the runs to it.)
     expeditions = sr.load_config(sr.EXPEDITIONS_PATH)
     ranks = sr.difficulty_ranks(expeditions)
     level_files = sr.load_level_files()
@@ -3190,9 +3262,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         stage = level["stages"][0]
         block = mission["crowd"]
         if (len(level["stages"]) != 1 or stage["kind"] != "camp" or stage["zone"] != "arena" or not stage["merge"]
-                or not stage["bankEachWave"] or stage["breatherSeconds"] is not None
+                or "bankEachWave" in stage or stage["breatherSeconds"] is not None or level.get("camps")
                 or stage["targetWaveSeconds"] != mission["targetWaveSeconds"]):
-            problems.append(f"{file['id']} is not one merging camp that banks each wave on the director's breather")
+            problems.append(f"{file['id']} is not one merging camp on the director's breather with no residents")
         if (level["crowd"]["rewards"] is not block["rewards"] or level["crowd"]["regenShare"] != block["regenShare"]
                 or level["crowd"]["maxAlive"] != block["maxAlive"] or level["crowd"]["burst"] != block["burst"]
                 or level["material"] != mission["material"]
@@ -3268,25 +3340,21 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     checks.verdict(not problems, "20 level gates     ", "; ".join(problems[:6]) if problems else "; ".join(notes)
                    + f"; {len(node_ids)} map nodes; gateSeconds {combat_cfg['levels']['gateSeconds']:g}")
 
-    # 21. What each difficulty of a level pays. Normal: cash and materials within
-    #     LEVEL_PAY_TOLERANCE of the target and exactly its Valor. Hard and Brutal: the Valor is
-    #     Normal's times rewardMult, and the whole clear pays LEVEL_PAY_TIMES of Normal (summons
-    #     at the counts sim_range reports for the reacting player's boss fight at each
-    #     difficulty's gear). targetMinutes lies within CROWD_TARGET_MINUTES_SLACK of the mean
-    #     measured clear on Normal. Two more, from the fix round:
-    #     - every cleared run of the reacting player banked exactly what the level file pays
-    #       for its kills (the configured bodies, the boss, the fodder that run's boss called);
-    #     - stalling never beats playing: what a boss's calls pay per second is under
-    #       LEVEL_STALL_SHARE of what the clear pays per second. That is why a slow clear may
-    #       bank more than the band: one gear preset below, the boss fight is longer and the
-    #       boss calls more fodder, so the clear banks up to x1.16 (Hard) and x1.07 (Brutal) of
-    #       the clear at the recommended gear, and less by the minute. The band is the
-    #       recommended gear's; tools/sim_range.py measures the slow clear and holds its rate.
+    # 21. What each difficulty of a level pays (L1b Wave 1, amended). Gated: the Valor is
+    #     exactly the boss's x rewardMult on every difficulty (Normal 10); targetMinutes lies
+    #     within CROWD_TARGET_MINUTES_SLACK of the mean measured clear on Normal; every cleared run
+    #     of the reacting player was paid, kill by kill, exactly what the level file pays for its
+    #     kills (every resident, the boss room's bodies, the boss, the fodder that run's boss
+    #     called: L1b-15, no checkpoint pays); stalling never beats playing (what a boss's calls
+    #     pay per second is under LEVEL_STALL_SHARE of what the clear pays per second).
+    #     Reported, not gated (the contract's "Balance bands"): Normal's pay against L1's
+    #     LEVEL_PAY_TARGETS, and Hard's and Brutal's pay as times Normal's.
     details = []
     ok21 = True
     proving_cfg = sr.load_config(sr.CONFIG_PATH)
     for level_id, target in LEVEL_PAY_TARGETS.items():
-        report = sr.forest_report(proving_cfg, careless=False, level_id=level_id, human=False, ranged=False, below=False)
+        report = sr.forest_report(proving_cfg, careless=False, level_id=level_id, human=False, ranged=False, below=False,
+                                  scenarios=False)
         if report is None:
             ok21 = False
             details.append(f"{level_id} has no level file")
@@ -3295,12 +3363,10 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         summons = forest_summons(proving_cfg, report)
         pays = {d: level_pay(level, d, ranks, combat_cfg, summons[d])[0] for d in report["difficulties"]}
         normal = pays["normal"]
-        good = (abs(normal["cash"] / target["cash"] - 1) <= LEVEL_PAY_TOLERANCE
-                and abs(normal["materials"] / target["materials"] - 1) <= LEVEL_PAY_TOLERANCE
-                and normal["valor"] == target["valor"])
+        good = normal["valor"] == target["valor"]
         parts = [f"{level_id} Normal {normal['cash']:,.0f} cash ({100 * (normal['cash'] / target['cash'] - 1):+.1f}% of "
-                 f"{target['cash']:,}), {normal['materials']:.0f} {level['material']} "
-                 f"({100 * (normal['materials'] / target['materials'] - 1):+.1f}% of {target['materials']}), "
+                 f"L1's {target['cash']:,}, reported), {normal['materials']:.0f} {level['material']} "
+                 f"({100 * (normal['materials'] / target['materials'] - 1):+.1f}% of L1's {target['materials']}, reported), "
                  f"{normal['valor']} Valor (needs {target['valor']})"]
         for difficulty, (lo, hi) in LEVEL_PAY_TIMES.items():
             pay = pays.get(difficulty)
@@ -3311,16 +3377,17 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
             cash_times = pay["cash"] / normal["cash"]
             mat_times = pay["materials"] / normal["materials"]
             valor = normal["valor"] * LEVEL_REWARD_MULT[difficulty]
-            good = good and lo <= cash_times <= hi and lo <= mat_times <= hi and pay["valor"] == valor
+            good = good and pay["valor"] == valor
             parts.append(f"{difficulty} {pay['cash']:,.0f} cash (x{cash_times:.2f}), {pay['materials']:.0f} "
-                         f"{level['material']} (x{mat_times:.2f}), {pay['valor']} Valor (needs {valor}; x{lo:g}-x{hi:g})")
+                         f"{level['material']} (x{mat_times:.2f}; L1's band x{lo:g}-x{hi:g}, reported), {pay['valor']} "
+                         f"Valor (needs {valor})")
         runs = report["difficulties"]["normal"]["runs"]
         clears = [r["at"] for r in runs if r["end"] == "cleared"]
         mean = sum(clears) / len(clears) / 60 if clears else math.inf
         honest = abs(level["targetMinutes"] - mean) <= CROWD_TARGET_MINUTES_SLACK
         good = good and honest
         parts.append(f"targetMinutes {level['targetMinutes']} against a mean clear of {mean:.1f} min")
-        # What the measured runs banked, against the level file: the configured kills of the
+        # What the measured runs were paid, against the level file: the configured kills of the
         # difficulty and the fodder that very run's boss called, priced by level_pay.
         boss_kind = sr.FOREST_BOSS
         called = next((a.get("summon") for a in proving_cfg["crowd"]["kinds"][boss_kind]["attacks"]
@@ -3335,13 +3402,13 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
                 cleared += 1
                 extra = r["killed"].get(called, 0) - written.get(called, 0) if called else 0
                 owed, _rows, kills = level_pay(level, difficulty, ranks, combat_cfg, {boss_kind: {called: extra}})
-                if r["banked"] != owed or r["killed"] != kills or r["dropped"]["cash"] != 0:
-                    unpaid.append(f"{difficulty}: banked {r['banked']['cash']:,}/{r['banked']['materials']}/"
-                                  f"{r['banked']['valor']}, the file pays {owed['cash']:,}/{owed['materials']}/"
+                if r["wallet"] != owed or r["killed"] != kills:
+                    unpaid.append(f"{difficulty}: paid {r['wallet']['cash']:,}/{r['wallet']['materials']}/"
+                                  f"{r['wallet']['valor']}, the file pays {owed['cash']:,}/{owed['materials']}/"
                                   f"{owed['valor']} for its kills")
         good = good and cleared > 0 and not unpaid
-        parts.append(f"{cleared} cleared runs each banked exactly what the file pays for its kills" if not unpaid
-                     else "banked is not what the file pays: " + "; ".join(unpaid[:3]))
+        parts.append(f"{cleared} cleared runs each paid exactly what the file pays for its kills" if not unpaid
+                     else "paid is not what the file pays: " + "; ".join(unpaid[:3]))
         # A stalled clear: standing in front of a boss for what it calls.
         calls = next((a for a in proving_cfg["crowd"]["kinds"][boss_kind]["attacks"] if a["shape"] == "summon"), None)
         for difficulty in report["difficulties"]:
@@ -3356,13 +3423,114 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
                          f"(at most {LEVEL_STALL_SHARE:.0%} of it)")
         ok21 = ok21 and good
         details.append("; ".join(parts))
-    checks.verdict(ok21, "21 level pay       ", " | ".join(details) + f" (tolerance {LEVEL_PAY_TOLERANCE:.0%})")
+    checks.verdict(ok21, "21 level pay       ", " | ".join(details))
+
+    # 22. L1b-15: Combat.SplitCarry over a seeded fuzz never pays any member more than the sum of
+    #     its exact shares (pool x share x cash multiplier), never a whole unit less, and every
+    #     carry stays in [0, 1). The contract's cases by hand: solo equals each pool exactly; two
+    #     members at 0.9 and 0.1 over ten 1-Timber kills are paid 9 and 1; a cash multiplier of
+    #     1.5; a member absent from the shares keeps their carry; a bad share pays nothing.
+    problems = []
+    rng = __import__("random").Random(CARRY_FUZZ_SEED)
+    for _run in range(CARRY_FUZZ_RUNS):
+        members = list(range(1, rng.randint(1, 4) + 1))
+        mults = {u: rng.choice((1, 1, 1.5, 2, 1.25)) for u in members}
+        carry = {}
+        paid = {u: {"cash": 0, "materials": 0, "valor": 0} for u in members}
+        exact = {u: {"cash": 0.0, "materials": 0.0, "valor": 0.0} for u in members}
+        for _kill in range(CARRY_FUZZ_KILLS):
+            pool = {"cash": rng.choice((0, 100, 500, 700, 1200, 2000, 29000)) * rng.choice((1, 2, 4)),
+                    "materials": rng.choice((0, 1, 2, 4, 6, 70)), "valor": rng.choice((0, 0, 0, 10, 40))}
+            weights = {u: rng.random() for u in members if rng.random() < 0.8}
+            total = sum(weights.values())
+            shares = {u: w / total for u, w in weights.items()} if total > 0 else {}
+            for u, money in split_carry(pool, shares, carry, mults).items():
+                for key in paid[u]:
+                    paid[u][key] += money[key]
+                    exact[u][key] += pool[key] * shares[u] * (mults[u] if key == "cash" else 1)
+            for u, held in carry.items():
+                for key, value in held.items():
+                    if not 0 <= value < 1:
+                        problems.append(f"carry {key} {value} of member {u} is not in [0, 1)")
+        for u in members:
+            for key in paid[u]:
+                if paid[u][key] > exact[u][key] + 1e-6 or paid[u][key] < exact[u][key] - 1 - 1e-6:
+                    problems.append(f"member {u} was paid {paid[u][key]} {key} against an exact {exact[u][key]:.4f}")
+    carry = {}
+    solo = [split_carry({"cash": c, "materials": m, "valor": v}, {7: 1.0}, carry)[7]
+            for c, m, v in ((100, 0, 0), (2000, 6, 0), (29000, 70, 10))]
+    if solo != [{"cash": 100, "materials": 0, "valor": 0}, {"cash": 2000, "materials": 6, "valor": 0},
+                {"cash": 29000, "materials": 70, "valor": 10}] or any(v != 0 for v in carry[7].values()):
+        problems.append(f"solo is not each pool exactly: {solo}, carry {carry}")
+    carry = {}
+    duo = {1: 0, 2: 0}
+    for _kill in range(10):
+        for u, money in split_carry({"cash": 0, "materials": 1, "valor": 0}, {1: 0.9, 2: 0.1}, carry).items():
+            duo[u] += money["materials"]
+    if duo != {1: 9, 2: 1}:
+        problems.append(f"0.9 / 0.1 over ten 1-Timber kills paid {duo}, not 9 and 1")
+    carry = {}
+    if split_carry({"cash": 101, "materials": 0, "valor": 0}, {1: 1.0}, carry, {1: 1.5})[1]["cash"] != 151 \
+            or abs(carry[1]["cash"] - 0.5) > 1e-9:
+        problems.append("a cash multiplier of 1.5 on 101 does not pay 151 and carry 0.5")
+    carry = {3: {"cash": 0.75, "materials": 0.5, "valor": 0.25}}
+    split_carry({"cash": 100, "materials": 1, "valor": 0}, {1: 1.0}, carry)
+    if carry[3] != {"cash": 0.75, "materials": 0.5, "valor": 0.25}:
+        problems.append("a member absent from the shares lost their carry")
+    carry = {4: {"cash": 0.5, "materials": 0, "valor": 0}}
+    bad = split_carry({"cash": 100, "materials": 1, "valor": 0}, {4: float("nan"), 5: -1, 6: math.inf}, carry)
+    if bad or carry[4] != {"cash": 0.5, "materials": 0, "valor": 0} or len(carry) != 1:
+        problems.append(f"a bad share paid {bad} or touched a carry: {carry}")
+    checks.verdict(not problems, "22 split carry     ", "; ".join(problems[:4]) if problems else
+                   f"{CARRY_FUZZ_RUNS} fuzzed runs of {CARRY_FUZZ_KILLS} kills (1-4 members, cash x1-x2): never over the "
+                   f"exact shares, never a unit under, every carry in [0, 1); solo exact, 0.9/0.1 pays 9 and 1, x1.5, an "
+                   f"absent member's carry kept, a bad share pays nothing")
+
+    # 23. L1b-11: the population of every difficulty of every level with residents, worked by hand
+    #     from the files (residents by minDifficulty, never countMult; the most room a boss room's
+    #     maxAlive leaves over its own residents; levels.populationReserve), equals StageFlow.Plan's
+    #     (sim_range.plan_level, held to the Luau by tools/check_stage_mirror.py) and is at most
+    #     ProvingGrounds.json crowd.maxAlive.
+    problems = []
+    notes = []
+    crowd_max = sr.load_config(sr.CONFIG_PATH)["crowd"]["maxAlive"]
+    reserve = combat_cfg["levels"]["populationReserve"]
+    for level_id, (file, level, layout) in levels.items():
+        if level is None or layout is None or not level.get("camps"):
+            continue
+        row = []
+        for difficulty in level["difficulties"]:
+            rank = ranks[difficulty]
+            by_camp = {}
+            for config in level["camps"]:
+                for group in config["residents"]:
+                    for unit in group["units"]:
+                        needs = unit.get("minDifficulty")
+                        if needs is None or ranks[needs] <= rank:
+                            by_camp[config["id"]] = by_camp.get(config["id"], 0) + unit["count"]
+            room = 0
+            for stage in level["stages"]:
+                if stage["kind"] == "camp":
+                    cap = stage["maxAlive"] if stage.get("maxAlive") is not None else level["crowd"]["maxAlive"]
+                    room = max(room, cap - by_camp.get(stage["zone"], 0))
+            by_hand = sum(by_camp.values()) + room + reserve
+            plan = sr.plan_level(level, layout, difficulty, combat_cfg["levels"], ranks)
+            if plan is None or plan["population"] != by_hand:
+                problems.append(f"{level_id} {difficulty}: by hand {by_hand}, Plan "
+                                f"{plan['population'] if plan else 'refused'}")
+            if by_hand > crowd_max:
+                problems.append(f"{level_id} {difficulty}: {by_hand} is over crowd.maxAlive {crowd_max}")
+            row.append(f"{difficulty} {by_hand} (" + ", ".join(f"{k} {v}" for k, v in by_camp.items())
+                       + f"; room {room}; reserve {reserve})")
+        notes.append(f"{level_id}: " + "; ".join(row))
+    checks.verdict(not problems and bool(notes), "23 population      ",
+                   "; ".join(problems[:4]) if problems else " | ".join(notes) + f" (crowd.maxAlive {crowd_max})")
 
     print()
     print(
         "CHECK: "
         + (
-            "PASS -- all twenty-one assertions hold"
+            "PASS -- all twenty-three assertions hold"
             if checks.failed == 0
             else f"FAIL -- {checks.failed} assertion(s)"
         )
@@ -3379,7 +3547,7 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="run the twenty-one C0-L1 assertions")
+    parser.add_argument("--check", action="store_true", help="run the twenty-three C0-L1b assertions")
     parser.add_argument(
         "--trace", action="store_true", help="print the wave timeline of the simulated run"
     )

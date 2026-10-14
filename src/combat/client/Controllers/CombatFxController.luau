@@ -55,6 +55,8 @@ local CombatHud = require(uiFolder:WaitForChild("CombatHud"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
+-- L1b: the camp cues (the "!" over a woken group, the checkpoint notice) live there.
+local CampFx = require(script.Parent:WaitForChild("CampFx"))
 
 local ENEMIES_FOLDER = "Enemies"
 local ENEMY_ID_ATTRIBUTE = "EnemyId"
@@ -1255,18 +1257,26 @@ local function onRefused(fx: { [string]: any }): ()
 	toast(WAITING_TEXT)
 end
 
--- L1: a camp's gates closed behind the party (the banner is its name) or it was cleared. No
--- sound: the banner is the cue. One message per event (fix round, item 5): the clear is the
--- banner's, and the checkpoint that banks with it is the HUD's "Progress saved" notice, which
--- reads RunState.banked, so `saved` is not said a second time here.
+-- L1: the boss room's gates closed behind the party (the banner is its name) or a camp was
+-- cleared. L1b: a group woke (`alert`: a "!" over each of `ids`) or a checkpoint was reached
+-- (`checkpoint`: the HUD's notice); both are CampFx's. Nothing is saved any more (every kill
+-- pays at once), so a clear is the banner alone. No sound: the banner and the marks are the cue.
 local function onCamp(fx: { [string]: any }): ()
+	local event = fx.event
+	if event == "alert" then
+		CampFx.Alert(fx.ids)
+		return
+	elseif event == "checkpoint" then
+		CampFx.Checkpoint()
+		return
+	end
 	local name = fx.name
 	if typeof(name) ~= "string" or name == "" then
 		return
 	end
-	if fx.event == "closed" then
+	if event == "closed" then
 		showBanner(name, "", bannerSeconds())
-	elseif fx.event == "cleared" then
+	elseif event == "cleared" then
 		showBanner(name .. " cleared", "", bannerSeconds())
 	end
 end
@@ -1590,6 +1600,7 @@ function CombatFxController.Destroy(): ()
 		forgetEnemy(model)
 	end
 	table.clear(enemiesById)
+	CampFx.Destroy()
 end
 
 return CombatFxController

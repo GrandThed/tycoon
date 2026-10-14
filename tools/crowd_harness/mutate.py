@@ -28,12 +28,14 @@ RING = "src/combat/server/Services/PositionRing.luau"
 FLOW = "src/combat/server/Services/StageFlow.luau"
 GEOMETRY = "src/combat/server/Services/LevelGeometry.luau"
 COMBAT = "src/shared/Combat.luau"
+CAMP = "src/combat/server/Services/CampBrain.luau"
 FILES = [
     TALLY,
     TUNING,
     RING,
     FLOW,
     GEOMETRY,
+    CAMP,
     COMBAT,
     "src/shared/Economy.luau",
     "src/shared/Config/Combat.json",
@@ -62,7 +64,7 @@ for folder, pattern in (
 OVERLAY = "(overlaid and CrowdBrain.IsStriking(mind))"
 BOTH = "elseif planted then\n" + "\t" * 6 + "continue\n" + "\t" * 5 + "end"
 AIMED = "if not held and not (voided and strike.targetUserId == player.UserId) then"
-FLOOR = "local floor = if y >= target.restY then target.restY else target.standY"
+FLOOR = "local floor = if y >= target.restY then target.restY else floorY + target.lift"
 UNDER = '(shape ~= "lob" or above >= -height)'
 ENDED = "\t\tshot.flying = false\n\t\tflying -= 1\n"
 STRIKING = "if attack == nil or not CrowdBrain.IsStriking(mind) then"
@@ -74,7 +76,7 @@ REACHED = "if not usable(mind, index, attack) or distance > attack.reach + REACH
 USES = "return uses == nil or (mind.landed[index] or 0) < math.floor(uses)"
 GUARDED = "\t\tand def.guarded == true\n\t\tand (enemy.guard > 0 or (mind ~= nil and CrowdBrain.OwesCall(mind, def)))\n"
 OWED = "and (attack.uses ~= nil or (mind.landed[index] or 0) == 0)"
-DIED = 'enemy.state = "dead"\n\taliveCount -= 1\n\tlocal summoner = enemy.summoner\n\tif summoner ~= nil then\n\t\tsummoner.guard = math.max(summoner.guard - 1, 0)'
+DIED = 'enemy.state = "dead"\n\tnoteGone(enemy)\n\tlocal summoner = enemy.summoner\n\tif summoner ~= nil then\n\t\tsummoner.guard = math.max(summoner.guard - 1, 0)'
 LEFT = "-- Removed alive (a set load, its summoner's death): it leaves its summoner's guard.\n\t\tlocal summoner = enemy.summoner\n\t\tif summoner ~= nil then\n\t\t\tsummoner.guard = math.max(summoner.guard - 1, 0)"
 BRAIN_OF = "if mind.enraged and phaseDef ~= nil and phaseDef.brain ~= nil then"
 SCALE = "local scale = if recover then phase.recoverScale else phase.windupScale"
@@ -974,13 +976,13 @@ L1_MUTATIONS = {
     ),
     "l1: fallen wins on a clear field": (
         FLOW,
-        "if fallen ~= nil and not input.fieldClear then",
+        "if fallen ~= nil and not fieldClear then",
         "if fallen ~= nil then",
     ),
     "l1: the fallen are asked before the cap": (
         FLOW,
         "\tif input.runCap then\n",
-        "\tif input.runCap and (input.fallen == nil or input.fieldClear) then\n",
+        "\tif input.runCap and (input.fallen == nil or StageFlow.FieldClear(plan, state, input)) then\n",
     ),
     "l1: an end that banks": (
         FLOW,
@@ -1059,7 +1061,7 @@ L1_MUTATIONS = {
     ),
     "l1: an entry in the close's band is planned": (
         FLOW,
-        "if not inRect(inner, camp.entry.x, camp.entry.z) then",
+        "if not inRect(zone.inner, zone.entry.X, zone.entry.Z) then",
         "if false then",
     ),
     "l1: the close is judged once": (
@@ -1147,8 +1149,8 @@ L1_MUTATIONS = {
     ),
     "l1: a stage's cap is always the level's": (
         FLOW,
-        "maxAlive = stage.maxAlive or level.crowd.maxAlive,",
-        "maxAlive = level.crowd.maxAlive,",
+        "local cap = stage.maxAlive or level.crowd.maxAlive\n\t\tcaps[zone.id] = cap",
+        "local cap = level.crowd.maxAlive\n\t\tcaps[zone.id] = cap",
     ),
     "l1: Plan carries a missing name to the client": (
         FLOW,
@@ -1299,12 +1301,12 @@ L1_MUTATIONS = {
     "l1: the wire origin following the bounds": (
         CROWD,
         "\t\t\tCrowdCodec.Encode(chunk, WIRE_ORIGIN, serverTime)\n\t\t)\n\t\ttable.clear(chunk)\n\tend\nend",
-        "\t\t\tCrowdCodec.Encode(chunk, boundsCenter, serverTime)\n\t\t)\n\t\ttable.clear(chunk)\n\tend\nend",
+        "\t\t\tCrowdCodec.Encode(chunk, floors[1].centre, serverTime)\n\t\t)\n\t\ttable.clear(chunk)\n\tend\nend",
     ),
     "l1: a full packet's origin following the bounds": (
         CROWD,
         "\t\t\t\tCrowdCodec.Encode(chunk, WIRE_ORIGIN, serverTime)\n\t\t\t)\n\t\t\ttable.clear(chunk)\n\t\t\tcount = 0\n",
-        "\t\t\t\tCrowdCodec.Encode(chunk, boundsCenter, serverTime)\n\t\t\t)\n\t\t\ttable.clear(chunk)\n\t\t\tcount = 0\n",
+        "\t\t\t\tCrowdCodec.Encode(chunk, floors[1].centre, serverTime)\n\t\t\t)\n\t\t\ttable.clear(chunk)\n\t\t\tcount = 0\n",
     ),
     "l1: SetBounds accepted with a body alive": (
         CROWD,
@@ -1867,6 +1869,610 @@ REAL_MUTATIONS = {
     ),
 }
 MUTATIONS.update(REAL_MUTATIONS)
+
+
+# ------------------------------------------------------------------------------------------------
+# L1b Wave 1 (docs/INTERFACES.md "L1b contracts — the living road").
+# From luau-engineer A (the crowd), verbatim from docs/prompts/l1b-w1-reports/A-crowd.md: its new
+# entries, and the existing entries its edits changed, under their own labels (a dict update keeps
+# each one's place in the run).
+# L1b Wave 1, luau-engineer A: new mutations (labels prefixed "l1b crowd:").
+L1B_CROWD_MUTATIONS = {
+    "l1b crowd: sight ignores the height band": (
+        CAMP,
+        "\tif not inBand(def, root, rules) then\n\t\treturn false\n\tend\n\tlocal posture = postureRules(def, rules)",
+        "\tlocal posture = postureRules(def, rules)",
+    ),
+    "l1b crowd: the cone is ignored": (
+        CAMP,
+        "if posture.cone >= 360 or distance < CONE_NEAR then",
+        "if true then",
+    ),
+    "l1b crowd: the cone uses the full angle": (
+        CAMP,
+        "return angle <= posture.cone / 2 + CONE_EPSILON_DEGREES",
+        "return angle <= posture.cone + CONE_EPSILON_DEGREES",
+    ),
+    "l1b crowd: in play ignores chaseMargin": (
+        CAMP,
+        "local margin = rules.chaseMargin",
+        "local margin = 0",
+    ),
+    "l1b crowd: in play ignores the shooters' reach": (
+        CAMP,
+        "if flatDistance(shooter.at, root) <= shooter.reach then",
+        "if false then",
+    ),
+    "l1b crowd: rise skips its seconds": (
+        CAMP,
+        "if now - group.since >= postureRules(group.def, rules).rise - TIME_EPSILON then",
+        "if true then",
+    ),
+    "l1b crowd: two transitions in one call": (
+        CAMP,
+        '\t\t\tchanged = "rise"\n\t\tend\n\telseif state == "rise" then',
+        '\t\t\tchanged = "rise"\n\t\tend\n\tend\n\tif state == "rise" or changed == "rise" then',
+    ),
+    "l1b crowd: the leash fires while striking": (
+        CAMP,
+        "now - group.quietSince >= rules.leashSeconds - TIME_EPSILON and not input.striking",
+        "now - group.quietSince >= rules.leashSeconds - TIME_EPSILON",
+    ),
+    "l1b crowd: the leash is not reset by a target back in play": (
+        CAMP,
+        "\t\tif anyInPlay then\n\t\t\tgroup.quietSince = now",
+        "\t\tif anyInPlay then\n\t\t\tgroup.quietSince = group.quietSince",
+    ),
+    "l1b crowd: home takes damage": (
+        CAMP,
+        'return group.held or group.state == "home"',
+        "return group.held",
+    ),
+    "l1b crowd: home wakes on a hit": (
+        CAMP,
+        '\telseif state == "home" then\n\t\tlocal home = true',
+        '\telseif state == "home" then\n\t\tif group.hit then\n\t\t\tchanged = "rise"\n\t\tend\n\t\tlocal home = changed == nil',
+    ),
+    "l1b crowd: a hit from out of play lands": (
+        CAMP,
+        "return byUserId == 0 or group.inPlay[byUserId] == true",
+        "return true",
+    ),
+    "l1b crowd: a held group wakes on sight": (
+        CAMP,
+        "\tif group.held then\n\t\t-- Held until the close: neither sight nor a hit wakes it (ruling L1b-13).\n\t\tgroup.hit = false",
+        "\tif group.held and not anySeen(group, input, rules) then\n\t\tgroup.hit = false",
+    ),
+    "l1b crowd: Release frees a group that was not held": (
+        CAMP,
+        "\tif not group.held then\n\t\treturn\n\tend\n\tgroup.held = false",
+        "\tgroup.held = false",
+    ),
+    "l1b crowd: patrol posts not spaced by arc length": (
+        CAMP,
+        "local s = total * (k - 1) / count",
+        "local s = total * ((k - 1) % n) / n",
+    ),
+    "l1b crowd: a fire's sitters face away from it": (
+        CAMP,
+        "local yaw = theta + math.pi",
+        "local yaw = theta",
+    ),
+    "l1b crowd: a patrol's leg does not wrap": (
+        CAMP,
+        "resident.leg = resident.leg % n + 1",
+        "resident.leg = resident.leg + 1",
+    ),
+    "l1b crowd: home does not restore the post's leg": (
+        CAMP,
+        "\t\t\tresident.leg = post.leg",
+        "\t\t\tresident.leg = resident.leg",
+    ),
+    "l1b crowd: a sitter shows idle": (
+        CAMP,
+        'return if group.def.posture == "fire" then "rest" else "idle"',
+        'return "idle"',
+    ),
+    "l1b crowd: the heal leaves the plate broken": (
+        CROWD,
+        "\tenemy.hp = enemy.maxHp\n\tenemy.plate = enemy.plateMax\n",
+        "\tenemy.hp = enemy.maxHp\n",
+    ),
+    "l1b crowd: the heal keeps the damage book": (
+        CROWD,
+        "\ttable.clear(enemy.damageBy)\n\tenemy.staggerUntil = 0",
+        "\tenemy.staggerUntil = 0",
+    ),
+    "l1b crowd: a summon on floor 1": (
+        CROWD,
+        'local risen = enemies[CrowdService.Spawn(kind, spot, "fight", nil, nil, summoner.floor)]',
+        'local risen = enemies[CrowdService.Spawn(kind, spot, "fight", nil, nil, 1)]',
+    ),
+    "l1b crowd: a strike's floorY from floor 1": (
+        BRAIN,
+        "floorY = floor.centre.Y,",
+        "floorY = (floors[1] or DEFAULT_FLOOR).centre.Y,",
+    ),
+    "l1b crowd: the clamp on floor 1": (
+        CROWD,
+        "local floor = floorOf(enemy)\n\tlocal boundsCenter = floor.centre",
+        "local floor = floors[1]\n\tlocal boundsCenter = floor.centre",
+    ),
+    "l1b crowd: AliveOn counts every floor": (
+        CROWD,
+        "return aliveOn[floor] or 0",
+        "return aliveCount",
+    ),
+    "l1b crowd: ClearFloor clears every floor": (
+        CROWD,
+        "if enemy ~= nil and enemy.floor == floor then",
+        "if enemy ~= nil then",
+    ),
+    "l1b crowd: Think ignores allowed": (
+        BRAIN,
+        "if allowed ~= nil and not allowed[target.userId] then",
+        "if false then",
+    ),
+    "l1b crowd: SetFloors accepted with a body alive": (
+        CROWD,
+        "\tif aliveCount > 0 then\n\t\tif not warnedBoundsAlive then",
+        "\tif false then\n\t\tif not warnedBoundsAlive then",
+    ),
+    "l1b crowd: the codec's new states swapped": (
+        CODEC,
+        '"attack", "recover", "rest", "rise" }',
+        '"attack", "recover", "rise", "rest" }',
+    ),
+    "l1b crowd: an unknown floor index is not refused": (
+        CROWD,
+        "local stand = if isFinite(floorIndex) then floors[floorIndex] else nil",
+        "local stand = if isFinite(floorIndex) then floors[floorIndex] or floors[1] else nil",
+    ),
+    "l1b crowd: AddGroup takes an unknown floor": (
+        CROWD,
+        'if typeof(def) ~= "table" or floors[def.floor] == nil then',
+        'if typeof(def) ~= "table" then',
+    ),
+    "l1b crowd: a resting resident thinks": (
+        CROWD,
+        'local resting = brain ~= nil and (brain.held or brain.state ~= "fight")',
+        "local resting = false",
+    ),
+    "l1b crowd: a released group fights in the step that releases it": (
+        CROWD,
+        "\t\t\tCampBrain.Step(brain, input, rules)\n\t\t\tCampBrain.Release(brain, simTime)",
+        "\t\t\tCampBrain.Release(brain, simTime)\n\t\t\tCampBrain.Step(brain, input, rules)",
+    ),
+    "l1b crowd: a group with no living member is busy": (
+        CROWD,
+        'if #group.bodies > 0 and not group.brain.held and (state == "rise" or state == "fight") then',
+        'if not group.brain.held and (state == "rise" or state == "fight") then',
+    ),
+    "l1b crowd: a group with no living member is awake": (
+        CROWD,
+        'if #group.bodies > 0 and not group.brain.held and state ~= "rest" then',
+        'if not group.brain.held and state ~= "rest" then',
+    ),
+    "l1b crowd: Damage never asks the group": (
+        CROWD,
+        "if group ~= nil and not CampBrain.Struck(group.brain, byUserId) then",
+        "if false then",
+    ),
+}
+
+# Existing mutations in mutate.py whose text L1b's crowd edits changed: label -> the new entry.
+STALE_REPLACEMENTS = {
+    "a retreat ignores the arena's edge": (
+        BRAIN,
+        "return inArena(\n\t\t\tbody.position - mind.facing * (bandMin - distance),\n\t\t\tdef.radius,\n\t\t\tfloorOf(body)\n\t\t),\n\t\t\t0",
+        "return body.position - mind.facing * (bandMin - distance),\n\t\t\t0",
+    ),
+    "shot: no lead": (
+        BRAIN,
+        "aim = here + (ahead(here, target, flight + target.lag, floorY) - here) * lead",
+        "aim = here + (ahead(here, target, flight + target.lag, floorY) - here) * 0",
+    ),
+    "shot: aimed along the locked facing, not at T": (
+        BRAIN,
+        "strike.aim = if target ~= nil\n\t\t\t\t\tthen ledAim(origin, here, target, attack, floor.centre.Y)\n\t\t\t\t\telse here",
+        "strike.aim = origin + mind.facing",
+    ),
+    "lane: the charge ignores the arena's edge": (
+        BRAIN,
+        "then math.min(range, runway(body.position, mind.facing, def.radius, floor))",
+        "then range",
+    ),
+    "1a: the wave 2 rule (in the air = above the standing height, down to the crowd's floor)": (
+        BRAIN,
+        "\tif not target.resting then\n\t\tlocal floor = if y >= target.restY then target.restY else floorY + target.lift",
+        "\tif y - (floorY + target.lift) > 0.75 then\n\t\tlocal floor = floorY + target.lift",
+    ),
+    "1a: a jump off a block is led down to the crowd's floor": (
+        BRAIN,
+        "local floor = if y >= target.restY then target.restY else floorY + target.lift",
+        "local floor = floorY + target.lift",
+    ),
+    "1a: a fall off a block stops at the block's height": (
+        BRAIN,
+        "local floor = if y >= target.restY then target.restY else floorY + target.lift",
+        "local floor = target.restY",
+    ),
+    "lag: a shot is led over its flight alone": (
+        BRAIN,
+        "ahead(here, target, flight + target.lag, floorY)",
+        "ahead(here, target, flight, floorY)",
+    ),
+    "summon: they stand idle": (
+        CROWD,
+        'local risen = enemies[CrowdService.Spawn(kind, spot, "fight", nil, nil, summoner.floor)]',
+        'local risen = enemies[CrowdService.Spawn(kind, spot, "idle", nil, nil, summoner.floor)]',
+    ),
+    "boss: its queued impact is still handed over": (
+        CROWD,
+        "\t\tend\n\tend\n\tCrowdBrain.Recall(ids)\n",
+        "\t\tend\n\tend\n",
+    ),
+    "guarded: a guard in its dead state still guards": (
+        CROWD,
+        'enemy.state = "dead"\n\tnoteGone(enemy)\n\tlocal summoner = enemy.summoner\n\tif summoner ~= nil then\n\t\tsummoner.guard = math.max(summoner.guard - 1, 0)',
+        'enemy.state = "dead"\n\tnoteGone(enemy)\n\tlocal summoner = enemy.summoner\n\tif summoner ~= nil then\n\t\tsummoner.guard = math.max(summoner.guard, 0)',
+    ),
+}
+
+MUTATIONS.update(L1B_CROWD_MUTATIONS)
+MUTATIONS.update(STALE_REPLACEMENTS)
+
+# L1 entries L1b's rulings retired, each with the L1b entry that now holds its rule (never deleted
+# silently; the report of luau-engineer B lists them):
+#   "l1: a camp clear without bank"         -> "l1b: a bank emitted" (L1b-15: nothing banks, ever)
+#   "l1: bankEachWave ignored"              -> "l1b: a clear does not settle its waves"
+#   "l1: a bank counts one wave whatever it covers" -> "l1b: a clear counts one wave whatever it covers"
+#   "l1: the arena adapter without bankEachWave"    -> "l1b: Resolve drops the file's camps"
+#   "l1: CampReward ignores rewardMult"     -> "l1b: KillReward ignores rewardMult"
+#   "l1: CampReward floors"                 -> "l1b: KillReward floors"
+#   "l1: SetBounds accepted with a body alive" -> A's "l1b crowd: SetFloors accepted with a body alive"
+#                                              (the same text: SetBounds is SetFloors of one floor)
+RETIRED = [
+    "l1: a camp clear without bank",
+    "l1: bankEachWave ignored",
+    "l1: a bank counts one wave whatever it covers",
+    "l1: the arena adapter without bankEachWave",
+    "l1: CampReward ignores rewardMult",
+    "l1: CampReward floors",
+    "l1: SetBounds accepted with a body alive",
+]
+for label in RETIRED:
+    del MUTATIONS[label]
+
+CLEARED = "\tstate.settled = wave\n\tlocal lastWave = wave >= stage.waves"
+CAMP_CLEAR = "if zone.locks or zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then"
+SPLIT = "local paid = math.floor(exact + 1e-9)\n\treturn paid, math.max(exact - paid, 0)"
+KILL = "return math.round(reward.cash * rewardMult), math.round(reward.materials * rewardMult)"
+# From luau-engineer B (the run): StageFlow, Combat, LevelGeometry, tests_l1b.luau.
+L1B_RUN_MUTATIONS = {
+    "l1b: a bank emitted": (
+        FLOW,
+        CLEARED,
+        '\tstate.settled = wave\n\ttable.insert(actions, { kind = "bank", stage = state.stage, wave = wave, count = 1 })\n\tlocal lastWave = wave >= stage.waves',
+    ),
+    "l1b: a clear does not settle its waves": (FLOW, CLEARED, "\tlocal lastWave = wave >= stage.waves"),
+    "l1b: a clear counts one wave whatever it covers": (
+        FLOW,
+        "count = wave - state.settled }",
+        "count = 1 }",
+    ),
+    "l1b: campClear twice": (
+        FLOW,
+        CAMP_CLEAR,
+        "if zone.locks or zone.residents <= 0 or byFloor[index] ~= 0 then",
+    ),
+    "l1b: campClear for a zone with no residents": (
+        FLOW,
+        CAMP_CLEAR,
+        "if zone.locks or state.done[index] or byFloor[index] ~= 0 then",
+    ),
+    "l1b: campClear for the locking zone": (
+        FLOW,
+        CAMP_CLEAR,
+        "if zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then",
+    ),
+    "l1b: a reach from a downed root": (
+        FLOW,
+        "\t\t\t\tand inBand\n\t\t\t\tand (standing == nil or standing[rootIndex] ~= false)\n",
+        "\t\t\t\tand inBand\n",
+    ),
+    "l1b: reach ignores the band": (
+        FLOW,
+        "local inBand = rise >= -rules.triggerBelow and rise <= rules.triggerHeight",
+        "local inBand = true",
+    ),
+    "l1b: a checkpoint reached from past checkpointReach": (
+        FLOW,
+        "\t\t\t\tflat <= rules.checkpointReach\n",
+        "\t\t\t\tflat <= rules.checkpointReach + 1\n",
+    ),
+    "l1b: SafePoint returns a busy floor's checkpoint": (
+        FLOW,
+        "local quiet = busy == nil or busy[index] ~= true",
+        "local quiet = true",
+    ),
+    "l1b: SafePoint ignores reached": (
+        FLOW,
+        "if mark ~= nil and state.reached[index] and quiet then",
+        "if mark ~= nil and quiet then",
+    ),
+    "l1b: SafePoint takes the nearest checkpoint first": (
+        FLOW,
+        "for index = #plan.zones, 1, -1 do",
+        "for index = 1, #plan.zones do",
+    ),
+    "l1b: FieldClear on the road ignores awake": (
+        FLOW,
+        "return input.spawningDone and input.awake == 0",
+        "return input.spawningDone",
+    ),
+    "l1b: FieldClear in the camp counts every floor": (
+        FLOW,
+        "return input.spawningDone and input.alive == 0",
+        "local all = input.alive\n\t\tfor _, bodies in input.aliveByFloor do\n\t\t\tall += bodies\n\t\tend\n\t\treturn input.spawningDone and all == 0",
+    ),
+    "l1b: RescueGrace gives the i-frames while engaged": (
+        FLOW,
+        "return if engaged then 0 else iframes",
+        "return iframes",
+    ),
+    "l1b: the boss room's clear leaves it not done": (
+        FLOW,
+        "\tif zone ~= nil then\n\t\tstate.done[zone.floor] = true\n\tend\n\tstate.cleared += 1",
+        "\tstate.cleared += 1",
+    ),
+    "l1b: countMult applied to residents": (
+        FLOW,
+        "local groups, residents = groupsOf(level, layout, rank, ranks)",
+        "local groups, residents = groupsOf(level, layout, rank, ranks)\n\tfor _, def in groups do\n\t\tfor _, unit in def.units do\n\t\t\tunit.count = math.round(unit.count * level.difficulties[difficulty].countMult)\n\t\tend\n\tend",
+    ),
+    "l1b: minDifficulty ignored for residents": (
+        FLOW,
+        "if needs ~= nil and (needsRank == nil or needsRank > rank) then",
+        "if false then",
+    ),
+    "l1b: the population gate without the reserve": (
+        FLOW,
+        "return placed + room + reserve",
+        "return placed + room",
+    ),
+    "l1b: a locking camp's residents not held": (
+        FLOW,
+        "held = camp.locks == true,",
+        "held = false,",
+    ),
+    "l1b: a stage naming an open camp passes Validate": (
+        FLOW,
+        "if camp.locks ~= true then",
+        "if false then",
+    ),
+    "l1b: Validate counts no guard against its posts": (
+        FLOW,
+        'if def.posture == "guard" and members > #def.points then',
+        "if false then",
+    ),
+    "l1b: Validate lets a post hang its widest kind over the edge": (
+        FLOW,
+        "not onFloor(camp, post.at.X, post.at.Z, widest)",
+        "not onFloor(camp, post.at.X, post.at.Z, 0)",
+    ),
+    "l1b: Validate lets the boss room's residents fill its cap": (
+        FLOW,
+        "if held >= cap then",
+        "if held > cap then",
+    ),
+    "l1b: Plan names a zone by its id alone": (
+        FLOW,
+        "name = names[camp.id] or camp.id,",
+        "name = camp.id,",
+    ),
+    "l1b: Resolve drops the file's camps": (
+        FLOW,
+        "camps = file.camps or {},",
+        "camps = {},",
+    ),
+    "l1b: SplitCarry drops the carry": (COMBAT, SPLIT, "local paid = math.floor(exact + 1e-9)\n\treturn paid, 0"),
+    "l1b: SplitCarry pays a fraction rounded up": (
+        COMBAT,
+        SPLIT,
+        "local paid = math.ceil(exact - 1e-9)\n\treturn paid, math.max(exact - paid, 0)",
+    ),
+    "l1b: SplitCarry ignores the cash multiplier": (
+        COMBAT,
+        "local mult = if cashMults ~= nil then cashMults[userId] or NEUTRAL_MULT else NEUTRAL_MULT",
+        "local mult = NEUTRAL_MULT",
+    ),
+    "l1b: SplitCarry pays a bad share": (
+        COMBAT,
+        "if not (share >= 0 and share < math.huge) then",
+        "if false then",
+    ),
+    "l1b: KillReward ignores rewardMult": (COMBAT, KILL, "return math.round(reward.cash), math.round(reward.materials)"),
+    "l1b: KillReward floors": (
+        COMBAT,
+        KILL,
+        "return math.floor(reward.cash * rewardMult), math.floor(reward.materials * rewardMult)",
+    ),
+    "l1b: an open camp builds a barrier": (
+        GEOMETRY,
+        "if barrier ~= nil and locks then",
+        "if barrier ~= nil then",
+    ),
+    "l1b: an open camp builds gates": (
+        GEOMETRY,
+        "local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, sizes.fence) else {}",
+        "local gates: { Box } = LevelGeometry.GateBoxes(camp, sizes.fence)",
+    ),
+    "l1b: FromArena not locking": (
+        GEOMETRY,
+        "\t\tlocks = true,\n\t\tspots = nil,",
+        "\t\tlocks = nil,\n\t\tspots = nil,",
+    ),
+    "l1b: a fire marker on a spot that is no fire": (
+        GEOMETRY,
+        'if spot.posture == "fire" and spot.points ~= nil then',
+        "if spot.points ~= nil then",
+    ),
+    "l1b: the fire marker stands at its z along X": (
+        GEOMETRY,
+        "x = centre.x,\n\t\ty = camp.y + size.sy / 2,\n\t\tz = centre.z,",
+        "x = centre.z,\n\t\ty = camp.y + size.sy / 2,\n\t\tz = centre.x,",
+    ),
+    # Added by the second B (the continuation, 2026-10-14): Validate's other new refusals, the
+    # reach's once-only rule, the countdown's safe point and the minDifficulty rank edge.
+    "l1b: Validate without the population gate": (FLOW, "if population > crowdMax then", "if false then"),
+    "l1b: a locking camp no stage names passes Validate": (
+        FLOW,
+        "if camp.locks == true and times ~= 1 then",
+        "if camp.locks == true and times > 1 then",
+    ),
+    "l1b: Validate takes a checkpointReach of 0": (
+        FLOW,
+        'if type(value) == "number" and not (value > 0) then',
+        "if false then",
+    ),
+    "l1b: Validate takes a negative populationReserve": (
+        FLOW,
+        'if type(reserve) == "number" and not (reserve >= 0) then',
+        "if false then",
+    ),
+    "l1b: Validate takes two camps entries for one camp": (FLOW, "elseif entries[id] then", "elseif false then"),
+    "l1b: Validate takes a spot id used twice": (FLOW, "elseif seen[id] then", "elseif false then"),
+    "l1b: Validate takes a fire of radius 0": (
+        FLOW,
+        'if posture == "fire" and not (type(spot.radius) == "number" and spot.radius > 0) then',
+        "if false then",
+    ),
+    "l1b: a minDifficulty unit joins one difficulty late": (
+        FLOW,
+        "if needs ~= nil and (needsRank == nil or needsRank > rank) then",
+        "if needs ~= nil and (needsRank == nil or needsRank >= rank) then",
+    ),
+    "l1b: a zone counts no residents": (FLOW, "residents = residents[camp.id] or 0,", "residents = 0,"),
+    "l1b: a checkpoint at the world's height": (
+        FLOW,
+        "checkpoint = if mark ~= nil then Vector3.new(mark.x, camp.y, mark.z) else nil,",
+        "checkpoint = if mark ~= nil then Vector3.new(mark.x, 0, mark.z) else nil,",
+    ),
+    "l1b: reach twice": (
+        FLOW,
+        "if mark == nil or state.reached[index] then",
+        "if mark == nil then",
+    ),
+    "l1b: SafePoint in the countdown is a checkpoint": (
+        FLOW,
+        'if step == "gate" or step == "fight" or step == "breather" then\n\t\tlocal stage = plan.stages[state.stage]\n\t\tlocal zone = if stage ~= nil then stage.zone else nil\n\t\tif zone ~= nil then\n\t\t\treturn zone.entry',
+        'if step == "fight" or step == "breather" then\n\t\tlocal stage = plan.stages[state.stage]\n\t\tlocal zone = if stage ~= nil then stage.zone else nil\n\t\tif zone ~= nil then\n\t\t\treturn zone.entry',
+    ),
+}
+MUTATIONS.update(L1B_RUN_MUTATIONS)
+
+# The L1b Wave 1 fix round, B (docs/prompts/l1b-w1-fix-round.md): the stand-up on a clear road,
+# a skip that pays nothing, progress in every live step, the safe point out of every threat.
+FIX_B_MUTATIONS = {
+    "l1b fix: StandsUp in the boss room's fight": (
+        FLOW,
+        'if step ~= "travel" and step ~= "armed" and step ~= "gate" then\n\t\treturn false',
+        'if step == "over" then\n\t\treturn false',
+    ),
+    "l1b fix: StandsUp ignores the field": (
+        FLOW,
+        "if standing == nil or not StageFlow.FieldClear(plan, state, input) then",
+        "if standing == nil then",
+    ),
+    "l1b fix: StandsUp with nobody down": (
+        FLOW,
+        "\tfor _, up in standing do\n\t\tif up == false then",
+        "\tfor _, up in standing do\n\t\tif up ~= nil then",
+    ),
+    "l1b fix: a stage skip's open is not marked skipped": (
+        FLOW,
+        "leaveCamp(plan, state, actions, true)",
+        "leaveCamp(plan, state, actions, false)",
+    ),
+    "l1b fix: a cleared camp's open is marked skipped": (
+        FLOW,
+        "leaveCamp(plan, state, actions, false)",
+        "leaveCamp(plan, state, actions, true)",
+    ),
+    "l1b fix: a boss skip's passed camps are not marked skipped": (
+        FLOW,
+        'table.insert(actions, { kind = "open", stage = index, skipped = true })',
+        'table.insert(actions, { kind = "open", stage = index })',
+    ),
+    "l1b fix: progress only on the road": (
+        FLOW,
+        "\tprogress(plan, state, input, rules, actions)\n",
+        '\tif step == "travel" or step == "armed" then\n\t\tprogress(plan, state, input, rules, actions)\n\tend\n',
+    ),
+    "l1b fix: SafePoint ignores the threats": (
+        FLOW,
+        "if mark ~= nil and threatened(mark, threats) then",
+        "if mark ~= nil and false then",
+    ),
+    "l1b fix: a threat's reach judged in 3D": (
+        FLOW,
+        "if Vector3.new(mark.X - threat.at.X, 0, mark.Z - threat.at.Z).Magnitude <= threat.reach then",
+        "if (mark - threat.at).Magnitude <= threat.reach then",
+    ),
+    "l1b fix: a threat's reach edge left out": (
+        FLOW,
+        "mark.Z - threat.at.Z).Magnitude <= threat.reach then",
+        "mark.Z - threat.at.Z).Magnitude < threat.reach then",
+    ),
+    "l1b fix: LongestReach takes the last attack": (
+        FLOW,
+        "longest = math.max(longest, attack.reach)",
+        "longest = attack.reach",
+    ),
+}
+MUTATIONS.update(FIX_B_MUTATIONS)
+
+# The L1b Wave 1 fix round, A (docs/prompts/l1b-w1-reports/fix-A.md): rounded in-play corners,
+# the engaged hold, and the three `home` survivors of the crowd review.
+FIX_A_MUTATIONS = {
+    "l1b crowd: in play has square corners": (
+        CAMP,
+        "if math.sqrt(outX * outX + outZ * outZ) <= margin then",
+        "if outX <= margin and outZ <= margin then",
+    ),
+    "l1b crowd: no engaged hold": (
+        CAMP,
+        "return lastAt ~= nil and now - lastAt <= rules.engagedHoldSeconds + TIME_EPSILON",
+        "return lastAt ~= nil and now - lastAt <= TIME_EPSILON",
+    ),
+    "l1b crowd: the engaged hold never ends": (
+        CAMP,
+        "return lastAt ~= nil and now - lastAt <= rules.engagedHoldSeconds + TIME_EPSILON",
+        "return lastAt ~= nil",
+    ),
+    "l1b crowd: Engaged reads the last step only": (
+        CROWD,
+        "return rules ~= nil and CampBrain.Engaged(camp.engaged[userId], simTime, rules)",
+        "return rules ~= nil and camp.engaged[userId] == simTime",
+    ),
+    "l1b crowd: Awake leaves out a group walking home": (
+        CROWD,
+        'if #group.bodies > 0 and not group.brain.held and state ~= "rest" then',
+        'if #group.bodies > 0 and not group.brain.held and (state == "rise" or state == "fight") then',
+    ),
+    "l1b crowd: Busy counts a group walking home": (
+        CROWD,
+        'if #group.bodies > 0 and not group.brain.held and (state == "rise" or state == "fight") then',
+        'if #group.bodies > 0 and not group.brain.held and state ~= "rest" then',
+    ),
+    "l1b crowd: a group walking home engages": (
+        CROWD,
+        'if #members > 0 and (brain.state == "rise" or brain.state == "fight") then',
+        'if #members > 0 and brain.state ~= "rest" then',
+    ),
+}
+MUTATIONS.update(FIX_A_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

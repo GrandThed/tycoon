@@ -1,7 +1,8 @@
 --!strict
 -- The arithmetic of a level's grey blocks (docs/INTERFACES.md "L1 contracts" → "Server modules"
--- → "A — the world", rulings 27, 29 and 31): where a camp's floor, fence, gates and invisible
--- wall stand, how deep the ground is built, what a layout's bounds are, the adapter that reads
+-- → "A — the world", rulings 27, 29 and 31; "L1b contracts" → "LevelGeometry"): where a camp's
+-- floor, fence, gates, invisible wall and fire markers stand (gates and the wall only for the
+-- camp that locks, L1b-12), how deep the ground is built, what a layout's bounds are, the adapter that reads
 -- the C1 Village arena as a level of one camp, and the whole list of Parts a layout becomes.
 -- LevelService turns that list into Instances and does no arithmetic of its own.
 --
@@ -30,22 +31,23 @@ export type Bounds = {
 export type Size = { sx: number, sy: number, sz: number }
 -- What a layout does not say and the config does: the fence's thickness and how deep the ground
 -- is (Combat.json levels.fenceThickness, levels.floorThickness), and how big a checkpoint
--- marker and a secret's sign are (Combat.json levels.checkpointSize, Expeditions.json
--- sign.size). A size the config does not give is nil, and what it sizes is then not built: no
--- size lives in code. Without `floor` a layout with a camp is refused (a camp has no floor) and
--- every block is built as the layout writes it.
-export type Sizes = { fence: number, floor: number?, checkpoint: Size?, sign: Size? }
+-- marker, a fire spot's marker and a secret's sign are (Combat.json levels.checkpointSize,
+-- levels.fireMarkerSize, Expeditions.json sign.size). A size the config does not give is nil,
+-- and what it sizes is then not built: no size lives in code. Without `floor` a layout with a
+-- camp is refused (a camp has no floor) and every block is built as the layout writes it.
+export type Sizes = { fence: number, floor: number?, checkpoint: Size?, fire: Size?, sign: Size? }
 -- One Part to build. `look` names a key of Expeditions.json `looks` (nil = no look at all: the
 -- invisible wall); `material` and `color` are the piece's own and win over the look's.
 export type Piece = {
 	name: string,
-	-- "block" | "floor" | "fence" | "gate" | "obstacle" | "checkpoint" | "barrier" | "secret" | "sign"
+	-- "block" | "floor" | "fence" | "gate" | "obstacle" | "checkpoint" | "fire" | "barrier" |
+	-- "secret" | "sign"
 	role: string,
 	box: Box,
 	look: string?,
 	material: string?,
 	color: { number }?,
-	-- The camp a floor, fence, gate, obstacle, checkpoint or barrier belongs to.
+	-- The camp a floor, fence, gate, obstacle, checkpoint, fire or barrier belongs to.
 	camp: string?,
 	-- false = nothing collides with it, touches it or is stopped by it in a ray.
 	collide: boolean,
@@ -368,6 +370,23 @@ function LevelGeometry.CheckpointBox(camp: Types.LevelCamp, size: Size): Box?
 	}
 end
 
+-- A fire spot's marker (L1b: so a group's place shows in grey box): centred on the fire's
+-- point, its bottom on the floor's top. nil for a spot that is no fire or has no point.
+function LevelGeometry.FireBox(camp: Types.LevelCamp, spot: Types.LevelSpot, size: Size): Box?
+	local centre = if spot.posture == "fire" and spot.points ~= nil then spot.points[1] else nil
+	if centre == nil then
+		return nil
+	end
+	return {
+		x = centre.x,
+		y = camp.y + size.sy / 2,
+		z = centre.z,
+		sx = size.sx,
+		sy = size.sy,
+		sz = size.sz,
+	}
+end
+
 function LevelGeometry.SecretBox(secret: Types.LevelSecret): Box
 	return {
 		x = secret.x,
@@ -530,8 +549,9 @@ function LevelGeometry.Bounds(layout: Types.LevelLayout, floorThickness: number?
 	}
 end
 
--- Ruling 27: the C1 arena read as a level. One camp, "arena", whose floor top is the world
--- origin: the arena's size, floor, fence and cover; no gates; the party enters at the first
+-- Ruling 27: the C1 arena read as a level. One camp, "arena", that locks (L1b-12), whose floor
+-- top is the world origin: the arena's size, floor, fence and cover; no gates; the party enters
+-- at the first
 -- player spawn (else the pad) and leaves and starts at the pad; the crowd arrives at the
 -- arena's enemy spawns. The invisible wall is the arena's (none without barrierHeight; a
 -- thickness of 0 means the fence's). Every table is new: the arena's own is a shared module.
@@ -568,6 +588,8 @@ function LevelGeometry.FromArena(arena: Types.ArenaLayout, killY: number): Types
 		checkpoint = nil,
 		spawns = spawns,
 		obstacles = obstacles,
+		locks = true,
+		spots = nil,
 	}
 	return {
 		version = 1,
@@ -612,8 +634,10 @@ function LevelGeometry.BareLobby(): Types.LevelLayout
 end
 
 -- Every Part a layout becomes, in build order: the blocks; per camp its floor, fence, gates,
--- cover, checkpoint marker and invisible wall; per secret its marked block and its sign. A
--- marker or a sign whose size `sizes` does not give is left out.
+-- cover, checkpoint marker, fire markers and invisible wall; per secret its marked block and its
+-- sign. Only a camp that locks (L1b-12) has gates and a wall: an open camp's fence is cut at its
+-- gates and the road runs through. A marker or a sign whose size `sizes` does not give is left
+-- out.
 -- Names are what Studio's Explorer shows (Camp_A_Floor, Gate_A_1, Barrier_A_3,
 -- Secret_lookout). nil and one line saying why when the layout cannot be built: it still
 -- names an arena, a camp has gates and no fence, a camp's floor has no depth (`sizes.floor`),
@@ -677,7 +701,9 @@ function LevelGeometry.Pieces(
 				collide = true,
 			})
 		end
-		for index, box in LevelGeometry.GateBoxes(camp, sizes.fence) do
+		local locks = camp.locks == true
+		local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, sizes.fence) else {}
+		for index, box in gates do
 			table.insert(pieces, {
 				name = `Gate_{id}_{index}`,
 				role = "gate",
@@ -716,7 +742,24 @@ function LevelGeometry.Pieces(
 				collide = false,
 			})
 		end
-		if barrier ~= nil then
+		local fireSize = sizes.fire
+		if fireSize ~= nil then
+			for _, spot in listOf(camp.spots) do
+				local fire = LevelGeometry.FireBox(camp, spot, fireSize)
+				if fire ~= nil then
+					-- A marker only: the group sits round it, and the crowd walks through it anyway.
+					table.insert(pieces, {
+						name = `Camp_{id}_Fire_{spot.id}`,
+						role = "fire",
+						box = fire,
+						look = "fire",
+						camp = id,
+						collide = false,
+					})
+				end
+			end
+		end
+		if barrier ~= nil and locks then
 			for index, box in LevelGeometry.BarrierBoxes(camp, sizes.fence, barrier) do
 				table.insert(pieces, {
 					name = `Barrier_{id}_{index}`,

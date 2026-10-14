@@ -35,6 +35,12 @@
 -- at Spawn, and a hit's HP loss is multiplied by the attacker's tier scale while the plate,
 -- heavyHit, the interrupt and armour keep judging the unscaled tier-1 amount. A kill carries what
 -- the run pays for (CrowdKillInfo). In Studio the step's cost is logged as a `[Perf]` line.
+-- L1b ("L1b contracts — the living road", rulings L1b-1 to L1b-9 and L1b-13): the crowd keeps a
+-- list of floors, one per camp, set once per run with no body alive, and every body stands, is
+-- clamped and strikes on its own. A camp's residents belong to groups that rest, rise, fight and
+-- go home together (CampBrain decides, the camp step here executes): a resident thinks with the
+-- brain only while its group fights, and then only of the targets in play for its group. The
+-- range keeps one floor (SetBounds) and no group, byte for byte as before.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -48,6 +54,7 @@ local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local RemoteService =
 	require(script.Parent.Parent:WaitForChild("Services"):WaitForChild("RemoteService"))
 local CrowdBrain = require(script.Parent:WaitForChild("CrowdBrain"))
+local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
 
 type Behaviour = "idle" | "walk" | "strafe" | "jump" | "chase" | "fight"
 
@@ -94,6 +101,33 @@ type Enemy = {
 	place: number,
 	-- P5: HP removed from this body per userId, each hit capped at the HP it had left.
 	damageBy: { [number]: number },
+	-- L1b: its index in the floor list, for its whole life (a summon takes its summoner's).
+	floor: number,
+	-- A camp's resident: its group, its post and its patrol leg. nil for every other body.
+	resident: CampBrain.Resident?,
+	-- A resident's records for the camp step, kept so the step allocates nothing per body.
+	member: CampBrain.Member?,
+	shooter: CampBrain.Shooter?,
+}
+
+-- One resident group: CampBrain's state, the floor it lives on, its living members, and the
+-- input it is stepped with (rebuilt in place every step).
+type CampGroup = {
+	brain: CampBrain.Group,
+	floor: number,
+	bodies: { Enemy },
+	input: CampBrain.StepInput,
+}
+
+-- A group's change of state, for WaveService (DrainGroupEvents). held = `from` was a held rest
+-- (the close released it); ids = the group's living members at the change.
+export type GroupEvent = {
+	group: number,
+	floor: number,
+	from: Types.CampGroupState,
+	to: Types.CampGroupState,
+	held: boolean,
+	ids: { number },
 }
 
 -- P5: the run's crowd-wide multipliers. The range never sets them.
@@ -156,6 +190,8 @@ local MAX_CATCHUP_STEPS = 3
 local MIN_PERIOD_SECONDS = 0.1
 local GROUND_EPSILON = 0.01
 local MOVE_THRESHOLD = 0.2
+-- A resting or homeward resident stops this share of camps.homeTolerance short of its goal.
+local HOME_STOP_SHARE = 0.5
 -- Before SetBounds: floor at y 0, effectively unbounded sideways, launches capped at 200.
 local DEFAULT_HALF_SIZE = Vector3.new(1024, 200, 1024)
 -- Spatial hash. Small cells keep a packed stress crowd at ~2 bodies per cell; separation widens
@@ -184,14 +220,34 @@ local simTime = 0
 local accumulator = 0
 local lastStepMs = 0
 
-local boundsCenter = Vector3.zero
--- L1 ruling 12: every snapshot is encoded against the world origin, for good. The bounds (and
--- with them the floor) move from camp to camp while the server lives, and a client that learnt
--- a new origin late would misplace every body by the distance between two camps. Every camp of
--- every level lies within the wire's reach of this point (StageFlow.Validate).
+-- L1 ruling 12: every snapshot is encoded against the world origin, for good. A client that
+-- learnt a new origin late would misplace every body by the distance between two camps. Every
+-- camp of every level lies within the wire's reach of this point (StageFlow.Validate).
 local WIRE_ORIGIN = Vector3.zero
 local warnedBoundsAlive = false
-local boundsHalf = DEFAULT_HALF_SIZE
+-- L1b-1: the floors, by floor index. Each is a top centre and half extents (half.Y = the highest a
+-- launch carries a body over it). The range sets one (SetBounds); a level one per camp.
+local DEFAULT_FLOOR: Types.CrowdFloor = { centre = Vector3.zero, half = DEFAULT_HALF_SIZE }
+local floors: { Types.CrowdFloor } = { DEFAULT_FLOOR }
+-- Living bodies per floor index, kept with aliveCount (never a scan).
+local aliveOn: { [number]: number } = {}
+-- The camp's resident groups and what the camp step keeps between steps. One table, so the
+-- module's top level stays well under Studio's 200 locals.
+local camp = {
+	-- Combat.json `camps`; nil (the range, the lobby) = no group changes state.
+	rules = nil :: Types.CampRulesConfig?,
+	groups = {} :: { CampGroup },
+	events = {} :: { GroupEvent },
+	-- Floors a WakeFloor has asked to release at the next step.
+	wake = {} :: { [number]: boolean },
+	-- userId -> the step clock at which it was last in play for a group in rise or fight; kept
+	-- for camps.engagedHoldSeconds (CampBrain.Engaged), then dropped.
+	engaged = {} :: { [number]: number },
+	-- This step's targets, as CampBrain reads them, and one reused record per userId.
+	seen = {} :: { CampBrain.Seen },
+	seenPool = {} :: { [number]: CampBrain.Seen },
+	warnedFloors = {} :: { [number]: boolean },
+}
 
 local grid: { [number]: { Enemy } } = {}
 local usedCells: { number } = {}
@@ -243,6 +299,12 @@ local function currentDef(enemy: Enemy, kinds: { [string]: Types.CrowdKindDef })
 	return enemy.def
 end
 
+-- A body's own floor; one whose index is no longer listed (only a dead body can be: SetFloors is
+-- refused with a body alive) stands on the first.
+local function floorOf(enemy: Enemy): Types.CrowdFloor
+	return floors[enemy.floor] or floors[1] or DEFAULT_FLOOR
+end
+
 local function gravity(): number
 	return Workspace.Gravity
 end
@@ -254,10 +316,13 @@ local function launchSpeed(height: number): number
 	return math.sqrt(2 * gravity() * height)
 end
 
--- Keeps a body wholly inside the arena footprint and under the launch ceiling. A clamp that
+-- Keeps a body wholly inside its own floor's footprint and under the launch ceiling. A clamp that
 -- bites cancels the knockback on that axis so the body does not grind against the wall.
 local function clampToBounds(enemy: Enemy, radius: number): ()
 	local position = enemy.position
+	local floor = floorOf(enemy)
+	local boundsCenter = floor.centre
+	local boundsHalf = floor.half
 	local limitX = math.max(boundsHalf.X - radius, 0)
 	local limitZ = math.max(boundsHalf.Z - radius, 0)
 	local floorY = boundsCenter.Y
@@ -316,6 +381,33 @@ local function fireAll(eventName: string, payload: any): ()
 	end
 end
 
+-- A resident that dies or is removed leaves its group's living members.
+local function leaveGroup(enemy: Enemy): ()
+	local resident = enemy.resident
+	if resident == nil then
+		return
+	end
+	local group = camp.groups[resident.group]
+	if group == nil then
+		return
+	end
+	local bodies = group.bodies
+	for index, body in bodies do
+		if body == enemy then
+			bodies[index] = bodies[#bodies]
+			bodies[#bodies] = nil
+			return
+		end
+	end
+end
+
+-- One living body fewer, on its floor and in its group.
+local function noteGone(enemy: Enemy): ()
+	aliveCount -= 1
+	aliveOn[enemy.floor] = math.max((aliveOn[enemy.floor] or 0) - 1, 0)
+	leaveGroup(enemy)
+end
+
 local function removeRecord(enemy: Enemy): ()
 	enemies[enemy.id] = nil
 	local last = order[#order]
@@ -323,7 +415,7 @@ local function removeRecord(enemy: Enemy): ()
 	last.index = enemy.index
 	order[#order] = nil
 	if enemy.deadAt == nil then
-		aliveCount -= 1
+		noteGone(enemy)
 		-- Removed alive (a set load, its summoner's death): it leaves its summoner's guard.
 		local summoner = enemy.summoner
 		if summoner ~= nil then
@@ -442,6 +534,8 @@ end
 -- targets are the same players less the ones the threat hooks rule out.
 local function gatherTargets(shooting: Types.RangeShootingConfig): ()
 	table.clear(targets)
+	local seenList = camp.seen
+	table.clear(seenList)
 	local hooks = threatHooks
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
@@ -453,10 +547,19 @@ local function gatherTargets(shooting: Types.RangeShootingConfig): ()
 		if root ~= nil and root:IsA("BasePart") and humanoid ~= nil and humanoid.Health > 0 then
 			table.insert(targets, root.Position)
 			if hooks == nil or hooks.canTarget(player) then
-				-- R15's HipHeight is measured to the root's underside.
-				local standY = boundsCenter.Y + humanoid.HipHeight + root.Size.Y / 2
+				-- R15's HipHeight is measured to the root's underside. The brain adds the floor of
+				-- whichever body it leads a fall for.
+				local lift = humanoid.HipHeight + root.Size.Y / 2
 				local lag = Tuning.CommitLag(shooting, player:GetNetworkPing())
-				CrowdBrain.AddTarget(player.UserId, root.Position, standY, lag)
+				CrowdBrain.AddTarget(player.UserId, root.Position, lift, lag)
+				local seen = camp.seenPool[player.UserId]
+				if seen == nil then
+					seen = { userId = player.UserId, root = root.Position }
+					camp.seenPool[player.UserId] = seen
+				else
+					seen.root = root.Position
+				end
+				table.insert(seenList, seen)
 			end
 		end
 	end
@@ -469,21 +572,41 @@ local function integrate(
 	dt: number,
 	g: number
 ): ()
-	local floorY = boundsCenter.Y
+	local floorY = floorOf(enemy).centre.Y
 	local position = enemy.position
 	local grounded = position.Y <= floorY + GROUND_EPSILON and enemy.vy <= 0
 	local alive = enemy.deadAt == nil
 	local mind = enemy.mind
 	-- A fighting body looks where its brain says: its own target, which a downed player is not.
 	local target = if alive and mind == nil then nearestTarget(position) else nil
+	-- L1b: a resident thinks with the brain only while its group fights; otherwise it rests,
+	-- rises or walks home as CampBrain has it, and is never committed.
+	local resident = if alive then enemy.resident else nil
+	local group = if resident ~= nil then camp.groups[resident.group] else nil
+	local brain = if group ~= nil then group.brain else nil
+	local resting = brain ~= nil and (brain.held or brain.state ~= "fight")
 
 	local desired = Vector3.zero
 	local free = alive and grounded and simTime >= enemy.staggerUntil
-	if mind ~= nil then
+	if resting then
+		local rules = camp.rules
+		if free and rules ~= nil and brain ~= nil and resident ~= nil then
+			local goal, pace = CampBrain.Goal(brain, resident, position, rules)
+			if goal ~= nil then
+				local speed = math.max(def.speed, 0) * math.max(pace, 0)
+				-- Half the tolerance short of the goal, not the whole of it: a body stopped at
+				-- exactly the tolerance lands a rounding error either side of it, and then neither
+				-- counts as at its post nor turns a patrol to its next point.
+				local stop = math.max(rules.homeTolerance, 0) * HOME_STOP_SHARE
+				desired = seek(position, goal, speed, stop, dt)
+			end
+		end
+	elseif mind ~= nil then
 		if alive then
 			-- Called even when the body is not free: an attack under way keeps its timeline
-			-- through a stagger or a hop.
-			local goal, stopDistance = CrowdBrain.Think(enemy, mind, def, crowd, free)
+			-- through a stagger or a hop. A fighting resident sees only its group's targets.
+			local allowed = if brain ~= nil then brain.inPlay else nil
+			local goal, stopDistance = CrowdBrain.Think(enemy, mind, def, crowd, free, allowed)
 			local carried = if mind.charge ~= nil then CrowdBrain.Carried(mind) else nil
 			if carried ~= nil then
 				-- A charge: the brain carries the body down its lane, and nothing else moves it
@@ -531,7 +654,14 @@ local function integrate(
 
 	local moving = desired.Magnitude > MOVE_THRESHOLD
 	if alive then
-		if mind ~= nil then
+		if resting then
+			if moving then
+				enemy.yaw = yawToward(desired)
+			elseif resident ~= nil and brain ~= nil and (brain.held or brain.state == "rest") then
+				-- Standing still at rest it faces as its post does.
+				enemy.yaw = resident.post.yaw
+			end
+		elseif mind ~= nil then
 			-- Walking, a rusher faces where it goes; otherwise, and for a shooter always, its
 			-- target or the heading its windup locked (the brain keeps `facing` for both).
 			enemy.yaw = yawToward(if moving and not mind.watch then desired else mind.facing)
@@ -554,8 +684,14 @@ local function integrate(
 		enemy.state = "stagger"
 	else
 		-- windup, attack or recover while the brain is in one. A stagger or a launch shows over
-		-- it and the phase shows again after, its clock never having stopped.
-		local phase: Types.CrowdState? = if mind ~= nil then CrowdBrain.StateOf(mind) else nil
+		-- it and the phase shows again after, its clock never having stopped. A resting resident
+		-- shows its group's posture (CampBrain.Shows).
+		local phase: Types.CrowdState? = nil
+		if resting and brain ~= nil then
+			phase = CampBrain.Shows(brain, moving)
+		elseif mind ~= nil then
+			phase = CrowdBrain.StateOf(mind)
+		end
 		if phase ~= nil then
 			enemy.state = phase
 		elseif moving then
@@ -746,6 +882,123 @@ local function separate(largeRadius: number): ()
 	end
 end
 
+-- The heal (L1b-8): a resident back at its post while its group goes home is whole again.
+local function heal(enemy: Enemy): ()
+	enemy.hp = enemy.maxHp
+	enemy.plate = enemy.plateMax
+	table.clear(enemy.damageBy)
+	enemy.staggerUntil = 0
+end
+
+-- The longest reach among the attacks the wire can name.
+local function longestReach(def: Types.CrowdKindDef): number
+	local longest = 0
+	local attacks = def.attacks
+	if attacks ~= nil then
+		for index, attack in attacks do
+			if index > CrowdCodec.MAX_ATTACK then
+				break
+			end
+			longest = math.max(longest, attack.reach)
+		end
+	end
+	return longest
+end
+
+local function queueEvent(
+	index: number,
+	group: CampGroup,
+	from: Types.CampGroupState,
+	to: Types.CampGroupState,
+	held: boolean
+): ()
+	local ids = table.create(#group.bodies)
+	for _, body in group.bodies do
+		table.insert(ids, body.id)
+	end
+	table.insert(
+		camp.events,
+		{ group = index, floor = group.floor, from = from, to = to, held = held, ids = ids }
+	)
+end
+
+-- The camp step (L1b-3 to L1b-8, L1b-13): once per step, after the targets are gathered and before
+-- any body is committed or thinks. Each group's input is rebuilt in its own tables, a pending
+-- WakeFloor releases a held group, every other group takes one CampBrain.Step, and a change of
+-- state is queued for DrainGroupEvents. A resident at its post while its group goes home is healed
+-- first, so the step that finds them all home has healed every one. Nothing here yields, casts a
+-- ray or allocates per body; a group with no living member engages nobody. Engagement is stamped
+-- with this step's clock and outlives play by camps.engagedHoldSeconds.
+local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
+	local engaged = camp.engaged
+	local rules = camp.rules
+	if rules == nil then
+		table.clear(engaged)
+		return
+	end
+	local wake = camp.wake
+	for index, group in camp.groups do
+		local brain = group.brain
+		local input = group.input
+		local members = input.members
+		local shooters = input.shooters
+		table.clear(members)
+		table.clear(shooters)
+		local striking = false
+		local homeward = brain.state == "home" and not brain.held
+		for _, body in group.bodies do
+			local resident = body.resident
+			local member = body.member
+			if resident == nil or member == nil then
+				continue
+			end
+			member.at = body.position
+			if homeward and CampBrain.AtPost(resident.post, body.position, rules) then
+				heal(body)
+			end
+			table.insert(members, member)
+			local def = currentDef(body, kinds)
+			local shooter = body.shooter
+			if shooter ~= nil and def.brain == "keepAway" then
+				shooter.at = body.position
+				shooter.reach = longestReach(def)
+				table.insert(shooters, shooter)
+			end
+			local mind = body.mind
+			if mind ~= nil and (CrowdBrain.IsStriking(mind) or mind.charge ~= nil) then
+				striking = true
+			end
+		end
+		input.now = simTime
+		input.targets = camp.seen
+		input.striking = striking
+		if wake[group.floor] and brain.held then
+			-- Stepped held first (it changes nothing but its in-play set, so Engaged is current),
+			-- then released: the rise is counted from here, so even a rise of 0 shows.
+			CampBrain.Step(brain, input, rules)
+			CampBrain.Release(brain, simTime)
+			queueEvent(index, group, "rest", "rise", true)
+		else
+			local from: Types.CampGroupState = brain.state
+			local to: Types.CampGroupState? = CampBrain.Step(brain, input, rules)
+			if to ~= nil then
+				queueEvent(index, group, from, to, false)
+			end
+		end
+		if #members > 0 and (brain.state == "rise" or brain.state == "fight") then
+			for userId in brain.inPlay do
+				engaged[userId] = simTime
+			end
+		end
+	end
+	table.clear(wake)
+	for userId, at in engaged do
+		if not CampBrain.Engaged(at, simTime, rules) then
+			engaged[userId] = nil
+		end
+	end
+end
+
 -- `clock` = the frame's os.clock(): what the brain times its attacks on.
 local function simulate(dt: number, clock: number): ()
 	simTime += dt
@@ -756,17 +1009,18 @@ local function simulate(dt: number, clock: number): ()
 	local hooks = threatHooks
 	CrowdBrain.BeginStep(
 		clock,
-		boundsCenter.Y,
 		g,
 		if hooks ~= nil then hooks.shotsAlive() else 0,
 		Tuning.FastestMove(config)
 	)
 	gatherTargets(config.shooting)
+	campStep(kinds)
 	-- The places each kind holds against each player are counted before anyone thinks, so a
 	-- body walked late in the step never finds its own place taken by one that started after it.
 	for _, enemy in order do
 		local mind = enemy.mind
 		if mind ~= nil and enemy.deadAt == nil then
+			-- A resting resident never thinks, so its mind holds no place; committing it is a no-op.
 			CrowdBrain.Commit(enemy, mind)
 		end
 	end
@@ -973,30 +1227,93 @@ end
 
 local CrowdService = {}
 
--- center = the floor the crowd stands on: its top face and its XZ centre. halfSize.X/Z = the
--- footprint's half extents (bodies stay wholly inside); halfSize.Y = the highest a launch can
--- carry a body above the floor. L1 (rulings 11 and 12): a level sets this at every camp's
--- trigger, so the floor may move and change height while the server lives; the snapshots' origin
--- does not move with it (WIRE_ORIGIN). Refused, with false, while a body is alive: every living
--- body would be clamped into a rectangle it never stood in and judged against a floor it is not
--- on. The caller clears the crowd first.
-function CrowdService.SetBounds(center: Vector3, halfSize: Vector3): boolean
-	if not isFiniteVector(center) or not isFiniteVector(halfSize) then
-		warn("[CrowdService] SetBounds ignored: non-finite bounds")
+-- Every group goes (with its pending events and wakes); no body is a resident any more.
+local function forgetGroups(): ()
+	for _, enemy in order do
+		enemy.resident = nil
+		enemy.member = nil
+		enemy.shooter = nil
+	end
+	camp.groups = {}
+	table.clear(camp.events)
+	table.clear(camp.wake)
+	table.clear(camp.engaged)
+end
+
+local function setFloors(list: { Types.CrowdFloor }, caller: string): boolean
+	local valid = typeof(list) == "table" and #list > 0
+	if valid then
+		for _, floor in list do
+			-- Read as any: a caller's table may lack either field, whatever its type says.
+			local given: any = floor
+			if
+				typeof(given) ~= "table"
+				or given.centre == nil
+				or given.half == nil
+				or not isFiniteVector(given.centre)
+				or not isFiniteVector(given.half)
+			then
+				valid = false
+				break
+			end
+		end
+	end
+	if not valid then
+		warn(`[CrowdService] {caller} ignored: no floor, or a non-finite one`)
 		return false
 	end
 	if aliveCount > 0 then
 		if not warnedBoundsAlive then
 			warnedBoundsAlive = true
-			warn("[CrowdService] SetBounds refused: a body is alive (clear the crowd first)")
+			warn(`[CrowdService] {caller} refused: a body is alive (clear the crowd first)`)
 		end
 		return false
 	end
-	boundsCenter = center
-	boundsHalf = Vector3.new(math.abs(halfSize.X), math.abs(halfSize.Y), math.abs(halfSize.Z))
-	CrowdBrain.SetArena(boundsCenter, boundsHalf)
+	local kept: { Types.CrowdFloor } = {}
+	for _, floor in list do
+		local half = floor.half
+		table.insert(kept, {
+			centre = floor.centre,
+			half = Vector3.new(math.abs(half.X), math.abs(half.Y), math.abs(half.Z)),
+		})
+	end
+	floors = kept
+	table.clear(aliveOn)
+	forgetGroups()
+	CrowdBrain.SetFloors(floors)
 	ensureRunning()
 	return true
+end
+
+-- L1b-1: the run's floors, one per camp in layout order (a body's floor index is its camp's place
+-- there). Each is the floor's top centre and half extents; half.Y = the highest a launch can carry
+-- a body above it. Set once at a level's start; the snapshots' origin never moves (WIRE_ORIGIN).
+-- Refused, with false and one warn, for an empty list, a non-finite value, or while a body is
+-- alive (every living body would be clamped into a rectangle it never stood in). Forgets every
+-- group.
+function CrowdService.SetFloors(list: { Types.CrowdFloor }): boolean
+	return setFloors(list, "SetFloors")
+end
+
+-- The range's one floor: center = its top face and XZ centre, halfSize.X/Z = the footprint's half
+-- extents (bodies stay wholly inside), halfSize.Y = the launch ceiling. The same as a list of that
+-- one floor, at index 1.
+function CrowdService.SetBounds(center: Vector3, halfSize: Vector3): boolean
+	return setFloors({ { centre = center, half = halfSize } }, "SetBounds")
+end
+
+-- Combat.json `camps` for the run's groups; nil (the range, the lobby) = no group changes state.
+-- Rules CampBrain finds a problem with are refused as nil, with one warn naming each problem.
+function CrowdService.SetCampRules(rules: Types.CampRulesConfig?): ()
+	if rules ~= nil then
+		local problems = CampBrain.Problems(rules)
+		if #problems > 0 then
+			warn(`[CrowdService] SetCampRules refused: {table.concat(problems, "; ")}`)
+			camp.rules = nil
+			return
+		end
+	end
+	camp.rules = rules
 end
 
 -- Until they are set, fighting enemies go for every living player and their impacts are dropped.
@@ -1032,12 +1349,15 @@ end
 -- behaviour `fight` runs the kind's brain (CrowdBrain); a kind without one stands.
 -- P5: maxHp = def.hp x scales.hp x hpMult (a boss body's party factor), plate = def.plate x
 -- scales.plate.
+-- L1b: floor = the floor index it lives on for its whole life (nil = 1); an index the floor list
+-- does not hold is refused (0, one warn per index).
 function CrowdService.Spawn(
 	kind: string,
 	position: Vector3,
 	behaviour: string,
 	anchor: Vector3?,
-	hpMult: number?
+	hpMult: number?,
+	floor: number?
 ): number
 	ensureRunning()
 	local config = Tuning.Get()
@@ -1050,6 +1370,15 @@ function CrowdService.Spawn(
 		return 0
 	end
 	if not isFiniteVector(position) or (anchor ~= nil and not isFiniteVector(anchor)) then
+		return 0
+	end
+	local floorIndex = if floor == nil then 1 else floor
+	local stand = if isFinite(floorIndex) then floors[floorIndex] else nil
+	if stand == nil then
+		if isFinite(floorIndex) and not camp.warnedFloors[floorIndex] then
+			camp.warnedFloors[floorIndex] = true
+			warn(`[CrowdService] no floor {floorIndex}; spawn refused`)
+		end
 		return 0
 	end
 	if aliveCount >= config.crowd.maxAlive then
@@ -1067,7 +1396,7 @@ function CrowdService.Spawn(
 	local maxHp = math.max(def.hp * scales.hp * bodyMult, 1)
 	local plate = math.max((def.plate or 0) * scales.plate, 0)
 	local phase = id * GOLDEN_RATIO_FRACTION % 1
-	local start = Vector3.new(position.X, math.max(position.Y, boundsCenter.Y), position.Z)
+	local start = Vector3.new(position.X, math.max(position.Y, stand.centre.Y), position.Z)
 	local enemy: Enemy = {
 		id = id,
 		kind = kind,
@@ -1100,18 +1429,23 @@ function CrowdService.Spawn(
 			plated = plate > 0,
 			attack = 0,
 		},
-		spawnInfo = { id = id, kind = kind, maxHp = maxHp },
+		spawnInfo = { id = id, kind = kind, maxHp = maxHp, floor = floorIndex },
 		mind = if resolvedBehaviour == "fight" then CrowdBrain.NewMind(os.clock()) else nil,
 		summoner = nil,
 		summoned = 0,
 		guard = 0,
 		place = 0,
 		damageBy = {},
+		floor = floorIndex,
+		resident = nil,
+		member = nil,
+		shooter = nil,
 	}
 	clampToBounds(enemy, def.radius)
 	enemies[id] = enemy
 	order[enemy.index] = enemy
 	aliveCount += 1
+	aliveOn[floorIndex] = (aliveOn[floorIndex] or 0) + 1
 	pendingSpawnSet[id] = true
 	table.insert(pendingSpawnOrder, id)
 	gridInsert(enemy)
@@ -1172,10 +1506,11 @@ local function summon(strike: CrowdBrain.Strike): ()
 		local angle = summoner.yaw + (place + turned) / count * 2 * math.pi
 		local spot = Vector3.new(
 			centre.X - math.sin(angle) * radius,
-			boundsCenter.Y,
+			floorOf(summoner).centre.Y,
 			centre.Z - math.cos(angle) * radius
 		)
-		local risen = enemies[CrowdService.Spawn(kind, spot, "fight")]
+		-- On its summoner's floor, and in no group.
+		local risen = enemies[CrowdService.Spawn(kind, spot, "fight", nil, nil, summoner.floor)]
 		if risen ~= nil then
 			risen.summoner = summoner
 			risen.place = place
@@ -1238,11 +1573,13 @@ end
 
 -- Every enemy goes, and with them the impacts their brains had still queued. (Whoever holds
 -- the threat hooks clears what is already in the air: VitalsService.OnSetLoaded.)
+-- L1b: and every group is forgotten.
 function CrowdService.Clear(): ()
 	for index = #order, 1, -1 do
 		removeRecord(order[index])
 	end
 	CrowdBrain.DrainStrikes(nil)
+	forgetGroups()
 end
 
 -- Broadphase: every living enemy whose body (body sphere and head sphere) may reach within
@@ -1323,7 +1660,7 @@ local function die(enemy: Enemy, def: Types.CrowdKindDef, crowd: CrowdConfig, by
 	enemy.hp = 0
 	enemy.deadAt = simTime
 	enemy.state = "dead"
-	aliveCount -= 1
+	noteGone(enemy)
 	local summoner = enemy.summoner
 	if summoner ~= nil then
 		summoner.guard = math.max(summoner.guard - 1, 0)
@@ -1377,6 +1714,16 @@ function CrowdService.Damage(
 	end
 	if enemy.deadAt ~= nil then
 		return 0, false, nil
+	end
+	-- L1b-7, L1b-8 and L1b-13: a resident's group is asked first. One that evades (held, going
+	-- home) or a hit from a player out of play answers "blocked": no damage, knock, stagger or
+	-- book. Any hit that is not evaded wakes a resting group.
+	local resident = enemy.resident
+	if resident ~= nil then
+		local group = camp.groups[resident.group]
+		if group ~= nil and not CampBrain.Struck(group.brain, byUserId) then
+			return 0, false, "blocked"
+		end
 	end
 	local crowd = Tuning.Get().crowd
 	local def = currentDef(enemy, crowd.kinds)
@@ -1496,6 +1843,155 @@ end
 
 function CrowdService.AliveCount(): number
 	return aliveCount
+end
+
+-- L1b-3: a resident group of the run; its index (1..n in call order), or 0 when refused (a floor
+-- index the list does not hold, a non-finite number). Its bodies come from SpawnResident.
+function CrowdService.AddGroup(def: Types.CampGroupDef): number
+	if typeof(def) ~= "table" or floors[def.floor] == nil then
+		warn(
+			`[CrowdService] AddGroup refused: no floor {if typeof(def) == "table"
+				then def.floor
+				else "?"}`
+		)
+		return 0
+	end
+	local rect = def.rect
+	local finite = typeof(rect) == "table"
+		and isFinite(def.floorY)
+		and isFinite(def.yaw)
+		and isFinite(def.radius)
+		and isFinite(rect.x)
+		and isFinite(rect.z)
+		and isFinite(rect.hx)
+		and isFinite(rect.hz)
+		and typeof(def.points) == "table"
+	if finite then
+		for _, point in def.points do
+			if not isFiniteVector(point) then
+				finite = false
+				break
+			end
+		end
+	end
+	if not finite then
+		warn(`[CrowdService] AddGroup refused: group {def.id} has a non-finite value`)
+		return 0
+	end
+	local index = #camp.groups + 1
+	camp.groups[index] = {
+		brain = CampBrain.NewGroup(def, simTime),
+		floor = def.floor,
+		bodies = {},
+		input = {
+			now = simTime,
+			members = {},
+			targets = camp.seen,
+			shooters = {},
+			striking = false,
+		},
+	}
+	return index
+end
+
+-- One member of a group, standing on `post` (CampBrain.Posts): it fights (once its group does) on
+-- its group's floor. 0 for an unknown group, else exactly Spawn's refusals.
+function CrowdService.SpawnResident(kind: string, group: number, post: CampBrain.Post): number
+	local record = camp.groups[group]
+	if record == nil then
+		return 0
+	end
+	local id = CrowdService.Spawn(kind, post.at, "fight", post.at, nil, record.floor)
+	local enemy = enemies[id]
+	if enemy == nil then
+		return 0
+	end
+	enemy.resident = { group = group, post = post, leg = post.leg }
+	enemy.member = { at = enemy.position, post = post }
+	enemy.shooter = { at = enemy.position, reach = 0 }
+	enemy.yaw = post.yaw
+	enemy.entry.yaw = post.yaw
+	table.insert(record.bodies, enemy)
+	return id
+end
+
+-- The close (L1b-13): every held group of that floor is released at the next step.
+function CrowdService.WakeFloor(floor: number): ()
+	if isFinite(floor) then
+		camp.wake[floor] = true
+	end
+end
+
+-- Removes that floor's bodies as Clear does (no kill, so nothing is credited), and the impacts
+-- they had queued or in the air. The other floors are left alone.
+function CrowdService.ClearFloor(floor: number): ()
+	local ids: { [number]: boolean } = {}
+	local any = false
+	-- Backwards: a removal moves the last record into the freed slot, one already looked at.
+	for index = #order, 1, -1 do
+		local enemy = order[index]
+		if enemy ~= nil and enemy.floor == floor then
+			ids[enemy.id] = true
+			any = true
+			removeRecord(enemy)
+		end
+	end
+	if not any then
+		return
+	end
+	CrowdBrain.Recall(ids)
+	local hooks = threatHooks
+	if hooks ~= nil then
+		hooks.gone(ids)
+	end
+end
+
+-- Living bodies on that floor.
+function CrowdService.AliveOn(floor: number): number
+	return aliveOn[floor] or 0
+end
+
+-- Groups in rise, fight or home with a living member.
+function CrowdService.Awake(): number
+	local count = 0
+	for _, group in camp.groups do
+		local state = group.brain.state
+		if #group.bodies > 0 and not group.brain.held and state ~= "rest" then
+			count += 1
+		end
+	end
+	return count
+end
+
+-- The floors with a group in rise or fight that has a living member (a new table).
+function CrowdService.Busy(): { [number]: boolean }
+	local busy: { [number]: boolean } = {}
+	for _, group in camp.groups do
+		local state = group.brain.state
+		if #group.bodies > 0 and not group.brain.held and (state == "rise" or state == "fight") then
+			busy[group.floor] = true
+		end
+	end
+	return busy
+end
+
+-- In play for a group in rise or fight at a step within camps.engagedHoldSeconds of the last
+-- one (CampBrain.Engaged, on the crowd's step clock).
+function CrowdService.Engaged(userId: number): boolean
+	local rules = camp.rules
+	return rules ~= nil and CampBrain.Engaged(camp.engaged[userId], simTime, rules)
+end
+
+-- Every change of a group's state since the last drain, in order.
+function CrowdService.DrainGroupEvents(handler: (event: GroupEvent) -> ()): ()
+	if #camp.events == 0 then
+		return
+	end
+	local events = camp.events
+	camp.events = {}
+	for _, event in events do
+		handler(event)
+	end
 end
 
 -- Wall time of the last Heartbeat that stepped: simulation, lifecycle batches and snapshot

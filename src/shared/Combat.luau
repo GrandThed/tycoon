@@ -283,9 +283,11 @@ type ArmoryConfig = {
 type CombatOwner = { era: number, rebirthCount: number, combat: CombatProfile }
 type CashOwner = { legacy: number, legacyShop: LegacyShopState }
 
--- One wave's unsplit reward pot, filled kill by kill and flushed at the wave clear.
+-- One kill's unsplit reward (L1b-15: a kill is split and paid as it falls).
 export type RewardPool = { cash: number, materials: number, valor: number, kills: number }
 export type RewardShare = { cash: number, materials: number, valor: number }
+-- Per userId: the fractions SplitCarry has not paid yet, each under 1. Kept for a run.
+export type Carry = { [number]: RewardShare }
 
 -- One wave, fully resolved: how many enemies and by how much their stats and rewards are
 -- multiplied. `boss` is the entry for this wave when it is a boss wave. `bossHpMult` (C2) is the
@@ -753,16 +755,42 @@ function Combat.AbilityCooldown(cfg: ArmoryConfig, state: CombatOwner, slot: str
 	return ability.cooldown
 end
 
--- Floors, so a wave can never pay out more than it banked. The per-player cash multiplier is
--- applied by the caller on top of this share (it depends on the profile, which is not pure).
-function Combat.SplitPool(pool: RewardPool, shares: { [number]: number }): { [number]: RewardShare }
+-- L1b-15: what a kill pays is split the moment it falls, so a share is often a fraction of a
+-- unit (a party of two splits a slinger's 1 Timber 0.9 / 0.1). Each member is paid the whole
+-- units of their share and keeps the fraction in their carry, which is added to their next
+-- credit: over a run nobody loses a fraction, and nobody is paid more than the pools held.
+-- `cashMults[userId]` (CombatCashMult; nil = 1) multiplies cash inside the carry, so it is
+-- floored once. A share that is not a finite number of at least 0 pays nothing and leaves that
+-- member's carry as it was; a member not in `shares` keeps theirs. Mutates `carry`.
+local function whole(exact: number): (number, number)
+	local paid = math.floor(exact + 1e-9)
+	return paid, math.max(exact - paid, 0)
+end
+
+function Combat.SplitCarry(
+	pool: RewardPool,
+	shares: { [number]: number },
+	carry: Carry,
+	cashMults: { [number]: number }?
+): { [number]: RewardShare }
 	local split: { [number]: RewardShare } = {}
 	for userId, share in shares do
-		split[userId] = {
-			cash = math.floor(pool.cash * share),
-			materials = math.floor(pool.materials * share),
-			valor = math.floor(pool.valor * share),
-		}
+		if not (share >= 0 and share < math.huge) then
+			continue
+		end
+		local held = carry[userId]
+		if held == nil then
+			held = { cash = 0, materials = 0, valor = 0 }
+			carry[userId] = held
+		end
+		local mult = if cashMults ~= nil then cashMults[userId] or NEUTRAL_MULT else NEUTRAL_MULT
+		local cash, cashLeft = whole(pool.cash * share * mult + held.cash)
+		local materials, materialsLeft = whole(pool.materials * share + held.materials)
+		local valor, valorLeft = whole(pool.valor * share + held.valor)
+		held.cash = cashLeft
+		held.materials = materialsLeft
+		held.valor = valorLeft
+		split[userId] = { cash = cash, materials = materials, valor = valor }
 	end
 	return split
 end
@@ -819,17 +847,27 @@ function Combat.CampWave(
 	}
 end
 
--- Fixed cash and materials for one kill of `kind`; a kind with no rewards entry pays nothing.
-function Combat.CampReward(
+-- L1b-15: fixed cash and materials for one kill of `kind` at a difficulty's `rewardMult`,
+-- rounded to the nearest; a kind with no rewards entry pays nothing.
+function Combat.KillReward(
 	rewards: { [string]: MissionCrowdReward },
 	kind: string,
-	spec: CrowdWaveSpec
+	rewardMult: number
 ): (number, number)
 	local reward = rewards[kind]
 	if reward == nil then
 		return 0, 0
 	end
-	return math.round(reward.cash * spec.rewardMult), math.round(reward.materials * spec.rewardMult)
+	return math.round(reward.cash * rewardMult), math.round(reward.materials * rewardMult)
+end
+
+-- KillReward at the spec's rewardMult (the mission-shaped callers' form).
+function Combat.CampReward(
+	rewards: { [string]: MissionCrowdReward },
+	kind: string,
+	spec: CrowdWaveSpec
+): (number, number)
+	return Combat.KillReward(rewards, kind, spec.rewardMult)
 end
 
 -- Seconds between two bursts of the same wave: the whole wave is meant to land inside

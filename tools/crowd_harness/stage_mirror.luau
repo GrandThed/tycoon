@@ -1,8 +1,8 @@
 -- The Luau half of tools/check_stage_mirror.py (never shipped). That tool prepends `DATA` (the
 -- shipped files and the cases it wants answered) and `SOURCES.<name>(game, script, require,
 -- Vector3, ...)`, the real module bodies wrapped the way tools/crowd_harness/run_harness.py wraps
--- them. This file runs the real Combat, StageFlow and LevelGeometry on them and prints one line
--- an answer: `OUT<tab>id<tab>json`. It decides nothing: every comparison is the Python's.
+-- them. This file runs the real Combat, StageFlow, CampBrain and LevelGeometry on them and prints
+-- one line an answer: `OUT<tab>id<tab>json`. It decides nothing: every comparison is the Python's.
 
 -- Vector3, as much of it as StageFlow uses -----------------------------------------------------
 local vmeta = {}
@@ -15,6 +15,10 @@ vmeta.__index = function(self, key)
 	elseif key == "Unit" then
 		local m = math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
 		return vec(self.X / m, self.Y / m, self.Z / m)
+	elseif key == "Dot" then
+		return function(a, b)
+			return a.X * b.X + a.Y * b.Y + a.Z * b.Z
+		end
 	end
 	return nil
 end
@@ -134,6 +138,7 @@ function J.try(id: string, fn: () -> any): any
 end
 
 local Combat = M.load("Combat")
+local Brain = M.load("CampBrain")
 local Flow = M.load("StageFlow")
 local Geo = M.load("LevelGeometry")
 local data: any = DATA
@@ -142,19 +147,15 @@ local director = data.combat.director
 
 -- What the module exports: the Python lists a comparison whose function is not there.
 do
-	local names: { [string]: { string } } = { Combat = {}, StageFlow = {} }
-	for name, value in Combat do
-		if type(value) == "function" then
-			table.insert(names.Combat, name)
+	local names: { [string]: { string } } = { Combat = {}, StageFlow = {}, CampBrain = {} }
+	for module, value in { Combat = Combat, StageFlow = Flow, CampBrain = Brain } do
+		for name, item in value do
+			if type(item) == "function" then
+				table.insert(names[module], name)
+			end
 		end
+		table.sort(names[module])
 	end
-	for name, value in Flow do
-		if type(value) == "function" then
-			table.insert(names.StageFlow, name)
-		end
-	end
-	table.sort(names.Combat)
-	table.sort(names.StageFlow)
 	J.out("exports", names)
 end
 
@@ -181,6 +182,35 @@ end
 function L.rect(rect: any): any
 	return { rect.x, rect.z, rect.hx, rect.hz }
 end
+-- A set { [index] = true } as the sorted list of its indices (JSON cannot tell the two apart).
+function L.keys(set: any): any
+	local found = {}
+	for key, value in set or {} do
+		if value then
+			table.insert(found, key)
+		end
+	end
+	table.sort(found)
+	return found
+end
+-- A Plan zone as plain values.
+function L.zone(zone: any): any
+	return {
+		id = zone.id,
+		floor = zone.floor,
+		locks = zone.locks,
+		name = zone.name,
+		checkpoint = zone.checkpoint,
+		residents = zone.residents,
+		floorY = zone.floorY,
+		rect = L.rect(zone.rect),
+		inner = L.rect(zone.inner),
+		trigger = L.rect(zone.trigger),
+		entry = zone.entry,
+		exit = zone.exit,
+		spawns = zone.spawns,
+	}
+end
 -- A Plan as plain values: a zone's rectangles as { x, z, hx, hz }, its boss waves as a list.
 function L.plan(plan: any): any
 	local stages = {}
@@ -199,22 +229,14 @@ function L.plan(plan: any): any
 			boss = boss,
 			breatherSeconds = stage.breatherSeconds,
 			merge = stage.merge,
-			bankEachWave = stage.bankEachWave,
 			targetWaveSeconds = stage.targetWaveSeconds,
 			maxAlive = stage.maxAlive,
-			zone = if zone ~= nil
-				then {
-					id = zone.id,
-					floorY = zone.floorY,
-					rect = L.rect(zone.rect),
-					inner = L.rect(zone.inner),
-					trigger = L.rect(zone.trigger),
-					entry = zone.entry,
-					exit = zone.exit,
-					spawns = zone.spawns,
-				}
-				else nil,
+			zone = if zone ~= nil then zone.id else nil,
 		}
+	end
+	local zones = {}
+	for index, zone in plan.zones or {} do
+		zones[index] = L.zone(zone)
 	end
 	return {
 		levelId = plan.levelId,
@@ -223,11 +245,14 @@ function L.plan(plan: any): any
 		killY = plan.killY,
 		camps = plan.camps,
 		stages = stages,
+		zones = zones,
+		groups = plan.groups,
+		population = plan.population,
 	}
 end
 -- { plan = ... } or { refused = reason }.
 function L.planned(level: any, layout: any, difficulty: string): (any, any)
-	local plan, why = Flow.Plan(level, layout, difficulty, rules, Geo.Bounds(layout))
+	local plan, why = Flow.Plan(level, layout, difficulty, rules, Geo.Bounds(layout), data.ranks)
 	if plan == nil then
 		return nil, { refused = why or "nil" }
 	end
@@ -247,7 +272,7 @@ for index, file in data.levels do
 		continue
 	end
 	J.try(id .. ".validate", function()
-		return Flow.Validate(level, layout, data.proving.crowd.kinds, data.ranks, rules)
+		return Flow.Validate(level, layout, data.proving.crowd.kinds, data.ranks, rules, data.proving.crowd.maxAlive)
 	end)
 	for _, difficulty in data.planDifficulties do
 		local plan = nil
@@ -306,6 +331,15 @@ J.try("grid.campReward", function()
 	end
 	return found
 end)
+J.try("grid.killReward", function()
+	local found = {}
+	for index, case in data.rewardCases do
+		local cash, materials = Combat.KillReward({ probe = { cash = case[1], materials = case[2] } }, "probe", case[3])
+		local noCash, noMaterials = Combat.KillReward({}, "probe", case[3])
+		found[index] = { cash, materials, noCash, noMaterials }
+	end
+	return found
+end)
 J.try("grid.burstSeconds", function()
 	local found = {}
 	for index, case in data.burstCases do
@@ -342,7 +376,8 @@ for _, case in data.refusalCases do
 		if level == nil then
 			return { "it does not resolve" }
 		end
-		return Flow.Validate(level, L.layout(case.file.layout), data.proving.crowd.kinds, data.ranks, case.rules)
+		local layout = if case.layout ~= nil then case.layout else L.layout(case.file.layout)
+		return Flow.Validate(level, layout, data.proving.crowd.kinds, data.ranks, case.rules, data.proving.crowd.maxAlive)
 	end)
 end
 
@@ -364,29 +399,67 @@ for _, trace in data.traces do
 			for _, root in tick.roots do
 				table.insert(roots, V.new(root[1], root[2], root[3]))
 			end
+			local input = {
+				now = tick.now,
+				roots = roots,
+				standing = tick.standing,
+				fighters = tick.fighters,
+				spawningDone = tick.spawningDone,
+				alive = tick.alive,
+				awake = tick.awake,
+				aliveByFloor = tick.aliveByFloor,
+				mergeOk = tick.mergeOk,
+				breatherSeconds = tick.breatherSeconds,
+				fallen = tick.fallen,
+				runCap = tick.runCap,
+			}
+			local clear = Flow.FieldClear(plan, state, input)
 			local actions
 			if tick.op == "skip" then
 				actions = Flow.Skip(plan, state, tick.which, tick.now, rules, tick.fighters)
 			elseif tick.op == "force" then
 				actions = Flow.Force(plan, state, tick.wave)
 			else
-				actions = Flow.Advance(plan, state, {
-					now = tick.now,
-					roots = roots,
-					fighters = tick.fighters,
-					fieldClear = tick.fieldClear,
-					spawningDone = tick.spawningDone,
-					mergeOk = tick.mergeOk,
-					breatherSeconds = tick.breatherSeconds,
-					fallen = tick.fallen,
-					runCap = tick.runCap,
-				}, rules)
+				actions = Flow.Advance(plan, state, input, rules)
+			end
+			local shown = table.clone(state)
+			shown.reached = L.keys(state.reached)
+			shown.done = L.keys(state.done)
+			local safe = {}
+			for which, case in data.busyCases do
+				local zones = #plan.zones
+				local busy = nil
+				if case == "all" and zones > 0 then
+					busy = {}
+					for floor = 1, zones do
+						busy[floor] = true
+					end
+				elseif case == "first" and zones > 0 then
+					busy = { [1] = true }
+				elseif case == "last" and zones > 0 then
+					busy = { [zones] = true }
+				end
+				-- The fix round's threats: 5 studs off every checkpoint, reach exactly 5 or a hair under.
+				local threats = nil
+				local reach = if case == "threatAll" then 5 elseif case == "threatShort" then 5 - 1e-6 else nil
+				if reach ~= nil then
+					threats = {}
+					for _, zone in plan.zones do
+						local mark = zone.checkpoint
+						if mark ~= nil then
+							table.insert(threats, { at = V.new(mark.X + 3, mark.Y + 7, mark.Z + 4), reach = reach })
+						end
+					end
+				end
+				safe[which] = Flow.SafePoint(plan, state, busy, threats)
 			end
 			ticks[index] = {
 				actions = actions,
-				state = table.clone(state),
+				state = shown,
 				directs = Flow.Directs(state),
 				closing = Flow.StillClosing(state, tick.now, rules),
+				clear = clear,
+				safe = safe,
 			}
 		end
 		local stars = {}
@@ -394,6 +467,173 @@ for _, trace in data.traces do
 			stars[index] = Flow.EarnsStar(state, user)
 		end
 		return { ticks = ticks, stars = stars }
+	end)
+end
+-- CampBrain (L1b): the Python's cases, each answered by the real module -----------------------------
+local C: any = {}
+function C.v(point: any): any
+	return V.new(point[1], point[2], point[3])
+end
+-- A def row (points as { x, y, z }) as a CampGroupDef.
+function C.def(row: any): any
+	local def = table.clone(row)
+	local points = {}
+	for index, point in row.points do
+		points[index] = C.v(point)
+	end
+	def.points = points
+	def.radius = row.radius or 0
+	return def
+end
+function C.post(row: any): any
+	return { at = C.v(row.at), yaw = row.yaw, leg = row.leg }
+end
+function C.targets(rows: any): any
+	local found = {}
+	for index, row in rows do
+		found[index] = { userId = row.userId, root = C.v(row.root) }
+	end
+	return found
+end
+function C.group(row: any, state: string, held: boolean): any
+	local group = Brain.NewGroup(C.def(row), 0)
+	group.state = state
+	group.held = held
+	return group
+end
+function C.snapshot(group: any): any
+	return {
+		state = group.state,
+		held = group.held,
+		since = group.since,
+		quietSince = group.quietSince,
+		hit = group.hit,
+		inPlay = L.keys(group.inPlay),
+	}
+end
+local campRules = data.campRules
+for _, case in data.campCases do
+	J.try(case.id, function()
+		local op = case.op
+		if op == "posts" then
+			return Brain.Posts(C.def(case.def), case.count)
+		elseif op == "sees" then
+			local def = C.def(case.def)
+			local member = { at = C.v(case.member.at), post = C.post(case.member.post) }
+			local found = {}
+			for index, target in C.targets(case.targets) do
+				found[index] = Brain.Sees(def, member, target, campRules)
+			end
+			return found
+		elseif op == "inPlay" then
+			local def = C.def(case.def)
+			local shooters = {}
+			for index, shooter in case.shooters do
+				shooters[index] = { at = C.v(shooter.at), reach = shooter.reach }
+			end
+			local found = {}
+			for index, target in C.targets(case.targets) do
+				found[index] = Brain.InPlay(def, target, shooters, campRules)
+			end
+			return found
+		elseif op == "atPost" then
+			local post = C.post(case.post)
+			local found = {}
+			for index, at in case.ats do
+				found[index] = Brain.AtPost(post, C.v(at), campRules)
+			end
+			return found
+		elseif op == "goal" then
+			local group = C.group(case.def, case.state, case.held)
+			local resident = { group = 1, post = C.post(case.post), leg = case.leg }
+			local goal, pace = Brain.Goal(group, resident, C.v(case.at), campRules)
+			return { if goal ~= nil then goal else "nil", pace, resident.leg }
+		elseif op == "struck" then
+			local group = C.group(case.def, case.state, case.held)
+			for _, user in case.inPlay do
+				group.inPlay[user] = true
+			end
+			local landed = Brain.Struck(group, case.by)
+			return { landed, group.hit, Brain.Evades(group) }
+		elseif op == "shows" then
+			local shown = Brain.Shows(C.group(case.def, case.state, case.held), case.moving)
+			return if shown ~= nil then shown else "nil"
+		elseif op == "problems" then
+			return #Brain.Problems(case.rules)
+		elseif op == "engaged" then
+			local found = {}
+			for index, row in case.rows do
+				found[index] = Brain.Engaged(if row.lastAt == "nil" then nil else row.lastAt, row.now, campRules)
+			end
+			return found
+		elseif op == "timeline" then
+			local group = Brain.NewGroup(C.def(case.def), 0)
+			local rows = {}
+			for index, step in case.ops do
+				local ret: any = nil
+				if step.kind == "step" then
+					local members = {}
+					for m, member in step.members do
+						members[m] = { at = C.v(member.at), post = C.post(member.post) }
+					end
+					local shooters = {}
+					for k, shooter in step.shooters do
+						shooters[k] = { at = C.v(shooter.at), reach = shooter.reach }
+					end
+					ret = Brain.Step(group, {
+						now = step.now,
+						members = members,
+						targets = C.targets(step.targets),
+						shooters = shooters,
+						striking = step.striking,
+					}, campRules)
+				elseif step.kind == "release" then
+					Brain.Release(group, step.now)
+				else
+					ret = Brain.Struck(group, step.by)
+				end
+				rows[index] = { ret = if ret ~= nil then ret else "nil", group = C.snapshot(group) }
+			end
+			return rows
+		end
+		error("unknown op " .. tostring(op))
+	end)
+end
+
+-- Combat.SplitCarry: the Python's seeded kills, the carry after each ------------------------------------
+for _, case in data.splitCases do
+	J.try(case.id, function()
+		local carry = {}
+		local rows = {}
+		for index, call in case.calls do
+			local shares = {}
+			for _, pair in call.shares do
+				shares[pair[1]] = pair[2]
+			end
+			local mults = nil
+			if call.mults ~= nil then
+				mults = {}
+				for _, pair in call.mults do
+					mults[pair[1]] = pair[2]
+				end
+			end
+			local paid = Combat.SplitCarry(call.pool, shares, carry, mults)
+			local function listed(map: any): any
+				local users = {}
+				for user in map do
+					table.insert(users, user)
+				end
+				table.sort(users)
+				local found = {}
+				for _, user in users do
+					local entry = map[user]
+					table.insert(found, { user, entry.cash, entry.materials, entry.valor })
+				end
+				return found
+			end
+			rows[index] = { paid = listed(paid), carry = listed(carry) }
+		end
+		return rows
 	end)
 end
 print("DONE")

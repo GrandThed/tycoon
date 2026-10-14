@@ -13,9 +13,13 @@ and compares what they answer, value by value:
     both sides, and (the fix round's ruling 6) a level with a maxAlive of 0 or of 2.5, a burst of
     0, a camp with a targetWaveSeconds of 0 or none, a breatherSeconds under 0 or no wave, and a
     Combat.json that lacks any one of the `levels` numbers a run reads, is refused on both;
+  * `StageFlow.Validate`'s L1b lines: the residents, the spots, which camps lock, the population
+    gate and the three new `levels` numbers, each broken once in a copy of the shipped level, its
+    layout or Combat.json, refused alike;
   * `StageFlow.Plan` against `sim_range.plan_level`: every level at every difficulty, and at one
-    that does not exist: each stage's numbers and each camp's floor, `inner` and trigger
-    rectangles, entry, exit and spawn points;
+    that does not exist: each stage's numbers; every camp of the layout as a zone (its floor
+    index, `locks`, name, checkpoint, residents, floor, `inner` and trigger rectangles, entry,
+    exit and spawn points); every resident group; the population (L1b-11);
   * `StageFlow.BurstPoint` and `BossPoint` against `sim_range.burst_point` and the boss's place;
   * `Combat.CampWave` against `sim_combat.camp_wave`: every wave of every camp of every level, at
     every difficulty, for parties of 1 to coop.maxParty;
@@ -26,15 +30,20 @@ and compares what they answer, value by value:
     grids built from those specs (the bursts each wave really has, its expected kills a second)
     and on the thresholds themselves;
   * `StageFlow.Advance` against `sim_range.LevelRun.advance`: for every level and difficulty,
-    scripted runs fed tick for tick to both. Each camp is approached from outside its fence
-    (outside the fenced rectangle, above and under the trigger's height, on the fence line),
-    waits its countdown, and plays its waves through: still spawning, the director asking to
-    merge, bodies alive, a down on a field that is clear, the clear, the breather. One run of
-    each is a clean clear, one ends with a down in a live camp, one at the run cap, and one has
-    nobody on his feet when a countdown ends (the camp is armed again). After every tick the
-    actions (kind, stage, wave, time, count, reason) and the state (stage, step, wave,
-    firstWave, gateAt, breatherUntil, cleared, lastCleared, settled, closedAt, fought, ended) of
-    both sides are compared;
+    scripted runs fed tick for tick to both. On the road each open camp's checkpoint is walked
+    up to (past its reach, over the band, by a downed root, then on its edge) and its residents
+    are killed off (L1b-17), with the boss room's floor empty all along (it never clears as an
+    open camp). Each camp that locks is approached from outside its fence (outside the fenced
+    rectangle, above and under the trigger's height, on the fence line), waits its countdown,
+    and plays its waves through: still spawning, the director asking to merge, bodies alive, a
+    down on a field that is clear, the clear, the breather. One run of each is a clean clear,
+    one ends with a down in a live camp, one with a down on the road while a group is awake
+    (L1b-19), one at the run cap, one leaves the open camps standing, and one has nobody on his
+    feet when a countdown ends (the camp is armed again). After every tick the actions (kind,
+    stage, wave, time, count, zone, reason) and the state (stage, step, wave, firstWave, gateAt,
+    breatherUntil, cleared, lastCleared, settled, reached, done, closedAt, fought, ended) of both
+    sides are compared, and `StageFlow.FieldClear` (before the tick) and `StageFlow.SafePoint`
+    (after it, with no floor busy, every floor busy, the first and the last) too;
   * `StageFlow.Skip` and `StageFlow.Force` against `LevelRun.skip` and `LevelRun.force` (the
     Studio levers; the simulator's own runs never use them): three more runs of each level and
     difficulty in which a stage skip, a boss skip or a forced wave comes at the first tick on
@@ -43,7 +52,19 @@ and compares what they answer, value by value:
     director keep its tempo in this step) and `StageFlow.StillClosing` against
     `LevelRun.still_closing` (is the close still judged again); and at each run's end
     `StageFlow.EarnsStar` against `LevelRun.earns_star`, for a fighter of the last clear, for
-    one who was not, and for a stranger.
+    one who was not, and for a stranger;
+  * `CampBrain` (L1b) against `sim_range`'s cb_* mirror: `Posts` for every resident group of
+    every level at every difficulty and for grid groups (a patrol of 3 and of 4 on a square loop,
+    a fire of 1 to 7, guards); `Sees` on rings round a member (the sight's edge, the cone's edge,
+    the height band's edges, distance 0); `InPlay` on the grown rectangle's edges, its rounded
+    corners and a shooter's reach; `AtPost`, `Goal` (a patrol's legs stepping and wrapping, home
+    restoring the leg), `Struck`, `Shows` and `Problems` (how many lines) on every state;
+    `Engaged` on the hold's edges; and scripted `Step`
+    timelines (rest, rise, fight, the leash held while striking, home, rest; held, released;
+    woken by a hit; an empty group), the group compared after every call;
+  * `Combat.KillReward` against `sim_combat.kill_reward` on the reward grid, and
+    `Combat.SplitCarry` against `sim_combat.split_carry` over seeded sequences of kills, the
+    payments and every carry compared after each.
 
 It fails when either side changes alone. A function of the Luau that the simulators do not
 mirror (the rescue, the skips, the map) is listed, not compared: tools/crowd_harness tests those.
@@ -84,11 +105,14 @@ import sim_range as sr  # noqa: E402
 
 HARNESS = ROOT / "tools" / "crowd_harness"
 DRIVER = HARNESS / "stage_mirror.luau"
-MODULES = ("Economy", "Armory", "Combat", "LevelGeometry", "StageFlow")  # in load order
+MODULES = ("Economy", "Armory", "Combat", "LevelGeometry", "CampBrain", "StageFlow")  # in load order
 # The functions each comparison needs; one that is missing fails the run by name.
-NEEDED = {"Combat": ("CampWave", "CampReward", "BurstSeconds", "Tempo", "ShouldMerge", "BreatherSeconds"),
+NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
+                     "BreatherSeconds"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint",
-                        "Directs", "StillClosing", "EarnsStar")}
+                        "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint"),
+          "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
+                        "Struck", "Goal", "Shows", "Engaged")}
 TOLERANCE = 1e-9  # relative; the two sides do the same arithmetic on the same doubles
 TEMPO_GRID = (-1.0, 0.0, 0.5, 0.7, 1.0, 1.25, 1.6, 2.0)
 KILL_GRID = (0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89)
@@ -98,9 +122,13 @@ BURST_SIZES = (1, 2, 3, 9, 16)
 REWARD_GRID = tuple((cash, materials, mult) for cash in (1, 3, 5, 7, 100) for materials in (0, 1, 3)
                     for mult in (0.5, 1.5, 2.5, 1 / 3, 4))
 STATE_FIELDS = ("stage", "step", "wave", "firstWave", "gateAt", "breatherUntil", "cleared", "lastCleared", "settled",
-                "closedAt", "fought", "ended")
-ACTION_FIELDS = ("kind", "stage", "wave", "at", "merged", "count", "reason")
-VARIANTS = ("clear", "down", "cap", "reset", "skipStage", "skipBoss", "force")
+                "reached", "done", "closedAt", "fought", "ended")
+ACTION_FIELDS = ("kind", "stage", "wave", "at", "merged", "count", "zone", "reason", "skipped")
+VARIANTS = ("clear", "down", "roadDown", "cap", "standing", "reset", "skipStage", "skipBoss", "force")
+# CampBrain's grids (L1b).
+CB_ANGLES = tuple(range(0, 360, 10))
+CB_SPLIT_SEED = 1407
+CB_SPLIT_CALLS = 160
 STAR_USERS = (1, 2, 9)  # whom EarnsStar is asked about: the script's two fighters, and a stranger
 BREATHER_INPUT = 7.25  # the director's breather a tick is handed (any number: both sides get the same)
 # Ruling 6 of the fix round: each of these makes a level that must be refused on both sides.
@@ -118,6 +146,61 @@ REFUSALS = (
 
 def first_camp(file):
     return next(stage for stage in file["stages"] if stage["kind"] == "camp")
+
+
+def layout_camp(layout, cid):
+    return next(camp for camp in layout["camps"] if camp["id"] == cid)
+
+
+def level_camp(file, cid):
+    return next(camp for camp in file["camps"] if camp["id"] == cid)
+
+
+# L1b: Validate's new lines, each broken once. (label, change(file, layout, rules)) on copies of
+# the shipped level file, its raw layout and Combat.json `levels`; refused alike on both sides.
+# Only a level with residents (`camps`) gets them.
+L1B_REFUSALS = (
+    ("a resident of an unknown kind", lambda f, l, r: level_camp(f, "A")["residents"][0]["units"].append(
+        {"kind": "nobody", "count": 1})),
+    ("a resident count of 0", lambda f, l, r: level_camp(f, "A")["residents"][0]["units"][0].__setitem__("count", 0)),
+    ("a resident count of 2.5", lambda f, l, r: level_camp(f, "A")["residents"][0]["units"][0].__setitem__("count", 2.5)),
+    ("a minDifficulty that is no difficulty", lambda f, l, r: level_camp(f, "A")["residents"][0]["units"][0]
+     .__setitem__("minDifficulty", "nope")),
+    ("a camps entry for a camp the layout lacks", lambda f, l, r: level_camp(f, "A").__setitem__("id", "Z")),
+    ("two camps entries for one camp", lambda f, l, r: level_camp(f, "B").__setitem__("id", "A")),
+    ("a camps entry with no name", lambda f, l, r: level_camp(f, "A").__setitem__("name", "")),
+    ("a resident group on a spot its camp lacks", lambda f, l, r: level_camp(f, "A")["residents"][0]
+     .__setitem__("spot", "nowhere")),
+    ("a resident group with no units", lambda f, l, r: level_camp(f, "A")["residents"][0].__setitem__("units", [])),
+    ("the boss room's residents at its maxAlive", lambda f, l, r: level_camp(f, "C")["residents"][0]["units"].append(
+        {"kind": "fodder", "count": 40})),
+    ("a population over crowd.maxAlive", lambda f, l, r: level_camp(f, "B")["residents"][0]["units"].append(
+        {"kind": "fodder", "count": 200})),
+    ("a negative clearBonus", lambda f, l, r: f["crowd"].__setitem__("clearBonus", {"cash": -1, "materials": 0})),
+    ("a stage naming an open camp", lambda f, l, r: layout_camp(l, "C").pop("locks", None)),
+    ("a locking camp no stage names", lambda f, l, r: layout_camp(l, "A").__setitem__("locks", True)),
+    ("a spot with no id", lambda f, l, r: layout_camp(l, "A")["spots"][0].pop("id")),
+    ("a spot id used twice", lambda f, l, r: layout_camp(l, "A")["spots"][1].__setitem__(
+        "id", layout_camp(l, "A")["spots"][0]["id"])),
+    ("a posture that is none", lambda f, l, r: layout_camp(l, "A")["spots"][0].__setitem__("posture", "sleep")),
+    ("a spot with no points", lambda f, l, r: layout_camp(l, "A")["spots"][0].__setitem__("points", [])),
+    ("a guard spot with no facing", lambda f, l, r: next(s for s in layout_camp(l, "A")["spots"]
+                                                         if s["posture"] == "guard").pop("facing")),
+    ("a guard spot a point short", lambda f, l, r: next(s for s in layout_camp(l, "A")["spots"]
+                                                        if s["posture"] == "guard")["points"].__setitem__(slice(1, None), [])),
+    ("a patrol of one point", lambda f, l, r: next(s for s in layout_camp(l, "B")["spots"]
+                                                   if s["posture"] == "patrol")["points"].__setitem__(slice(1, None), [])),
+    ("a fire of two points", lambda f, l, r: next(s for s in layout_camp(l, "A")["spots"]
+                                                  if s["posture"] == "fire")["points"].append({"x": 0, "z": 0})),
+    ("a fire with a radius of 0", lambda f, l, r: next(s for s in layout_camp(l, "A")["spots"]
+                                                       if s["posture"] == "fire").__setitem__("radius", 0)),
+    ("a post off its floor", lambda f, l, r: next(s for s in layout_camp(l, "A")["spots"]
+                                                  if s["posture"] == "guard")["points"][0].__setitem__(
+        "x", layout_camp(l, "A")["x"] + layout_camp(l, "A")["sx"] / 2 - 0.5)),
+    ("levels.checkpointReach 0", lambda f, l, r: r.__setitem__("checkpointReach", 0)),
+    ("levels.walletSendSeconds 0", lambda f, l, r: r.__setitem__("walletSendSeconds", 0)),
+    ("levels.populationReserve -1", lambda f, l, r: r.__setitem__("populationReserve", -1)),
+)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -281,7 +364,7 @@ class Scripted(sr.LevelRun):
 
     def __init__(self, cfg, ctx, level, layout, difficulty):
         super().__init__(cfg, 100.0, ctx, dict(level), layout, difficulty, sr.THREAT_POLICIES["stand"], 1)
-        self.given = {"fieldClear": True, "mergeOk": False, "breatherSeconds": 0.0}
+        self.given = {"mergeOk": False, "breatherSeconds": 0.0}
         run = self
 
         class Director:  # what advance() asks of sim_combat
@@ -296,11 +379,13 @@ class Scripted(sr.LevelRun):
         self.sc = Director
         self.spawned = 1
 
-    def field_clear(self):
-        return self.given["fieldClear"]
-
-    def alive(self):
-        return 0 if self.given["fieldClear"] else 1
+    def flow_input(self, t):
+        """StageFlow.Input: the tick's own (L1b), never the world's."""
+        g = self.given
+        return {"roots": [tuple(root) for root in g["roots"]], "standing": g.get("standing"),
+                "fighters": list(g["fighters"]) if g.get("fighters") is not None else [],
+                "spawningDone": g["spawningDone"], "alive": g["alive"], "awake": g["awake"],
+                "aliveByFloor": list(g["aliveByFloor"]), "fallen": g["fallen"]}
 
     def on_gate(self, index, t):
         pass
@@ -314,10 +399,13 @@ class Scripted(sr.LevelRun):
     def on_clear(self, t):
         pass
 
-    def on_bank(self, t):
+    def on_reach(self, floor, t):
         pass
 
-    def on_open(self, t, index=None):
+    def on_camp_clear(self, floor, t):
+        pass
+
+    def on_open(self, t, index=None, skipped=False):
         pass
 
     def on_rearm(self, t):
@@ -351,6 +439,7 @@ class Scripted(sr.LevelRun):
         self.level["runCapSeconds"] = tick["now"] if tick["runCap"] else 0
         self.fighters_now = list(tick["fighters"]) if tick.get("fighters") is not None else []
         before = len(self.actions)
+        clear = self.field_clear(self.flow_input(tick["now"]))
         if tick["op"] == "skip":
             self.skip(tick["which"], tick["now"], tick.get("fighters"))
         elif tick["op"] == "force":
@@ -360,9 +449,33 @@ class Scripted(sr.LevelRun):
         actions = [dict(fields, kind=kind) for kind, fields in self.actions[before:]]
         state = {"stage": self.stage, "step": self.flow, "wave": self.wave, "firstWave": self.first_wave,
                  "gateAt": self.gate_at, "breatherUntil": self.breather_until, "cleared": self.cleared,
-                 "lastCleared": self.last_cleared, "settled": self.settled, "closedAt": self.closed_at,
+                 "lastCleared": self.last_cleared, "settled": self.settled,
+                 "reached": sorted(k for k, v in self.reached.items() if v),
+                 "done": sorted(k for k, v in self.done.items() if v), "closedAt": self.closed_at,
                  "fought": list(self.fought), "ended": self.end_reason}
-        return actions, state, self.directs(), self.still_closing(tick["now"])
+        safe = [list(self.safe_point(busy_of(case, len(self.zones)), threats_of(case, self.zones))) for case in BUSY_CASES]
+        return actions, state, self.directs(), self.still_closing(tick["now"]), clear, safe
+
+
+# SafePoint's `busy`, per tick: none, every floor, the first, the last (as lists of floor indices);
+# and its `threats` (the fix round): a threat 5 studs off every checkpoint (3, 4 on the flat) whose
+# reach is exactly 5 (it reaches: the edge is included) or a hair under it (it does not).
+BUSY_CASES = ("none", "all", "first", "last", "threatAll", "threatShort")
+THREAT_REACH = {"threatAll": 5.0, "threatShort": 5.0 - 1e-6}
+
+
+def threats_of(case, zones):
+    reach = THREAT_REACH.get(case)
+    if reach is None:
+        return None
+    return [{"at": (z["checkpoint"][0] + 3.0, z["floorY"] + 7.0, z["checkpoint"][1] + 4.0), "reach": reach}
+            for z in zones if z["checkpoint"] is not None]
+
+
+def busy_of(case, zones):
+    if case not in ("all", "first", "last") or zones == 0:
+        return None
+    return {"all": {i: True for i in range(1, zones + 1)}, "first": {1: True}, "last": {zones: True}}[case]
 
 
 def script_run(run, variant, rules, start_y):
@@ -375,21 +488,57 @@ def script_run(run, variant, rules, start_y):
     ticks = []
     clock = [0.0]
     stages = run.plan["stages"]
+    zones = run.plan["zones"]
     camps = [index for index, stage in enumerate(stages, 1) if stage["kind"] == "camp"]
     start = run.plan["start"]
     spot = [(start[0], start_y + sr.ROOT_HEIGHT, start[1])]
     reset = [variant == "reset"]
     pressed = set()
+    # Living bodies per floor: the open camps' residents, and nothing on a locking camp's floor
+    # (so a locking camp would clear as an open one if a side forgot `locks`).
+    by_floor = [0 if zone["locks"] else zone["residents"] for zone in zones]
+    walked = set()
 
-    def tick(root=None, at=None, **given):
+    def tick(root=None, at=None, fieldClear=True, **given):
         clock[0] = at if at is not None else clock[0] + 0.5
         if root is not None:
             spot[0] = root
-        entry = {"op": "tick", "now": clock[0], "roots": [list(spot[0])], "fighters": [1], "fieldClear": True,
-                 "spawningDone": True, "mergeOk": False, "breatherSeconds": BREATHER_INPUT, "fallen": None,
-                 "runCap": False}
+        entry = {"op": "tick", "now": clock[0], "roots": [list(spot[0])], "fighters": [1], "spawningDone": True,
+                 "alive": 0 if fieldClear else 1, "awake": 0, "aliveByFloor": list(by_floor), "mergeOk": False,
+                 "breatherSeconds": BREATHER_INPUT, "fallen": None, "runCap": False}
         entry.update(given)
         ticks.append((entry,) + run.play(entry))
+
+    def open_camps():
+        """L1b-17 and L1b-18 on the road: each open camp's checkpoint walked up to, then its
+        residents killed off. True when the run ended on the way (roadDown)."""
+        for index, zone in enumerate(zones, 1):
+            if zone["locks"] or index in walked:
+                continue
+            walked.add(index)
+            mark = zone["checkpoint"]
+            floor = zone["floorY"]
+            root = floor + sr.ROOT_HEIGHT
+            if mark is not None:
+                reach = rules["checkpointReach"]
+                tick((mark[0] + reach + 0.5, root, mark[1]))  # past its reach
+                tick((mark[0], floor + rules["triggerHeight"] + 0.5, mark[1]))  # over the band
+                tick((mark[0], floor - rules["triggerBelow"] - 0.5, mark[1]))  # under it
+                tick((mark[0], root, mark[1]), standing=[False], fallen="down")  # a downed root, a quiet road
+                tick((mark[0] + reach, root, mark[1]))  # on its edge: reached
+                tick((mark[0], root, mark[1]))  # again: nothing more
+            tick(awake=1)  # a group awake, nobody down: nothing
+            if variant == "roadDown":
+                tick(awake=1, fallen="down")  # down while a group is awake: the run is lost
+                return True
+            if variant == "standing":
+                continue  # the open camps are left standing
+            by_floor[index - 1] = 1
+            tick(awake=1)  # one resident left
+            by_floor[index - 1] = 0
+            tick()  # the last falls: the camp is cleared
+            tick()  # once
+        return False
 
     def lever(where):
         """Presses this run's lever the first time it stands `where`; True when it did."""
@@ -415,7 +564,11 @@ def script_run(run, variant, rules, start_y):
         if flow in ("travel", "armed"):
             if lever("road"):
                 continue
+            if open_camps():
+                continue
             zone = run.armed_zone()
+            if zone is None:
+                break
             cx, cz, hx, hz = zone["rect"]
             ex, ez = zone["entry"]
             # The side of the floor its entry point is nearest to, and the way out through it.
@@ -487,6 +640,7 @@ def script_run(run, variant, rules, start_y):
 def action_row(action):
     row = {field: action.get(field) for field in ACTION_FIELDS}
     row["merged"] = bool(row["merged"])
+    row["skipped"] = bool(row["skipped"])
     return plain(row)
 
 
@@ -495,11 +649,313 @@ def tick_text(entry):
         return f"now {entry['now']:g}, Skip \"{entry['which']}\""
     if entry["op"] == "force":
         return f"now {entry['now']:g}, Force {entry['wave']:g}"
-    odd = [f"{key} {entry[key]}" for key in ("fieldClear", "spawningDone", "mergeOk", "fallen", "runCap")
-           if entry[key] not in ({"fieldClear": True, "spawningDone": True, "mergeOk": False, "fallen": None,
+    odd = [f"{key} {entry[key]}" for key in ("alive", "awake", "spawningDone", "mergeOk", "fallen", "runCap")
+           if entry[key] not in ({"alive": 0, "awake": 0, "spawningDone": True, "mergeOk": False, "fallen": None,
                                   "runCap": False}[key],)]
+    if entry.get("standing") is not None:
+        odd.append(f"standing {entry['standing']}")
     root = entry["roots"][0]
-    return f"now {entry['now']:g}, root ({root[0]:g}, {root[1]:g}, {root[2]:g})" + (", " + ", ".join(odd) if odd else "")
+    return (f"now {entry['now']:g}, root ({root[0]:g}, {root[1]:g}, {root[2]:g}), aliveByFloor {entry['aliveByFloor']}"
+            + (", " + ", ".join(odd) if odd else ""))
+
+
+# ---------------------------------------------------------------------------------------------
+# L1b: the plan's zones and groups as rows, CampBrain's cases, SplitCarry's sequences
+# ---------------------------------------------------------------------------------------------
+
+
+def zone_row(zone):
+    """A Plan zone as the Luau's stage_mirror.luau prints it: points on the floor as [x, y, z]."""
+    floor = zone["floorY"]
+    mark = zone["checkpoint"]
+    return {"id": zone["id"], "floor": zone["floor"], "locks": zone["locks"], "name": zone["name"],
+            "checkpoint": None if mark is None else [mark[0], floor, mark[1]], "residents": zone["residents"],
+            "floorY": floor, "rect": list(zone["rect"]), "inner": list(zone["inner"]), "trigger": list(zone["trigger"]),
+            "entry": [zone["entry"][0], floor, zone["entry"][1]], "exit": [zone["exit"][0], floor, zone["exit"][1]],
+            "spawns": [[x, floor, z] for x, z in zone["spawns"]]}
+
+
+def def_row(defn):
+    """A CampGroupDef as plain values (both sides read and print it so)."""
+    return plain({"id": defn["id"], "camp": defn["camp"], "floor": defn["floor"], "floorY": defn["floorY"],
+                  "rect": dict(defn["rect"]), "posture": defn["posture"], "points": [list(p) for p in defn["points"]],
+                  "yaw": defn["yaw"], "radius": defn["radius"], "held": defn["held"],
+                  "units": [{"kind": u["kind"], "count": u["count"]} for u in defn["units"]]})
+
+
+def as_def(row):
+    """A def row back as the mirror's def (points as tuples)."""
+    defn = dict(row)
+    defn["points"] = [tuple(p) for p in row["points"]]
+    defn.setdefault("radius", 0)
+    return defn
+
+
+def post_row(post):
+    return {"at": list(post["at"]), "yaw": post["yaw"], "leg": post["leg"]}
+
+
+def group_row(group):
+    """A CampBrain Group after a call: its state, as both sides print it."""
+    return {"state": group["state"], "held": group["held"], "since": group["since"], "quietSince": group["quietSince"],
+            "hit": group["hit"], "inPlay": sorted(k for k, v in group["inPlay"].items() if v)}
+
+
+def ring(centre, yaw, distances, angles, heights):
+    """Targets round a point: at each distance, turned each angle (degrees) from the facing `yaw`,
+    at each height: [{userId, root}]."""
+    found = []
+    for d in distances:
+        for a in angles:
+            turn = yaw + math.radians(a)
+            x, z = centre[0] - math.sin(turn) * d, centre[2] - math.cos(turn) * d
+            for y in heights:
+                found.append({"userId": 1, "root": [x, y, z]})
+    return found
+
+
+def camp_cases(data, expected, label, defn, rules):
+    """Sees, InPlay, AtPost, Goal, Struck and Shows on one group (L1b), on grids built round its
+    posts, its floor's rectangle and its posture's numbers."""
+    row = def_row(defn)
+    posture = sr.cb_posture(defn, rules)
+    sight, cone = posture["sight"], posture["cone"]
+    floor = defn["floorY"]
+    count = sum(unit["count"] for unit in defn["units"])
+    posts = sr.cb_posts(defn, count)
+    heights = [floor - rules["sightBelow"] - EDGE, floor - rules["sightBelow"], floor + sr.ROOT_HEIGHT,
+               floor + rules["sightAbove"], floor + rules["sightAbove"] + EDGE]
+    half = cone / 2
+    angles = list(CB_ANGLES) + [half, -half, half + 1e-4, -half - 1e-4, half - 1e-4, -half + 1e-4]
+    distances = [0.0, 0.0005, sight / 2, sight - EDGE, sight, sight + EDGE]
+    for which, post in (("first", posts[0]), ("last", posts[-1])):
+        member = {"at": post["at"], "post": post}
+        targets = ring(post["at"], post["yaw"], distances, angles, heights)
+        case = f"camp.sees.{defn['id']}.{which}.{len(data['campCases'])}"
+        data["campCases"].append({"id": case, "op": "sees", "def": row,
+                                  "member": {"at": list(post["at"]), "post": post_row(post)}, "targets": targets})
+        expected[case] = ("CampBrain.Sees", f"{label}, from its {which} post, {len(targets)} targets",
+                          [sr.cb_sees(defn, member, {"userId": 1, "root": tuple(t["root"])}, rules) for t in targets])
+    # InPlay: the grown rectangle's edges, the band's, and a shooter's reach.
+    rect, margin = defn["rect"], rules["chaseMargin"]
+    xs = [rect["x"] - rect["hx"] - margin - EDGE, rect["x"] - rect["hx"] - margin, rect["x"],
+          rect["x"] + rect["hx"] + margin, rect["x"] + rect["hx"] + margin + EDGE]
+    zs = [rect["z"] - rect["hz"] - margin - EDGE, rect["z"] - rect["hz"] - margin, rect["z"],
+          rect["z"] + rect["hz"] + margin, rect["z"] + rect["hz"] + margin + EDGE]
+    band = [floor - rules["sightBelow"], floor + sr.ROOT_HEIGHT, floor + rules["sightAbove"] + EDGE]
+    targets = [{"userId": 1, "root": [x, y, z]} for x in xs for z in zs for y in band]
+    # The rounded corners (fix round, crowd Major 1): off each corner of the floor, just inside and
+    # just outside chaseMargin on the diagonal and at 30 degrees; the grid's square corners above
+    # are out of play now.
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            cx, cz = rect["x"] + sx * rect["hx"], rect["z"] + sz * rect["hz"]
+            for degrees in (45, 30):
+                a = math.radians(degrees)
+                for d in (margin - EDGE, margin + EDGE, margin / 2):
+                    targets.append({"userId": 1, "root": [cx + sx * d * math.cos(a), floor + sr.ROOT_HEIGHT,
+                                                          cz + sz * d * math.sin(a)]})
+    shooter = {"at": list(posts[0]["at"]), "reach": 32.0}
+    targets += ring(posts[0]["at"], 0.0, [32.0 - EDGE, 32.0, 32.0 + EDGE], list(CB_ANGLES), [floor + sr.ROOT_HEIGHT])
+    for shooters in ([], [shooter]):
+        case = f"camp.inPlay.{defn['id']}.{len(shooters)}.{len(data['campCases'])}"
+        data["campCases"].append({"id": case, "op": "inPlay", "def": row, "targets": targets, "shooters": shooters})
+        theirs = [{"at": tuple(s["at"]), "reach": s["reach"]} for s in shooters]
+        expected[case] = ("CampBrain.InPlay", f"{label}, {len(shooters)} shooter(s), {len(targets)} targets",
+                          [sr.cb_in_play(defn, {"userId": 1, "root": tuple(t["root"])}, theirs, rules) for t in targets])
+    # AtPost round the first post.
+    tol = rules["homeTolerance"]
+    ats = [p["root"] for p in ring(posts[0]["at"], 0.0, [0.0, tol - EDGE, tol, tol + EDGE], [0, 90, 180, 270, 45],
+                                   [floor])]
+    case = f"camp.atPost.{defn['id']}.{len(data['campCases'])}"
+    data["campCases"].append({"id": case, "op": "atPost", "post": post_row(posts[0]), "ats": ats})
+    expected[case] = ("CampBrain.AtPost", f"{label}, {len(ats)} places",
+                      [sr.cb_at_post(posts[0], tuple(at), rules) for at in ats])
+    # Goal, Struck and Shows on every state.
+    points = defn["points"]
+    states = (("rest", False), ("rest", True), ("rise", False), ("fight", False), ("home", False))
+    for state, held in states:
+        for k, post in enumerate(posts[:3], 1):
+            legs = range(0, len(points) + 2) if defn["posture"] == "patrol" else [post["leg"]]
+            places = [post["at"], (post["at"][0] + 30.0, floor, post["at"][2])]
+            if defn["posture"] == "patrol":
+                places += [(p[0] + tol / 2, floor, p[2]) for p in points]
+            for leg in legs:
+                for at in places:
+                    group = sr.cb_new_group(defn, 0.0)
+                    group["state"], group["held"] = state, held
+                    resident = {"group": 1, "post": post, "leg": leg}
+                    goal, pace = sr.cb_goal(group, resident, at, rules)
+                    case = f"camp.goal.{len(data['campCases'])}"
+                    data["campCases"].append({"id": case, "op": "goal", "def": row, "state": state, "held": held,
+                                              "post": post_row(post), "leg": leg, "at": list(at)})
+                    expected[case] = ("CampBrain.Goal", f"{label} {state}{' held' if held else ''}, post {k}, leg {leg}, "
+                                      f"at ({at[0]:g}, {at[2]:g})",
+                                      plain([list(goal) if goal is not None else "nil", pace, resident["leg"]]))
+        for in_play in ([], [1]):
+            for by in (0, 1, 2):
+                group = sr.cb_new_group(defn, 0.0)
+                group["state"], group["held"] = state, held
+                for user in in_play:
+                    group["inPlay"][user] = True
+                landed = sr.cb_struck(group, by)
+                case = f"camp.struck.{len(data['campCases'])}"
+                data["campCases"].append({"id": case, "op": "struck", "def": row, "state": state, "held": held,
+                                          "inPlay": in_play, "by": by})
+                expected[case] = ("CampBrain.Struck", f"{label} {state}{' held' if held else ''}, in play {in_play}, by {by}",
+                                  [landed, group["hit"], sr.cb_evades(group)])
+        for moving in (False, True):
+            group = sr.cb_new_group(defn, 0.0)
+            group["state"], group["held"] = state, held
+            case = f"camp.shows.{len(data['campCases'])}"
+            data["campCases"].append({"id": case, "op": "shows", "def": row, "state": state, "held": held,
+                                      "moving": moving})
+            shown = sr.cb_shows(group, moving)
+            expected[case] = ("CampBrain.Shows", f"{label} {state}{' held' if held else ''}, moving {moving}",
+                              shown if shown is not None else "nil")
+
+
+def grid_def(posture, points, *, yaw=0.0, radius=0.0, held=False, units=(("fodder", 3),)):
+    """A group on a 60 x 60 floor at y 8 centred (0, 0), for the grids."""
+    return {"id": f"grid.{posture}", "camp": "G", "floor": 1, "floorY": 8.0,
+            "rect": {"x": 0.0, "z": 0.0, "hx": 30.0, "hz": 30.0}, "posture": posture,
+            "points": [(x, 8.0, z) for x, z in points], "yaw": yaw, "radius": radius, "held": held,
+            "units": [{"kind": kind, "count": count} for kind, count in units]}
+
+
+def timeline(data, expected, label, defn, rules, ops):
+    """One scripted run of CampBrain on both sides: the group after every call."""
+    group = sr.cb_new_group(defn, 0.0)
+    rows = []
+    for op in ops:
+        if op["kind"] == "step":
+            step = {"now": op["now"], "members": [{"at": tuple(m["at"]), "post": dict(m["post"], at=tuple(m["post"]["at"]))}
+                                                  for m in op["members"]],
+                    "targets": [{"userId": t["userId"], "root": tuple(t["root"])} for t in op["targets"]],
+                    "shooters": [{"at": tuple(s["at"]), "reach": s["reach"]} for s in op["shooters"]],
+                    "striking": op["striking"]}
+            ret = sr.cb_step(group, step, rules)
+        elif op["kind"] == "release":
+            sr.cb_release(group, op["now"])
+            ret = None
+        else:
+            ret = sr.cb_struck(group, op["by"])
+        rows.append({"ret": ret if ret is not None else "nil", "group": group_row(group)})
+    case = f"camp.timeline.{len(data['campCases'])}"
+    data["campCases"].append({"id": case, "op": "timeline", "def": def_row(defn), "ops": ops})
+    expected[case] = ("CampBrain.Step: scripted timelines", label, plain(rows))
+
+
+def grid_camp_cases(data, expected, rules):
+    """CampBrain on grid groups: Posts for many counts, the rules on each posture, Step's
+    timelines and Problems."""
+    square = [(-20.0, -20.0), (20.0, -20.0), (20.0, 20.0), (-20.0, 20.0)]
+    grids = [grid_def("patrol", square), grid_def("patrol", [(-10.0, 0.0), (10.0, 0.0)]),
+             grid_def("fire", [(5.0, -5.0)], radius=4.0), grid_def("guard", [(0.0, -25.0), (6.0, -25.0)], yaw=math.pi / 2),
+             grid_def("guard", [(0.0, 25.0)], yaw=-2.5, held=True)]
+    for defn in grids:
+        for count in range(1, 8):
+            case = f"camp.posts.grid.{defn['posture']}.{len(data['campCases'])}"
+            data["campCases"].append({"id": case, "op": "posts", "def": def_row(defn), "count": count})
+            expected[case] = ("CampBrain.Posts", f"grid {defn['posture']} of {len(defn['points'])} points, {count}",
+                              plain(sr.cb_posts(defn, count)))
+        camp_cases(data, expected, f"grid {defn['posture']}", defn, rules)
+    # Step timelines.
+    fire = grids[2]
+    posts = sr.cb_posts(fire, 3)
+    home = [{"at": list(p["at"]), "post": post_row(p)} for p in posts]
+    away = [{"at": [p["at"][0] + 5.0, 8.0, p["at"][2]], "post": post_row(p)} for p in posts]
+    sight = sr.cb_posture(fire, rules)["sight"]
+    rise = sr.cb_posture(fire, rules)["rise"]
+    leash = rules["leashSeconds"]
+    far = {"userId": 1, "root": [5.0, 11.0, -5.0 - 4.0 - sight - 1.0]}
+    near = {"userId": 1, "root": [5.0, 11.0, -5.0 - 4.0 - sight + 1.0]}
+    out = {"userId": 1, "root": [0.0, 11.0, -30.0 - rules["chaseMargin"] - 5.0]}
+
+    def step(now, members, targets, striking=False):
+        return {"kind": "step", "now": now, "members": members, "targets": targets, "shooters": [],
+                "striking": striking}
+
+    t = 0.0
+    ops = [step(0.0, home, [far]), step(0.25, home, [near]), step(0.5, home, [near]), step(rise, home, [near]),
+           step(0.25 + rise, home, [near]), step(0.25 + rise + 1e-7, home, [near]), step(2.0 + rise, home, [near]),
+           step(2.0 + rise + leash - 1e-3, home, [out]), step(2.5 + rise, away, [out]),
+           step(2.5 + rise + leash, away, [out], striking=True), step(2.6 + rise + leash, away, [out]),
+           {"kind": "struck", "by": 1}, step(3.0 + rise + leash, away, [near]), step(3.5 + rise + leash, home, [near]),
+           step(4.0 + rise + leash, home, [far]), {"kind": "struck", "by": 2}, step(4.5 + rise + leash, home, [far]),
+           step(4.5 + rise + leash, [], [near])]
+    timeline(data, expected, "fire: sight, rise, fight, the leash held while striking, home, rest, a hit wakes", fire,
+             rules, ops)
+    held = grids[4]
+    hposts = sr.cb_posts(held, 1)
+    hmembers = [{"at": list(p["at"]), "post": post_row(p)} for p in hposts]
+    hnear = {"userId": 1, "root": [0.0, 11.0, 24.0]}
+    ops = [step(0.0, hmembers, [hnear]), {"kind": "struck", "by": 1}, step(0.5, hmembers, [hnear]),
+           {"kind": "release", "now": 0.75}, step(0.75, hmembers, [hnear]), step(1.0, hmembers, [hnear]),
+           {"kind": "release", "now": 1.25}, step(1.25, hmembers, [hnear])]
+    timeline(data, expected, "guard held: ignores sight and hits, released, rise 0", held, rules, ops)
+    patrol = grids[0]
+    pposts = sr.cb_posts(patrol, 3)
+    pmembers = [{"at": list(p["at"]), "post": post_row(p)} for p in pposts]
+    sights = [{"userId": 2, "root": [0.0, 11.0, 0.0]}, {"userId": 5, "root": [0.0, 11.0, 90.0]}]
+    ops = [step(0.0, pmembers, [sights[1]]), step(0.5, pmembers, sights), step(0.5, pmembers, sights),
+           step(1.0, pmembers, [sights[1]]), step(1.0 + leash, pmembers, [sights[1]]),
+           step(1.0 + leash, pmembers, [sights[1]])]
+    timeline(data, expected, "patrol: two targets, one out of play; one transition a call", patrol, rules, ops)
+    # Engaged: the hold (fix round, crowd Minor 1), its edge either side, never, and a hold of 0.
+    hold = rules["engagedHoldSeconds"]
+    rows = [{"lastAt": "nil", "now": 5.0}] + [{"lastAt": 4.0, "now": 4.0 + d} for d in
+                                              (0.0, 0.5, hold - EDGE, hold, hold + 1e-6 - EDGE, hold + 1e-6 + EDGE,
+                                               hold + 0.25, 60.0)]
+    case = f"camp.engaged.{len(data['campCases'])}"
+    data["campCases"].append({"id": case, "op": "engaged", "rows": rows})
+    expected[case] = ("CampBrain.Engaged", f"hold {hold:g} s, {len(rows)} rows",
+                      [sr.cb_engaged(None if r["lastAt"] == "nil" else r["lastAt"], r["now"], rules) for r in rows])
+    # Problems: how many lines, on rules broken one key at a time.
+    broken = [("as shipped", lambda r: None), ("no camps", lambda r: r.clear()), ("no guard", lambda r: r.pop("guard")),
+              ("a sight of 0", lambda r: r["fire"].__setitem__("sight", 0)),
+              ("a cone of 0", lambda r: r["guard"].__setitem__("cone", 0)),
+              ("a cone of 361", lambda r: r["guard"].__setitem__("cone", 361)),
+              ("a rise of -1", lambda r: r["fire"].__setitem__("rise", -1)),
+              ("a homeTolerance of 0", lambda r: r.__setitem__("homeTolerance", 0)),
+              ("a leash that is text", lambda r: r.__setitem__("leashSeconds", "3")),
+              ("no sightAbove", lambda r: r.pop("sightAbove")),
+              ("no engagedHoldSeconds", lambda r: r.pop("engagedHoldSeconds")),
+              ("an engagedHoldSeconds of -1", lambda r: r.__setitem__("engagedHoldSeconds", -1))]
+    for label, change in broken:
+        changed = copy.deepcopy(rules)
+        change(changed)
+        case = f"camp.problems.{len(data['campCases'])}"
+        data["campCases"].append({"id": case, "op": "problems", "rules": changed})
+        expected[case] = ("CampBrain.Problems: how many lines", label, len(sr.cb_problems(changed)))
+
+
+def split_cases(data, expected):
+    """Combat.SplitCarry over seeded sequences of kills: the payments and every carry after each."""
+    import random
+
+    rng = random.Random(CB_SPLIT_SEED)
+    for run in range(4):
+        members = list(range(1, run + 2))
+        mults = [[u, rng.choice((1, 1.5, 2, 1.25))] for u in members] if run % 2 == 1 else None
+        carry = {}
+        calls, rows = [], []
+        for _call in range(CB_SPLIT_CALLS):
+            pool = {"cash": rng.choice((0, 100, 500, 700, 1200, 2000, 29000)) * rng.choice((1, 2, 4)),
+                    "materials": rng.choice((0, 1, 2, 4, 6, 70)), "valor": rng.choice((0, 0, 10, 40))}
+            weights = {u: rng.random() for u in members if rng.random() < 0.8}
+            total = sum(weights.values())
+            shares = {u: w / total for u, w in weights.items()} if total > 0 else {}
+            if rng.random() < 0.05 and members:
+                shares[members[-1]] = -0.5  # a bad share: pays nothing, the carry stays
+            paid = sc.split_carry(pool, shares, carry, dict(mults) if mults is not None else None)
+            calls.append({"pool": pool, "shares": [[u, v] for u, v in shares.items()], "mults": mults})
+            rows.append({"paid": [[u, p["cash"], p["materials"], p["valor"]] for u, p in sorted(paid.items())],
+                         "carry": [[u, c["cash"], c["materials"], c["valor"]] for u, c in sorted(carry.items())]})
+        case = f"split.{run}"
+        data["splitCases"].append({"id": case, "calls": calls})
+        expected[case] = ("Combat.SplitCarry: seeded kills, the carry after each", f"{len(members)} member(s)"
+                          + (", cash multipliers" if mults else ""), rows)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -528,6 +984,7 @@ def main():
     ctx = sr.level_context()
     combat, expeditions, ranks = ctx["combat"], ctx["expeditions"], ctx["ranks"]
     rules, director = combat["levels"], combat["director"]
+    crowd_kinds, crowd_max = cfg["crowd"]["kinds"], cfg["crowd"]["maxAlive"]
     files = sr.load_level_files()
     missions = [sr.load_config(path) for path in sorted(sr.MISSIONS_DIR.glob("*.json")) if sr.is_catalog_name(path.stem)]
     by_mission = {mission["id"]: mission for mission in missions}
@@ -545,7 +1002,8 @@ def main():
     expected = {}  # id -> (kind, label, the Python's answer)
     data = {"combat": combat, "expeditions": expeditions, "proving": cfg, "levels": files, "missions": missions,
             "layouts": raw_layouts, "ranks": ranks, "planDifficulties": plan_difficulties, "pointCases": [],
-            "waveCases": [], "refusalCases": [], "traces": []}
+            "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
+            "campRules": combat["camps"], "campCases": [], "splitCases": []}
     bursts, tempos = {}, {}
     scripted = {}  # trace id -> (label, the Python's ticks)
     stars = {}  # trace id -> the Python's earns_star for STAR_USERS, at the run's end
@@ -557,9 +1015,9 @@ def main():
         if level is None:
             continue
         expected[f"level.{number}.validate"] = ("StageFlow.Validate: the shipped level is playable", name,
-                                                sr.level_problems(level, layout, rules))
+                                                sr.level_problems(level, layout, rules, crowd_kinds, ranks, crowd_max))
         for difficulty in plan_difficulties:
-            plan = sr.plan_level(level, layout, difficulty, rules)
+            plan = sr.plan_level(level, layout, difficulty, rules, ranks)
             key = f"level.{number}.plan.{difficulty}"
             if plan is None:
                 expected[key] = ("StageFlow.Plan", f"{name} {difficulty}", None)
@@ -571,17 +1029,21 @@ def main():
                 stages.append({
                     "kind": stage["kind"], "name": stage["name"], "waves": stage["waves"],
                     "boss": sorted(stage["boss"]), "breatherSeconds": stage["breatherSeconds"], "merge": stage["merge"],
-                    "bankEachWave": stage["bankEachWave"], "targetWaveSeconds": stage["targetWaveSeconds"],
-                    "maxAlive": stage["maxAlive"],
-                    "zone": None if zone is None else {
-                        "id": zone["id"], "floorY": floor, "rect": zone["rect"], "inner": zone["inner"],
-                        "trigger": zone["trigger"], "entry": (zone["entry"][0], floor, zone["entry"][1]),
-                        "exit": (zone["exit"][0], floor, zone["exit"][1]),
-                        "spawns": [(x, floor, z) for x, z in zone["spawns"]]}})
+                    "targetWaveSeconds": stage["targetWaveSeconds"], "maxAlive": stage["maxAlive"],
+                    "zone": None if zone is None else zone["id"]})
             start = layout["start"]
             expected[key] = ("StageFlow.Plan", f"{name} {difficulty}", plain({"plan": {
                 "levelId": plan["levelId"], "difficulty": plan["difficulty"], "start": (start["x"], start["y"], start["z"]),
-                "killY": plan["killY"], "camps": plan["camps"], "stages": stages}}))
+                "killY": plan["killY"], "camps": plan["camps"], "stages": stages,
+                "zones": [zone_row(zone) for zone in plan["zones"]],
+                "groups": [def_row(defn) for defn in plan["groups"]], "population": plan["population"]}}))
+            # CampBrain.Posts on every resident group of the plan.
+            for g, defn in enumerate(plan["groups"], 1):
+                count = sum(unit["count"] for unit in defn["units"])
+                case = f"camp.posts.{number}.{difficulty}.{g}"
+                data["campCases"].append({"id": case, "op": "posts", "def": def_row(defn), "count": count})
+                expected[case] = ("CampBrain.Posts", f"{name} {difficulty} {defn['id']} ({count})",
+                                  plain(sr.cb_posts(defn, count)))
             # Spawn grids and the boss's place: geometry, so once a level (its first difficulty).
             if difficulty == next(d for d in plan_difficulties if d in level["difficulties"]):
                 spacing = level["crowd"]["burstSpacing"]
@@ -618,6 +1080,10 @@ def main():
                                        "ticks": [tick[0] for tick in ticks], "users": list(STAR_USERS)})
                 stars[trace] = [run.earns_star(user) for user in STAR_USERS]
                 scripted[trace] = (f"{name} {difficulty}, {variant}", ticks)
+            # CampBrain's rules on the shipped groups (once, at the highest difficulty).
+            if difficulty == max((d for d in plan_difficulties if d in level["difficulties"]), key=lambda d: ranks[d]):
+                for defn in plan["groups"]:
+                    camp_cases(data, expected, f"{name} {defn['id']}", defn, combat["camps"])
         # Combat, on every wave.
         kinds = sorted(level["crowd"]["rewards"]) + ["nobody"]
         for difficulty, scales in level["difficulties"].items():
@@ -647,7 +1113,8 @@ def main():
                 case = f"refusal.{number}.{len(data['refusalCases'])}"
                 data["refusalCases"].append({"id": case, "file": changed, "rules": rules})
                 level_changed = resolved(changed)
-                refused = level_changed is None or bool(sr.level_problems(level_changed, layout, rules))
+                refused = level_changed is None or bool(sr.level_problems(level_changed, layout, rules, crowd_kinds, ranks,
+                                                                          crowd_max))
                 expected[case] = ("ruling 6: refused alike", f"{name}, {label}", refused)
             # And Combat.json without one of the numbers a run reads: unavailable on both sides.
             for key in sr.LEVEL_RULES_NEEDED:
@@ -655,7 +1122,18 @@ def main():
                 case = f"refusal.{number}.{len(data['refusalCases'])}"
                 data["refusalCases"].append({"id": case, "file": file, "rules": short_rules})
                 expected[case] = ("ruling 6: refused alike", f"{name}, Combat.json without levels.{key}",
-                                  bool(sr.level_problems(level, layout, short_rules)))
+                                  bool(sr.level_problems(level, layout, short_rules, crowd_kinds, ranks, crowd_max)))
+            # L1b: each of Validate's new lines, broken once.
+            if file.get("camps"):
+                for label, change in L1B_REFUSALS:
+                    changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
+                    change(changed, raw, short_rules)
+                    case = f"refusal.{number}.{len(data['refusalCases'])}"
+                    data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
+                    level_changed = resolved(changed)
+                    refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
+                                                                              ranks, crowd_max))
+                    expected[case] = ("L1b: Validate's new lines refuse alike", f"{name}, {label}", refused)
     for target in sorted({key[0] for key in bursts}):
         for count in (0, -1):
             bursts[(target, count, 1.0)] = None
@@ -668,6 +1146,8 @@ def main():
                            director["mergeThreshold"] + EDGE, 1.0)]
     breathers = [0.0, director["tempoMin"] / 2, director["tempoMin"], (1 + director["tempoMin"]) / 2, 1.0 - EDGE, 1.0,
                  director["mergeTempo"], director["tempoMax"]]
+    grid_camp_cases(data, expected, combat["camps"])
+    split_cases(data, expected)
     data["burstCases"] = [list(key) for key in bursts]
     data["tempoCases"] = [list(key) for key in tempos]
     data["mergeCases"] = [list(key) for key in merges]
@@ -730,7 +1210,7 @@ def main():
         if kind.startswith("StageFlow.Validate"):
             report.compare(kind, label, luau_answer if isinstance(luau_answer, dict) else list(luau_answer or []), python)
             continue
-        if kind.startswith("ruling 6"):
+        if kind.startswith("ruling 6") or kind.startswith("L1b: Validate"):
             if isinstance(luau_answer, dict) and "threw" in luau_answer:
                 report.compare(kind, label, luau_answer, python)
             else:
@@ -755,6 +1235,9 @@ def main():
     grid("Combat.CampReward", "grid.campReward", data["rewardCases"],
          lambda cash, materials, mult: list(sc.camp_reward({"probe": {"cash": cash, "materials": materials}}, "probe",
                                                             {"rewardMult": mult})))
+    grid("Combat.KillReward", "grid.killReward", data["rewardCases"],
+         lambda cash, materials, mult: list(sc.kill_reward({"probe": {"cash": cash, "materials": materials}}, "probe",
+                                                            mult)) + list(sc.kill_reward({}, "probe", mult)))
     grid("Combat.BurstSeconds", "grid.burstSeconds", data["burstCases"], sc.burst_seconds)
     grid("Combat.Tempo", "grid.tempo", data["tempoCases"], lambda kills, window, rate: sc.tempo(kills, window, rate, director))
     grid("Combat.ShouldMerge", "grid.shouldMerge", data["mergeCases"], lambda tempo, dead: sc.should_merge(tempo, dead, director))
@@ -772,7 +1255,7 @@ def main():
             report.compare(kind, label, got if isinstance(got, dict) else {"threw": "no answer"}, None)
             continue
         parted = None
-        for index, (entry, actions, state, directs, closing) in enumerate(ticks):
+        for index, (entry, actions, state, directs, closing, clear, safe) in enumerate(ticks):
             theirs = got["ticks"][index] if index < len(got["ticks"]) else {}
             their_state = theirs.get("state") or {}
             extra_state |= set(their_state) - set(STATE_FIELDS)
@@ -789,6 +1272,9 @@ def main():
                                theirs.get("directs"), directs)
                 report.compare("StageFlow.StillClosing: is the close still judged again", here,
                                theirs.get("closing"), closing)
+                report.compare("StageFlow.FieldClear: may the fallen lose (L1b-19)", here, theirs.get("clear"), clear)
+                report.compare("StageFlow.SafePoint: no floor busy, every floor, the first, the last (L1b-18)", here,
+                               theirs.get("safe"), safe)
         if parted is None:
             report.compare(kind, f"{label} ({len(ticks)} ticks, ended {ticks[-1][2]['ended']})", True, True)
             report.compare("StageFlow.EarnsStar: a fighter of the last clear, one who was not, a stranger",
@@ -798,10 +1284,13 @@ def main():
             report.differ(kind, parted)
 
     failed = report.print()
-    mirrored = {"Combat": NEEDED["Combat"], "StageFlow": NEEDED["StageFlow"]}
+    mirrored = {"Combat": NEEDED["Combat"], "StageFlow": NEEDED["StageFlow"], "CampBrain": NEEDED["CampBrain"]}
     loose = [name for name in exports.get("StageFlow") or [] if name not in mirrored["StageFlow"]]
     print(f"  note  StageFlow functions the simulators do not mirror (tools/crowd_harness tests them): "
           f"{', '.join(loose) or 'none'}")
+    loose = [name for name in exports.get("CampBrain") or [] if name not in mirrored["CampBrain"]]
+    if loose:
+        print(f"  note  CampBrain functions not compared: {', '.join(loose)}")
     if extra_state:
         print(f"  note  State fields the simulator's run does not carry: {', '.join(sorted(extra_state))}")
     print()

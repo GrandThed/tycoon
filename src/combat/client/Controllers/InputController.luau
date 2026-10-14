@@ -245,6 +245,9 @@ type RangeState = {
 	-- so does waiting on the pad for the next wave (the local PartyMember.waiting).
 	inMission: boolean,
 	waiting: boolean,
+	-- L1b: the local PartyMember.engaged (a camp group fights this player, a slinger's reach
+	-- included), so auto-fire may answer a shooter from the road.
+	engaged: boolean,
 	activeSlot: Stance,
 	-- nil until FeedbackController pushes the server's loadout: the config's starting loadout.
 	loadout: Types.RangeLoadout?,
@@ -288,6 +291,7 @@ local rangeState: RangeState = {
 	rangeStarted = false,
 	inMission = false,
 	waiting = false,
+	engaged = false,
 	activeSlot = MELEE_SLOT,
 	device = "pc",
 	rangeTouches = {},
@@ -1064,20 +1068,46 @@ local function sphereInSights(
 	return toCentre - math.asin(math.clamp(radius / distance, 0, 1)) <= limit
 end
 
+-- L1b fix round: auto-fire and auto-swing consider a camp's body only while the local root is
+-- in play for its floor, the server's first in-play clause (L1b-6): flat distance to the floor
+-- rectangle at most camps.chaseMargin (so the corners are rounded), inside the sight band.
+-- Leaving out the keepAway reach clause only makes this stricter. A shot from out of play is
+-- "blocked" and still wakes a resting group (L1b-4, L1b-7), so a phone must never take one by
+-- itself. Bodies with no camp floor (the range) keep the old rule.
+local function campInPlay(id: number, root: Vector3): boolean
+	local cfg = combatConfig
+	if cfg == nil or rangeState.engaged then
+		return true
+	end
+	local centre, half = CrowdRenderer.CampFloor(id)
+	if centre == nil or half == nil then
+		return true
+	end
+	local camps = cfg.camps
+	if root.Y < centre.Y - camps.sightBelow or root.Y > centre.Y + camps.sightAbove then
+		return false
+	end
+	local dx = math.max(math.abs(root.X - centre.X) - half.X, 0)
+	local dz = math.max(math.abs(root.Z - centre.Z) - half.Z, 0)
+	return dx * dx + dz * dz <= camps.chaseMargin * camps.chaseMargin
+end
+
 -- CrowdRenderer reports the ground point; the body sphere is centred at height/2 and the
--- head sphere sits at the top (INTERFACES P1 decision 1).
+-- head sphere sits at the top (INTERFACES P1 decision 1). `root` = the local root, for the
+-- camp in-play gate.
 local function enemyInSights(
 	origin: Vector3,
 	look: Vector3,
 	range: number,
 	degrees: number,
-	lagPad: number
+	lagPad: number,
+	root: Vector3
 ): boolean
 	local limit = math.rad(degrees)
 	local found = false
 	CrowdRenderer.ForEach(
-		function(_id: number, position: Vector3, radius: number, headRadius: number, height: number)
-			if found then
+		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
+			if found or not campInPlay(id, root) then
 				return
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
@@ -1121,12 +1151,13 @@ local function enemyInReach(
 	origin: Vector3,
 	forward: Vector3,
 	extraPad: number,
-	lagPad: number
+	lagPad: number,
+	root: Vector3
 ): boolean
 	local found = false
 	CrowdRenderer.ForEach(
-		function(_id: number, position: Vector3, radius: number, headRadius: number, height: number)
-			if found then
+		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
+			if found or not campInPlay(id, root) then
 				return
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
@@ -1155,14 +1186,22 @@ local function targetOnAuto(
 ): boolean
 	local controls = cfg.controls
 	local lagPad = controls.assistLagPad
+	local root = rig.root.Position
 	if isRanged(variant) then
 		local origin, look = shotRay(rig)
 		if variant.shape == "cone" then
-			return enemyInReach(variant, origin, look, 0, lagPad)
+			return enemyInReach(variant, origin, look, 0, lagPad, root)
 		end
-		return enemyInSights(origin, look, variant.range, controls.autoFireAssistDegrees, lagPad)
+		return enemyInSights(
+			origin,
+			look,
+			variant.range,
+			controls.autoFireAssistDegrees,
+			lagPad,
+			root
+		)
 	end
-	return enemyInReach(variant, rig.root.Position, flatCameraLook(), controls.autoSwingPad, lagPad)
+	return enemyInReach(variant, root, flatCameraLook(), controls.autoSwingPad, lagPad, root)
 end
 
 -- A queued tap still inside its buffer; an expired one is dropped.
@@ -2425,10 +2464,11 @@ function InputController.SetAbilityReady(readyIn: SlotTiers): ()
 end
 
 -- Pushed from every RunState: the run phase, and (P5) whether the local member is waiting on
--- the pad for the next wave (nil = not).
-function InputController.SetPhase(nextPhase: string, waiting: boolean?): ()
+-- the pad for the next wave (nil = not), and (L1b) whether a camp group is fighting them.
+function InputController.SetPhase(nextPhase: string, waiting: boolean?, engaged: boolean?): ()
 	missionState.phase = nextPhase
 	rangeState.waiting = waiting == true
+	rangeState.engaged = engaged == true
 	if not inPlay() then
 		missionState.attackHeld = false
 		missionState.chargeStartedAt = nil

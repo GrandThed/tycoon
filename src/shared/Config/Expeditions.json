@@ -31,7 +31,8 @@
 		"secret": { "material": "SmoothPlastic", "color": [176, 96, 224] },
 		"sign": { "material": "SmoothPlastic", "color": [52, 54, 62] },
 		"water": { "material": "SmoothPlastic", "color": [122, 138, 152], "transparency": 0.2 },
-		"lobby": { "material": "SmoothPlastic", "color": [124, 126, 132] }
+		"lobby": { "material": "SmoothPlastic", "color": [124, 126, 132] },
+		"fire": { "material": "Neon", "color": [255, 150, 30] }
 	},
 	"sign": { "textColor": [243, 246, 255], "pixelsPerStud": 20, "size": [6, 4, 6] }
 }

@@ -18,7 +18,7 @@
 			],
 			"entry": { "x": -60, "z": -36 },
 			"exit": { "x": -12, "z": -36 },
-			"checkpoint": { "x": -10, "z": -47 },
+			"checkpoint": { "x": 16, "z": -42 },
 			"spawns": [
 				{ "x": -40, "z": -60 },
 				{ "x": -40, "z": -12 },
@@ -29,6 +29,11 @@
 			"obstacles": [
 				{ "x": -56, "z": -60, "sx": 6, "sy": 3.5, "sz": 6, "material": "SmoothPlastic", "color": [104, 106, 112] },
 				{ "x": -56, "z": -12, "sx": 6, "sy": 3.5, "sz": 6, "material": "SmoothPlastic", "color": [104, 106, 112] }
+			],
+			"spots": [
+				{ "id": "fire1", "posture": "fire", "points": [{ "x": -46, "z": -24 }], "radius": 4 },
+				{ "id": "eastGate", "posture": "guard", "points": [{ "x": -12, "z": -40 }, { "x": -12, "z": -32 }, { "x": -16, "z": -36 }, { "x": -20, "z": -40 }, { "x": -20, "z": -32 }], "facing": 90 },
+				{ "id": "fire2", "posture": "fire", "points": [{ "x": -28, "z": -48 }], "radius": 5 }
 			]
 		},
 		{
@@ -45,7 +50,7 @@
 			],
 			"entry": { "x": 44, "z": -36 },
 			"exit": { "x": 132, "z": -36 },
-			"checkpoint": { "x": 134, "z": -47 },
+			"checkpoint": { "x": 150, "z": -42 },
 			"spawns": [
 				{ "x": 78, "z": -76 },
 				{ "x": 78, "z": 4 },
@@ -59,10 +64,19 @@
 				{ "x": 118, "z": -64, "sx": 10, "sy": 3.5, "sz": 8, "material": "SmoothPlastic", "color": [104, 106, 112] },
 				{ "x": 60, "z": -6, "sx": 10, "sy": 3.5, "sz": 8, "material": "SmoothPlastic", "color": [104, 106, 112] },
 				{ "x": 118, "z": -8, "sx": 10, "sy": 3.5, "sz": 8, "material": "SmoothPlastic", "color": [104, 106, 112] }
+			],
+			"spots": [
+				{ "id": "fire1", "posture": "fire", "points": [{ "x": 56, "z": -50 }], "radius": 4 },
+				{ "id": "loop", "posture": "patrol", "points": [{ "x": 72, "z": -54 }, { "x": 104, "z": -54 }, { "x": 104, "z": -18 }, { "x": 72, "z": -18 }] },
+				{ "id": "southWatch", "posture": "guard", "points": [{ "x": 76, "z": 2 }, { "x": 84, "z": 2 }, { "x": 92, "z": 2 }, { "x": 100, "z": 2 }, { "x": 88, "z": -2 }, { "x": 96, "z": -2 }, { "x": 80, "z": -2 }], "facing": 0 },
+				{ "id": "fire3", "posture": "fire", "points": [{ "x": 100, "z": -64.5 }], "radius": 6 },
+				{ "id": "fire2", "posture": "fire", "points": [{ "x": 118, "z": -20 }], "radius": 5 },
+				{ "id": "eastGate", "posture": "guard", "points": [{ "x": 130, "z": -40 }, { "x": 130, "z": -32 }, { "x": 126, "z": -44 }, { "x": 126, "z": -28 }], "facing": 90 }
 			]
 		},
 		{
 			"id": "C",
+			"locks": true,
 			"x": 218.5,
 			"y": 12,
 			"z": -36,
@@ -84,6 +98,10 @@
 			],
 			"obstacles": [
 				{ "x": 241, "z": -60, "sx": 18, "sy": 3.5, "sz": 12, "material": "SmoothPlastic", "color": [104, 106, 112] }
+			],
+			"spots": [
+				{ "id": "gate", "posture": "guard", "points": [{ "x": 198, "z": -28 }, { "x": 198, "z": -44 }, { "x": 202, "z": -22 }, { "x": 202, "z": -50 }], "facing": 90 },
+				{ "id": "chiefFire", "posture": "fire", "points": [{ "x": 214, "z": -58 }], "radius": 4 }
 			]
 		}
 	],
