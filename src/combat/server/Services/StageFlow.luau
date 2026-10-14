@@ -1870,9 +1870,10 @@ local function threatened(mark: Vector3, threats: { CampBrain.Shooter }?): boole
 end
 
 -- The fix round's B-3: whether a tent still owes its group a rouse. A body sent while its camp
--- fights (a group of its floor in rise or fight) is roused, but a group walking home cannot rise
--- until it is back (CampBrain.Rouse rises a resting group only), so the executor asks again every
--- tick until the group is up, or until the camp has nobody up to join.
+-- fights (a group of its floor in rise or fight) is roused (CampBrain.Rouse rises a resting group
+-- at the next step, a homeward one only while a player is in play for it, a held one never), so
+-- the executor asks again every tick until the group is up, or until the camp has nobody up to
+-- join.
 function StageFlow.TentOwesRouse(owed: boolean, campBusy: boolean, groupAwake: boolean): boolean
 	return owed and campBusy and not groupAwake
 end

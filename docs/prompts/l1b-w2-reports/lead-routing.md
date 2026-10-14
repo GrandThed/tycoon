@@ -134,3 +134,10 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
   group out of `home` **only while a player is in play for its camp**; from `rest` as before. No band
   is widened. The same agent finishes it, re-points the StageFlow comment, and spawns the sim's tent
   bodies at their doors.
+- **Fix tail, second pass:** (b) built, harness 1,987, mutate 616 / 0, mirror mutants 44 / 44; still
+  one red (seed 11 Timber 36.4): the tent's rouse at send lifts its RESTING group with nobody in
+  play, so it cycles rest → rise → fight → home. **Ruling (i): every tent-caused rouse (at the send
+  and the owed rouse) needs a player in play for the camp,** from rest or home. A tent never wakes a
+  group to fight nobody. Rouses by sight, a hit or the join-in chain are unchanged. If a seed still
+  sits under 37.8 after that, the smallest data retune (tent bodies' Timber), written in BALANCE;
+  the band is not widened.

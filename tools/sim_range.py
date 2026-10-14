@@ -5898,14 +5898,28 @@ def cb_join_in(groups, living, gaps, woke, rules):
     return answer
 
 
-def cb_rouse(group, now):
-    """CampBrain.Rouse: a resting or homeward, unheld group rises (the fix round's B-3); True when it did."""
-    if group["held"] or group["state"] not in ("rest", "home"):
+def cb_rouse(group, now, in_play):
+    """CampBrain.Rouse: a resting, unheld group rises; a homeward one only while a player is in play
+    for its camp (`in_play`, the caller's answer from the group's in-play set; the fix round's B-3
+    as the lead ruled it). True when it did."""
+    if group["held"]:
+        return False
+    if group["state"] != "rest" and not (group["state"] == "home" and in_play):
         return False
     group["state"] = "rise"
     group["since"] = now
     group["hit"] = False
     return True
+
+
+def tent_owes_rouse(owed, camp_busy, group_awake):
+    """StageFlow.TentOwesRouse (the fix round's B-3)."""
+    return owed and camp_busy and not group_awake
+
+
+def group_up(group):
+    """WaveService's run.awakeGroups[group] ~= nil: its last event went to rise or fight."""
+    return group["state"] in ("rise", "fight") and not group["held"]
 
 
 def cb_new_tent(stock):
@@ -6191,8 +6205,8 @@ class LevelRun(ThreatRun):
                 continue
             self.tents.append({"group": len(self.groups), "id": tent["def"]["id"], "camp": tent["def"]["camp"],
                                "floor": tent["zone"], "kinds": tent["kinds"], "posts": tent["posts"],
-                               "every": tent["every"], "sent": 0, "state": cb_new_tent(len(tent["kinds"])),
-                               "sentAt": [], "refused": 0})
+                               "doors": tent["doors"], "every": tent["every"], "sent": 0, "state": cb_new_tent(len(tent["kinds"])),
+                               "sentAt": [], "refused": 0, "owed": False})
         # L1b-W2-12: CrowdService.AddGroup's posts and the gap between every two groups of one camp,
         # post to post, worked out once (posts never move).
         posts_of = [cb_posts(g["def"], sum(u["count"] for u in g["def"]["units"])) for g in self.groups]
@@ -6268,8 +6282,11 @@ class LevelRun(ThreatRun):
     def send_tents(self, t):
         """WaveService.tick's tents (L1b-W2-7), before Advance: Busy once; for each tent, active
         while its camp is busy or once none of its camp's residents lives (its own bodies not
-        counted); a due body spawns on its ring post, its group is roused at the next camp step,
-        and the clock moves on. A refused spawn (the cap) counts as sent."""
+        counted); a due body comes out at its door (B-4) and walks to its ring post, its group is
+        roused at the next camp step, and the clock moves on. A refused spawn (the cap) counts as
+        sent. A body sent while its camp is busy and its group is not up leaves a debt (B-3,
+        StageFlow.TentOwesRouse) that rouses the group every tick until it is up or the camp is
+        quiet: a homeward group rises only while the player is in play for it (cb_rouse)."""
         if not self.tents:
             return
         busy = self.busy()
@@ -6278,7 +6295,11 @@ class LevelRun(ThreatRun):
             group = self.groups[tent["group"] - 1]
             floor = tent["floor"]
             own = sum(1 for b in group["members"] if b.alive)
-            active = cb_tent_active(busy.get(floor) is True, self.alive_on(floor) - own)
+            camp_busy = busy.get(floor) is True
+            tent["owed"] = tent_owes_rouse(tent["owed"], camp_busy, group_up(group))
+            if tent["owed"]:
+                self.rouse_pending.add(tent["group"])
+            active = cb_tent_active(camp_busy, self.alive_on(floor) - own)
             if not cb_tent_due(tent["state"], active, t):
                 continue
             k = tent["sent"]
@@ -6286,11 +6307,15 @@ class LevelRun(ThreatRun):
                 tent["refused"] += 1
             else:
                 post = tent["posts"][k]
-                body = self.raise_body(tent["kinds"][k], post["at"][0], post["at"][2], t, floor)
+                # The fix round's B-4: it comes out at its door (CrowdService.SpawnResident's
+                # `from`) and walks to its post; the post stays its resident post.
+                door = tent["doors"][k]
+                body = self.raise_body(tent["kinds"][k], door[0], door[2], t, floor)
                 body.resident = {"group": tent["group"], "post": post, "leg": post["leg"]}
                 body.face = (-math.sin(post["yaw"]), -math.cos(post["yaw"]))
                 group["members"].append(body)
                 self.rouse_pending.add(tent["group"])
+                tent["owed"] = tent_owes_rouse(True, camp_busy, group_up(group))
                 self.count_alive()
             cb_tent_sent(tent["state"], t, tent["every"])
             tent["sent"] += 1
@@ -6394,7 +6419,7 @@ class LevelRun(ThreatRun):
                 # names the state it left (the fix round's B-3: a group walking home rises too).
                 self.rouse_pending.discard(index)
                 left = group["state"]
-                if cb_rouse(group, now):
+                if cb_rouse(group, now, any(group["inPlay"].values())):
                     self.note(now, index, left, "rise", False, "tent")
         self.wake_floors = set()
         if woke:
@@ -6402,7 +6427,8 @@ class LevelRun(ThreatRun):
             living = {i: sum(1 for b in g["members"] if b.alive) for i, g in enumerate(self.groups, 1)}
             joined = cb_join_in(self.groups, living, self.gaps, woke, rules)
             for index in joined:
-                if cb_rouse(self.groups[index - 1], now):
+                joining = self.groups[index - 1]
+                if cb_rouse(joining, now, any(joining["inPlay"].values())):
                     self.note(now, index, "rest", "rise", False, "join")
             self.joined.append((now, list(woke), joined))
         for group in self.groups:

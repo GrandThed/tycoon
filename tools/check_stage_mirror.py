@@ -958,14 +958,18 @@ def wave2_camp_cases(data, expected, rules, plans):
                                   "living": [[i, n] for i, n in living.items()], "gaps": triples, "woke": woke})
         expected[case] = ("CampBrain.JoinIn", f"grid chain guard -> fire -> fire -> fire (just past), woke {woke}",
                           sr.cb_join_in(groups, living, gaps, woke, rules))
-    # Rouse in every state.
+    # Rouse in every state, with and without a player in play (the fix round's B-3: a homeward
+    # group rises only with one).
     for state, held in (("rest", False), ("rest", True), ("rise", False), ("fight", False), ("home", False)):
-        group = sr.cb_new_group(guard, 0.0)
-        group["state"], group["held"], group["hit"] = state, held, True
-        ret = sr.cb_rouse(group, 4.5)
-        case = f"camp.rouse.{state}.{held}"
-        data["campCases"].append({"id": case, "op": "rouse", "def": def_row(guard), "state": state, "held": held})
-        expected[case] = ("CampBrain.Rouse", f"{state}{' held' if held else ''}", {"ret": ret, "group": group_row(group)})
+        for in_play in (False, True):
+            group = sr.cb_new_group(guard, 0.0)
+            group["state"], group["held"], group["hit"] = state, held, True
+            ret = sr.cb_rouse(group, 4.5, in_play)
+            case = f"camp.rouse.{state}.{held}.{in_play}"
+            data["campCases"].append({"id": case, "op": "rouse", "def": def_row(guard), "state": state, "held": held,
+                                      "playerInPlay": in_play})
+            expected[case] = ("CampBrain.Rouse", f"{state}{' held' if held else ''}{' in play' if in_play else ''}",
+                              {"ret": ret, "group": group_row(group)})
     # The tent rule on timelines: wake at 0 (0, 6, 12), a pause from 13 to 40 (the next at 40),
     # the residents dead with the camp at rest (it keeps sending), the stock spent (never).
     every = 6.0

@@ -2816,11 +2816,11 @@ L1B_W2_CROWD_MUTATIONS = {
         "if earlier.brain.def.camp == def.camp then",
         "if true then",
     ),
-    # Re-aimed by the fix round's tail (B-3: Rouse also rises a homeward group): same rule.
+    # Re-aimed by the fix round's tail (B-3: the held test is a clause of its own now): same rule.
     "l1b w2 crowd: Rouse wakes a held group": (
         CAMP,
-        'if group.held or (group.state ~= "rest" and group.state ~= "home") then',
-        'if group.state ~= "rest" and group.state ~= "home" then',
+        'if group.held then\n\t\treturn false\n\tend\n\tif group.state ~= "rest" and not',
+        'if false then\n\t\treturn false\n\tend\n\tif group.state ~= "rest" and not',
     ),
     "l1b w2 crowd: TentActive ignores the dead residents": (
         CAMP,
@@ -3021,10 +3021,26 @@ L1B_W2_FIX_TAIL_MUTATIONS = {
         "info.rises = nil",
         "info.rises = info.rises",
     ),
+    # Re-aimed when the lead ruled B-3 option (b): from home only with a player in play.
     "l1b w2 fix tail: Rouse leaves a homeward group home": (
         CAMP,
-        'if group.held or (group.state ~= "rest" and group.state ~= "home") then',
-        'if group.held or group.state ~= "rest" then',
+        '(group.state == "home" and inPlay)',
+        "false",
+    ),
+    "l1b w2 fix tail: Rouse lifts a homeward group with nobody in play": (
+        CAMP,
+        '(group.state == "home" and inPlay)',
+        '(group.state == "home")',
+    ),
+    "l1b w2 fix tail: the tent's rouse is told a player is always in play": (
+        CROWD,
+        "CampBrain.Rouse(brain, simTime, next(brain.inPlay) ~= nil)",
+        "CampBrain.Rouse(brain, simTime, true)",
+    ),
+    "l1b w2 fix tail: the tent's rouse is told nobody is ever in play": (
+        CROWD,
+        "CampBrain.Rouse(brain, simTime, next(brain.inPlay) ~= nil)",
+        "CampBrain.Rouse(brain, simTime, false)",
     ),
     "l1b w2 fix tail: a rouse's event says it left rest": (
         CROWD,

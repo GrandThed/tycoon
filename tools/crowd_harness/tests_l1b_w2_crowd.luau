@@ -707,23 +707,29 @@ function W2A.joinTests(): ()
 	check(W2A.list(once) == "{3}", `two wakers in reach of each other and of a third: the third once, neither waker ({W2A.list(once)})`)
 
 	print(" CampBrain.Rouse")
-	local roused = W2A.groups({ "tent", "tent", "tent", "tent", "tent" })
+	local roused = W2A.groups({ "tent", "tent", "tent", "tent", "tent", "tent", "tent" })
 	roused[1].hit = true
-	check(CB.Rouse(roused[1], 7) and roused[1].state == "rise" and roused[1].since == 7 and roused[1].hit == false, "rest: rise, since now, hit cleared, true")
+	check(CB.Rouse(roused[1], 7, false) and roused[1].state == "rise" and roused[1].since == 7 and roused[1].hit == false, "rest, nobody in play: rise, since now, hit cleared, true")
+	check(CB.Rouse(roused[6], 7, true) and roused[6].state == "rise", "rest, a player in play: rise as well")
 	roused[2].held = true
-	check(not CB.Rouse(roused[2], 7) and roused[2].state == "rest" and roused[2].held, "held: nothing, false")
+	check(not CB.Rouse(roused[2], 7, true) and roused[2].state == "rest" and roused[2].held, "held: nothing, false, a player in play or not")
 	local unchanged = true
 	for index, state in { [3] = "rise", [4] = "fight" } do
 		roused[index].state = state
 		roused[index].since = 1
-		unchanged = unchanged and not CB.Rouse(roused[index], 7) and roused[index].state == state and roused[index].since == 1
+		unchanged = unchanged and not CB.Rouse(roused[index], 7, true) and not CB.Rouse(roused[index], 7, false) and roused[index].state == state and roused[index].since == 1
 	end
 	check(unchanged, "rise, fight: nothing, false")
-	-- The fix round's B-3: a tent's body is roused at once, also while its group walks home.
+	-- The fix round's B-3 as the lead ruled it: a homeward group rises only while a player is in
+	-- play for its camp.
 	roused[5].state = "home"
 	roused[5].since = 1
 	roused[5].hit = true
-	check(CB.Rouse(roused[5], 7) and roused[5].state == "rise" and roused[5].since == 7 and roused[5].hit == false, "home: rise, since now, hit cleared, true (B-3)")
+	check(not CB.Rouse(roused[5], 7, false) and roused[5].state == "home" and roused[5].since == 1, "home, nobody in play: nothing, false (it would only leash again)")
+	check(CB.Rouse(roused[5], 7, true) and roused[5].state == "rise" and roused[5].since == 7 and roused[5].hit == false, "home, a player in play: rise, since now, hit cleared, true (B-3)")
+	roused[7].state = "home"
+	roused[7].held = true
+	check(not CB.Rouse(roused[7], 7, true) and roused[7].state == "home", "(held and home: nothing)")
 
 	print(" CampBrain: the tent rule")
 	check(CB.TentActive(true, 5) and CB.TentActive(false, 0) and CB.TentActive(false, -1) and not CB.TentActive(false, 3), "TentActive: busy, or no resident alive")
@@ -1253,8 +1259,18 @@ function W2A.tentDoorTests(): ()
 	check(homeward, "(no target in play: the group leashes and walks home)")
 	Crowd.RouseGroup(group)
 	step2()
+	local ignored = L1BC.events()
+	local rose = false
+	for _, event in ignored do
+		rose = rose or (event.group == group and event.to == "rise")
+	end
+	check(not rose and seen(ids[1]).state ~= "rise", `B-3 as ruled: with nobody in play for its camp, a group walking home is not roused ({#ignored} events)`)
+	-- A player steps into the camp while it walks home (home ignores sight, so only the rouse acts).
+	root.Position = vec(-20, 11, -20)
+	Crowd.RouseGroup(group)
+	step2()
 	local back = L1BC.events()
-	check(#back == 1 and back[1].group == group and back[1].from == "home" and back[1].to == "rise" and back[1].held == false, `B-3: a group walking home is roused at the next step, and its event names "home" as the state it left ({#back} events)`)
+	check(#back == 1 and back[1].group == group and back[1].from == "home" and back[1].to == "rise" and back[1].held == false, `B-3: with a player in play, a group walking home is roused at the next step, and its event names "home" as the state it left ({#back} events)`)
 	check(seen(ids[1]).state == "rise", "it shows rise where it stands")
 end
 W2A.crowdGroup("tent door, rouse from home", W2A.tentDoorTests)

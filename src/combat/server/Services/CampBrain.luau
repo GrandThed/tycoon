@@ -592,11 +592,17 @@ function CampBrain.JoinIn(
 	return answer
 end
 
--- A wake from outside Step and Release (a tent's rouse, a join-in): a resting or homeward, unheld
--- group rises (the fix round's B-3: a tent's body is roused at once, also while its group walks
--- home; JoinIn skips homeward groups itself). True when it did; anything else is left as it is.
-function CampBrain.Rouse(group: Group, now: number): boolean
-	if group.held or (group.state ~= "rest" and group.state ~= "home") then
+-- A wake from outside Step and Release (a tent's rouse, a join-in): a resting, unheld group rises.
+-- One walking home rises only while a player is in play for its camp (`inPlay`: the caller's
+-- answer from the group's in-play set at this step's Step, the set engagement reads). The fix
+-- round's B-3 as the lead ruled it: roused with nobody to fight, a group would only leash again,
+-- evading every hit on its way home, and stall the clear. JoinIn skips homeward groups itself.
+-- True when it did; anything else is left as it is.
+function CampBrain.Rouse(group: Group, now: number, inPlay: boolean): boolean
+	if group.held then
+		return false
+	end
+	if group.state ~= "rest" and not (group.state == "home" and inPlay) then
 		return false
 	end
 	group.state = "rise"
