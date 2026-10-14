@@ -11365,3 +11365,1299 @@ built, then returns false with one warn.
 - **Checked by reading only** (nothing loads them): `WaveService`, `ArenaService`,
   `LevelService`'s Instances, `Main`, every client file. Needs Studio: the wall at a camp's
   edge, the facing after a move, the settle after a fall, Backspace twice, the phone layout.
+
+# L1b contracts — the living road (Ben, 2026-10-14)
+
+**Status: confirmed by the lead on 2026-10-14, every [draft] point included (the nine "Draft points for the lead" at the end stand as written).** Branch `l1b-living-road`,
+worktree `C:\Users\benja\Desktop\tycoon-p5`. Written from the code on the branch the same day.
+
+Plan of record: `docs/MISSIONS_DESIGN.md` §15 (Ben's verdict on L1) and §16 (his six L1b
+decisions, fixed), and `docs/prompts/l1b-study-report.md` (the groundwork study, with file:line
+evidence, its wave plan §8 and the lead's rulings at its end: all fifteen recommendations taken
+as written). Where this section and the study differ, this section wins, and the difference is
+named where it is made.
+
+**Waves.** L1b is built in two building waves. Each ends in a stop Ben judges by pressing Play
+in `tycoon\build\proving.rbxl` and departing for Forest Road (`debug.provingLevel` stays
+`forestRoad`).
+- **Wave 1, "the camp is alive" (this contract, in full).** Today's road and today's camp
+  sizes. The camps are inhabited when he arrives. Raiders rest at posts, on patrol and at fires.
+  A group that sees him stands up and fights. He can walk out; they chase him to the camp's edge,
+  walk home and heal. Every kill pays at once. Only the Chief's Clearing locks.
+- **Wave 2, "the long road" (an outline at the end; it gets its own full contract).** Ben's
+  size: the 1,000-stud road, three camps of about twice L1's floor area, 100 to 120 raiders,
+  tents, dormancy, a sneak path, a first clear of about 10 minutes.
+- Wave 3 (numbers only) runs only if Wave 2's stop asks for it.
+
+**Gate protocol.** Ben's §16.7: a wave that has passed review and QA is merged to `main`, and
+the six place files are rebuilt there. **Publish freeze:** the Expeditions place must not be
+published from `main` until L4 (unchanged).
+
+**What Ben gets in Wave 1.** Play, the map, Depart: the same grey Forest Road. Before camp A he
+sees raiders already there: some sitting round a fire marker, some standing guard, one group
+walking a loop. A group that sees him gets a "!" over each of its bodies, stands up and fights.
+Sitters are slow to stand, so he can strike first. Camps A and B never close. He can walk out;
+they chase him to the edge of their camp, then walk back to their posts and heal, and every hit
+on the way home reads "BLOCKED". The dead stay dead. The wallet rises with every kill; "Progress
+saved" is gone. The Chief's Clearing is the one camp that locks. Its residents stand still behind
+the gate until the gates close, then wake, and the waves and the Colossus follow as in L1.
+
+## Rulings that bind L1b (Ben, MISSIONS_DESIGN §15 and §16)
+
+1. **Enemies are already there.** A camp is inhabited when the party arrives.
+2. **Camps do not lock.** Only the boss's room locks: once its gates close, nobody leaves it, nor
+   the level, until the boss falls or the run ends.
+3. **Running away:** raiders chase to the camp's edge, then walk back to their posts and heal.
+   Running out resets that fight. Slingers still shoot while you are in their range.
+4. **At rest:** guards at posts, patrols walking loops, groups sitting at fires (slow to stand,
+   so a first strike). They wake on seeing a player near, on being hit, or when a raider of their
+   group wakes. Groups wake separately.
+5. **Sneaking past a camp is allowed.**
+6. **Rewards come from kills,** each kept the moment it falls; a down loses nothing already
+   earned. The boss still pays its own reward on a win. A checkpoint banks nothing.
+7. **A camp stays as you left it** for the rest of the run: the dead stay dead, survivors heal.
+   No refills.
+8. **Size** (Wave 2): three camps about twice L1's floor, a road of about 1,000 studs, a first
+   Normal clear of about 10 minutes, 30 to 40 raiders a camp in groups, a tent that sends
+   reinforcements once its camp is awake.
+9. Everything else in L1 stands: the lobby camp and the map, the difficulties, the summary and
+   the return to the lobby, the tested stage rules, the boss room's close.
+
+## What the code says (checked 2026-10-14)
+
+Read in the worktree, not assumed. Every study reference used below was checked and holds; line
+numbers drift by one or two in places.
+
+- **One floor for the whole crowd.** `CrowdService` keeps one `boundsCenter` (its `.Y` is the
+  floor) and one `boundsHalf`. `clampToBounds`, `integrate`, `gatherTargets` (a target's
+  `standY` is `boundsCenter.Y` + `HipHeight` + half the root's height), the `Spawn` lift
+  (`math.max(position.Y, boundsCenter.Y)`) and `summon` all read them. `CrowdBrain` keeps one
+  `stepFloorY` (set by `BeginStep`) and one `arenaCenter` / `arenaHalf` (set by `SetArena`).
+  `land` writes `strike.floorY = stepFloorY`. `inArena` (a keepAway retreat) and `runway` (a
+  lane's length) are cut at that one rectangle.
+- **`VitalsService` and `ThreatField` read only `strike.floorY`,** which travels with each
+  Strike. They need no change once the brain fills it from the attacker's own floor. `HitShapes`
+  has no crowd floor in it.
+- **A `fight` body hunts the nearest target on the whole server.** `CrowdBrain.Think` calls
+  `nearest(body.position)` over every target the hooks allow. The only delay is
+  `threat.spawnGrace` (1.0 s) before its first windup.
+- **Turn-taking (`perPlayer`) is counted per kind per target player across the server.** It is
+  kept: a player is in one fight at a time.
+- **Nothing rests, has a post, goes home or heals.** Neither `CrowdService`'s `Enemy` record nor
+  `CrowdBrain`'s `Mind` has a field for it.
+- **`CrowdService.Damage` runs outside the step,** from the strike that hit. Kill callbacks run
+  through `task.spawn`. `removeRecord` (used by `Clear` and `Remove`) fires no kill callback, so
+  a removed body is never credited.
+- **The codec's state byte** has 4 bits of state index and uses 8 of 16 values (`idle move
+  windup stagger airborne dead attack recover`). Its rule is "append, never reorder". Entries are
+  11 bytes, at most 64 per packet, and every body goes to every player at `crowd.snapshotHz`
+  (15 Hz).
+- **`WaveService` blocks open camps in three places:**
+  - the `gate` action calls `setCrowdFloor`, which runs `CrowdService.Clear()` and
+    `VitalsService.ClearThreats()` and moves the one floor;
+  - the tick's `fieldClear` is `spawningDone and CrowdService.AliveCount() == 0`, a
+    server-wide count;
+  - `spawnBursts` holds a burst while `CrowdService.AliveCount() >= stage.maxAlive`, also
+    server-wide.
+- **A kill pays into a pool only in `wave`, `boss` and `breather`.** A kill in `travel` pays
+  nothing today. Only a `bank` action pays. `flushPool` splits the pool with
+  `Combat.ContributionShares` (`coop.contributionFloor` 0.1) and `Combat.SplitPool` (which floors
+  each share). The cash multiplier floors again, then `ArenaService.SendSnapshot` re-sends the
+  whole `PlayerState`. `EndRun` drops the pool.
+- **`StageFlow.SafePoint`** returns the live camp's entry in `gate`, `fight` and `breather`, else
+  the exit of the last cleared camp, else the start. **`StageFlow.Rescue`** answers "level",
+  "lobby" or nil. `WaveService.rescueFallen` then moves the body and always grants
+  `ProvingGrounds.json player.getUpIframes` (1.5 s).
+- **`LevelGeometry.Pieces`** builds gates and four barrier boxes for every camp from the
+  layout-wide `barrier`. `StageFlow.Validate` refuses a camp stage with no barrier.
+- **Forest Road as shipped:**
+  - camps A (60 × 60, floor top y 8), B (100 × 94, y 8) and C (81 × 81, y 12), each with west
+    and east gates 16 wide;
+  - each checkpoint stands 4 studs inside its floor's east edge and 11 studs north of the camp's
+    centre line, so it is on the floor;
+  - 73 Parts, `killY` −13, `runCapSeconds` 1050;
+  - stages travel, A, travel, B, travel, C; camp C's last wave is the Colossus (`at` [14, 0],
+    Valor 10);
+  - Normal scales hp 1.5 and damage 1.12; `countMult` 1, 1.2 (Hard), 1.35 (Brutal);
+    `crowd.maxAlive` 40; stage caps A 16, B 40, C 30.
+- **`ProvingGrounds.json crowd.maxAlive` is 160,** and `Spawn` refuses past it without a word.
+  Kind radii: fodder 1.3, slinger 1.2, lobber 1.4, marksman 1.2, armoured 1.7, brute 2.2,
+  colossus 4.
+- **An attack's reach is measured on the flat from the body's centre to the target's root**
+  (`Think`'s `distance`). A fodder clamped at its floor's edge stands its radius inside it, so it
+  can reach a root only `reach − radius` past the edge.
+- **Yaw convention** (`CrowdService.yawToward`): `math.atan2(-dx, -dz)`. Yaw 0 faces −Z (north);
+  yaw π/2 faces −X (west).
+- **The harness** loads pure modules with a Vector3 shim (`X Y Z + - * /`, unary minus,
+  `Magnitude`, `Unit`, `Dot`). It loads `CrowdService` and `CrowdBrain` with stubs. It cannot
+  load `WaveService`, `ArenaService`, `LevelService` or `Main`. The worktree has no
+  `tools/bin/luau.exe` (only `luau-compile.exe`).
+- **Top-level locals** (`py tools/check_compile.py --counts`): `CrowdRenderer` 151,
+  `FeedbackController` 159, `CombatFxController` 125. Every server file named in this contract is
+  under 100.
+- **Evade can reuse the "blocked" word.** `CrowdService.Damage` already answers
+  `(0, false, "blocked")` for a hit a plate turned. `StrikeTally` and the client draw it as the
+  grey word "BLOCKED", never a 0. Answering the same for a body that evades needs no change in
+  `WeaponService`, `StrikeTally` or `FeedbackController`.
+
+## Rulings (lead) for Wave 1
+
+Numbered L1b-1 onward. "Study n" names the study's decision n, which the lead took as written.
+L1's rulings stand where this list does not replace them. A ruling marked **[draft]** is this
+draft's answer where the rulings left a choice; the lead confirms or changes it before the wave
+starts.
+
+- **L1b-1. Floors per camp, set once per run** (study 1). The crowd keeps a list of floors, one
+  per layout camp in layout order: the floor index of a camp is its position in
+  `layout.camps`. The list is set at the start of a level, with no body alive, and never moves
+  while the run lives. Every body has a floor index for its whole life; a summon takes its
+  summoner's. A body is clamped to its own floor's rectangle, stands on its own floor's height,
+  and every ground shape it makes lies on its own floor (`strike.floorY`). The range keeps one
+  floor (`SetBounds`), byte for byte as today.
+- **L1b-2. The wire origin stays the world origin** (study 2). Unchanged from L1 ruling 12.
+- **L1b-3. Groups.** A resident belongs to exactly one **group**: a set of bodies of one camp
+  with one posture and one state. Postures: `guard` (stands at its post facing a heading),
+  `patrol` (walks a closed loop), `fire` (sits round a point). States: `rest`, `rise`, `fight`,
+  `home`. A group's whole membership changes state together, which is what "a raider of their
+  group wakes" means. Groups wake separately: no group wakes another in Wave 1 (Wave 2's tent
+  wakes with its camp).
+- **L1b-4. Waking** (Ben §16.2, study 12). A group at `rest` goes to `rise` when either:
+  - **sight:** a living member sees a target: on the flat within its posture's `sight` radius of
+    that member, with the target's root between `camps.sightBelow` under and `camps.sightAbove`
+    over the camp's floor, and for a guard inside its post's cone (`cone` degrees, the whole angle;
+    360 = all round); or
+  - **a hit:** a member was struck since the last step, by anybody (see L1b-7 for whether the
+    hit hurts).
+  Sight is distance only, with no ray: **raiders see through the palisade and through cover**,
+  and Ben is told so with the Wave 1 stop.
+- **L1b-5. Rising.** A group stays in `rise` for its posture's `rise` seconds (guard and patrol
+  0, fire about 1.5), then goes to `fight`. A `rise` of 0 still lasts one crowd step. Rising
+  bodies do not move or attack and show the wire state `rise`.
+- **L1b-6. In play and the chase.** A target is **in play** for a group while its root is inside
+  the camp's floor rectangle grown by `camps.chaseMargin` on every side, in the same height band
+  as sight, or within the longest attack reach of a living member of the group whose brain is
+  `keepAway` (on the flat, from that member). A fighting member goes for the nearest target **in
+  play for its group**, never a target out of play. Its body never leaves its floor (L1b-1), so
+  a chaser stops at the edge, and a shooter at the edge keeps shooting a player still in its
+  reach (Ben's "slingers still shoot"). Bodies without a group (the boss room's waves, the boss,
+  summons, every range body) keep L1's rule: the nearest target on the server.
+- **L1b-7. Damage only from a player in play.** **[draft; beyond the study]** A resident takes
+  damage only from a player who was in play for its group at the last step, or from no player
+  at all (`byUserId == 0`, the Studio levers). Any other hit answers `(0, false, "blocked")`, and
+  still wakes a resting group. *Why:* the study's evade alone leaves a farm. A fodder at the edge
+  reaches a root only `reach − radius` past the edge (about 3.2 studs), and a sword reaches 12.8.
+  A player standing 4 to 12 studs outside the fence would hit the clamped chasers for the whole
+  `leashSeconds` of every wake, walk in to wake them again, and step out. With this rule and
+  `camps.chaseMargin` at most `reach − radius` of every resting rusher kind (a `check_levels.py`
+  gate), every player who can hurt a resident can be hurt back by it, or stands in a shooter's
+  reach.
+- **L1b-8. The leash, going home, evading and the heal** (Ben §16.1, study 3). A group in
+  `fight` with no target in play for `camps.leashSeconds` (and no member between a windup's
+  start and its attack's end) goes `home`. At `home`:
+  - each member walks to its own post at `camps.homePace` × its kind's speed and does not attack;
+  - **it evades:** it takes no damage (every hit answers `"blocked"`), is not knocked or
+    staggered, and ignores sight and hits;
+  - a member within `camps.homeTolerance` of its post is **healed**: HP to `maxHp`, its plate to
+    `plateMax` (a broken plate is whole again), its damage book (`damageBy`) emptied, its stagger
+    ended;
+  - once every living member is at its post, the group is at `rest` again, and can wake again.
+  The heal of the plate and the emptied damage book are **[draft]**: "survivors heal" read as
+  "the fight is reset".
+- **L1b-9. No refills** (Ben §16.5). A group never respawns a member. The dead stay dead.
+- **L1b-10. Residents and difficulty** (study 4). Residents are placed once, at the start of the
+  run, all of them alive at once. `countMult` does **not** scale residents; a resident unit may
+  carry `minDifficulty`, so Hard and Brutal add units and groups. **[draft]** Residents do not
+  scale with party size in Wave 1 (`perExtra` is not read for them; parties in a level are
+  L5's), so the population gate below holds for any party.
+- **L1b-11. The population gate.** For every difficulty: all residents + the largest
+  `max(stage.maxAlive − that camp's residents, 0)` over the locking camps + `levels.populationReserve`
+  ≤ `ProvingGrounds.json crowd.maxAlive` (160). The reserve (21: the boss, 12 summons, 8 for
+  Wave 2's tents) covers what the crowd raises by itself. `StageFlow.Validate` and
+  `check_levels.py` both refuse a level that breaks it. The Plan's `population` is the left side
+  at the played difficulty; the client prewarms its pool with it.
+- **L1b-12. Only a locking camp has a stage** (study 7, §5.4). A layout camp with `locks = true`
+  is the boss room: gates, the invisible wall, a `camp` stage of its own, the trigger, the
+  countdown, the close, the grace, the re-arm, its waves, breathers and boss, all exactly as in L1
+  (rulings 9, 10, 13, 14, 16, R1, R2, R9, R10). Every other camp is **open**: its fence is built
+  cut at its gates (the road runs through), and it has no gate Parts, no wall and no stage. A
+  level's stages are `travel` and `camp` in turn; each `camp` stage names a locking camp; every
+  locking camp is named by exactly one stage; the last stage is a camp. Forest Road's stages
+  become "Follow the road", then "The Chief's Clearing" (camp C). The Raider Arena's one camp
+  locks (the adapter says so).
+- **L1b-13. The boss room's residents are held** (study 7). A group of a locking camp starts
+  **held**: it is at `rest`, does not wake by sight or by a hit, and evades (as at `home`), so it
+  can be seen through the gate and cannot be farmed from outside. The close releases every held
+  group of that camp to `rise`. The first wave is queued at the same close, as in L1.
+- **L1b-14. The three boss-room blockers, fixed per floor** (study §5.1–3).
+  - The `gate` action sets nothing on the crowd: it does not clear the crowd, the threats or the
+    floor (the floors were set at the start).
+  - The locking camp's clear counts only bodies on its own floor (`CrowdService.AliveOn`).
+  - A burst is held only while the locking camp's own floor holds `stage.maxAlive` living bodies
+    or more, its residents included.
+- **L1b-15. Every kill pays at once** (Ben §16.4, study 14). This replaces L1 ruling 15.
+  - A kill is credited the moment it falls, in every live phase (`travel`, `gate`, `wave`,
+    `boss`, `breather`), through one pure split: the kill's own `damageBy`, kept to the humans in
+    the session, gets `Combat.ContributionShares` with `coop.contributionFloor`. A body nobody
+    damaged (a Studio lever) splits evenly among the fighting humans.
+  - The pool is one kill's reward: its kind's `cash` and `materials` × the difficulty's
+    `rewardMult`, plus the boss's Valor on the boss.
+  - **`Combat.SplitCarry`** pays each member whole units and keeps the fraction (cash after that
+    member's `CombatCashMult`, materials, Valor) in a carry for the run, added to their next
+    credit. The carry is under 1 of each and is dropped at the run's end. A solo player gets
+    exactly what L1's bank paid for the same kills.
+  - The Mentor bonus is paid at the boss's kill, from the boss's damage book. The boss's Valor
+    is part of its kill, so a lost run never pays it.
+  - Nothing is pooled, so nothing is dropped: no `bank` action, no `dropPool`, and `EndRun` pays
+    and drops nothing.
+  - The Raider Arena runs under the same rule (study 6). Its numbers are frozen; a failed arena
+    run now keeps every kill. BALANCE says so.
+- **L1b-16. The wallet send** (study 15). A credit marks the member's wallet dirty. The tick
+  sends `ArenaService.SendSnapshot` to a dirty member at most once every
+  `levels.walletSendSeconds` (1 s), and to every dirty member at once when the run ends.
+- **L1b-17. A camp's clear** (study 5). An open camp is **cleared** when it had residents and none
+  of them lives. A locking camp is cleared when its last wave clears (as in L1). A clear:
+  - pushes the banner "\<name\> cleared" (CombatFx `camp`, event `cleared`);
+  - marks the camp's checkpoint `checkpointDone`;
+  - adds one to `campsCleared`, and one to `stats.wavesCleared`;
+  - pays `crowd.clearBonus` × `rewardMult` split evenly among the fighting humans, through
+    `SplitCarry`. **The bonus is 0 by default** (Ben's "disregarding clearing status"; he was asked
+    to confirm), so his answer is a config change.
+  A clear of the locking camp's waves still adds each wave to `stats.wavesCleared` and to
+  `ArenaService.MarkWaveCleared`, and writes the arena's mission record, as L1's bank did.
+- **L1b-18. Checkpoints** (study 5). A camp's checkpoint is **reached** when a standing fighter's
+  root comes within `levels.checkpointReach` (flat) of it, in the trigger's height band. The
+  first time: the marker turns `checkpointDone` and every member sees the toast "Checkpoint".
+  The **safe point** in `travel` and `armed` is the checkpoint of the furthest camp (highest floor
+  index) that has been reached and whose floor has no group in `rise` or `fight`; else the next
+  one down; else the level's start. In the locking camp's `gate`, `fight` and `breather` it is
+  that camp's entry, as in L1. A checkpoint lies outside its camp's floor and out of sight of
+  every resting member (a `check_levels.py` gate), so a body put there wakes nobody.
+- **L1b-19. A clear field** (study 13). The fallen do not lose a run whose field is clear. In the
+  locking camp's `fight` and `breather` the field is clear when nothing is queued, no boss is to
+  be placed and nothing lives on its floor. Everywhere else (`travel`, `armed`, `gate`) it is
+  clear when nothing is queued and no group anywhere is in `rise`, `fight` or `home`. So a solo
+  down in a resident fight ends the run (Ben's rule); a reset on a quiet road costs a respawn.
+- **L1b-20. The rescue beside a fight** (study 10). The rescue moves a body as in L1. While the
+  player is **engaged** (in play for a group in `rise` or `fight` at the last step), it grants
+  **no** get-up i-frames. The safe point (L1b-18) is never in a camp with a group in `rise` or
+  `fight`. The group then leashes and goes home behind them.
+- **L1b-21. The wake cue** (study 11). Every group that goes from `rest` to `rise` (a release
+  included) pushes CombatFx `camp` with event `alert`, the camp's name and the ids of its living
+  members; every member's client marks those bodies with a "!".
+- **L1b-22. Studio skips** (L1 ruling 33). **N** on the road moves the party to the next locking
+  camp's entry and starts its countdown; the open camps behind are not cleared and their
+  residents stay where they are. **N** in the locking camp's fight drops that camp and counts it
+  cleared, as in L1. **B** goes to the boss's wave. A `drop` removes **only the live locking
+  camp's floor** (its queue, its bodies and its residents), without a kill, so nothing skipped is
+  credited. **G** is unchanged.
+- **L1b-23. Not in Wave 1:** tents, dormancy, spawn infos with a position, the sneak path gate,
+  camp sizes, the 1,000-stud road, `[Perf]` in the boss room as a gate (Wave 2). Sight through
+  walls (L4 or later).
+- **L1b-24. Kept unchanged from L1:** the lobby camp and the map; `RequestStartLevel` and its
+  checks; the difficulties and their scales; the boss room's trigger, countdown, close, grace,
+  re-arm, wall and rescue box; the waves, breathers, merges and the Colossus; the summary and the
+  return to the lobby with everyone healed; Abandon (Backspace twice); the star rule; the
+  session's stars; the Studio keys N, B and G; the hard rules (nothing in a Heartbeat path
+  yields; the server owns all state; the client sends intents, never amounts; every remote is
+  validated and rate-limited; every constant in Config JSON; `Economy.luau` untouched; no sound;
+  no attack button).
+
+## Flow (what changes in L1's "Flow")
+
+### Start (`WaveService` `startLevel`, after `LevelService.Build` succeeds)
+
+In this order, in the remote's thread, with no yield:
+1. `clearField()` (as today: `CrowdService.Clear()` also forgets every group).
+2. `CrowdService.SetFloors(floors)`: one floor per `plan.zones`, in floor-index order, centre
+   `(rect.x, floorY, rect.z)`, half `(rect.hx, levels.crowdCeiling, rect.hz)`. A refusal warns
+   and the start answers `unavailable` (the level is cleared).
+3. `CrowdService.SetCampRules(combat.camps)`.
+4. `CrowdService.SetScales` and `VitalsService.SetMission`, as today (before any spawn, so the
+   residents take the difficulty's HP and plate).
+5. For each `plan.groups[g]`, in order: `CrowdService.AddGroup(def)` (it must answer `g`), then
+   `CampBrain.Posts(def, total)`, then one `CrowdService.SpawnResident(kind, g, post)` per
+   member, kinds in the order of `def.units`. A refused spawn warns once per run and is not
+   retried (the population gate makes it a bug).
+6. The members are placed at the start, `RunState` goes out with `floors`, as today.
+
+### A run (`WaveService.tick`)
+
+L1's tick order stands, with these changes:
+- **Group events.** Before `advance`, `CrowdService.DrainGroupEvents`: a `rest → rise` event
+  pushes the `alert` CombatFx (L1b-21).
+- **`advance`'s input** gains `alive` (living bodies on the live locking camp's floor; 0 outside
+  one), `awake` (`CrowdService.Awake()`) and `aliveByFloor` (`CrowdService.AliveOn(i)` for each
+  zone), and loses `fieldClear` (StageFlow decides it, L1b-19).
+- **Wallet.** After `execute`, dirty wallets are sent by L1b-16.
+- **The rescue** passes `CrowdService.Busy()` to `StageFlow.SafePoint` and grants
+  `StageFlow.RescueGrace(CrowdService.Engaged(userId), getUpIframes)` seconds of i-frames.
+- **The placer** (a respawn) uses the same `SafePoint`.
+
+### What WaveService does for each action (replacing L1's rows where named)
+
+| Action | WaveService |
+|---|---|
+| `gate` | Nothing on the crowd (L1b-14). `run.maxAlive` is not changed (it is the plan's population). |
+| `close` | As L1, then `CrowdService.WakeFloor(zone.floor)`. |
+| `wave` | As L1; bursts and the boss spawn with `floor = zone.floor`. |
+| `clear` | As L1 (threats cleared), then `ArenaService.MarkWaveCleared(action.wave, action.count)`, `stats.wavesCleared += action.count` for every fighting human, and the arena's mission record (`bestWave`). |
+| `boundary`, `breather`, `travel`, `rearm`, `move`, `end` | As L1. |
+| `open` | As L1 (the locking camp's gates open, the banner), plus the clear of L1b-17. |
+| `campClear` (new) | An open camp's clear (L1b-17): `LevelService.SetCamp(zone.id, "cleared")`, the banner, the bonus. |
+| `reach` (new) | `LevelService.SetCamp(zone.id, "reached")`; CombatFx `camp` event `checkpoint`. |
+| `drop` | `run.queue = {}`, `run.bossPending = nil`, `CrowdService.ClearFloor(zone.floor)`, `VitalsService.ClearThreats()`. Nothing is credited. |
+| `bank` | Gone. |
+
+## Server modules
+
+Two luau-engineer instances, **A (the crowd)** and **B (the run)**, with the disjoint files of
+"Ownership". They meet at the `CampBrain`, `CrowdService` and `Types` APIs below. **A lands the
+whole Types block of this section in `src/shared/Types.luau` as its first edit, before anyone
+else builds**, and says so to the lead. B codes against A's APIs before A lands them. An owner
+who needs a change in a file it does not own does not make it: it lists the change under "for
+the other owner" in its report, and the lead routes it.
+
+### A — the crowd
+
+**`src/combat/server/Services/CampBrain.luau` (new, pure).** Tables, numbers and Vector3 within
+the harness shim (`X Y Z + - * /`, unary minus, `Magnitude`, `Unit`, `Dot`); no service, no
+Instance, no clock of its own (every time is an argument), no yield. `Types` is required for
+annotations only. It mutates only the `Group` and `Resident` tables it is handed.
+
+```luau
+export type Post = {
+	at: Vector3,       -- feet, on the group's floor (y = def.floorY)
+	yaw: number,       -- facing at rest, radians, CrowdService.yawToward's convention (0 faces -Z)
+	leg: number,       -- patrol: the loop point (1-based) it walks to next; 0 for guard and fire
+}
+export type Resident = { group: number, post: Post, leg: number }   -- kept on the crowd body; leg starts at post.leg
+export type Seen = { userId: number, root: Vector3 }               -- a target this step: alive, not down
+export type Shooter = { at: Vector3, reach: number }               -- a living keepAway member: feet, its longest attack reach
+export type Member = { at: Vector3, post: Post }                   -- a living member: feet, its post
+export type StepInput = {
+	now: number,
+	members: { Member },
+	targets: { Seen },
+	shooters: { Shooter },
+	striking: boolean,  -- a member is between a windup's start and its attack's end, a charge included
+}
+export type Group = {
+	def: Types.CampGroupDef,
+	state: Types.CampGroupState,
+	held: boolean,
+	since: number,                    -- the clock the state began
+	quietSince: number,               -- fight: no target has been in play since this clock
+	hit: boolean,                     -- a member was struck since the last Step (Struck sets it)
+	inPlay: { [number]: boolean },    -- the userIds in play at the last Step
+}
+
+CampBrain.Problems(rules: Types.CampRulesConfig?): { string }
+	-- one line per missing, non-number, non-finite or negative key of Combat.json `camps`;
+	-- a `sight` of 0 or less; a `cone` outside (0, 360]; `homeTolerance` of 0 or less. nil = one line.
+CampBrain.NewGroup(def: Types.CampGroupDef, now: number): Group
+	-- state "rest", held = def.held, since = quietSince = now, hit = false, inPlay = {}
+CampBrain.Posts(def: Types.CampGroupDef, count: number): { Post }
+CampBrain.Sees(def: Types.CampGroupDef, member: Member, target: Seen, rules: Types.CampRulesConfig): boolean
+CampBrain.InPlay(def: Types.CampGroupDef, target: Seen, shooters: { Shooter }, rules: Types.CampRulesConfig): boolean
+CampBrain.Step(group: Group, input: StepInput, rules: Types.CampRulesConfig): Types.CampGroupState?
+	-- the new state (already written into group), or nil when it did not change
+CampBrain.Release(group: Group, now: number): ()        -- the close: a held group goes to rise; no-op otherwise
+CampBrain.Struck(group: Group, byUserId: number): boolean   -- records a hit; true = the damage lands
+CampBrain.Evades(group: Group): boolean                 -- held, or home
+CampBrain.Goal(group: Group, resident: Resident, at: Vector3, rules: Types.CampRulesConfig): (Vector3?, number)
+	-- where a member that is not fighting walks, and its pace (x its kind's speed); nil = it stands
+CampBrain.AtPost(post: Post, at: Vector3, rules: Types.CampRulesConfig): boolean
+CampBrain.Shows(group: Group, moving: boolean): Types.CrowdState?
+	-- the wire state of a member that is not fighting; nil = the brain's (fight)
+```
+
+The rules, exactly (each one has a harness case and a mutation):
+- **`Posts`.** Every post is at `y = def.floorY`.
+  - `guard`: member k stands on `def.points[k]` (Validate guarantees `count <= #points`), every
+    yaw `def.yaw`, leg 0.
+  - `patrol`: the loop is closed (`points[#points]` back to `points[1]`), of length L. Member k
+    stands at arc length `L × (k − 1) / count` from `points[1]`, walking the points in order. Its
+    leg is the index of the point at the end of the leg it stands on (a point exactly on a vertex
+    takes the next one). Its yaw faces that point.
+  - `fire`: member k sits at bearing `θ = 2π × (k − 1) / count` on the circle of `def.radius`
+    round `def.points[1]`: at `centre + (−sin θ, 0, −cos θ) × radius` (the first is north of the
+    centre). Its yaw faces the centre (`θ + π`, wrapped into (−π, π]). Leg 0.
+- **`Sees`.** True when all of these hold:
+  - the target's root is between `rules.sightBelow` under and `rules.sightAbove` over
+    `def.floorY`, both edges included;
+  - the flat distance from `member.at` to the root is at most `rules[def.posture].sight`;
+  - the posture's `cone` is 360, or the distance is under 0.001, or the flat angle between the
+    post's facing `(−sin yaw, 0, −cos yaw)` and the direction to the root is at most `cone / 2`
+    degrees (edge included).
+  Sight is distance only, with no ray and no occlusion.
+- **`InPlay`.** True when the root is in the height band of `Sees` and either inside
+  `def.rect` grown by `rules.chaseMargin` on every side (edges included), or within `reach`
+  (flat) of any of `shooters`.
+- **`Step`.** At most one transition per call, in this order:
+  1. No member: return nil, nothing changes (an empty group never changes state).
+  2. `group.inPlay` is rebuilt from `InPlay` for every target, whatever the state.
+  3. Held: `hit` is cleared, return nil.
+  4. `rest`: if `hit`, or any member `Sees` any target: state `rise`, `since = now`.
+  5. `rise`: if `now − since >= rules[posture].rise − 1e-6`: state `fight`,
+     `since = quietSince = now`. A rise of 0 lasts exactly one step.
+  6. `fight`: if any target is in play, `quietSince = now`. Else, if
+     `now − quietSince >= rules.leashSeconds − 1e-6` and not `striking`: state `home`,
+     `since = now`.
+  7. `home`: if every member is `AtPost`: state `rest`, `since = now`. Hits and sight are
+     ignored.
+  `hit` is cleared at the end of every call.
+- **`Release`.** If held: `held = false`, state `rise`, `since = now`.
+- **`Struck`.** If `Evades`: return false and set nothing. Else `hit = true`; return true when
+  `byUserId == 0` or `inPlay[byUserId] == true` (ruling L1b-7).
+- **`Goal`.**
+  - `rise`, `fight`: nil, 0.
+  - `rest` or held: guard and fire → `post.at` at `rules.homePace` (a shoved body drifts back).
+    Patrol → the loop point `resident.leg` at `rules.patrolPace`; once the body is within
+    `rules.homeTolerance` of it, `resident.leg` steps to the next point (wrapping) and that point
+    is the goal.
+  - `home`: `post.at` at `rules.homePace`. Once at its post, `resident.leg = post.leg`.
+  The executor walks to the goal with stop distance `rules.homeTolerance`.
+- **`AtPost`.** The flat distance from `post.at` is at most `rules.homeTolerance`.
+- **`Shows`.** `rise` → `"rise"`. `fight` → nil. `rest`, held or `home`: `"move"` when moving,
+  else fire → `"rest"`, guard and patrol and home → `"idle"`. "Moving" is the executor's: a flat
+  speed over `CrowdService`'s `MOVE_THRESHOLD` (0.2 studs/s) this step.
+
+**`src/shared/CrowdCodec.luau`.** `STATES` gains `"rest"` (index 8) and `"rise"` (index 9),
+appended. `FORMAT_VERSION` stays 2. Entries stay 11 bytes.
+
+**`src/combat/server/Services/CrowdService.luau`.** Floors, groups and the per-floor count. The
+range's calls (`SetBounds`, `Spawn` without a floor) behave byte for byte as today.
+
+```luau
+export type GroupEvent = {
+	group: number, floor: number,
+	from: Types.CampGroupState, to: Types.CampGroupState,
+	held: boolean,                      -- `from` was a held rest (the close released it)
+	ids: { number },                    -- the group's living members at the change
+}
+
+CrowdService.SetFloors(floors: { Types.CrowdFloor }): boolean
+	-- refused (false, one warn) while a body is alive, for an empty list or a non-finite value.
+	-- Forgets every group. Calls CrowdBrain.SetFloors.
+CrowdService.SetBounds(center: Vector3, halfSize: Vector3): boolean   -- = SetFloors({ { centre = center, half = halfSize } })
+CrowdService.SetCampRules(rules: Types.CampRulesConfig?): ()          -- nil (the range, the lobby) = no group changes state
+CrowdService.AddGroup(def: Types.CampGroupDef): number               -- 1..n in call order; 0 = refused (floor index unknown, a non-finite point)
+CrowdService.SpawnResident(kind: string, group: number, post: CampBrain.Post): number
+	-- behaviour fight, floor = the group's, anchor = post.at, yaw = post.yaw, leg = post.leg;
+	-- 0 for an unknown group, else exactly Spawn's refusals
+CrowdService.Spawn(kind, position, behaviour, anchor: Vector3?, hpMult: number?, floor: number?): number
+	-- floor nil = 1; an unknown floor index refuses (0, one warn per index)
+CrowdService.WakeFloor(floor: number): ()           -- every held group of that floor is released at the next step
+CrowdService.ClearFloor(floor: number): ()          -- removes that floor's bodies as Clear does (no kill), and their impacts
+CrowdService.Clear(): ()                            -- as today, and forgets every group
+CrowdService.AliveOn(floor: number): number         -- living bodies on that floor
+CrowdService.Awake(): number                        -- groups in rise, fight or home with a living member
+CrowdService.Busy(): { [number]: boolean }          -- floors with a group in rise or fight (a new table)
+CrowdService.Engaged(userId: number): boolean       -- in play for a group in rise or fight, at the last step
+CrowdService.DrainGroupEvents(handler: (event: GroupEvent) -> ()): ()   -- every change since the last drain, in order
+```
+
+What the executor does (harness-loaded, so each point has a case):
+- **The record.** `Enemy` gains `floor: number` and `resident: CampBrain.Resident?`. A summon
+  takes its summoner's floor and no group. `spawnInfo` carries `floor` always.
+- **Per floor:** `clampToBounds`, `integrate` (grounding, gravity, the charge's carried Y), the
+  `Spawn` lift and `summon` read `floors[enemy.floor]`. `gatherTargets` hands the brain a
+  per-target `lift = HipHeight + root.Size.Y / 2`, not a stand height.
+- **The camp step**, once per step, after `gatherTargets` and before `Commit`, for each group in
+  index order:
+  - a pending `WakeFloor` releases it (`CampBrain.Release`);
+  - its input is built from scratch tables (members, the brain's targets, its keepAway members
+    with their longest attack reach, `striking` from `CrowdBrain.IsStriking` or a charge);
+  - `CampBrain.Step`; a change queues a `GroupEvent`;
+  - the engaged set is the union of `inPlay` over groups in `rise` or `fight`.
+- **A resident in `fight`** runs `CrowdBrain.Think` with `allowed = group.inPlay` and is
+  committed as today. **A resident in any other state** does not think and is not committed: it
+  walks to `CampBrain.Goal` (seek at goal pace × kind speed, stop at `homeTolerance`), its state
+  is `CampBrain.Shows`, and when it stands still at rest it faces its post's yaw.
+- **The heal:** a resident whose group is `home` and that is `AtPost` gets `hp = maxHp`,
+  `plate = plateMax`, `damageBy = {}` and `staggerUntil = 0`.
+- **`Damage` on a resident** asks `CampBrain.Struck` first, after the "gone" and "dead" checks. A
+  false answer returns `(0, false, "blocked")` with no damage, knock, stagger or damage book. A
+  true one goes on as today.
+- **`AliveOn`** is a count per floor kept with `aliveCount` (raised in `Spawn`, lowered where
+  `aliveCount` is), never a scan.
+- **No yield, no raycast** in the camp step (C1's and L1 ruling 35's rule). A `Damage` from
+  outside the step only sets `hit`.
+
+**`src/combat/server/Services/CrowdBrain.luau`.** Per-body floor and in-play targets.
+
+```luau
+CrowdBrain.SetFloors(floors: { Types.CrowdFloor }): ()      -- replaces SetArena (removed)
+CrowdBrain.BeginStep(now: number, gravity: number, shotsAlive: number, fastest: number): ()   -- loses floorY
+CrowdBrain.AddTarget(userId: number, position: Vector3, lift: number, lag: number): ()       -- lift replaces standY
+CrowdBrain.Think(body: Body, mind: Mind, def, crowd, free: boolean, allowed: { [number]: boolean }?): (Vector3?, number)
+	-- allowed nil = every target (as today); else only targets whose userId is in it
+-- Body gains:  floor: number
+```
+
+- `land` writes `strike.floorY` = the top of `floors[body.floor]`: the attacker's camp floor,
+  never its feet (P4's rule stands).
+- `inArena` and `runway` take the body's floor rectangle.
+- `ahead` leads a falling target down to `floors[body.floor].centre.Y + target.lift` where it used
+  `standY`.
+- Nothing else in the brain changes: turn-taking, the shot cap, the bosses, the commit rule.
+
+**`tools/crowd_harness/tests_l1b_crowd.luau` (new, A's).** B registers it in `run_harness.py`.
+At least:
+- **`CampBrain.Posts`:** guard posts and yaw; a patrol of 3 on a square loop of 4 points (arc
+  spacing, legs, a point on a vertex); a fire of 6 (bearings, radius, yaw to the centre); every
+  post at `floorY`.
+- **`Sees`:** each edge of the distance and of the height band, inside and outside; a guard's
+  cone at `cone / 2` exactly and just past it; a 360 cone behind the body; a target at distance 0.
+- **`InPlay`:** the grown rectangle's edges on X and Z; a root over the band; a shooter's reach
+  exactly and just past it.
+- **`Step`:** every wake cause (sight, a hit, a release); a held group ignores both; rise for 0
+  s and for 1.5 s; one transition per call; the leash at `leashSeconds` exactly, held while
+  `striking`, reset by a target coming back into play; home ignores hits and sight; home to rest
+  only once every member is at its post; an empty group never changes.
+- **`Struck`:** in play, out of play (blocked and wakes), held, home, `byUserId == 0`.
+- **`Goal`** (a patrol's leg steps and wraps; home restores `post.leg`), **`AtPost`**,
+  **`Shows`**, **`Problems`** (each missing key, a cone of 0 and of 361).
+- **`CrowdService` with two floors** (A at y 8 centred (−36, −36), B at y 12 centred (88, −36)):
+  - a body stands on its own floor and is clamped to its own rectangle;
+  - a summon takes its summoner's floor;
+  - a strike's `floorY` is the attacker's floor;
+  - `AliveOn` per floor; `ClearFloor` leaves the other floor alone;
+  - `SetFloors` is refused with a body alive; `SetBounds` is one floor at index 1;
+  - a P4 range set's snapshot bytes over 30 steps equal the bytes before this wave (a recorded
+    fixture);
+  - the codec round-trips `rest` and `rise`.
+- **`CrowdService` with groups:**
+  - a resting fire group with a target beyond `sight` stays seated (`rest` on the wire) and never
+    winds up;
+  - the same target walking in wakes it (`rise` for 1.5 s, then `fight`); one `GroupEvent`;
+  - a fighting member goes for the nearer target in play, not a nearer one out of play;
+  - a hit from a player out of play answers `blocked` and wakes the group;
+  - after `leashSeconds` with nobody in play the group goes home, evades (`blocked`, no knock),
+    walks to its posts and is healed (HP, plate, `damageBy`);
+  - `WakeFloor` releases only held groups of that floor; `Engaged`, `Awake` and `Busy` follow the
+    states.
+
+**Mutations (A hands them to B for `mutate.py`), at least:** sight ignores the height band; the
+cone is ignored; the cone uses the full angle; in play ignores `chaseMargin`; in play ignores the
+shooters' reach; rise skips its seconds; two transitions in one call; the leash fires while
+striking; the leash is not reset by a target back in play; home takes damage; home wakes on a
+hit; a hit from out of play lands; a held group wakes on sight; `Release` frees a group that was
+not held; the heal leaves the plate broken; the heal keeps the damage book; a summon on floor 1;
+a strike's `floorY` from floor 1; the clamp on floor 1; `AliveOn` counts every floor;
+`ClearFloor` clears every floor; `Think` ignores `allowed`; `SetFloors` accepted with a body
+alive; the codec's new states swapped; patrol posts not spaced by arc length.
+
+### B — the run
+
+**`src/combat/server/Services/StageFlow.luau`** (pure, as in L1). What changes:
+
+```luau
+-- Zone gains (a zone now exists for EVERY layout camp, in layout order):
+	floor: number,             -- its index in plan.zones = its index in the crowd's floor list
+	locks: boolean,            -- the layout camp's `locks` (nil = false)
+	name: string,              -- the level's LevelCampConfig.name; else the locking stage's name; else the id
+	checkpoint: Vector3?,      -- the layout's checkpoint, feet at the camp's floorY
+	residents: number,         -- bodies placed at the start, at the played difficulty
+-- trigger, inner, entry, exit and spawns are as in L1; only a locking zone's are read.
+
+-- Plan gains:
+	zones: { Zone },
+	groups: { Types.CampGroupDef },   -- every resident group, in file order (camps, then their groups)
+	population: number,               -- L1b-11's left side at the played difficulty
+-- Plan.camps is #zones. Stage.zone names only locking zones. Stage loses bankEachWave.
+
+-- State gains:
+	reached: { [number]: boolean },   -- zone index -> its checkpoint has been reached
+	done: { [number]: boolean },      -- zone index -> that camp is cleared
+-- State.settled now means "the last wave of the live camp counted by a clear or a skip".
+-- State.cleared counts open camps too.
+
+-- Input loses:  fieldClear
+-- Input gains:
+	alive: number,              -- living bodies on the live locking camp's floor; 0 outside one
+	awake: number,              -- CrowdService.Awake()
+	aliveByFloor: { number },   -- CrowdService.AliveOn(i) for every zone i
+
+-- Action.kind loses "bank" and gains "reach" and "campClear".
+-- Action gains:  zone: number?    -- reach, campClear: the zone index
+-- `clear` carries count = the waves it covers (wave - settled).
+
+StageFlow.Resolve(file, mission, runCapSeconds, firstDifficulty?): Types.LevelConfig?
+	-- LevelConfig.camps = file.camps or {}. The arena adapter: camps = {}, its stage merges, no bankEachWave.
+StageFlow.Validate(level, layout, kinds, ranks, rules, crowdMax: number): { string }
+	-- crowdMax = ProvingGrounds.json crowd.maxAlive
+StageFlow.Plan(level, layout, difficulty, rules, bounds): (Plan?, string?)
+StageFlow.FieldClear(plan: Plan, state: State, input: Input): boolean        -- L1b-19
+StageFlow.Advance(plan, state, input, rules): { Action }
+StageFlow.SafePoint(plan: Plan, state: State, busy: { [number]: boolean }?): Vector3   -- L1b-18
+StageFlow.RescueGrace(engaged: boolean, iframes: number): number             -- L1b-20: 0 when engaged
+-- Skip, Force, Finish, Phase, Directs, StillClosing, MustEnter, Strayed, OutOfBox, IsOut, Rescue,
+-- StartPoint, BurstPoint, BossPoint, NodeState, MapState, Award, EarnsStar: signatures unchanged.
+```
+
+- **`Validate`** keeps every L1 refusal (a barrier is required only of a locking camp, which is
+  the only kind a stage names) and adds one line for each of:
+  - a `camp` stage naming a camp whose `locks` is not true; a locking camp no stage names, or
+    one named twice;
+  - a `camps` entry naming a camp the layout lacks; two entries for one camp; a missing or empty
+    `name`;
+  - a resident group naming a spot its camp lacks; a group with no units; a unit with no kind, a
+    kind `ProvingGrounds.json` lacks or `rewards` does not price, a count that is not a whole
+    number of at least 1, a `minDifficulty` that is no difficulty;
+  - a spot with no `id` or one used twice in its camp; a `posture` that is not `guard`, `patrol`
+    or `fire`; no points; a guard spot holding more members (at the highest difficulty) than it
+    has points, or with no `facing`; a patrol of fewer than 2 points; a fire of other than 1
+    point, or with a `radius` of 0 or less;
+  - a post not inside its floor less the largest radius of its group's kinds (StageFlow requires
+    `CampBrain` and asks `CampBrain.Posts`, so the rule exists once; `Validate` builds the
+    group's def as `Plan` does, at the highest difficulty);
+  - a locking camp whose residents, at any difficulty, are not fewer than its stage's `maxAlive`;
+  - L1b-11's population gate broken at any difficulty (the line names the difficulty and both
+    numbers);
+  - `levels.checkpointReach` or `levels.walletSendSeconds` missing or not above 0;
+    `levels.populationReserve` missing or negative; `crowd.clearBonus` present with a negative or
+    missing `cash` or `materials`.
+- **`Plan`** builds a `Zone` for every layout camp (floor index = its place in `layout.camps`), and
+  one `CampGroupDef` per resident group: `id = "<camp>.<spot>"`, `held = zone.locks`, `yaw =
+  math.rad(spot.facing or 0)`, `radius = spot.radius or 0`, points at the floor's height, units
+  filtered by `minDifficulty` against the played rank. **`countMult` is not applied** (L1b-10). A
+  group whose units all drop is left out. `zone.residents` is the sum of its groups' units.
+- **`FieldClear`** (L1b-19): in steps `fight` and `breather`, `input.spawningDone and input.alive
+  == 0`; in every other step, `input.spawningDone and input.awake == 0`.
+- **`Advance`**, in this order:
+  1. `over`: nothing. 2. The run cap. 3. `fallen` and not `FieldClear`: the end.
+  4. **Checkpoints:** for each zone in order with a checkpoint not yet reached, if a standing
+     root is within `rules.checkpointReach` of it on the flat and between `rules.triggerBelow`
+     under and `rules.triggerHeight` over its floor, it is reached and a `reach` action is
+     emitted.
+  5. **Open camps:** for each open zone in order with `residents > 0`, not `done`, and
+     `aliveByFloor[i] == 0`: `done[i] = true`, `cleared += 1`, a `campClear` action.
+  6. The step's rows as in L1, with `FieldClear` where L1 read `input.fieldClear`. The `bank` row
+     is gone; `clear` carries `count` and sets `settled = wave`. Clearing the locking camp's last
+     wave also sets `done[zone.floor]`.
+  Steps 4 and 5 run in every live step (`travel`, `armed`, `gate`, `fight`, `breather`), before
+  the rows, and emit each zone at most once per run.
+- **`SafePoint`**: in `gate`, `fight` and `breather`, the live camp's entry (as L1). Otherwise,
+  from the highest zone index down, the checkpoint of the first zone that is `reached`, has a
+  checkpoint and is not `busy`; else the exit of the last cleared locking camp; else the start.
+- **`Skip`** (L1b-22): unchanged in shape; only locking camps are stages, so N on the road goes to
+  the next locking camp and passes the open camps by. A `drop` is about the live locking camp only.
+
+**`src/shared/Combat.luau`** (pure; the economy-designer mirrors it in `tools/sim_combat.py`):
+
+```luau
+export type Carry = { [number]: RewardShare }    -- per userId: the fractions not paid yet, each under 1
+
+Combat.KillReward(rewards: { [string]: MissionCrowdReward }, kind: string, rewardMult: number): (number, number)
+	-- math.round(reward.cash * rewardMult), math.round(reward.materials * rewardMult); 0, 0 for an unpriced kind
+Combat.CampReward(rewards, kind, spec): (number, number)    -- = KillReward(rewards, kind, spec.rewardMult); same results as L1
+Combat.SplitCarry(pool: RewardPool, shares: { [number]: number }, carry: Carry, cashMults: { [number]: number }?): { [number]: RewardShare }
+```
+
+- **`SplitCarry`**, for each `userId, share` in `shares`:
+  - `exact.cash = pool.cash × share × (cashMults[userId] or 1) + carry.cash`;
+  - `exact.materials = pool.materials × share + carry.materials`;
+  - `exact.valor = pool.valor × share + carry.valor`;
+  - each is paid as `math.floor(exact + 1e-9)`, and `carry.x = math.max(exact − paid, 0)`;
+  - the member's carry entry is created when missing; a share that is not a finite number of at
+    least 0 pays nothing and leaves that carry as it was; a userId not in `shares` keeps its carry.
+- `SplitPool` goes if no caller is left (grep), with its Python mirror kept only if an old
+  assertion still reads it.
+
+**`src/combat/server/Services/LevelGeometry.luau`:**
+- `Pieces`: gates and the four barrier boxes only for a camp whose `locks` is true. An open camp's
+  fence is cut at its gates as today. One marker per fire spot: look `fire`, size
+  `Sizes.fire` (from `levels.fireMarkerSize`; nil = none), centred on the fire's point, its bottom
+  on the floor's top, `collide = false`.
+- `Sizes` gains `fire: Size?`. `FromArena` sets the arena camp's `locks = true`. `Bounds` is
+  unchanged.
+
+**`src/combat/server/Services/LevelService.luau`:** `SetCamp(zoneId, state)` takes `"open"`,
+`"closed"`, `"cleared"` and new `"reached"` (the checkpoint marker takes look `checkpointDone`,
+nothing else). On an open camp `open` and `closed` change nothing.
+
+**`src/combat/server/Services/WaveService.luau`** (an executor: read by review, not loadable):
+- **Start**, "Flow". `run.maxAlive = plan.population`. The camp rules come from
+  `combat.camps`; `CampBrain.Problems` non-empty, or a `Validate` line, answers `unavailable`
+  with one warn naming each problem.
+- **The run's fields** lose `pool`, `damageTally`, `bossClearsThisFlush`, `banked`, `savedAt` and
+  `floor`, and gain `carry: Combat.Carry`, `walletDirty: { [number]: boolean }` and
+  `walletSentAt: { [number]: number }`.
+- **`onCrowdKilled`** credits in every live phase (L1b-15). It builds the pool from
+  `Combat.KillReward` × the difficulty's `rewardMult`, plus `run.bossValor` when it is the boss;
+  the tally from `info.damageBy` kept to non-bot humans `ArenaService.GetMember` knows (empty: every
+  fighting human at 0). For the boss, `payMentors(combatConfig, tally)` first, then the
+  `bossDown` FX and the mission record's `bossClears`. Then `ContributionShares`, `SplitCarry`
+  with each member's `CombatCashMult`, and per member: `state.cash`, `combat.valor`, the level's
+  material, `stats.cashFromCombat`, `ArenaService.CreditSummary` (kills 1 for the killer, else 0),
+  and a dirty wallet. The killer's `stats.kills += 1`. It does not yield.
+- **The tick:** `DrainGroupEvents` (a `rest → rise` event pushes the `alert`, with the zone's
+  name); `advance` with the new input; `rescueFallen` with `RescueGrace`; dirty wallets by
+  L1b-16.
+- **`spawnBursts`** holds a burst while `CrowdService.AliveOn(zone.floor) >= stage.maxAlive`.
+  Bursts and the boss spawn with `floor = zone.floor`.
+- **`setCrowdFloor` is removed** (and with it the `WeaponService.SetArena` call).
+- **`EndRun`** drops nothing and pays nothing; it sends every dirty wallet at once; the carry goes
+  with the run.
+- `SpawnOne(kind)`: inside the live locking camp only, on its floor; elsewhere one notice "No
+  camp to spawn in". `KillAll` kills on every floor and each kill is credited (a Studio lever:
+  `byUserId` 0, an even split).
+
+**`src/combat/server/Services/ArenaService.luau`:** `RunState.floors` (from `plan.zones`, in
+order; `{}` in the lobby) replaces `floor`; `banked` and `RunResult.savedAt` go. `maxAlive` is
+the plan's population. Nothing else changes.
+
+**`src/combat/server/Services/DebugService.luau`:** only if a lever needs it; nothing is planned.
+
+**`tools/crowd_harness/`** (B's files): `run_harness.py` adds `CampBrain` to `SOURCES` and
+registers `tests_l1b_crowd.luau` (A's) and `tests_l1b.luau` (B's). `mutate.py` adds
+`CampBrain.luau` to `FILES`, holds A's mutations and B's, and replaces each L1 mutation that
+names a bank, the pool or the one floor with the L1b rule's own (never deleted silently: B's
+report lists each replaced mutation and its replacement). `tests_l1.luau` and
+`tests_l1_world.luau` are updated where the rulings changed a case (the bank cases, the
+three-camp walk-through becomes one road and one locking camp, the fuzz's "no gate with a body
+alive" becomes "no gate with a body queued", a camp without `locks` builds no barrier, the real
+files' Part count); B's report lists each changed case.
+
+**`tools/crowd_harness/tests_l1b.luau` (new, B's)**, at least:
+- **`Validate`:** every new refusal fires on a level broken for it and none on the shipped
+  files; the population gate at each difficulty with numbers worked by hand.
+- **`Plan`:** zones for every camp in layout order with their floor indices; groups filtered by
+  `minDifficulty` and never scaled by `countMult` (Hard's group count differs from Normal's only by
+  `minDifficulty` units); `held` only in the locking zone; `population` by hand.
+- **`FieldClear`:** in the locking camp, by `alive` and the queue; on the road, by `awake`.
+- **`Advance`:** a `reach` once per zone, only from a standing root, inside `checkpointReach` and
+  the band; `campClear` once per open zone, never for a zone with no residents, never for the
+  locking zone; the locking camp's clear carries `count`; no `bank`, ever; a solo `fallen` on the
+  road with a group awake ends the run, on a quiet road does not; only the locking camp triggers.
+- **`SafePoint`:** the furthest reached; a busy floor skipped; the start; the entry while the
+  locking camp counts down or fights.
+- **`RescueGrace`**, **`Skip`** (N on the road goes to the locking camp; a `drop` is the live
+  floor's only), **`Force`**.
+- **`Combat`:** `KillReward` against `CampReward` on every kind and difficulty; `SplitCarry` solo
+  equals the pool exactly; two members at shares 0.9 and 0.1 over ten 1-Timber kills pay 9 and 1
+  in all, never more than the pool, with every carry under 1; a cash multiplier of 1.5; a member
+  absent from the shares keeps their carry; a bad share pays nothing.
+- **`LevelGeometry`:** an open camp builds no gate and no barrier box; a fire marker per fire
+  spot; `FromArena` locks; the shipped Forest Road's Part count.
+
+**Mutations (B), at least:** a `bank` emitted; `campClear` twice; `campClear` for a zone with no
+residents; `campClear` for the locking zone; a `reach` from a downed root; `reach` ignores the
+band; `SafePoint` returns a busy floor's checkpoint; `SafePoint` ignores `reached`; `FieldClear`
+on the road ignores `awake`; `FieldClear` in the camp counts every floor; `RescueGrace` gives the
+i-frames while engaged; `SplitCarry` drops the carry; `SplitCarry` ignores the cash multiplier;
+`SplitCarry` pays a fraction rounded up; `countMult` applied to residents; `minDifficulty` ignored
+for residents; the population gate without the reserve; a locking camp's residents not held; an
+open camp builds a barrier; `FromArena` not locking; a stage naming an open camp passes
+`Validate`.
+
+## Client (ui-engineer)
+
+Every client file is an executor, read by review; `py tools/check_compile.py` is in every verify.
+`CrowdRenderer` is at 151 top-level locals: the floor list and the two poses go into its state
+tables or a new module beside it, never new top-level locals one by one.
+
+- **`CrowdRenderer`:**
+  - `CrowdRenderer.SetFloors(floors: { Types.RunFloor })` (new): the floor list, index = floor
+    index. `SetFloor(center, halfSize)` stays and means "one floor at index 1" (the range's
+    `SetArena` calls it, unchanged). `SetFloors({})` in the lobby.
+  - Each body's floor index comes from its spawn info (`floor`, nil = 1). The four readers that
+    used the one floor (the tell's height, the threat origin's height, the charge clamp and
+    `laneReach`) read the body's own floor. A body whose floor is not in the list yet (its spawn
+    info came before the RunState) uses its own feet height and no charge clamp until the list
+    arrives; nothing is dropped.
+  - **Two poses, procedural** (no animation ids): `rest` is seated, the body lowered by
+    `Theme.COMBAT_REST_DROP` (0.35) of the kind's height, legs forward, arms down; `rise` blends
+    from seated to standing over `Theme.COMBAT_RISE_BLEND_SECONDS` (0.5 s), then holds standing
+    while the state lasts. A seated raider must read as seated at 50 studs and more, on a PC and
+    at 667 × 375.
+  - `Prewarm(run.maxAlive)` as in L1 (`maxAlive` is now the plan's population).
+- **`CombatFxController`** (or a new `src/combat/client/Controllers/CampFx.luau` it calls; it is
+  at 125 locals), kind `camp`:
+  - `closed`: the camp's name as a banner (as L1);
+  - `cleared`: the banner "\<name\> cleared" (L1's, without `saved`);
+  - `alert` (new): a "!" over each body in `ids` for `Theme.COMBAT_ALERT_SECONDS` (1.5 s), drawn
+    at `Theme.COMBAT_ALERT_STUDS` (3) above its head and readable at 60 studs; a body no longer
+    drawn is skipped;
+  - `checkpoint` (new): the toast "Checkpoint" for `Theme.COMBAT_CHECKPOINT_NOTICE_SECONDS` (2 s).
+  - No sound.
+- **`CombatHud`:**
+  - "Progress saved" goes (and its `banked` watch).
+  - The objective line in `travel` and `armed` is the stage's name ("Follow the road"); in the
+    locking camp, as L1 (countdown, "\<camp\>: 14 left", the boss's name, the breather).
+  - The dim second line reads "Camps cleared 1 / 3" (`campsCleared` / `camps`), left out in a
+    level of one camp, as L1.
+  - Buttons and Abandon (Backspace twice) unchanged.
+- **`SummaryCard`:** "Saved at: …" and "Nothing was saved" go. "Camps cleared 2 / 3", or "Waves
+  cleared 7 / 10" in a level of one camp, as L1. The reward rows as today: they now hold every
+  kill of the run.
+- **`CombatUIController`:**
+  - `isRunState` checks `floors` (a table) in place of `floor`, `banked` and `savedAt`.
+  - `CrowdRenderer.SetFloors(run.floors)` and `Prewarm(run.maxAlive)` when the level changes;
+    `SetFloors({})` in the lobby. The L1 `applyFloor` goes.
+  - The wallet request on a bank (`run.banked > st.banked`) goes: the server sends the wallet by
+    itself, at most once a second (L1b-16). The request when the run ends stays.
+- **`src/client/UI/Theme.luau`** (add only): `COMBAT_REST_DROP` 0.35,
+  `COMBAT_RISE_BLEND_SECONDS` 0.5, `COMBAT_ALERT_SECONDS` 1.5, `COMBAT_ALERT_STUDS` 3,
+  `COMBAT_CHECKPOINT_NOTICE_SECONDS` 2, and the alert mark's sizes. `COMBAT_SAVED_NOTICE_*` lose
+  their reader; they are removed only if a grep finds no other one.
+- **Not changed:** `MapScreen`, `InputController`, `CameraController`, `MovementController`,
+  `VitalsController`, `FeedbackController` ("BLOCKED" already draws an evading body's hit),
+  `DebugPanel`, `combat.project.json`.
+
+## Types (applied verbatim by luau-engineer A in `src/shared/Types.luau`, as its first edit)
+
+No required field is added to a type that hub code constructs. `RunState` gains a required
+field; only `ArenaService` builds it.
+
+```luau
+-- L1b (docs/INTERFACES.md "L1b contracts — the living road", Wave 1)
+
+-- CrowdState, replacing the union. Wire order is CrowdCodec's STATES: "rest" and "rise" are appended.
+export type CrowdState =
+	"idle"
+	| "move"
+	| "windup"
+	| "stagger"
+	| "airborne"
+	| "dead"
+	| "attack"
+	| "recover"
+	| "rest"
+	| "rise"
+-- CrowdSpawnInfo, replacing the line. floor = the body's floor index in RunState.floors (nil = 1).
+export type CrowdSpawnInfo = { id: number, kind: string, maxHp: number, summonerId: number?, floor: number? }
+-- One floor of the crowd: centre = the floor's top centre; half.X and half.Z its half extents;
+-- half.Y the highest a launch may carry a body over it (levels.crowdCeiling).
+export type CrowdFloor = { centre: Vector3, half: Vector3 }
+
+-- Combat.json `camps` (CampBrain)
+export type CampPosture = "guard" | "patrol" | "fire"
+export type CampGroupState = "rest" | "rise" | "fight" | "home"
+export type CampPostureRules = {
+	sight: number, -- studs on the flat, from each member
+	cone: number, -- degrees, the whole angle about the post's facing; 360 = all round
+	rise: number, -- seconds from a wake to the fight
+}
+export type CampRulesConfig = {
+	guard: CampPostureRules,
+	patrol: CampPostureRules,
+	fire: CampPostureRules,
+	sightBelow: number, -- studs a root may be under the camp's floor and still be seen or in play
+	sightAbove: number, -- studs a root may be over it
+	chaseMargin: number, -- studs the in-play rectangle reaches past the floor's edge
+	leashSeconds: number,
+	homePace: number, -- x the kind's speed: walking home, and a resting body drifting back
+	patrolPace: number, -- x the kind's speed: a patrol at rest
+	homeTolerance: number, -- studs from its post that count as at its post
+}
+export type CampRect = { x: number, z: number, hx: number, hz: number }
+export type CampUnit = { kind: string, count: number }
+export type CampGroupDef = {
+	id: string, -- "<camp>.<spot>"
+	camp: string,
+	floor: number, -- index into the run's floor list
+	floorY: number,
+	rect: CampRect, -- the camp's floor
+	posture: CampPosture,
+	points: { Vector3 }, -- feet at floorY: the guard posts | the patrol loop | the fire's centre
+	yaw: number, -- guard: the posts' facing, radians (0 faces -Z)
+	radius: number, -- fire: the sitting circle, studs; 0 otherwise
+	held: boolean, -- a locking camp's group: sleeps and evades until the close
+	units: { CampUnit }, -- filtered by minDifficulty; members are spawned in this order
+}
+
+-- Layouts/Levels/<Name>.json. LevelCamp gains (both optional):
+--	locks: boolean?,          -- true: the boss room (gates, the wall, a stage of its own); nil = open
+--	spots: { LevelSpot }?,
+-- facing: degrees, 0 faces -Z, 90 faces -X (CrowdService.yawToward's convention)
+export type LevelSpot = {
+	id: string,
+	posture: string, -- "guard" | "patrol" | "fire"
+	points: { ArenaPoint }, -- guard: one post per member | patrol: the closed loop | fire: its centre
+	facing: number?,
+	radius: number?,
+}
+
+-- Config/Levels/<n>_<Name>.json: residents. MissionCrowdGroup.perExtra is not read for them.
+export type LevelResidentGroup = { spot: string, units: { MissionCrowdGroup } }
+export type LevelCampConfig = { id: string, name: string, residents: { LevelResidentGroup } }
+-- LevelFile gains:         camps: { LevelCampConfig }?
+-- LevelConfig gains:       camps: { LevelCampConfig }        -- Resolve fills {} when the file has none
+-- LevelCrowdConfig gains:  clearBonus: MissionCrowdReward?   -- per camp cleared, x rewardMult; nil = nothing
+-- LevelStage loses:        bankEachWave
+
+-- Combat.json
+-- CombatConfig gains:       camps: CampRulesConfig,
+-- CombatLevelsConfig gains: checkpointReach: number, populationReserve: number,
+--                           walletSendSeconds: number, fireMarkerSize: { number }?,
+
+-- RunState (built only by ArenaService)
+-- RunState loses:  floor, banked
+-- RunState gains:  floors: { RunFloor },   -- every camp's floor in floor-index order; {} in the lobby
+-- RunState.maxAlive now carries the plan's population (the client's pool).
+-- RunResult loses: savedAt
+
+-- CombatFxCamp, replacing the line. event: "closed" | "cleared" | "alert" | "checkpoint".
+-- ids: on "alert", the crowd ids of the group that woke; nil otherwise. `saved` is gone.
+export type CombatFxCamp = { kind: "camp", event: string, name: string, ids: { number }? }
+```
+
+`Post`, `Resident`, `Seen`, `Shooter`, `Member`, `StepInput` and `Group` are exported from
+`CampBrain`; `GroupEvent` from `CrowdService`; `Carry` from `Combat`.
+
+## Config (economy-designer owns the files; the shapes are fixed here)
+
+Every number below is a starting value for the designer to set, unless marked fixed.
+
+**`Combat.json`:**
+
+```json
+"camps": {
+	"guard":  { "sight": 30, "cone": 140, "rise": 0 },
+	"patrol": { "sight": 24, "cone": 360, "rise": 0 },
+	"fire":   { "sight": 16, "cone": 360, "rise": 1.5 },
+	"sightBelow": 4, "sightAbove": 30,
+	"chaseMargin": 3, "leashSeconds": 3,
+	"homePace": 1, "patrolPace": 0.5, "homeTolerance": 1
+},
+"levels": { "...L1's keys, unchanged...",
+	"checkpointReach": 8, "populationReserve": 21, "walletSendSeconds": 1, "fireMarkerSize": [3, 1, 3] }
+```
+
+Units: `sight`, `sightBelow`, `sightAbove`, `chaseMargin`, `homeTolerance`, `checkpointReach`
+in studs; `cone` in degrees (the whole angle); `rise`, `leashSeconds`, `walletSendSeconds` in
+seconds; `homePace` and `patrolPace` as a multiple of the kind's `speed`; `populationReserve` in
+bodies; `fireMarkerSize` in studs `[x, y, z]`. `walletSendSeconds` 1 and `populationReserve` at
+least 21 are fixed (L1b-16, L1b-11).
+
+**`Expeditions.json`:** `looks` gains `fire` (a warm colour that reads at a glance from 60
+studs), so it has twelve required keys.
+
+**`Levels/1_ForestRoad.json`:**
+
+```json
+{
+	"...": "version, id, name, layout, material, runCapSeconds, difficulties as L1",
+	"targetMinutes": 0,
+	"crowd": { "...": "as L1", "clearBonus": { "cash": 0, "materials": 0 } },
+	"stages": [
+		{ "kind": "travel", "name": "Follow the road" },
+		{ "kind": "camp", "zone": "C", "name": "The Chief's Clearing", "targetWaveSeconds": 0, "breatherSeconds": 3, "maxAlive": 0,
+			"waves": [ { "groups": [ { "kind": "fodder", "count": 0 } ] }, { "groups": [], "boss": { "kind": "colossus", "at": [14, 0], "valor": 10 } } ] }
+	],
+	"camps": [
+		{ "id": "A", "name": "Pickets", "residents": [
+			{ "spot": "fire1", "units": [ { "kind": "fodder", "count": 0 } ] },
+			{ "spot": "gate", "units": [ { "kind": "fodder", "count": 0 }, { "kind": "slinger", "count": 0, "minDifficulty": "hard" } ] } ] },
+		{ "id": "B", "name": "Main Camp", "residents": [ "..." ] },
+		{ "id": "C", "name": "The Chief's Clearing", "residents": [ "..." ] }
+	]
+}
+```
+
+- Enemies by camp stay Ben's plan (MISSIONS_DESIGN §12): A fodder and slingers; B fodder,
+  slingers, brutes and one lobber; Hard adds marksmen and plated elites, now as `minDifficulty`
+  units. Camp C keeps the Colossus as its last wave, at the same spot, with Valor 10 (fixed).
+- `targetMinutes` is set to the measured first clear. `runCapSeconds` stays at least twice it.
+
+**`Layouts/Levels/ForestRoad.json`:**
+- Camp C gains `"locks": true`. A and B have no `locks` (open). Sizes, heights, the road, the
+  route, the secrets, `killY` and the cover are unchanged.
+- Each camp gains `spots`, for example:
+
+  ```json
+  "spots": [
+  	{ "id": "fire1", "posture": "fire", "points": [ { "x": -40, "z": -24 } ], "radius": 4 },
+  	{ "id": "gate", "posture": "guard", "points": [ { "x": -60, "z": -30 }, { "x": -60, "z": -42 } ], "facing": 270 },
+  	{ "id": "loop", "posture": "patrol", "points": [ { "x": 60, "z": -60 }, { "x": 116, "z": -60 }, { "x": 116, "z": -12 }, { "x": 60, "z": -12 } ] }
+  ]
+  ```
+
+  (`facing` 270 faces +X; 90 faces −X.)
+- The checkpoints of A and B move off their floors onto the road beyond each exit, as L1b-18
+  and the gates below require. C's stays.
+
+**Gates of `tools/check_levels.py` for Wave 1** (new or changed; every L1 gate not named stays):
+
+| Constraint | Number |
+|---|---|
+| Camp floors and the route | unchanged: A about 60 × 60, B about 100 × 94, C about 81 × 81 (±10%); route 500–600 studs |
+| `locks` | exactly the camps the level's stages name; Forest Road: C only |
+| An open camp | a fence cut at its gates; no gate Part and no barrier box |
+| A locking camp | as L1: two gates at least 12 wide, a barrier of height 80 and thickness 8, four or more spawn points at least 12 studs from the entry, a checkpoint |
+| Ground beside a camp | none, for a locking camp only (sneaking is allowed past the others) |
+| Residents per camp, at the highest difficulty | A 12–18, B 30–40, C at least 4 and under its stage's `maxAlive`; every camp at most its floor area / 200 (A 18, B 47, C 32) |
+| Postures | every open camp holds at least one `fire` and one `guard` group; the level at least one `patrol` |
+| Posts | every post at least the group's largest kind radius + 1 inside its floor's edge, and that far from every obstacle's box |
+| A patrol | every leg of its loop on the floor and that far from every obstacle |
+| A fire | neighbours on its circle at least 2 × the largest radius + 0.5 apart; the circle clear of obstacles |
+| A guard spot | at least as many points as members |
+| Checkpoints of open camps | outside their floor; on a solid ground block whose top is within 1 stud of the floor's height; seen by no post at rest (`Sees`, cone included) |
+| `camps.chaseMargin` | at most the smallest `reach − radius` of the shortest attack of every rusher kind resident in an open camp (fodder: 4.5 − 1.3 = 3.2) |
+| keepAway kinds | a resident keepAway kind's `bandMin` is at most 0.45 of its camp's shorter side (L1's rule) |
+| Population | L1b-11 at every difficulty |
+| Looks | the twelve keys of `Expeditions.json looks` |
+| Parts | at most `levels.maxParts` (Forest Road: 73 less 6 per open camp, plus one per fire) |
+
+## Balance bands (economy-designer; checked by the simulators, written up in `docs/BALANCE.md` "L1b")
+
+Measured as in L1: gear melee 2 / ranged 1, no Ascension, Broadsword + Longbow, solo, the reacting
+player of `sim_range.py` (policy `mission`), unless a band names another.
+
+- **Forest Road, Normal, a first clear: 5–8 minutes** from the start point to the Colossus's
+  fall, every seed, walking included.
+- **The Colossus in camp C: 64–90 s** (unchanged).
+- **No enemy hit over 25% of the bar** on Normal (unchanged).
+- **Standing still in a woken group in camp A: down in 6–12 s** from the group's wake.
+- **A first strike:** walking up to a resting fire group from outside its sight, the reacting
+  player lands a hit on a sitter before any sitter starts a windup, every seed.
+- **The leash** (new policy `kite`: wake a group, run past `chaseMargin`, wait `leashSeconds`
+  and the walk home, come back): every survivor is at full health when the player returns, no
+  body killed before is back, and the policy earns only what its kills pay.
+- **The edge** (new policy `edge`: stand just past `chaseMargin` of a group without shooters and
+  hit the bodies at its edge): earns 0 from that group.
+- **Every kill is paid once, at once.** Per member, the run's credits are within 1 (cash,
+  materials, Valor each) of the sum of each kill's reward × share; solo, exactly. Normal's Valor
+  is exactly 10.
+- **What a Normal clear pays is reported, not banded,** against L1's 88,200 cash, 155 Timber and
+  10 Valor: the residents replace the waves of A and B, and the pay bands return at Wave 2's size.
+- **Hard and Brutal:** `rewardMult` is exactly 2 and 4. L1's human-reaction gates (fix round,
+  R12) are **reported, not gated, in Wave 1** **[draft]**: they were tuned on the waves the
+  residents replace, and they are gated again at Wave 2.
+- **Population:** each difficulty's left side of L1b-11 and each camp's residents, reported (and
+  gated by `check_levels.py`).
+- **The Raider Arena** keeps every L1 band. What moves: a failed run keeps every kill (L1b-15).
+  BALANCE says so, with any change the carry makes to its pay (none solo at a cash multiplier of 1).
+- **`tools/sim_range.py`:** `LevelRun` mirrors one road and one locking camp. Each camp is its own
+  floor; residents are placed from the layout by the mirror of `CampBrain.Posts`; groups follow
+  mirrors of `Sees`, `InPlay`, `Step`, `Goal`, `Struck` and the heal; credit is per kill with the
+  carry. Policies: `mission`, `human`, `rampage`, `still` as today, plus `kite` and `edge`.
+- **`tools/sim_combat.py`:** mirrors `KillReward` and `SplitCarry` exactly. Assertions 19–21 lose
+  "only a checkpoint pays". New 22: over a seeded fuzz, `SplitCarry` never pays more than the
+  pools in total and every carry stays under 1. New 23: the population of every difficulty equals
+  `Validate`'s numbers on the shipped files.
+- **`tools/check_stage_mirror.py`** (with `stage_mirror.luau`) also compares, on the shipped files
+  and on grids: `CampBrain.Posts`, `Sees`, `InPlay`, `Goal`, `Struck` and scripted `Step`
+  timelines (rest → rise → fight → home → rest, held → released) against `sim_range.py`'s mirror;
+  `KillReward` and `SplitCarry` against `sim_combat.py`'s; `StageFlow.FieldClear`, `SafePoint`,
+  `Plan`'s groups and population, and scripted `Advance` runs (one road, one locking camp, the
+  new actions).
+
+## Remotes
+
+No new remote; no intent carries an amount, a position or a reward.
+
+| Remote | Change |
+|---|---|
+| `CrowdSpawn` | each info carries `floor` |
+| `CrowdSnapshot` | states `rest` (8) and `rise` (9) may appear; bytes per entry unchanged |
+| `RunState` | `floors` replaces `floor`; `banked` and `RunResult.savedAt` go |
+| `CombatFx` | `camp` loses `saved`, gains `ids` and the events `alert` and `checkpoint` |
+| `StateChanged` (the wallet) | at most once a second per player during a run (L1b-16) |
+
+Everything else (`RequestStartLevel`, `RequestAbandon`, `RequestLeave`, `RequestDebug`,
+`MapState`, `CrowdRemove`, the weapon intents) is unchanged.
+
+## Ownership (L1b Wave 1, disjoint)
+
+| Owner | Files |
+|---|---|
+| luau-engineer **A** (the crowd) | `src/shared/Types.luau` (**first**, the whole block of "Types"); `src/shared/CrowdCodec.luau`; `src/combat/server/Services/` new `CampBrain.luau`, `CrowdService.luau`, `CrowdBrain.luau`; new `tools/crowd_harness/tests_l1b_crowd.luau`; in `tools/crowd_harness/tests.luau` only the call sites the new `BeginStep` and `AddTarget` signatures change |
+| luau-engineer **B** (the run) | `src/combat/server/Services/` `StageFlow.luau`, `LevelGeometry.luau`, `LevelService.luau`, `WaveService.luau`, `ArenaService.luau`, `DebugService.luau` (only if needed); `src/shared/Combat.luau`; `tools/crowd_harness/run_harness.py`, `mutate.py`, `tests_l1.luau`, `tests_l1_world.luau`, new `tests_l1b.luau` |
+| ui-engineer | `src/combat/client/Controllers/` `CrowdRenderer.luau`, `CombatUIController.luau`, `CombatFxController.luau`, new `CampFx.luau` (if used); `src/combat/client/UI/` `CombatHud.luau`, `SummaryCard.luau`; `src/client/UI/Theme.luau` (add only) |
+| economy-designer | `src/shared/Config/Combat.json`, `Config/Expeditions.json`, `Config/Levels/1_ForestRoad.json`; `src/shared/Layouts/Levels/ForestRoad.json`; `tools/sim_range.py`, `tools/sim_combat.py`, `tools/check_levels.py`, `tools/check_stage_mirror.py`, `tools/crowd_harness/stage_mirror.luau`; `docs/BALANCE.md` "L1b" |
+| lead | this section; `docs/MISSIONS_DESIGN.md`; merges; the questions to Ben |
+| untouched | everything under `src/server`; everything under `src/client` but `Theme.luau`; `VitalsService`, `ThreatField`, `WeaponService`, `RangeService`, `AbilityService`, `PositionRing`, `StrikeTally`, `RunRegistry`, `RunFx`, `EnemyService`, `CombatService`, `ReturnService`, `CombatRemotes`, `Main.server.luau`; `HitShapes`, `Tuning`, `Armory`, `Economy`, `Catalog`, `CombatMode`; `Config/ProvingGrounds.json`, `Config/Armory.json`, `Config/Missions/*`, `Config/Levels/0_RaiderArena.json`, `Layouts/Levels/RaiderArena.json`, `Layouts/Levels/Lobby.json`, `Layouts/Arenas/*`; `MapScreen`; `combat.project.json`; `tools/sim_economy.py`, `tools/proving_project.py` |
+
+- **A lands `Types.luau` before anyone else builds** and tells the lead; the others start from it.
+- **A's mutations go to B,** who adds them to `mutate.py`. A also lists every existing mutation
+  in `mutate.py` whose text its edits change (`mutate.py` refuses a stale one), with the new
+  text, for B.
+- **Cross-owner requests go through the lead.** An owner who needs a change in a file it does
+  not own lists it under "for the other owner" in its report; the lead routes it. Nobody edits
+  another owner's file.
+- No agent writes git, and none kills a process by image name (kill only your own PIDs). Each
+  agent keeps its scratch in a subfolder of its own.
+
+## Gates (every QA pass; PATH line `export PATH="$HOME/.rokit/bin:$PATH"`, Python is `py`)
+
+1. `stylua --check src`; `selene src` (one old `LegacyPanel` warning is expected).
+2. `rojo sourcemap default.project.json -o sourcemap.json` and `rojo sourcemap
+   combat.project.json -o sourcemap.combat.json`.
+3. `luau-lsp analyze` twice, both with `--definitions=tools/types/globalTypes.d.luau` and
+   ignoring `Packages/**` and `ServerPackages/**`: `src/shared src/server src/client` on the hub
+   sourcemap (it proves the hub still typechecks with the new Types), and `src/combat` on the
+   combat sourcemap.
+4. `py tools/check_compile.py`: Studio's limit of 200 locals; every module at about 180
+   top-level locals or fewer.
+5. `rojo build default.project.json -o build/test.rbxl`, `rojo build combat.project.json -o
+   build/combat.rbxl`, and `py tools/proving_project.py` followed by `rojo build
+   .proving.project.json -o build/proving.rbxl`.
+6. `py tools/sim_economy.py --check` (unchanged and green).
+7. `py tools/sim_combat.py --check`: assertions 1–18 as they are, 19–21 as amended, new 22–23.
+8. `py tools/sim_range.py --check`: the range's passes unchanged, the Raider Arena's, and the L1b
+   bands.
+9. `py tools/check_levels.py`: L1's gates as amended plus the Wave 1 table.
+10. `py tools/check_stage_mirror.py`: every comparison equal, the new ones included. In the
+    worktree it uses the main checkout's `tools/bin/luau.exe`, or `--luau <path>`.
+11. `py tools/crowd_harness/run_harness.py`, **then** `py tools/crowd_harness/mutate.py`: one after
+    the other, never in parallel. The worktree has no `tools/bin/luau.exe`: pass the worktree's
+    root as the first argument and `C:\Users\benja\Desktop\tycoon\tools\bin\luau.exe` as the
+    second. The verdicts are `HARNESS: PASS (<n> checks, <folder>)` and `MUTATIONS: <n> run, 0 not
+    caught`; both counts go in the report.
+12. `git diff --stat main -- src/server src/client` lists only `src/client/UI/Theme.luau`.
+13. **New:** the range is unchanged. `git diff main -- src/shared/Config/ProvingGrounds.json
+    src/shared/Config/Missions src/shared/Layouts/Arenas` is empty; `tests.luau` differs from
+    `main` only at A's signature call sites; `tests_w2`, `tests_s2`, `tests_s3` and `tests_p5`
+    do not differ and pass.
+14. `py tools/gen_asset_manifest.py --check`: up to date (no asset changes).
+
+`streetplan.py` and `check_mirror.py` are skipped, as in L1: Pillow is not installed, and L1b
+touches no city file. qa-runner must end with its report even when every command passes.
+
+## Definition of done (Wave 1)
+
+**luau-engineer A:**
+- The Types block is in `Types.luau`, first, verbatim; the lead was told.
+- `CampBrain` implements every rule of "A — the crowd" with the signatures given; `CrowdCodec`
+  appends the two states; `CrowdService` and `CrowdBrain` carry floors, groups, the camp step, the
+  heal, `Struck` in `Damage`, `AliveOn`, `Awake`, `Busy`, `Engaged`, `WakeFloor`, `ClearFloor`,
+  `DrainGroupEvents`.
+- `tests_l1b_crowd.luau` holds every case listed and passes under B's harness; the mutations and
+  the stale-mutation list are handed to B with their exact texts.
+- Gates 1–4 and 11 green on A's files; nothing in the camp step yields, raycasts or allocates per
+  body.
+- The report lists anything "for the other owner".
+
+**luau-engineer B:**
+- `StageFlow`, `Combat`, `LevelGeometry`, `LevelService`, `WaveService`, `ArenaService` as in
+  "B — the run"; "Flow" and its action table executed as written.
+- The three boss-room blockers are fixed per floor (L1b-14), and B's report quotes the three
+  lines that do it.
+- Every kill is credited at once in every live phase, with the carry; the wallet goes at most once
+  a second; the rescue grants no i-frames while engaged.
+- `tests_l1b.luau` holds every case listed; `run_harness.py` and `mutate.py` register A's and B's
+  files; every mutation is caught; the report lists each L1 case and mutation that was changed or
+  replaced, and by what.
+- Gates 1–5 and 11–13 green.
+
+**ui-engineer:**
+- Every point of "Client" is done; the seated pose, the rise, the "!" and the "Checkpoint" toast
+  read on a PC and in the phone emulator at 667 × 375 (one screenshot each in the report).
+- `CrowdRenderer` stays under about 180 top-level locals.
+- Gates 1–5 and 12 green on the client files.
+
+**economy-designer:**
+- The config, the level file and the layout as in "Config", every number set.
+- `check_levels.py`, `sim_range.py`, `sim_combat.py`, `check_stage_mirror.py` and
+  `stage_mirror.luau` learn what "Balance bands" and the Wave 1 table say; every band passes or is
+  reported where this contract says "reported".
+- `docs/BALANCE.md` "L1b" records: residents per camp and per difficulty, the population at each
+  difficulty, the Part count, the first clear's length, the Colossus, the worst hit, what a Normal
+  clear pays against L1, Hard and Brutal as reported, and the Raider Arena's note.
+- Gates 6–10 green.
+
+**The wave as a whole:**
+- Every gate above is green. With `debug.provingBoots` `"range"`, every P1–P4 set behaves as at
+  P5.
+- **`build/proving.rbxl`, Play:** the checklist below plays as written. Beyond it:
+  - a resident never leaves its floor; a chaser stops at the edge;
+  - a group that goes home is whole again at its posts, and the bodies killed before stay dead;
+  - a fall from camp A's edge mid-fight puts the player on the road at the last checkpoint
+    reached, with no get-up i-frames;
+  - the boss room's residents cannot be hurt before the close;
+  - after a down, the wallet holds every kill made before it;
+  - the Raider Arena plays its ten waves as in L1, paying per kill.
+- The `[Perf]` line's p95 is under 2 ms in camps A and B with every resident alive (the lead
+  reads it from Studio's log).
+- docs-keeper has written `docs/PLAYTEST.md` "L1b Wave 1", `docs/MANUAL_STEPS.md` "L1b" (the
+  publish freeze until L4) and `docs/PLAN.md` "L1b".
+
+## Playtest checklist (Ben; about 8 minutes; docs-keeper copies it into PLAYTEST "L1b Wave 1")
+
+File: `tycoon\build\proving.rbxl`, after "Build all". Press **Play**: the map is open on Forest
+Road, Normal. Keys as in L1: **Enter** = Depart / Back to camp, **arrows** = level and
+difficulty, **1** / **2** = weapons, **Space** jump, **Left Shift** dash, **N** = finish this part,
+**B** = jump to the boss, **G** = stronger gear, **Backspace** twice = Abandon.
+
+**Good to know:** raiders see through the palisade and through cover. Their sight is distance
+only, so walls do not hide you. You can only hurt a camp's raiders while you are close enough
+for them to fight back: a hit from farther out reads "BLOCKED" (it still wakes them).
+
+1. **Enter** (Depart) and walk the road to the first camp. Before you reach it you see raiders
+   already there: some sitting round a fire, some standing guard (one group walks a loop, in this
+   camp or the next). Nobody comes for you yet. *Bug: the camp is empty; raiders rush you from far away.*
+2. Walk in toward the sitters. A "!" pops over the group that saw you; the sitters stand up slowly
+   and you can hit one first. Kill a few: your cash rises with every kill. *Bug: no "!"; they stand
+   at once; cash does not move until later.*
+3. Run back out along the road. They chase you to the edge of their camp and stop there; a slinger
+   in the group keeps shooting while you are close. Wait a few seconds: they walk back to their places. Hit one on
+   its way: "BLOCKED". *Bug: they follow you down the road; one keeps chasing forever.*
+4. Walk back in. The survivors are at full health again; the ones you killed are still gone. Then
+   walk out through the far side: no gate ever closes in this camp or the next. *Bug: dead raiders
+   are back; a gate closes.*
+5. **N** takes you to the Chief's Clearing. Its raiders stand still behind the gate. Step in: "Gates
+   close in 3", the gates shut, they wake, and the Colossus comes as before. **G** if you like, then
+   kill him: the summary says Cleared, lists what you earned, and has no "Saved at" line. **Enter**.
+   *Bug: the gates never close; you can hit them before the close; the summary is empty.*
+6. **Up arrow** (Hard), **Enter**. In the first camp let a group hit you until you go **DOWN**: the
+   run ends, and your cash keeps every kill you made. *Bug: cash goes back to what it was.*
+
+Asked afterwards, as click questions: do the camps feel alive; is walking out and back in right
+(the chase, the walk home, the heal); does a small bonus for clearing a whole camp matter to you
+(it is 0 now); after the "!", is the time before they fight right.
+
+## Open for later
+
+- **Wave 2 — "the long road"** (its own full contract; owners as the study's §8):
+  - **A:** `CampBrain` gains dormancy (`Dormant`: a group at `rest` with no living player's root
+    within `dormantRadius` of its camp's floor; never while awake; `dormantRadius` over every
+    `sight` plus a snapshot of the fastest move) and the tent's rule (once any group of its camp
+    is in `fight`, up to `tent.count` bodies, `tent.every` seconds apart, as a group of its own;
+    paused while the camp rests; a fixed stock per run). `CrowdService` skips dormant bodies in
+    the step and the snapshot, and spawn infos carry position, yaw and state.
+  - **B:** `Validate` for the tents and the population with tents; the tent executor in
+    `WaveService`; `tests_l1b.luau` and `mutate.py`.
+  - **ui:** a body drawn from its spawn info without a snapshot; the phone check of the long road.
+  - **economy-designer:** the 1,000-stud road (every camp inside the wire's ±1,000), camps of
+    about twice L1's area (A about 85 × 85, B about 141 × 133, C about 115 × 115; study 8, with a
+    render for Ben before balance), 100 to 120 residents on Normal, the sneak-path gate in
+    `check_levels.py` (the road passes every resting post farther than its sight), the route
+    and Part gates, the bands (a first Normal clear of about 10 minutes; Hard and Brutal gated
+    again; the pay bands back).
+  - **Ben's one number:** the `[Perf]` line in the boss room, asked as a click question with
+    ranges.
+- **Wave 3** (only if Wave 2's stop asks): numbers only (sight, leash, rise, tent pace, camp
+  mixes).
+- **Carried, with owners:**
+  - before any publish (luau-engineer): `OnDash` grants i-frames on the request alone; residents
+    that chase make the dash the main escape;
+  - parties in a level: residents do not scale with party size (L1b-10); L5 decides;
+  - sight through walls (no ray in the crowd's step); L4 or later;
+  - the client's "!" and seated pose on a phone are judged in Studio's emulator only, never on a
+    device;
+  - every L1 carried item not named here stands (INTERFACES L1 "Open for later steps").
+- **Never measured, said plainly:** the crowd step with 60 to 90 residents alive at once (Wave 1's
+  `[Perf]` read is the first); snapshot bytes with every resident sent every step (about 2
+  packets, 13 KB/s per player); a seated raider read at 50 studs on a phone.
+
+## Draft points for the lead (decisions this draft took that the rulings did not cover)
+
+1. **L1b-7, damage only from a player in play.** Not in the study. Without it, the study's evade
+   leaves a farm from just outside the fence for the whole `leashSeconds` of every wake. It also
+   needs the `chaseMargin` gate (at most 3.2 studs today).
+2. **L1b-8, the heal restores a broken plate and empties the damage book.** "Survivors heal" read
+   as "the fight is reset".
+3. **L1b-10, residents do not scale with party size** in Wave 1.
+4. **L1b-13, the boss room's residents are held** (no wake, no damage) until the close. The study
+   said only "woken by the close".
+5. **L1b-15, the cash multiplier goes inside the carry,** so a party member loses no cash to the
+   second floor of L1. Solo at a multiplier of 1, nothing changes.
+6. **L1b-17, a camp's clear adds one to `stats.wavesCleared`,** besides the boss room's waves
+   (study 5's "counts the boss room's waves and the camps cleared").
+7. **L1b-18, the safe point is the furthest reached checkpoint whose floor is not busy;** open
+   camps' checkpoints move off their floors and out of sight.
+8. **Hard and Brutal are reported, not gated, in Wave 1.**
+9. **Fire markers** are grey-box Parts (look `fire`), so Ben can see where a group sits.
