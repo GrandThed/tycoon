@@ -150,3 +150,4 @@ headshot lands on big bodies (a bug to find); the bow felt weak but he played at
 preset becomes 2 / 2 (no weapon-number change, bosses keep their tuning); "agro range double" = nearby
 resting groups of the same camp within 2× sight wake with a group; a nicer end screen → L4. All folded
 into Wave 2 (he chose that over a separate small wave). Clear bonus still unanswered.
+Wave 2 starts in a NEW session from `docs/prompts/l1b-wave2.md` (written 2026-10-14 at his request).
