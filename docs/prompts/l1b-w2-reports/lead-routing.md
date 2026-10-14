@@ -84,3 +84,11 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
   a stopped bundle as caught, else drop it.
 - A → econ (relayed): `stage_mirror.luau`'s `Brain.Problems` count expects the new lines; the
   `RayUpright` / `CrowdRay` rules and the tent yaw are in build-A.md for `sim_range`.
+- **B done (build-B.md):** harness 1,896 PASS, `mutate.py` 572 run / 0 not caught (on a snapshot
+  without econ's two count-0 units, which Validate rightly refused). Its open decisions confirmed.
+- B → econ (relayed): `check_levels.py` 1814 / 1816 still name `populationReserve` (gate 15);
+  `stage_mirror.luau` passes `kinds` as Plan's 7th argument; Luau `math.round` rounds .5 away from
+  zero (not Python's `round`); `sim_combat.py` may mirror `Combat.WaveStock`.
+- **Flaky timing case** "a giant standing far away costs the packed crowd nothing" (A's) fails at
+  random under load and can turn the mutate baseline red. Goes to the fix round for A: make it
+  deterministic (count work, not time) or widen its margin with a stated reason.

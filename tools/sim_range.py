@@ -3034,7 +3034,7 @@ class ThreatRun:
         boss = enemy.summoner
         if boss is not None and boss.boss and self.guards_at is None and not self.world.guard_of(boss):
             self.guards_at = self.world.now  # the last of a boss's guard has fallen
-        if enemy.boss or self.policy.get("anyKill"):
+        if enemy.boss or self.policy.get("anyKill") == enemy.name:
             if self.kill_at is None:
                 self.kill_at = self.world.now
         if enemy.boss:
@@ -4886,7 +4886,7 @@ FOREST_CASH_PER_MINUTE_WAVE1 = 19800
 # these kinds, at the boss's spot in the boss room, aiming at the body and at the head.
 BOW_KINDS = ("brute", "armoured", "colossus")
 BOW_SECONDS = 240.0
-TENT_ALONE_SECONDS = 70.0  # a tent with no resident to wait for is watched this long
+TENT_ALONE_SECONDS = 20.0  # a tent with no resident to wait for is watched its stock x every, and this long more
 # L1b: standing still in the group of camp A that wakes first, down this long after its wake.
 FOREST_STILL_DOWN = (6.0, 12.0)
 FOREST_BOSS_SECONDS = {"normal": (64.0, 90.0), "hard": (64.0, 100.0), "brutal": (64.0, 100.0)}
@@ -6173,7 +6173,8 @@ class LevelRun(ThreatRun):
         self.ground = start[2] if start is not None else plan["startY"]
         self.order = self.route_order()
         self.target = 0
-        self.mode = "edge" if policy.get("edge") else "sneak" if policy.get("sneak") else "road"
+        self.mode = ("edge" if policy.get("edge") else "sneak" if policy.get("sneak")
+                     else "stopped" if policy.get("parked") else "road")
         self.path = self.path_to(self.order[0], None) if self.order and self.mode == "road" else []
         if self.mode == "sneak":
             # The sneak (L1b-W2-3): along layout.sneak, every point at the ground's height there.
@@ -6526,7 +6527,12 @@ class LevelRun(ThreatRun):
         alive = self.residents_left(floor)
         self.kite["back"] = t
         self.kite["full"] = all(b.hp >= b.max_hp and b.plate >= b.max_plate for b in alive)
-        self.kite["same"] = (sorted(b.id for b in alive) == sorted(b.id for b in self.kite["alive"])
+        # Every survivor still there, the dead still dead; what came out of the tent while he was
+        # away (its stock does not pause while the camp is up) is new, and no other body is.
+        tent_groups = {t["group"] for t in self.tents}
+        known = {b.id for b in self.kite["alive"]}
+        self.kite["same"] = (known <= {b.id for b in alive}
+                             and all(b.resident["group"] in tent_groups for b in alive if b.id not in known)
                              and all(not b.alive for b in self.kite["dead"]))
         self.kite["leashes"] = sum(1 for e in self.events if e[0] >= self.kite["at"] and e[2] == "fight" and e[3] == "home"
                                    and self.groups[e[1] - 1]["def"]["floor"] == floor)
@@ -7294,6 +7300,7 @@ THREAT_POLICIES["edge"] = {"label": "stands just past chaseMargin, hits the edge
 # boss room's countdown.
 THREAT_POLICIES["sneak"] = {"label": "keeps to the sneak path, never attacks", "sneak": True}
 THREAT_POLICIES["cross"] = {"label": "walks the road through every camp, never fights", "cross": True}
+THREAT_POLICIES["parked"] = {"label": "stands at the start point, never moves", "parked": True}
 
 
 def preset_gears(combat_cfg):
@@ -7472,8 +7479,8 @@ def tent_alone_runs(view, hp, ctx, level, layout, difficulty, plan):
     found = {}
     for tent in plan["tents"]:
         found[tent["def"]["id"]] = [
-            LevelRun(view, hp, ctx, level, layout, difficulty, THREAT_POLICIES["sneak"], seed, only={tent["def"]["id"]},
-                     seconds=TENT_ALONE_SECONDS).run()
+            LevelRun(view, hp, ctx, level, layout, difficulty, THREAT_POLICIES["parked"], seed, only={tent["def"]["id"]},
+                     seconds=tent["every"] * len(tent["kinds"]) + TENT_ALONE_SECONDS).run()
             for seed in MISSION_SEEDS[:1]]
     return found
 
@@ -7498,7 +7505,7 @@ def bow_rows(view, plan, hp, level, bow):
             for aim in ("body", "head"):
                 for rule in ("sphere", "capsule"):
                     RAY_RULE = rule
-                    policy = dict(THREAT_POLICIES["mission"], aim=aim, anyKill=True,
+                    policy = dict(THREAT_POLICIES["mission"], aim=aim, anyKill=kind,
                                   label=f"{aim} aim, {rule} rule")
                     THREAT_POLICIES["_bow"] = policy
                     row = boss_row(view, camp_env(plan, hp, zone_id), set_name, "_bow", weapon=bow,

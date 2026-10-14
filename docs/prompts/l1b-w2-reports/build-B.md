@@ -1,8 +1,7 @@
 # L1b Wave 2 build — luau-engineer B (the run, the level, the tests)
 
-Status: built; harness green (1,897 checks with A's and my case files). Waiting for A's mutation
-list and A's replacements for its four stale mutations, then the full `mutate.py` run. A fresh
-agent continues from "Left".
+Status: built; harness green (1,897 checks with A's and my case files); every mutation is
+registered; the full `mutate.py` run is the last step. A fresh agent continues from "Left".
 
 ## Done
 
@@ -80,18 +79,34 @@ end
   the only errors are `CrowdService.luau` (2062, 2063: a `string` where a `CrowdState` is
   expected), A's file. Hub sourcemap: exit 0.
 - `py tools/check_compile.py`: PASS (155 files); my files are each under 100 top-level locals.
-- Harness: `HARNESS: PASS (1,897 checks, C:\Users\benja\Desktop\tycoon-p5\tools\crowd_harness)`.
-  The bundle's chunk holds about 101 top-level locals (prelude 3, tests.luau 52, tests_w2 38, one
-  table per later file).
-- Full `mutate.py`: not yet (see Left).
+- Harness, on the worktree as it stands at the end:
+  `HARNESS: PASS (1,896 checks, C:\Users\benja\Desktop\tycoon-p5\tools\crowd_harness)`. The count
+  moves with the economy-designer's level file: the real-file cases loop over its camps. The
+  bundle's chunk holds about 102 top-level locals: prelude 3, tests.luau 52, tests_w2 38, and one
+  table per later file.
+- Full `mutate.py`: `MUTATIONS: 572 run, 0 not caught`, baseline
+  `HARNESS: PASS (1,896 checks, ...)`. It ran on a scratch snapshot of the worktree (src + tools)
+  because the live worktree's baseline was red at the time: the economy-designer's mid-tune level
+  file had two resident units of count 0 (B.loop, B.eastFire), which Validate rightly refuses. The
+  snapshot dropped those two units and nothing else. Since then the worktree is green again with
+  the same 1,896 checks.
+  - "l1b w2 crowd: the [Perf] attribute set with no name" is caught by the bundle stopping, as A
+    said.
+  - "separate: a giant widens what every body scans" is caught by its own timing case. That case
+    is the one that flakes under load.
+- `rg -n "populationReserve" src tools`: none in my files; two lines in `tools/check_levels.py`
+  (the economy-designer's).
 
 ## Left
 
-- A's mutations and A's four stale ones (`l1b crowd: in play ignores chaseMargin`, `l1b crowd: a
-  fire's sitters face away from it`, `l1b crowd: in play has square corners`, `l1b crowd: a group
-  walking home engages`): their texts are no longer in CampBrain / CrowdService. Add A's texts
-  to `mutate.py` when A hands them over, then run `py tools/crowd_harness/mutate.py . <luau.exe>`
-  in full (about 540 mutations, ~30 min), after the harness, never in parallel.
+- Nothing of B's. QA should re-run harness then mutate on the final data.
+
+A's mutations are in (`L1B_W2_CROWD_MUTATIONS`, 35, texts verbatim from build-A.md, with
+`SWING`). Its three stale Wave 1 mutations are replaced under their labels
+(`L1B_W2_CROWD_REPLACED`). "l1b crowd: in play has square corners" is retired, deleted with a
+comment naming "l1b w2 crowd: FlatToRect with square corners", which now holds its rule. "the
+[Perf] attribute set with no name" is kept: `mutate.py` counts a stopped bundle as caught (the
+lead's ruling). Every one of the 572 texts occurs exactly once.
 
 ## Decisions the contract did not take
 
@@ -120,10 +135,8 @@ end
 
 ## For the other owner
 
-- **luau-engineer A:** four of A's Wave 1 mutations are stale (texts in "Left"); please hand B
-  their replacement texts with A's new mutations. `CrowdService.luau` 2062-2063 fail luau-lsp
-  (`string` passed where `CrowdState` is expected; the `refreshInfo` `state` probably needs a
-  cast).
+- (Resolved: A handed over its mutations and replacements. A's report says its luau-lsp errors in
+  CrowdService are fixed.)
 - **luau-engineer A / the lead (flaky, not mine):** the timing case "a giant standing far away
   costs the packed crowd nothing" (1.2 ms vs 1.6 ms a step) failed twice in my scratch mutation
   runs while four agents loaded the machine, on mutants that do not touch the crowd. It can make

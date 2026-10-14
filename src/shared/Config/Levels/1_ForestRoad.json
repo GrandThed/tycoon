@@ -4,7 +4,7 @@
 	"name": "Forest Road",
 	"layout": "ForestRoad",
 	"material": "Timber",
-	"targetMinutes": 9,
+	"targetMinutes": 7,
 	"runCapSeconds": 1500,
 	"difficulties": {
 		"normal": {
@@ -41,7 +41,7 @@
 		"rewards": {
 			"fodder": { "cash": 100, "materials": 0 },
 			"slinger": { "cash": 500, "materials": 1 },
-			"brute": { "cash": 2000, "materials": 6 },
+			"brute": { "cash": 2000, "materials": 4 },
 			"lobber": { "cash": 700, "materials": 4 },
 			"marksman": { "cash": 600, "materials": 1 },
 			"armoured": { "cash": 1200, "materials": 2 },
@@ -120,7 +120,7 @@
 				}
 			],
 			"tent": {
-				"every": 6,
+				"every": 8,
 				"units": [
 					{ "kind": "fodder", "count": 4 },
 					{ "kind": "slinger", "count": 2 },
@@ -135,7 +135,8 @@
 				{
 					"spot": "fire1",
 					"units": [
-						{ "kind": "fodder", "count": 4 },
+						{ "kind": "fodder", "count": 2 },
+						{ "kind": "armoured", "count": 2 },
 						{ "kind": "slinger", "count": 1 },
 						{ "kind": "brute", "count": 2 },
 						{ "kind": "armoured", "count": 1, "minDifficulty": "hard" }
@@ -144,25 +145,26 @@
 				{
 					"spot": "fire2",
 					"units": [
-						{ "kind": "fodder", "count": 4 },
+						{ "kind": "fodder", "count": 1 },
+						{ "kind": "armoured", "count": 2 },
 						{ "kind": "slinger", "count": 2 },
-						{ "kind": "brute", "count": 1 },
+						{ "kind": "brute", "count": 2 },
 						{ "kind": "marksman", "count": 1, "minDifficulty": "hard" }
 					]
 				},
 				{
 					"spot": "loop",
 					"units": [
-						{ "kind": "fodder", "count": 4 },
-						{ "kind": "brute", "count": 3 },
+						{ "kind": "armoured", "count": 2 },
+						{ "kind": "brute", "count": 5 },
 						{ "kind": "slinger", "count": 1 }
 					]
 				},
 				{
 					"spot": "fire3",
 					"units": [
-						{ "kind": "fodder", "count": 3 },
-						{ "kind": "slinger", "count": 1 },
+						{ "kind": "fodder", "count": 1 },
+						{ "kind": "slinger", "count": 3 },
 						{ "kind": "lobber", "count": 1 },
 						{ "kind": "brute", "count": 3 },
 						{ "kind": "marksman", "count": 1, "minDifficulty": "hard" }
@@ -180,15 +182,15 @@
 				{
 					"spot": "eastFire",
 					"units": [
-						{ "kind": "fodder", "count": 4 },
-						{ "kind": "slinger", "count": 1 },
-						{ "kind": "brute", "count": 3 },
+						{ "kind": "fodder", "count": 1 },
+						{ "kind": "slinger", "count": 3 },
+						{ "kind": "brute", "count": 4 },
 						{ "kind": "armoured", "count": 1, "minDifficulty": "hard" }
 					]
 				}
 			],
 			"tent": {
-				"every": 6,
+				"every": 8,
 				"units": [
 					{ "kind": "fodder", "count": 2 },
 					{ "kind": "slinger", "count": 2 },

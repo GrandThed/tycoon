@@ -69,7 +69,8 @@ function M.load(name: string): any
 		local function requireStub(t: any): any
 			return M.load(t.__module)
 		end
-		M.modules[name] = source(gameStub, token("script"), requireStub, V, os, nil, print, nil, nil)
+		M.modules[name] =
+			source(gameStub, token("script"), requireStub, V, os, nil, print, nil, nil)
 	end
 	return M.modules[name]
 end
@@ -152,7 +153,13 @@ do
 	local names: { [string]: { string } } =
 		{ Combat = {}, StageFlow = {}, CampBrain = {}, HitShapes = {}, SwingGate = {} }
 	for module, value in
-		{ Combat = Combat, StageFlow = Flow, CampBrain = Brain, HitShapes = Shapes, SwingGate = Gate }
+		{
+			Combat = Combat,
+			StageFlow = Flow,
+			CampBrain = Brain,
+			HitShapes = Shapes,
+			SwingGate = Gate,
+		}
 	do
 		for name, item in value do
 			if type(item) == "function" then
@@ -182,7 +189,12 @@ function L.mission(file: any): any
 	return nil
 end
 function L.resolve(file: any): any
-	return Flow.Resolve(file, L.mission(file), director.runCapSeconds, data.expeditions.difficulties[1])
+	return Flow.Resolve(
+		file,
+		L.mission(file),
+		director.runCapSeconds,
+		data.expeditions.difficulties[1]
+	)
 end
 function L.rect(rect: any): any
 	return { rect.x, rect.z, rect.hx, rect.hz }
@@ -288,7 +300,14 @@ for index, file in data.levels do
 		continue
 	end
 	J.try(id .. ".validate", function()
-		return Flow.Validate(level, layout, data.proving.crowd.kinds, data.ranks, rules, data.proving.crowd.maxAlive)
+		return Flow.Validate(
+			level,
+			layout,
+			data.proving.crowd.kinds,
+			data.ranks,
+			rules,
+			data.proving.crowd.maxAlive
+		)
 	end)
 	for _, difficulty in data.planDifficulties do
 		local plan = nil
@@ -310,7 +329,13 @@ for index, file in data.levels do
 				if case.boss ~= nil then
 					return Flow.BossPoint(zone, case.boss)
 				end
-				return Flow.BurstPoint(zone, zone.spawns[case.spawn], case.size, case.index, case.spacing)
+				return Flow.BurstPoint(
+					zone,
+					zone.spawns[case.spawn],
+					case.size,
+					case.index,
+					case.spacing
+				)
 			end)
 		end
 	end
@@ -322,7 +347,15 @@ for _, case in data.waveCases do
 	local spec = J.try(case.id, function()
 		local level = L.resolve(file)
 		local stage = level.stages[case.stage]
-		return Combat.CampWave(stage.waves[case.wave], level.crowd.regenShare, level.difficulties[case.difficulty], data.ranks[case.difficulty], data.ranks, case.party, data.combat)
+		return Combat.CampWave(
+			stage.waves[case.wave],
+			level.crowd.regenShare,
+			level.difficulties[case.difficulty],
+			data.ranks[case.difficulty],
+			data.ranks,
+			case.party,
+			data.combat
+		)
 	end)
 	if spec ~= nil and case.kinds ~= nil then
 		J.try(case.id .. ".rewards", function()
@@ -342,7 +375,11 @@ end
 J.try("grid.campReward", function()
 	local found = {}
 	for index, case in data.rewardCases do
-		local cash, materials = Combat.CampReward({ probe = { cash = case[1], materials = case[2] } }, "probe", { rewardMult = case[3] })
+		local cash, materials = Combat.CampReward(
+			{ probe = { cash = case[1], materials = case[2] } },
+			"probe",
+			{ rewardMult = case[3] }
+		)
 		found[index] = { cash, materials }
 	end
 	return found
@@ -350,7 +387,8 @@ end)
 J.try("grid.killReward", function()
 	local found = {}
 	for index, case in data.rewardCases do
-		local cash, materials = Combat.KillReward({ probe = { cash = case[1], materials = case[2] } }, "probe", case[3])
+		local cash, materials =
+			Combat.KillReward({ probe = { cash = case[1], materials = case[2] } }, "probe", case[3])
 		local noCash, noMaterials = Combat.KillReward({}, "probe", case[3])
 		found[index] = { cash, materials, noCash, noMaterials }
 	end
@@ -393,7 +431,14 @@ for _, case in data.refusalCases do
 			return { "it does not resolve" }
 		end
 		local layout = if case.layout ~= nil then case.layout else L.layout(case.file.layout)
-		return Flow.Validate(level, layout, data.proving.crowd.kinds, data.ranks, case.rules, data.proving.crowd.maxAlive)
+		return Flow.Validate(
+			level,
+			layout,
+			data.proving.crowd.kinds,
+			data.ranks,
+			case.rules,
+			data.proving.crowd.maxAlive
+		)
 	end)
 end
 
@@ -459,13 +504,19 @@ for _, trace in data.traces do
 				end
 				-- The fix round's threats: 5 studs off every checkpoint, reach exactly 5 or a hair under.
 				local threats = nil
-				local reach = if case == "threatAll" then 5 elseif case == "threatShort" then 5 - 1e-6 else nil
+				local reach = if case == "threatAll"
+					then 5
+					elseif case == "threatShort" then 5 - 1e-6
+					else nil
 				if reach ~= nil then
 					threats = {}
 					for _, zone in plan.zones do
 						local mark = zone.checkpoint
 						if mark ~= nil then
-							table.insert(threats, { at = V.new(mark.X + 3, mark.Y + 7, mark.Z + 4), reach = reach })
+							table.insert(
+								threats,
+								{ at = V.new(mark.X + 3, mark.Y + 7, mark.Z + 4), reach = reach }
+							)
 						end
 					end
 				end
@@ -646,7 +697,11 @@ for _, case in data.campCases do
 		elseif op == "engaged" then
 			local found = {}
 			for index, row in case.rows do
-				found[index] = Brain.Engaged(if row.lastAt == "nil" then nil else row.lastAt, row.now, campRules)
+				found[index] = Brain.Engaged(
+					if row.lastAt == "nil" then nil else row.lastAt,
+					row.now,
+					campRules
+				)
 			end
 			return found
 		elseif op == "timeline" then
@@ -702,8 +757,17 @@ for _, case in data.rayCases do
 				)
 				found[index] = { if entry ~= nil then entry else "nil", crit }
 			elseif case.op == "rayUpright" then
-				local entry =
-					Shapes.RayUpright(C.v(row[1]), C.v(row[2]), row[3], row[4], row[5], C.v(row[6]), row[7], row[8], row[9])
+				local entry = Shapes.RayUpright(
+					C.v(row[1]),
+					C.v(row[2]),
+					row[3],
+					row[4],
+					row[5],
+					C.v(row[6]),
+					row[7],
+					row[8],
+					row[9]
+				)
 				found[index] = if entry ~= nil then entry else "nil"
 			else
 				found[index] = Shapes.FlatToRect(row[1], row[2], row[3], row[4], row[5], row[6])

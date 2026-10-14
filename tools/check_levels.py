@@ -1806,15 +1806,14 @@ def check_rules(combat, level_files, ctx, expect):
            "crowdCeiling, floorThickness, fenceThickness and startSpacing are over 0; triggerInset is gone (a camp "
            "triggers on its whole fenced rectangle)" + (f" (not: {', '.join(odd)})" if odd else "")
            + (" (triggerInset is still there)" if "triggerInset" in levels else ""))
-    # L1b: the checkpoint's reach, the wallet's pace and the fire marker; the population reserve
-    # is gone (L1b-W2-5: the boss reserve is derived from ProvingGrounds.json).
+    # L1b: the checkpoint's reach, the wallet's pace and the fire marker (L1b-W2-5 derives the
+    # boss reserve from ProvingGrounds.json: Combat.json holds no reserve).
     reach, wallet = levels.get("checkpointReach"), levels.get("walletSendSeconds")
     fire = levels.get("fireMarkerSize")
     expect(is_number(reach) and reach > 0 and is_number(wallet) and wallet == WALLET_SEND_SECONDS
-           and three_positive(fire) and "populationReserve" not in levels,
+           and three_positive(fire),
            f"Combat.json levels (L1b): checkpointReach over 0 ({reach}), walletSendSeconds exactly "
-           f"{WALLET_SEND_SECONDS:g} ({wallet}), fireMarkerSize three positive numbers ({fire}), no populationReserve "
-           f"(L1b-W2-5)")
+           f"{WALLET_SEND_SECONDS:g} ({wallet}), fireMarkerSize three positive numbers ({fire})")
     camps = combat.get("camps")
     problems = sr.cb_problems(camps)
     expect(not problems, "Combat.json camps: every key CampBrain.Problems reads is there, finite and in range"

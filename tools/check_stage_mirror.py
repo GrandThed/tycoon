@@ -655,6 +655,7 @@ def script_run(run, variant, rules, start_y):
             continue
         if flow == "gate":
             tick(at=(clock[0] + run.gate_at) / 2)  # the countdown runs
+            tick(at=(clock[0] + run.gate_at) / 2, standing=[False])  # a down in it stands up (StandsUp)
             if lever("gate"):
                 continue
             if reset[0]:

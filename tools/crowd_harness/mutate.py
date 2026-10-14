@@ -2603,7 +2603,208 @@ W2_RUN_MUTATIONS = {
     ),
 }
 MUTATIONS.update(W2_RUN_MUTATIONS)
-FILES += ["src/shared/SwingGate.luau", SPAWN_SEED]
+FILES += ["src/shared/SwingGate.luau", SPAWN_SEED]  # SwingGate: A's SWING
+
+# L1b Wave 2, luau-engineer A (docs/prompts/l1b-w2-reports/build-A.md "For B"): the crowd's ray,
+# SwingGate, CampBrain's tent, dormancy and join-in, CrowdService's executors. Texts as A gave them.
+SWING = "src/shared/SwingGate.luau"
+
+L1B_W2_CROWD_MUTATIONS = {
+    # HitShapes.CrowdRay / RayUpright / FlatToRect
+    "l1b w2 crowd: CrowdRay without the head term": (
+        HITSHAPES,
+        "local entry = earlier(bodyEntry, headEntry)",
+        "local entry = bodyEntry",
+    ),
+    "l1b w2 crowd: CrowdRay's crit test padded": (
+        HITSHAPES,
+        "return entry, HitShapes.Ray(origin, direction, reach, width, 0, head, headRadius) ~= nil",
+        "return entry, HitShapes.Ray(origin, direction, reach, width, pad, head, headRadius) ~= nil",
+    ),
+    "l1b w2 crowd: CrowdRay's head at half height": (
+        HITSHAPES,
+        "local head = feet + Vector3.new(0, height - headRadius, 0)\n\tlocal bodyEntry",
+        "local head = feet + Vector3.new(0, height / 2, 0)\n\tlocal bodyEntry",
+    ),
+    "l1b w2 crowd: CrowdRay's body back to a sphere": (
+        HITSHAPES,
+        "\t\tfeet,\n\t\tradius,\n\t\ttop - radius,\n\t\tradius\n\t)",
+        "\t\tfeet,\n\t\theight / 2,\n\t\theight / 2,\n\t\tradius\n\t)",
+    ),
+    "l1b w2 crowd: CrowdRay's entry always the head's": (
+        HITSHAPES,
+        "local entry = earlier(bodyEntry, headEntry)",
+        "local entry = if headEntry ~= nil then headEntry else bodyEntry",
+    ),
+    "l1b w2 crowd: CrowdRay's top without the max": (
+        HITSHAPES,
+        "local top = math.max(height - 2 * headRadius, height / 2 + radius)",
+        "local top = height - 2 * headRadius",
+    ),
+    "l1b w2 crowd: RayUpright drops a cap": (
+        HITSHAPES,
+        "local best = earlier(firstIn(lowEnter, lowExit, reach), firstIn(highEnter, highExit, reach))",
+        "local best = firstIn(lowEnter, lowExit, reach)",
+    ),
+    "l1b w2 crowd: FlatToRect with square corners": (
+        HITSHAPES,
+        "local dz = math.max(math.abs(z - cz) - hz, 0)\n\treturn math.sqrt(dx * dx + dz * dz)",
+        "local dz = math.max(math.abs(z - cz) - hz, 0)\n\treturn math.max(dx, dz)",
+    ),
+    # SwingGate
+    "l1b w2 crowd: SwingGate.Took ignores airborne": (SWING, "state.used = airborne", "state.used = true"),
+    "l1b w2 crowd: SwingGate.Landed does nothing": (
+        SWING,
+        "function SwingGate.Landed(state: State)\n\tstate.used = false",
+        "function SwingGate.Landed(state: State)\n\tlocal _ = state",
+    ),
+    "l1b w2 crowd: SwingGate.Allows ignores used": (SWING, "return not (airborne and state.used)", "return true"),
+    "l1b w2 crowd: SwingGate.IsAir with >=": (
+        SWING,
+        "return height > standOffset + SwingGate.AIR_MARGIN_STUDS",
+        "return height >= standOffset + SwingGate.AIR_MARGIN_STUDS",
+    ),
+    # CampBrain
+    "l1b w2 crowd: a tent's ring faces inward": (
+        CAMP,
+        'local turn = if posture == "fire" then math.pi else 0',
+        "local turn = math.pi",
+    ),
+    "l1b w2 crowd: a tent sits at rest": (
+        CAMP,
+        'return if group.def.posture == "fire" then "rest" else "idle"',
+        'return if group.def.posture == "fire" or group.def.posture == "tent" then "rest" else "idle"',
+    ),
+    "l1b w2 crowd: Problems skips the tent posture": (
+        CAMP,
+        'local POSTURES: { Types.CampPosture } = { "guard", "patrol", "fire", "tent" }',
+        'local POSTURES: { Types.CampPosture } = { "guard", "patrol", "fire" }',
+    ),
+    "l1b w2 crowd: Problems lets dormantRadius equal a sight": (
+        CAMP,
+        "if isFinite(sight) and dormantRadius <= sight then",
+        "if isFinite(sight) and dormantRadius < sight then",
+    ),
+    "l1b w2 crowd: Dormant while in home": (
+        CAMP,
+        'function CampBrain.Dormant(group: Group, roots: { Vector3 }, rules: Types.CampRulesConfig): boolean\n\tif group.state ~= "rest" then',
+        'function CampBrain.Dormant(group: Group, roots: { Vector3 }, rules: Types.CampRulesConfig): boolean\n\tif group.state ~= "rest" and group.state ~= "home" then',
+    ),
+    "l1b w2 crowd: Dormant ignores dormantRadius": (
+        CAMP,
+        "local radius = rules.dormantRadius",
+        "local radius = 0",
+    ),
+    "l1b w2 crowd: JoinIn does not chain": (
+        CAMP,
+        "\t\t\t\ttable.insert(answer, other)\n\t\t\t\ttable.insert(queue, other)",
+        "\t\t\t\ttable.insert(answer, other)",
+    ),
+    "l1b w2 crowd: JoinIn uses the first waker's sight for the whole chain": (
+        CAMP,
+        "local reach = rules.joinFactor * postureRules(group.def, rules).sight",
+        "local reach = rules.joinFactor * postureRules(groups[woke[1]].def, rules).sight",
+    ),
+    "l1b w2 crowd: JoinIn joins a held group": (
+        CAMP,
+        '\t\t\t\tcandidate.state == "rest"\n\t\t\t\tand not candidate.held\n',
+        '\t\t\t\tcandidate.state == "rest"\n',
+    ),
+    "l1b w2 crowd: gaps written across camps": (
+        CROWD,
+        "if earlier.brain.def.camp == def.camp then",
+        "if true then",
+    ),
+    "l1b w2 crowd: Rouse wakes a held group": (
+        CAMP,
+        'if group.held or group.state ~= "rest" then\n\t\treturn false\n\tend\n\tgroup.state = "rise"',
+        'if group.state ~= "rest" then\n\t\treturn false\n\tend\n\tgroup.state = "rise"',
+    ),
+    "l1b w2 crowd: TentActive ignores the dead residents": (
+        CAMP,
+        "return busy or residentsAlive <= 0",
+        "return busy",
+    ),
+    "l1b w2 crowd: TentDue ignores active": (
+        CAMP,
+        "return active and tent.left > 0 and now >= tent.nextAt - TIME_EPSILON",
+        "return tent.left > 0 and now >= tent.nextAt - TIME_EPSILON",
+    ),
+    "l1b w2 crowd: TentSent does not move nextAt": (
+        CAMP,
+        "tent.nextAt = now + every",
+        "tent.nextAt = tent.nextAt",
+    ),
+    # CrowdService
+    "l1b w2 crowd: a dormant body is integrated": (
+        CROWD,
+        "\t\tif enemy.dormant then\n\t\t\t-- L1b-W2-10: not integrated",
+        "\t\tif false then\n\t\t\t-- L1b-W2-10: not integrated",
+    ),
+    "l1b w2 crowd: a dormant body is sent": (
+        CROWD,
+        "\t\tif enemy.dormant then\n\t\t\t-- L1b-W2-10: far from every player",
+        "\t\tif false then\n\t\t\t-- L1b-W2-10: far from every player",
+    ),
+    "l1b w2 crowd: the flush skips the info refresh": (
+        CROWD,
+        "pendingSpawnSet[id] = nil\n\t\t\t\ttable.insert(batch, refreshInfo(enemy))",
+        "pendingSpawnSet[id] = nil\n\t\t\t\ttable.insert(batch, enemy.spawnInfo)",
+    ),
+    "l1b w2 crowd: a late joiner's batch skips the info refresh": (
+        CROWD,
+        "if not pendingSpawnSet[enemy.id] then\n\t\t\ttable.insert(batch, refreshInfo(enemy))",
+        "if not pendingSpawnSet[enemy.id] then\n\t\t\ttable.insert(batch, enemy.spawnInfo)",
+    ),
+    "l1b w2 crowd: the join-in never runs": (CROWD, "\tif #woke > 0 then\n", "\tif false then\n"),
+    "l1b w2 crowd: a rouse is never executed": (
+        CROWD,
+        "if rouse[index] and CampBrain.Rouse(brain, simTime) then",
+        "if false then",
+    ),
+    "l1b w2 crowd: GroupedOn not taken down at a death": (
+        CROWD,
+        "grouped[enemy.floor] = math.max((grouped[enemy.floor] or 0) - 1, 0)",
+        "grouped[enemy.floor] = grouped[enemy.floor] or 0",
+    ),
+    "l1b w2 crowd: the [Perf] attribute never set": (
+        CROWD,
+        "Workspace:SetAttribute(attribute, p95)",
+        "Workspace:SetAttribute(attribute, nil)",
+    ),
+    "l1b w2 crowd: the [Perf] attribute set with no name": (
+        CROWD,
+        'perf.attribute = if typeof(attribute) == "string" and attribute ~= "" then attribute else nil',
+        'perf.attribute = if typeof(attribute) == "string" and attribute ~= "" then attribute else "CrowdPerfMs"',
+    ),
+}
+
+# Stale Wave 1 mutations whose text A's edits changed: label -> (file, new old-text, new new-text).
+L1B_W2_CROWD_REPLACED = {
+    "l1b crowd: in play ignores chaseMargin": (
+        CAMP,
+        "HitShapes.FlatToRect(root.X, root.Z, rect.x, rect.z, rect.hx, rect.hz) <= rules.chaseMargin",
+        "HitShapes.FlatToRect(root.X, root.Z, rect.x, rect.z, rect.hx, rect.hz) <= 0",
+    ),
+    "l1b crowd: a fire's sitters face away from it": (
+        CAMP,
+        'local turn = if posture == "fire" then math.pi else 0',
+        "local turn = 0",
+    ),
+    "l1b crowd: a group walking home engages": (
+        CROWD,
+        'if #group.bodies > 0 and (brain.state == "rise" or brain.state == "fight") then',
+        'if #group.bodies > 0 and brain.state ~= "rest" then',
+    ),
+}
+# "l1b crowd: in play has square corners" is retired: the rectangle distance moved into
+# HitShapes.FlatToRect, whose own mutation "l1b w2 crowd: FlatToRect with square corners" replaces it.
+MUTATIONS.update(L1B_W2_CROWD_MUTATIONS)
+# A's edits moved the text of three Wave 1 mutations: same labels, same rules, new texts.
+MUTATIONS.update(L1B_W2_CROWD_REPLACED)
+# Retired, never silently: the rectangle distance moved into HitShapes.FlatToRect, whose own
+# "l1b w2 crowd: FlatToRect with square corners" holds the rule now.
+del MUTATIONS["l1b crowd: in play has square corners"]
 
 
 def harness(root: Path) -> tuple:
