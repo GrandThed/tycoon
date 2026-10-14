@@ -1,0 +1,492 @@
+{
+	"version": 1,
+	"id": "forestRoad",
+	"name": "Forest Road",
+	"layout": "ForestRoad",
+	"material": "Timber",
+	"targetMinutes": 9,
+	"runCapSeconds": 1500,
+	"difficulties": {
+		"normal": {
+			"hpScale": 1.5,
+			"damageScale": 1.12,
+			"plateScale": 1,
+			"countMult": 1,
+			"rewardMult": 1,
+			"recommendedTier": 2
+		},
+		"hard": {
+			"hpScale": 5.2,
+			"damageScale": 2.0,
+			"plateScale": 1,
+			"countMult": 1.2,
+			"rewardMult": 2,
+			"recommendedTier": 4
+		},
+		"brutal": {
+			"hpScale": 11.5,
+			"damageScale": 3.35,
+			"plateScale": 1,
+			"countMult": 1.35,
+			"rewardMult": 4,
+			"recommendedTier": 6
+		}
+	},
+	"crowd": {
+		"regenShare": 0.077,
+		"maxAlive": 40,
+		"burst": 8,
+		"burstSpacing": 3.5,
+		"clearBonus": {
+			"cash": 0,
+			"materials": 0,
+			"share": 0.1
+		},
+		"rewards": {
+			"fodder": {
+				"cash": 100,
+				"materials": 0
+			},
+			"slinger": {
+				"cash": 500,
+				"materials": 1
+			},
+			"brute": {
+				"cash": 2000,
+				"materials": 6
+			},
+			"lobber": {
+				"cash": 700,
+				"materials": 4
+			},
+			"marksman": {
+				"cash": 600,
+				"materials": 1
+			},
+			"armoured": {
+				"cash": 1200,
+				"materials": 2
+			},
+			"colossus": {
+				"cash": 29000,
+				"materials": 70
+			}
+		}
+	},
+	"stages": [
+		{
+			"kind": "travel",
+			"name": "Follow the road"
+		},
+		{
+			"kind": "camp",
+			"zone": "C",
+			"name": "The Chief's Clearing",
+			"targetWaveSeconds": 34,
+			"breatherSeconds": 3,
+			"maxAlive": 42,
+			"waves": [
+				{
+					"groups": [
+						{
+							"kind": "fodder",
+							"count": 16
+						},
+						{
+							"kind": "brute",
+							"count": 2
+						},
+						{
+							"kind": "armoured",
+							"count": 2,
+							"minDifficulty": "hard"
+						},
+						{
+							"kind": "fodder",
+							"count": 16
+						},
+						{
+							"kind": "brute",
+							"count": 1
+						}
+					]
+				},
+				{
+					"groups": [
+						{
+							"kind": "fodder",
+							"count": 14
+						},
+						{
+							"kind": "slinger",
+							"count": 2
+						},
+						{
+							"kind": "brute",
+							"count": 3
+						},
+						{
+							"kind": "fodder",
+							"count": 14
+						}
+					]
+				},
+				{
+					"groups": [],
+					"boss": {
+						"kind": "colossus",
+						"at": [
+							14,
+							0
+						],
+						"valor": 10
+					}
+				}
+			]
+		}
+	],
+	"camps": [
+		{
+			"id": "A",
+			"name": "Pickets",
+			"residents": [
+				{
+					"spot": "fireW",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 5
+						},
+						{
+							"kind": "slinger",
+							"count": 2
+						},
+						{
+							"kind": "slinger",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				},
+				{
+					"spot": "fireN",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 6
+						},
+						{
+							"kind": "slinger",
+							"count": 1
+						},
+						{
+							"kind": "armoured",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				},
+				{
+					"spot": "watch",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 6
+						},
+						{
+							"kind": "slinger",
+							"count": 2
+						},
+						{
+							"kind": "marksman",
+							"count": 1,
+							"minDifficulty": "hard"
+						},
+						{
+							"kind": "armoured",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				},
+				{
+					"spot": "loop",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 6
+						},
+						{
+							"kind": "slinger",
+							"count": 2
+						},
+						{
+							"kind": "slinger",
+							"count": 1,
+							"minDifficulty": "hard"
+						},
+						{
+							"kind": "armoured",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				}
+			],
+			"tent": {
+				"every": 6,
+				"units": [
+					{
+						"kind": "fodder",
+						"count": 4
+					},
+					{
+						"kind": "slinger",
+						"count": 2
+					},
+					{
+						"kind": "brute",
+						"count": 2
+					}
+				]
+			}
+		},
+		{
+			"id": "B",
+			"name": "Main Camp",
+			"residents": [
+				{
+					"spot": "fire1",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 4
+						},
+						{
+							"kind": "slinger",
+							"count": 1
+						},
+						{
+							"kind": "brute",
+							"count": 2
+						},
+						{
+							"kind": "armoured",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				},
+				{
+					"spot": "fire2",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 4
+						},
+						{
+							"kind": "slinger",
+							"count": 2
+						},
+						{
+							"kind": "brute",
+							"count": 1
+						},
+						{
+							"kind": "marksman",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				},
+				{
+					"spot": "loop",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 4
+						},
+						{
+							"kind": "brute",
+							"count": 3
+						},
+						{
+							"kind": "slinger",
+							"count": 1
+						}
+					]
+				},
+				{
+					"spot": "fire3",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 3
+						},
+						{
+							"kind": "slinger",
+							"count": 1
+						},
+						{
+							"kind": "lobber",
+							"count": 1
+						},
+						{
+							"kind": "brute",
+							"count": 3
+						},
+						{
+							"kind": "marksman",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				},
+				{
+					"spot": "eastWatch",
+					"units": [
+						{
+							"kind": "brute",
+							"count": 4
+						},
+						{
+							"kind": "armoured",
+							"count": 2
+						},
+						{
+							"kind": "slinger",
+							"count": 1
+						},
+						{
+							"kind": "lobber",
+							"count": 1
+						}
+					]
+				},
+				{
+					"spot": "eastFire",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 4
+						},
+						{
+							"kind": "slinger",
+							"count": 1
+						},
+						{
+							"kind": "brute",
+							"count": 3
+						},
+						{
+							"kind": "armoured",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				}
+			],
+			"tent": {
+				"every": 6,
+				"units": [
+					{
+						"kind": "fodder",
+						"count": 2
+					},
+					{
+						"kind": "slinger",
+						"count": 2
+					},
+					{
+						"kind": "brute",
+						"count": 4
+					}
+				]
+			}
+		},
+		{
+			"id": "C",
+			"name": "The Chief's Clearing",
+			"residents": [
+				{
+					"spot": "gate",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 6
+						},
+						{
+							"kind": "brute",
+							"count": 3
+						}
+					]
+				},
+				{
+					"spot": "chiefFire",
+					"units": [
+						{
+							"kind": "brute",
+							"count": 3
+						},
+						{
+							"kind": "fodder",
+							"count": 4
+						},
+						{
+							"kind": "armoured",
+							"count": 2
+						}
+					]
+				},
+				{
+					"spot": "north",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 4
+						},
+						{
+							"kind": "brute",
+							"count": 2
+						},
+						{
+							"kind": "slinger",
+							"count": 2
+						},
+						{
+							"kind": "armoured",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				},
+				{
+					"spot": "south",
+					"units": [
+						{
+							"kind": "fodder",
+							"count": 4
+						},
+						{
+							"kind": "brute",
+							"count": 2
+						},
+						{
+							"kind": "slinger",
+							"count": 2
+						},
+						{
+							"kind": "lobber",
+							"count": 2
+						},
+						{
+							"kind": "armoured",
+							"count": 1,
+							"minDifficulty": "hard"
+						}
+					]
+				}
+			]
+		}
+	]
+}

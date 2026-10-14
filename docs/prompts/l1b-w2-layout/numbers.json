@@ -1,0 +1,1881 @@
+{
+ "winding": {
+  "name": "winding",
+  "population": {
+   "normal": {
+    "residents": {
+     "A": 30,
+     "B": 46,
+     "C": 36
+    },
+    "total": 112,
+    "tents": {
+     "A": 8,
+     "B": 8,
+     "C": 0
+    },
+    "tentTotal": 16,
+    "room": 6,
+    "worst": 147,
+    "validate21": 139,
+    "cap": 160,
+    "groups": 14
+   },
+   "hard": {
+    "residents": {
+     "A": 36,
+     "B": 50,
+     "C": 38
+    },
+    "total": 124,
+    "tents": {
+     "A": 8,
+     "B": 8,
+     "C": 0
+    },
+    "tentTotal": 16,
+    "room": 4,
+    "worst": 157,
+    "validate21": 149,
+    "cap": 160,
+    "groups": 14
+   },
+   "brutal": {
+    "residents": {
+     "A": 36,
+     "B": 50,
+     "C": 38
+    },
+    "total": 124,
+    "tents": {
+     "A": 8,
+     "B": 8,
+     "C": 0
+    },
+    "tentTotal": 16,
+    "room": 4,
+    "worst": 157,
+    "validate21": 149,
+    "cap": 160,
+    "groups": 14
+   }
+  },
+  "parts": {
+   "checkLevels": 79,
+   "tents": 3,
+   "total": 82,
+   "max": 600
+  },
+  "wire": {
+   "campFurthest": 379.0,
+   "anyFurthest": 482.0,
+   "gate": 1000.0,
+   "codec": 1024,
+   "bounds": [
+    -482.0,
+    387.0,
+    -109.5,
+    104.0,
+    -5.0,
+    92
+   ]
+  },
+  "route": {
+   "length": 1055.0,
+   "walked": 750.0,
+   "camps": {
+    "A": 73.0,
+    "B": 129.0,
+    "C": 103.0
+   }
+  },
+  "groups": [
+   {
+    "id": "A.fireW",
+    "camp": "A",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 27.9415392918092,
+    "sneakSeen": false,
+    "roadDistance": 25.0,
+    "roadSeen": false,
+    "centre": [
+     -251.5,
+     -14.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 5
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "A.fireN",
+    "camp": "A",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 23.0,
+    "sneakSeen": false,
+    "roadDistance": 12.5,
+    "roadSeen": true,
+    "centre": [
+     -229.5,
+     -26.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 6
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "A.watch",
+    "camp": "A",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 10,
+    "held": false,
+    "sneakDistance": 56.54423047491229,
+    "sneakSeen": false,
+    "roadDistance": 56.54423047491229,
+    "roadSeen": false,
+    "centre": [
+     -200.5,
+     21.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 6
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "marksman",
+      "count": 1
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "A.loop",
+    "camp": "A",
+    "posture": "patrol",
+    "sight": 24,
+    "cone": 360,
+    "bodies": 10,
+    "held": false,
+    "sneakDistance": 41.08976028160787,
+    "sneakSeen": false,
+    "roadDistance": 34.0,
+    "roadSeen": false,
+    "centre": [
+     -187.5,
+     1.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 6
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.fire1",
+    "camp": "B",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 22.140647680347623,
+    "sneakSeen": false,
+    "roadDistance": 13.5,
+    "roadSeen": true,
+    "centre": [
+     -49.5,
+     -24.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "brute",
+      "count": 2
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.fire2",
+    "camp": "B",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 31.0,
+    "sneakSeen": false,
+    "roadDistance": 14.5,
+    "roadSeen": true,
+    "centre": [
+     -21.5,
+     -23.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "brute",
+      "count": 1
+     },
+     {
+      "kind": "marksman",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.loop",
+    "camp": "B",
+    "posture": "patrol",
+    "sight": 24,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 77.38378383098102,
+    "sneakSeen": false,
+    "roadDistance": 77.38378383098102,
+    "roadSeen": false,
+    "centre": [
+     -25.5,
+     48.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "brute",
+      "count": 3
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.fire3",
+    "camp": "B",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 9,
+    "held": false,
+    "sneakDistance": 105.0,
+    "sneakSeen": false,
+    "roadDistance": 88.5,
+    "roadSeen": false,
+    "centre": [
+     0.5,
+     52.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 3
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "lobber",
+      "count": 1
+     },
+     {
+      "kind": "brute",
+      "count": 3
+     },
+     {
+      "kind": "marksman",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.eastWatch",
+    "camp": "B",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 45.32846346392077,
+    "sneakSeen": false,
+    "roadDistance": 38.0,
+    "roadSeen": false,
+    "centre": [
+     64.5,
+     11.5
+    ],
+    "units": [
+     {
+      "kind": "brute",
+      "count": 4
+     },
+     {
+      "kind": "armoured",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "lobber",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.eastFire",
+    "camp": "B",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 9,
+    "held": false,
+    "sneakDistance": 71.79618287732,
+    "sneakSeen": false,
+    "roadDistance": 60.5,
+    "roadSeen": false,
+    "centre": [
+     44.5,
+     24.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "brute",
+      "count": 3
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "C.gate",
+    "camp": "C",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 9,
+    "held": true,
+    "sneakDistance": 27.390691849604675,
+    "sneakSeen": true,
+    "roadDistance": 0.0,
+    "roadSeen": true,
+    "centre": [
+     279.94444444444446,
+     -44.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 6
+     },
+     {
+      "kind": "brute",
+      "count": 3
+     }
+    ]
+   },
+   {
+    "id": "C.chiefFire",
+    "camp": "C",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 9,
+    "held": true,
+    "sneakDistance": 82.84001278815738,
+    "sneakSeen": false,
+    "roadDistance": 26.5,
+    "roadSeen": false,
+    "centre": [
+     333.5,
+     -9.999999999999998
+    ],
+    "units": [
+     {
+      "kind": "brute",
+      "count": 3
+     },
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "armoured",
+      "count": 2
+     }
+    ]
+   },
+   {
+    "id": "C.north",
+    "camp": "C",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 9,
+    "held": true,
+    "sneakDistance": 64.74758682761852,
+    "sneakSeen": false,
+    "roadDistance": 44.0,
+    "roadSeen": false,
+    "centre": [
+     317.5,
+     -88.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "brute",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "C.south",
+    "camp": "C",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 11,
+    "held": true,
+    "sneakDistance": 76.19875327064085,
+    "sneakSeen": false,
+    "roadDistance": 50.0,
+    "roadSeen": false,
+    "centre": [
+     332.5,
+     6.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "brute",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "lobber",
+      "count": 2
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   }
+  ],
+  "postSpacing": {
+   "spare": 0.07488462074616731,
+   "difficulty": "hard",
+   "between": [
+    "B.fire1",
+    "B.fire1"
+   ]
+  },
+  "sneak": {
+   "length": 966.9713734513575,
+   "offGround": 0,
+   "samples": 1929,
+   "firstOff": []
+  },
+  "chains": {
+   "A.fireW": {
+    "wakes": [
+     "A.fireN",
+     "A.fireW"
+    ],
+    "bodies": 16
+   },
+   "A.fireN": {
+    "wakes": [
+     "A.fireN",
+     "A.fireW"
+    ],
+    "bodies": 16
+   },
+   "A.watch": {
+    "wakes": [
+     "A.fireN",
+     "A.fireW",
+     "A.loop",
+     "A.watch"
+    ],
+    "bodies": 36
+   },
+   "A.loop": {
+    "wakes": [
+     "A.fireN",
+     "A.fireW",
+     "A.loop",
+     "A.watch"
+    ],
+    "bodies": 36
+   },
+   "B.fire1": {
+    "wakes": [
+     "B.fire1",
+     "B.fire2"
+    ],
+    "bodies": 16
+   },
+   "B.fire2": {
+    "wakes": [
+     "B.fire1",
+     "B.fire2"
+    ],
+    "bodies": 16
+   },
+   "B.loop": {
+    "wakes": [
+     "B.fire3",
+     "B.loop"
+    ],
+    "bodies": 17
+   },
+   "B.fire3": {
+    "wakes": [
+     "B.fire3",
+     "B.loop"
+    ],
+    "bodies": 17
+   },
+   "B.eastWatch": {
+    "wakes": [
+     "B.eastFire",
+     "B.eastWatch"
+    ],
+    "bodies": 17
+   },
+   "B.eastFire": {
+    "wakes": [
+     "B.eastFire",
+     "B.eastWatch"
+    ],
+    "bodies": 17
+   },
+   "C.gate": {
+    "wakes": [
+     "C.chiefFire",
+     "C.gate",
+     "C.north",
+     "C.south"
+    ],
+    "bodies": 38
+   },
+   "C.chiefFire": {
+    "wakes": [
+     "C.chiefFire",
+     "C.gate",
+     "C.north",
+     "C.south"
+    ],
+    "bodies": 38
+   },
+   "C.north": {
+    "wakes": [
+     "C.chiefFire",
+     "C.gate",
+     "C.north",
+     "C.south"
+    ],
+    "bodies": 38
+   },
+   "C.south": {
+    "wakes": [
+     "C.chiefFire",
+     "C.gate",
+     "C.north",
+     "C.south"
+    ],
+    "bodies": 38
+   }
+  },
+  "edges": {
+   "A.fireW": [
+    "A.fireN"
+   ],
+   "A.fireN": [
+    "A.fireW"
+   ],
+   "A.watch": [
+    "A.fireW",
+    "A.fireN",
+    "A.loop"
+   ],
+   "A.loop": [
+    "A.fireN",
+    "A.watch"
+   ],
+   "B.fire1": [
+    "B.fire2"
+   ],
+   "B.fire2": [
+    "B.fire1"
+   ],
+   "B.loop": [
+    "B.fire3"
+   ],
+   "B.fire3": [
+    "B.loop"
+   ],
+   "B.eastWatch": [
+    "B.eastFire"
+   ],
+   "B.eastFire": [
+    "B.eastWatch"
+   ],
+   "C.gate": [
+    "C.chiefFire",
+    "C.north",
+    "C.south"
+   ],
+   "C.chiefFire": [
+    "C.south"
+   ],
+   "C.north": [
+    "C.gate"
+   ],
+   "C.south": [
+    "C.gate",
+    "C.chiefFire"
+   ]
+  },
+  "time": {
+   "walk": 52.75,
+   "tour": 13.787130556823953,
+   "tours": {
+    "A": 123.36221708567075,
+    "B": 152.38039405080832
+   },
+   "fights": {
+    "A": 31.875,
+    "B": 122.875,
+    "C": 135.85
+   },
+   "colossus": 75.0,
+   "countdown": 3.0,
+   "sim": 435.137130556824,
+   "human": 566.753130556824,
+   "hp": {
+    "camps": {
+     "A": 1852.5,
+     "B": 10112.5,
+     "C": 6970.0
+    },
+    "tents": {
+     "A": 1335.0,
+     "B": 2175.0,
+     "C": 0
+    },
+    "cWaves": 6615.0,
+    "cWaveBodies": 68
+   }
+  },
+  "pay": {
+   "normal": {
+    "camps": {
+     "A": {
+      "kills": {
+       "fodder": 27,
+       "slinger": 9,
+       "brute": 2
+      },
+      "cash": 11200,
+      "materials": 21,
+      "bonusCash": 1120,
+      "bonusMaterials": 2
+     },
+     "B": {
+      "kills": {
+       "fodder": 21,
+       "slinger": 9,
+       "brute": 20,
+       "lobber": 2,
+       "armoured": 2
+      },
+      "cash": 50400,
+      "materials": 141,
+      "bonusCash": 5040,
+      "bonusMaterials": 14
+     },
+     "C": {
+      "kills": {
+       "fodder": 78,
+       "brute": 16,
+       "armoured": 2,
+       "slinger": 6,
+       "lobber": 2
+      },
+      "cash": 46600,
+      "materials": 114,
+      "bonusCash": 4660,
+      "bonusMaterials": 11,
+      "bossCash": 33800,
+      "bossMaterials": 70,
+      "valor": 10
+     }
+    },
+    "cash": 152820,
+    "materials": 373,
+    "valor": 10
+   },
+   "hard": {
+    "camps": {
+     "A": {
+      "kills": {
+       "fodder": 27,
+       "slinger": 11,
+       "armoured": 3,
+       "marksman": 1,
+       "brute": 2
+      },
+      "cash": 32800,
+      "materials": 60,
+      "bonusCash": 3280,
+      "bonusMaterials": 6
+     },
+     "B": {
+      "kills": {
+       "fodder": 21,
+       "slinger": 9,
+       "brute": 20,
+       "armoured": 4,
+       "marksman": 2,
+       "lobber": 2
+      },
+      "cash": 108000,
+      "materials": 294,
+      "bonusCash": 10800,
+      "bonusMaterials": 29
+     },
+     "C": {
+      "kills": {
+       "fodder": 88,
+       "brute": 16,
+       "armoured": 6,
+       "slinger": 6,
+       "lobber": 2
+      },
+      "cash": 104800,
+      "materials": 244,
+      "bonusCash": 10480,
+      "bonusMaterials": 24,
+      "bossCash": 67600,
+      "bossMaterials": 140,
+      "valor": 20
+     }
+    },
+    "cash": 337760,
+    "materials": 797,
+    "valor": 20
+   },
+   "brutal": {
+    "camps": {
+     "A": {
+      "kills": {
+       "fodder": 27,
+       "slinger": 11,
+       "armoured": 3,
+       "marksman": 1,
+       "brute": 2
+      },
+      "cash": 65600,
+      "materials": 120,
+      "bonusCash": 6560,
+      "bonusMaterials": 12
+     },
+     "B": {
+      "kills": {
+       "fodder": 21,
+       "slinger": 9,
+       "brute": 20,
+       "armoured": 4,
+       "marksman": 2,
+       "lobber": 2
+      },
+      "cash": 216000,
+      "materials": 588,
+      "bonusCash": 21600,
+      "bonusMaterials": 58
+     },
+     "C": {
+      "kills": {
+       "fodder": 96,
+       "brute": 17,
+       "armoured": 6,
+       "slinger": 6,
+       "lobber": 2
+      },
+      "cash": 220800,
+      "materials": 512,
+      "bonusCash": 22080,
+      "bonusMaterials": 51,
+      "bossCash": 135200,
+      "bossMaterials": 280,
+      "valor": 40
+     }
+    },
+    "cash": 687840,
+    "materials": 1621,
+    "valor": 40
+   },
+   "perMinute": {
+    "simCash": 21071.977903302846,
+    "simTimber": 51.432062281978546,
+    "humanCash": 16178.472611155123,
+    "humanTimber": 39.48809242220168
+   }
+  },
+  "campGaps": {
+   "A-B": 109.0,
+   "A-C": 435.0,
+   "B-C": 185.0
+  },
+  "gates": {
+   "pass": 98,
+   "total": 98,
+   "failures": []
+  }
+ },
+ "switchback": {
+  "name": "switchback",
+  "population": {
+   "normal": {
+    "residents": {
+     "A": 30,
+     "B": 46,
+     "C": 36
+    },
+    "total": 112,
+    "tents": {
+     "A": 8,
+     "B": 8,
+     "C": 0
+    },
+    "tentTotal": 16,
+    "room": 6,
+    "worst": 147,
+    "validate21": 139,
+    "cap": 160,
+    "groups": 14
+   },
+   "hard": {
+    "residents": {
+     "A": 36,
+     "B": 50,
+     "C": 38
+    },
+    "total": 124,
+    "tents": {
+     "A": 8,
+     "B": 8,
+     "C": 0
+    },
+    "tentTotal": 16,
+    "room": 4,
+    "worst": 157,
+    "validate21": 149,
+    "cap": 160,
+    "groups": 14
+   },
+   "brutal": {
+    "residents": {
+     "A": 36,
+     "B": 50,
+     "C": 38
+    },
+    "total": 124,
+    "tents": {
+     "A": 8,
+     "B": 8,
+     "C": 0
+    },
+    "tentTotal": 16,
+    "room": 4,
+    "worst": 157,
+    "validate21": 149,
+    "cap": 160,
+    "groups": 14
+   }
+  },
+  "parts": {
+   "checkLevels": 74,
+   "tents": 3,
+   "total": 77,
+   "max": 600
+  },
+  "wire": {
+   "campFurthest": 278.5,
+   "anyFurthest": 482.0,
+   "gate": 1000.0,
+   "codec": 1024,
+   "bounds": [
+    -482.0,
+    133.5,
+    -63.5,
+    294.0,
+    -5.0,
+    108
+   ]
+  },
+  "route": {
+   "length": 1088.30566541818,
+   "walked": 806.5,
+   "camps": {
+    "A": 51.61879502661797,
+    "B": 127.18687039156204,
+    "C": 103.0
+   }
+  },
+  "groups": [
+   {
+    "id": "A.fireW",
+    "camp": "A",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 32.12350800151416,
+    "sneakSeen": false,
+    "roadDistance": 28.150405800774088,
+    "roadSeen": false,
+    "centre": [
+     -61.0,
+     216.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 5
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "A.fireN",
+    "camp": "A",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 21.0,
+    "sneakSeen": false,
+    "roadDistance": 8.996318345622953,
+    "roadSeen": true,
+    "centre": [
+     -57.0,
+     186.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 6
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "A.watch",
+    "camp": "A",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 10,
+    "held": false,
+    "sneakDistance": 70.91720524668185,
+    "sneakSeen": false,
+    "roadDistance": 64.70027129805592,
+    "roadSeen": false,
+    "centre": [
+     -15.0,
+     225.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 6
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "marksman",
+      "count": 1
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "A.loop",
+    "camp": "A",
+    "posture": "patrol",
+    "sight": 24,
+    "cone": 360,
+    "bodies": 10,
+    "held": false,
+    "sneakDistance": 50.06246098625196,
+    "sneakSeen": false,
+    "roadDistance": 45.608387515702084,
+    "roadSeen": false,
+    "centre": [
+     -12.0,
+     201.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 6
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.fire1",
+    "camp": "B",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 34.5,
+    "sneakSeen": false,
+    "roadDistance": 11.866329867175505,
+    "roadSeen": true,
+    "centre": [
+     -164.0,
+     70.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "brute",
+      "count": 2
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.fire2",
+    "camp": "B",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 20.5,
+    "sneakSeen": false,
+    "roadDistance": 12.790512791756147,
+    "roadSeen": true,
+    "centre": [
+     -184.0,
+     55.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "brute",
+      "count": 1
+     },
+     {
+      "kind": "marksman",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.loop",
+    "camp": "B",
+    "posture": "patrol",
+    "sight": 24,
+    "cone": 360,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 30.0,
+    "sneakSeen": false,
+    "roadDistance": 30.0,
+    "roadSeen": false,
+    "centre": [
+     -245.0,
+     150.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "brute",
+      "count": 3
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.fire3",
+    "camp": "B",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 9,
+    "held": false,
+    "sneakDistance": 62.95233905741774,
+    "sneakSeen": false,
+    "roadDistance": 62.95233905741774,
+    "roadSeen": false,
+    "centre": [
+     -250.0,
+     120.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 3
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "lobber",
+      "count": 1
+     },
+     {
+      "kind": "brute",
+      "count": 3
+     },
+     {
+      "kind": "marksman",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.eastWatch",
+    "camp": "B",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 8,
+    "held": false,
+    "sneakDistance": 39.56008088970496,
+    "sneakSeen": false,
+    "roadDistance": 38.0,
+    "roadSeen": false,
+    "centre": [
+     -151.5,
+     150.0
+    ],
+    "units": [
+     {
+      "kind": "brute",
+      "count": 4
+     },
+     {
+      "kind": "armoured",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "lobber",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "B.eastFire",
+    "camp": "B",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 9,
+    "held": false,
+    "sneakDistance": 42.96695974299298,
+    "sneakSeen": false,
+    "roadDistance": 23.197051396552606,
+    "roadSeen": false,
+    "centre": [
+     -172.0,
+     124.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "slinger",
+      "count": 1
+     },
+     {
+      "kind": "brute",
+      "count": 3
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "C.gate",
+    "camp": "C",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 9,
+    "held": true,
+    "sneakDistance": 29.732137494637012,
+    "sneakSeen": true,
+    "roadDistance": 0.0,
+    "roadSeen": true,
+    "centre": [
+     26.444444444444443,
+     2.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 6
+     },
+     {
+      "kind": "brute",
+      "count": 3
+     }
+    ]
+   },
+   {
+    "id": "C.chiefFire",
+    "camp": "C",
+    "posture": "fire",
+    "sight": 16,
+    "cone": 360,
+    "bodies": 9,
+    "held": true,
+    "sneakDistance": 85.14274735997257,
+    "sneakSeen": false,
+    "roadDistance": 26.5,
+    "roadSeen": false,
+    "centre": [
+     80.0,
+     36.0
+    ],
+    "units": [
+     {
+      "kind": "brute",
+      "count": 3
+     },
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "armoured",
+      "count": 2
+     }
+    ]
+   },
+   {
+    "id": "C.north",
+    "camp": "C",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 9,
+    "held": true,
+    "sneakDistance": 66.60330322138685,
+    "sneakSeen": false,
+    "roadDistance": 44.0,
+    "roadSeen": false,
+    "centre": [
+     64.0,
+     -42.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "brute",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   },
+   {
+    "id": "C.south",
+    "camp": "C",
+    "posture": "guard",
+    "sight": 30,
+    "cone": 140,
+    "bodies": 11,
+    "held": true,
+    "sneakDistance": 78.10249675906654,
+    "sneakSeen": false,
+    "roadDistance": 50.0,
+    "roadSeen": false,
+    "centre": [
+     79.0,
+     52.0
+    ],
+    "units": [
+     {
+      "kind": "fodder",
+      "count": 4
+     },
+     {
+      "kind": "brute",
+      "count": 2
+     },
+     {
+      "kind": "slinger",
+      "count": 2
+     },
+     {
+      "kind": "lobber",
+      "count": 2
+     },
+     {
+      "kind": "armoured",
+      "count": 1
+     }
+    ]
+   }
+  ],
+  "postSpacing": {
+   "spare": 0.07488462074615843,
+   "difficulty": "hard",
+   "between": [
+    "B.fire1",
+    "B.fire1"
+   ]
+  },
+  "sneak": {
+   "length": 1037.3137084989849,
+   "offGround": 0,
+   "samples": 2075,
+   "firstOff": []
+  },
+  "chains": {
+   "A.fireW": {
+    "wakes": [
+     "A.fireN",
+     "A.fireW"
+    ],
+    "bodies": 16
+   },
+   "A.fireN": {
+    "wakes": [
+     "A.fireN",
+     "A.fireW"
+    ],
+    "bodies": 16
+   },
+   "A.watch": {
+    "wakes": [
+     "A.fireN",
+     "A.fireW",
+     "A.loop",
+     "A.watch"
+    ],
+    "bodies": 36
+   },
+   "A.loop": {
+    "wakes": [
+     "A.fireN",
+     "A.fireW",
+     "A.loop",
+     "A.watch"
+    ],
+    "bodies": 36
+   },
+   "B.fire1": {
+    "wakes": [
+     "B.fire1",
+     "B.fire2"
+    ],
+    "bodies": 16
+   },
+   "B.fire2": {
+    "wakes": [
+     "B.fire1",
+     "B.fire2"
+    ],
+    "bodies": 16
+   },
+   "B.loop": {
+    "wakes": [
+     "B.fire3",
+     "B.loop"
+    ],
+    "bodies": 17
+   },
+   "B.fire3": {
+    "wakes": [
+     "B.fire3",
+     "B.loop"
+    ],
+    "bodies": 17
+   },
+   "B.eastWatch": {
+    "wakes": [
+     "B.eastFire",
+     "B.eastWatch"
+    ],
+    "bodies": 17
+   },
+   "B.eastFire": {
+    "wakes": [
+     "B.eastFire",
+     "B.eastWatch"
+    ],
+    "bodies": 17
+   },
+   "C.gate": {
+    "wakes": [
+     "C.chiefFire",
+     "C.gate",
+     "C.north",
+     "C.south"
+    ],
+    "bodies": 38
+   },
+   "C.chiefFire": {
+    "wakes": [
+     "C.chiefFire",
+     "C.gate",
+     "C.north",
+     "C.south"
+    ],
+    "bodies": 38
+   },
+   "C.north": {
+    "wakes": [
+     "C.chiefFire",
+     "C.gate",
+     "C.north",
+     "C.south"
+    ],
+    "bodies": 38
+   },
+   "C.south": {
+    "wakes": [
+     "C.chiefFire",
+     "C.gate",
+     "C.north",
+     "C.south"
+    ],
+    "bodies": 38
+   }
+  },
+  "edges": {
+   "A.fireW": [
+    "A.fireN"
+   ],
+   "A.fireN": [
+    "A.fireW"
+   ],
+   "A.watch": [
+    "A.fireW",
+    "A.fireN",
+    "A.loop"
+   ],
+   "A.loop": [
+    "A.fireW",
+    "A.fireN",
+    "A.watch"
+   ],
+   "B.fire1": [
+    "B.fire2"
+   ],
+   "B.fire2": [
+    "B.fire1"
+   ],
+   "B.loop": [
+    "B.fire3"
+   ],
+   "B.fire3": [
+    "B.loop"
+   ],
+   "B.eastWatch": [
+    "B.eastFire"
+   ],
+   "B.eastFire": [
+    "B.eastWatch"
+   ],
+   "C.gate": [
+    "C.chiefFire",
+    "C.north",
+    "C.south"
+   ],
+   "C.chiefFire": [
+    "C.south"
+   ],
+   "C.north": [
+    "C.gate"
+   ],
+   "C.south": [
+    "C.gate",
+    "C.chiefFire"
+   ]
+  },
+  "time": {
+   "walk": 54.415283270909,
+   "tour": 20.81720943600319,
+   "tours": {
+    "A": 132.36815608263444,
+    "B": 283.9760326374294
+   },
+   "fights": {
+    "A": 31.875,
+    "B": 122.875,
+    "C": 135.85
+   },
+   "colossus": 75.0,
+   "countdown": 3.0,
+   "sim": 443.8324927069122,
+   "human": 575.4484927069122,
+   "hp": {
+    "camps": {
+     "A": 1852.5,
+     "B": 10112.5,
+     "C": 6970.0
+    },
+    "tents": {
+     "A": 1335.0,
+     "B": 2175.0,
+     "C": 0
+    },
+    "cWaves": 6615.0,
+    "cWaveBodies": 68
+   }
+  },
+  "pay": {
+   "normal": {
+    "camps": {
+     "A": {
+      "kills": {
+       "fodder": 27,
+       "slinger": 9,
+       "brute": 2
+      },
+      "cash": 11200,
+      "materials": 21,
+      "bonusCash": 1120,
+      "bonusMaterials": 2
+     },
+     "B": {
+      "kills": {
+       "fodder": 21,
+       "slinger": 9,
+       "brute": 20,
+       "lobber": 2,
+       "armoured": 2
+      },
+      "cash": 50400,
+      "materials": 141,
+      "bonusCash": 5040,
+      "bonusMaterials": 14
+     },
+     "C": {
+      "kills": {
+       "fodder": 78,
+       "brute": 16,
+       "armoured": 2,
+       "slinger": 6,
+       "lobber": 2
+      },
+      "cash": 46600,
+      "materials": 114,
+      "bonusCash": 4660,
+      "bonusMaterials": 11,
+      "bossCash": 33800,
+      "bossMaterials": 70,
+      "valor": 10
+     }
+    },
+    "cash": 152820,
+    "materials": 373,
+    "valor": 10
+   },
+   "hard": {
+    "camps": {
+     "A": {
+      "kills": {
+       "fodder": 27,
+       "slinger": 11,
+       "armoured": 3,
+       "marksman": 1,
+       "brute": 2
+      },
+      "cash": 32800,
+      "materials": 60,
+      "bonusCash": 3280,
+      "bonusMaterials": 6
+     },
+     "B": {
+      "kills": {
+       "fodder": 21,
+       "slinger": 9,
+       "brute": 20,
+       "armoured": 4,
+       "marksman": 2,
+       "lobber": 2
+      },
+      "cash": 108000,
+      "materials": 294,
+      "bonusCash": 10800,
+      "bonusMaterials": 29
+     },
+     "C": {
+      "kills": {
+       "fodder": 88,
+       "brute": 16,
+       "armoured": 6,
+       "slinger": 6,
+       "lobber": 2
+      },
+      "cash": 104800,
+      "materials": 244,
+      "bonusCash": 10480,
+      "bonusMaterials": 24,
+      "bossCash": 67600,
+      "bossMaterials": 140,
+      "valor": 20
+     }
+    },
+    "cash": 337760,
+    "materials": 797,
+    "valor": 20
+   },
+   "brutal": {
+    "camps": {
+     "A": {
+      "kills": {
+       "fodder": 27,
+       "slinger": 11,
+       "armoured": 3,
+       "marksman": 1,
+       "brute": 2
+      },
+      "cash": 65600,
+      "materials": 120,
+      "bonusCash": 6560,
+      "bonusMaterials": 12
+     },
+     "B": {
+      "kills": {
+       "fodder": 21,
+       "slinger": 9,
+       "brute": 20,
+       "armoured": 4,
+       "marksman": 2,
+       "lobber": 2
+      },
+      "cash": 216000,
+      "materials": 588,
+      "bonusCash": 21600,
+      "bonusMaterials": 58
+     },
+     "C": {
+      "kills": {
+       "fodder": 96,
+       "brute": 17,
+       "armoured": 6,
+       "slinger": 6,
+       "lobber": 2
+      },
+      "cash": 220800,
+      "materials": 512,
+      "bonusCash": 22080,
+      "bonusMaterials": 51,
+      "bossCash": 135200,
+      "bossMaterials": 280,
+      "valor": 40
+     }
+    },
+    "cash": 687840,
+    "materials": 1621,
+    "valor": 40
+   },
+   "perMinute": {
+    "simCash": 20659.14539982755,
+    "simTimber": 50.424428963065544,
+    "humanCash": 15934.006459671207,
+    "humanTimber": 38.891404328342894
+   }
+  },
+  "campGaps": {
+   "A-B": 42.0,
+   "A-C": 88.14193099768123,
+   "B-C": 132.0
+  },
+  "gates": {
+   "pass": 98,
+   "total": 98,
+   "failures": []
+  }
+ }
+}
