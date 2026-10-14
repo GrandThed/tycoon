@@ -245,6 +245,9 @@ type RangeState = {
 	-- so does waiting on the pad for the next wave (the local PartyMember.waiting).
 	inMission: boolean,
 	waiting: boolean,
+	-- L1b: the local PartyMember.engaged (a camp group fights this player, a slinger's reach
+	-- included), so auto-fire may answer a shooter from the road.
+	engaged: boolean,
 	activeSlot: Stance,
 	-- nil until FeedbackController pushes the server's loadout: the config's starting loadout.
 	loadout: Types.RangeLoadout?,
@@ -288,6 +291,7 @@ local rangeState: RangeState = {
 	rangeStarted = false,
 	inMission = false,
 	waiting = false,
+	engaged = false,
 	activeSlot = MELEE_SLOT,
 	device = "pc",
 	rangeTouches = {},
@@ -1072,7 +1076,7 @@ end
 -- itself. Bodies with no camp floor (the range) keep the old rule.
 local function campInPlay(id: number, root: Vector3): boolean
 	local cfg = combatConfig
-	if cfg == nil then
+	if cfg == nil or rangeState.engaged then
 		return true
 	end
 	local centre, half = CrowdRenderer.CampFloor(id)
@@ -2460,10 +2464,11 @@ function InputController.SetAbilityReady(readyIn: SlotTiers): ()
 end
 
 -- Pushed from every RunState: the run phase, and (P5) whether the local member is waiting on
--- the pad for the next wave (nil = not).
-function InputController.SetPhase(nextPhase: string, waiting: boolean?): ()
+-- the pad for the next wave (nil = not), and (L1b) whether a camp group is fighting them.
+function InputController.SetPhase(nextPhase: string, waiting: boolean?, engaged: boolean?): ()
 	missionState.phase = nextPhase
 	rangeState.waiting = waiting == true
+	rangeState.engaged = engaged == true
 	if not inPlay() then
 		missionState.attackHeld = false
 		missionState.chargeStartedAt = nil

@@ -6656,7 +6656,7 @@ class LevelRun(ThreatRun):
                 self.entered = True
                 self.grace_moves += 1
         self.advance(t)
-        if self.flow != "over" and self.down_until is not None and self.flow in ("travel", "armed") \
+        if self.flow != "over" and self.down_until is not None and self.flow in ("travel", "armed", "gate") \
                 and self.field_clear(self.flow_input(t)):
             # A down on a quiet road (nothing awake): WaveService's placer puts him on the safe
             # point and he gets up (never met in the gated runs; it is here so a run cannot hang).

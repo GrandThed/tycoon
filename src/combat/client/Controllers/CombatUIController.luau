@@ -1720,6 +1720,7 @@ local function bootMission(): ()
 		local userId = player.UserId
 		local humans = 0
 		local waiting = false
+		local engaged = false
 		for _, member in run.party do
 			if typeof(member) ~= "table" then
 				continue
@@ -1732,9 +1733,10 @@ local function bootMission(): ()
 				-- Waiting in the lobby camp for the next boundary (ruling 18): the server
 				-- refuses every attack, so none is sent. CombatHud reads the flag the same way.
 				waiting = member.waiting == true and live
+				engaged = member.engaged == true and live
 			end
 		end
-		InputController.SetPhase(phase, waiting)
+		InputController.SetPhase(phase, waiting, engaged)
 
 		-- The map opens whenever the phase becomes `lobby` (the first RunState and every
 		-- return) and closes when the phase leaves it. On a return the server refuses a start

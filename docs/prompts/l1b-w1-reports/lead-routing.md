@@ -89,3 +89,13 @@ Filled as owners report; routed after A and B finish (both edit Types/run files)
   `StageFlow.LongestReach`, `Action.skipped`, `CampBrain.Engaged`, `camps.engagedHoldSeconds`,
   `chaseMargin` 2.5 with the rounded in-play test; B's residents moved (Hard marksmen to
   southWatch, the lobber to fire3, the patrol's Hard plated elite to fire1).
+
+## Fix-diff review and QA (2026-10-14)
+- Fix-diff review: Critical 0, Major 0, Minor 2 (fix-diff.md). QA (qa-runner): ALL GREEN, harness
+  1,571 checks, mutations 513 / 0 not caught.
+- Lead fixed both Minors: phone auto-fire also picks camp bodies while the local member is
+  `engaged` (a slinger's reach counts), via `InputController.SetPhase(phase, waiting, engaged)`;
+  `sim_range` stands a downed player up in `gate` too, as `StageFlow.StandsUp` does. Re-ran stylua,
+  selene, check_compile, luau-lsp (combat), check_stage_mirror, sim_range --check: all PASS.
+- Carried to Wave 2 (economy-designer): `check_stage_mirror` compares `StandsUp` (today it compares
+  `FieldClear`, which `StandsUp` composes).
