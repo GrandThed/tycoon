@@ -107,3 +107,17 @@ harness 1,292 checks (its verdict line names the count and the folder), 417 muta
 `check_stage_mirror.py` about 5,600 comparisons of the real StageFlow / Combat / LevelGeometry against the
 simulators, sims green. The publish freeze holds until L4. Next: Ben's look, then L2 (secrets, keys, bought
 double jump) only on his word; the carried list with owners is PLAN "L1".
+
+**Ben's verdict on L1, 2026-10-14** (a real Studio look: Studio's log shows the rebuilt `proving.rbxl`, one
+Forest Road run on Normal, ended "down" in camp A about two minutes after boot; nothing past camp A was seen).
+"looks good! [...] i was hopping for the enemies to already be there all the time, with bigger camp sites, and
+longer roads [...] something i really didnt like is the fact that you are closed off from leaving when entering a
+zone, i was ambisioning that the only zone that remainds closed is the final room with the boss so you cannot leave
+the level nor the boss zone. [...] everything else was allright from a technical demo standpoing". So: resident
+enemies, open camps, only the boss room locks, bigger camps, longer roads. It reverses his own 2026-10-13 ruling
+"gates close until the camp is clear" (which the lead had recommended because the crowd has one floor per server
+and because closed camps stop kiting). Next step **L1b "the living road"**, in a NEW session from
+`docs/prompts/l1b-living-road.md` (study first: several live camps need a floor per body or group, a resting and
+leashed brain, dormant far bodies, a codec range for longer roads; then his six decisions; then contracts).
+Lesson: he judged the camp mechanic within two minutes of play, so a mock of how a camp BEHAVES (not only how the
+level looks from above) would have caught this before the build: offer one for L1b.

@@ -3099,7 +3099,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 - [x] L1 built (`fc43816`)
 - [x] L1 reviewed, fix round done (`de03e36`; INTERFACES "Review round and state (2026-10-13)")
 - [x] L1 merged to `main`, six place files rebuilt (lead)
-- [ ] L1 playtest (Ben)
+- [x] L1 playtest (Ben), 2026-10-14: one Normal run in Studio (down in camp A about two minutes in); "looks good" as a technical demo. He wants enemies already in the camps, camps that do not lock (only the boss's room), bigger camps and longer roads: MISSIONS_DESIGN §15. Next: L1b "the living road", in a new session from `docs/prompts/l1b-living-road.md`.
 
 ## M12 — Growing city
 

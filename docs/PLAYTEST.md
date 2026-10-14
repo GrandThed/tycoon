@@ -4466,6 +4466,8 @@ Also, if you have a view:
 
 ## L1 — Forest Road in grey
 
+**Played 2026-10-14** (one Normal run, down in camp A about two minutes in). Ben's verdict and what it changes: `docs/MISSIONS_DESIGN.md` §15. The steps below were not walked one by one; L1b replaces the camp rules they test.
+
 <!-- FILE TO OPEN: start. Lead: if L1 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
 - **Only after the lead says L1 is merged.** Then VS Code, **Ctrl+Shift+B** → **"Build all"**.

@@ -1,7 +1,7 @@
 # Expeditions: levels, secrets and the Armory (design)
 
 **Status (2026-10-13): the plan of record for the mission side, approved by Ben in pieces (§2).
-L1 (Forest Road in grey) is built, reviewed and fixed 2026-10-13; merging. Nothing after L1 is
+L1 (Forest Road in grey) is merged 2026-10-14 and Ben has played it (§15); L1b reworks its camps. Nothing after L1 is
 built.** `docs/COMBAT_DESIGN.md` stays the plan of record for the fighting itself (weapons,
 enemies, bosses, health), which is kept.
 
@@ -302,7 +302,8 @@ of the five. Scenery is generated.
 | Step | What Ben gets to look at |
 |---|---|
 | **L0. Pictures** | A picture of the map screen, a top-down plan of Forest Road, a picture of the Armory screen. No code. |
-| **L1. Forest Road in grey** | Play opens in the dungeon place's lobby camp with the map; one node is playable. Forest Road in plain blocks: path, the three camp parts with gates, checkpoints, a stand-in boss, the difficulty choice, and back to the lobby at the end. Today's enemies. Stars last for the session only. **Built, reviewed and fixed 2026-10-13; merging.** |
+| **L1. Forest Road in grey** | Play opens in the dungeon place's lobby camp with the map; one node is playable. Forest Road in plain blocks: path, the three camp parts with gates, checkpoints, a stand-in boss, the difficulty choice, and back to the lobby at the end. Today's enemies. Stars last for the session only. **Merged 2026-10-14; Ben's verdict in §15.** |
+| **L1b. The living road** | Ben's L1 verdict (§15): enemies already in their camps, camps that do not lock (only the boss's room does), bigger camps and longer roads. Starts in a new session from `docs/prompts/l1b-living-road.md`: a groundwork study, Ben's decisions, contracts, waves. |
 | **L2. Secrets and keys** | Double jump as a purchase and the lookout; the Flamethrower and the bramble cave; the frost weapon and the creek. |
 | **L3. The Armory** | Per-weapon tiers, the upgrade loop with Forest drops, the new screen, weapon models. |
 | **L4. The real forest** | Scenery, the Camp Chief, the map in the hub, rewards balanced. First version that can be published. |
@@ -312,3 +313,32 @@ Then the Castle, as its own plan.
 
 **Until L4 the Expeditions place must not be published from `main`:** the old combat is unmounted
 and only the Village arena can be played.
+
+## 15. Ben's verdict on L1 (2026-10-14)
+
+Studio's log: he opened the rebuilt `proving.rbxl` at 00:22, played Forest Road on Normal once, and
+the run ended "down" in stage 2 (camp A) about two minutes after boot. He did not reach camp B, the
+boss, Hard, the Raider Arena or the phone check. (The simulator's human-reaction player never goes
+down on Normal: ask him what happened in camp A.)
+
+In his words: *"looks good! one thing i was ambisioning that wasnt in this build is that i was
+hopping for the enemies to already be there all the time, with bigger camp sites, and longer roads,
+i mean, it is an experiment after all just saying, and something i really didnt like is the fact
+that you are closed off from leaving when entering a zone, i was ambisioning that the only zone that
+remainds closed is the final room with the boss so you cannot leave the level nor the boss zone.
+[...] everything else was allright from a technical demo standpoing"*
+
+**What changes [Ben], for the next step, L1b "the living road":**
+1. **Enemies are already there.** A camp is inhabited when you arrive; you see the raiders before
+   they see you.
+2. **Camps do not lock.** You walk in and out of every camp freely. **Only the boss's room locks**:
+   once inside you cannot leave it, nor the level, until the boss falls or the run ends.
+3. **Bigger camp sites and longer roads.**
+4. Everything else in L1 stands as a technical base: the lobby camp and the map, the difficulties,
+   checkpoints banking rewards, the summary and the return to the lobby, the tested stage rules.
+
+This replaces ruling 1 of §2 ("fights happen inside flat camps whose gates close until the camp is
+clear") for every camp except the boss's. §5 and §12 describe L1 as built and are to be rewritten in
+L1b. Open questions for Ben (resting raiders, running away, what saves progress, refilling camps,
+size, sneaking past a camp) and the technical consequences are in `docs/prompts/l1b-living-road.md`,
+the prompt for the session that builds L1b.
