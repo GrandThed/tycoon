@@ -79,3 +79,16 @@ step designs the whole shape once; the hub is untouched (its Depart lands in the
 ticket's mission is ignored for choosing); the stand-in boss is the Colossus; the ten-wave Village arena
 becomes a node on the map; secret sites are marked blocks that do nothing yet; double jump stays free in L1
 but the main path must be passable with one jump and the dash.
+
+**L1 state, 2026-10-13 22:00.** Contract: INTERFACES "# L1 contracts — Forest Road in grey" (on the branch).
+Built by four owners and committed on `l1-forest-road` (fc43816): the lobby camp, `StageFlow` (pure stage
+rules), `LevelService` / `LevelGeometry` / `BarrierGroups`, the map screen (`src/client/UI/MapScreen.luau`),
+Forest Road's layout and balance, `tools/check_levels.py`. Reviewed by four Opus reviewers in slices (the
+run, the world, the client, the data and tests): **0 Critical, 9 Major, 44 Minor**. The whole fix list with
+the lead's rulings is `docs/prompts/l1-fix-round.md` on the branch. The fix round was cut off by the
+session limit minutes after it started; fresh agents continue from that file. **Nothing of L1 is on
+`main`.** Rulings of the round: a camp triggers on its whole fenced rectangle; the invisible wall's inner
+face is the floor's edge; cover in a camp is at most 3.5 studs (a taller block is a perch the boss cannot
+hit); Abandon's key is Backspace twice; a skip pays nothing; everyone is healed in the lobby; the G presets
+are 2/1, 4/4, 6/6; a third simulated player with a human reaction becomes the gate for Hard and Brutal
+(the ideal one clears Hard at 2/1 in 16 minutes without a hit).
