@@ -81,6 +81,9 @@ export type PlanTent = {
 	-- The stock in file order, filtered by minDifficulty; never scaled by countMult.
 	kinds: { string },
 	posts: { CampBrain.Post },
+	-- The fix round's B-4: where each body steps out of the marker (LevelGeometry.TentDoor, its
+	-- kind's radius clear of the wall, on the wall when Plan had no kinds), paired with posts.
+	doors: { Vector3 },
 	every: number,
 }
 export type Plan = {
@@ -488,7 +491,8 @@ local function tentsOf(
 	level: Types.LevelConfig,
 	layout: Types.LevelLayout,
 	rank: number,
-	ranks: { [string]: number }?
+	ranks: { [string]: number }?,
+	crowdKinds: { [string]: Types.CrowdKindDef }?
 ): ({ PlanTent }, { [string]: number })
 	local tents: { PlanTent } = {}
 	local stocks: { [string]: number } = {}
@@ -530,11 +534,25 @@ local function tentsOf(
 			units = units,
 		}
 		local placed, posts = pcall(CampBrain.Posts, def, #kinds)
+		local ring: { CampBrain.Post } = if placed then posts else {}
+		local box = LevelGeometry.TentBox(camp)
+		local doors: { Vector3 } = {}
+		for index, post in ring do
+			local body = if crowdKinds ~= nil then crowdKinds[kinds[index]] else nil
+			local clear = if body ~= nil then body.radius else 0
+			if box == nil then
+				table.insert(doors, post.at)
+			else
+				local x, z = LevelGeometry.TentDoor(box, post.at.X, post.at.Z, clear)
+				table.insert(doors, Vector3.new(x, post.at.Y, z))
+			end
+		end
 		table.insert(tents, {
 			zone = floor,
 			def = def,
 			kinds = kinds,
-			posts = if placed then posts else {},
+			posts = ring,
+			doors = doors,
 			every = tent.every,
 		})
 		stocks[camp.id] = #kinds
@@ -820,57 +838,79 @@ local function campProblems(
 		return
 	end
 
-	-- The posts, at the highest difficulty the level offers: the most members each group holds.
-	local top = 0
+	-- The posts at every difficulty the level offers, the highest first: CampBrain.Posts spaces n
+	-- posts evenly round a fire's or a tent's ring, so a difficulty that fields fewer bodies stands
+	-- them at other bearings than the highest one does (the fix round's B-2). A group is told of
+	-- once, at the highest difficulty it fails at.
+	local levelRanks: { number } = {}
 	for name in level.difficulties do
-		top = math.max(top, ranks[name] or 0)
+		local rank = ranks[name] or 0
+		if table.find(levelRanks, rank) == nil then
+			table.insert(levelRanks, rank)
+		end
 	end
-	local groups = groupsOf(level, layout, top, ranks)
-	for _, def in groups do
-		local members = 0
-		local widest = 0
-		for _, unit in def.units do
-			members += unit.count
-			local kind = kinds[unit.kind]
-			widest = math.max(widest, if kind ~= nil then kind.radius else 0)
-		end
-		if def.posture == "guard" and members > #def.points then
-			problem(`group {def.id} holds {members} guards and has {#def.points} posts`)
-			continue
-		end
-		local _floor, camp = campIndex(camps, def.camp)
-		local placed, posts = pcall(CampBrain.Posts, def, members)
-		if not placed then
-			problem(`group {def.id}: its posts could not be placed ({tostring(posts)})`)
-			continue
-		end
-		for index, post in posts :: { CampBrain.Post } do
-			if camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest) then
-				problem(
-					`group {def.id}: post {index} lies off its floor less {widest}, its widest radius`
-				)
-				break
+	table.sort(levelRanks, function(a: number, b: number): boolean
+		return a > b
+	end)
+	local told: { [string]: boolean } = {}
+	for _, rank in levelRanks do
+		for _, def in (groupsOf(level, layout, rank, ranks)) do
+			if told[def.id] then
+				continue
+			end
+			local members = 0
+			local widest = 0
+			for _, unit in def.units do
+				members += unit.count
+				local kind = kinds[unit.kind]
+				widest = math.max(widest, if kind ~= nil then kind.radius else 0)
+			end
+			if def.posture == "guard" and members > #def.points then
+				told[def.id] = true
+				problem(`group {def.id} holds {members} guards and has {#def.points} posts`)
+				continue
+			end
+			local _floor, camp = campIndex(camps, def.camp)
+			local placed, posts = pcall(CampBrain.Posts, def, members)
+			if not placed then
+				told[def.id] = true
+				problem(`group {def.id}: its posts could not be placed ({tostring(posts)})`)
+				continue
+			end
+			for index, post in posts :: { CampBrain.Post } do
+				if camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest) then
+					told[def.id] = true
+					problem(
+						`group {def.id}: post {index} lies off its floor less {widest}, its widest radius`
+					)
+					break
+				end
 			end
 		end
-	end
-	local tents = tentsOf(level, layout, top, ranks)
-	for _, tent in tents do
-		local widest = 0
-		for _, kind in tent.kinds do
-			local def = kinds[kind]
-			widest = math.max(widest, if def ~= nil then def.radius else 0)
-		end
-		local _floor, camp = campIndex(camps, tent.def.camp)
-		if #tent.posts ~= #tent.kinds then
-			problem(`group {tent.def.id}: its posts could not be placed`)
-			continue
-		end
-		for index, post in tent.posts do
-			if camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest) then
-				problem(
-					`group {tent.def.id}: ring post {index} lies off its floor less {widest}, its widest radius`
-				)
-				break
+		for _, tent in (tentsOf(level, layout, rank, ranks)) do
+			local id = tent.def.id
+			if told[id] then
+				continue
+			end
+			local widest = 0
+			for _, kind in tent.kinds do
+				local def = kinds[kind]
+				widest = math.max(widest, if def ~= nil then def.radius else 0)
+			end
+			local _floor, camp = campIndex(camps, tent.def.camp)
+			if #tent.posts ~= #tent.kinds then
+				told[id] = true
+				problem(`group {id}: its posts could not be placed`)
+				continue
+			end
+			for index, post in tent.posts do
+				if camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest) then
+					told[id] = true
+					problem(
+						`group {id}: ring post {index} lies off its floor less {widest}, its widest radius`
+					)
+					break
+				end
 			end
 		end
 	end
@@ -1186,7 +1226,7 @@ function StageFlow.Plan(
 	end
 	local rank = if ranks ~= nil then ranks[difficulty] or 0 else 0
 	local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks)
-	local tents, tentStocks = tentsOf(level, layout, rank, ranks)
+	local tents, tentStocks = tentsOf(level, layout, rank, ranks, kinds)
 	-- What a zone is called: its camps entry's name, else the name of the stage that names it.
 	local names: { [string]: string } = {}
 	for _, stage in level.stages do
@@ -1827,6 +1867,14 @@ local function threatened(mark: Vector3, threats: { CampBrain.Shooter }?): boole
 		end
 	end
 	return false
+end
+
+-- The fix round's B-3: whether a tent still owes its group a rouse. A body sent while its camp
+-- fights (a group of its floor in rise or fight) is roused, but a group walking home cannot rise
+-- until it is back (CampBrain.Rouse rises a resting group only), so the executor asks again every
+-- tick until the group is up, or until the camp has nobody up to join.
+function StageFlow.TentOwesRouse(owed: boolean, campBusy: boolean, groupAwake: boolean): boolean
+	return owed and campBusy and not groupAwake
 end
 
 -- The longest reach among a kind's attacks (0 for none, or an unknown kind): what a body of it

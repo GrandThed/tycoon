@@ -259,6 +259,293 @@ function W2A.swingTests(): ()
 end
 L1BC.group("swing gate", W2A.swingTests)
 
+-- SwingGate, fix round A-1: one landing rule for both sides --------------------------------------------
+-- A jump of movement.jumpHeight 18 under the default gravity, a root standing 3 over a floor at 0,
+-- integrated at the client's 240 Hz physics. A hop touches the floor for ONE physics step, then
+-- jumps again (held Space); `dj` = { at = height over standing, into = jump height } double-jumps
+-- once in the first hop's fall. Returns the steps { t, y, vy } and the bounce times.
+W2A.G = 196.2
+W2A.STAND = 3
+W2A.DT = 1 / 240
+
+function W2A.hops(count: number, dj: any?): ({ any }, { number })
+	local v0 = math.sqrt(2 * W2A.G * 18)
+	local steps, bounces = {}, {}
+	local t, y, vy = 0, W2A.STAND, 0
+	local function push(): ()
+		table.insert(steps, { t = t, y = y, vy = vy })
+	end
+	for _ = 1, 24 do
+		push()
+		t += W2A.DT
+	end
+	local left = count
+	local doubled = dj == nil
+	vy = v0
+	while left > 0 do
+		vy -= W2A.G * W2A.DT
+		y += vy * W2A.DT
+		t += W2A.DT
+		if not doubled and vy < 0 and y <= W2A.STAND + dj.at then
+			doubled = true
+			vy = math.sqrt(2 * W2A.G * dj.into)
+		end
+		if y <= W2A.STAND and vy < 0 then
+			y, vy = W2A.STAND, 0
+			push()
+			table.insert(bounces, t)
+			left -= 1
+			if left > 0 then
+				vy = v0
+			end
+		else
+			push()
+		end
+	end
+	for _ = 1, 48 do
+		t += W2A.DT
+		push()
+	end
+	return steps, bounces
+end
+
+-- The physics state at time `t`: the last step at or before it.
+function W2A.at(steps: { any }, t: number): any
+	local best = steps[1]
+	for _, s in steps do
+		if s.t <= t + 1e-9 then
+			best = s
+		else
+			break
+		end
+	end
+	return best
+end
+
+-- The same, replicated: snapshots every `every` seconds (from `offset`), read between two
+-- snapshots by straight interpolation of the height and the vertical speed.
+function W2A.replicated(steps: { any }, t: number, every: number, offset: number): any
+	local k = math.floor((t - offset) / every)
+	local a = W2A.at(steps, offset + k * every)
+	local b = W2A.at(steps, offset + (k + 1) * every)
+	local f = math.clamp((t - (offset + k * every)) / every, 0, 1)
+	return { t = t, y = a.y + (b.y - a.y) * f, vy = a.vy + (b.vy - a.vy) * f }
+end
+
+-- Runs one sampler over a trajectory: Observe every 1/60 s, an airborne swing (lag 0) at the
+-- first sample past each apex. Returns landings, swings refused, and swings taken.
+function W2A.run(Gate: any, steps: { any }, sample: (number) -> any, phase: number): (number, number, number)
+	local gate = Gate.New()
+	local landings, refused, taken = 0, 0, 0
+	local rising = false
+	local last = steps[#steps].t
+	local t = phase
+	while t <= last do
+		local s = sample(t)
+		if Gate.Observe(gate, s.y, s.vy, 0, W2A.STAND, false) then
+			landings += 1
+		end
+		if s.vy > 0 then
+			rising = true
+		elseif rising then
+			rising = false
+			local allowed, airborne = Gate.Judge(gate, s.y, 0, W2A.STAND, 0)
+			if allowed then
+				Gate.Took(gate, airborne)
+				taken += 1
+			else
+				refused += 1
+			end
+		end
+		t += 1 / 60
+	end
+	return landings, refused, taken
+end
+
+function W2A.landingTests(): ()
+	print(" SwingGate: one landing rule (fix round A-1)")
+	local Gate = load("SwingGate")
+	local steps, bounces = W2A.hops(4)
+	check(#bounces == 4, "(four hops, three one-step bounces and a landing)")
+	local worst = { direct = "", slow = "" }
+	local phases = 40
+	for index = 0, phases - 1 do
+		local phase = index / phases / 60
+		local l, r, k = W2A.run(Gate, steps, function(t)
+			return W2A.at(steps, t)
+		end, phase)
+		if worst.direct == "" and (l ~= 4 or r ~= 0 or k ~= 4) then
+			worst.direct = `phase {index}: {l} landings, {r} refused, {k} taken`
+		end
+		local l2, r2, k2 = W2A.run(Gate, steps, function(t)
+			return W2A.replicated(steps, t, 1 / 20, phase * 0.7)
+		end, phase)
+		if worst.slow == "" and (l2 ~= 4 or r2 ~= 0 or k2 ~= 4) then
+			worst.slow = `phase {index}: {l2} landings, {r2} refused, {k2} taken`
+		end
+	end
+	check(worst.direct == "", `a held-Space bunny hop sampled at 60 Hz: every bounce is one landing and every hop's swing is allowed, at all {phases} phases {worst.direct}`)
+	check(worst.slow == "", `and the same copy replicated at 20 Hz and read between snapshots (height and speed interpolated) {worst.slow}`)
+
+	-- A double jump is no landing: once just past the apex, once 10 studs up the fall.
+	local high = { at = 17, into = 12 }
+	local mid = { at = 10, into = 12 }
+	local refusedHigh, refusedMid, landedEarly = 0, 0, 0
+	for index = 0, phases - 1 do
+		local phase = index / phases / 60
+		for _, dj in { high, mid } do
+			local djSteps = W2A.hops(1, dj)
+			local l, r, k = W2A.run(Gate, djSteps, function(t)
+				return W2A.at(djSteps, t)
+			end, phase)
+			if l ~= 1 then
+				landedEarly += 1
+			end
+			if r == 1 and k == 1 then
+				if dj == high then
+					refusedHigh += 1
+				else
+					refusedMid += 1
+				end
+			end
+		end
+	end
+	check(refusedHigh == phases and refusedMid == phases, `a double jump just past the apex and 10 studs up the fall: the second apex's swing is refused at every phase ({refusedHigh}, {refusedMid} of {phases})`)
+	check(landedEarly == 0, `and only the final touchdown is a landing ({landedEarly} runs counted another)`)
+
+	-- The server's copy trails the claim by the lag: a swing just after a bounce arrives first.
+	local function lagged(lag: number, after: number): (number, number)
+		local gate = Gate.New()
+		local allowedAfter, refusedApex = 0, 0
+		local swings = {}
+		for index = 1, #bounces - 1 do
+			local b = bounces[index]
+			table.insert(swings, { t = b + after, apex = false })
+			table.insert(swings, { t = b + math.sqrt(2 * 18 / W2A.G), apex = true })
+		end
+		table.insert(swings, 1, { t = bounces[1] - math.sqrt(2 * 18 / W2A.G), apex = true })
+		local next = 1
+		local t = 0
+		while t <= steps[#steps].t do
+			local copy = W2A.at(steps, t - lag)
+			Gate.Observe(gate, copy.y, copy.vy, 0, W2A.STAND, false)
+			local swing = swings[next]
+			if swing ~= nil and t >= swing.t then
+				next += 1
+				local claim = W2A.at(steps, swing.t)
+				local allowed, airborne = Gate.Judge(gate, claim.y, 0, W2A.STAND, lag)
+				if allowed then
+					Gate.Took(gate, airborne)
+				end
+				if not swing.apex and allowed then
+					allowedAfter += 1
+				elseif swing.apex and swing.t > bounces[1] and not allowed then
+					refusedApex += 1
+				end
+			end
+			t += 1 / 60
+		end
+		return allowedAfter, refusedApex
+	end
+	local after1, apex1 = lagged(0.15, 0.03)
+	check(after1 == 3, `a swing 0.03 s after each bounce, the copy 0.15 s behind and still falling: the claim is the newest sample and finds the landing ({after1} of 3 allowed)`)
+	check(apex1 == 3, `and the copy's own bounce later is not a second landing: the same hop's apex swing is refused ({apex1} of 3)`)
+	local after2 = lagged(0.3, 0.17)
+	check(after2 == 3, `with the lag at its 0.3 s ceiling and the swing 0.17 s after the bounce, both above the turn window alone ({after2} of 3)`)
+
+	-- The landing ahead of the copy needs a copy falling within reach of its floor.
+	local gate = Gate.New()
+	Gate.Observe(gate, 20, -5, 0, W2A.STAND, false)
+	Gate.Observe(gate, 19.9, -6, 0, W2A.STAND, false)
+	Gate.Took(gate, true)
+	check(not Gate.Judge(gate, 21, 0, W2A.STAND, 0.3), "a copy falling slowly far up (a double jump's claim) finds no landing: refused")
+	gate = Gate.New()
+	Gate.Observe(gate, 3.1, 10, 0, W2A.STAND, false)
+	Gate.Observe(gate, 5, 60, 0, W2A.STAND, false)
+	Gate.Took(gate, true)
+	check(not Gate.Judge(gate, 8, 0, W2A.STAND, 0.3), "nor a copy still rising from the floor: refused")
+	gate = Gate.New()
+	Gate.Observe(gate, 14, -50, 0, W2A.STAND, false)
+	Gate.Observe(gate, 13, -60, 0, W2A.STAND, false)
+	Gate.Took(gate, true)
+	check(not Gate.Judge(gate, 9, 0, W2A.STAND, 0 / 0), "a NaN lag reads as 0: 9.25 over the band at 60 studs/s is past the window alone")
+	check(Gate.Judge(gate, 9, 0, W2A.STAND, 0.1), "and a lag of 0.1 s brings it within reach: allowed")
+	Gate.Took(gate, true)
+	check(not Gate.Judge(gate, 9, 0, W2A.STAND, 0.1), "once: the next swing before the copy's own landing is refused")
+	Gate.Observe(gate, W2A.STAND, 0, 0, W2A.STAND, false)
+	check(not Gate.Judge(gate, 9, 0, W2A.STAND, 0.1), "and that landing, taken ahead, does not clear it again")
+end
+L1BC.group("swing gate: landings", W2A.landingTests)
+
+function W2A.footprintTests(): ()
+	print(" SwingGate: the footprint and the get-up (fix round A-1)")
+	local Gate = load("SwingGate")
+	check(Gate.PROBE_POINTS == #Gate.FOOTPRINT and Gate.PROBE_POINTS == 5, "five probe points")
+	local cx, cz = Gate.ProbePoint(1, 4, 7, 1, 0, 1, 0.5)
+	check(cx == 4 and cz == 7, "the first is the centre")
+	local function corners(rx: number, rz: number): string
+		local seen = {}
+		for index = 2, Gate.PROBE_POINTS do
+			local x, z = Gate.ProbePoint(index, 0, 0, rx, rz, 1, 0.5)
+			table.insert(seen, string.format("%.2f,%.2f", x + 0, z + 0))
+		end
+		table.sort(seen)
+		return table.concat(seen, " ")
+	end
+	check(corners(1, 0) == "-1.00,-0.50 -1.00,0.50 1.00,-0.50 1.00,0.50", `facing -Z: the corners are the root's 2 x 1 rectangle ({corners(1, 0)})`)
+	check(corners(0, -2) == "-0.50,-1.00 -0.50,1.00 0.50,-1.00 0.50,1.00", `turned a quarter (right = -Z, any length): the rectangle turns with it ({corners(0, -2)})`)
+	check(corners(0, 0) == corners(1, 0), "a right vector with no flat part reads as facing +X")
+	check(Gate.Higher(nil, nil) == nil and Gate.Higher(nil, 3) == 3 and Gate.Higher(2, nil) == 2 and Gate.Higher(2, 5) == 5 and Gate.Higher(5, 2) == 5, "Higher keeps the highest floor found")
+
+	-- The probe as both sides cast it, against a made-up world.
+	local function floorUnder(world: (number, number) -> number?, x: number, z: number, rx: number, rz: number): number?
+		local floorY = nil
+		for index = 1, Gate.PROBE_POINTS do
+			local px, pz = Gate.ProbePoint(index, x, z, rx, rz, 1, 0.5)
+			floorY = Gate.Higher(floorY, world(px, pz))
+		end
+		return floorY
+	end
+	local ledge = function(x: number, _z: number): number?
+		return if x < 0 then 8 else 0
+	end
+	local fence = function(x: number, _z: number): number?
+		return if math.abs(x) < 0.25 then 4 else 0
+	end
+	local lip = floorUnder(ledge, 0.6, 0, 1, 0)
+	check(lip == 8, "a root whose centre is 0.6 past a ledge's lip still has the ledge under a corner")
+	local gate = Gate.New()
+	Gate.Observe(gate, 8 + W2A.STAND, 0, lip, W2A.STAND, false)
+	local allowed, airborne = Gate.Judge(gate, 8 + W2A.STAND, lip, W2A.STAND, 0)
+	check(allowed and not airborne, "standing on the lip is grounded on both questions")
+	Gate.Took(gate, airborne)
+	allowed, airborne = Gate.Judge(gate, 8 + W2A.STAND, lip, W2A.STAND, 0)
+	check(allowed and not airborne, "and every swing there is a grounded one")
+	check(floorUnder(ledge, 0.6, 0, 0, -1) == 0 and floorUnder(ledge, 0.4, 0, 0, -1) == 8, "turned a quarter the footprint is 1 wide across the lip: 0.6 past is off it, 0.4 past is on it")
+	check(floorUnder(fence, 0.9, 0, 1, 0) == 4, "a fence top under one corner is the floor")
+
+	-- A down clears the gate, and the get-up stands up clear.
+	gate = Gate.New()
+	Gate.Observe(gate, 12, 20, 0, W2A.STAND, false)
+	Gate.Took(gate, true)
+	check(not Gate.Allows(gate, true), "(an air swing taken)")
+	Gate.Observe(gate, 10, -30, 0, W2A.STAND, true)
+	check(Gate.Allows(gate, true), "a down clears it, while still in the air")
+	Gate.Observe(gate, 1, 0, 0, W2A.STAND, true)
+	Gate.Observe(gate, W2A.STAND, 0, 0, W2A.STAND, false)
+	check(Gate.Allows(gate, true) and not gate.falling and not gate.ahead, "the get-up stands up with nothing spent and no fall held")
+	Gate.Observe(gate, 12, 20, 0, W2A.STAND, false)
+	Gate.Took(gate, true)
+	Gate.Observe(gate, 14, 10, 0, W2A.STAND, true)
+	Gate.Observe(gate, 14, 5, 0, W2A.STAND, false)
+	check(Gate.Allows(gate, true), "a knockdown in the air and a get-up in the air: the next jump's swing is allowed")
+	Gate.Took(gate, true)
+	Gate.Landed(gate)
+	check(Gate.Allows(gate, true) and gate.lastY == nil, "Landed (a new character) resets the samples too")
+	check(Gate.Observe(gate, W2A.STAND, 0, 0, W2A.STAND, false) == false, "a first grounded sample is no landing")
+end
+L1BC.group("swing gate: footprint and get-up", W2A.footprintTests)
+
 -- CampBrain --------------------------------------------------------------------------------------------
 function W2A.rules(over: any?): any
 	local rules = L1BC.rules()
@@ -533,22 +820,23 @@ function W2A.dormantTests(): ()
 	W2A.enter()
 	-- Something always on the wire, so a snapshot goes out every step.
 	Crowd.Spawn("pawn", vec(-20, 8, -20), "idle")
-	root.Position = vec(0, 11, 0)
+	-- Fix round A-2: the patroller walks first (a root 20 from its floor, inside 120), so the
+	-- freeze has a walking state to reset.
+	root.Position = vec(150, 11, 0)
 	local east = { floor = 2, floorY = 12, rect = { x = 200, z = 0, hx = 30, hz = 30 }, id = "B.loop", camp = "B" }
 	local loop = { vec(190, 12, -10), vec(210, 12, -10), vec(210, 12, 10), vec(190, 12, 10) }
 	local group, ids = W2A.place("patrol", loop, { "fodder", "fodder" }, east)
+	local post = Crowd.Get(ids[1]).position
+	step2(10)
+	local walking = Crowd.Get(ids[1])
+	check(walking.state == "move" and (walking.position.X ~= post.X or walking.position.Z ~= post.Z), `(awake to the wire, the patroller walks: {walking.state})`)
+	root.Position = vec(0, 11, 0)
 	step2()
 	local before = Crowd.Get(ids[1]).position
 	check(W2A.absent(ids[1], 30) and W2A.absent(ids[2], 1), "a group with every root beyond dormantRadius (170 > 120) is in no snapshot")
-	local after = Crowd.Get(ids[1]).position
-	check(after.X == before.X and after.Z == before.Z, `and is not integrated: a patroller does not move over 30 steps ({before.X}, {before.Z})`)
-	local info = nil
-	for _, entry in risen do
-		if entry.id == ids[1] then
-			info = entry
-		end
-	end
-	check(info ~= nil and info.state == "idle" and info.at ~= nil and near(info.at.X, before.X) and near(info.at.Z, before.Z), "its spawn info shows it standing where it froze")
+	local frozen = Crowd.Get(ids[1])
+	check(frozen.position.X == before.X and frozen.position.Z == before.Z, `and is not integrated: a patroller does not move over 30 steps ({before.X}, {before.Z})`)
+	check(frozen.state == "idle", `frozen mid-walk it shows idle, the state a late joiner's refreshed spawn info is copied from (the infos case pins the copy): {frozen.state}`)
 	root.Position = vec(150, 11, 0)
 	local present = not W2A.absent(ids[1], 1)
 	step2(10)
@@ -682,6 +970,87 @@ function W2A.infoTests(): ()
 	-- The second crowd shared CrowdBrain's floors: L1BC.leave's SetBounds puts the first crowd's back.
 end
 W2A.crowdGroup("infos", W2A.infoTests)
+
+-- Fix round ui-2: `resting` on every spawn info, and a re-announce when a group goes to or from rest.
+-- Read from what step2 gathered (risen, ended) right after each step: the stub keeps payloads by
+-- reference, so values are copied at the time.
+function W2A.clearSent(): ()
+	table.clear(risen)
+	table.clear(ended)
+end
+
+function W2A.sentSince(ids: { number }): ({ [number]: any }, boolean, boolean)
+	local out = {}
+	local other = false
+	local wanted, removes = {}, {}
+	for _, id in ids do
+		wanted[id] = true
+	end
+	for _, entry in risen do
+		if wanted[entry.id] then
+			out[entry.id] = { resting = entry.resting, state = entry.state }
+		else
+			other = true
+		end
+	end
+	for _, id in ended do
+		removes[id] = true
+	end
+	local removed = true
+	for _, id in ids do
+		removed = removed and removes[id] == true
+	end
+	return out, other, removed
+end
+
+function W2A.restingTests(): ()
+	print(" CrowdService: resting on the spawn info (fix round ui-2)")
+	W2A.enter()
+	root.Position = vec(0, 11, -100)
+	W2A.clearSent()
+	local wave = Crowd.Spawn("pawn", vec(-20, 8, -20), "idle")
+	local group, ids = W2A.place("guard", { vec(10, 8, 10), vec(14, 8, 10) }, { "fodder", "fodder" })
+	local _, heldIds = W2A.place("guard", { vec(210, 12, 0) }, { "fodder" }, { id = "B.held", camp = "B", floor = 2, floorY = 12, rect = { x = 200, z = 0, hx = 30, hz = 30 }, held = true })
+	step2()
+	local sent = W2A.sentSince({ wave, ids[1], ids[2], heldIds[1] })
+	check(sent[ids[1]] ~= nil and sent[ids[1]].resting == true and sent[ids[2]] ~= nil and sent[ids[2]].resting == true, "a resident spawned at rest is announced resting")
+	check(sent[heldIds[1]] ~= nil and sent[heldIds[1]].resting == true, "a held group's body is announced resting")
+	check(sent[wave] ~= nil and sent[wave].resting == nil, "a wave body (no group) never carries resting")
+	W2A.clearSent()
+	Crowd.RouseGroup(group)
+	step2()
+	local roused, otherSent = W2A.sentSince(ids)
+	check(roused[ids[1]] ~= nil and roused[ids[1]].resting == nil and roused[ids[2]] ~= nil and roused[ids[2]].resting == nil, "once its group wakes, the next batch re-announces it, not resting")
+	check(not otherSent, "a batch of re-announces only goes out on its own (and the wave body and the held group are not sent again)")
+	W2A.clearSent()
+	Crowd.WakeFloor(2)
+	step2()
+	local released = W2A.sentSince(heldIds)
+	check(released[heldIds[1]] ~= nil and released[heldIds[1]].resting == nil, "a held group released is re-announced, not resting")
+	local rested = nil
+	for _ = 1, 200 do
+		W2A.clearSent()
+		step2()
+		local backToRest = false
+		for _, event in L1BC.events() do
+			backToRest = backToRest or (event.group == group and event.to == "rest")
+		end
+		if backToRest then
+			rested = W2A.sentSince(ids)
+			break
+		end
+	end
+	check(rested ~= nil and rested[ids[1]] ~= nil and rested[ids[1]].resting == true and rested[ids[2]] ~= nil and rested[ids[2]].resting == true, "after home and rest it is re-announced resting again")
+	-- A body that leaves before the re-announce is ended, not announced.
+	W2A.clearSent()
+	Crowd.Remove(ids[2])
+	Crowd.RouseGroup(group)
+	step2()
+	local after, _, removed = W2A.sentSince({ ids[2] })
+	check(removed and after[ids[2]] == nil, "a body removed while its group's re-announce is due gets its CrowdRemove and no announce")
+	W2A.clearSent()
+end
+W2A.crowdGroup("resting", W2A.restingTests)
 
 function W2A.joinCrowdTests(): ()
 	print(" CrowdService: the join-in, RouseGroup, GroupAlive, GroupedOn")

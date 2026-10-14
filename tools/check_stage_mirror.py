@@ -176,6 +176,17 @@ def level_camp(file, cid):
     return next(camp for camp in file["camps"] if camp["id"] == cid)
 
 
+def ring_only_normal_breaks(file, layout):
+    """The fix round's B-2: A's tent fields 2 fodder on Normal (posts north and south of the
+    marker) and a third from Hard (north, and 120 degrees either side), and the marker sits 10
+    studs inside the floor's south edge: Normal's south post hangs over it, Hard's two stand 5
+    inside. Validate judging the highest difficulty only would pass it."""
+    level_camp(file, "A")["tent"]["units"] = [{"kind": "fodder", "count": 2},
+                                              {"kind": "fodder", "count": 1, "minDifficulty": "hard"}]
+    camp = layout_camp(layout, "A")
+    camp["tent"]["z"] = camp["z"] + camp["sz"] / 2 - camp["tent"]["radius"] + 0.5
+
+
 # L1b: Validate's new lines, each broken once. (label, change(file, layout, rules)) on copies of
 # the shipped level file, its raw layout and Combat.json `levels`; refused alike on both sides.
 # Only a level with residents (`camps`) gets them.
@@ -216,6 +227,7 @@ L1B_REFUSALS = (
     ("a tent's centre off its floor", lambda f, l, r: layout_camp(l, "A")["tent"].__setitem__(
         "x", layout_camp(l, "A")["x"] + layout_camp(l, "A")["sx"] / 2 + 1)),
     ("a tent ring post off its floor", lambda f, l, r: layout_camp(l, "A")["tent"].__setitem__("radius", 200)),
+    ("a tent ring post only Normal pushes off its floor", lambda f, l, r: ring_only_normal_breaks(f, l)),
     ("a tent stock on a camp with no residents", lambda f, l, r: level_camp(f, "A").__setitem__("residents", [])),
     ("a population one body over on Hard", lambda f, l, r: level_camp(f, "A")["tent"]["units"].append(
         {"kind": "fodder", "count": 4})),
@@ -759,7 +771,8 @@ def post_row(post):
 def tent_row(tent):
     """A PlanTent as plain values."""
     return {"zone": tent["zone"], "def": def_row(tent["def"]), "kinds": list(tent["kinds"]),
-            "posts": [post_row(p) for p in tent["posts"]], "every": tent["every"]}
+            "posts": [post_row(p) for p in tent["posts"]], "doors": [list(d) for d in tent["doors"]],
+            "every": tent["every"]}
 
 
 def wire(value):

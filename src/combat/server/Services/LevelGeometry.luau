@@ -397,6 +397,29 @@ function LevelGeometry.TentBox(camp: Types.LevelCamp): Box?
 	return { x = tent.x, y = tent.y, z = tent.z, sx = tent.sx, sy = tent.sy, sz = tent.sz }
 end
 
+-- The fix round's B-4: where a tent body steps out on its way to the ring post at (x, z). On the
+-- line from the marker's centre to the post, `clear` studs past the footprint's edge (the body's
+-- radius, so it rises clear of the wall), and never past the post itself: a post on or inside the
+-- footprint, or at its centre, is its own door.
+function LevelGeometry.TentDoor(box: Box, x: number, z: number, clear: number): (number, number)
+	local dx, dz = x - box.x, z - box.z
+	local distance = math.sqrt(dx * dx + dz * dz)
+	if not (distance > 1e-6) then
+		return x, z
+	end
+	local ux, uz = dx / distance, dz / distance
+	-- How far along that line the footprint's edge is (the nearer of the two sides it can cross).
+	local edge = math.huge
+	if math.abs(ux) > 1e-9 then
+		edge = math.min(edge, box.sx / 2 / math.abs(ux))
+	end
+	if math.abs(uz) > 1e-9 then
+		edge = math.min(edge, box.sz / 2 / math.abs(uz))
+	end
+	local out = math.min(edge + math.max(clear, 0), distance)
+	return box.x + ux * out, box.z + uz * out
+end
+
 function LevelGeometry.SecretBox(secret: Types.LevelSecret): Box
 	return {
 		x = secret.x,

@@ -441,6 +441,24 @@ local function floorUnder(position: Vector3, params: RaycastParams): number?
 	return if result ~= nil then result.Position.Y else nil
 end
 
+-- Fix round A-1: the air-swing gate's floor is the highest one under the root's whole footprint
+-- (SwingGate.ProbePoint), probed like floorUnder, so a lip or a cover block under any corner
+-- reads grounded. AirSwing on the client casts the same five rays.
+local function footprintFloor(position: Vector3, root: BasePart, params: RaycastParams): number?
+	local right = root.CFrame.RightVector
+	local halfX, halfZ = root.Size.X / 2, root.Size.Z / 2
+	local lift = position.Y + HitShapes.GROUND_PROBE_LIFT
+	local depth = DOWN * HitShapes.GROUND_PROBE_DEPTH
+	local floorY: number? = nil
+	for index = 1, SwingGate.PROBE_POINTS do
+		local x, z =
+			SwingGate.ProbePoint(index, position.X, position.Z, right.X, right.Z, halfX, halfZ)
+		local result = workspace:Raycast(Vector3.new(x, lift, z), depth, params)
+		floorY = SwingGate.Higher(floorY, if result ~= nil then result.Position.Y else nil)
+	end
+	return floorY
+end
+
 -- How far a position a client claims may sit from the server's copy of its character: a moving
 -- character leads the server's view of it by the ping plus a margin. The speed is the server's
 -- own measure (ruling 7: the fastest stretch of shooting.originSpeedSeconds inside the last
@@ -1801,6 +1819,15 @@ local function trackAir(now: number, deltaTime: number): ()
 			continue
 		end
 		PositionRing.Record(shooter.history, now, root.Position)
+		-- Fix round A-1: the air-swing gate's own sample, the one AirSwing feeds on the client.
+		SwingGate.Observe(
+			shooter.airSwing,
+			root.Position.Y,
+			root.AssemblyLinearVelocity.Y,
+			footprintFloor(root.Position, root, params),
+			standingOffset(root, humanoid),
+			VitalsService.IsDown(player)
+		)
 		local floorY = floorBelow(root, params)
 		local height = if floorY ~= nil then root.Position.Y - floorY else math.huge
 		local airborne = height > standingOffset(root, humanoid) + CONST.AIRBORNE_MARGIN_STUDS
@@ -1824,7 +1851,6 @@ local function trackAir(now: number, deltaTime: number): ()
 			-- The landing frame's own fall counts: the dive ends on it.
 			shooter.lastDiveSpeed = math.max(shooter.diveSpeed, fallSpeed)
 			shooter.landedAt = now
-			SwingGate.Landed(shooter.airSwing)
 		end
 		shooter.airborne = airborne
 	end
@@ -2200,17 +2226,21 @@ function WeaponService.OnAttack(
 	end
 	-- L1b-W2-13: one melee swing per jump, judged at the swing's own origin (the claim, clamped
 	-- by the claim slack) against the floor under it, so a swing on the take-off frame is
-	-- airborne and one on the landing frame grounded: an honest client is never refused.
+	-- airborne and one on the landing frame grounded: an honest client is never refused. Fix
+	-- round A-1: the floor is the footprint's, and the claim is the newest sample, so a swing
+	-- sent just after a bounce the server's copy has not shown yet still finds its landing.
 	local swingAt = origin
 	local airSwing = false
 	if variant.kind == "melee" then
 		swingAt = meleeOrigin(shooter, root, origin, config)
-		local floorY = floorUnder(swingAt, worldParams())
+		local floorY = footprintFloor(swingAt, root, worldParams())
 		local standOffset = if humanoid ~= nil
 			then standingOffset(root, humanoid)
 			else root.Size.Y / 2
-		airSwing = SwingGate.IsAir(if floorY ~= nil then swingAt.Y - floorY else nil, standOffset)
-		if not SwingGate.Allows(shooter.airSwing, airSwing) then
+		local lag = Tuning.CommitLag(config.shooting, player:GetNetworkPing())
+		local allowed
+		allowed, airSwing = SwingGate.Judge(shooter.airSwing, swingAt.Y, floorY, standOffset, lag)
+		if not allowed then
 			sendRefused(shooter, seq)
 			return
 		end

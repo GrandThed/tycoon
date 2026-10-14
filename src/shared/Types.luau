@@ -2244,6 +2244,10 @@ export type CrowdSpawnInfo = {
 	at: Vector3?,
 	yaw: number?,
 	state: CrowdState?,
+	-- L1b Wave 2 fix round (ui-2): true while the body's camp group is at rest (held and dormant
+	-- included); nil for an awake group (rise, fight, home) or a body with no group. Clients'
+	-- touch auto-target never takes a resting body.
+	resting: boolean?,
 }
 -- L1b: one floor of the crowd: centre = the floor's top centre; half.X and half.Z its half extents;
 -- half.Y the highest a launch may carry a body over it (levels.crowdCeiling).

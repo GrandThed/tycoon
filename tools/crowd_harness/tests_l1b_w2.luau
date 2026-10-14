@@ -491,6 +491,97 @@ function W2B.realTests(): ()
 end
 L1.group("l1b w2 realTests", W2B.realTests)
 
+-- The fix round (docs/prompts/l1b-w2-fix-round.md, B-2 to B-4) ------------------------------------
+
+function W2B.fixTests(): ()
+	print(" fix round B-2: a ring's posts on its floor at every difficulty, not only the highest")
+	local has = L1.has
+	local problems = W2B.problems
+	local function count(list: { string }, text: string): number
+		local found = 0
+		for _, line in list do
+			if string.find(line, text, 1, true) ~= nil then
+				found += 1
+			end
+		end
+		return found
+	end
+	-- A's tent: 2 fodder and 2 brutes on Normal (4 posts: north, west, south, east), and 2
+	-- slingers more from Hard (6 posts, none due east). Round x 24 at radius 4 the Normal east
+	-- post is at x 28, past A's floor (ends x 30) less the brute's 2.2 = 27.8; Hard's easternmost
+	-- is 24 + 4 sin 60 = 27.46, inside it.
+	local tentLevel, tentLayout = W2B.level(), W2B.layout()
+	tentLevel.camps[1].tent.units = { { kind = "fodder", count = 2 }, { kind = "brute", count = 2 }, { kind = "slinger", count = 2, minDifficulty = "hard" } }
+	tentLayout.camps[1].tent.x = 24
+	tentLayout.camps[1].tent.radius = 4
+	local list = problems(tentLevel, tentLayout)
+	check(has(list, "group A.tent: ring post 4 lies off its floor less 2.2"), `a tent ring that only Normal's 4 posts push past the floor is refused ({list[1] or "no problem"})`)
+	local easier = W2B.layout()
+	easier.camps[1].tent.x = 23.5
+	easier.camps[1].tent.radius = 4
+	check(not has(problems(tentLevel, easier), "ring post"), "(round x 23.5 Normal's east post is at 27.5: legal)")
+	-- A's fire1: 4 fodder on Normal (west post at x - 4), 2 slingers more from Hard (6 posts,
+	-- westernmost x - 3.46). Round x -25: Normal's west post at -29 is past -30 + 1.3 = -28.7.
+	local fireLevel, fireLayout = W2B.level(), W2B.layout()
+	table.insert(fireLevel.camps[1].residents[1].units, { kind = "slinger", count = 2, minDifficulty = "hard" })
+	fireLayout.camps[1].spots[1].points[1].x = -25
+	list = problems(fireLevel, fireLayout)
+	check(has(list, "group A.fire1: post 2 lies off its floor less 1.3"), `a resident fire that only Normal's posts push past the floor is refused ({list[1] or "no problem"})`)
+	-- A ring past the floor at every difficulty is told of once, at the highest.
+	local always = W2B.layout()
+	always.camps[1].tent.x = 25
+	always.camps[1].tent.z = 100
+	always.camps[1].tent.radius = 4.9
+	list = problems(nil, always)
+	check(count(list, "group A.tent: ring post") == 1 and has(list, "lies off its floor less 2.2"), `a ring off its floor at every difficulty is one line, not one a difficulty ({count(list, "group A.tent: ring post")})`)
+	-- fire1's 4 fodder at every difficulty, round x -27: the west post at -31 on all three.
+	local fireAlways = W2B.layout()
+	fireAlways.camps[1].spots[1].points[1].x = -27
+	list = problems(nil, fireAlways)
+	check(count(list, "group A.fire1: post") == 1, `a fire off its floor at every difficulty is one line ({count(list, "group A.fire1: post")})`)
+
+	print(" fix round B-3: a tent body sent while its camp fights is roused until its group is up")
+	local Owes = W2B.Flow.TentOwesRouse
+	check(Owes(true, true, false) == true, "owed, the camp busy, the group walking home or resting: still owed")
+	check(Owes(true, true, true) == false, "the group is up (rise or fight): paid")
+	check(Owes(true, false, false) == false, "the camp has gone quiet: nothing to join, dropped")
+	check(Owes(false, true, false) == false, "never owed: stays not owed")
+
+	print(" fix round B-4: a tent body steps out of its marker's side, facing its post")
+	local Geo = W2B.Geo
+	local box = { x = 10, y = 12, z = 110, sx = 10, sy = 8, sz = 10 }
+	local x, z = Geo.TentDoor(box, 20, 110, 1.3)
+	check(near(x, 16.3) and near(z, 110), `a post due east at 10: the east wall at 15, 1.3 clear (16.3, 110) ({x}, {z})`)
+	x, z = Geo.TentDoor(box, 10 + 10 / math.sqrt(2), 110 - 10 / math.sqrt(2), 0)
+	check(near(x, 15) and near(z, 105), `a post to the north-east: the box's corner (15, 105) ({x}, {z})`)
+	x, z = Geo.TentDoor(box, 10 + 10 / math.sqrt(2), 110 - 10 / math.sqrt(2), 5)
+	check(near(x, 10 + 10 / math.sqrt(2)) and near(z, 110 - 10 / math.sqrt(2)), "a clearance that would pass the post stops on the post")
+	x, z = Geo.TentDoor(box, 13, 110, 1)
+	check(x == 13 and z == 110, "a post inside the footprint is its own door")
+	x, z = Geo.TentDoor(box, 10, 110, 1)
+	check(x == 10 and z == 110, "a post at the centre is its own door")
+	x, z = Geo.TentDoor(box, 20, 110, -3)
+	check(near(x, 15), "a negative clearance is none: the wall itself")
+	local long = { x = 0, y = 0, z = 0, sx = 14, sy = 10, sz = 6 }
+	x, z = Geo.TentDoor(long, 0, -10, 0)
+	local x2 = Geo.TentDoor(long, 10, 0, 0)
+	check(near(x, 0) and near(z, -3) and near(x2, 7), `a 14 x 6 box: its north wall at z -3, its east wall at x 7 ({z}, {x2})`)
+	local plan = W2B.plan()
+	local a = plan.tents[1]
+	check(#a.doors == #a.posts, "Plan pairs a door with every post")
+	-- A's marker is 4 x 4 round (10, 110), its ring 5: post 1 (fodder) due north at (10, 105).
+	check(L1.same(a.doors[1], vec(10, 8, 110 - 2 - 1.3)), "post 1 (a fodder due north): its door 1.3 past the north wall, on the floor")
+	-- Post 3 (the brute) at bearing 240: out along (sin 60, cos 60), the east wall at 2 / sin 60.
+	local d3 = a.doors[3]
+	local p3 = a.posts[3].at
+	local along = vec(d3.X - 10, 0, d3.Z - 110)
+	local toPost = vec(p3.X - 10, 0, p3.Z - 110)
+	check(near(along.Magnitude, 2 / math.sin(math.pi / 3) + 2.2, 1e-6) and near(along.X * toPost.Z - along.Z * toPost.X, 0, 1e-6) and along.X * toPost.X > 0 and near(d3.Y, 8), `post 3 (a brute, south-east): its door on the line to its post, the brute's 2.2 past the wall ({along.Magnitude})`)
+	local bare = W2B.plan(nil, nil, nil, false)
+	check(L1.same(bare.tents[1].doors[1], vec(10, 8, 108)), "Plan without kinds: the door on the wall itself")
+end
+L1.group("l1b w2 fixTests", W2B.fixTests)
+
 -- SpawnSeed (the ui-engineer's pure module, tested here on the lead's routing) -------------------
 
 function W2B.seedTests(): ()
@@ -511,5 +602,62 @@ function W2B.seedTests(): ()
 	check(Seed.Read({ at = { X = 1, Y = 2, Z = 3 } }) == nil and Seed.Read({ at = vec(0 / 0, 0, 0) }) == nil, "SpawnSeed: an at that is no Vector3, or not finite, seeds nothing")
 end
 L1.group("l1b w2 seedTests", W2B.seedTests)
+
+-- L1b Wave 2 fix round, ui-2: touch auto-target never takes a resting group's body (CampAim).
+do
+	local Aim = load("CampAim")
+	local camps: any = { sightBelow = 6, sightAbove = 12, chaseMargin = 2.5 }
+	local centre = vec(100, 8, 0)
+	local half = vec(20, 0, 15)
+	local inside = vec(105, 11, 3)
+	check(
+		Aim.Takes(nil, nil, false, inside, "travel", false, camps),
+		"CampAim: a body with no camp floor is always taken"
+	)
+	check(
+		Aim.Takes(nil, nil, true, inside, "gate", false, camps),
+		"CampAim: a body with no camp floor is taken even in the gate"
+	)
+	check(
+		Aim.Takes(centre, half, false, inside, "travel", false, camps),
+		"CampAim: an awake group's body is taken in play"
+	)
+	check(
+		not Aim.Takes(centre, half, true, inside, "travel", false, camps),
+		"CampAim: a resting group's body is never taken (the sneak on touch)"
+	)
+	check(
+		not Aim.Takes(centre, half, true, inside, "travel", true, camps),
+		"CampAim: engaged by another group, a resting body is still not taken"
+	)
+	check(
+		not Aim.Takes(centre, half, false, inside, "gate", true, camps),
+		"CampAim: in the gate no camp body is taken, engaged or not"
+	)
+	check(
+		Aim.Takes(centre, half, false, vec(400, 8, 0), "travel", true, camps),
+		"CampAim: engaged, an awake body is taken from out of play"
+	)
+	check(
+		Aim.Takes(centre, half, false, vec(122, 8, 0), "travel", false, camps),
+		"CampAim: within chaseMargin of an edge is in play"
+	)
+	check(
+		not Aim.Takes(centre, half, false, vec(122, 8, 17), "travel", false, camps),
+		"CampAim: past the rounded corner is out of play"
+	)
+	check(
+		not Aim.Takes(centre, half, false, vec(105, 1, 0), "travel", false, camps),
+		"CampAim: under the sight band is out of play"
+	)
+	check(
+		not Aim.Takes(centre, half, false, vec(105, 21, 0), "travel", false, camps),
+		"CampAim: over the sight band is out of play"
+	)
+	check(
+		Aim.Takes(centre, half, false, vec(400, 8, 0), "travel", false, nil),
+		"CampAim: with no camp rules loaded an awake body is taken"
+	)
+end
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

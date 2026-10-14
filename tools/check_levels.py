@@ -1420,9 +1420,39 @@ def check_wave2(name, level, layout, ctx, expect, caps, solids):
     expect(not bad, f"{name}: tents: a stock only on an open camp with residents and a tent block, its centre on the "
            f"floor, every above 0, its ring {POST_SPARE:g} + the widest radius inside the floor and off cover, clear "
            f"of its marker (every difficulty)" + (": " + "; ".join(bad[:4]) if bad else f" ({'; '.join(told)})"))
-    expect(all(c.get("tent", {}).get("collide") is not True for c in layout["camps"]),
-           f"{name}: every tent marker is walk-through (LevelGeometry builds it collide = false): not cover, not a "
-           f"perch, no shot or camera ray stops on it")
+    # Every resident post of a camp with a tent block (the boss room's marker included), and every
+    # point of a patrol's loop, clear of that marker by its body's radius, so no resting body stands
+    # half inside the opaque tent (data m1). The marker being walk-through is LevelGeometry's to
+    # build, and the harness guards it (mutation "l1b w2: the tent marker built colliding"); the
+    # layout carries no collide key for it, so nothing here could test it.
+    bad = []
+    tightest = (math.inf, "")
+    for difficulty in difficulties:
+        residents, _res = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
+        for defn in residents:
+            block = camps[defn["camp"]].get("tent")
+            if block is None:
+                continue
+            mark = (block["x"] - block["sx"] / 2, block["x"] + block["sx"] / 2,
+                    block["z"] - block["sz"] / 2, block["z"] + block["sz"] / 2)
+            kinds_of = member_kinds(defn)
+            if defn["posture"] == "patrol":
+                widest = max(radius(k) for k in kinds_of)
+                spots = [(x, z, widest, f"loop at ({x:g}, {z:g})") for x, z, _yaw in loop_samples(defn["points"])]
+            else:
+                spots = [(post["at"][0], post["at"][2], radius(kind), f"post {k} ({kind})")
+                         for k, (post, kind) in enumerate(zip(sr.group_posts(defn), kinds_of), 1)]
+            for x, z, r, what in spots:
+                spare = rect_distance(x, z, *mark) - r
+                if spare < tightest[0]:
+                    tightest = (spare, f"{difficulty} {defn['id']} {what}")
+                if spare < -EPS:
+                    bad.append(f"{difficulty} {defn['id']} {what} stands {-spare:.2f} inside camp {defn['camp']}'s tent "
+                               f"marker")
+    expect(not bad, f"{name}: every resident post and patrol loop of a camp with a tent block stands clear of its "
+           f"marker by its body's radius, every difficulty (the marker's walk-through build is the harness's)"
+           + (": " + "; ".join(bad[:4]) if bad else
+              f" (the tightest: {tightest[1]}, {tightest[0]:+.2f} to spare)" if tightest[1] else " (no post near one)"))
 
     # Post spacing (L1b-W2-4): any two posts of a camp, any groups, the tent's ring included, at
     # least r_a + r_b + SPACING_SPARE apart; a patrol's loop as far from every other group's post.

@@ -91,13 +91,17 @@
 --
 -- L1b Wave 2 (docs/INTERFACES.md "Wave 2 — the long road" -> Client):
 --  * One swing per jump (L1b-W2-14). Before a melee swing is predicted or sent, AirSwing asks
---    the server's question at the swing's own origin; the second airborne swing of a jump is
---    dropped (no effect, no send, nothing queued for the landing). A held button or the phone's
+--    the server's question at the swing's own origin (SwingGate, which AirSwing feeds every
+--    frame with the server's own samples: fix round ui-1); the second airborne swing of a jump
+--    is dropped (no effect, no send, nothing queued for the landing). A held button or the phone's
 --    auto-swing simply swings again at its rate once grounded. Abilities and shots are not gated.
 --  * Auto-target's camp rule measures with HitShapes.FlatToRect (L1b-W2-24), and while the run
 --    phase is `gate` (the boss room's countdown) it takes no body with a camp floor at all
 --    (L1b-W2-25): every one in reach then is a held resident whose hit would read "BLOCKED".
 --    Deliberate shots are untouched.
+--  * Fix round (ui-2): auto-target never takes a body whose camp group rests (held or dormant
+--    too), so a phone can sneak past a camp; it wakes one only by walking into its sight. The
+--    whole rule is the pure CampAim.Takes.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -121,6 +125,7 @@ local MovementController = require(script.Parent:WaitForChild("MovementControlle
 local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 local RangeTouchButtons = require(script.Parent:WaitForChild("RangeTouchButtons"))
 local AirSwing = require(script.Parent:WaitForChild("AirSwing"))
+local CampAim = require(script.Parent:WaitForChild("CampAim"))
 
 export type Stance = "melee" | "ranged"
 export type SlotTiers = { melee: number, ranged: number }
@@ -1079,31 +1084,21 @@ local function sphereInSights(
 	return toCentre - math.asin(math.clamp(radius / distance, 0, 1)) <= limit
 end
 
--- L1b fix round: auto-fire and auto-swing consider a camp's body only while the local root is
--- in play for its floor, the server's first in-play clause (L1b-6): flat distance to the floor
--- rectangle at most camps.chaseMargin (so the corners are rounded), inside the sight band.
--- Leaving out the keepAway reach clause only makes this stricter. A shot from out of play is
--- "blocked" and still wakes a resting group (L1b-4, L1b-7), so a phone must never take one by
--- itself. Bodies with no camp floor (the range) keep the old rule. L1b-W2-25: in the boss
--- room's countdown (`gate`) no body with a camp floor is taken, engaged or not.
+-- Whether auto-fire and auto-swing may take this body by themselves (CampAim): a camp's body
+-- only while the local root is in play for its floor and its group is awake, never in the boss
+-- room's countdown; a body with no camp floor (the range) always.
 local function campInPlay(id: number, root: Vector3): boolean
-	local centre, half = CrowdRenderer.CampFloor(id)
-	if centre == nil or half == nil then
-		return true
-	end
-	if missionState.phase == "gate" then
-		return false
-	end
+	local centre, half, resting = CrowdRenderer.CampFloor(id)
 	local cfg = combatConfig
-	if cfg == nil or rangeState.engaged then
-		return true
-	end
-	local camps = cfg.camps
-	if root.Y < centre.Y - camps.sightBelow or root.Y > centre.Y + camps.sightAbove then
-		return false
-	end
-	return HitShapes.FlatToRect(root.X, root.Z, centre.X, centre.Z, half.X, half.Z)
-		<= camps.chaseMargin
+	return CampAim.Takes(
+		centre,
+		half,
+		resting,
+		root,
+		missionState.phase,
+		rangeState.engaged,
+		if cfg ~= nil then cfg.camps else nil
+	)
 end
 
 -- CrowdRenderer reports the ground point; the body sphere is centred at height/2 and the

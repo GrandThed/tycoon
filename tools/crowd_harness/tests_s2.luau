@@ -917,8 +917,10 @@ function S2.separateTests(): ()
 	step2(2)
 	check(Crowd.Get(big).position.X == 2 and flatTo(Crowd.Get(lunger).position, vec(2, 0, 4)) >= 5.3 - 1e-6, "once it has struck it gives way")
 
-	-- The cost: one giant alive must not widen what every other body scans.
-	local function timed(giantAlive: boolean): number
+	-- The cost: one giant alive must not widen what every other body scans. Fix round A-3: counted
+	-- in grid cells visited (CrowdService.SeparationCells), not timed: a clock under load made
+	-- this case fail at random and could turn the mutation baseline red.
+	local function scanned(giantAlive: boolean): number
 		fresh()
 		root.Position = vec(0, 3, -95)
 		for index = 1, 110 do
@@ -928,21 +930,15 @@ function S2.separateTests(): ()
 			Crowd.Spawn("titan", vec(-80, 0, -80), "idle")
 		end
 		step2(10)
-		local best = math.huge
-		for _ = 1, 6 do
-			local began = os.clock()
-			for _ = 1, 25 do
-				fakeNow += DT
-				crowdBeat(DT)
-			end
-			best = math.min(best, os.clock() - began)
-		end
+		fakeNow += DT
+		crowdBeat(DT)
+		local cells = Crowd.SeparationCells()
 		gather()
-		return best / 25 * 1000
+		return cells
 	end
-	local without = math.min(timed(false), timed(false))
-	local with = math.min(timed(true), timed(true))
-	check(with < without * 1.25, `a giant standing far away costs the packed crowd nothing: {string.format("%.3f", without)} ms a step without it, {string.format("%.3f", with)} ms with it`)
+	local without = scanned(false)
+	local with = scanned(true)
+	check(without >= 110 * 9 and with == without, `a giant standing far away costs the packed crowd nothing: {without} grid cells scanned a step without it, {with} with it`)
 end
 S2.separateTests()
 

@@ -5169,11 +5169,31 @@ def groups_of(level, layout, rank, ranks):
     return groups, residents
 
 
-def tents_of(level, layout, rank, ranks):
+def tent_door(block, x, z, clear):
+    """LevelGeometry.TentDoor (the fix round's B-4): where a tent body steps out on its way to the
+    ring post at (x, z): on the line from the marker's centre to the post, `clear` past the
+    footprint's edge (negative = 0), never past the post; a post at the centre is its own door."""
+    dx, dz = x - block["x"], z - block["z"]
+    distance = math.sqrt(dx * dx + dz * dz)
+    if not distance > 1e-6:
+        return x, z
+    ux, uz = dx / distance, dz / distance
+    edge = math.inf
+    if abs(ux) > 1e-9:
+        edge = min(edge, block["sx"] / 2 / abs(ux))
+    if abs(uz) > 1e-9:
+        edge = min(edge, block["sz"] / 2 / abs(uz))
+    out = min(edge + max(clear, 0), distance)
+    return block["x"] + ux * out, block["z"] + uz * out
+
+
+def tents_of(level, layout, rank, ranks, crowd_kinds=None):
     """StageFlow.tentsOf (L1b-W2-6): one PlanTent per open camp of the layout, in its order, whose
     camps entry carries a tent stock and whose layout camp has a tent block, with a stock left at
     `rank` (minDifficulty; never countMult); and each such camp's stock by its id. A tent is one
-    group of its camp, posture "tent", on the ring round its marker: kinds[k] stands on posts[k]."""
+    group of its camp, posture "tent", on the ring round its marker: kinds[k] stands on posts[k]
+    and steps out of the marker at doors[k] (B-4: its kind's radius clear of the wall, read from
+    `crowd_kinds`; on the wall without it)."""
     tents = []
     stocks = {}
     configs = level.get("camps") or []
@@ -5191,7 +5211,13 @@ def tents_of(level, layout, rank, ranks):
                 "rect": {"x": camp["x"], "z": camp["z"], "hx": camp["sx"] / 2, "hz": camp["sz"] / 2},
                 "posture": "tent", "points": [(block["x"], camp["y"], block["z"])], "yaw": 0.0,
                 "radius": block["radius"], "held": False, "units": units}
-        tents.append({"zone": floor, "def": defn, "kinds": kinds, "posts": cb_posts(defn, len(kinds)),
+        posts = cb_posts(defn, len(kinds))
+        doors = []
+        for kind, post in zip(kinds, posts):
+            body = crowd_kinds.get(kind) if crowd_kinds is not None else None
+            x, z = tent_door(block, post["at"][0], post["at"][2], body["radius"] if body is not None else 0)
+            doors.append((x, post["at"][1], z))
+        tents.append({"zone": floor, "def": defn, "kinds": kinds, "posts": posts, "doors": doors,
                       "every": tent["every"]})
         stocks[camp["id"]] = len(kinds)
     return tents, stocks
@@ -5352,32 +5378,43 @@ def camp_level_problems(level, layout, rules, kinds, ranks, crowd_max, problems)
             unit_problems(at, group.get("units"))
     if problems:
         return
-    top = max((ranks.get(name, 0) for name in level["difficulties"]), default=0)
-    groups, _residents = groups_of(level, layout, top, ranks)
-    for defn in groups:
-        members = sum(unit["count"] for unit in defn["units"])
-        widest = max((kinds[unit["kind"]]["radius"] if unit["kind"] in kinds else 0 for unit in defn["units"]),
-                     default=0)
-        if defn["posture"] == "guard" and members > len(defn["points"]):
-            problem(f"group {defn['id']} holds {members} guards and has {len(defn['points'])} posts")
-            continue
-        _floor, camp = camp_index(layout, defn["camp"])
-        for index, post in enumerate(cb_posts(defn, members), 1):
-            x, _y, z = post["at"]
-            if camp is not None and not (abs(x - camp["x"]) <= camp["sx"] / 2 - widest
-                                         and abs(z - camp["z"]) <= camp["sz"] / 2 - widest):
-                problem(f"group {defn['id']}: post {index} lies off its floor less {widest}")
-                break
-    tents, _stocks = tents_of(level, layout, top, ranks)
-    for tent in tents:
-        widest = max((kinds[kind]["radius"] if kind in kinds else 0 for kind in tent["kinds"]), default=0)
-        _floor, camp = camp_index(layout, tent["def"]["camp"])
-        for index, post in enumerate(tent["posts"], 1):
-            x, _y, z = post["at"]
-            if camp is not None and not (abs(x - camp["x"]) <= camp["sx"] / 2 - widest
-                                         and abs(z - camp["z"]) <= camp["sz"] / 2 - widest):
-                problem(f"group {tent['def']['id']}: ring post {index} lies off its floor less {widest}")
-                break
+    # The posts at every difficulty the level offers, the highest first (the fix round's B-2: a
+    # difficulty that fields fewer bodies stands a ring's posts at other bearings); a group is told
+    # of once, at the highest difficulty it fails at.
+    told = set()
+    for rank in sorted({ranks.get(name, 0) for name in level["difficulties"]}, reverse=True):
+        groups, _residents = groups_of(level, layout, rank, ranks)
+        for defn in groups:
+            if defn["id"] in told:
+                continue
+            members = sum(unit["count"] for unit in defn["units"])
+            widest = max((kinds[unit["kind"]]["radius"] if unit["kind"] in kinds else 0 for unit in defn["units"]),
+                         default=0)
+            if defn["posture"] == "guard" and members > len(defn["points"]):
+                told.add(defn["id"])
+                problem(f"group {defn['id']} holds {members} guards and has {len(defn['points'])} posts")
+                continue
+            _floor, camp = camp_index(layout, defn["camp"])
+            for index, post in enumerate(cb_posts(defn, members), 1):
+                x, _y, z = post["at"]
+                if camp is not None and not (abs(x - camp["x"]) <= camp["sx"] / 2 - widest
+                                             and abs(z - camp["z"]) <= camp["sz"] / 2 - widest):
+                    told.add(defn["id"])
+                    problem(f"group {defn['id']}: post {index} lies off its floor less {widest}")
+                    break
+        tents, _stocks = tents_of(level, layout, rank, ranks)
+        for tent in tents:
+            if tent["def"]["id"] in told:
+                continue
+            widest = max((kinds[kind]["radius"] if kind in kinds else 0 for kind in tent["kinds"]), default=0)
+            _floor, camp = camp_index(layout, tent["def"]["camp"])
+            for index, post in enumerate(tent["posts"], 1):
+                x, _y, z = post["at"]
+                if camp is not None and not (abs(x - camp["x"]) <= camp["sx"] / 2 - widest
+                                             and abs(z - camp["z"]) <= camp["sz"] / 2 - widest):
+                    told.add(tent["def"]["id"])
+                    problem(f"group {tent['def']['id']}: ring post {index} lies off its floor less {widest}")
+                    break
     reserve = boss_reserve(level, kinds)
     crowd_max = crowd_max if crowd_max is not None else math.inf
     for name in level["difficulties"]:
@@ -5414,7 +5451,7 @@ def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
         return None
     rank = (ranks.get(difficulty) or 0) if ranks is not None else 0
     groups, residents = groups_of(level, layout, rank, ranks)
-    tents, tent_stocks = tents_of(level, layout, rank, ranks)
+    tents, tent_stocks = tents_of(level, layout, rank, ranks, kinds)
     by_kind = {}  # each camp's stock by kind (L1b-W2-21): its residents, then its tent's
     for defn in groups:
         stock = by_kind.setdefault(defn["camp"], {})

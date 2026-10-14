@@ -67,6 +67,8 @@ SOURCES = {
     "StageFlow": "src/combat/server/Services/StageFlow.luau",
     # L1b Wave 2: the client's pure reading of a spawn info (the lead's routing: tested here).
     "SpawnSeed": "src/combat/client/Controllers/SpawnSeed.luau",
+    # The L1b Wave 2 fix round, ui-2: touch auto-target's camp rule (the ui-engineer's).
+    "CampAim": "src/combat/client/Controllers/CampAim.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.

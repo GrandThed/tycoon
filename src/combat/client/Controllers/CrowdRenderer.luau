@@ -342,6 +342,9 @@ type Entity = {
 	seat: number,
 	-- L1b Wave 2: the body's only sample is its spawn info's (SpawnSeed), no snapshot yet.
 	seeded: boolean,
+	-- L1b Wave 2 fix round (ui-2): its camp group rests, as the newest spawn info said (the
+	-- server re-announces a group's bodies when it changes to or from rest). CampFloor.
+	resting: boolean,
 
 	dirty: boolean,
 	lastShown: Vector3,
@@ -687,6 +690,7 @@ local function newEntity(): Entity?
 		floorIndex = 1,
 		seat = 0,
 		seeded = false,
+		resting = false,
 		dirty = true,
 		lastShown = Vector3.zero,
 		lastYaw = 0,
@@ -1128,6 +1132,7 @@ local function spawnEntity(
 	entity.floorIndex = floorIndex
 	entity.seat = 0
 	entity.seeded = false
+	entity.resting = false
 	entity.wards = 0
 	entity.called = false
 	entity.opened = false
@@ -1761,9 +1766,13 @@ local function onSpawn(payload: any): ()
 					then math.floor(index)
 					else 1
 			)
+			local entity = byId[info.id]
+			-- Every info is the newest word on the group, a re-announce of a drawn body too.
+			if entity ~= nil then
+				entity.resting = info.resting == true
+			end
 			-- L1b Wave 2: drawn at once from the info, unless a snapshot already drew it.
 			local at: Vector3?, yaw: number, state: Types.CrowdState = SpawnSeed.Read(info)
-			local entity = byId[info.id]
 			if
 				at == nil
 				or entity == nil
@@ -2774,17 +2783,18 @@ end
 
 -- L1b fix round: the camp floor a body stands on, as its top centre and half extents (half.Y
 -- is 0); nil for the range's arena, a body not known, or a floor that has not arrived. Touch
--- auto-fire reads it so it never wakes a camp the player is not in play for.
-function CrowdRenderer.CampFloor(id: number): (Vector3?, Vector3?)
+-- auto-fire reads it so it never wakes a camp the player is not in play for. The third value
+-- (L1b Wave 2 fix round, ui-2): whether that body's camp group rests (CampAim).
+function CrowdRenderer.CampFloor(id: number): (Vector3?, Vector3?, boolean)
 	local entity = byId[id]
 	if entity == nil then
-		return nil, nil
+		return nil, nil, false
 	end
 	local floor = floors[entity.floorIndex]
 	if floor == nil or not floor.camp or floor.half == nil then
-		return nil, nil
+		return nil, nil, false
 	end
-	return floor.centre, floor.half
+	return floor.centre, floor.half, entity.resting
 end
 
 function CrowdRenderer.GetHeight(id: number): number?

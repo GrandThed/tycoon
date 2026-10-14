@@ -4285,6 +4285,7 @@ the ray rule, the tents, the join-in, dormancy, the clear bonus, `DeadFraction` 
 | Forest Road `runCapSeconds` | 1500 (the draft's) | ≥ 2 × the human's slowest Normal clear (7.09 min → 851 s) and ≥ 1260 |
 | Layout: A's tent | moved 6 studs west, (−201.5, 6) → (−207.5, 6) | at the draft's place its ring stood 1 stud from A.loop's patrol, so post spacing failed by 2.9. The patrol and the picture are unchanged |
 | Layout: tents' `radius` | 10 (A and B; C's tent is a marker only) | clears its 10 × 10 marker by ≥ 2.9 (≥ every ring body's radius) and every other post |
+| Layout: C's tent | moved 2 studs north, (353.5, 0) → (353.5, −2) | at z 0 its south wall (z 6) ran through the centres of C.south's last three guards (two lobbers, and the plated raider on Hard): each stood 1.4–1.7 studs inside the opaque marker. Now the wall is at z 4 and the tightest, Hard's plated raider, clears it by 0.30. C's spawns and every number are unchanged (the marker is where C's stage waves come out) |
 | Layout: `sneak` | gained its last point (262, −44), C's entry | the gate runs the path to the boss room's entry. The draft stopped at (250, −44) |
 
 No `ProvingGrounds.json` number moved (gate 13). C's stage, the difficulties and every other reward
@@ -4463,13 +4464,20 @@ Its files are frozen, and every band holds:
 | Still, first strike, kite (+ tent paused), edge, sneak, join-in, tents | sim_range | PASS |
 | Pay ×2–×3 and ×4–×6; bonus 5–10%; Valor exact; calls under half | sim_combat 21 | PASS |
 | Population = Validate's, ≤ 160 | sim_combat 23 | 147 / 157 / 157: PASS |
-| The Wave 2 table | check_levels | PASS. Post spacing proved on the draft's tent (fails by 2.9) |
-| The mirrors | check_stage_mirror | all equal; **39 of 39 Luau mutants caught** (below) |
+| The Wave 2 table | check_levels | PASS. Post spacing proved on the draft's tent (fails by 2.9); the marker clearance on C's tent at z 0 (fails, the two lobbers 1.40 inside) |
+| The mirrors | check_stage_mirror | all equal; **39 of 39 Luau mutants caught** by `py tools/crowd_harness/mirror_mutants.py` (below; about 2 min) |
 
 The Wave 2 table covers sizes, route, residents, sneak, post spacing, population, tents, markers,
-looks, `dormantRadius`, `joinFactor`, and checkpoints with tents.
+looks, `dormantRadius`, `joinFactor`, and checkpoints with tents. Since the fix round, every
+resident post and patrol loop of a camp with a tent block (C's included) must clear the marker
+by its body's radius at every difficulty. The old line "every tent marker is walk-through"
+tested a `collide` key no layout has and could not fail, so it is gone: the marker is built
+walk-through by `LevelGeometry`, and the harness's mutation "l1b w2: the tent marker built
+colliding" is the guard.
 
-**The Luau mutants.** Each is one text change, run through `check_stage_mirror.py --module`.
+**The Luau mutants.** Each is one text change, run through `check_stage_mirror.py --module`. The
+driver is `tools/crowd_harness/mirror_mutants.py` (`--list`, `--only <label>`); a mutant whose
+text no longer occurs once reports STALE and fails, so a module edit must re-aim it.
 
 | Module | Mutants caught |
 |---|---|

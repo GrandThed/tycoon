@@ -269,6 +269,11 @@ local camp = {
 	roots = {} :: { Vector3 },
 	-- Living bodies per floor that belong to a group, kept with aliveOn (never a scan).
 	groupedOn = {} :: { [number]: number },
+	-- Fix round ui-2: bodies whose group went to or from rest, sent again at the next flush so
+	-- every client's `resting` follows. Its own queue, never pendingSpawnSet: an id in that set
+	-- counts as never announced, and a body dying in the same step would get no CrowdRemove.
+	reannounce = {} :: { [number]: boolean },
+	reannounceOrder = {} :: { number },
 }
 
 local grid: { [number]: { Enemy } } = {}
@@ -296,6 +301,9 @@ local perf = {
 	since = 0,
 	-- L1b-W2-23: the Workspace attribute each line also sets to its p95; nil = none.
 	attribute = nil :: string?,
+	-- Grid cells the last separation pass visited: its work, which the harness compares where a
+	-- clock under load could not (fix round A-3).
+	cells = 0,
 }
 
 -- Scratch tables reused every step so the loop allocates nothing per enemy.
@@ -831,6 +839,7 @@ end
 -- still shoves and launches it through integrate.
 local function separate(largeRadius: number): ()
 	local widest = 0
+	perf.cells = 0
 	table.clear(giants)
 	for _, enemy in order do
 		-- L1b-W2-10: a dormant body neither moves nor pushes.
@@ -857,6 +866,7 @@ local function separate(largeRadius: number): ()
 		local cx = math.floor(enemy.position.X / CELL_SIZE) + CELL_OFFSET
 		local cz = math.floor(enemy.position.Z / CELL_SIZE) + CELL_OFFSET
 		local reach = math.ceil((radius + widest) / CELL_SIZE)
+		perf.cells += (2 * reach + 1) * (2 * reach + 1)
 		for ox = -reach, reach do
 			for oz = -reach, reach do
 				local cell = grid[(cx + ox) * CELL_STRIDE + (cz + oz)]
@@ -950,8 +960,13 @@ local function queueEvent(
 	held: boolean
 ): ()
 	local ids = table.create(#group.bodies)
+	local restChanged = from == "rest" or to == "rest"
 	for _, body in group.bodies do
 		table.insert(ids, body.id)
+		if restChanged and not pendingSpawnSet[body.id] and not camp.reannounce[body.id] then
+			camp.reannounce[body.id] = true
+			table.insert(camp.reannounceOrder, body.id)
+		end
 	end
 	table.insert(
 		camp.events,
@@ -1145,6 +1160,13 @@ local function refreshInfo(enemy: Enemy): Types.CrowdSpawnInfo
 	info.at = enemy.position
 	info.yaw = enemy.yaw
 	info.state = enemy.state
+	-- Fix round ui-2: the test CampBrain.Shows uses for "shown at rest". A dormant group is
+	-- always at rest (CampBrain.Dormant), so dormant bodies read resting too.
+	local resident = enemy.resident
+	local group = if resident ~= nil then camp.groups[resident.group] else nil
+	info.resting = if group ~= nil and (group.brain.held or group.brain.state == "rest")
+		then true
+		else nil
 	return info
 end
 
@@ -1153,8 +1175,23 @@ local function flushLifecycle(): ()
 		fireAll(REMOVE_EVENT, pendingRemoves)
 		pendingRemoves = {}
 	end
-	if #pendingSpawnOrder > 0 then
+	local reannounce = camp.reannounce
+	if #pendingSpawnOrder > 0 or #camp.reannounceOrder > 0 then
 		local batch: { Types.CrowdSpawnInfo } = {}
+		-- A body still pending is skipped here: its own announcement below carries the same info.
+		for _, id in camp.reannounceOrder do
+			local enemy = enemies[id]
+			if
+				reannounce[id]
+				and enemy ~= nil
+				and enemy.deadAt == nil
+				and not pendingSpawnSet[id]
+			then
+				table.insert(batch, refreshInfo(enemy))
+			end
+		end
+		table.clear(camp.reannounceOrder)
+		table.clear(reannounce)
 		for _, id in pendingSpawnOrder do
 			local enemy = enemies[id]
 			if pendingSpawnSet[id] and enemy ~= nil then
@@ -1351,6 +1388,8 @@ local function forgetGroups(): ()
 	table.clear(camp.engaged)
 	table.clear(camp.rouse)
 	table.clear(camp.groupedOn)
+	table.clear(camp.reannounce)
+	table.clear(camp.reannounceOrder)
 end
 
 local function setFloors(list: { Types.CrowdFloor }, caller: string): boolean
@@ -1748,6 +1787,12 @@ function CrowdService.Query(center: Vector3, radius: number): { number }
 		end
 	end
 	return ids
+end
+
+-- The grid cells the last step's separation pass visited (fix round A-3: the harness proves a
+-- giant widens nobody's scan by this count, not by a clock).
+function CrowdService.SeparationCells(): number
+	return perf.cells
 end
 
 function CrowdService.Get(id: number): EnemyView?

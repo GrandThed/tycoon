@@ -2262,8 +2262,8 @@ L1B_RUN_MUTATIONS = {
     ),
     "l1b: Validate lets a post hang its widest kind over the edge": (
         FLOW,
-        "for index, post in posts :: { CampBrain.Post } do\n\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest)",
-        "for index, post in posts :: { CampBrain.Post } do\n\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, 0)",
+        "for index, post in posts :: { CampBrain.Post } do\n\t\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest)",
+        "for index, post in posts :: { CampBrain.Post } do\n\t\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, 0)",
     ),
     "l1b: Validate lets the boss room's residents fill its cap": (
         FLOW,
@@ -2539,8 +2539,8 @@ W2_RUN_MUTATIONS = {
     ),
     "l1b w2: Validate lets a ring post hang its widest kind over the edge": (
         FLOW,
-        "for index, post in tent.posts do\n\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest)",
-        "for index, post in tent.posts do\n\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, 0)",
+        "for index, post in tent.posts do\n\t\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, widest)",
+        "for index, post in tent.posts do\n\t\t\t\tif camp ~= nil and not onFloor(camp, post.at.X, post.at.Z, 0)",
     ),
     "l1b w2: a tent's posts counted by its units, not its bodies": (
         FLOW,
@@ -2603,6 +2603,107 @@ W2_RUN_MUTATIONS = {
     ),
 }
 MUTATIONS.update(W2_RUN_MUTATIONS)
+
+# The L1b Wave 2 fix round, B (docs/prompts/l1b-w2-fix-round.md B-2 to B-4): ring posts checked
+# at every difficulty and each group told of once; a tent's owed rouse; the tent's door.
+W2_FIX_B_MUTATIONS = {
+    "l1b w2 fix B: Validate checks resident posts at the highest difficulty only": (
+        FLOW,
+        "for _, def in (groupsOf(level, layout, rank, ranks)) do",
+        "for _, def in (groupsOf(level, layout, levelRanks[1], ranks)) do",
+    ),
+    "l1b w2 fix B: Validate checks a tent's ring at the highest difficulty only": (
+        FLOW,
+        "for _, tent in (tentsOf(level, layout, rank, ranks)) do",
+        "for _, tent in (tentsOf(level, layout, levelRanks[1], ranks)) do",
+    ),
+    "l1b w2 fix B: Validate tells of a resident post once a difficulty": (
+        FLOW,
+        "\t\t\t\t\ttold[def.id] = true\n\t\t\t\t\tproblem(\n\t\t\t\t\t\t`group {def.id}: post {index}",
+        "\t\t\t\t\tproblem(\n\t\t\t\t\t\t`group {def.id}: post {index}",
+    ),
+    "l1b w2 fix B: Validate tells of a ring post once a difficulty": (
+        FLOW,
+        "\t\t\t\t\ttold[id] = true\n\t\t\t\t\tproblem(\n\t\t\t\t\t\t`group {id}: ring post {index}",
+        "\t\t\t\t\tproblem(\n\t\t\t\t\t\t`group {id}: ring post {index}",
+    ),
+    "l1b w2 fix B: TentOwesRouse keeps rousing a group already up": (
+        FLOW,
+        "return owed and campBusy and not groupAwake",
+        "return owed and campBusy",
+    ),
+    "l1b w2 fix B: TentOwesRouse keeps rousing for a quiet camp": (
+        FLOW,
+        "return owed and campBusy and not groupAwake",
+        "return owed and not groupAwake",
+    ),
+    "l1b w2 fix B: TentDoor on the wall, no clearance": (
+        GEOMETRY,
+        "local out = math.min(edge + math.max(clear, 0), distance)",
+        "local out = math.min(edge, distance)",
+    ),
+    "l1b w2 fix B: TentDoor runs past the post": (
+        GEOMETRY,
+        "local out = math.min(edge + math.max(clear, 0), distance)",
+        "local out = edge + math.max(clear, 0)",
+    ),
+    "l1b w2 fix B: TentDoor takes a negative clearance": (
+        GEOMETRY,
+        "edge + math.max(clear, 0)",
+        "edge + clear",
+    ),
+    "l1b w2 fix B: TentDoor swaps the box's sides": (
+        GEOMETRY,
+        "edge = math.min(edge, box.sx / 2 / math.abs(ux))",
+        "edge = math.min(edge, box.sz / 2 / math.abs(ux))",
+    ),
+    "l1b w2 fix B: a post inside the footprint steps out anyway": (
+        GEOMETRY,
+        "local out = math.min(edge + math.max(clear, 0), distance)",
+        "local out = math.max(math.min(edge + math.max(clear, 0), distance), edge)",
+    ),
+    "l1b w2 fix B: Plan's doors without the kind's radius": (
+        FLOW,
+        "local clear = if body ~= nil then body.radius else 0",
+        "local clear = 0",
+    ),
+    "l1b w2 fix B: Plan's door is the post": (
+        FLOW,
+        "table.insert(doors, Vector3.new(x, post.at.Y, z))",
+        "table.insert(doors, post.at)",
+    ),
+}
+MUTATIONS.update(W2_FIX_B_MUTATIONS)
+
+# The L1b Wave 2 fix round, the ui-engineer's ui-2 (fix-ui.md, texts as given): touch
+# auto-target's camp rule, CampAim.
+CAMP_AIM = "src/combat/client/Controllers/CampAim.luau"
+FILES.append(CAMP_AIM)
+W2_FIX_UI_MUTATIONS = {
+    "l1b w2 ui: a resting body is taken": (CAMP_AIM, 'if phase == "gate" or resting then', 'if phase == "gate" then'),
+    "l1b w2 ui: the gate takes camp bodies": (CAMP_AIM, 'if phase == "gate" or resting then', "if resting then"),
+    "l1b w2 ui: engaged takes a resting body": (
+        CAMP_AIM,
+        '\tif phase == "gate" or resting then\n\t\treturn false\n\tend\n\tif camps == nil or engaged then\n\t\treturn true\n\tend\n',
+        '\tif phase == "gate" then\n\t\treturn false\n\tend\n\tif camps == nil or engaged then\n\t\treturn true\n\tend\n\tif resting then\n\t\treturn false\n\tend\n',
+    ),
+    "l1b w2 ui: auto-target corners square": (
+        CAMP_AIM,
+        "return HitShapes.FlatToRect(root.X, root.Z, centre.X, centre.Z, half.X, half.Z)\n\t\t<= camps.chaseMargin",
+        "return math.max(math.abs(root.X - centre.X) - half.X, math.abs(root.Z - centre.Z) - half.Z)\n\t\t<= camps.chaseMargin",
+    ),
+    "l1b w2 ui: auto-target has no sight band": (
+        CAMP_AIM,
+        "if root.Y < centre.Y - camps.sightBelow or root.Y > centre.Y + camps.sightAbove then",
+        "if false then",
+    ),
+    "l1b w2 ui: a body with no camp floor is refused": (
+        CAMP_AIM,
+        "if centre == nil or half == nil then\n\t\treturn true",
+        "if centre == nil or half == nil then\n\t\treturn false",
+    ),
+}
+MUTATIONS.update(W2_FIX_UI_MUTATIONS)
 FILES += ["src/shared/SwingGate.luau", SPAWN_SEED]  # SwingGate: A's SWING
 
 # L1b Wave 2, luau-engineer A (docs/prompts/l1b-w2-reports/build-A.md "For B"): the crowd's ray,

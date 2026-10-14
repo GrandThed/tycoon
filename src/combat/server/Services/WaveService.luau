@@ -120,8 +120,9 @@ type Run = {
 	-- change (DrainGroupEvents). SafePoint keeps out of their reach.
 	awakeGroups: { [number]: { number } },
 	-- L1b-W2-7: one per Plan.tents entry, in its order: its crowd group, the bodies it has sent
-	-- (a refused spawn counts) and CampBrain's clock.
-	tents: { { group: number, sent: number, state: CampBrain.TentState } },
+	-- (a refused spawn counts) and CampBrain's clock; `owed` = its group still owes the rouse of a
+	-- body sent while the camp fought (StageFlow.TentOwesRouse, the fix round's B-3).
+	tents: { { group: number, sent: number, state: CampBrain.TentState, owed: boolean } },
 	-- A tent's refused spawn: warned once per run.
 	warnedTent: boolean,
 	-- L1b-W2-21: what the live locking camp's waves queued in this run, by kind (the director's
@@ -1577,7 +1578,10 @@ local function placeTents(plan: StageFlow.Plan): ()
 			warn(`[WaveService] the crowd took group {tent.def.id} as {group}, not {wanted}`)
 		end
 		local stock = if group ~= 0 then #tent.kinds else 0
-		table.insert(run.tents, { group = group, sent = 0, state = CampBrain.NewTent(stock) })
+		table.insert(
+			run.tents,
+			{ group = group, sent = 0, state = CampBrain.NewTent(stock), owed = false }
+		)
 	end
 end
 
@@ -1586,6 +1590,9 @@ end
 -- due, onto its own ring post, and rouses its group so the body joins the fight. One body per
 -- tent per tick. A refused spawn warns once per run and counts as sent: the population rule makes
 -- it a bug, and the camp must still be able to clear. Never yields.
+-- The fix round: a body that joins a group already up is a threat for the safe point at once
+-- (B-1: its group's state does not change, so no event lists it), and a body sent while its camp
+-- fights keeps its group roused until the group is up (B-3: one walking home rises once home).
 local function tickTents(): ()
 	local plan = run.plan
 	if plan == nil or #run.tents == 0 then
@@ -1599,8 +1606,13 @@ local function tickTents(): ()
 			continue
 		end
 		local floor = planned.zone
+		local campBusy = busy[floor] == true
+		tent.owed = StageFlow.TentOwesRouse(tent.owed, campBusy, run.awakeGroups[tent.group] ~= nil)
+		if tent.owed then
+			CrowdService.RouseGroup(tent.group)
+		end
 		local residentsAlive = CrowdService.AliveOn(floor) - CrowdService.GroupAlive(tent.group)
-		local active = CampBrain.TentActive(busy[floor] == true, residentsAlive)
+		local active = CampBrain.TentActive(campBusy, residentsAlive)
 		if not CampBrain.TentDue(tent.state, active, now) then
 			continue
 		end
@@ -1612,6 +1624,11 @@ local function tickTents(): ()
 			else 0
 		if id ~= 0 then
 			CrowdService.RouseGroup(tent.group)
+			local awake = run.awakeGroups[tent.group]
+			if awake ~= nil then
+				table.insert(awake, id)
+			end
+			tent.owed = StageFlow.TentOwesRouse(true, campBusy, awake ~= nil)
 		elseif not run.warnedTent then
 			run.warnedTent = true
 			warn(

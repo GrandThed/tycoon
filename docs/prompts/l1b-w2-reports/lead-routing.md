@@ -102,3 +102,22 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
 - **econ re-tune at 6 s (build-econ.md):** Normal clear 7.02–7.25 min (band 6.5–8), Timber
   38.9–40.2 a minute, bonus 7.3% of a clear; brute Timber 3 on Forest Road, camp A's watch 2 fodder
   → 2 slingers. Confirmed. Population 147 / 157 / 157 and Parts 82 unchanged.
+
+## Fix-round routing
+
+- **ui fix done (fix-ui.md):** ui-1 on A's `SwingGate.Observe` / `Judge` / `Took`; ui-2 as the
+  pure `CampAim.Takes`. Its decisions confirmed (sampling starts at the first Judge, the skip list
+  rebuilt every 0.25 s, a resting body refused even while engaged).
+- ui → A (routed, part of ui-2's ruling): `resting` on `CrowdSpawnInfo`, set in `refreshInfo`,
+  re-announced on rest changes through a queue of its own (not `pendingSpawnSet`), with five cases
+  and three mutations. ui → B: `CampAim` in `SOURCES`, 12 cases, `CAMP_AIM` with 6 mutations.
+- **A fix done (fix-A.md), harness 1,969 PASS.** Confirmed, including the addition beyond the
+  review: `OnAttack` judges with `Tuning.CommitLag` so a swing sent just after a bounce is not
+  refused while the server's copy is still falling (lenient on the server only; a cheater gains at
+  most one swing at the very end of a fall). Dormant bodies count as resting. Its two dropped
+  mutations (equivalent to the code) are accepted, the guard case kept. `TURN_WINDOW_SECONDS` stays
+  a module constant (not a tunable for Ben).
+- **Contract amendments to write at the merge (lead):** the new `SwingGate` exports (`Observe`,
+  `Judge`, `ProbePoint`, `Higher`, `TURN_WINDOW_SECONDS`, `STILL_SPEED`, `FOOTPRINT`,
+  `PROBE_POINTS`; `Landed` a full reset), `CrowdService.SeparationCells`, `CrowdSpawnInfo.resting`
+  with re-announces on rest changes, `CampAim.Takes`, tent bodies rising (B-4).
