@@ -4876,8 +4876,11 @@ GATE_PYTHON = (3, 12)  # the interpreter the bands are measured on: see interpre
 FOREST_LEVEL = "forestRoad"
 FOREST_BOSS = "colossus"
 # L1b Wave 2: Normal's first clear at the proving gear 2 / 2, from the start point to the
-# Colossus's fall, walking included, every seed (L1b-W2-22: Ben about x1.36 of it, 9-10.5 min).
-FOREST_CLEAR_SECONDS = (420.0, 480.0)
+# Colossus's fall, walking included, every seed. The lead's ruling after the build: 6.5-8 min,
+# not the contract's 7-8, because Ben's tent pace (one body every 6 s, his own pick) stands and
+# no camp mix lifts the clear past 7 on every seed without breaking the Timber band (Ben about
+# x1.36 of it: 8.8-10.9 min).
+FOREST_CLEAR_SECONDS = (390.0, 480.0)
 # L1b-W2-22: what a Normal clear pays a minute, every seed: Timber within 10% of Wave 1's 42;
 # cash is reported against Wave 1's 19,800.
 FOREST_TIMBER_PER_MINUTE = (37.8, 46.2)

@@ -99,3 +99,6 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
   reacting player (Ben about 9–10.5 at his ×1.36). Timber per minute must still land in
   37.8–46.2: the designer re-tunes with the mix or brute / tent-body Timber, never the pace.
   Brute Timber 6 → 4, camp B's mix and `targetMinutes` 7 are confirmed.
+- **econ re-tune at 6 s (build-econ.md):** Normal clear 7.02–7.25 min (band 6.5–8), Timber
+  38.9–40.2 a minute, bonus 7.3% of a clear; brute Timber 3 on Forest Road, camp A's watch 2 fodder
+  → 2 slingers. Confirmed. Population 147 / 157 / 157 and Parts 82 unchanged.
