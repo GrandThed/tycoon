@@ -92,3 +92,10 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
 - **Flaky timing case** "a giant standing far away costs the packed crowd nothing" (A's) fails at
   random under load and can turn the mutate baseline red. Goes to the fix round for A: make it
   deterministic (count work, not time) or widen its margin with a stated reason.
+- **econ done (build-econ.md):** every gate in its rows green. **Ruling on the tent pace:** the
+  designer moved `every` 6 → 8 to reach the 7–8 min band, against Ben's ruling 5. **Ben's 6 s
+  stands** (the band was the lead's, his was "about 10 minutes"; at 8 the player waits ~32 s for
+  the last tent bodies in A). The Normal clear band becomes **6.5–8 min** for the simulator's
+  reacting player (Ben about 9–10.5 at his ×1.36). Timber per minute must still land in
+  37.8–46.2: the designer re-tunes with the mix or brute / tent-body Timber, never the pace.
+  Brute Timber 6 → 4, camp B's mix and `targetMinutes` 7 are confirmed.

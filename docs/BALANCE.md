@@ -4254,3 +4254,205 @@ keeps 16,800 to 24,960 cash where L1 dropped the wave in progress). A cleared ru
   their neighbours); Wave 2's bigger camps need the gate: every pair of posts of a camp at every
   difficulty at least r_a + r_b + 0.5 apart, a patrol's loop included.
 - A per-minute pay band (the Timber flag above).
+
+## L1b: the long road, Wave 2 (2026-10-14)
+
+Contract: `docs/INTERFACES.md` "Wave 2 — the long road" (with "Lead's answers to the draft points")
+and `docs/prompts/l1b-w2-reports/lead-routing.md`. The layout is the winding road Ben picked
+(`docs/prompts/l1b-w2-layout/winding.*.json`). Measured as Wave 1, but at **gear 2 / 2**
+(`debug.provingGear`): Broadsword + Longbow, solo, the reacting player of `sim_range.py` (policy
+`mission`, melee only), three seeds, the gate's Python (64-bit 3.12). Every mirror (the ray rule,
+the tents, the join-in, dormancy, the clear bonus, `DeadFraction`, `StandsUp`) was in place and
+held equal to the Luau by `check_stage_mirror.py` before any band was read.
+
+### L1b W2: values
+
+| Key | Value | Why |
+|---|---|---|
+| `camps.tent` | sight 24, cone 360°, rise 0 | contract; a tent's group stands (idle) round its marker |
+| `camps.joinFactor` | 2 (fixed) | Ben's "at least double" |
+| `camps.dormantRadius` | 120 | contract start; gated ≥ every sight + FastestMove / snapshotHz = 30 + 140 / 15 = 39.3; the floors are 109 and 185 apart |
+| `levels.populationReserve` | **removed** | L1b-W2-5: the boss reserve is derived (1 + the Colossus's 12 calls = 13) |
+| `debug.provingGear`, `gearPresets` | 2 / 2; 2 / 2, 4 / 4, 6 / 6 | L1b-W2-20 (fixed) |
+| `debug.perfAttribute` | `"CrowdPerfMs"` | L1b-W2-23 |
+| `looks.tent` | Fabric (222, 184, 120) | a canvas tan, a colour look (channel spread 102 > 80) and not the fire's orange |
+| Forest Road `crowd.clearBonus` | `{ share 0.1 }` | Ben's "a small bonus" (LR 2) |
+| Forest Road `rewards.brute.materials` | **6 → 4** | lever 2, for the Timber-a-minute band (53–57 a minute at 6) |
+| Forest Road tents' `every` | **6 → 8** | lever 3: see "flags" (the clear band is not reachable at 6 with levers 1, 2 and 4) |
+| Forest Road B's residents | 14 fodder swapped (see "who lives where") | levers 1 and 4: B is the part of the clear the mix moves |
+| Forest Road `targetMinutes` | **9 → 7** | the measured mean first clear (7.4 min), as Wave 1's rule |
+| Forest Road `runCapSeconds` | 1500 (the draft's) | ≥ 2 × the human's slowest Normal clear (6.77 min → 812 s) and ≥ 1260 |
+| Layout: A's tent | moved 6 studs west, (−201.5, 6) → (−207.5, 6), ring radius 10 | the ring at the draft's place stood 1 stud from A.loop's patrol (post spacing fails by 2.9); the patrol and the picture are unchanged |
+| Layout: tents' `radius` | 10 (A, B; C's marker only) | clears its 10 × 10 marker by ≥ 2.9 (≥ every ring body's radius) and every other post |
+| Layout: `sneak` | gained its last point (262, −44), C's entry | the gate runs it to the boss room's entry; the draft stopped at (250, −44) |
+
+No `ProvingGrounds.json` number moved (gate 13), nor C's stage, the difficulties or any other reward.
+
+### L1b W2: who lives where (Normal; Hard and Brutal add the draft's 12 `minDifficulty` units)
+
+| Camp | Group | Posture | Normal |
+|---|---|---|---|
+| A, Pickets (85 × 85) | fireW, fireN, watch, loop | as the draft | 23 fodder, 7 slingers (Ben's plan: no brute) |
+| | tent (8, one every 8 s) | tent | 4 fodder, 2 slingers, 2 brutes |
+| B, Main Camp (141 × 133) | fire1 | fire | **2 fodder, 2 plated**, 1 slinger, 2 brutes (draft 4 fodder) |
+| | fire2 | fire | **1 fodder, 2 plated**, 2 slingers, **2 brutes** (draft 4 fodder, 1 brute) |
+| | loop | patrol | **2 plated, 5 brutes**, 1 slinger (draft 4 fodder, 3 brutes) |
+| | fire3 | fire | **1 fodder, 3 slingers**, 1 lobber, 3 brutes (draft 3 fodder, 1 slinger) |
+| | eastWatch | guard | 4 brutes, 2 plated, 1 slinger, 1 lobber (as the draft) |
+| | eastFire | fire | **1 fodder, 3 slingers, 4 brutes** (draft 4 fodder, 1 slinger, 3 brutes) |
+| | tent (8, one every 8 s) | tent | 2 fodder, 2 slingers, 4 brutes |
+| C, Chief's Clearing (held) | gate, chiefFire, north, south | as the draft | 18 fodder, 10 brutes, 4 slingers, 2 lobbers, 2 plated |
+
+| | Normal | Hard | Brutal |
+|---|---|---|---|
+| Residents A / B / C | 30 / 46 / 36 = 112 | 36 / 50 / 38 = 124 | 124 |
+| Tents' stock | 8 + 8 | 8 + 8 | 8 + 8 |
+| **Population (L1b-W2-5)** | **147** = 112 + 16 + room 6 + boss 13 | **157** = 124 + 16 + 4 + 13 | **157** |
+| Brutes in the level (residents, tents, C's waves) | 42 (draft 38) | | |
+
+- **Parts 82** (79 + 3 tent markers); route 1,055 studs (750 outside the camps); every camp
+  within 379 of the origin.
+- **Post spacing** (new gate, L1b-W2-4): the tightest pair is inside B.fire1's ring on Hard,
+  +0.07 to spare (the fire rule's own case).
+- **The sneak path** (979 studs, its gap jumped, two climbs): the tightest margins are B.fire1
+  +6.1 (sight 16), A.fireN +7.0, A.fireW +11.9, B.fire2 +15.0, B.eastWatch +15.3 (in its cone
+  +28.1), A.loop +17.1.
+- **The join-in from rest** (check_levels' chain table, on Normal; a tent has sent nobody yet):
+  A.fireW ↔ A.fireN (14 bodies); A.watch → fireW, fireN, loop (30); A.loop → fireN, watch, fireW
+  (30); B.fire1 ↔ B.fire2 (14); B.loop ↔ B.fire3 (16); B.eastWatch ↔ B.eastFire (16); once out,
+  A.tent → all of A (30), B.tent → fire3, eastWatch, eastFire, loop (32).
+
+### L1b W2: results
+
+| | Normal at 2 / 2 | Hard at 4 / 4 | Brutal at 6 / 6 |
+|---|---|---|---|
+| **The reacting player's first clear** | **7.23–7.51 min** (band 7–8: **PASS**) | 7.57–8.13 min (reported) | 7.60–7.94 min (reported) |
+| Its split, seed 11 | A cleared 73.5 s; B 248.9 s; C closed 271.0 s, cleared 450.8 s | | |
+| The human (0.55 s) | 6.66–6.77 min, 0 downs, 3–15 hits (**PASS**) | 6.85–7.02 min, 0 downs (**PASS**) | 7.14–7.25 min, 0 downs (**PASS**) |
+| The player who never dodges | down at 1.61–1.65 min (**PASS**) | down in the Pickets at 0.45–0.49 min (**PASS**) | the same (**PASS**) |
+| The Colossus alone | **80.5 s** (79.4–82.7; band 64–90) | 83.2 s (64–100) | 86.1 s (64–100) |
+| The Colossus in the run | 73.0–75.5 s | 77.6–79.4 s | 80.0–80.6 s |
+| The worst hit | the Colossus's lane 36 = **23.2%** (25%) | 64 = 27.8% (30%) | 107 = 28.2% (30%) |
+| One preset below (2 / 2, 4 / 4) | | human down twice, cleared once at ×3.13; the Colossus not killed in 240 s (> 135); paid 19.0–19.6k a minute against 46.4–49.9k | human down once, cleared at ×1.85 and ×1.98 (≥ 1.4); the Colossus 209.6 s (> 180); paid less a minute |
+| Most alive at once | 113 | 125 | 125 |
+
+- **The scenarios, Normal, every seed** (all PASS): still in the first woken group of A, down
+  6.9–7.2 s after its wake (6–12); a first strike on each of the six fire groups of A and B, his
+  hit 0.13–0.95 s after the wake and before any windup; the kite (out at 14.5 s with 28 alive,
+  at rest again 7 s later, back in 2 s after: every survivor whole, the dead dead, **the tent's
+  stock left the same as when the camp went home**); the edge
+  (0 paid); **the sneak** (972 studs, wakes nobody); **the join-in** (each camp's first wake
+  brought in exactly the chain from rest: A.fireW → A.fireN, B.fire1 → B.fire2); **the tents**
+  (8 of 8, 8.00 s apart from the wake; with no resident alive and the camp at rest, all 8 at 0,
+  8, …, 56 s, then never again).
+- **The careless road** (reported): walking the road through A and B wakes their road fires
+  (A.fireN, B.fire1 by sight, A.fireW, B.fire2 by the join-in) and both tents; he is past before
+  any of it reaches him (no down in 47 s).
+- **Dormancy**: about 190,000 body-steps of a Normal run were dormant (not integrated, separated
+  or clamped).
+- **Why the band needed lever 3.** At the drafted every 6 s the clear was 6.48–7.01 min, and no
+  mix moved it: the Broadsword's cleave takes a camp's bodies in crowds, so swapping 6, 10 and 14
+  fodder in B for plated, slingers and brutes moved B's clear by ±15 s of seed noise, and every
+  brute added pays 4.4 Timber (the per-minute band was already near its top at 4 a brute). The
+  tents set the floor of each open camp's clear (A clears the moment its 8th tent body falls),
+  so `every` 8 adds 14 s to A and lifts B's busy window: 7.23–7.51 with B's swaps.
+
+### L1b W2: what a clear pays
+
+| | Normal | Hard | Brutal |
+|---|---|---|---|
+| **The clear** | **170,467 cash, 325 Timber, 10 Valor** | 379,493 (×2.23), 710 (×2.18), 20 | 780,067 (×4.58), 1,450 (×4.46), 40 |
+| Against the draft's arithmetic (152,820 / 373 / 10) | +11.5% cash, −12.9% Timber | band ×2–×3: **PASS** | band ×4–×6: **PASS** |
+| **A minute** | **22.7–23.5k cash** (+14% to +19% of Wave 1's 19,800); **43.3–44.9 Timber** (band 37.8–46.2: **PASS**) | 46.4–49.9k, 87–94 Timber | 97.6–102.0k, 183–191 Timber |
+| The camps' clear bonuses (seed 11) | A 1,120 / 2, B 6,620 / 13, C 4,660 / 8 = 12,400 cash = **7.3%** of the clear (band 5–10%: **PASS**) | A 3,280, B 13,960, C 10,920 | A 6,560, B 27,920, C 23,720 |
+
+- Every kill paid once, at once, and every bonus equal to `Combat.ClearBonus` on the camp's whole
+  stock by hand (sim_combat 21: 9 cleared runs exact). The bonus is never paid on a skip.
+- The boss's calls pay 67 cash/s against the clear's 384 on Normal (17%; band under 50%).
+
+### L1b W2: the bow at 2 / 2 (reported for Ben's question)
+
+The Longbow alone against one body at the boss's spot in C, the reacting player, two seeds:
+
+| Target | Body aim, old rule | Body aim, new rule | Head aim, old rule | Head aim, new rule |
+|---|---|---|---|---|
+| Brute | 6.3 s | 6.3 s | 3.1 s | 3.1 s |
+| Plated elite | 5.2 s | 5.2 s | 2.1 s | 2.1 s |
+| **Colossus** | 141.8 s | 133.9 s | 124.9 s | **95.0 s** |
+
+On a brute or an elite the aim ray from chest height to the head already crossed the old body
+sphere, so the new rule changes nothing there. On the Colossus a head shot used to miss the body
+sphere outright (63% of head aims, report `headshot.md`); with the capsule and the head counted it
+crits, and the bow kills the Colossus in 95 s against the sword's 80. Nothing was re-tuned
+(L1b-W2-20). The ray rule moved the range's own rows a little (all its passes green), against
+`main`: the Splitbow B's crowd DPS 200 → 215, Volley 211 → 212; the P4 Colossus with the Longbow
+143.9 → 142.8 s, the Splitbow 225.4 → 195.4 s, the Piercing Rifle 54.8 → 53.3 s, the Beam
+116.1 → 112.6 s; the Warlord with the Longbow 158.6 → 162.2 s, the Splitbow 208.3 → 203.2 s.
+Projectiles now crit as the game's do (`path_candidates` carries the crit); body aims never
+touched a head, so no earlier number moved for that.
+
+### L1b W2: the Raider Arena at 2 / 2
+
+Its files are frozen; every band holds: the Colossus alone 76.8 s, the Warlord 97.7 s, still in
+wave 1 down at 11.0–11.1 s, clears at 10.19, 10.35 and 11.97 min with no hit, the worst hit
+23.2%, paid 144,250 cash, 258 Timber, 35 Valor.
+
+### L1b W2: bands (`--check`)
+
+| Band | Where | Now |
+|---|---|---|
+| Normal first clear 7–8 min, every seed | sim_range | 7.23–7.51: PASS |
+| Timber a minute 37.8–46.2, every seed | sim_range | 43.3–44.9: PASS |
+| Colossus 64–90 (Normal), 64–100 (Hard, Brutal) | sim_range | 80.5 / 83.2 / 86.1: PASS |
+| Hit ceilings 25% / 30% / 30% | sim_range | 23.2 / 27.8 / 28.2%: PASS |
+| Human clears, never-dodger does not, every difficulty | sim_range | PASS |
+| Beyond the gear below (down or ×1.8 / ×1.4; boss > 135 / 180 s; less a minute) | sim_range | PASS |
+| Still, first strike, kite (+ tent paused), edge, sneak, join-in, tents | sim_range | PASS |
+| Pay ×2–×3, ×4–×6; bonus 5–10%; Valor exact; calls under half | sim_combat 21 | PASS |
+| Population = Validate's, ≤ 160 | sim_combat 23 | 147 / 157 / 157: PASS |
+| The Wave 2 table (sizes, route, residents, sneak, post spacing, population, tents, markers, looks, dormantRadius, joinFactor, checkpoints with tents) | check_levels | PASS; the post-spacing gate proved on the draft's tent (fails by 2.9) |
+| The mirrors | check_stage_mirror | all equal; **39 of 39 Luau mutants caught** (below) |
+
+The Luau mutants (each one text change, run through `check_stage_mirror.py --module`):
+CrowdRay with the head dropped, the crit padded, the body a sphere again, `top` without its max;
+RayUpright without its top cap; FlatToRect with square corners; SwingGate's IsAir with `>=`, Took
+ignoring `airborne`, Landed doing nothing, Allows ignoring `used`, another margin; Dormant true
+while home, Dormant ignoring `dormantRadius`; Gap taking the largest; JoinIn not chaining, using
+the first waker's sight, joining a held group, excluding the factor's edge; Rouse waking a held
+group; TentActive ignoring the dead residents, TentDue ignoring `active`, TentSent not moving
+`nextAt`; a tent's posts facing its centre; a tent seated at rest; Problems passing a joinFactor of
+0 and a dormantRadius at a sight; ClearBonus flooring, ClearBonus ignoring rewardMult; DeadFraction
+not clamped at 0; WaveStock ignoring the elite; StandsUp outside the countdown; BossReserve without
+the boss; Plan leaving the tents out of the population, a tent's ring one post more, a tent body
+counted twice in the stock; Validate passing a share over 1, leaving the tents out of the
+population, passing a tent on the boss room; Advance clearing a camp with tent stock left. (A
+first "DeadFraction not clamped at 1" was equivalent: the fraction can never exceed 1. It was
+replaced.)
+
+### L1b W2: flags for the owner
+
+- **The tents send one body every 8 s, not Ben's 6** (LR 5). It is lever 3 of the contract, and
+  the only one that reached the band: at 6 s the clear was 6.5–7.0 min whatever the mix. A Normal
+  camp A now takes ~74 s, ~32 s of it waiting for the last tent bodies after A's residents are
+  dead. If the lead keeps 6 s, the band is 6.5–7.4 min (Ben about 8.8–10) and Timber a minute
+  is 44–50 (over the band's top on the fastest seed). Ben's tent question in the playtest ("too many / about right
+  / too few") covers the pace too.
+- **B is plated and brute-heavy now:** 8 plated (draft 2), 20 brutes, 11 slingers, 5 fodder on
+  Normal. Expect the Main Camp to feel tougher than the Pickets by more than the draft did.
+- **Brutes pay 4 Timber** on Forest Road (6 everywhere else, and in the draft).
+- **The human-reaction player clears faster than the reacting player** (6.7 against 7.4 min on
+  Normal): he takes 3–15 hits and stands his ground where the reacting player dodges. Ben's ×1.36
+  is therefore read against 7.4: about 10 minutes.
+- **Hard and Brutal clear in about the same 7.6–8.1 minutes as Normal** (the gear rises with
+  them), paying ×2.2 and ×4.6.
+- **The tent goes on sending while the player is out kiting** (it pauses only once the camp is at
+  rest): the kite band compares the stock at rest and at the return, which is what the contract
+  asks; bodies sent during the chase are new survivors, not refills.
+- **Not measured:** the crowd step with 110–160 bodies (`[Perf]`, Ben's number), the phone frame.
+
+### L1b W2: open
+
+- The careless road wakes both road fires and both tents within 47 s; nothing reaches him at walk
+  speed in the simulator, real play may differ.
+- The bow question: 95 s on the Colossus with head shots, 134 s with body shots, against the
+  sword's 80 s.

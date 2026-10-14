@@ -42,8 +42,59 @@ Written as the work goes. A fresh agent continues from "Left".
 4. **Layout:** the sneak path gained its last point, C's entry (262, -44) (the gate needs it to end
    there; the draft stopped at (250, -44)).
 
+5. **Tuned and written up** (`docs/BALANCE.md` "L1b: the long road, Wave 2"): brute Timber 6 -> 4,
+   tents' `every` 6 -> 8, 14 fodder of camp B swapped (6 plated, 4 slingers, 4 brutes), C as the
+   draft, `targetMinutes` 9 -> 7, `runCapSeconds` 1500. Normal first clear 7.23-7.51 min, Timber
+   43.3-44.9 a minute, bonus 7.3% of a clear, Hard x2.23, Brutal x4.58. Every band of "Balance
+   bands" passes.
+6. **Mutants:** `check_stage_mirror.py` catches 39 of 39 Luau mutants. The script is scratch:
+   `C:/Users/benja/AppData/Local/Temp/claude/l1b-w2-econ/mirror_mutants.py`. Its list is in BALANCE.
+
+## Gates run (on the final files)
+
+- `py tools/check_levels.py`: CHECK PASS. The gate 16 block prints: population 147 / 157 / 157,
+  Parts 82, route 1,055, sneak 979 studs (B.fire1 tightest at +6.1), and the chain table.
+- `py tools/sim_range.py --check`: CHECK PASS (range, threat, bosses, Raider Arena at 2 / 2, the
+  Forest Road Wave 2 bands).
+- `py tools/sim_combat.py --check`: PASS, 23 of 23.
+- `py tools/check_stage_mirror.py`: CHECK PASS; mutants 39 / 39.
+- `py tools/check_compile.py`: PASS (155 files).
+- `stylua --check tools/crowd_harness/stage_mirror.luau`: clean. It was not formatted on `main`;
+  now it is.
+- Gate 15 (`populationReserve` in src and tools): no hits.
+- Not run by me: `run_harness.py` and `mutate.py`. They are B's and must never run in parallel
+  with B's own runs.
+
 ## Left
+
+Nothing in my rows.
 
 ## Decisions the contract did not take
 
+- **Tents' `every` 6 -> 8 (lever 3).** This goes against Ben's LR 5, "one every 6 s".
+  - At 6 s the clear was 6.5-7.0 min whatever the mix. Seed noise of +-15 s in B swamps any swap,
+    and more brutes push Timber over its band.
+  - The lead decides. At 6 s the clear is 6.5-7.4 min and Timber 44-50 a minute.
+- A's tent moved 6 studs west, for post spacing against A.loop. Every tent's ring has radius 10.
+- The sneak path ends at C's entry (262, -44): one point added.
+- `looks.tent` is (222, 184, 120), because check_levels needs a colour look's channel spread above 80.
+- check_levels:
+  - tent groups count in the gates for checkpoint sight and reach, chaseMargin and perches;
+  - the chain table is taken on Normal with the tents empty, as they are at the first wake.
+- sim_range:
+  - projectiles now crit, as the game's do;
+  - the `RAY_RULE` switch exists only for the bow report;
+  - the kite band counts tent bodies sent during the chase as new bodies, not refills;
+  - the simulated player waits in an open camp until its tent is empty, so the camp clears and
+    pays its bonus.
+
 ## For the other owner
+
+- **B:** the final level differs from the draft in three ways your hand-worked cases may assume:
+  brute materials 4, B's residents (BALANCE "who lives where"), and tents every 8. Population
+  (147 / 157 / 157) and Parts (82) are unchanged. The two count-0 units you saw were transient;
+  the final file validates.
+- **Lead:**
+  - the tent pace ruling above;
+  - a shell slip (`cd X && (A) & B`) started one background run in the main checkout. It only
+    read files and ran the simulator; the main checkout's `git status` stayed clean.
