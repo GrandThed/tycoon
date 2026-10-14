@@ -393,4 +393,5 @@ Notes he gave, and how they were settled (click questions, same day):
    up"*: good enough for a prototype; **moved to L4** (the polish step). **[Ben]**
 
 **All of 1–4 are folded into Wave 2 "the long road"** (his choice over a separate small wave).
-Not answered yet: whether a camp's clear should pay a bonus (0 today).
+**Clear bonus (asked at the start of the Wave 2 session, same day): a small bonus**, about 10% of
+what that camp's raiders pay, on top of the per-kill pay; a config number. **[Ben]**
