@@ -1257,6 +1257,37 @@ local Theme = {
 	-- The Studio strip's spawn buttons: one per rewarded kind of the level (the C1 cap of
 	-- three enemy keys is too few for a level's seven).
 	COMBAT_DEBUG_MAX_KIND_KEYS = 10,
+	-- L1 fix round (docs/prompts/l1-fix-round.md, part U).
+	-- The server says when it has placed a body and where (the character's `Placed` and
+	-- `PlacedSeq` attributes, ArenaService.MoveMember); the body's new position reaches the
+	-- client a moment before or after that word. The speed the body carried is dropped once
+	-- its root is seen within NEAR studs of the feet point named, and the word is forgotten
+	-- after TIMEOUT seconds. NEAR sits between two numbers of the server's: the root is put 4
+	-- studs above the feet point (and stands 3 above it), and a kill height is at least 8
+	-- studs under any ground (tools/check_levels.py), so a faller is never "there" before it
+	-- is moved. The same TIMEOUT is how long a look asked of the camera waits for the camera
+	-- to pick the body up.
+	COMBAT_PLACED_NEAR_STUDS = 6,
+	COMBAT_PLACED_TIMEOUT_SECONDS = 1,
+	-- CameraController.LookToward: a point this near where the look starts, on the flat, gives
+	-- it no direction to turn to.
+	COMBAT_LOOK_MIN_STUDS = 1,
+	-- A body the server placed faces along its level's route. Within this many studs of the
+	-- end of the stretch it stands on, forward is the next stretch's way (a camp's entry is
+	-- the end of the road into it, and forward there is into the camp).
+	COMBAT_FORWARD_NEAR_STUDS = 4,
+	-- The run header's difficulty chip (CombatHud): it holds the right end of the title's row,
+	-- and the level's name shrinks down to this text size before it would truncate.
+	COMBAT_HEADER_CHIP_WIDTH = 60,
+	COMBAT_HEADER_CHIP_HEIGHT = 18,
+	COMBAT_HEADER_CHIP_GAP = 6,
+	COMBAT_HEADER_TITLE_MIN_TEXT = 14,
+	-- The banner's smallest title: a long camp name shrinks to its frame down to this.
+	COMBAT_BANNER_MIN_TEXT = 14,
+	-- With no MapState in hand the client asks for its snapshot again (the map rides with it)
+	-- this often, at most this many times.
+	MAP_STATE_RETRY_SECONDS = 2,
+	MAP_STATE_RETRIES = 5,
 
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,

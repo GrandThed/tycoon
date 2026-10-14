@@ -1,9 +1,9 @@
 --!strict
 -- The arithmetic of a level's grey blocks (docs/INTERFACES.md "L1 contracts" → "Server modules"
 -- → "A — the world", rulings 27, 29 and 31): where a camp's floor, fence, gates and invisible
--- wall stand, what a layout's bounds are, the adapter that reads the C1 Village arena as a level
--- of one camp, and the whole list of Parts a layout becomes. LevelService turns that list into
--- Instances and does no arithmetic of its own.
+-- wall stand, how deep the ground is built, what a layout's bounds are, the adapter that reads
+-- the C1 Village arena as a level of one camp, and the whole list of Parts a layout becomes.
+-- LevelService turns that list into Instances and does no arithmetic of its own.
 --
 -- Pure: tables and numbers only. No Vector3, no Instance, no clock and nothing yields; the one
 -- require is Types, for the layout shapes. tools/crowd_harness loads this file as it stands
@@ -28,11 +28,13 @@ export type Bounds = {
 	maxZ: number,
 }
 export type Size = { sx: number, sy: number, sz: number }
--- What a layout does not say and the config does: the fence's thickness (Combat.json
--- levels.fenceThickness), and how big a checkpoint marker and a secret's sign are (Combat.json
--- levels.checkpointSize, Expeditions.json sign.size). A size the config does not give is nil,
--- and those Parts are then not built: no size lives in code.
-export type Sizes = { fence: number, checkpoint: Size?, sign: Size? }
+-- What a layout does not say and the config does: the fence's thickness and how deep the ground
+-- is (Combat.json levels.fenceThickness, levels.floorThickness), and how big a checkpoint
+-- marker and a secret's sign are (Combat.json levels.checkpointSize, Expeditions.json
+-- sign.size). A size the config does not give is nil, and what it sizes is then not built: no
+-- size lives in code. Without `floor` a layout with a camp is refused (a camp has no floor) and
+-- every block is built as the layout writes it.
+export type Sizes = { fence: number, floor: number?, checkpoint: Size?, sign: Size? }
 -- One Part to build. `look` names a key of Expeditions.json `looks` (nil = no look at all: the
 -- invisible wall); `material` and `color` are the piece's own and win over the look's.
 export type Piece = {
@@ -50,10 +52,18 @@ export type Piece = {
 	text: string?,
 }
 
--- INTERFACES fixes a camp's floor at 1 stud thick, as the C1 arena's was.
-local FLOOR_THICKNESS = 1
 -- The id of the one camp an arena becomes (ruling 27; StageFlow.Resolve names the same zone).
 local ARENA_CAMP_ID = "arena"
+-- Two edges closer than this are one edge: layouts are written in halves and quarters of a stud.
+local SEAM = 1e-6
+-- The looks of the blocks a body lands on (tools/check_levels.py GROUND_LOOKS names the same
+-- four). A block of any other look is a wall, a sign or a marker.
+local GROUND_LOOKS: { [string]: boolean } = {
+	ground = true,
+	path = true,
+	lobby = true,
+	water = true,
+}
 
 type Side = { alongX: boolean, sign: number }
 local SIDES: { [string]: Side } = {
@@ -87,6 +97,58 @@ local function isSound(box: Box): boolean
 		and box.sx > 0
 		and box.sy > 0
 		and box.sz > 0
+end
+
+-- A depth the config gave: a positive number. nil for anything else, a NaN included.
+local function depthOf(value: number?): number?
+	if value ~= nil and value > 0 and isFinite(value) then
+		return value
+	end
+	return nil
+end
+
+-- Whether the boxes of `under` hold up the whole of `box`, seen from above: its footprint is
+-- cut along every edge of theirs that crosses it, and each cell must lie in one of them. A
+-- block that only rests on something at one end hangs over the void for the rest.
+local function heldUp(box: Box, under: { Box }): boolean
+	local xs = { box.x - box.sx / 2, box.x + box.sx / 2 }
+	local zs = { box.z - box.sz / 2, box.z + box.sz / 2 }
+	for _, other in under do
+		for _, way in { -1, 1 } do
+			local x = other.x + way * other.sx / 2
+			if x > xs[1] and x < xs[2] then
+				table.insert(xs, x)
+			end
+			local z = other.z + way * other.sz / 2
+			if z > zs[1] and z < zs[2] then
+				table.insert(zs, z)
+			end
+		end
+	end
+	table.sort(xs)
+	table.sort(zs)
+	for i = 1, #xs - 1 do
+		for j = 1, #zs - 1 do
+			-- A cell with no width is a seam between two edges, not ground.
+			if xs[i + 1] - xs[i] > SEAM and zs[j + 1] - zs[j] > SEAM then
+				local x = (xs[i] + xs[i + 1]) / 2
+				local z = (zs[j] + zs[j + 1]) / 2
+				local held = false
+				for _, other in under do
+					local dx = math.abs(x - other.x)
+					local dz = math.abs(z - other.z)
+					if dx < other.sx / 2 and dz < other.sz / 2 then
+						held = true
+						break
+					end
+				end
+				if not held then
+					return false
+				end
+			end
+		end
+	end
+	return true
 end
 
 -- Half the floor's length along `side`.
@@ -153,14 +215,16 @@ local function fenceHeight(camp: Types.LevelCamp): number
 	return fence.height
 end
 
--- The floor: 1 stud thick, its top face at camp.y.
-function LevelGeometry.FloorBox(camp: Types.LevelCamp): Box
+-- The floor: its top face at camp.y, `depth` deep under it (Combat.json levels.floorThickness).
+-- It is deep because it stands over the void: a body the rescue puts back on it still has the
+-- speed of its fall, and passes through a slab of one stud.
+function LevelGeometry.FloorBox(camp: Types.LevelCamp, depth: number): Box
 	return {
 		x = camp.x,
-		y = camp.y - FLOOR_THICKNESS / 2,
+		y = camp.y - depth / 2,
 		z = camp.z,
 		sx = camp.sx,
-		sy = FLOOR_THICKNESS,
+		sy = depth,
 		sz = camp.sz,
 	}
 end
@@ -224,12 +288,14 @@ function LevelGeometry.GateBoxes(camp: Types.LevelCamp, thickness: number): { Bo
 	return boxes
 end
 
--- The invisible wall, the Village rule: four boxes (north, south, west, east) from the floor's
--- top up to barrier.height, each with its inner face on the fence's outer face and
--- barrier.thickness deep outward (never thinner than the fence: a dash covers over 2 studs a
--- frame and steps through a thin wall). The north and south boxes run past the west and east
--- ones, so the corners close. It stands where the fence's outer face would be even on a camp
--- with no fence, and it runs across the gates: closed, it is what holds a body in.
+-- The invisible wall: four boxes (north, south, west, east) from the floor's top up to
+-- barrier.height, each with its inner face on the FLOOR'S EDGE and barrier.thickness deep
+-- outward from there. The fence and the gates stand inside it, so in a closed camp nobody stands
+-- on a fence or in a gate gap, whatever the fence's height: a fence top is a perch the crowd
+-- cannot reach. It is never thinner than the fence (it must hold the whole fence line, and a
+-- dash covers over 2 studs a frame and steps through a thin wall). The north and south boxes
+-- run past the west and east ones, so the corners close. A camp with no fence has the same
+-- wall, and it runs across the gates: closed, it is what holds a body in.
 function LevelGeometry.BarrierBoxes(
 	camp: Types.LevelCamp,
 	thickness: number,
@@ -237,13 +303,12 @@ function LevelGeometry.BarrierBoxes(
 ): { Box }
 	local boxes: { Box } = {}
 	local height = barrier.height
-	local fence = math.max(thickness, 0)
-	local depth = math.max(barrier.thickness, fence)
+	local depth = math.max(barrier.thickness, thickness, 0)
 	if not (height > 0) or not (depth > 0) then
 		return boxes
 	end
-	local outerX = camp.sx / 2 + fence
-	local outerZ = camp.sz / 2 + fence
+	local edgeX = camp.sx / 2
+	local edgeZ = camp.sz / 2
 	local y = camp.y + height / 2
 	for _, name in SIDE_ORDER do
 		local side = SIDES[name]
@@ -251,19 +316,19 @@ function LevelGeometry.BarrierBoxes(
 			table.insert(boxes, {
 				x = camp.x,
 				y = y,
-				z = camp.z + side.sign * (outerZ + depth / 2),
-				sx = (outerX + depth) * 2,
+				z = camp.z + side.sign * (edgeZ + depth / 2),
+				sx = (edgeX + depth) * 2,
 				sy = height,
 				sz = depth,
 			})
 		else
 			table.insert(boxes, {
-				x = camp.x + side.sign * (outerX + depth / 2),
+				x = camp.x + side.sign * (edgeX + depth / 2),
 				y = y,
 				z = camp.z,
 				sx = depth,
 				sy = height,
-				sz = outerZ * 2,
+				sz = edgeZ * 2,
 			})
 		end
 	end
@@ -327,6 +392,79 @@ function LevelGeometry.SignBox(secret: Types.LevelSecret, size: Size): Box
 	}
 end
 
+-- A layout's blocks as they are built, in the layout's order. Ground that hangs over the void
+-- is as deep as a camp's floor, for the same reason: a solid block of a ground look that is
+-- thinner than `floorThickness` is made that deep downward, its top where the layout puts it,
+-- unless it rests on something: the other solid blocks, the camp floors and the secrets that
+-- lie right under it, reach lower than it does, and between them hold all of it up. Every other
+-- block is the box the layout writes: a wall or a sign, one marked `collide = false`, one deep
+-- enough already, and one whose size is not sound (Pieces refuses that one by name). What a
+-- block rests on is read from the layout as written, so the answer does not turn on the
+-- blocks' order. Without a thickness nothing is changed. tools/check_levels.py holds every
+-- layout that ships to the same rule, so there this changes no block: it is the net under a
+-- layout that has not been through that gate.
+function LevelGeometry.BlockBoxes(layout: Types.LevelLayout, floorThickness: number?): { Box }
+	local depth = depthOf(floorThickness)
+	local blocks = listOf(layout.blocks)
+	local written: { Box } = {}
+	for _, block in blocks do
+		table.insert(written, {
+			x = block.x,
+			y = block.y,
+			z = block.z,
+			sx = block.sx,
+			sy = block.sy,
+			sz = block.sz,
+		})
+	end
+	if depth == nil then
+		return written
+	end
+	-- Everything solid a block could rest on.
+	local solids: { Box } = {}
+	for index, block in blocks do
+		if block.collide ~= false and isSound(written[index]) then
+			table.insert(solids, written[index])
+		end
+	end
+	for _, camp in listOf(layout.camps) do
+		table.insert(solids, LevelGeometry.FloorBox(camp, depth))
+	end
+	for _, secret in listOf(layout.secrets) do
+		table.insert(solids, LevelGeometry.SecretBox(secret))
+	end
+	local boxes: { Box } = {}
+	for index, block in blocks do
+		local box = written[index]
+		local ground = GROUND_LOOKS[block.look] == true and block.collide ~= false
+		if ground and isSound(box) and box.sy < depth then
+			-- Under it: what reaches up to its underside and lower than it. (Never the block
+			-- itself, nor one beside or round it at its own depth: the void is under both. Nor
+			-- one further down with air between: a body still passes through the thin block.)
+			local bottom = box.y - box.sy / 2
+			local under: { Box } = {}
+			for _, other in solids do
+				local reaches = other.y + other.sy / 2 >= bottom - SEAM
+				if reaches and other.y - other.sy / 2 < bottom - SEAM then
+					table.insert(under, other)
+				end
+			end
+			if not heldUp(box, under) then
+				box = {
+					x = box.x,
+					y = box.y + box.sy / 2 - depth / 2,
+					z = box.z,
+					sx = box.sx,
+					sy = depth,
+					sz = box.sz,
+				}
+			end
+		end
+		table.insert(boxes, box)
+	end
+	return boxes
+end
+
 local function widen(bounds: Bounds?, box: Box): Bounds
 	local minX = box.x - box.sx / 2
 	local maxX = box.x + box.sx / 2
@@ -346,23 +484,20 @@ local function widen(bounds: Bounds?, box: Box): Bounds
 	return bounds
 end
 
--- The box that holds a layout: every block, every camp (its floor, its fence's height, its
--- cover) and every secret. It takes no fence thickness, so in X and Z a camp counts as its
--- floor; the callers add a margin of tens of studs. A layout with nothing in it is its start.
-function LevelGeometry.Bounds(layout: Types.LevelLayout): Bounds
+-- The box that holds a layout as it is built: every block (BlockBoxes), every camp (its floor,
+-- its fence's height, its cover) and every secret. `floorThickness` is Combat.json
+-- levels.floorThickness: without it a camp's floor counts as its top face and a block as the
+-- layout writes it, and what is built reaches further down than this box. It takes no fence
+-- thickness either, so in X and Z a camp counts as its floor; the callers add a margin of tens
+-- of studs. A layout with nothing in it is its start.
+function LevelGeometry.Bounds(layout: Types.LevelLayout, floorThickness: number?): Bounds
+	local depth = depthOf(floorThickness)
 	local bounds: Bounds? = nil
-	for _, block in listOf(layout.blocks) do
-		bounds = widen(bounds, {
-			x = block.x,
-			y = block.y,
-			z = block.z,
-			sx = block.sx,
-			sy = block.sy,
-			sz = block.sz,
-		})
+	for _, box in LevelGeometry.BlockBoxes(layout, depth) do
+		bounds = widen(bounds, box)
 	end
 	for _, camp in listOf(layout.camps) do
-		bounds = widen(bounds, LevelGeometry.FloorBox(camp))
+		bounds = widen(bounds, LevelGeometry.FloorBox(camp, depth or 0))
 		local height = fenceHeight(camp)
 		if height > 0 then
 			bounds = widen(bounds, {
@@ -450,7 +585,9 @@ end
 
 -- The stand-in lobby, built when Layouts/Levels has no lobby file: one pad of look `lobby` and
 -- four points on it. It lies 1,500 studs north of the world origin, clear of every camp (each
--- is within 1,000 studs of the origin on every axis).
+-- is within 1,000 studs of the origin on every axis). The pad is a deep block and the kill
+-- height is close under it, config or no config: whoever steps off falls a short way, and is
+-- put back on ground their fall's speed does not carry them through.
 function LevelGeometry.BareLobby(): Types.LevelLayout
 	local z = -1500
 	return {
@@ -463,11 +600,11 @@ function LevelGeometry.BareLobby(): Types.LevelLayout
 			{ x = 6, y = 0, z = z + 6 },
 			{ x = -6, y = 0, z = z + 6 },
 		},
-		killY = -40,
+		killY = -12,
 		barrier = nil,
 		camps = {},
 		blocks = {
-			{ name = "LobbyPad", look = "lobby", x = 0, y = -0.5, z = z, sx = 32, sy = 1, sz = 32 },
+			{ name = "LobbyPad", look = "lobby", x = 0, y = -2, z = z, sx = 32, sy = 4, sz = 32 },
 		},
 		secrets = {},
 		route = {},
@@ -479,8 +616,10 @@ end
 -- marker or a sign whose size `sizes` does not give is left out.
 -- Names are what Studio's Explorer shows (Camp_A_Floor, Gate_A_1, Barrier_A_3,
 -- Secret_lookout). nil and one line saying why when the layout cannot be built: it still
--- names an arena, a camp has gates and no fence, a piece has a position that is not a number
--- or a size that is not positive, or it is more than `maxParts` Parts.
+-- names an arena, a camp has gates and no fence, a camp's floor has no depth (`sizes.floor`),
+-- a piece has a position that is not a number or a size that is not positive (a block, a
+-- camp, a piece of cover or a secret with a size of 0 or less), or it is more than `maxParts`
+-- Parts.
 function LevelGeometry.Pieces(
 	layout: Types.LevelLayout,
 	sizes: Sizes,
@@ -490,19 +629,15 @@ function LevelGeometry.Pieces(
 		return nil,
 			`the layout names the arena "{layout.arena}": resolve it with LevelGeometry.FromArena`
 	end
+	local depth = depthOf(sizes.floor)
 	local pieces: { Piece } = {}
-	for index, block in listOf(layout.blocks) do
+	local blocks = listOf(layout.blocks)
+	for index, box in LevelGeometry.BlockBoxes(layout, depth) do
+		local block = blocks[index]
 		table.insert(pieces, {
 			name = block.name or `Block_{index}`,
 			role = "block",
-			box = {
-				x = block.x,
-				y = block.y,
-				z = block.z,
-				sx = block.sx,
-				sy = block.sy,
-				sz = block.sz,
-			},
+			box = box,
 			look = block.look,
 			collide = block.collide ~= false,
 			text = block.text,
@@ -515,11 +650,15 @@ function LevelGeometry.Pieces(
 		if fence == nil and #listOf(camp.gates) > 0 then
 			return nil, `camp {id} has gates and no fence`
 		end
+		if depth == nil then
+			return nil,
+				`camp {id} has no floor: levels.floorThickness is missing or is not a positive number`
+		end
 		local floor = camp.floor
 		table.insert(pieces, {
 			name = `Camp_{id}_Floor`,
 			role = "floor",
-			box = LevelGeometry.FloorBox(camp),
+			box = LevelGeometry.FloorBox(camp, depth),
 			look = "campFloor",
 			material = if floor ~= nil then floor.material else nil,
 			color = if floor ~= nil then floor.color else nil,

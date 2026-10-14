@@ -35,6 +35,10 @@ export type DebugPanelHandle = {
 	SetKinds: (kinds: { string }) -> (),
 	SetWave: (wave: number) -> (),
 	SetGear: (melee: number, ranged: number) -> (),
+	-- false = the whole strip, its tab included, is off the screen (the map is open: it is a
+	-- full-screen sheet of the strip's own ZIndex tier, and the tab drew over it). What was open
+	-- is open again when it comes back.
+	SetVisible: (visible: boolean) -> (),
 	SetLayout: (scale: number, viewportSize: Vector2) -> (),
 	Destroy: () -> (),
 }
@@ -260,6 +264,9 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		SetGear = function(melee: number, ranged: number)
 			meleeTier = melee
 			rangedTier = ranged
+		end,
+		SetVisible = function(visible: boolean)
+			root.Visible = visible
 		end,
 		SetLayout = function(scale: number, viewportSize: Vector2)
 			uiScale.Scale = scale

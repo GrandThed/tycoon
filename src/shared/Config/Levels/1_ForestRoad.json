@@ -8,8 +8,8 @@
 	"runCapSeconds": 1050,
 	"difficulties": {
 		"normal": { "hpScale": 1.5, "damageScale": 1.12, "plateScale": 1, "countMult": 1, "rewardMult": 1, "recommendedTier": 2 },
-		"hard": { "hpScale": 5.2, "damageScale": 1.8, "plateScale": 1, "countMult": 1.2, "rewardMult": 2, "recommendedTier": 4 },
-		"brutal": { "hpScale": 11.5, "damageScale": 3.1, "plateScale": 1, "countMult": 1.35, "rewardMult": 4, "recommendedTier": 6 }
+		"hard": { "hpScale": 5.2, "damageScale": 2.0, "plateScale": 1, "countMult": 1.2, "rewardMult": 2, "recommendedTier": 4 },
+		"brutal": { "hpScale": 11.5, "damageScale": 3.35, "plateScale": 1, "countMult": 1.35, "rewardMult": 4, "recommendedTier": 6 }
 	},
 	"crowd": {
 		"regenShare": 0.077,

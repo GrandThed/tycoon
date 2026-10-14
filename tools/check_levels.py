@@ -8,21 +8,31 @@ table in docs/INTERFACES.md "L1 contracts" -> "Config", and prints a top-down pl
 view of each level in plain characters.
 
 What it reads, and copies no number from:
-  Config/Combat.json          levels.* (fence thickness, trigger inset, Part budget), player.rescue
-  Config/ProvingGrounds.json  movement.* (jump, double jump, walk, dash), the crowd kinds' radii and
-                              keepAway bands, threat.spawnClear, crowd.maxAlive
+  Config/Combat.json          levels.* (fence and floor thickness, the trigger's and the close's
+                              numbers, the crowd ceiling, Part budget), player.rescue, the gear
+                              presets
+  Config/ProvingGrounds.json  movement.* (jump, double jump, walk, dash), the crowd kinds' radii,
+                              keepAway bands and ground attacks' heights, threat.spawnClear,
+                              crowd.maxAlive
   Config/Expeditions.json     the map's nodes, themes and looks
   Config/Levels/*.json        each level's stages (which kinds stand in which camp, the boss spot)
   Layouts/Levels/*.json       the layouts; a file that names an `arena` is read through
                               sim_range.arena_as_layout, the mirror of LevelGeometry.FromArena
 
-Geometry rules, as LevelService builds them (the Village arena's rule): a camp's fence stands
-OUTSIDE its floor rectangle, `levels.fenceThickness` thick; the barrier stands outside the fence,
-`barrier.thickness` deep. So a road runs up to the floor's edge and passes under the gate.
+Geometry rules, as LevelService builds them: a camp's fence stands OUTSIDE its floor rectangle,
+`levels.fenceThickness` thick, so a road runs up to the floor's edge and passes under the gate.
+The invisible wall's inner face is the floor's edge (fix round, ruling 2): it is
+`barrier.thickness` deep outward from there (never thinner than the fence), so in a closed camp
+nobody stands on a fence. A camp triggers on its whole fenced rectangle (ruling 1): the floor
+grown by the fence's thickness. A camp's floor is `levels.floorThickness` deep under its top.
 
 The route. `route[i].via` says how the leg that ENDS at point i is travelled: absent = walked,
 "climb" = one jump up onto a ledge, "gap" = one jump across a hole, "camp" = through a camp from
 its entry point to its exit point. The y of a route point is the height of the ground there.
+
+Importable with no side effect: tools/crowd_harness/run_harness.py asks `load_all` and
+`part_count` for this tool's reading of the layouts, and tools/check_stage_mirror.py for the
+level files in Catalog's order.
 
 Usage:
   py tools/check_levels.py                # the gates and the plans; exit 1 when a gate fails
@@ -71,13 +81,27 @@ WALK_RISE = 1.0  # a walked leg steps up at most this much
 GATE_MIN_WIDTH = 12.0
 SPAWNS_MIN = 4
 SPAWN_ENTRY_MIN = 12.0
+ENTRY_GATE_REACH = 12.0  # a camp's entry and exit points stand at most this far inside their gates
 BARRIER = {"height": 80.0, "thickness": 8.0}
 ORIGIN_LIMIT = 1000.0  # the wire carries +-1,024 studs round the world origin (ruling 12)
-LOOKOUT_OVER_JUMP = 2.0  # the ledge is at least this far over one jump ...
-LOOKOUT_UNDER_DOUBLE = 4.0  # ... and at least this far under jump + double jump
+# A body steps up about 2 studs onto a ledge and the air dash holds its altitude, so a jump that
+# ends this far under a ledge still gets on it: every "needs the double jump" test allows it.
+STEP_UP = 3.0
+# The lookout's ledge is over one jump and that step up, and at least this far under jump +
+# double jump.
+LOOKOUT_UNDER_DOUBLE = 4.0
 CREEK_DROP = 1.0
-KILL_MARGIN = 20.0
+# killY: a fall is short. At least KILL_UNDER[0] under every standable surface (a body on the
+# lowest ground is never "fallen"), at most KILL_UNDER[1] under the lowest one (about 12), and
+# under every Part's bottom.
+KILL_UNDER = (8.0, 16.0)
 KILL_FLOOR = -450.0
+# Cover (fix round, ruling 3): a standable top inside a camp is at most COVER_MAX studs over its
+# floor, and at least COVER_MARGIN under the lowest ground attack that camp fields (ThreatField:
+# a shape with a `height` misses feet more than that far above the floor).
+COVER_MAX = 3.5
+COVER_MARGIN = 0.5
+GROUND_LOOKS = ("ground", "path", "lobby", "water")  # blocks a body lands on
 LOBBY_CLEARANCE = 150.0
 DENSITY_AREA = 200.0  # a camp's maxAlive is at most its floor area over this (the arena: 60 on 110 x 110)
 BAND_SHARE = 0.45  # a keepAway kind's bandMin is at most this share of the camp's shorter side
@@ -95,9 +119,11 @@ ENGINE_MATERIALS = frozenset((
     "CorrodedMetal", "DiamondPlate", "Foil", "Metal", "Grass", "LeafyGrass", "Sand", "Fabric", "Snow", "Mud",
     "Ground", "Asphalt", "Salt", "Ice", "Glacier", "Glass", "ForceField", "Cardboard", "Carpet", "CeramicTiles",
     "ClayRoofTiles", "RoofShingles", "Leather", "Plaster", "Rubber"))
+# The `levels` numbers this tool itself reads to measure a layout.
+READ_RULES = ("fenceThickness", "floorThickness", "triggerHeight", "crowdCeiling", "startSpacing", "maxParts")
+GEAR_PRESETS = ((2, 1), (4, 4), (6, 6))  # fix round, ruling 8: the Studio gear presets (melee, ranged)
 BODY_HEIGHT = 6.0  # a character, feet to head: what stands this far under a barrier's foot is in it
 CLOSE_SPARE = 1.0  # a camp's entry point lies this far inside the close rule's inset rectangle
-SIGN_REACH = 6.0  # a secret's sign stands at the level of a block no further from it than this
 SAMPLE = 0.25  # studs between two samples of a walked leg
 EPS = 1e-6
 SIDES = ("north", "south", "west", "east")
@@ -155,12 +181,21 @@ def gate_rect(camp, gate, thickness):
     return (mid - half, mid + half) + ((z0 - thickness, z0) if gate["side"] == "north" else (z1, z1 + thickness))
 
 
-def solids_of(layout, thickness):
-    """Every standing surface of a layout: solid blocks, camp floors, fences, obstacles, secrets."""
+def wall_reach(thickness, barrier):
+    """How far past a camp's floor edge its Parts reach: the invisible wall stands with its inner
+    face on the floor's edge, barrier.thickness deep and never thinner than the fence (fix round,
+    ruling 2; LevelGeometry.BarrierBoxes). Without a barrier it is the fence's thickness."""
+    return max((barrier or {}).get("thickness") or 0, thickness)
+
+
+def solids_of(layout, thickness, floor_depth=1.0):
+    """Every standing surface of a layout: solid blocks, camp floors (`floor_depth` deep under
+    their top: levels.floorThickness), fences, obstacles, secrets."""
     found = [block_solid(b) for b in layout["blocks"] if b.get("collide") is not False]
     for camp in layout["camps"]:
         x0, x1, z0, z1 = camp_rect(camp)
-        found.append(Solid(f"Camp_{camp['id']}_Floor", "floor", "campFloor", x0, x1, z0, z1, camp["y"] - 1, camp["y"]))
+        found.append(Solid(f"Camp_{camp['id']}_Floor", "floor", "campFloor", x0, x1, z0, z1, camp["y"] - floor_depth,
+                           camp["y"]))
         fence = camp.get("fence")
         if fence:
             for side, (fx0, fx1, fz0, fz1) in fence_strips(camp, thickness).items():
@@ -187,17 +222,18 @@ def ground(solids, x, z, limit=math.inf, kinds=("block", "floor", "secret")):
     return (best.top, best) if best is not None else (None, None)
 
 
-def layout_bounds(layout, thickness):
-    """LevelGeometry.Bounds as a rectangle and a height span: blocks, camps with their fence and
-    barrier, secrets. (minX, maxX, minZ, maxZ, minY, maxY), or None for an empty layout."""
-    boxes = [(s.x0, s.x1, s.z0, s.z1, s.bottom, s.top) for s in solids_of(layout, thickness)]
+def layout_bounds(layout, thickness, floor_depth=1.0):
+    """Everything a layout builds, as a rectangle and a height span: blocks, camps with their
+    fence and invisible wall, secrets. (minX, maxX, minZ, maxZ, minY, maxY), or None for an empty
+    layout. (Wider than LevelGeometry.Bounds, which counts a camp as its floor.)"""
+    boxes = [(s.x0, s.x1, s.z0, s.z1, s.bottom, s.top) for s in solids_of(layout, thickness, floor_depth)]
     boxes += [(b.x0, b.x1, b.z0, b.z1, b.bottom, b.top)
               for b in (block_solid(x) for x in layout["blocks"] if x.get("collide") is False)]
     barrier = layout.get("barrier") or {}
-    reach = thickness + (barrier.get("thickness") or 0)
+    reach = wall_reach(thickness, barrier)
     for camp in layout["camps"]:
         x0, x1, z0, z1 = camp_rect(camp)
-        boxes.append((x0 - reach, x1 + reach, z0 - reach, z1 + reach, camp["y"] - 1,
+        boxes.append((x0 - reach, x1 + reach, z0 - reach, z1 + reach, camp["y"] - floor_depth,
                       camp["y"] + (barrier.get("height") or 0)))
     if not boxes:
         return None
@@ -416,9 +452,18 @@ def check_layout(name, layout, ctx, expect):
     levels, move, looks = ctx["levels"], ctx["move"], ctx["looks"]
     thickness = levels["fenceThickness"]
     spec = EXPECTED.get(name, {})
-    solids = solids_of(layout, thickness)
+    solids = solids_of(layout, thickness, levels["floorThickness"])
     jump = jump_facts(move)
     tag = f"{name}:"
+
+    # Ruling 6 of the fix round: a size of 0 or less is no Part (LevelGeometry.Pieces refuses it).
+    flat = [b.get("name") or b["look"] for b in layout["blocks"] if min(b["sx"], b["sy"], b["sz"]) <= 0]
+    flat += [f"camp {c['id']} obstacle {i + 1}" for c in layout["camps"] for i, o in enumerate(c.get("obstacles") or [])
+             if min(o["sx"], o["sy"], o["sz"]) <= 0]
+    flat += [f"secret {x['id']}" for x in layout["secrets"] if min(x["sx"], x["sy"], x["sz"]) <= 0]
+    flat += [f"camp {c['id']}" for c in layout["camps"] if min(c["sx"], c["sz"]) <= 0]
+    expect(not flat, f"{tag} every block, obstacle, secret and camp has a size over 0 on each axis"
+           + (f" (not: {', '.join(flat)})" if flat else ""))
 
     unknown = sorted({b["look"] for b in layout["blocks"] if b["look"] not in looks})
     expect(not unknown, f"{tag} every block's look is in Expeditions.json looks"
@@ -473,8 +518,9 @@ def check_layout(name, layout, ctx, expect):
         gates = camp.get("gates") or []
         fence = camp.get("fence")
         entry, leave = camp["entry"], camp["exit"]
-        expect(bool(fence) and fence["height"] > 0, f"{tag} camp {cid} has a fence"
-               + (f" ({fence['height']:g} high)" if fence else ""))
+        expect(bool(fence) and 0 < fence["height"] <= levels["triggerHeight"] - sr.ROOT_HEIGHT,
+               f"{tag} camp {cid} has a fence, and a root on its top is inside the trigger's height "
+               f"(levels.triggerHeight {levels['triggerHeight']:g})" + (f": {fence['height']:g} high" if fence else ""))
         wide = len(gates) == 2 and all(g["width"] >= GATE_MIN_WIDTH - EPS and g["side"] in SIDES for g in gates)
         expect(wide, f"{tag} camp {cid} has two gates (entry, exit) at least {GATE_MIN_WIDTH:g} wide: "
                + ", ".join(f"{g['side']} {g['width']:g}" for g in gates))
@@ -490,9 +536,9 @@ def check_layout(name, layout, ctx, expect):
                     lined = gx0 - EPS <= point["x"] <= gx1 + EPS
                     near = abs(point["z"] - (z0 if gate["side"] == "north" else z1))
                     fits = gx0 >= x0 - EPS and gx1 <= x1 + EPS
-                expect(lined and fits and near <= levels["triggerInset"] + 8,
-                       f"{tag} camp {cid}: the {word} point stands {near:g} studs inside the {gate['side']} gate, in "
-                       f"line with its opening")
+                expect(lined and fits and near <= ENTRY_GATE_REACH,
+                       f"{tag} camp {cid}: the {word} point stands {near:g} studs inside the {gate['side']} gate (at "
+                       f"most {ENTRY_GATE_REACH:g}), in line with its opening")
             expect(gates[0]["side"] != gates[1]["side"], f"{tag} camp {cid}: entry and exit are on different sides")
         inside = all(x0 + 1 <= p["x"] <= x1 - 1 and z0 + 1 <= p["z"] <= z1 - 1 for p in (entry, leave))
         expect(inside, f"{tag} camp {cid}: the entry and exit points are on its floor")
@@ -524,11 +570,13 @@ def check_layout(name, layout, ctx, expect):
                  or o["z"] - o["sz"] / 2 < z0 - EPS or o["z"] + o["sz"] / 2 > z1 + EPS]
         expect(not bumps and not stray, f"{tag} camp {cid} is flat at height {camp['y']:g}: no block rises through "
                f"its floor and its obstacles stand on it" + (f" ({bumps or stray})" if bumps or stray else ""))
-        # Within the wire's reach of the world origin, barrier included.
-        reach = thickness + (barrier.get("thickness") or 0)
-        furthest = max(abs(x0 - reach), abs(x1 + reach), abs(z0 - reach), abs(z1 + reach), abs(camp["y"]))
+        # Within the wire's reach of the world origin, the invisible wall included; and in height
+        # with the highest a launch may carry a crowd body (levels.crowdCeiling) on top.
+        reach = wall_reach(thickness, barrier)
+        ceiling = levels["crowdCeiling"]
+        furthest = max(abs(x0 - reach), abs(x1 + reach), abs(z0 - reach), abs(z1 + reach), abs(camp["y"]) + ceiling)
         expect(furthest <= ORIGIN_LIMIT, f"{tag} camp {cid} lies within {ORIGIN_LIMIT:g} studs of the world origin on "
-               f"each axis: furthest {furthest:g}")
+               f"each axis, its floor's height with levels.crowdCeiling {ceiling:g} on top: furthest {furthest:g}")
         # Nothing beside it: along the axis the route crosses it on, the only thing in its span is itself.
         axis = camp_axis(camp)
         lo, hi = (x0 - thickness, x1 + thickness) if axis == "x" else (z0 - thickness, z1 + thickness)
@@ -549,11 +597,12 @@ def check_layout(name, layout, ctx, expect):
                + (f" (found {', '.join(beside)})" if beside else
                   f" (a jump, a double jump and a dash carry {clear:.0f} studs; a fall from its fence to killY is "
                   f"{drop:g} studs)"))
-        # The invisible wall. At "close" it is solid, barrier.thickness deep outside the fence
-        # line on all four sides, gate gaps included. Nothing a player should stand on may sit
-        # in that band: only the road that leads through one of the camp's own gates crosses it.
-        depth = barrier.get("thickness") or 0
+        # The invisible wall. At "close" it is solid from the floor's edge outward (fix round,
+        # ruling 2), `reach` deep on all four sides, gate gaps included. Nothing a player should
+        # stand on may sit in that band: only the road that leads through one of the camp's own
+        # gates crosses it.
         in_band = []
+        nearest_ground = (math.inf, None)
         for s in solids:
             if s.name.startswith(f"Camp_{cid}_") or s.kind not in ("block", "secret"):
                 continue
@@ -562,10 +611,14 @@ def check_layout(name, layout, ctx, expect):
             ix0, ix1 = max(s.x0, x0 - reach), min(s.x1, x1 + reach)
             iz0, iz1 = max(s.z0, z0 - reach), min(s.z1, z1 + reach)
             if ix1 - ix0 <= EPS or iz1 - iz0 <= EPS:
-                continue  # clear of the wall's outer face
-            if ix0 >= x0 - thickness - EPS and ix1 <= x1 + thickness + EPS and iz0 >= z0 - thickness - EPS \
-                    and iz1 <= z1 + thickness + EPS:
-                continue  # inside the fence line: not in the band
+                # Clear of the wall's outer face: by how much?
+                away = math.hypot(max(x0 - reach - s.x1, s.x0 - x1 - reach, 0.0),
+                                  max(z0 - reach - s.z1, s.z0 - z1 - reach, 0.0))
+                if away < nearest_ground[0]:
+                    nearest_ground = (away, s.name)
+                continue
+            if ix0 >= x0 - EPS and ix1 <= x1 + EPS and iz0 >= z0 - EPS and iz1 <= z1 + EPS:
+                continue  # inside the floor's edge: not in the band
             through = False
             if s.kind == "block" and s.look == "path":
                 for gate in gates:
@@ -583,8 +636,10 @@ def check_layout(name, layout, ctx, expect):
             if not through:
                 in_band.append(s.name)
         expect(not in_band, f"{tag} camp {cid}: nothing a player stands on sits in its invisible wall's band "
-               f"({depth:g} studs outside the fence line, gate gaps included), but the road through its gates"
-               + (f" (found {', '.join(in_band)})" if in_band else ""))
+               f"({reach:g} studs outward from the floor's edge, gate gaps included), but the road through its gates"
+               + (f" (found {', '.join(in_band)})" if in_band else
+                  f" (the nearest other ground: {nearest_ground[1]}, {nearest_ground[0]:g} studs past the wall's "
+                  f"outer face)" if nearest_ground[1] else ""))
 
     # The start: on the ground, with room for a party.
     start = layout["start"]
@@ -606,13 +661,21 @@ def check_layout(name, layout, ctx, expect):
         sign = secret.get("sign") or {}
         text = sign.get("text") or ""
         expect(word in text.upper(), f"{tag} the {secret['id']} sign names what it needs ({word}): \"{text}\"")
-        # LevelService stands the sign on its point, so the point is the ground beside the road.
+        # LevelService stands the sign's block (Expeditions.json sign.size) on its point: the
+        # whole footprint is on solid ground at that height, not over the void beside the road.
         road, away = route_height_near(layout, sign.get("x", 0), sign.get("z", 0))
-        near = min((s.gap_to(Solid("sign", "sign", "sign", sign.get("x", 0), sign.get("x", 0), sign.get("z", 0),
-                                   sign.get("z", 0), 0, 0)) for s in solids if s.kind == "block"
-                    and abs(s.top - sign.get("y", 0)) < 0.01), default=math.inf)
-        expect(near <= SIGN_REACH, f"{tag} the {secret['id']} sign stands at the height of a block within "
-               f"{SIGN_REACH:g} studs of it ({near:.1f} away, {away:.0f} from the route)")
+        wide, deep = (ctx["signSize"][0], ctx["signSize"][2]) if ctx.get("signSize") else (0.0, 0.0)
+        cells = max(int(math.ceil(max(wide, deep) / 0.5)), 1)
+        held = 0
+        for i in range(cells + 1):
+            for k in range(cells + 1):
+                px = sign.get("x", 0) - wide / 2 + wide * i / cells
+                pz = sign.get("z", 0) - deep / 2 + deep * k / cells
+                top, _under = ground(solids, px, pz, sign.get("y", 0) + EPS, kinds=("block", "floor"))
+                held += 1 if top is not None and abs(top - sign.get("y", 0)) < 0.01 else 0
+        expect(wide > 0 and held == (cells + 1) ** 2,
+               f"{tag} the {secret['id']} sign's {wide:g} x {deep:g} foot stands on solid ground at its height "
+               f"{sign.get('y', 0):g} ({held} of {(cells + 1) ** 2} samples), {away:.0f} studs from the route")
     lookout = next((s for s in layout["secrets"] if s["id"] == "lookout"), None)
     if lookout is not None:
         bottom = lookout["y"] - lookout["sy"] / 2
@@ -623,24 +686,34 @@ def check_layout(name, layout, ctx, expect):
         else:
             road, away = route_height_near(layout, lookout["x"], lookout["z"])
             rise = ledge.top - road
-            lo = move["jumpHeight"] + LOOKOUT_OVER_JUMP
+            lo = move["jumpHeight"] + STEP_UP
             hi = move["jumpHeight"] + move["doubleJumpHeight"] - LOOKOUT_UNDER_DOUBLE
-            expect(lo <= rise <= hi, f"{tag} the lookout ledge's top is {lo:g}-{hi:g} studs above the road under it "
-                   f"(over one jump's {move['jumpHeight']:g}, under jump + double jump's "
-                   f"{move['jumpHeight'] + move['doubleJumpHeight']:g}): {rise:g}, {away:.0f} studs from the road")
-            # No other surface gives a single jump (with a dash) the ledge.
+            expect(lo < rise <= hi, f"{tag} the lookout ledge's top is over {lo:g} and at most {hi:g} studs above the "
+                   f"road under it (over one jump's {move['jumpHeight']:g} and a step up of {STEP_UP:g}, under jump + "
+                   f"double jump's {move['jumpHeight'] + move['doubleJumpHeight']:g}): {rise:g}, {away:.0f} studs from "
+                   f"the road")
+            # No other surface gives a single jump (with a dash) the ledge. A body steps up onto
+            # a ledge its feet are STEP_UP under, and the air dash holds its altitude, so the jump
+            # only has to rise to STEP_UP under the top. Fences, gates and cover count: a player
+            # stands on them while the camp is open.
             ways = []
+            closest = (math.inf, None)
             for s in solids:
                 if s is ledge or s.name == "Secret_lookout":
                     continue
-                need = ledge.top - s.top
+                need = ledge.top - s.top - STEP_UP
+                spare = need - move["jumpHeight"]
+                if s.gap_to(ledge) <= move["walkSpeed"] * jump["air"] + move["dashDistance"] and spare < closest[0]:
+                    closest = (spare, s.name)
                 carry = reach_at_rise(move, need)
                 if carry is None:
                     continue
                 if s.gap_to(ledge) <= carry + move["dashDistance"] + EPS:
-                    ways.append(f"{s.name} ({need:g} up, {s.gap_to(ledge):.0f} away)")
-            expect(not ways, f"{tag} the lookout needs the double jump: no surface is within one jump and a dash of "
-                   f"its ledge" + (f" (reachable from {', '.join(ways)})" if ways else ""))
+                    ways.append(f"{s.name} ({ledge.top - s.top:g} up, {s.gap_to(ledge):.0f} away)")
+            expect(not ways, f"{tag} the lookout needs the double jump: no surface is within one jump, a step up of "
+                   f"{STEP_UP:g} studs and a dash of its ledge"
+                   + (f" (reachable from {', '.join(ways)})" if ways else
+                      f" (the closest call: {closest[1]}, {closest[0]:g} studs short)" if closest[1] else ""))
     if spec.get("creek"):
         waters = [s for s in solids if s.look == "water"]
         loose = [b.get("name") for b in layout["blocks"] if b["look"] == "water" and b.get("collide") is False]
@@ -658,13 +731,40 @@ def check_layout(name, layout, ctx, expect):
                f"the road: " + (", ".join(f"{w.name} {road - w.top:g} under" for w, road, _a in crossed) or "not crossed")
                + (f"; {len(waters)} water blocks at one height" if len(level) == 1 else "; water at several heights"))
 
-    lowest = min(s.bottom for s in solids) if solids else 0.0
-    expect(KILL_FLOOR < layout["killY"] <= lowest - KILL_MARGIN + EPS,
-           f"{tag} killY {layout['killY']:g} is at least {KILL_MARGIN:g} under the lowest block ({lowest:g}) and above "
-           f"{KILL_FLOOR:g}")
+    check_kill_height(tag, layout, solids, levels, expect)
     parts = part_count(layout)
     expect(parts <= levels["maxParts"], f"{tag} {parts} Parts (levels.maxParts {levels['maxParts']})")
     return facts
+
+
+def check_kill_height(tag, layout, solids, levels, expect):
+    """killY and the depth of the ground (fix round, E5 and part A's item 2). A fall is short and
+    a landing holds: killY is at least KILL_UNDER[0] under every standable surface, at most
+    KILL_UNDER[1] under the lowest, under every Part's bottom and above KILL_FLOOR; and every
+    block a body lands on is at least levels.floorThickness deep, or rests on another solid."""
+    kill = layout["killY"]
+    tops = [s for s in solids if s.kind in ("block", "floor", "secret", "obstacle", "fence")]
+    lowest = min(tops, key=lambda s: s.top) if tops else None
+    bottom = min((s.bottom for s in solids), default=0.0)
+    under = (lowest.top - kill) if lowest is not None else math.inf
+    expect(lowest is not None and KILL_FLOOR < kill < bottom and KILL_UNDER[0] <= under <= KILL_UNDER[1],
+           f"{tag} killY {kill:g} is {KILL_UNDER[0]:g}-{KILL_UNDER[1]:g} studs under the lowest standable surface "
+           + (f"({lowest.name}, top {lowest.top:g}: {under:g} under)" if lowest is not None else "(none)")
+           + f", under every Part's bottom ({bottom:g}) and above {KILL_FLOOR:g}")
+    depth = levels["floorThickness"]
+    thin = []
+    for s in solids:
+        if s.kind != "block" or s.look not in GROUND_LOOKS or s.top - s.bottom >= depth - EPS:
+            continue
+        # Thin ground is sound only where another solid lies right under all of it.
+        mid_x, mid_z = (s.x0 + s.x1) / 2, (s.z0 + s.z1) / 2
+        rests = all(any(o is not s and o.holds(x, z) and o.top >= s.bottom - EPS and o.bottom < s.bottom
+                        for o in solids)
+                    for x in (s.x0, mid_x, s.x1) for z in (s.z0, mid_z, s.z1))
+        if not rests:
+            thin.append(f"{s.name} ({s.top - s.bottom:g} deep)")
+    expect(not thin, f"{tag} every block a body lands on (looks {', '.join(GROUND_LOOKS)}) is at least "
+           f"levels.floorThickness {depth:g} deep, or rests on another solid" + (f" (thin: {', '.join(thin)})" if thin else ""))
 
 
 def check_arena_layout(name, layout, ctx, expect):
@@ -673,7 +773,7 @@ def check_arena_layout(name, layout, ctx, expect):
     camp = layout["camps"][0]
     x0, x1, z0, z1 = camp_rect(camp)
     barrier = layout.get("barrier") or {}
-    reach = levels["fenceThickness"] + (barrier.get("thickness") or 0)
+    reach = wall_reach(levels["fenceThickness"], barrier)
     expect(barrier.get("height") == BARRIER["height"] and barrier.get("thickness") == BARRIER["thickness"],
            f"{name}: the arena {layout['arena']} has the barrier ({BARRIER['height']:g} high, "
            f"{BARRIER['thickness']:g} thick)")
@@ -695,7 +795,7 @@ def check_arena_layout(name, layout, ctx, expect):
 
 def check_lobby(name, layout, ctx, bounds_of, expect):
     levels = ctx["levels"]
-    solids = solids_of(layout, levels["fenceThickness"])
+    solids = solids_of(layout, levels["fenceThickness"], levels["floorThickness"])
     expect(not layout["camps"] and not layout["route"] and not layout["secrets"],
            f"{name}: the lobby has no camp, no route and no secret")
     floors = [s for s in solids if s.look == "lobby"]
@@ -708,10 +808,10 @@ def check_lobby(name, layout, ctx, bounds_of, expect):
     standing = [p for p in points if any(abs(f.top - p["y"]) < 0.01 and f.holds(p["x"], p["z"]) for f in floors)]
     expect(len(layout.get("spawns") or []) >= 4 and len(standing) == len(points),
            f"{name}: the start and {len(layout.get('spawns') or [])} spawn points (needs 4) stand on the floor")
-    lowest = min(s.bottom for s in solids)
-    expect(KILL_FLOOR < layout["killY"] <= lowest - KILL_MARGIN + EPS,
-           f"{name}: killY {layout['killY']:g} is at least {KILL_MARGIN:g} under the lowest block ({lowest:g})")
-    mine = layout_bounds(layout, levels["fenceThickness"])
+    flat = [b.get("name") or b["look"] for b in layout["blocks"] if min(b["sx"], b["sy"], b["sz"]) <= 0]
+    expect(not flat, f"{name}: every block has a size over 0 on each axis" + (f" (not: {', '.join(flat)})" if flat else ""))
+    check_kill_height(f"{name}:", layout, solids, levels, expect)
+    mine = layout_bounds(layout, levels["fenceThickness"], levels["floorThickness"])
     for other, theirs in bounds_of.items():
         if other == name or theirs is None:
             continue
@@ -741,17 +841,63 @@ def stage_kinds(stage):
     return found
 
 
-def check_level_file(level, layouts, ctx, expect):
-    name = level["id"]
-    layout = layouts.get(level["layout"])
-    expect(layout is not None, f"{name}: its layout {level['layout']} exists")
-    if layout is None:
+def fielded(stage, kinds):
+    """Every kind that can stand in a camp stage at any difficulty: its groups, its bosses, and
+    what those call (a summon's kind)."""
+    names = [k for k, _boss in stage_kinds(stage)]
+    for name in list(names):
+        for attack in (kinds.get(name) or {}).get("attacks") or []:
+            called = attack.get("summon")
+            if called and called not in names:
+                names.append(called)
+    return names
+
+
+def ground_reach(names, kinds):
+    """The lowest `height` of the ground attacks those kinds have: (height, kind, shape), or None
+    when none of them has one. ThreatField: a shape with a `height` misses feet more than that
+    far above the crowd's floor; a shot and a line have none and reach any height."""
+    found = [(attack["height"], name, attack["shape"]) for name in names
+             for attack in (kinds.get(name) or {}).get("attacks") or [] if attack.get("height") is not None]
+    return min(found) if found else None
+
+
+def check_level_file(file, level, layouts, ctx, expect):
+    """`file` is the level file as it stands, `level` what StageFlow.Resolve makes of it (None when
+    it cannot be resolved)."""
+    name = file["id"]
+    layout = layouts.get(file["layout"])
+    expect(layout is not None, f"{name}: its layout {file['layout']} exists")
+    expect(level is not None, f"{name}: it resolves to a level (stages, difficulties and a crowd block, or a mission "
+           f"that has a crowd block)")
+    if layout is None or level is None:
         return
     kinds = ctx["kinds"]
-    if level.get("mission"):
-        expect(bool(layout.get("arena")), f"{name}: a level that names a mission ({level['mission']}) names an arena "
+    # Ruling 6 of the fix round, the reading StageFlow.Validate and the simulator share
+    # (sim_range.level_problems): zero and empty mean the same on both sides.
+    problems = sr.level_problems(level, layout, ctx["levels"])
+    expect(not problems, f"{name}: maxAlive is an integer of at least 1 wherever it appears, burst is at least 1, "
+           f"every camp's targetWaveSeconds is over 0 and its breatherSeconds is not under 0, no camp is without a "
+           f"wave, and Combat.json has every `levels` number a run reads"
+           + (": " + "; ".join(problems) if problems else ""))
+    if file.get("mission"):
+        expect(bool(layout.get("arena")), f"{name}: a level that names a mission ({file['mission']}) names an arena "
                f"layout ({layout.get('arena')})")
+        # Not a gate: the arena's numbers stay where they are (ruling 27). Its cover is held to
+        # no height here; this says how it stands against the fix round's ruling 3.
+        tops = [top for camp in layout["camps"] for top in camp.get("obstacleTops") or []]
+        names = [kind for stage in level["stages"] if stage["kind"] == "camp" for kind in fielded(stage, kinds)]
+        low = ground_reach(names, kinds)
+        if tops and low is not None:
+            print(f"  note  {name}: the arena's cover is not gated (its numbers are frozen): {len(tops)} obstacles, the "
+                  f"tallest {max(tops):g} studs, against its lowest ground attack, the {low[1]}'s {low[2]} at {low[0]:g} "
+                  f"({'a body on it is still hit, with no margin' if max(tops) <= low[0] else 'a body on it is out of reach'}"
+                  f"; a level's own camps keep {COVER_MARGIN:g} under)")
         return
+    # The simulator does not mirror the director's elite (WaveService picks it per wave): a level
+    # file that names one would be played with bodies no band has measured.
+    expect("eliteKind" not in (file.get("crowd") or {}),
+           f"{name}: its crowd block names no eliteKind (the simulators do not mirror the director's elite)")
     stages = level["stages"]
     turn = all(s["kind"] == ("camp" if (i % 2 == 1 or len(stages) == 1) else "travel") for i, s in enumerate(stages))
     expect((turn or all(s["kind"] == "camp" for s in stages[:1]) and len(stages) == 1) and stages[-1]["kind"] == "camp",
@@ -779,13 +925,24 @@ def check_level_file(level, layouts, ctx, expect):
         roomy = [f"{k} {kinds[k]['bandMin']:g}" for k, _b in named if k in kinds and kinds[k].get("brain") == "keepAway"]
         expect(not tight, f"{tag} every keepAway kind's bandMin is at most {BAND_SHARE:g} x its shorter side "
                f"({BAND_SHARE * short:.1f}): " + (", ".join(tight) + " do not fit" if tight else ", ".join(roomy) or "none"))
-        alive = stage.get("maxAlive") or level["crowd"]["maxAlive"]
+        alive = stage["maxAlive"] if stage.get("maxAlive") is not None else level["crowd"]["maxAlive"]
         area = camp["sx"] * camp["sz"]
         expect(alive <= area / DENSITY_AREA + EPS and alive <= ctx["crowdMaxAlive"],
                f"{tag} maxAlive {alive:g} is at most its floor area / {DENSITY_AREA:g} ({area / DENSITY_AREA:.1f}) and "
                f"the crowd's {ctx['crowdMaxAlive']}")
         widest = max((kinds[k]["radius"] for k, boss in named if k in kinds and not boss), default=ctx["widest"])
         ctx["campRadius"][(level["layout"], camp["id"])] = widest
+        # Cover is low (fix round, ruling 3): whoever stands on it is still in reach of every
+        # ground attack this camp fields. A fence is not cover: the closed camp's invisible wall
+        # stands on the floor's edge, so nobody is on a fence while anything is alive.
+        low = ground_reach(fielded(stage, kinds), kinds)
+        limit = min(COVER_MAX, low[0] - COVER_MARGIN) if low is not None else COVER_MAX
+        tops = [o["sy"] for o in camp.get("obstacles") or []]
+        expect(all(top <= limit + EPS for top in tops),
+               f"{tag} every standable top on its floor is at most {limit:g} studs up ({COVER_MAX:g}, and "
+               f"{COVER_MARGIN:g} under its lowest ground attack"
+               + (f", the {low[1]}'s {low[2]} at {low[0]:g}" if low is not None else ": none")
+               + f"): {len(tops)} obstacles, the tallest {max(tops, default=0):g}")
         for wave in stage.get("waves") or []:
             boss = wave.get("boss")
             if not boss or boss["kind"] not in kinds:
@@ -812,10 +969,14 @@ def check_map(expeditions, level_files, layouts, expect):
     expect(len(ids) == len(set(ids)), f"map: {len(ids)} nodes with ids of their own: {', '.join(ids)}")
     expect(len(difficulties) == 3 and all(d in expeditions["difficultyNames"] for d in difficulties),
            f"map: three difficulties, each with a name: {', '.join(difficulties)}")
+    # `level_files` are the files Catalog reads (<n>_<Name>.json). A node with no `level` is one
+    # that is meant to be unbuilt ("Not built yet"); a node that names a level must find its file.
     by_id = {level["id"]: level for level in level_files}
-    bad = [n["id"] for n in nodes if n.get("level") and n["level"] not in by_id]
-    expect(not bad, "map: every node with a `level` names a level file"
-           + (f" (no file for {bad})" if bad else f" ({', '.join(n['id'] for n in nodes if n.get('level'))})"))
+    bad = [f"{n['id']} -> {n['level']}" for n in nodes if n.get("level") and n["level"] not in by_id]
+    unbuilt = [n["id"] for n in nodes if not n.get("level")]
+    expect(not bad, "map: every node with a `level` names a level file that Catalog reads"
+           + (f" (no file for {', '.join(bad)})" if bad else f" ({', '.join(n['id'] for n in nodes if n.get('level'))}; "
+                                                              f"unbuilt, with no `level`: {', '.join(unbuilt) or 'none'})"))
     loose = [n["id"] for n in nodes if (n.get("from") and n["from"] not in ids)
              or ((n.get("requires") or {}).get("node") and n["requires"]["node"] not in ids)]
     expect(not loose, "map: every `from` and `requires.node` names a node" + (f" ({loose})" if loose else ""))
@@ -974,11 +1135,59 @@ def load_all():
     kinds = proving["crowd"]["kinds"]
     names = sorted(p.stem for p in sr.LEVEL_LAYOUT_DIR.glob("*.json"))
     layouts = {name: sr.load_level_layout(name, combat["player"]["rescue"]["below"]) for name in names}
+    size = (expeditions.get("sign") or {}).get("size")
     ctx = {"levels": combat["levels"], "move": proving["movement"], "looks": expeditions["looks"], "kinds": kinds,
            "widest": max(k["radius"] for k in kinds.values() if k.get("brain") and not k.get("boss")),
            "spawnClear": proving["crowd"]["threat"]["spawnClear"], "crowdMaxAlive": proving["crowd"]["maxAlive"],
-           "campRadius": {}}
+           "campRadius": {}, "signSize": size if three_positive(size) else None,
+           "missions": {m["id"]: m for m in (sr.load_config(path) for path in sorted(sr.MISSIONS_DIR.glob("*.json")))},
+           "runCap": combat["director"]["runCapSeconds"]}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
+
+
+def stray_level_files():
+    """The *.json files of Config/Levels that Catalog does not read: it takes <n>_<Name> only."""
+    return sorted(path.name for path in sr.LEVELS_DIR.glob("*.json") if not sr.is_catalog_name(path.stem))
+
+
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def check_rules(combat, level_files, ctx, expect):
+    """Combat.json: the `levels` keys of the fix round (ruling 4) and the Studio gear presets
+    (ruling 8)."""
+    levels = ctx["levels"]
+    size = levels.get("checkpointSize")
+    expect(three_positive(size),
+           f"Combat.json levels.checkpointSize is three positive numbers (the checkpoint marker): {size}")
+    # The least each may be; None = over 0. All but floorThickness and maxParts are the numbers
+    # StageFlow.Validate asks for by name (sim_range.LEVEL_RULES_NEEDED): without one, a start
+    # answers "unavailable".
+    wanted = {"triggerBelow": 0, "triggerHeight": None, "closeInset": 0, "closeGraceSeconds": 0, "crowdCeiling": None,
+              "floorThickness": None, "fenceThickness": None, "startSpacing": None, "boxMargin": 0}
+    odd = [f"{key} {levels.get(key)}" for key, least in wanted.items()
+           if not is_number(levels.get(key)) or (levels[key] <= 0 if least is None else levels[key] < least)]
+    odd += [f"{key} (StageFlow.Validate needs it)" for key in sr.LEVEL_RULES_NEEDED
+            if key not in wanted and key != "gateSeconds"]
+    expect(not odd and "triggerInset" not in levels,
+           "Combat.json levels: triggerBelow, closeInset, closeGraceSeconds and boxMargin are 0 or more; triggerHeight, "
+           "crowdCeiling, floorThickness, fenceThickness and startSpacing are over 0; triggerInset is gone (a camp "
+           "triggers on its whole fenced rectangle)" + (f" (not: {', '.join(odd)})" if odd else "")
+           + (" (triggerInset is still there)" if "triggerInset" in levels else ""))
+    expect(is_number(levels.get("gateSeconds")) and levels["gateSeconds"] >= 1,
+           f"Combat.json levels.gateSeconds {levels.get('gateSeconds')} is at least 1 (the client learns the floor that "
+           f"long before the first body)")
+    debug = combat.get("debug") or {}
+    presets = [(p.get("melee"), p.get("ranged")) for p in debug.get("gearPresets") or []]
+    proving = debug.get("provingGear") or {}
+    tiers = sorted({d["recommendedTier"] for file in level_files for d in (file.get("difficulties") or {}).values()}
+                   | {file["recommendedTier"] for file in level_files if file.get("recommendedTier") is not None})
+    reached = all(any(melee == tier for melee, _r in presets) for tier in tiers)
+    expect(presets == list(GEAR_PRESETS) and presets[:1] == [(proving.get("melee"), proving.get("ranged"))] and reached,
+           f"Combat.json debug.gearPresets are {', '.join(f'{m}/{r}' for m, r in GEAR_PRESETS)} (the G key), the first "
+           f"is debug.provingGear, and every difficulty's recommendedTier ({', '.join(map(str, tiers))}) is a preset's "
+           f"melee tier: " + ", ".join(f"{m}/{r}" for m, r in presets))
 
 
 def main():
@@ -1008,19 +1217,25 @@ def main():
               f"jump + double jump {move['jumpHeight'] + move['doubleJumpHeight']:g}")
         print()
         check_map(expeditions, level_files, layouts, expect)
-        size = ctx["levels"].get("checkpointSize")
-        expect(three_positive(size),
-               f"Combat.json levels.checkpointSize is three positive numbers (the checkpoint marker): {size}")
-        close_inset, trigger_inset = ctx["levels"].get("closeInset"), ctx["levels"]["triggerInset"]
-        expect(isinstance(close_inset, (int, float)) and 0 <= close_inset <= trigger_inset,
-               f"Combat.json levels.closeInset {close_inset} is at most triggerInset {trigger_inset}: whoever "
-               f"triggered a camp is inside the rectangle its close keeps")
-        expect(ctx["levels"]["gateSeconds"] >= 1, f"Combat.json levels.gateSeconds {ctx['levels']['gateSeconds']:g} "
-               f"is at least 1 (the client learns the floor that long before the first body)")
+        check_rules(combat, level_files, ctx, expect)
+        # The layouts are measured with these: without one of them nothing below can be said.
+        lost = [key for key in READ_RULES if not is_number(ctx["levels"].get(key))]
+        if lost:
+            print()
+            print(f"CHECK: FAIL ({len(failures)}): Combat.json levels lacks {', '.join(lost)}; the layouts were not "
+                  f"checked")
+            sys.exit(1)
+        stray = stray_level_files()
+        ids = [file["id"] for file in level_files]
+        expect(not stray and len(ids) == len(set(ids)),
+               "Config/Levels: every file is named <n>_<Name>.json, the only name Catalog reads, and no two share an id"
+               + (f" (Catalog would not read {', '.join(stray)})" if stray else f" ({len(ids)} files: {', '.join(ids)})"))
         # The level files first: they say which kinds stand in which camp.
-        for level in level_files:
-            check_level_file(level, layouts, ctx, expect)
-        bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"]) for name, layout in layouts.items()}
+        for file in level_files:
+            level = sr.resolve_level(file, ctx["missions"].get(file.get("mission")), ctx["runCap"])
+            check_level_file(file, level, layouts, ctx, expect)
+        bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
+                     for name, layout in layouts.items()}
         for name, layout in layouts.items():
             if name == lobby_name:
                 check_lobby(name, layout, ctx, bounds_of, expect)
@@ -1035,7 +1250,7 @@ def main():
         for name, layout in layouts.items():
             if layout.get("arena"):
                 continue
-            solids = solids_of(layout, ctx["levels"]["fenceThickness"])
+            solids = solids_of(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
             print()
             print(f"PLAN of {name}, from above (north at the top; one character = {scale_x:g} studs across, "
                   f"{scale_z:g} down; z at the left)")

@@ -44,6 +44,8 @@ Village arena is the level "Raider Arena" behind two adapters. This file mirrors
 `Combat.CampWave`, `Combat.CampReward` and `Combat.BurstSeconds` (CrowdWave, CrowdReward and
 BurstInterval are now their callers, as in the Luau) and asserts: the adapter gives the
 mission's own waves (19), the level gates (20) and what each difficulty of a level pays (21).
+The mirrors themselves are held to the real Luau by `tools/check_stage_mirror.py`: 19 is
+worked here from the mission file by hand, so it fails when either Python function moves.
 
 Usage:
   py tools/sim_combat.py                  # unlock table + Village run report
@@ -131,6 +133,9 @@ LEVEL_PAY_TARGETS = {"forestRoad": {"cash": 87000, "materials": 155, "valor": 10
 LEVEL_PAY_TOLERANCE = 0.10
 LEVEL_PAY_TIMES = {"hard": (2.0, 3.0), "brutal": (4.0, 6.0)}
 LEVEL_REWARD_MULT = {"normal": 1, "hard": 2, "brutal": 4}
+# What a boss's calls pay per second, as a share of what the whole clear pays per second: under
+# this, standing in front of a boss to farm what it calls is always worse than playing on.
+LEVEL_STALL_SHARE = 0.5
 # The legacy run model's assertions (3, 7, 8, 10, 11, 14) judge the C1 Humanoid waves. A mission
 # with a `crowd` block no longer plays them (P5 ruling 27 and the Wave 1 boot), and its
 # targetWaveSeconds is re-tuned for crowds, so they skip it; 15-18 judge its crowd instead.
@@ -2536,7 +2541,7 @@ def print_level(level_id, combat_cfg):
     import sim_range as sr
 
     proving = sr.load_config(sr.CONFIG_PATH)
-    report = sr.forest_report(proving, careless=False, level_id=level_id)
+    report = sr.forest_report(proving, careless=False, level_id=level_id, human=False, ranged=False, below=False)
     if report is None:
         return
     level, ctx = report["level"], report["ctx"]
@@ -3194,15 +3199,34 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
                 or level["runCapSeconds"] != combat_cfg["director"]["runCapSeconds"]):
             problems.append(f"{file['id']} does not carry the mission's rewards, regen, density, material and cap")
         compared = 0
+        coop = combat_cfg["coop"]
         for wave in range(1, len(block["waves"]) + 1):
-            for party in range(1, combat_cfg["coop"]["maxParty"] + 1):
+            written = block["waves"][wave - 1]
+            for party in range(1, coop["maxParty"] + 1):
                 ours = camp_wave(stage["waves"][wave - 1], level["crowd"]["regenShare"], level["difficulties"]["normal"],
                                  ranks["normal"], ranks, party, combat_cfg)
                 ours["wave"] = wave
                 compared += 1
-                if ours != crowd_wave(mission, wave, party, False, combat_cfg):
-                    problems.append(f"{file['id']} wave {wave} party {party}: CampWave differs from CrowdWave")
-        notes.append(f"{file['id']} = {mission['id']}: {compared} wave/party specs equal, one camp of "
+                # Worked by hand from the mission file, through neither function: the config's own
+                # counts grown by the party (round half away from zero), the boss's HP by the
+                # party, the block's three scales and its regen, rewards x1.
+                groups = []
+                for group in written["groups"]:
+                    grow = group["perExtra"] if group.get("perExtra") is not None else coop["countPerExtraPlayer"]
+                    groups.append({"kind": group["kind"],
+                                   "count": max(math.floor(group["count"] * (1 + grow * (party - 1)) + 0.5), 0)})
+                by_hand = {"wave": wave, "groups": groups, "total": sum(g["count"] for g in groups),
+                           "boss": written.get("boss"), "bossHpMult": 1 + coop["bossHpPerExtraPlayer"] * (party - 1),
+                           "hpScale": block["hpScale"], "plateScale": block["plateScale"],
+                           "damageScale": block["damageScale"], "regenShare": block["regenShare"], "rewardMult": 1}
+                if ours != by_hand:
+                    problems.append(f"{file['id']} wave {wave} party {party}: CampWave on the adapter is not the "
+                                    f"mission's wave worked by hand")
+                if crowd_wave(mission, wave, party, False, combat_cfg) != by_hand:
+                    problems.append(f"{file['id']} wave {wave} party {party}: CrowdWave is not the mission's wave "
+                                    f"worked by hand")
+        notes.append(f"{file['id']} = {mission['id']}: {compared} wave/party specs, each equal to the mission's wave "
+                     f"worked by hand through CampWave on the adapter and through CrowdWave; one camp of "
                      f"{len(stage['waves'])} waves")
     checks.verdict(not problems, "19 arena adapter   ", "; ".join(problems[:4]) if problems else "; ".join(notes))
 
@@ -3225,6 +3249,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
             problems.append(f"{file['id']}: no layout {file['layout']}")
         levels[file["id"]] = (file, level, layout)
         found = level_gates(file, level, layout, expeditions, sr.load_config(sr.CONFIG_PATH), combat_cfg)
+        if level is not None and layout is not None:
+            # The fix round's ruling 6 (zero and empty), and the numbers a run reads of Combat.json.
+            found += sr.level_problems(level, layout, combat_cfg["levels"])
         problems += [f"{file['id']}: {text}" for text in found]
         if level is not None:
             notes.append(f"{file['id']} {len(level['stages'])} stage(s), "
@@ -3246,12 +3273,20 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     #     Normal's times rewardMult, and the whole clear pays LEVEL_PAY_TIMES of Normal (summons
     #     at the counts sim_range reports for the reacting player's boss fight at each
     #     difficulty's gear). targetMinutes lies within CROWD_TARGET_MINUTES_SLACK of the mean
-    #     measured clear on Normal.
+    #     measured clear on Normal. Two more, from the fix round:
+    #     - every cleared run of the reacting player banked exactly what the level file pays
+    #       for its kills (the configured bodies, the boss, the fodder that run's boss called);
+    #     - stalling never beats playing: what a boss's calls pay per second is under
+    #       LEVEL_STALL_SHARE of what the clear pays per second. That is why a slow clear may
+    #       bank more than the band: one gear preset below, the boss fight is longer and the
+    #       boss calls more fodder, so the clear banks up to x1.16 (Hard) and x1.07 (Brutal) of
+    #       the clear at the recommended gear, and less by the minute. The band is the
+    #       recommended gear's; tools/sim_range.py measures the slow clear and holds its rate.
     details = []
     ok21 = True
     proving_cfg = sr.load_config(sr.CONFIG_PATH)
     for level_id, target in LEVEL_PAY_TARGETS.items():
-        report = sr.forest_report(proving_cfg, careless=False, level_id=level_id)
+        report = sr.forest_report(proving_cfg, careless=False, level_id=level_id, human=False, ranged=False, below=False)
         if report is None:
             ok21 = False
             details.append(f"{level_id} has no level file")
@@ -3282,11 +3317,43 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         runs = report["difficulties"]["normal"]["runs"]
         clears = [r["at"] for r in runs if r["end"] == "cleared"]
         mean = sum(clears) / len(clears) / 60 if clears else math.inf
-        banked = {(r["banked"]["cash"], r["banked"]["materials"], r["banked"]["valor"]) for r in runs}
         honest = abs(level["targetMinutes"] - mean) <= CROWD_TARGET_MINUTES_SLACK
         good = good and honest
-        parts.append(f"targetMinutes {level['targetMinutes']} against a mean clear of {mean:.1f} min; the measured "
-                     f"runs banked " + ", ".join(f"{c:,}/{m}/{v}" for c, m, v in sorted(banked)))
+        parts.append(f"targetMinutes {level['targetMinutes']} against a mean clear of {mean:.1f} min")
+        # What the measured runs banked, against the level file: the configured kills of the
+        # difficulty and the fodder that very run's boss called, priced by level_pay.
+        boss_kind = sr.FOREST_BOSS
+        called = next((a.get("summon") for a in proving_cfg["crowd"]["kinds"][boss_kind]["attacks"]
+                       if a["shape"] == "summon"), None)
+        cleared = 0
+        unpaid = []
+        for difficulty, row in report["difficulties"].items():
+            written = level_pay(level, difficulty, ranks, combat_cfg, {})[2]
+            for r in row["runs"]:
+                if r["end"] != "cleared":
+                    continue
+                cleared += 1
+                extra = r["killed"].get(called, 0) - written.get(called, 0) if called else 0
+                owed, _rows, kills = level_pay(level, difficulty, ranks, combat_cfg, {boss_kind: {called: extra}})
+                if r["banked"] != owed or r["killed"] != kills or r["dropped"]["cash"] != 0:
+                    unpaid.append(f"{difficulty}: banked {r['banked']['cash']:,}/{r['banked']['materials']}/"
+                                  f"{r['banked']['valor']}, the file pays {owed['cash']:,}/{owed['materials']}/"
+                                  f"{owed['valor']} for its kills")
+        good = good and cleared > 0 and not unpaid
+        parts.append(f"{cleared} cleared runs each banked exactly what the file pays for its kills" if not unpaid
+                     else "banked is not what the file pays: " + "; ".join(unpaid[:3]))
+        # A stalled clear: standing in front of a boss for what it calls.
+        calls = next((a for a in proving_cfg["crowd"]["kinds"][boss_kind]["attacks"] if a["shape"] == "summon"), None)
+        for difficulty in report["difficulties"]:
+            row = report["difficulties"].get(difficulty)
+            if row is None or calls is None:
+                continue
+            spec = {"rewardMult": row["scales"]["rewardMult"]}
+            stall = camp_reward(level["crowd"]["rewards"], called, spec)[0] * calls["count"] / calls["cooldown"]
+            rate = pays[difficulty]["cash"] / (sum(r["at"] for r in row["runs"]) / len(row["runs"]))
+            good = good and stall <= LEVEL_STALL_SHARE * rate
+            parts.append(f"{difficulty}: the boss's calls pay {stall:,.0f} cash/s against the clear's {rate:,.0f} "
+                         f"(at most {LEVEL_STALL_SHARE:.0%} of it)")
         ok21 = ok21 and good
         details.append("; ".join(parts))
     checks.verdict(ok21, "21 level pay       ", " | ".join(details) + f" (tolerance {LEVEL_PAY_TOLERANCE:.0%})")

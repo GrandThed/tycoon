@@ -61,7 +61,8 @@ type Service = {
 type Loader = (player: Player) -> Types.PlayerState?
 -- "arrival" = a fresh join or a safe-mode retry (admission applies); "rejoin" = a player who was
 -- a member moments ago and whose trip home failed. Re-running admission on a rejoin could refuse
--- them (the run moved past joinUntilWave) and bounce them through the failing teleport forever.
+-- them (`over`: a run is live and they are not on the ticket's expected list; `full`: their seat
+-- was taken meanwhile) and bounce them through the failing teleport forever.
 type JoinKind = "arrival" | "rejoin"
 
 -- The session key of an arrival that carries no hint at all (Studio, a standalone boot): no

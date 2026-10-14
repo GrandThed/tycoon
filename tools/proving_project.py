@@ -24,7 +24,9 @@ def main() -> None:
     attributes: dict = {debug["provingAttribute"]: True}
     project["name"] = project["name"] + "Proving"
     workspace = project["tree"]["Workspace"]
-    workspace["$attributes"] = attributes
+    # Merged, never replaced: whatever combat.project.json sets on Workspace stays, and only the
+    # switch is added (or overridden) here.
+    workspace["$attributes"] = {**workspace.get("$attributes", {}), **attributes}
     TARGET.write_text(json.dumps(project, indent="\t") + "\n", encoding="utf-8", newline="\n")
     baked = ", ".join(f"{key} = {json.dumps(value)}" for key, value in attributes.items())
     print(f"wrote {TARGET.name} ({baked})")

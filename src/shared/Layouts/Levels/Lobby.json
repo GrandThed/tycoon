@@ -10,7 +10,7 @@
 	"killY": -12,
 	"camps": [],
 	"blocks": [
-		{ "name": "LobbyFloor", "look": "lobby", "x": 0, "y": -1, "z": -340, "sx": 48, "sy": 2, "sz": 48 },
+		{ "name": "LobbyFloor", "look": "lobby", "x": 0, "y": -2, "z": -340, "sx": 48, "sy": 4, "sz": 48 },
 		{ "name": "LobbyWallNorth", "look": "wall", "x": 0, "y": 1.5, "z": -364.5, "sx": 50, "sy": 3, "sz": 1 },
 		{ "name": "LobbyWallSouth", "look": "wall", "x": 0, "y": 1.5, "z": -315.5, "sx": 50, "sy": 3, "sz": 1 },
 		{ "name": "LobbyWallWest", "look": "wall", "x": -24.5, "y": 1.5, "z": -340, "sx": 1, "sy": 3, "sz": 48 },

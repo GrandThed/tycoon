@@ -13,6 +13,13 @@
 -- What a difficulty asks and pays (`recommendedTier`, `rewardMult`) is read from the level file
 -- for display only. It makes no sound call.
 --
+-- L1 fix round (docs/prompts/l1-fix-round.md, part U, item 4): the server refuses a start for a
+-- short while after a party comes back, and a Depart pressed in that while used to do nothing
+-- at all. The host now says how long the rest is (Rest); a Depart pressed inside it is HELD,
+-- reads "Departing...", and is sent when the rest ends. Picking another level or difficulty,
+-- or closing the map, takes the held Depart back: nothing starts that was not confirmed as
+-- it stands.
+--
 -- Laid out for a landscape phone first (checked at 640x360 and 667x375 with top insets of 36
 -- and 58, and at 1280x720 and 1920x1080): the map on the left, the card on the right, both in
 -- one frame under one UIScale. Every node, difficulty button, Depart, Return and the close
@@ -64,9 +71,12 @@ export type MapScreenHandle = {
 	Open: () -> (),
 	Close: () -> (),
 	IsOpen: () -> boolean,
-	-- Busy = Depart stays quiet: a start was asked and not yet answered, or the party has only
-	-- just come back. Confirm sets it; the host clears it.
+	-- Busy = Depart stays quiet: a start was asked and not yet answered. Confirm sets it; the
+	-- host clears it.
 	SetBusy: (busy: boolean) -> (),
+	-- The party has only just come back and no start is taken for `seconds`: a Depart pressed
+	-- before they are over is held and sent when they are (0 = no rest).
+	Rest: (seconds: number) -> (),
 	-- scale = the HUD's UI scale; viewportSize = the parent ScreenGui's size in px.
 	SetLayout: (scale: number, viewportSize: Vector2) -> (),
 	Destroy: () -> (),
@@ -135,6 +145,8 @@ local CLOSE_GLYPH = "X"
 local LEADER_MARK = "★ "
 local BONUS_KIND = "bonus"
 local DEPART_TEXT = "Depart"
+-- Depart was pressed and stands: held until the rest is over, or sent and not yet answered.
+local DEPARTING_TEXT = "Departing..."
 local RETURN_TEXT = "Return to your city"
 local NO_LEADER_TEXT = "the leader"
 -- A locked node says why (MapNodeState.reason; `needs` is a node's name or a number of stars).
@@ -681,10 +693,15 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 	local dots: { Frame } = {}
 	-- What is shown. `wanted` is the difficulty the player last picked; `difficulty` is the one
 	-- in force, which is `wanted` where the selected node offers it and its first otherwise, so
-	-- stepping across a closed node does not forget the pick.
+	-- stepping across a closed node does not forget the pick. `restUntil` is the os.clock stamp
+	-- before which a Depart is held instead of sent, `held` that one is, and `heldToken` names
+	-- the hold, so a timer left over from a hold that was taken back sends nothing.
 	local view = {
 		open = false,
 		busy = false,
+		restUntil = 0,
+		held = false,
+		heldToken = 0,
 		selected = 1,
 		wanted = "",
 		difficulty = "",
@@ -909,17 +926,25 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 		local solo = view.partySize <= 1
 		card.partyCaption.Text = if solo then "Solo" else "Party"
 		card.party.Text = if solo then "A down ends the run" else view.partyText
-		local live = canDepart()
-		card.depart.Text = if isLeader()
-			then DEPART_TEXT
-			else "Waiting for " .. (if view.leaderName ~= ""
+		-- A Depart that was pressed and stands (held for the rest, or sent and unanswered) says
+		-- so: the press must never look as if it did nothing.
+		local pressed = view.held or view.busy
+		local live = canDepart() and not view.held
+		card.depart.Text = if not isLeader()
+			then "Waiting for " .. (if view.leaderName ~= ""
 				then view.leaderName
 				else NO_LEADER_TEXT)
+			elseif pressed then DEPARTING_TEXT
+			else DEPART_TEXT
 		card.depart.Active = live
 		card.depart.BackgroundColor3 = if live
 			then Theme.MAP_COLOR_GOLD
+			elseif pressed then Theme.MAP_COLOR_PANEL_SELECTED
 			else Theme.MAP_COLOR_PANEL_LIGHT
-		card.depart.TextColor3 = if live then Theme.MAP_COLOR_INK else Theme.MAP_COLOR_DIM
+		card.depart.TextColor3 = if live
+			then Theme.MAP_COLOR_INK
+			elseif pressed then Theme.MAP_COLOR_GOLD
+			else Theme.MAP_COLOR_DIM
 	end
 
 	local function paint(): ()
@@ -929,17 +954,30 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 		paintCard()
 	end
 
+	-- Takes a held Depart back (the caller repaints).
+	local function dropHeld(): ()
+		if view.held then
+			view.held = false
+			view.heldToken += 1
+		end
+	end
+
 	local function choose(index: number, difficulty: string?): ()
 		local target = views[index]
 		if target == nil then
 			return
 		end
 		local changed = index ~= view.selected
+		local before = view.difficulty
 		view.selected = index
 		if difficulty ~= nil then
 			view.wanted = difficulty
 		end
 		fitDifficulty()
+		if changed or view.difficulty ~= before then
+			-- The held Depart was for what stood selected when it was pressed.
+			dropHeld()
+		end
 		paint()
 		if changed then
 			target.pop.Scale = Theme.MAP_SELECT_POP_SCALE
@@ -949,7 +987,8 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 		end
 	end
 
-	local function confirm(): ()
+	-- Sends the departure for what is selected now, where it is still allowed.
+	local function send(): ()
 		local current = selectedView()
 		local levelId = if current ~= nil then current.node.level else nil
 		if levelId == nil or not canDepart() then
@@ -958,6 +997,32 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 		view.busy = true
 		paintCard()
 		deps.onDepart(levelId, view.difficulty)
+	end
+
+	local function confirm(): ()
+		local current = selectedView()
+		if current == nil or current.node.level == nil or not canDepart() or view.held then
+			return
+		end
+		local rest = view.restUntil - os.clock()
+		if rest <= 0 then
+			send()
+			return
+		end
+		-- The party has only just come back (Rest): the press is kept and sent when the rest is
+		-- over. `send` asks again whether it is allowed then (the leader may have changed).
+		view.held = true
+		view.heldToken += 1
+		local token = view.heldToken
+		paintCard()
+		task.delay(rest, function()
+			if token ~= view.heldToken or not view.held then
+				return
+			end
+			view.held = false
+			send()
+			paintCard()
+		end)
 	end
 
 	local function setOpen(open: boolean): ()
@@ -969,6 +1034,8 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 		if open then
 			fitDifficulty()
 			paint()
+		else
+			dropHeld()
 		end
 		deps.onOpenChanged(open)
 	end
@@ -1156,6 +1223,12 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 				view.busy = busy
 				paintCard()
 			end
+		end,
+		Rest = function(seconds: number)
+			-- A new rest is a new return: a Depart held for the last one does not carry over.
+			dropHeld()
+			view.restUntil = os.clock() + math.max(seconds, 0)
+			paintCard()
 		end,
 		SetLayout = function(scale: number, viewportSize: Vector2)
 			if scale <= 0 then

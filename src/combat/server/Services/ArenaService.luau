@@ -47,10 +47,11 @@ local SPAWN_SIZE = Vector3.new(6, 1, 6)
 local SPAWN_CLEARANCE = 4
 local WALL_THICKNESS = 1
 local BOT_USER_ID_BASE = -1000
--- P1: halfSize.Y handed to CrowdService.SetBounds = the highest a launch may carry a dummy above
--- the floor. Layouts have no height, so it is generous rather than tuned.
-local BOUNDS_HALF_HEIGHT = 200
 local DEFAULT_BOT_HP = 150
+-- What MoveMember writes on the character it moved, for the client that owns the body: where
+-- its feet were put (a Vector3) and a count that goes up by one with every move.
+local PLACED_ATTRIBUTE = "Placed"
+local PLACED_SEQ_ATTRIBUTE = "PlacedSeq"
 local NEUTRAL_EMPOWER = 1
 -- Shown as the session card's title when Expeditions.json is missing.
 local DEFAULT_SESSION_NAME = "Expeditions"
@@ -115,6 +116,10 @@ local play = {
 	sessionSummaries = {} :: { [number]: Types.RunSummary },
 	admittedAt = {} :: { [number]: number },
 	results = {} :: { [number]: Types.RunResult },
+	-- Per userId: how many times MoveMember has moved their body (the PlacedSeq attribute). Kept
+	-- across their characters and for the life of the server (a failed trip home re-admits the
+	-- same client), so one client never sees a value twice.
+	placedSeq = {} :: { [number]: number },
 }
 
 -- Handed in by the services above this one in the boot order.
@@ -450,11 +455,15 @@ end
 
 -- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts"). The range opens no session and admits
 -- nobody: it only borrows the arena builder and the spawn points. Returns the floor's bounds
--- (centre, half-size) for CrowdService.SetBounds.
+-- (centre, half-size) for CrowdService.SetBounds. halfSize.Y is the highest a launch may carry a
+-- dummy above the floor: levels.crowdCeiling, the same key a level's camp reads. (The range only
+-- boots with Combat.json, so the 0 is never the answer.)
 function ArenaService.BuildProvingArena(arenaName: string): (Vector3, Vector3)
 	ensureArena(arenaName)
 	local half = arena.floorHalfSize
-	return Vector3.zero, Vector3.new(half.X, BOUNDS_HALF_HEIGHT, half.Z)
+	local config = Catalog.GetCombatConfig()
+	local ceiling = if config ~= nil then config.levels.crowdCeiling else 0
+	return Vector3.zero, Vector3.new(half.X, ceiling, half.Z)
 end
 
 -- Where a range player (re)spawns: the lobby SpawnLocation for Roblox's own respawn, and the
@@ -716,10 +725,6 @@ function ArenaService.InRun(): boolean
 	return runFields.inRun
 end
 
-function ArenaService.GetPhase(): Types.RunPhase
-	return runFields.phase
-end
-
 -- L1 ruling 3: what is played. nil = the lobby. WaveService sets it at each start and clears it
 -- at each return.
 function ArenaService.SetLevel(info: LevelInfo?): ()
@@ -863,13 +868,22 @@ local function publishNow(): ()
 	local ticket = session.ticket
 	if ticket == nil or session.missionId == "" then
 		-- No verified ticket (or no hub departure at all): the session is playable but nobody can
-		-- teleport into it, so it is deliberately not advertised (warned once per session).
+		-- teleport into it, so it is deliberately not advertised. Said once per session, and said
+		-- as what it is: a session nobody departed for (Studio, a place opened on its own) is
+		-- private by design and no fault; a proving build is always one, so it says nothing.
 		if not session.warnedUnjoinable then
 			session.warnedUnjoinable = true
-			warn(
-				`[ArenaService] the session of host {session.hostUserId} has no verified ticket;`
-					.. ` it will not appear in any run list`
-			)
+			if session.missionId ~= "" then
+				warn(
+					`[ArenaService] the session of host {session.hostUserId} has no verified ticket;`
+						.. ` it will not appear in any run list`
+				)
+			elseif not CombatMode.IsProving() then
+				print(
+					`[ArenaService] the session of host {session.hostUserId} was opened with no hub`
+						.. ` departure: it is private and in no run list`
+				)
+			end
 		end
 		return
 	end
@@ -985,6 +999,9 @@ end
 -- the body is put SPAWN_CLEARANCE above it with its speed taken away (a fall's speed would
 -- carry it through the floor on the frame it lands), and whoever measures its motion is told
 -- the jump is not the player's (the moved hook). False when the member has no body to move.
+-- The client that owns the body is told too, as a fact and not a guess from its own speed: the
+-- character carries where its feet were put (`Placed`) and a count that rises with every move
+-- (`PlacedSeq`, so a move to the same place is still news). Attributes replicate by themselves.
 function ArenaService.MoveMember(member: Types.RunMember, feet: Vector3): boolean
 	local character = member.character
 	if character == nil or character.Parent == nil then
@@ -996,6 +1013,11 @@ function ArenaService.MoveMember(member: Types.RunMember, feet: Vector3): boolea
 	end
 	root.AssemblyLinearVelocity = Vector3.zero
 	character:PivotTo(CFrame.new(feet + Vector3.new(0, SPAWN_CLEARANCE, 0)))
+	local seq = (play.placedSeq[member.userId] or 0) + 1
+	play.placedSeq[member.userId] = seq
+	-- The place first: whoever hears the count change reads the place it belongs to.
+	character:SetAttribute(PLACED_ATTRIBUTE, feet)
+	character:SetAttribute(PLACED_SEQ_ATTRIBUTE, seq)
 	local hook = hooks.moved
 	local player = member.player
 	if hook ~= nil and player ~= nil then
@@ -1052,25 +1074,24 @@ local function watchCharacter(member: Types.RunMember, character: Model): ()
 	member.character = character
 	member.humanoid = character:FindFirstChildOfClass("Humanoid")
 	applyMaxHp(member)
-	local humanoid = member.humanoid
-	if humanoid == nil then
-		return
-	end
 	local player = member.player
-	if player == nil then
-		return
-	end
-	local connections = characterConnections[player]
-	if connections == nil then
-		return
-	end
-	if BarrierGroups.Ensure() then
+	local connections = if player ~= nil then characterConnections[player] else nil
+	-- First, and whatever the body still lacks: a character whose Humanoid has not arrived yet
+	-- must already be stopped by a camp's invisible wall, or it walks out of a closed camp.
+	if player ~= nil and BarrierGroups.Ensure() then
 		-- Every part of the body, and whatever it is given later (accessories, tools): only this
 		-- group is stopped by a camp's invisible wall.
 		for _, descendant in character:GetDescendants() do
 			BarrierGroups.JoinPlayers(descendant)
 		end
-		table.insert(connections, character.DescendantAdded:Connect(BarrierGroups.JoinPlayers))
+		local joined = character.DescendantAdded:Connect(BarrierGroups.JoinPlayers)
+		if connections ~= nil then
+			table.insert(connections, joined)
+		end
+	end
+	local humanoid = member.humanoid
+	if humanoid == nil or connections == nil then
+		return
 	end
 	table.insert(
 		connections,

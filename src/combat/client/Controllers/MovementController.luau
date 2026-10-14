@@ -150,6 +150,9 @@ local knock = Vector3.zero
 local knockToken = 0
 local knockedDown = false
 local downAlign: AlignOrientation? = nil
+-- L1 fix round: a move the server announced and the body has not been seen at yet. `at` is the
+-- feet point it named (nil = none pending), `expires` the os.clock() after which it is dropped.
+local placing = { at = nil :: Vector3?, expires = 0 }
 
 local screenGui: ScreenGui? = nil
 local dashButton: TextButton? = nil
@@ -555,6 +558,62 @@ local function standUp(rig: Rig?): ()
 	rig.humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 end
 
+-- L1 fix round, item 3 (docs/prompts/l1-fix-round.md, part U). The server has placed the body
+-- (a rescue from a fall, a camp's entry, a level's start, the lobby, a new body). The client
+-- owns the body's physics, so the speed it had comes along unless it is dropped here: the
+-- server's own write of the velocity does not reach the owner, and a faller rescued at 70 studs
+-- a second would meet the floor it was put on at that speed. Every move in progress goes with
+-- it, because each is a mover that would keep driving the body (a slam that missed the floor
+-- still pushes down at slamFallSpeed). Being down is not a move and stays: VitalsController
+-- says when that ends.
+local function settle(): ()
+	endMotion(false)
+	clearMover()
+	slamming = false
+	knock = Vector3.zero
+	dashUntil = 0
+	local rig = localRig()
+	if rig ~= nil then
+		rig.root.AssemblyLinearVelocity = Vector3.zero
+		rig.root.AssemblyAngularVelocity = Vector3.zero
+	end
+end
+
+-- CameraController.OnPlaced. With the server's word (`signalled`) `position` is the feet point
+-- it named, and the body's new position reaches this client a moment before or after the word:
+-- the move is kept pending until the body is seen there (stepPlacing). Settling at once would
+-- be too early for a faller whose body has not been moved yet, which would pick its speed up
+-- again before it is. Without the word (a body only just picked up) there is nothing to wait
+-- for. How far the move went does not matter here: a short nudge settles like a long one.
+local function onPlaced(position: Vector3, signalled: boolean, _far: boolean): ()
+	if signalled then
+		placing.at = position
+		placing.expires = os.clock() + Theme.COMBAT_PLACED_TIMEOUT_SECONDS
+	else
+		settle()
+	end
+end
+
+-- Every frame before the physics step, so a body that has just been put down takes no step at
+-- the speed it arrived with. The root is put a little above the feet point and stands a little
+-- above it afterwards, so "there" is within Theme.COMBAT_PLACED_NEAR_STUDS of it. A move whose
+-- body never shows (the word outlived the body, or the two were a second apart) is dropped.
+local function stepPlacing(): ()
+	local at = placing.at
+	if at == nil then
+		return
+	end
+	if os.clock() > placing.expires then
+		placing.at = nil
+		return
+	end
+	local rig = localRig()
+	if rig ~= nil and (rig.root.Position - at).Magnitude <= Theme.COMBAT_PLACED_NEAR_STUDS then
+		placing.at = nil
+		settle()
+	end
+end
+
 local function step(deltaTime: number): ()
 	local rig = localRig()
 	stepMotion(rig)
@@ -770,6 +829,9 @@ function MovementController.Start(): ()
 		end
 	end)
 	table.insert(connections, RunService.Heartbeat:Connect(step))
+	-- Stepped runs before the frame's physics: see stepPlacing.
+	table.insert(connections, RunService.Stepped:Connect(stepPlacing))
+	CameraController.OnPlaced(onPlaced)
 	table.insert(connections, UserInputService.JumpRequest:Connect(onJumpRequest))
 	table.insert(
 		connections,
@@ -784,6 +846,8 @@ function MovementController.Start(): ()
 			knock = Vector3.zero
 			knockedDown = false
 			downAlign = nil
+			-- A move announced for the old body is not this one's; its own word follows.
+			placing.at = nil
 		end)
 	)
 	-- Above the stock bindings, so Left Shift dashes instead of toggling shift-lock.

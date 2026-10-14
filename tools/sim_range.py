@@ -67,6 +67,31 @@ LevelGeometry.FromArena), and keeps its P5 bands. Forest Road is read from
 Config/Levels/1_ForestRoad.json and Layouts/Levels/ForestRoad.json and has bands of its own, at
 each of its three difficulties.
 
+The L1 fix round (docs/prompts/l1-fix-round.md, part E) adds the bands that can see a
+difficulty's damageScale. The player who reacts to every tell takes no hit, so his runs say how
+long a level is and nothing about how hard it hits. Two more players are hit: one with a human's
+reaction (HUMAN_REACTION_SECONDS), who must clear at the recommended gear without going down;
+and the one who never dodges, who must not clear at all. The recommended gear of a difficulty
+is the Studio gear preset of its recommendedTier (Combat.json debug.gearPresets). "Clearly
+beyond the gear below" is asked one preset under it: the human goes down there or is much
+slower, and the boss alone outlasts a time. The human in this simulator is hit by nothing but
+slingers' shots at close range, so his gates measure slingers times damageScale and no more: a
+better human is owed before the real balance pass. The default ranged family is reported for
+information.
+
+The fix round's last step (E4) mirrors what engineer B landed in StageFlow and WaveService: the
+director keeps its tempo through a camp's breathers as well as its fights (directs); a
+countdown that ends with nobody on his feet arms the camp again (rearm); the close is judged
+again for levels.closeGraceSeconds (still_closing); State.closedAt and State.fought, and who
+earns the star (earns_star); and the Studio levers Skip and Force, which the simulator's own
+runs never use and tools/check_stage_mirror.py holds to the Luau.
+
+WHICH PYTHON. The gate is `py tools/sim_range.py --check`, and the launcher follows the first
+line of this file to the 64-bit Python 3.12. `py -`, a script with no such line, and whatever
+imports this file from one run on the machine's other Python (3.14, a 32-bit build). A level
+run is chaotic, and the two builds can differ by up to 0.08 min on one seed (interpreter_note).
+Every number in docs/BALANCE.md is the gate's; `--check` prints the interpreter it ran on.
+
 Usage:
   py tools/sim_range.py                 # all tables
   py tools/sim_range.py --check         # exit 1 if a shipped value leaves the design bands
@@ -2001,6 +2026,8 @@ class ThreatRun:
         self.legs = 0  # strafe: runs finished
         self.step = None  # react: the walk under way (unit x, unit z, until)
         self.seen = None  # react: the threats the last plan was made for
+        # From a tell showing on screen to his moving: the practised player's, or the policy's.
+        self.reaction = policy["reaction"] if policy.get("reaction") is not None else REACTION_SECONDS
         weapon = policy.get("weapon") or (cfg["loadout"]["melee"], None)
         self.variant = variant_of(cfg, *weapon)
         self.melee = self.variant["kind"] == "melee"
@@ -2279,7 +2306,7 @@ class ThreatRun:
         # A tell shows with the first snapshot after the windup starts, or one crowd step later
         # when that snapshot is lost (INTERFACES "Tells are drawn against server time"); the sim
         # allows the lost one, and the player acts a reaction time after that.
-        seen = self.interval + REACTION_SECONDS
+        seen = self.interval + self.reaction
         threats = [e for e in self.fighters
                    if e.alive and e.state == "windup" and e.shape in ("lunge", "arc") and t >= e.started + seen
                    and shape_contains(e.attack, e.x, e.z, e.face, self.x, self.z)]
@@ -2326,7 +2353,7 @@ class ThreatRun:
         """Every attack whose tell the player has had time to see and act on: one crowd step for
         a lost snapshot, then his reaction. A line counts from its lock, a shot from its
         release, a lob from its throw: before that there is nothing to step out of."""
-        seen = self.interval + REACTION_SECONDS
+        seen = self.interval + self.reaction
         found = []
         for e in self.fighters:
             if not e.alive:
@@ -4625,9 +4652,11 @@ def check_siege(cfg, env, boss, expect):
 #              merging and a bank at every wave; plan_level mirrors StageFlow.Plan);
 #   [road]     the player walks the layout's `route` at movement.walkSpeed, jumps included, his
 #              own line (the seed's start offset) beside it; there is no enemy on the road;
-#   [trigger]  L1 ruling 9: a camp triggers when his root is inside its floor inset by
-#              levels.triggerInset; levels.gateSeconds later the gates close, and a fighter
-#              outside the floor is put on the camp's entry point; only the next camp can;
+#   [trigger]  L1 ruling 9 as the fix round's ruling 1 rewrote it: a camp triggers when his
+#              root is inside its whole fenced rectangle (the floor grown by
+#              levels.fenceThickness); levels.gateSeconds later the gates close, and a fighter
+#              not inside the floor inset by levels.closeInset is put on the camp's entry point;
+#              only the next camp can;
 #   [camp]     L1 rulings 11 and 13: each camp is its own floor: its rectangle, its spawn
 #              points, bursts whose rows step toward its centre, the boss at `boss.at` from its
 #              centre. The simulator fights each camp in that camp's own frame (centre = origin);
@@ -4637,9 +4666,21 @@ def check_siege(cfg, env, boss, expect):
 #              first, at its own spot; the queue holds while the stage's maxAlive bodies live;
 #   [director] P5 ruling 17: tempo from crowd kills (summons included) against spec.total /
 #              targetWaveSeconds, set back to 1 with the kill stamps cleared when a camp closes
-#              and held at 1 for tempoWarmupSeconds from then; a wave that has finished spawning merges
-#              the next in when Combat.ShouldMerge says so, only in a stage that merges and never
-#              into or out of a boss wave;
+#              and held at 1 for tempoWarmupSeconds from then. It is kept on every tick of a
+#              closed camp, its breathers as well as its fights (StageFlow.Directs: P5's
+#              behaviour, restored in the fix round), before that tick's spawns and before
+#              Advance is asked, against the wave queued last (through a breather still the wave
+#              just cleared). That one value is what the tick's merge, the breather's length at
+#              a clear and a finished burst's interval read. A wave that has finished spawning
+#              merges the next in when Combat.ShouldMerge says so, only in a stage that merges
+#              and never into or out of a boss wave. (The director's extra elite, which reads
+#              the tempo when a wave is queued, is not mirrored: no shipped mission or level
+#              names an eliteKind, and tools/check_levels.py refuses one in a level file.)
+#   [rearm]    at a countdown's end with nobody on his feet the camp is armed again, and
+#              triggers when somebody walks in; nothing closes and nothing spawns;
+#   [grace]    for levels.closeGraceSeconds after the close, whoever is outside the floor inset
+#              by levels.closeInset is still put on the entry point, once per close. (The
+#              simulator's player never is: a run reports how often it happened.)
 #   [advance]  StageFlow.Advance, row for row (LevelRun.advance): the run cap; the fallen
 #              against a clear field; the trigger; the countdown; the close and the first wave;
 #              the merge; the clear (threats cleared, the pool banked when the camp is beaten or
@@ -4668,15 +4709,35 @@ MISSION_STAND_DOWN_SECONDS = (6.0, 12.0)
 MISSION_REGEN_SHARE = 10 / 130
 MISSION_REGEN_TOLERANCE = 0.10
 MISSION_SEEDS = (11, 23, 37)
-# Forest Road's bands (INTERFACES "L1" -> "Balance bands"). Normal at the proving gear; Hard and
-# Brutal at their recommended tier (melee = the tier, ranged = one under), and against 2/1.
+# Forest Road's bands (INTERFACES "L1" -> "Balance bands", and the fix round's part E). Normal at
+# the proving gear; Hard and Brutal at their recommended gear, which is the Studio gear preset
+# (Combat.json debug.gearPresets) whose melee tier is the difficulty's recommendedTier: 4/4 and
+# 6/6. "One preset below" is the preset before it.
+GATE_PYTHON = (3, 12)  # the interpreter the bands are measured on: see interpreter_note
 FOREST_LEVEL = "forestRoad"
 FOREST_BOSS = "colossus"
 FOREST_CLEAR_SECONDS = {"normal": (360.0, 480.0), "hard": (360.0, 540.0), "brutal": (360.0, 540.0)}
 FOREST_BOSS_SECONDS = {"normal": (64.0, 90.0), "hard": (64.0, 100.0), "brutal": (64.0, 100.0)}
 FOREST_HIT_SHARE = {"normal": 0.25, "hard": 0.30, "brutal": 0.30}
 FOREST_UNDER_GEAR_BOSS = {"hard": 135.0, "brutal": 200.0}  # at 2/1 the boss takes longer than this
-FOREST_UNDER_GEAR_DOWN = ("hard",)  # at 2/1 the player who never dodges is down in the first camp
+FOREST_UNDER_GEAR_DOWN = ("hard", "brutal")  # at 2/1 the player who never dodges is down in the first camp
+# The ideal player takes no hit, so no band on his runs can see damageScale: skill beats gear.
+# These do. A player with a human's reaction clears at the recommended gear without going down
+# (it fails when a difficulty hits too hard), and the player who never dodges is down before the
+# end even at the recommended gear (it fails when it hits too softly).
+HUMAN_REACTION_SECONDS = 0.55
+# "Clearly beyond the gear below" (the lead's ruling, fix round E4). One preset below the
+# recommended gear the human EITHER goes down (or meets the run cap) OR takes this many times as
+# long as his slowest clear at the recommended gear; and the Colossus alone is not killed inside
+# FOREST_BELOW_BOSS seconds. An under-geared player who plays well and clears slowly is fine.
+# The lead's numbers are 1.8 and 135 s / 200 s. Hard's are his. Brutal's are the designer's:
+# its two presets are x2.17 apart in melee scale, where Hard's are x3.33 apart, and a third of a
+# clear is walking, countdowns and the bursts' own pace, so a slow Brutal clear at 4/4 takes
+# x1.5 and its Colossus 196-203 s. 1.8 and 200 s cannot hold there without retuning Brutal to
+# the gate.
+HUMAN_BELOW_ENDS = ("down", "runCap")
+HUMAN_BELOW_SLOWER = {"hard": 1.8, "brutal": 1.4}
+FOREST_BELOW_BOSS = {"hard": 135.0, "brutal": 180.0}
 FREE = 1e9  # the road has no fence: the half extents of "anywhere"
 
 
@@ -4732,7 +4793,9 @@ def arena_as_layout(name, kill_y):
             "fence": {"height": arena["wall"]}, "gates": [],
             "entry": {"x": entry[0], "z": entry[1]}, "exit": {"x": pad[0], "z": pad[1]},
             "spawns": [{"x": x, "z": z} for x, z in load_rim(name)],
-            "obstacleCount": len(re.findall(r"\bsx = ", obstacles.group(1))) if obstacles else 0}
+            "obstacleCount": len(re.findall(r"\bsx = ", obstacles.group(1))) if obstacles else 0,
+            # How tall its cover is, for tools/check_levels.py's note: nothing here stands on it.
+            "obstacleTops": [float(top) for top in re.findall(r"\bsy = ([\d.]+)", obstacles.group(1))] if obstacles else []}
     return {"version": 1, "arena": name, "start": {"x": pad[0], "y": 0.0, "z": pad[1]}, "killY": kill_y,
             "barrier": barrier, "camps": [camp], "blocks": [], "secrets": [], "route": []}
 
@@ -4746,9 +4809,19 @@ def load_level_layout(name, rescue_below):
     return layout
 
 
+def is_catalog_name(stem):
+    """Catalog reads a module of Config/Levels (and of Config/Missions) only when its name begins
+    with digits and an underscore: string.match(name, "^%d+_")."""
+    return re.match(r"\d+_", stem) is not None
+
+
 def load_level_files():
-    """Config/Levels/<n>_<Name>.json, in file order: [LevelFile]."""
-    return [load_config(path) for path in sorted(LEVELS_DIR.glob("*.json"))]
+    """The level files Catalog reads, Config/Levels/<n>_<Name>.json, in Catalog.GetLevelIds'
+    order: by the number, then by the name. A file named otherwise is not a level to the game,
+    so it is none here (tools/check_levels.py refuses it by name)."""
+    paths = [path for path in LEVELS_DIR.glob("*.json") if is_catalog_name(path.stem)]
+    paths.sort(key=lambda path: (int(re.match(r"\d+", path.stem).group()), path.stem))
+    return [load_config(path) for path in paths]
 
 
 def gear_max_hp(armory, gear):
@@ -4771,13 +4844,15 @@ def mission_gear():
     return {"melee": gear["melee"], "ranged": gear["ranged"]}
 
 
-def resolve_level(file, mission, run_cap):
+def resolve_level(file, mission, run_cap, first_difficulty="normal"):
     """StageFlow.Resolve. A file with no `mission` is the level as it stands (None when it lacks
     stages, difficulties or a crowd block), under its own run cap when it names one over 0 and
     under the director's otherwise. A file
     that names a mission borrows that mission's crowd block and becomes one camp "arena" of all
-    its waves: the mission's material, target and targetWaveSeconds; Normal = the block's three
-    scales; the director's breather; merging; a bank at every wave clear."""
+    its waves: the mission's material, target and targetWaveSeconds; its one difficulty is
+    `first_difficulty` (the first of Expeditions.json `difficulties`, which the map offers for a
+    level that names none) with the block's three scales; the director's breather; merging; a
+    bank at every wave clear."""
     if not file.get("mission"):
         if not file.get("stages") or not file.get("difficulties") or not file.get("crowd"):
             return None
@@ -4787,29 +4862,83 @@ def resolve_level(file, mission, run_cap):
                 "runCapSeconds": own if own > 0 else run_cap, "difficulties": file["difficulties"],
                 "crowd": file["crowd"], "stages": file["stages"]}
     block = mission.get("crowd") if mission is not None else None
-    if block is None:
+    if block is None or first_difficulty is None:
         return None
-    normal = {"hpScale": block["hpScale"], "damageScale": block["damageScale"], "plateScale": block["plateScale"],
-              "countMult": 1, "rewardMult": 1, "recommendedTier": file.get("recommendedTier") or 0}
+    only = {"hpScale": block["hpScale"], "damageScale": block["damageScale"], "plateScale": block["plateScale"],
+            "countMult": 1, "rewardMult": 1, "recommendedTier": file.get("recommendedTier") or 0}
     camp = {"kind": "camp", "name": file["name"], "zone": "arena", "waves": block["waves"],
             "targetWaveSeconds": mission["targetWaveSeconds"], "breatherSeconds": None, "merge": True,
             "bankEachWave": True, "maxAlive": None}
     return {"version": file["version"], "id": file["id"], "name": file["name"], "layout": file["layout"],
             "mission": file["mission"], "material": mission["material"], "targetMinutes": mission["targetMinutes"],
-            "runCapSeconds": run_cap, "difficulties": {"normal": normal},
+            "runCapSeconds": run_cap, "difficulties": {first_difficulty: only},
             "crowd": {"regenShare": block["regenShare"], "maxAlive": block["maxAlive"], "burst": block["burst"],
                       "burstSpacing": block["burstSpacing"], "eliteKind": block.get("eliteKind"),
                       "rewards": block["rewards"]},
             "stages": [camp]}
 
 
+def whole(value):
+    """Is `value` a whole number of at least 1 (an int, or a float with no fraction)?"""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 1
+            and float(value).is_integer())
+
+
+def over_zero(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+
+# The `levels` numbers of Combat.json a run reads: StageFlow.Validate names every one that is
+# missing, and the start then answers "unavailable".
+LEVEL_RULES_NEEDED = ("gateSeconds", "triggerBelow", "triggerHeight", "closeInset", "closeGraceSeconds",
+                      "crowdCeiling", "fenceThickness", "startSpacing", "boxMargin")
+
+
+def level_problems(level, layout, rules=None):
+    """The fix round's ruling 6, as StageFlow.Validate reads a resolved level: zero and empty
+    mean the same on both sides. One line per problem: a maxAlive that is not an integer of at
+    least 1 (the level's, or a camp's own), a burst under 1, a camp's targetWaveSeconds of 0 or
+    less (or none), a breatherSeconds under 0, a camp with no wave; and, when `rules` (Combat.json
+    `levels`) is given, each of the numbers a run reads that it lacks. Nothing here falls back
+    on a number with `or`: Luau's 0 is not Python's. (A key of the level file that is missing
+    altogether is a problem to Validate and a KeyError to these tools. A block or an obstacle
+    with a size of 0 or less is LevelGeometry.Pieces' to refuse, and tools/check_levels.py's.)"""
+    problems = []
+    if rules is not None:
+        lacks = [key for key in LEVEL_RULES_NEEDED
+                 if not isinstance(rules.get(key), (int, float)) or isinstance(rules.get(key), bool)]
+        if lacks:
+            problems.append("Combat.json lacks " + ", ".join(f"levels.{key}" for key in lacks))
+    crowd = level["crowd"]
+    if not whole(crowd.get("maxAlive")):
+        problems.append(f"crowd.maxAlive {crowd.get('maxAlive')} is not an integer of at least 1")
+    burst = crowd.get("burst")
+    if not over_zero(burst) or burst < 1:
+        problems.append(f"crowd.burst {burst}: a burst is at least 1 body")
+    for index, stage in enumerate(level["stages"], 1):
+        if stage["kind"] != "camp":
+            continue
+        where = f"stage {index} (\"{stage.get('name')}\")"
+        if not stage.get("waves"):
+            problems.append(f"{where} has no wave")
+        if not over_zero(stage.get("targetWaveSeconds")):
+            problems.append(f"{where}: targetWaveSeconds {stage.get('targetWaveSeconds')} is not over 0")
+        if stage.get("maxAlive") is not None and not whole(stage["maxAlive"]):
+            problems.append(f"{where}: maxAlive {stage['maxAlive']} is not an integer of at least 1")
+        rest = stage.get("breatherSeconds")
+        if rest is not None and (not isinstance(rest, (int, float)) or isinstance(rest, bool) or rest < 0):
+            problems.append(f"{where}: breatherSeconds {rest} is not a time")
+    return problems
+
+
 def plan_level(level, layout, difficulty, rules):
     """StageFlow.Plan: the level as the run walks it, at one difficulty. None for a difficulty
     the level lacks, a camp stage whose zone the layout lacks, or a camp whose entry point is
     not inside its floor inset by levels.closeInset (the close would move a fighter to a point
-    it moves him from). A zone's rectangles are (x, z, hx, hz); its trigger is its floor inset by
-    levels.triggerInset; its points are (x, z) on its floor. A stage's maxAlive is its own, else
-    the level's."""
+    it moves him from). A zone's rectangles are (x, z, hx, hz); its trigger is its whole fenced
+    rectangle, the floor grown by levels.fenceThickness (the fix round's ruling 1); `inner` is
+    the floor inset by levels.closeInset; its points are (x, z) on its floor. A stage's maxAlive
+    is its own when it names one, else the level's (no `or`: a 0 is a 0 on both sides)."""
     if difficulty not in level["difficulties"]:
         return None
     camps = {camp["id"]: camp for camp in layout["camps"]}
@@ -4824,13 +4953,13 @@ def plan_level(level, layout, difficulty, rules):
         if camp is None:
             return None
         hx, hz = camp["sx"] / 2, camp["sz"] / 2
-        inset = rules["triggerInset"]
-        keep = rules.get("closeInset") or 0
-        if (abs(camp["entry"]["x"] - camp["x"]) > max(hx - keep, 0)
-                or abs(camp["entry"]["z"] - camp["z"]) > max(hz - keep, 0)):
+        grow = rules["fenceThickness"]
+        keep = rules["closeInset"] if rules.get("closeInset") is not None else 0
+        inner = (camp["x"], camp["z"], max(hx - keep, 0), max(hz - keep, 0))
+        if abs(camp["entry"]["x"] - camp["x"]) > inner[2] or abs(camp["entry"]["z"] - camp["z"]) > inner[3]:
             return None
         zone = {"id": camp["id"], "floorY": camp["y"], "rect": (camp["x"], camp["z"], hx, hz),
-                "trigger": (camp["x"], camp["z"], max(hx - inset, 0), max(hz - inset, 0)),
+                "inner": inner, "trigger": (camp["x"], camp["z"], max(hx + grow, 0), max(hz + grow, 0)),
                 "entry": (camp["entry"]["x"], camp["entry"]["z"]), "exit": (camp["exit"]["x"], camp["exit"]["z"]),
                 "spawns": [(p["x"], p["z"]) for p in camp["spawns"]]}
         waves = stage.get("waves") or []
@@ -4838,11 +4967,29 @@ def plan_level(level, layout, difficulty, rules):
                        "boss": {index: True for index, wave in enumerate(waves, 1) if wave.get("boss")},
                        "defs": waves, "breatherSeconds": stage.get("breatherSeconds"),
                        "merge": stage.get("merge") is True, "bankEachWave": stage.get("bankEachWave") is True,
-                       "targetWaveSeconds": stage.get("targetWaveSeconds") or 0,
-                       "maxAlive": stage.get("maxAlive") or level["crowd"]["maxAlive"]})
+                       "targetWaveSeconds": (stage["targetWaveSeconds"]
+                                             if stage.get("targetWaveSeconds") is not None else 0),
+                       "maxAlive": (stage["maxAlive"] if stage.get("maxAlive") is not None
+                                    else level["crowd"]["maxAlive"])})
     start = layout["start"]
     return {"levelId": level["id"], "difficulty": difficulty, "start": (start["x"], start["z"]),
             "killY": layout["killY"], "camps": sum(1 for s in stages if s["kind"] == "camp"), "stages": stages}
+
+
+def burst_point(at, size, index, spacing):
+    """StageFlow.BurstPoint in the camp's own frame (its centre is the origin): the `index`-th
+    body (0-based) of a burst of `size` at spawn point `at`. A grid of pitch `spacing`:
+    ceil(sqrt(size)) columns across the line to the camp's centre, centred on the spawn point,
+    its rows stepping toward the centre."""
+    cx, cz = at
+    reach = math.hypot(cx, cz)
+    ix, iz = (-cx / reach, -cz / reach) if reach > 1e-3 else (0.0, 1.0)
+    ax, az = -iz, ix
+    columns = max(math.ceil(math.sqrt(size)), 1)
+    row, column = index // columns, index % columns
+    across = (column - (columns - 1) / 2) * spacing
+    inward = row * spacing
+    return cx + ax * across + ix * inward, cz + az * across + iz * inward
 
 
 def difficulty_ranks(expeditions):
@@ -4945,6 +5092,12 @@ class LevelRun(ThreatRun):
         self.cleared = 0
         self.last_cleared = 0
         self.settled = 0
+        self.closed_at = 0.0  # State.closedAt: when the live camp's gates closed
+        self.fought = []  # State.fought: the fighters at the last clear, before its boundary
+        # Input.fighters: the humans in the fight. The simulator plays solo, as user 1.
+        self.fighters_now = [1]
+        self.entered = False  # WaveService's run.entered: he was brought inside at this close
+        self.grace_moves = 0  # times the close, judged again in its grace, moved him
         # WaveService's run.
         self.ids = 0
         self.cursor = 0
@@ -4974,6 +5127,15 @@ class LevelRun(ThreatRun):
         self.forgiven = 0  # downs on a clear field, stood up at that boundary
         self.walked = 0.0
         self.path = self.route_to(self.stage if self.flow == "armed" else self.stage + 1)
+        # How far his root is above the floor of the camp he walks at: the route's ground there
+        # is at the floor's height, so it is the standing root's.
+        self.above = ROOT_HEIGHT
+        # StageFlow's actions, as `advance` decides them, in order: [(kind, {field: value})].
+        # tools/check_stage_mirror.py holds them to the real Advance, tick for tick.
+        self.actions = []
+
+    def emit(self, kind, **fields):
+        self.actions.append((kind, fields))
 
     def new_id(self):
         self.ids += 1
@@ -5021,10 +5183,12 @@ class LevelRun(ThreatRun):
         self.walked += stride
 
     def triggered(self, zone):
-        """[trigger] StageFlow.triggered: his root inside the zone's trigger rectangle (on the
-        route his height is the floor's)."""
+        """[trigger] StageFlow.triggered: his root inside the zone's trigger rectangle, the whole
+        fenced rectangle (on the route his height is the floor's, inside levels.triggerBelow under
+        and levels.triggerHeight above it)."""
         cx, cz, hx, hz = zone["trigger"]
-        return abs(self.x - cx) <= hx and abs(self.z - cz) <= hz
+        return (-self.rules["triggerBelow"] <= self.above <= self.rules["triggerHeight"]
+                and abs(self.x - cx) <= hx and abs(self.z - cz) <= hz)
 
     # -- the queue and the director (WaveService) ----------------------------------------------
 
@@ -5072,18 +5236,11 @@ class LevelRun(ThreatRun):
         if burst[3] is None:
             burst[3] = self.spawns[self.cursor % len(self.spawns)]
             self.cursor += 1
-        cx, cz = burst[3]
-        reach = math.hypot(cx, cz)
-        ix, iz = (-cx / reach, -cz / reach) if reach > 1e-3 else (0.0, 1.0)
-        ax, az = -iz, ix
         size = burst[1] + burst[2]
-        columns = max(math.ceil(math.sqrt(size)), 1)
         spacing = self.crowd["burstSpacing"]
         while burst[1] > 0 and self.alive() < self.max_alive:
-            row, column = burst[2] // columns, burst[2] % columns
-            across = (column - (columns - 1) / 2) * spacing
-            inward = row * spacing
-            self.raise_body(burst[0], cx + ax * across + ix * inward, cz + az * across + iz * inward, t)
+            x, z = burst_point(burst[3], size, burst[2], spacing)
+            self.raise_body(burst[0], x, z, t)
             burst[2] += 1
             burst[1] -= 1
         self.peak_alive = max(self.peak_alive, self.alive())
@@ -5097,12 +5254,15 @@ class LevelRun(ThreatRun):
         self.next_spawn = t + self.sc.burst_seconds(stage["targetWaveSeconds"], self.bursts, self.tempo)
 
     def update_tempo(self, t):
-        """[director] WaveService.updateTempo, in a camp fight only. The warmup counts from the
-        camp's close (P5 counted it from the run's start, which was its one camp's)."""
+        """[director] WaveService.updateTempo, on every tick of a closed camp: its fights and its
+        breathers (directs). Kill stamps older than the window go (one exactly that old is kept);
+        the tempo is 1 through the warmup, which counts from the camp's close (P5 counted it from
+        the run's start, which was its one camp's); then Combat.Tempo against the pace of the
+        wave queued last: through a breather still the wave just cleared."""
         director = self.director
         cutoff = t - director["windowSeconds"]
         self.stamps = [s for s in self.stamps if s >= cutoff]
-        if t - self.camp["closedAt"] < director["tempoWarmupSeconds"]:
+        if t - self.closed_at < director["tempoWarmupSeconds"]:
             self.tempo = 1.0
             return
         target = self.plan["stages"][self.stage - 1]["targetWaveSeconds"]
@@ -5116,7 +5276,8 @@ class LevelRun(ThreatRun):
         stage = self.plan["stages"][index - 1]
         self.max_alive = stage["maxAlive"]
         self.camp = {"stage": index, "name": stage["name"], "zone": stage["zone"]["id"], "gateAt": t,
-                     "closedAt": None, "clearedAt": None, "waves": {}, "peakAlive": 0, "walked": self.walked}
+                     "closedAt": None, "clearedAt": None, "waves": {}, "peakAlive": 0, "walked": self.walked,
+                     "killed": {}}  # kind -> kills made in this camp (check_forest prices them itself)
         self.camps.append(self.camp)
 
     def on_close(self, t):
@@ -5125,9 +5286,11 @@ class LevelRun(ThreatRun):
         back to 1, kill stamps cleared. From here his x and z are in the camp's own frame."""
         zone = self.plan["stages"][self.stage - 1]["zone"]
         cx, cz, hx, hz = zone["rect"]
-        keep = self.rules.get("closeInset") or 0
-        if abs(self.x - cx) > hx - keep or abs(self.z - cz) > hz - keep:
+        _ix, _iz, keep_x, keep_z = zone["inner"]  # StageFlow.MustEnter
+        self.entered = False  # WaveService: each member is brought in at most once per close
+        if abs(self.x - cx) > keep_x or abs(self.z - cz) > keep_z:
             self.x, self.z = zone["entry"]
+            self.entered = True
         self.x, self.z = self.x - cx, self.z - cz
         self.frame = (cx, cz)
         self.half = (hx, hz)
@@ -5178,14 +5341,56 @@ class LevelRun(ThreatRun):
         self.banks += 1
         self.saved_at = self.plan["stages"][self.stage - 1]["name"]
 
-    def on_open(self, t):
-        """`open`: the gates open; he is back in the world's frame, and walks on."""
+    def on_open(self, t, index=None):
+        """`open`: the gates open; he is back in the world's frame, and walks on. `index` = the
+        stage a skip opens; a camp a boss skip passes without ever closing has nothing to open."""
+        if index is not None and (self.camp is None or self.camp["stage"] != index):
+            return
         cx, cz = self.frame
         self.x, self.z = self.x + cx, self.z + cz
         self.frame = (0.0, 0.0)
         self.half = (FREE, FREE)
         self.anchor = (self.x, self.z)
-        self.camp["clearedAt"] = t
+        if self.camp is not None:
+            self.camp["clearedAt"] = t
+
+    def on_rearm(self, t):
+        """`rearm`: nobody was on his feet as the countdown ended. No camp is counting down now
+        (WaveService forgets the floor it had told the client); the camp triggers again when
+        somebody walks in."""
+        if self.camp in self.camps:
+            self.camps.remove(self.camp)
+        self.camp = None
+
+    def on_drop(self, t):
+        """`drop` (a Studio skip, the `wave` lever): WaveService.clearField and dropPool. The crowd
+        and what it had in the air go, and so does everything no checkpoint banked: the pool, and
+        the kills booked against it (they are no longer this camp's to be paid for)."""
+        self.fighters[:] = []
+        self.queue = []
+        self.boss_pending = None
+        self.boss = self.quarry = None
+        self.pending = []
+        self.shots = []
+        self.charges = []
+        self.rings = []
+        for key in self.pool:
+            self.pool[key] = 0
+        if self.camp is not None:
+            unpaid = self.camp.setdefault("unpaid", {})
+            for kind, kills in self.camp["killed"].items():
+                unpaid[kind] = unpaid.get(kind, 0) + kills
+            self.camp["killed"] = {}
+
+    def on_move(self, index, t):
+        """`move` (a skip): he is put on the entry point of camp `index`, and walks to its middle
+        through the countdown."""
+        zone = self.plan["stages"][index - 1]["zone"]
+        self.frame = (0.0, 0.0)  # the world's frame: no camp is closed round him
+        self.half = (FREE, FREE)
+        self.x, self.z = zone["entry"]
+        self.anchor = (self.x, self.z)
+        self.path = [zone["rect"][:2]]
 
     def end(self, reason, t):
         self.flow = "over"
@@ -5212,7 +5417,58 @@ class LevelRun(ThreatRun):
         self.windows.append((t, t + self.vitals["getUpIframes"]))
         self.forgiven += 1
 
-    # -- StageFlow.Advance -------------------------------------------------------------------------
+    # -- StageFlow: Advance, and the Studio levers Skip and Force ----------------------------------
+
+    def armed_index(self):
+        """StageFlow.armedCamp: the stage of the camp that may trigger now (only the next), or 0."""
+        index = self.stage if self.flow == "armed" else self.stage + 1 if self.flow == "travel" else 0
+        stages = self.plan["stages"]
+        return index if 1 <= index <= len(stages) and stages[index - 1]["kind"] == "camp" else 0
+
+    def to_gate(self, index, t):
+        """StageFlow.gate: into the countdown of camp `index`."""
+        self.stage = index
+        self.flow = "gate"
+        self.gate_at = t + self.rules["gateSeconds"]
+        self.emit("gate", stage=index, at=self.gate_at)
+        self.on_gate(index, t)
+
+    def to_close(self, t):
+        """StageFlow.close: the gates close and the camp's first wave is queued (wave 1 unless a
+        boss skip named another)."""
+        first = max(self.first_wave, 1)
+        self.first_wave = 1
+        self.flow = "fight"
+        self.wave = first
+        self.settled = first - 1
+        self.closed_at = t
+        self.emit("close", stage=self.stage)
+        self.emit("wave", stage=self.stage, wave=first)
+        self.on_close(t)
+        self.on_wave(first, False, t)
+
+    def leave_camp(self, t):
+        """StageFlow.leaveCamp: the live camp is behind him (cleared, or skipped): the gates
+        open; on to the next stage, or the end."""
+        stages = self.plan["stages"]
+        index = self.stage
+        self.cleared += 1
+        self.last_cleared = index
+        self.emit("open", stage=index)
+        self.on_open(t)
+        if index >= len(stages):
+            self.emit("end", stage=index, reason="cleared")
+            self.end("cleared", t)
+            return
+        if index >= self.last_stage:
+            self.end("stopped", t)  # the simulator's own stop: no action of StageFlow's
+            return
+        self.stage = index + 1
+        self.flow = "armed" if stages[self.stage - 1]["kind"] == "camp" else "travel"
+        self.wave = 0
+        if self.flow == "travel":
+            self.emit("travel", stage=self.stage)
+        self.path = self.route_to(self.stage if self.flow == "armed" else self.stage + 1)
 
     def advance(self, t):
         """[advance] One tick of the run: the first row of the contract's table that matches."""
@@ -5221,36 +5477,38 @@ class LevelRun(ThreatRun):
             return
         cap = self.level["runCapSeconds"]  # WaveService: a cap of 0 or less is no cap
         if cap > 0 and t >= cap:
+            self.emit("end", stage=self.stage, reason="runCap")
             self.end("runCap", t)
             return
         clear = self.field_clear()
+        fallen = self.down_until is not None  # solo: the one fighter has no standing body
         # A clear field wins (L1 ruling 17): the fallen do not lose a run whose field is clear.
-        if self.down_until is not None and not clear:
+        if fallen and not clear:
+            self.emit("end", stage=self.stage, reason="down")
             self.end("down", self.downs[-1])
             return
         if self.flow in ("travel", "armed"):
-            index = self.stage if self.flow == "armed" else self.stage + 1
-            camp = stages[index - 1] if index <= len(stages) else None
-            if camp is not None and camp["kind"] == "camp" and self.triggered(camp["zone"]):
-                self.stage = index
-                self.flow = "gate"
-                self.gate_at = t + self.rules["gateSeconds"]
-                self.on_gate(index, t)
+            index = self.armed_index()
+            if index != 0 and self.triggered(stages[index - 1]["zone"]):
+                self.to_gate(index, t)
             return
         if self.flow == "gate":
-            if t >= self.gate_at - THREAT_EPS:  # the countdown cannot be cancelled
-                first = max(self.first_wave, 1)
-                self.first_wave = 1
-                self.flow = "fight"
-                self.wave = first
-                self.settled = first - 1
-                self.on_close(t)
-                self.on_wave(first, False, t)
+            if t >= self.gate_at - THREAT_EPS:
+                if fallen:
+                    # The countdown cannot be cancelled, but somebody has to be able to fight:
+                    # with nobody on his feet the camp is armed again and waits to be walked into.
+                    self.flow = "armed"
+                    self.gate_at = 0.0
+                    self.emit("rearm", stage=self.stage)
+                    self.on_rearm(t)
+                else:
+                    self.to_close(t)
             return
         if self.flow == "breather":
             if t >= self.breather_until - THREAT_EPS:
                 self.wave += 1
                 self.flow = "fight"
+                self.emit("wave", stage=self.stage, wave=self.wave)
                 self.on_wave(self.wave, False, t)
             return
         # flow == "fight"
@@ -5266,14 +5524,20 @@ class LevelRun(ThreatRun):
             if (stage["merge"] and wave < stage["waves"] and not stage["boss"].get(wave)
                     and not stage["boss"].get(wave + 1) and self.sc.should_merge(self.tempo, dead, self.director)):
                 self.wave = wave + 1
+                self.emit("wave", stage=self.stage, wave=wave + 1, merged=True)
                 self.on_wave(wave + 1, True, t)
             return
-        # The field is clear: the wave (or merged pair) is beaten.
+        # The field is clear: the wave (or merged pair) is beaten. Who beat it is noted before
+        # the boundary lets in those who waited: the star is theirs.
+        self.fought = list(self.fighters_now)
+        self.emit("clear", stage=self.stage, wave=wave)
         self.on_clear(t)
         last_wave = wave >= stage["waves"]
         if last_wave or stage["bankEachWave"]:
+            self.emit("bank", stage=self.stage, wave=wave, count=wave - self.settled)
             self.on_bank(t)
             self.settled = wave
+        self.emit("boundary", stage=self.stage)
         self.stand_up(t)
         if not last_wave:
             self.flow = "breather"
@@ -5282,28 +5546,144 @@ class LevelRun(ThreatRun):
                 seconds = self.sc.breather_seconds(self.tempo, self.director)
             self.breathers += seconds
             self.breather_until = t + seconds
+            self.emit("breather", stage=self.stage, at=self.breather_until)
             return
-        # leaveCamp: the gates open; on to the next stage, or the end.
-        self.cleared += 1
-        self.last_cleared = self.stage
-        self.on_open(t)
-        if self.stage >= len(stages):
-            self.end("cleared", t)
+        self.leave_camp(t)
+
+    def boss_wave_after(self, stage, after):
+        """StageFlow.bossWaveAfter: the first wave with a boss after `after` in `stage`, or 0."""
+        if stage is None:
+            return 0
+        return next((wave for wave in range(after + 1, stage["waves"] + 1) if stage["boss"].get(wave)), 0)
+
+    def skip(self, which, t, fighters=None):
+        """StageFlow.Skip, Studio only, row for row. "stage" finishes this part: on the road he
+        is moved to the next camp and its countdown starts, a countdown ends now, a live camp is
+        dropped and counts as cleared. "boss" goes to the next wave with a boss, in this camp or
+        a later one (the camps between count as cleared), and does nothing when none is left. No
+        skip banks anything. The simulator's runs never skip: tools/check_stage_mirror.py holds
+        this to the Luau."""
+        stages = self.plan["stages"]
+        if self.flow == "over":
             return
-        if self.stage >= self.last_stage:
-            self.end("stopped", t)
+        live = self.flow in ("fight", "breather")
+        if which == "stage":
+            if self.flow in ("travel", "armed"):
+                index = self.armed_index()
+                if index != 0:
+                    self.emit("move", stage=index)
+                    self.on_move(index, t)
+                    self.to_gate(index, t)
+            elif self.flow == "gate":
+                self.to_close(t)
+            else:
+                self.fought = list(fighters) if fighters is not None else []
+                self.emit("drop", stage=self.stage)
+                self.on_drop(t)
+                self.emit("boundary", stage=self.stage)
+                self.stand_up(t)
+                self.leave_camp(t)
             return
-        self.stage += 1
-        self.flow = "armed" if stages[self.stage - 1]["kind"] == "camp" else "travel"
+        if which != "boss":
+            return
+        # In this camp: its countdown, its fight or its breather; or the camp that is armed.
+        here = stages[self.stage - 1] if 1 <= self.stage <= len(stages) else None
+        if live or self.flow in ("gate", "armed"):
+            wave = self.boss_wave_after(here, self.wave if live else 0)
+            if wave != 0:
+                if live:
+                    self.flow = "fight"
+                    self.wave = wave
+                    self.settled = wave - 1
+                    self.emit("drop", stage=self.stage)
+                    self.on_drop(t)
+                    self.emit("wave", stage=self.stage, wave=wave)
+                    self.on_wave(wave, False, t)
+                elif self.flow == "gate":
+                    self.first_wave = wave
+                    self.to_close(t)
+                else:
+                    self.first_wave = wave
+                    self.emit("move", stage=self.stage)
+                    self.on_move(self.stage, t)
+                    self.to_gate(self.stage, t)
+                return
+        # In a later camp.
+        target = target_wave = 0
+        for index in range(self.stage + 1, len(stages) + 1):
+            wave = self.boss_wave_after(stages[index - 1], 0)
+            if wave != 0:
+                target, target_wave = index, wave
+                break
+        if target == 0:
+            return
+        if live or self.flow == "gate":
+            self.emit("drop", stage=self.stage)
+            self.on_drop(t)
+        # Every camp from here to the boss's is behind him now.
+        for index in range(self.stage, target):
+            if 1 <= index <= len(stages) and stages[index - 1]["kind"] == "camp":
+                self.cleared += 1
+                self.last_cleared = index
+                self.emit("open", stage=index)
+                self.on_open(t, index)
+        self.first_wave = target_wave
         self.wave = 0
-        self.path = self.route_to(self.stage if self.flow == "armed" else self.stage + 1)
+        self.emit("move", stage=target)
+        self.on_move(target, t)
+        self.to_gate(target, t)
+
+    def force(self, wave, t):
+        """StageFlow.Force, Studio only (the `wave` lever): wave `wave` of the LIVE camp, clamped
+        to its waves. The field is dropped and that wave starts at once; the waves before it are
+        settled without being paid. Nothing elsewhere."""
+        stages = self.plan["stages"]
+        stage = stages[self.stage - 1] if 1 <= self.stage <= len(stages) else None
+        if stage is None or self.flow not in ("fight", "breather") or stage["waves"] < 1:
+            return
+        target = min(max(math.floor(wave), 1), stage["waves"])
+        self.flow = "fight"
+        self.wave = target
+        self.settled = target - 1
+        self.emit("drop", stage=self.stage)
+        self.on_drop(t)
+        self.emit("wave", stage=self.stage, wave=target)
+        self.on_wave(target, False, t)
+
+    def directs(self):
+        """StageFlow.Directs: does the director keep its tempo in this step? For as long as a
+        camp is closed: through its fights AND its breathers (P5's behaviour, restored in the
+        fix round). Never on the road, in a countdown or armed: the close starts it afresh."""
+        return self.flow in ("fight", "breather")
+
+    def still_closing(self, t):
+        """StageFlow.StillClosing: for levels.closeGraceSeconds after the gates close (strictly
+        less), the close is judged again: the server's copy of a body trails the player's own
+        screen, so someone it saw inside may have been in the gate gap."""
+        return self.flow in ("fight", "breather") and t - self.closed_at < self.rules["closeGraceSeconds"]
+
+    def earns_star(self, user_id):
+        """StageFlow.EarnsStar: nobody unless the run was cleared, and then those who were
+        fighting before its last boundary."""
+        return self.end_reason == "cleared" and user_id in self.fought
 
     def tick(self, t):
-        """WaveService.tick: the tempo and the spawns in a camp fight, then StageFlow.Advance."""
-        if self.flow == "fight":
+        """WaveService.tick, in its order: the tempo while a camp is closed, the spawns in its
+        fight, the close judged again in its grace, then StageFlow.Advance."""
+        if self.directs():
             self.update_tempo(t)
+        if self.flow == "fight":
             self.spawn_boss(t)
             self.spawn_next(t)
+        if self.still_closing(t) and not self.entered:
+            # WaveService.moveFighters(zone.entry, zone): whoever is outside the close's rectangle
+            # is still brought to the entry, once per close. (His x and z are the camp's frame.)
+            zone = self.plan["stages"][self.stage - 1]["zone"]
+            cx, cz = zone["rect"][:2]
+            if abs(self.x) > zone["inner"][2] or abs(self.z) > zone["inner"][3]:
+                self.x, self.z = zone["entry"][0] - cx, zone["entry"][1] - cz
+                self.entered = True
+                self.grace_moves += 1
         self.advance(t)
 
     # -- the player and the kills ---------------------------------------------------------------
@@ -5327,6 +5707,8 @@ class LevelRun(ThreatRun):
         super().fall(enemy)
         now = self.world.now
         self.killed[enemy.name] = self.killed.get(enemy.name, 0) + 1
+        if self.camp is not None:
+            self.camp["killed"][enemy.name] = self.camp["killed"].get(enemy.name, 0) + 1
         self.stamps.append(now)
         if self.camp is not None and self.wave in self.camp["waves"]:
             self.camp["waves"][self.wave]["kills"] += 1
@@ -5377,7 +5759,8 @@ class LevelRun(ThreatRun):
                 "forgiven": self.forgiven, "firstHit": log[0][0] if log else None,
                 "banked": dict(self.banked), "dropped": dict(self.pool), "banks": self.banks,
                 "savedAt": self.saved_at, "walked": self.walked, "wave": self.wave,
-                "stage": self.plan["stages"][self.stage - 1]["name"]}
+                "stage": self.plan["stages"][self.stage - 1]["name"], "graceMoves": self.grace_moves,
+                "star": self.earns_star(self.fighters_now[0])}
 
 
 THREAT_POLICIES["mission"] = {"label": "reacts to every tell, attacks the nearest", "fight": True, "react": True,
@@ -5386,6 +5769,35 @@ THREAT_POLICIES["mission"] = {"label": "reacts to every tell, attacks the neares
 # much a level asks of a player who stops answering the tells.
 THREAT_POLICIES["rampage"] = {"label": "attacks the nearest, never dodges", "fight": True, "boss": True,
                               "chase": True, "hunt": True}
+# The gate that matters (fix round, E2): the same player as `mission`, but he moves
+# HUMAN_REACTION_SECONDS after a tell shows, not REACTION_SECONDS. A fodder's lunge (0.6 s) and a
+# marksman's line (locked 0.55 s before it lands) are then over before he can answer them, and
+# an elite's arc leaves him a fifth of a second: he takes hits, so damageScale decides his run.
+THREAT_POLICIES["human"] = dict(THREAT_POLICIES["mission"], label="a human's reaction, attacks the nearest",
+                                reaction=HUMAN_REACTION_SECONDS)
+
+
+def preset_gears(combat_cfg):
+    """Combat.json debug.gearPresets as gears, weakest first: [{"melee": , "ranged": }]. The
+    proving gear alone when the file has none."""
+    presets = [{"melee": p["melee"], "ranged": p["ranged"]} for p in combat_cfg["debug"].get("gearPresets") or []]
+    return sorted(presets, key=lambda g: (g["melee"], g["ranged"])) or [mission_gear()]
+
+
+def recommended_gear(presets, tier):
+    """The gear a difficulty is measured at: the preset whose melee tier is its recommendedTier,
+    and (tier, tier) when no preset is."""
+    return dict(next((g for g in presets if g["melee"] == tier), {"melee": tier, "ranged": tier}))
+
+
+def preset_below(presets, gear):
+    """The preset just under a gear, or None under the weakest."""
+    under = [g for g in presets if (g["melee"], g["ranged"]) < (gear["melee"], gear["ranged"])]
+    return dict(under[-1]) if under else None
+
+
+def gear_text(gear):
+    return f"{gear['melee']}/{gear['ranged']}"
 
 
 def camp_env(plan, hp, zone_id, start=None):
@@ -5409,9 +5821,10 @@ def boss_spots(level):
     return found
 
 
-def boss_alone(view, plan, hp, level, name, start=None, seeds=THREAT_SEEDS, seconds=None):
+def boss_alone(view, plan, hp, level, name, start=None, seeds=THREAT_SEEDS, seconds=None, weapon=None):
     """The reacting player's fights with one of the level's bosses, alone in its camp at its
-    `boss.at`: a boss_row, or None when the level has no such boss."""
+    `boss.at`: a boss_row, or None when the level has no such boss. `weapon` = a family other
+    than the default melee."""
     spot = boss_spots(level).get(name)
     if spot is None:
         return None
@@ -5419,7 +5832,8 @@ def boss_alone(view, plan, hp, level, name, start=None, seeds=THREAT_SEEDS, seco
     set_name = f"_level_{level['id']}_{name}"
     view["dummySets"][set_name] = [{"kind": name, "behaviour": "fight", "count": 1, "at": list(at), "spacing": 0,
                                     "respawnSeconds": 12}]
-    return boss_row(view, camp_env(plan, hp, zone_id, start), set_name, "slay", seeds=seeds, seconds=seconds)
+    return boss_row(view, camp_env(plan, hp, zone_id, start), set_name, "slay", weapon=weapon, seeds=seeds,
+                    seconds=seconds)
 
 
 def mission_report(cfg, path=None, mission=None, careless=True):
@@ -5441,8 +5855,8 @@ def mission_report(cfg, path=None, mission=None, careless=True):
         layout = arena_as_layout(mission["arena"], -below)
     else:
         layout = load_level_layout(file["layout"], below)
-    level = resolve_level(file, mission, combat_cfg["director"]["runCapSeconds"])
-    difficulty = "normal"
+    difficulty = ctx["expeditions"]["difficulties"][0]
+    level = resolve_level(file, mission, combat_cfg["director"]["runCapSeconds"], difficulty)
     gear = mission_gear()
     scales = level["difficulties"][difficulty]
     view, hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], gear)
@@ -5464,44 +5878,60 @@ def mission_report(cfg, path=None, mission=None, careless=True):
             "stand": stand, "bosses": bosses, "runs": runs, "careless": careless_runs, "combat": combat_cfg, "sc": sc}
 
 
-def forest_report(cfg, careless=True, level_id=FOREST_LEVEL):
-    """Forest Road's bands, per difficulty. Normal at the proving gear: the hit shares, the still
-    player in the first camp, the boss alone in its camp (the player at the camp's entry), whole
-    runs of the reacting player and of the one who never dodges. Hard and Brutal twice: at their
-    recommended gear (the hit shares, the boss alone, whole runs), and at the proving gear (the
-    boss alone, and the player who never dodges)."""
+def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=True, below=True):
+    """Forest Road's bands, per difficulty, each at its recommended gear (Normal at the proving
+    gear, Hard and Brutal at the gear preset of their recommendedTier): the hit shares, the boss
+    alone in its camp (the player at the camp's entry), whole runs of the reacting player, of the
+    player with a human's reaction and of the one who never dodges. Normal also has the still
+    player in the first camp. Hard and Brutal twice more: one preset below (`below`: the human
+    player, the boss alone and, for what a slow clear pays, the reacting player), and at the
+    proving gear (the boss alone, and the player who never dodges). For information, the default
+    ranged family (the Longbow) through the first camp and against the boss."""
     import sim_combat as sc
     ctx = level_context()
     file = ctx["files"].get(level_id)
     if file is None:
         return None
     combat_cfg = ctx["combat"]
-    level = resolve_level(file, ctx["missions"].get(file.get("mission")), combat_cfg["director"]["runCapSeconds"])
+    level = resolve_level(file, ctx["missions"].get(file.get("mission")), combat_cfg["director"]["runCapSeconds"],
+                          ctx["expeditions"]["difficulties"][0])
     layout = load_level_layout(level["layout"], combat_cfg["player"]["rescue"]["below"])
+    problems = level_problems(level, layout, combat_cfg["levels"])
+    if problems:
+        raise SystemExit(f"sim_range: {level_id} cannot be played (StageFlow.Validate refuses it): " + "; ".join(problems))
     proving = mission_gear()
-    report = {"level": level, "layout": layout, "ctx": ctx, "sc": sc, "proving": proving, "difficulties": {}}
+    presets = preset_gears(combat_cfg)
+    bow = cfg["loadout"]["ranged"]
+    report = {"level": level, "layout": layout, "ctx": ctx, "sc": sc, "proving": proving, "presets": presets,
+              "bow": bow, "difficulties": {}}
+
+    def runs_of(view, hp, difficulty, key, last=None, weapon=None):
+        policy = THREAT_POLICIES[key] if weapon is None else dict(THREAT_POLICIES[key], weapon=(weapon, None))
+        return [LevelRun(view, hp, ctx, level, layout, difficulty, policy, seed, last).run() for seed in MISSION_SEEDS]
+
     for difficulty in ctx["expeditions"]["difficulties"]:
         scales = level["difficulties"].get(difficulty)
         if scales is None:
             continue
-        tier = scales["recommendedTier"]
         rank = ctx["ranks"][difficulty]
-        gear = dict(proving) if rank == 1 else {"melee": tier, "ranged": max(tier - 1, 0)}
+        gear = dict(proving) if rank == 1 else recommended_gear(presets, scales["recommendedTier"])
         plan = plan_level(level, layout, difficulty, combat_cfg["levels"])
         view, hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], gear)
+        first_camp = next(i for i, s in enumerate(plan["stages"], 1) if s["kind"] == "camp")
         row = {"scales": scales, "gear": gear, "hp": hp, "view": view, "plan": plan,
                "hits": hit_rows(cfg, view, hp, level_kinds(view, level, rank, ctx["ranks"])),
                "boss": boss_alone(view, plan, hp, level, FOREST_BOSS),
-               "runs": [LevelRun(view, hp, ctx, level, layout, difficulty, THREAT_POLICIES["mission"], seed).run()
-                        for seed in MISSION_SEEDS],
-               "stand": [], "careless": [], "under": None}
+               "runs": runs_of(view, hp, difficulty, "mission"),
+               "human": runs_of(view, hp, difficulty, "human") if human else [],
+               "careless": runs_of(view, hp, difficulty, "rampage") if careless else [],
+               "stand": [], "under": None, "below": None, "ranged": None}
+        if ranged:
+            # Information: the bow on its own. The first camp is the level's basic mix.
+            row["ranged"] = {"camp": runs_of(view, hp, difficulty, "mission", first_camp, bow),
+                             "boss": boss_alone(view, plan, hp, level, FOREST_BOSS, seeds=BOSS_RANGED_SEEDS,
+                                                weapon=bow)}
         if rank == 1:
-            first_camp = next(i for i, s in enumerate(plan["stages"], 1) if s["kind"] == "camp")
-            row["stand"] = [LevelRun(view, hp, ctx, level, layout, difficulty, THREAT_POLICIES["stand"], seed,
-                                     first_camp).run() for seed in MISSION_SEEDS]
-            if careless:
-                row["careless"] = [LevelRun(view, hp, ctx, level, layout, difficulty, THREAT_POLICIES["rampage"],
-                                            seed).run() for seed in MISSION_SEEDS]
+            row["stand"] = runs_of(view, hp, difficulty, "stand", first_camp)
         else:
             # The same difficulty against the proving gear: clearly beyond it.
             weak_view, weak_hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], proving)
@@ -5509,8 +5939,18 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL):
                 "gear": dict(proving), "hp": weak_hp,
                 "hits": hit_rows(cfg, weak_view, weak_hp, level_kinds(weak_view, level, rank, ctx["ranks"])),
                 "boss": boss_alone(weak_view, plan, weak_hp, level, FOREST_BOSS, seeds=BOSS_RANGED_SEEDS),
-                "careless": [LevelRun(weak_view, weak_hp, ctx, level, layout, difficulty, THREAT_POLICIES["rampage"],
-                                      seed).run() for seed in MISSION_SEEDS]}
+                "careless": runs_of(weak_view, weak_hp, difficulty, "rampage")}
+            # And one preset below its own: clearly beyond that gear.
+            lesser = preset_below(presets, gear)
+            if lesser is not None and below:
+                if lesser == proving:
+                    low_view, low_hp, low_boss = weak_view, weak_hp, row["under"]["boss"]
+                else:
+                    low_view, low_hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], lesser)
+                    low_boss = boss_alone(low_view, plan, low_hp, level, FOREST_BOSS, seeds=BOSS_RANGED_SEEDS)
+                row["below"] = {"gear": lesser, "hp": low_hp, "boss": low_boss,
+                                "human": runs_of(low_view, low_hp, difficulty, "human") if human else [],
+                                "runs": runs_of(low_view, low_hp, difficulty, "mission")}
         report["difficulties"][difficulty] = row
     return report
 
@@ -5529,7 +5969,7 @@ def print_mission(cfg, report):
         print("RAIDER ARENA: no crowd block, nothing to measure")
         return
     mission, view, level = report["mission"], report["view"], report["level"]
-    scales_of = level["difficulties"]["normal"]
+    scales_of = next(iter(level["difficulties"].values()))
     scales = view["_scales"]
     print()
     print(f"RAIDER ARENA (P5 and L1 ruling 27; {mission['name']} as a level of one camp, arena {mission['arena']}, gear "
@@ -5690,11 +6130,30 @@ def print_forest(cfg, report):
             length = camp["clearedAt"] - camp["closedAt"] if camp["clearedAt"] is not None else None
             print(f"        {camp['zone']} {camp['name']:<22} {fmt(camp['closedAt'], 0, 1):>10}  "
                   f"{fmt(camp['clearedAt'], 0, 1):>7}  {fmt(length, 0, 1):>6}  {waves}  {camp['peakAlive']:>4}")
+        if row["human"]:
+            print(f"    the same player with a human's reaction ({HUMAN_REACTION_SECONDS:g} s, not "
+                  f"{REACTION_SECONDS:g}): " + "; ".join(run_text(seed, r) for seed, r in zip(MISSION_SEEDS, row["human"])))
         if row["careless"]:
-            print("    the same player who never dodges (information): "
-                  + "; ".join(f"seed {seed} {r['end']} in {r['stage']} at {r['at'] / 60:.2f} min ({r['hits']} hits; banked "
-                              f"{r['banked']['cash']:,}, dropped {r['dropped']['cash']:,})"
-                              for seed, r in zip(MISSION_SEEDS, row["careless"])))
+            print("    the same player who never dodges: "
+                  + "; ".join(run_text(seed, r) for seed, r in zip(MISSION_SEEDS, row["careless"])))
+        below = row["below"]
+        if below is not None:
+            slowest = max((r["at"] for r in row["human"] if r["end"] == "cleared"), default=None)
+            print(f"    one preset below, gear {gear_text(below['gear'])} (health {below['hp']:.0f}): the "
+                  f"{FOREST_BOSS} alone: {boss_text(below['boss'])}")
+            if below["human"]:
+                print("      the human's reaction: " + "; ".join(
+                    run_text(seed, r) + (f" = x{r['at'] / slowest:.2f} of his slowest clear at gear "
+                                         f"{gear_text(row['gear'])}" if r["end"] == "cleared" and slowest else "")
+                    for seed, r in zip(MISSION_SEEDS, below["human"])))
+            pay = [r for r in row["runs"] if r["end"] == "cleared"]
+            if pay:
+                rate = sum(r["banked"]["cash"] for r in pay) / sum(r["at"] for r in pay) * 60
+                print("      the reacting player (what a slow clear pays): " + "; ".join(
+                    f"seed {seed} {r['end']} at {r['at'] / 60:.2f} min, banked {r['banked']['cash']:,} cash"
+                    + (f" = {r['banked']['cash'] / r['at'] * 60:,.0f} a minute" if r["end"] == "cleared" else "")
+                    for seed, r in zip(MISSION_SEEDS, below["runs"]))
+                      + f" (at gear {gear_text(row['gear'])}: {rate:,.0f} a minute)")
         under = row["under"]
         if under is not None:
             worst = max(under["hits"], key=lambda h: h["share"])
@@ -5702,10 +6161,48 @@ def print_forest(cfg, report):
                   f"worst hit is {worst['damage']} = {worst['share']:.0%} of the bar; the {FOREST_BOSS} alone: "
                   f"{boss_text(under['boss'])}; the player who never dodges: "
                   + "; ".join(f"{r['end']} in {r['stage']} at {r['at'] / 60:.2f} min" for r in under["careless"]))
+        shots = row["ranged"]
+        if shots is not None:
+            name = cfg["weapons"][report["bow"]]["name"]
+            camp = shots["camp"]
+            lengths = [(r["camps"][0]["clearedAt"] - r["camps"][0]["closedAt"])
+                       if r["camps"] and r["camps"][0]["clearedAt"] is not None else None for r in camp]
+            print(f"    ranged, for information ({name} only, the reacting player): the first camp "
+                  + "; ".join((f"cleared in {length:.0f} s" if length is not None else f"{r['end']} at {r['at']:.0f} s")
+                              + f" ({r['hits']} hits)" for length, r in zip(lengths, camp))
+                  + f"; the {FOREST_BOSS} alone: {boss_text(shots['boss'])}")
     walk = report["difficulties"][ctx["expeditions"]["difficulties"][0]]["runs"][0]
     print(f"  the road: {walk['walked']:.0f} studs walked outside the fights = "
           f"{walk['walked'] / cfg['movement']['walkSpeed']:.1f} s at walk speed, plus {rules['gateSeconds']:g} s of "
           f"countdown per camp")
+
+
+def camp_pay(level, scales, r, cleared):
+    """What the kills of a run's camps pay, priced from the level file and not from the run's
+    pool: Combat.CampReward per kill, and a boss's Valor. `cleared` True = the camps it cleared,
+    False = the camp it ended in (none when it ended between camps or cleared them all)."""
+    import sim_combat as sc
+    spec = {"rewardMult": scales["rewardMult"]}
+    bosses = {wave["boss"]["kind"]: wave["boss"]["valor"] for stage in level["stages"]
+              for wave in stage.get("waves") or [] if wave.get("boss")}
+    total = {"cash": 0, "materials": 0, "valor": 0}
+    for camp in r["camps"]:
+        if (camp["clearedAt"] is not None) != cleared:
+            continue
+        for kind, kills in camp["killed"].items():
+            cash, materials = sc.camp_reward(level["crowd"]["rewards"], kind, spec)
+            total["cash"] += cash * kills
+            total["materials"] += materials * kills
+            if kind in bosses:
+                total["valor"] += luau_round(bosses[kind] * scales["rewardMult"]) * kills
+    return total
+
+
+def run_text(seed, r):
+    """One whole run in a few words: how it ended, where, and what it cost and kept."""
+    where = "" if r["end"] == "cleared" else f" in {r['stage']}"
+    return (f"seed {seed} {r['end']}{where} at {r['at'] / 60:.2f} min ({r['downs']} down(s), {r['hits']} hits, "
+            f"{r['damage']:.0f} damage; banked {r['banked']['cash']:,}, dropped {r['dropped']['cash']:,})")
 
 
 def check_forest(cfg, report, expect):
@@ -5751,14 +6248,75 @@ def check_forest(cfg, report, expect):
             expect(fight is not None and lo <= fight <= hi,
                    f"{tag}: seed {seed}, the {FOREST_BOSS} in the run takes {lo:.0f}-{hi:.0f} s: "
                    + (f"{fight:.1f} s" if fight is not None else "not killed"))
-        dense = [f"{c['zone']} {c['peakAlive']}" for r in row["runs"] for c in r["camps"]
-                 if c["peakAlive"] > max(s["maxAlive"] for s in camps if s["zone"]["id"] == c["zone"])
-                 and not any(s["boss"] for s in camps if s["zone"]["id"] == c["zone"])]
-        expect(not dense, f"{tag}: no camp without a boss ever holds more than its maxAlive"
-               + (f" ({', '.join(dense)})" if dense else ""))
-        banks = all(r["banks"] == len(camps) and r["dropped"]["cash"] == 0 for r in row["runs"] if r["end"] == "cleared")
-        expect(banks, f"{tag}: a cleared run banks once per camp ({len(camps)}) and drops nothing")
-        under = row["under"]
+        # Only a checkpoint pays (ruling 15), priced here from each camp's own kills and not from
+        # the run's pool: what a run banked is what its CLEARED camps' kills pay, and what it
+        # dropped is what the kills of the camp it ended in pay. Every run of the row is held to
+        # it, the ones that failed above all.
+        under, below = row["under"], row["below"]
+        every = (row["runs"] + row["human"] + row["careless"] + row["stand"]
+                 + (under["careless"] if under is not None else [])
+                 + (below["human"] + below["runs"] if below is not None else []))
+        unpaid = []
+        for r in every:
+            kept, lost = camp_pay(level, row["scales"], r, True), camp_pay(level, row["scales"], r, False)
+            if r["banked"] != kept or r["dropped"] != lost:
+                unpaid.append(f"{r['end']} in {r['stage']}: banked {r['banked']['cash']:,} (its cleared camps' kills pay "
+                              f"{kept['cash']:,}), dropped {r['dropped']['cash']:,} (the camp it ended in: {lost['cash']:,})")
+        failed = sum(1 for r in every if r["end"] not in ("cleared", "stopped"))
+        moved = sum(r["graceMoves"] for r in every)
+        if moved:
+            print(f"  note  {tag}: the close, judged again in its grace, moved the simulator's player {moved} time(s)")
+        expect(not unpaid and failed > 0,
+               f"{tag}: only a checkpoint pays: each of {len(every)} runs ({failed} of them lost) banked what the kills "
+               f"of its cleared camps pay and dropped what the kills of the camp it ended in pay"
+               + (": " + "; ".join(unpaid[:3]) if unpaid else ""))
+        # The human gate (fix round, E2): the bands above cannot see damageScale, these can.
+        human = row["human"]
+        if human:
+            expect(all(r["end"] == "cleared" and r["downs"] == 0 and r["hits"] > 0 for r in human),
+                   f"{tag} at gear {gear}: with a human's reaction ({HUMAN_REACTION_SECONDS:g} s) he takes hits and "
+                   f"still clears without going down, every seed: "
+                   + ", ".join(f"{r['end']} at {r['at'] / 60:.2f} min, {r['hits']} hits" for r in human))
+        careless = row["careless"]
+        if careless:
+            expect(all(r["end"] == "down" for r in careless),
+                   f"{tag} at gear {gear}: the player who never dodges does not clear, every seed: "
+                   + ", ".join(f"{r['end']} in {r['stage']}" for r in careless))
+        if below is not None:
+            low = gear_text(below["gear"])
+            if below["human"] and human:
+                # Clearly beyond the gear below: he goes down there, or he is much slower.
+                slowest = max((r["at"] for r in human if r["end"] == "cleared"), default=math.inf)
+                slower = HUMAN_BELOW_SLOWER[difficulty]
+                told = []
+                beyond = True
+                for r in below["human"]:
+                    if r["end"] in HUMAN_BELOW_ENDS:
+                        told.append(f"{r['end']} in {r['stage']} at {r['at'] / 60:.2f} min")
+                    else:
+                        told.append(f"{r['end']} at {r['at'] / 60:.2f} min = x{r['at'] / slowest:.2f}")
+                        beyond = beyond and r["end"] == "cleared" and r["at"] >= slower * slowest - THREAT_EPS
+                expect(beyond, f"{tag} one preset below, at gear {low}: with a human's reaction he goes down, or "
+                       f"takes at least x{slower:g} as long as his slowest clear at gear {gear} "
+                       f"({slowest / 60:.2f} min), every seed: " + ", ".join(told))
+            least = FOREST_BELOW_BOSS[difficulty]
+            boss = below["boss"]
+            span = boss["killSpan"] if boss is not None else None
+            expect(boss is not None and (span is None or span[0] > least),
+                   f"{tag} one preset below, at gear {low}: the {FOREST_BOSS} alone is not killed inside {least:.0f} s: "
+                   + boss_text(boss))
+            # Under-gearing never pays better: a slow clear banks more (its boss calls longer),
+            # and less by the minute.
+            fast = [r for r in row["runs"] if r["end"] == "cleared"]
+            slow = [r for r in below["runs"] if r["end"] == "cleared"]
+            if fast and slow:
+                rate = sum(r["banked"]["cash"] for r in fast) / sum(r["at"] for r in fast)
+                worst = max(r["banked"]["cash"] / r["at"] for r in slow)
+                most = max(r["banked"]["cash"] for r in slow)
+                expect(worst < rate, f"{tag} one preset below, at gear {low}: the reacting player's slow clear pays "
+                       f"less by the minute than a clear at gear {gear}: at most {worst * 60:,.0f} cash a minute "
+                       f"against {rate * 60:,.0f} (it banks up to {most:,}, x{most / fast[0]['banked']['cash']:.2f} "
+                       f"of the clear at gear {gear})")
         if under is None:
             continue
         weak = f"{under['gear']['melee']}/{under['gear']['ranged']}"
@@ -5774,6 +6332,23 @@ def check_forest(cfg, report, expect):
                    + ", ".join(f"{r['end']} in {r['downIn'] or r['stage']}" for r in under["careless"]))
 
 
+def interpreter_note():
+    """Which Python this is, and whether it is the gate's. The gate is `py tools/sim_range.py
+    --check`, and the launcher follows this file's first line to the 64-bit Python 3.12. The
+    other Python on the owner's machine (3.14, a 32-bit build) is what `py -` and a script with
+    no such line get, and what imports this file from one. A level run is chaotic: a sum whose
+    last digit rounds differently on the 32-bit build can move a kill by a frame, and the same
+    seed then differs by up to 0.08 min in a seven-minute run. Bands are set to pass on both;
+    the numbers in docs/BALANCE.md are the gate's."""
+    bits = 64 if sys.maxsize > 2 ** 32 else 32
+    version = f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}, {bits}-bit"
+    gate = bits == 64 and sys.version_info[:2] == GATE_PYTHON
+    return (f"interpreter: {version}" + (" (the gate's)" if gate else
+                                         f" (NOT the gate's, which is the 64-bit Python "
+                                         f"{GATE_PYTHON[0]}.{GATE_PYTHON[1]} that `py tools/sim_range.py` selects: a level "
+                                         f"run's times can differ here by up to 0.08 min)"))
+
+
 def check(cfg, fam_rows, ab_rows, threat=None, bosses=None, mission=None, forest=None):
     failures = []
 
@@ -5784,6 +6359,7 @@ def check(cfg, fam_rows, ab_rows, threat=None, bosses=None, mission=None, forest
 
     print()
     print("CHECK (bands in tools/sim_range.py; targets from docs/WEAPONS.md and docs/BALANCE.md P3)")
+    print(f"  {interpreter_note()}")
     lo_t, hi_t = 1 - FAMILY_TOLERANCE, 1 + FAMILY_TOLERANCE
     for family, targets in FAMILY_TARGETS.items():
         rows = [r for r in fam_rows if r["family"] == family]
@@ -5869,6 +6445,7 @@ def main():
                     failures.append(text)
 
             print()
+            print(f"  {interpreter_note()}")
             check_mission(cfg, report, expect)
             check_forest(cfg, forest, expect)
             print(f"\nCHECK (levels only): {'PASS' if not failures else 'FAIL (' + str(len(failures)) + ')'}")

@@ -5,6 +5,8 @@
 -- loaded here: they only execute what StageFlow returns.
 -- The last group, "the real files", runs the same rules (and LevelGeometry's) on the level
 -- files, layouts and map that ship, not on fixtures.
+-- Every group runs behind L1.group: one that throws fails a check and the bundle goes on, so the
+-- verdict line is always printed. The fuzz (L1.fuzzTests) is seeded: the same 2,000 runs each time.
 
 print("L1: the run (StageFlow)")
 
@@ -14,7 +16,7 @@ local L1: any = {
 	Geo = load("LevelGeometry"),
 	village = FIXTURES.village,
 	combat = FIXTURES.combat,
-	rules = { gateSeconds = 3, triggerInset = 4, triggerHeight = 30, startSpacing = 4, startCooldownSeconds = 2, fenceThickness = 1, boxMargin = 40, maxParts = 600, closeInset = 2 },
+	rules = { gateSeconds = 3, triggerBelow = 4, triggerHeight = 30, closeInset = 2, closeGraceSeconds = 0.5, crowdCeiling = 200, floorThickness = 4, startSpacing = 4, startCooldownSeconds = 2, fenceThickness = 1, boxMargin = 40, maxParts = 600 },
 	ranks = { normal = 1, hard = 2, brutal = 3 },
 	bounds = { minX = -50, minY = -1, minZ = -20, maxX = 150, maxY = 20, maxZ = 560 },
 	rescue = { below = 8, outside = 4 },
@@ -31,20 +33,24 @@ function L1.copy(value: any): any
 	return out
 end
 
+-- A camp whose floor's top centre is (x, y, z): entry 4 studs inside its north edge, exit 4
+-- inside its south, four spawn points in its southern half.
+function L1.camp(id: string, x: number, y: number, z: number, sx: number, sz: number): any
+	return {
+		id = id, x = x, y = y, z = z, sx = sx, sz = sz,
+		fence = { height = 6 },
+		gates = { { side = "north", at = 0, width = 14 }, { side = "south", at = 0, width = 14 } },
+		entry = { x = x, z = z - sz / 2 + 4 },
+		exit = { x = x, z = z + sz / 2 - 4 },
+		checkpoint = { x = x + 6, z = z + sz / 2 - 6 },
+		spawns = { { x = x - 20, z = z + 10 }, { x = x + 20, z = z + 10 }, { x = x - 20, z = z + 20 }, { x = x + 20, z = z + 20 } },
+	}
+end
+
 -- Three camps at three heights along +Z: A (60 x 60, floor 0), B (100 x 94, floor 12, off the
 -- axis), C (80 x 80, floor 4).
 function L1.layout(): any
-	local function camp(id: string, x: number, y: number, z: number, sx: number, sz: number): any
-		return {
-			id = id, x = x, y = y, z = z, sx = sx, sz = sz,
-			fence = { height = 6 },
-			gates = { { side = "north", at = 0, width = 14 }, { side = "south", at = 0, width = 14 } },
-			entry = { x = x, z = z - sz / 2 + 4 },
-			exit = { x = x, z = z + sz / 2 - 4 },
-			checkpoint = { x = x + 6, z = z + sz / 2 - 6 },
-			spawns = { { x = x - 20, z = z + 10 }, { x = x + 20, z = z + 10 }, { x = x - 20, z = z + 20 }, { x = x + 20, z = z + 20 } },
-		}
-	end
+	local camp = L1.camp
 	return {
 		version = 1,
 		start = { x = 0, y = 0, z = 0 },
@@ -100,7 +106,7 @@ end
 
 -- An Input with the quiet defaults: nobody anywhere, a clear field, nothing wrong.
 function L1.input(over: any?): any
-	local input: any = { now = 0, roots = {}, fieldClear = true, spawningDone = true, mergeOk = false, breatherSeconds = 6, fallen = nil, runCap = false }
+	local input: any = { now = 0, roots = {}, fighters = {}, fieldClear = true, spawningDone = true, mergeOk = false, breatherSeconds = 6, fallen = nil, runCap = false }
 	for key, value in over or {} do
 		input[key] = value
 	end
@@ -122,6 +128,27 @@ function L1.find(actions: { any }, kind: string): any
 		end
 	end
 	return nil
+end
+
+-- The first action of `kind`, or an empty table: for reading a field of an action a mutant may
+-- not answer (the check then fails; a bare index would stop the bundle). `L1.find` stays for
+-- "is it there".
+function L1.get(actions: { any }, kind: string): any
+	return L1.find(actions, kind) or {}
+end
+
+-- The action at `index`, or an empty table, for the same reason.
+function L1.at(actions: { any }, index: number): any
+	return actions[index] or {}
+end
+
+-- Flow.Validate behind a pcall: a throw is reported as its one problem.
+function L1.problems(level: any?, layout: any?, rules: any?): { string }
+	local ok, problems = pcall(L1.Flow.Validate, level or L1.level(), layout or L1.layout(), L1.kinds, L1.ranks, rules or L1.rules)
+	if not ok then
+		return { "Validate threw: " .. tostring(problems) }
+	end
+	return problems
 end
 
 function L1.advance(plan: any, state: any, over: any?): { any }
@@ -172,6 +199,15 @@ function L1.same(a: any, b: any): boolean
 	return near(a.X, b.X, 1e-9) and near(a.Y, b.Y, 1e-9) and near(a.Z, b.Z, 1e-9)
 end
 
+-- Runs one group of cases. A group that throws (a mutant's answer read where the real one is a
+-- table) fails a check here and the bundle goes on: mutate.py always gets its verdict.
+function L1.group(name: string, cases: () -> ()): ()
+	local ok, problem = pcall(cases)
+	if not ok then
+		check(false, `{name} stopped: {tostring(problem)}`)
+	end
+end
+
 function L1.resolveTests(): ()
 	print(" Resolve: the Raider Arena is a level of one camp (ruling 27)")
 	local Flow = L1.Flow
@@ -179,7 +215,7 @@ function L1.resolveTests(): ()
 	local village = L1.village
 	local block = village.crowd
 	local file = { version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village", recommendedTier = 2 }
-	local level = Flow.Resolve(file, village, 1800)
+	local level = Flow.Resolve(file, village, 1800, "normal")
 	local stage = level.stages[1]
 	local bosses = {}
 	for index, wave in stage.waves do
@@ -196,7 +232,7 @@ function L1.resolveTests(): ()
 	check(normal.countMult == 1 and normal.rewardMult == 1 and normal.recommendedTier == 2 and next(level.difficulties, "normal") == nil, "countMult 1, rewardMult 1, the file's recommendedTier, and no other difficulty")
 	check(level.material == village.material and level.targetMinutes == village.targetMinutes and level.runCapSeconds == 1800 and level.mission == "village", "the mission's material and minutes, the director's cap, and the mission it writes")
 	check(level.crowd.regenShare == block.regenShare and level.crowd.maxAlive == block.maxAlive and level.crowd.burst == block.burst and level.crowd.burstSpacing == block.burstSpacing and level.crowd.rewards == block.rewards, "its crowd numbers are the block's")
-	check(Flow.Resolve(file, nil, 1800) == nil and Flow.Resolve(file, { id = "bare", material = "Timber" }, 1800) == nil, "a file whose mission is missing, or has no crowd block, is no level")
+	check(Flow.Resolve(file, nil, 1800, "normal") == nil and Flow.Resolve(file, { id = "bare", material = "Timber" }, 1800, "normal") == nil, "a file whose mission is missing, or has no crowd block, is no level")
 
 	local own = L1.level()
 	local asItStands = Flow.Resolve(own, nil, 1800)
@@ -260,7 +296,7 @@ function L1.resolveTests(): ()
 	local scaled = Combat.CampWave(waveDef, 0.07, { hpScale = 5, damageScale = 1.8, plateScale = 2, countMult = 1, rewardMult = 2 }, 2, L1.ranks, 1, L1.combat)
 	check(scaled.hpScale == 5 and scaled.damageScale == 1.8 and scaled.plateScale == 2 and scaled.rewardMult == 2 and scaled.regenShare == 0.07 and scaled.wave == 0 and scaled.total == 11, "the spec carries the difficulty's scales, and counts its total")
 end
-L1.resolveTests()
+L1.group("resolveTests", L1.resolveTests)
 
 function L1.planTests(): ()
 	print(" Plan")
@@ -272,7 +308,7 @@ function L1.planTests(): ()
 	check(#plan.stages == 6 and plan.camps == 3 and plan.levelId == "road" and plan.difficulty == "normal" and plan.killY == -60 and L1.same(plan.start, vec(0, 0, 0)), "six stages, three camps, the start and the kill height of the layout")
 	check(plan.stages[1].kind == "travel" and plan.stages[1].zone == nil and plan.stages[1].waves == 0, "a travel stage has no zone and no wave")
 	check(a.zone.rect.x == 0 and a.zone.rect.z == 100 and a.zone.rect.hx == 30 and a.zone.rect.hz == 30 and a.zone.floorY == 0, "a camp's rectangle is its floor")
-	check(a.zone.trigger.hx == 26 and a.zone.trigger.hz == 26 and a.zone.trigger.x == 0 and a.zone.trigger.z == 100, "its trigger is the floor inset by triggerInset")
+	check(a.zone.trigger.hx == 31 and a.zone.trigger.hz == 31 and a.zone.trigger.x == 0 and a.zone.trigger.z == 100, "its trigger is the whole fenced rectangle: the floor grown by fenceThickness (1)")
 	check(L1.same(b.zone.entry, vec(100, 12, 257)) and L1.same(b.zone.exit, vec(100, 12, 343)) and #b.zone.spawns == 4 and b.zone.spawns[1].Y == 12 and b.zone.floorY == 12, "entry, exit and spawn points are feet on the camp's own floor (12)")
 	check(a.waves == 2 and a.breatherSeconds == 3 and a.maxAlive == 16 and a.targetWaveSeconds == 20 and a.merge == false and a.bankEachWave == false, "a camp carries its waves, its breather, its cap and its pace")
 	check(b.maxAlive == 40 and b.breatherSeconds == nil, "a stage with no cap of its own takes the level's")
@@ -294,9 +330,7 @@ function L1.planTests(): ()
 	check(start.stage == 1 and start.step == "travel" and start.cleared == 0 and start.lastCleared == 0 and start.ended == nil, "a level that opens with a road begins travelling")
 
 	print(" Validate")
-	local function problems(level: any?, layout: any?): { string }
-		return Flow.Validate(level or L1.level(), layout or L1.layout(), L1.kinds, L1.ranks)
-	end
+	local problems = L1.problems
 	local good = problems()
 	check(#good == 0, `a good level on a good layout has no problem ({good[1] or "none"})`)
 	local level = L1.level()
@@ -363,9 +397,9 @@ function L1.planTests(): ()
 
 	print(" the Village arena as a level, through both adapters")
 	local arenaFile = { version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village", recommendedTier = 2 }
-	local arenaLevel = Flow.Resolve(arenaFile, L1.village, 1800)
+	local arenaLevel = Flow.Resolve(arenaFile, L1.village, 1800, "normal")
 	local arenaLayout = L1.Geo.FromArena(L1W.village(), -8)
-	local arenaProblems = Flow.Validate(arenaLevel, arenaLayout, config.crowd.kinds, L1.ranks)
+	local arenaProblems = Flow.Validate(arenaLevel, arenaLayout, config.crowd.kinds, L1.ranks, L1.rules)
 	check(#arenaProblems == 0, `the real Village mission on the Village arena validates ({arenaProblems[1] or "none"})`)
 	local arenaPlan = Flow.Plan(arenaLevel, arenaLayout, "normal", L1.rules, L1.Geo.Bounds(arenaLayout))
 	local camp = arenaPlan.stages[1]
@@ -373,7 +407,7 @@ function L1.planTests(): ()
 	check(camp.zone.rect.hx == 55 and camp.zone.rect.x == 0 and camp.zone.floorY == 0 and #camp.zone.spawns == 8 and L1.same(arenaPlan.start, vec(0, 0, 0)), "at the world origin, 110 x 110, eight spawn points: the arena's numbers do not change")
 	check(Flow.Begin(arenaPlan).step == "armed" and Flow.Plan(arenaLevel, arenaLayout, "hard", L1.rules, L1.bounds) == nil, "it begins armed (no road), and has no Hard")
 end
-L1.planTests()
+L1.group("planTests", L1.planTests)
 
 function L1.walkTests(): ()
 	print(" a three-camp walk-through")
@@ -385,8 +419,10 @@ function L1.walkTests(): ()
 	end
 	check(#L1.advance(plan, fresh(), { roots = { vec(0, 3, 0) } }) == 0, "on the road, far from every camp: nothing")
 	check(#L1.advance(plan, fresh(), { roots = {} }) == 0, "nobody anywhere: nothing triggers")
-	check(#L1.advance(plan, fresh(), { roots = { vec(0, 3, 73) } }) == 0, "on camp A's floor but outside its trigger (the inset band): nothing")
-	check(#L1.advance(plan, fresh(), { roots = { vec(27, 3, 100) } }) == 0, "(the band, on the other axis)")
+	check(L1.names(L1.advance(plan, fresh(), { roots = { vec(0, 3, 71) } })) == "gate" and L1.names(L1.advance(plan, fresh(), { roots = { vec(29.5, 3, 100) } })) == "gate", "a root in the floor's edge strip, a stud inside the edge, triggers it (the old inset band is gone)")
+	check(L1.names(L1.advance(plan, fresh(), { roots = { vec(0, 3, 69.5) } })) == "gate" and L1.names(L1.advance(plan, fresh(), { roots = { vec(0, 3, 69) } })) == "gate", "so does one on the fence line: in a gate's gap, and on the fence's outer face exactly")
+	check(L1.names(L1.advance(plan, fresh(), { roots = { vec(30.5, 9, 100) } })) == "gate", "and one standing on a fence top (the fence is 6 high, the root 3 over it)")
+	check(#L1.advance(plan, fresh(), { roots = { vec(0, 3, 68.9) } }) == 0 and #L1.advance(plan, fresh(), { roots = { vec(31.1, 3, 100) } }) == 0 and #L1.advance(plan, fresh(), { roots = { vec(-31.1, 3, 131.1) } }) == 0, "a root outside the fence, on the road or beside the camp, does not")
 	check(#L1.advance(plan, fresh(), { roots = { vec(0, 30.5, 100) } }) == 0, "over the trigger, above triggerHeight: nothing")
 	check(L1.names(L1.advance(plan, fresh(), { roots = { vec(0, 30, 100) } })) == "gate", "(at triggerHeight exactly: it triggers)")
 	check(#L1.advance(plan, fresh(), { roots = { vec(0, -4.5, 100) } }) == 0 and L1.names(L1.advance(plan, fresh(), { roots = { vec(0, -4, 100) } })) == "gate", "more than 4 studs under the floor: nothing; 4 under: it triggers")
@@ -405,7 +441,7 @@ function L1.walkTests(): ()
 	check(#L1.advance(plan, state, { now = 14, spawningDone = false, fieldClear = true }) == 0, "nor while a boss is still to place, whatever is alive")
 	check(#L1.advance(plan, state, { now = 14, spawningDone = true, fieldClear = false, mergeOk = true }) == 0, "nor while a body lives (and this stage does not merge)")
 	actions = L1.advance(plan, state, { now = 20 })
-	check(L1.names(actions) == "clear boundary breather" and L1.find(actions, "breather").at == 23, "wave 1 of 2 cleared: `clear`, `boundary`, and the stage's own breather of 3 s; no bank")
+	check(L1.names(actions) == "clear boundary breather" and L1.get(actions, "breather").at == 23, "wave 1 of 2 cleared: `clear`, `boundary`, and the stage's own breather of 3 s; no bank")
 	check(state.step == "breather" and Flow.Phase(state, false) == "breather", "the camp rests")
 	check(#L1.advance(plan, state, { now = 22.9 }) == 0, "the breather is not over early")
 	actions = L1.advance(plan, state, { now = 23 })
@@ -424,22 +460,22 @@ function L1.walkTests(): ()
 	check(L1.names(actions) == "close wave", "B closes")
 	actions = L1.advance(plan, state, { now = 70 })
 	bank = L1.find(actions, "bank")
-	check(L1.names(actions) == "clear bank boundary open travel" and bank.count == 1 and state.cleared == 2 and state.lastCleared == 4, "a camp of one wave: its clear is its checkpoint")
+	check(L1.names(actions) == "clear bank boundary open travel" and bank ~= nil and bank.count == 1 and state.cleared == 2 and state.lastCleared == 4, "a camp of one wave: its clear is its checkpoint")
 
 	L1.advance(plan, state, { now = 80, roots = { L1.inCamp(plan, 6) } })
 	L1.advance(plan, state, { now = 83 })
 	actions = L1.advance(plan, state, { now = 90, breatherSeconds = 7.5 })
-	check(L1.names(actions) == "clear boundary breather" and L1.find(actions, "breather").at == 97.5, "C names no breather: the director's (7.5 s here)")
+	check(L1.names(actions) == "clear boundary breather" and L1.get(actions, "breather").at == 97.5, "C names no breather: the director's (7.5 s here)")
 	actions = L1.advance(plan, state, { now = 97.5 })
 	check(L1.names(actions) == "wave" and actions[1].wave == 2, "C's boss wave")
 	check(#L1.advance(plan, state, { now = 98, spawningDone = false, fieldClear = true }) == 0, "the boss is still to place: no clear")
 	check(#L1.advance(plan, state, { now = 99, spawningDone = true, fieldClear = false, mergeOk = true }) == 0, "the boss lives: no clear")
 	actions = L1.advance(plan, state, { now = 160 })
 	check(L1.names(actions) == "clear bank boundary open end", `the last camp's clear ends the run: clear, bank, boundary, open, end ({L1.names(actions)})`)
-	check(L1.find(actions, "end").reason == "cleared" and state.step == "over" and state.ended == "cleared" and state.cleared == 3 and Flow.Phase(state, false) == "summary", "the run is over, cleared, three camps of three")
+	check(L1.get(actions, "end").reason == "cleared" and state.step == "over" and state.ended == "cleared" and state.cleared == 3 and Flow.Phase(state, false) == "summary", "the run is over, cleared, three camps of three")
 	check(#L1.advance(plan, state, { now = 161 }) == 0 and #L1.advance(plan, state, { now = 162, runCap = true, fallen = "down", fieldClear = false }) == 0, "after that nothing happens any more")
 end
-L1.walkTests()
+L1.group("walkTests", L1.walkTests)
 
 function L1.waveTests(): ()
 	print(" waves in a camp: banking, breathers, merges")
@@ -449,11 +485,11 @@ function L1.waveTests(): ()
 	local plan = L1.plan(level)
 	local state = L1.toFight(plan, 2, 0)
 	local actions = L1.advance(plan, state, { now = 30 })
-	local bank = L1.find(actions, "bank")
+	local bank = L1.get(actions, "bank")
 	check(L1.names(actions) == "clear bank boundary breather" and bank.count == 1 and bank.wave == 1, "with bankEachWave a wave clear banks that wave")
 	L1.advance(plan, state, { now = state.breatherUntil })
 	actions = L1.advance(plan, state, { now = 60 })
-	check(L1.names(actions) == "clear bank boundary open travel" and L1.find(actions, "bank").count == 1, "and the camp's clear banks only the last one")
+	check(L1.names(actions) == "clear bank boundary open travel" and L1.get(actions, "bank").count == 1, "and the camp's clear banks only the last one")
 
 	level = L1.level()
 	level.stages[2].merge = true
@@ -466,7 +502,7 @@ function L1.waveTests(): ()
 	actions = L1.advance(plan, state, { now = 21, fieldClear = false, mergeOk = true })
 	check(L1.names(actions) == "wave" and actions[1].wave == 2 and actions[1].merged == true and state.wave == 2 and state.step == "fight", "the director folds wave 2 in on top of wave 1: `wave` 2, merged")
 	actions = L1.advance(plan, state, { now = 30 })
-	check(L1.names(actions) == "clear bank boundary breather" and L1.find(actions, "bank").count == 2, "the merged pair clears at once, and its bank covers both waves")
+	check(L1.names(actions) == "clear bank boundary breather" and L1.get(actions, "bank").count == 2, "the merged pair clears at once, and its bank covers both waves")
 	L1.advance(plan, state, { now = state.breatherUntil })
 	check(state.wave == 3 and #L1.advance(plan, state, { now = 50, fieldClear = false, mergeOk = true }) == 0, "the last wave has nothing to fold in")
 
@@ -488,7 +524,7 @@ function L1.waveTests(): ()
 
 	print(" the arena plays as at P5: ten waves, a bank at each, the director's breathers and merges")
 	local Geo = L1.Geo
-	local arenaLevel = Flow.Resolve({ version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village" }, L1.village, 1800)
+	local arenaLevel = Flow.Resolve({ version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village" }, L1.village, 1800, "normal")
 	local arenaLayout = Geo.FromArena(L1W.village(), -8)
 	plan = Flow.Plan(arenaLevel, arenaLayout, "normal", L1.rules, Geo.Bounds(arenaLayout))
 	state = Flow.Begin(plan)
@@ -528,7 +564,7 @@ function L1.waveTests(): ()
 	check(table.concat(order, " ") == "1+2 3+4 6+7 8+9", `with a director that always says yes, waves merge in pairs and never round the bosses of 5 and 10 ({table.concat(order, " ")})`)
 	check(banks == 6 and merges == 4, `every clear banks (six clears: four pairs, wave 5, wave 10), each after the director's breather ({banks})`)
 end
-L1.waveTests()
+L1.group("waveTests", L1.waveTests)
 
 function L1.endTests(): ()
 	print(" what ends a run")
@@ -549,10 +585,10 @@ function L1.endTests(): ()
 	for _, step in { "gate", "fight", "breather" } do
 		local state = at(step)
 		local actions = L1.advance(plan, state, { now = 1, fallen = "down", fieldClear = false, spawningDone = false })
-		check(state.step == "over" and L1.names(actions) == "end" and actions[1].reason == "down" and state.ended == "down", `the fallen end the run in {step}, with their reason`)
+		check(state.step == "over" and L1.names(actions) == "end" and L1.at(actions, 1).reason == "down" and state.ended == "down", `the fallen end the run in {step}, with their reason`)
 	end
 	local wiped = at("fight")
-	check(L1.advance(plan, wiped, { now = 1, fallen = "wipe", fieldClear = false })[1].reason == "wipe", "(a wipe ends it as a wipe)")
+	check(L1.at(L1.advance(plan, wiped, { now = 1, fallen = "wipe", fieldClear = false }), 1).reason == "wipe", "(a wipe ends it as a wipe)")
 
 	local state = at("fight")
 	local actions = L1.advance(plan, state, { now = 5, fallen = "down", fieldClear = true })
@@ -561,7 +597,7 @@ function L1.endTests(): ()
 	L1.advance(plan, state, { now = 200 })
 	L1.advance(plan, state, { now = state.breatherUntil })
 	actions = L1.advance(plan, state, { now = 300, fallen = "down", fieldClear = true })
-	check(L1.find(actions, "end").reason == "cleared" and L1.find(actions, "bank") ~= nil, "on the last wave of the last camp the run ends cleared, and banks")
+	check(L1.get(actions, "end").reason == "cleared" and L1.find(actions, "bank") ~= nil, "on the last wave of the last camp the run ends cleared, and banks")
 	check(#L1.advance(plan, at("travel"), { now = 5, fallen = "wipe", fieldClear = true }) == 0, "on the road the field is always clear: a death there costs a respawn, not the run")
 	state = at("gate")
 	check(#L1.advance(plan, state, { now = 1, fallen = "down", fieldClear = true }) == 0 and state.step == "gate", "nor does one in a countdown, with the crowd not yet on the floor")
@@ -569,19 +605,22 @@ function L1.endTests(): ()
 	for _, step in { "travel", "gate", "fight", "breather" } do
 		local capped = at(step)
 		local out = L1.advance(plan, capped, { now = 1, runCap = true, roots = { L1.inCamp(plan, 2) } })
-		check(L1.names(out) == "end" and out[1].reason == "runCap" and capped.step == "over", `the run cap ends it from {step}`)
+		check(L1.names(out) == "end" and L1.at(out, 1).reason == "runCap" and capped.step == "over", `the run cap ends it from {step}`)
 	end
 	state = at("fight")
 	actions = L1.advance(plan, state, { now = 5, runCap = true, fallen = "down", fieldClear = true })
-	check(L1.names(actions) == "end" and actions[1].reason == "runCap", "the cap wins over everything else, a clear included: nothing is banked")
+	check(L1.names(actions) == "end" and L1.at(actions, 1).reason == "runCap", "the cap wins over everything else, a clear included: nothing is banked")
+	state = at("fight")
+	actions = L1.advance(plan, state, { now = 5, runCap = true, fallen = "down", fieldClear = false, spawningDone = false })
+	check(L1.names(actions) == "end" and L1.at(actions, 1).reason == "runCap" and state.ended == "runCap", "and over the fallen on a field that is not clear: the cap is asked first, so the card says the run ran out of time")
 
 	state = at("fight")
 	actions = Flow.Finish(plan, state, "abandoned")
-	check(L1.names(actions) == "end" and actions[1].reason == "abandoned" and state.step == "over" and state.ended == "abandoned", "Finish: the run ends abandoned")
+	check(L1.names(actions) == "end" and L1.at(actions, 1).reason == "abandoned" and state.step == "over" and state.ended == "abandoned", "Finish: the run ends abandoned")
 	check(#Flow.Finish(plan, state, "abandoned") == 0 and state.ended == "abandoned", "and only once")
 	check(#Flow.Skip(plan, state, "stage", 9, L1.rules) == 0 and #Flow.Skip(plan, state, "boss", 9, L1.rules) == 0 and #Flow.Force(plan, state, 2) == 0, "no skip and no lever acts on a run that is over")
 end
-L1.endTests()
+L1.group("endTests", L1.endTests)
 
 function L1.bodyTests(): ()
 	print(" SafePoint")
@@ -640,6 +679,7 @@ function L1.bodyTests(): ()
 	check(not Flow.MustEnter(a, vec(0, 3, 73)) and not Flow.MustEnter(a, vec(0, 3, 100)), "one 3 studs inside, or in the middle, stays where it is")
 	check(Flow.MustEnter(a, vec(29, 3, 100)) and not Flow.MustEnter(a, vec(-27, 3, 100)) and Flow.MustEnter(a, vec(0, 3, 129)), "the same on every side")
 	check(not Flow.MustEnter(a, a.entry) and not Flow.MustEnter(b, b.entry) and not Flow.MustEnter(c, c.entry), "the entry itself is inside: whoever is moved there is not moved again")
+	check(Flow.MustEnter(a, vec(0, 3, 69)) and Flow.MustEnter(a, vec(30.5, 9, 100)) and Flow.MustEnter(a, vec(-29, 3, 100)), "whoever triggered the camp from its fence line, a fence top or the floor's edge strip stands where the wall turns solid, and is brought in")
 	check(Flow.MustEnter(b, vec(0, 3, 100)), "(a body in another camp is outside this one)")
 
 	print(" StartPoint, BurstPoint, BossPoint")
@@ -669,7 +709,7 @@ function L1.bodyTests(): ()
 	check(L1.same(middle, vec(100, 12, 300)), "(a spawn point on the centre itself is still a place)")
 	check(L1.same(Flow.BossPoint(b, { 5, -10 }), vec(105, 12, 290)) and L1.same(Flow.BossPoint(b, {}), vec(100, 12, 300)), "boss.at is { x, z } from the camp's centre, on its floor")
 end
-L1.bodyTests()
+L1.group("bodyTests", L1.bodyTests)
 
 function L1.skipTests(): ()
 	print(" Skip (Studio): stage")
@@ -688,7 +728,7 @@ function L1.skipTests(): ()
 	check(state.step == "breather" and L1.names(Flow.Skip(plan, state, "stage", 11, rules)) == "drop boundary open travel", "between a camp's waves: the same")
 	state = L1.toFight(plan, 6, 0)
 	actions = Flow.Skip(plan, state, "stage", 7, rules)
-	check(L1.names(actions) == "drop boundary open end" and L1.find(actions, "end").reason == "cleared" and state.step == "over", "in the last camp: the run ends cleared, and banks nothing")
+	check(L1.names(actions) == "drop boundary open end" and L1.get(actions, "end").reason == "cleared" and state.step == "over", "in the last camp: the run ends cleared, and banks nothing")
 	check(#Flow.Skip(plan, Flow.Begin(plan), "sideways", 0, rules) == 0, "an unknown skip does nothing")
 
 	print(" Skip (Studio): boss")
@@ -699,7 +739,7 @@ function L1.skipTests(): ()
 	actions = L1.advance(plan, state, { now = 8 })
 	check(L1.names(actions) == "close wave" and actions[2].wave == 2 and state.wave == 2 and state.firstWave == 1, "the gates close on wave 2, the boss's")
 	actions = L1.advance(plan, state, { now = 60 })
-	check(L1.names(actions) == "clear bank boundary open end" and L1.find(actions, "bank").count == 1, "killing him banks his wave alone: nothing skipped is credited")
+	check(L1.names(actions) == "clear bank boundary open end" and L1.get(actions, "bank").count == 1, "killing him banks his wave alone: nothing skipped is credited")
 	state = L1.toFight(plan, 2, 0)
 	actions = Flow.Skip(plan, state, "boss", 5, rules)
 	check(L1.names(actions) == "drop open open move gate" and actions[2].stage == 2 and actions[3].stage == 4 and state.cleared == 2, "from a live camp with no boss: it is dropped first, then the same")
@@ -708,7 +748,7 @@ function L1.skipTests(): ()
 	check(L1.names(actions) == "drop wave" and actions[2].wave == 2 and state.wave == 2 and state.step == "fight", "in the boss's own camp: the field is dropped and his wave starts")
 	check(#Flow.Skip(plan, state, "boss", 6, rules) == 0 and state.wave == 2, "with no boss left: nothing")
 	actions = L1.advance(plan, state, { now = 60 })
-	check(L1.find(actions, "bank").count == 1, "(and the wave skipped over is not banked with his)")
+	check(L1.get(actions, "bank").count == 1, "(and the wave skipped over is not banked with his)")
 	state = Flow.Begin(plan)
 	Flow.Skip(plan, state, "boss", 5, rules)
 	state = L1.toFight(plan, 4, 0)
@@ -718,14 +758,14 @@ function L1.skipTests(): ()
 	check(state.step == "fight" and L1.names(actions) == "close wave" and actions[2].wave == 2, "in the countdown of the boss's camp: the gates close now, on his wave")
 
 	local Geo = L1.Geo
-	local arenaLevel = Flow.Resolve({ version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village" }, L1.village, 1800)
+	local arenaLevel = Flow.Resolve({ version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village" }, L1.village, 1800, "normal")
 	local arenaLayout = Geo.FromArena(L1W.village(), -8)
 	local arena = Flow.Plan(arenaLevel, arenaLayout, "normal", rules, Geo.Bounds(arenaLayout))
 	state = Flow.Begin(arena)
 	actions = Flow.Skip(arena, state, "boss", 0, rules)
 	check(L1.names(actions) == "move gate" and state.firstWave == 5 and state.step == "gate", "the arena, before its gates: B arms wave 5")
 	actions = L1.advance(arena, state, { now = 3 })
-	check(actions[2].wave == 5 and state.settled == 4, "it opens on wave 5, with waves 1 to 4 settled unpaid")
+	check(L1.at(actions, 2).wave == 5 and state.settled == 4, "it opens on wave 5, with waves 1 to 4 settled unpaid")
 	actions = Flow.Skip(arena, state, "boss", 4, rules)
 	check(L1.names(actions) == "drop wave" and actions[2].wave == 10 and state.settled == 9, "B again: wave 10 (P5's ForceWave)")
 	check(#Flow.Skip(arena, state, "boss", 5, rules) == 0, "and then none is left")
@@ -737,10 +777,10 @@ function L1.skipTests(): ()
 	state = L1.toFight(arena, 1, 0)
 	actions = Flow.Force(arena, state, 7)
 	check(L1.names(actions) == "drop wave" and actions[2].wave == 7 and state.wave == 7 and state.settled == 6 and state.step == "fight", "in the live camp: that wave at once, the ones before it settled unpaid")
-	check(Flow.Force(arena, state, 99)[2].wave == 10 and Flow.Force(arena, state, 0)[2].wave == 1, "clamped to the camp's waves")
+	check(L1.at(Flow.Force(arena, state, 99), 2).wave == 10 and L1.at(Flow.Force(arena, state, 0), 2).wave == 1, "clamped to the camp's waves")
 	check(#Flow.Force(arena, Flow.Begin(arena), 3) == 0 and #Flow.Force(plan, Flow.Begin(plan), 3) == 0, "outside a live camp it does nothing")
 end
-L1.skipTests()
+L1.group("skipTests", L1.skipTests)
 
 function L1.mapTests(): ()
 	print(" the map")
@@ -791,7 +831,7 @@ function L1.mapTests(): ()
 	check(state.kind == "map" and state.leaderUserId == 42 and table.concat(ids, ",") == "forestRoad,raiderArena,castle,keep,vault,ruin", "MapState lists every node in the config's order, with the leader's id")
 	check(#state.nodes[1].stars == 0 and state.nodes[2].stars[1] == "normal" and state.nodes[4].open == true and state.nodes[5].open == false, "each with the receiver's own stars, and open by the leader's")
 end
-L1.mapTests()
+L1.group("mapTests", L1.mapTests)
 
 function L1.crowdTests(): ()
 	print(" CrowdService on a camp's floor (rulings 11 and 12)")
@@ -830,7 +870,719 @@ function L1.crowdTests(): ()
 	check(near(Crowd.Get(home).position.Y, 0) and near(seen(home).position.X, 10, 1 / 16), "and the arena at the origin is as it was")
 	fresh()
 end
-L1.crowdTests()
+L1.group("crowdTests", L1.crowdTests)
+
+function L1.campNumberTests(): ()
+	print(" Combat, by hand: Forest Road's numbers")
+	-- Everything above checks CampWave, CampReward and BurstSeconds against their own callers
+	-- (CrowdWave, CrowdReward, BurstInterval), which a mutant changes with them. These are worked
+	-- by hand. The inputs are a copy of Config/Levels/1_ForestRoad.json and of Combat.json `coop`
+	-- as they stood on 2026-10-13: the files may be retuned, the arithmetic here stays.
+	local Combat = L1.Combat
+	local rules = { coop = { countPerExtraPlayer = 0.6, bossHpPerExtraPlayer = 0.75 } }
+	local ranks = { normal = 1, hard = 2, brutal = 3 }
+	local scales = {
+		normal = { hpScale = 1.5, damageScale = 1.12, plateScale = 1, countMult = 1, rewardMult = 1 },
+		hard = { hpScale = 5.2, damageScale = 1.8, plateScale = 1, countMult = 1.2, rewardMult = 2 },
+		brutal = { hpScale = 11.5, damageScale = 3.1, plateScale = 1, countMult = 1.35, rewardMult = 4 },
+	}
+	local rewards = {
+		fodder = { cash = 100, materials = 0 }, slinger = { cash = 500, materials = 1 }, brute = { cash = 2000, materials = 6 }, lobber = { cash = 700, materials = 4 },
+		marksman = { cash = 600, materials = 1 }, armoured = { cash = 1200, materials = 2 }, colossus = { cash = 29000, materials = 70 },
+	}
+	-- Main Camp, wave 4, and The Chief's Clearing, wave 2.
+	local waveDef = { groups = { { kind = "fodder", count = 16 }, { kind = "brute", count = 3 }, { kind = "slinger", count = 4 }, { kind = "armoured", count = 3, minDifficulty = "hard" }, { kind = "marksman", count = 2, minDifficulty = "hard" }, { kind = "fodder", count = 16 } } }
+	local bossDef = { groups = {}, boss = { kind = "colossus", at = { 14, 0 }, valor = 10 } }
+	local function spec(def: any, difficulty: string, party: number): any
+		return Combat.CampWave(def, 0.077, scales[difficulty], ranks[difficulty], ranks, party, rules)
+	end
+	local function fielded(resolved: any): string
+		local out = {}
+		for _, group in resolved.groups do
+			table.insert(out, `{group.kind} {group.count}`)
+		end
+		return table.concat(out, ", ") .. " = " .. tostring(resolved.total)
+	end
+	-- count = round(count x (1 + 0.6 x extras) x countMult): x1, x1.2, x1.35 solo; x2.8, x3.36, x3.78 for four.
+	local byHand = {
+		{ "normal", 1, "fodder 16, brute 3, slinger 4, fodder 16 = 39" },
+		{ "hard", 1, "fodder 19, brute 4, slinger 5, armoured 4, marksman 2, fodder 19 = 53" },
+		{ "brutal", 1, "fodder 22, brute 4, slinger 5, armoured 4, marksman 3, fodder 22 = 60" },
+		{ "normal", 4, "fodder 45, brute 8, slinger 11, fodder 45 = 109" },
+		{ "hard", 4, "fodder 54, brute 10, slinger 13, armoured 10, marksman 7, fodder 54 = 148" },
+		{ "brutal", 4, "fodder 60, brute 11, slinger 15, armoured 11, marksman 8, fodder 60 = 165" },
+	}
+	for _, row in byHand do
+		local resolved = spec(waveDef, row[1], row[2])
+		local own = scales[row[1]]
+		check(fielded(resolved) == row[3], `Main Camp wave 4 on {row[1]}, a party of {row[2]}: {row[3]} ({fielded(resolved)})`)
+		check(resolved.hpScale == own.hpScale and resolved.damageScale == own.damageScale and resolved.plateScale == own.plateScale and resolved.rewardMult == own.rewardMult and resolved.regenShare == 0.077 and resolved.boss == nil, `and it carries {row[1]}'s scales: hp x{own.hpScale}, damage x{own.damageScale}, rewards x{own.rewardMult}, regen 0.077`)
+	end
+	local alone = spec(bossDef, "brutal", 1)
+	local four = spec(bossDef, "brutal", 4)
+	check(alone.total == 0 and #alone.groups == 0 and alone.boss == bossDef.boss and alone.bossHpMult == 1, "the Chief's wave fields nobody but the boss; solo, his body has its own health")
+	check(four.boss == bossDef.boss and four.bossHpMult == 3.25 and spec(waveDef, "normal", 4).bossHpMult == 3.25 and spec(waveDef, "hard", 2).bossHpMult == 1.75, `for a party of four it is x3.25 (1 + 0.75 x 3), whatever the difficulty ({four.bossHpMult})`)
+
+	local function pay(kind: string, mult: number): string
+		local cash, materials = Combat.CampReward(rewards, kind, { rewardMult = mult })
+		return `{cash}/{materials}`
+	end
+	local function paid(kind: string, difficulty: string, party: number): string
+		local cash, materials = Combat.CampReward(rewards, kind, spec(waveDef, difficulty, party))
+		return `{cash}/{materials}`
+	end
+	check(paid("brute", "normal", 1) == "2000/6" and paid("colossus", "normal", 1) == "29000/70" and paid("fodder", "normal", 1) == "100/0", `a kill on Normal pays its kind's price: a brute 2000 and 6, the Colossus 29000 and 70 ({paid("brute", "normal", 1)})`)
+	check(paid("brute", "hard", 1) == "4000/12" and paid("slinger", "hard", 1) == "1000/2" and paid("colossus", "hard", 1) == "58000/140", `on Hard twice that: a brute 4000 and 12, the Colossus 58000 and 140 ({paid("brute", "hard", 1)})`)
+	check(paid("brute", "brutal", 1) == "8000/24" and paid("marksman", "brutal", 1) == "2400/4" and paid("colossus", "brutal", 1) == "116000/280", `on Brutal four times: a brute 8000 and 24, the Colossus 116000 and 280 ({paid("brute", "brutal", 1)})`)
+	check(paid("brute", "hard", 4) == "4000/12" and paid("colossus", "brutal", 4) == "116000/280", "a kill pays the same in a party of four: the pool is split, not the price")
+	check(pay("slinger", 1.5) == "750/2" and pay("brute", 1.3) == "2600/8" and pay("lobber", 1.3) == "910/5", `a multiplier that leaves a fraction is rounded to the nearest, never down: 1 x 1.5 -> 2, 6 x 1.3 = 7.8 -> 8, 4 x 1.3 = 5.2 -> 5 ({pay("slinger", 1.5)}, {pay("brute", 1.3)}, {pay("lobber", 1.3)})`)
+	check(pay("warlord", 4) == "0/0", "a kind the level does not price pays nothing")
+
+	-- Pickets: 36 s a wave. Wave 1 on Normal, solo, is 16 + 8 fodder in bursts of 8: three bursts.
+	check(Combat.BurstSeconds(36, 3, 1) == 12 and Combat.BurstSeconds(36, 3, 1.5) == 8 and Combat.BurstSeconds(36, 3, 2) == 6 and Combat.BurstSeconds(36, 3, 0.75) == 16, `Pickets wave 1: a burst every 12 s at tempo 1, every 8 at 1.5, every 6 at 2, every 16 at 0.75 ({Combat.BurstSeconds(36, 3, 1.5)})`)
+	-- Main Camp wave 4 on Hard, solo: 19 + 4 + 5 + 4 + 2 + 19 in bursts of 8 is 3 + 1 + 1 + 1 + 1 + 3.
+	check(near(Combat.BurstSeconds(36, 10, 1.25), 2.88) and near(Combat.BurstSeconds(34, 5, 2), 3.4), `Main Camp wave 4 on Hard: ten bursts, 2.88 s apart at tempo 1.25; the Clearing's five, 3.4 s apart at tempo 2 ({Combat.BurstSeconds(36, 10, 1.25)})`)
+	check(Combat.BurstSeconds(36, 0, 1.5) == 36 and Combat.BurstSeconds(36, 3, 0) == 36, "with no burst, or no tempo, the whole target")
+end
+L1.group("campNumberTests", L1.campNumberTests)
+
+function L1.shapeTests(): ()
+	print(" Validate: a missing key is a problem, never a throw")
+	local Flow = L1.Flow
+	local problems = L1.problems
+	-- `edit` changes a fresh level, layout or rules; the answer must name `text` and not throw.
+	local function names(what: string, text: string, edit: (level: any, layout: any, rules: any) -> ()): ()
+		local level, layout, rules = L1.level(), L1.layout(), L1.copy(L1.rules)
+		edit(level, layout, rules)
+		local list = problems(level, layout, rules)
+		check(not L1.has(list, "Validate threw") and L1.has(list, text), `{what}: "{text}" ({list[1] or "no problem"})`)
+	end
+	names("a camp with no entry", "camp A lacks entry.x, entry.z", function(_level, layout)
+		layout.camps[1].entry = nil
+	end)
+	names("a camp with no exit", "camp B lacks exit.x, exit.z", function(_level, layout)
+		layout.camps[2].exit = nil
+	end)
+	names("a camp with no spawn list", "camp B lacks spawns", function(_level, layout)
+		layout.camps[2].spawns = nil
+	end)
+	names("a spawn point with no z", "camp C lacks spawns[2].z", function(_level, layout)
+		layout.camps[3].spawns[2] = { x = 5 }
+	end)
+	names("a camp with no width", "camp A lacks sx", function(_level, layout)
+		layout.camps[1].sx = nil
+	end)
+	names("a camp whose height is a word", "camp A lacks y", function(_level, layout)
+		layout.camps[1].y = "ground"
+	end)
+	names("a layout with no kill height", "the layout lacks killY", function(_level, layout)
+		layout.killY = nil
+	end)
+	names("a layout with no start", "the layout lacks start.x, start.y, start.z", function(_level, layout)
+		layout.start = nil
+	end)
+	names("a layout with no camps", "the layout lacks camps", function(_level, layout)
+		layout.camps = nil
+	end)
+	names("a level with no burst size", "the level lacks crowd.burst", function(level)
+		level.crowd.burst = nil
+	end)
+	names("a level with no crowd block", "crowd.regenShare, crowd.maxAlive, crowd.burst, crowd.burstSpacing, crowd.rewards", function(level)
+		level.crowd = nil
+	end)
+	names("a level with no rewards", "the level lacks crowd.rewards", function(level)
+		level.crowd.rewards = nil
+	end)
+	names("a reward with no cash", "crowd.rewards.fodder.cash", function(level)
+		level.crowd.rewards.fodder.cash = nil
+	end)
+	names("a difficulty with no countMult", "difficulties.hard.countMult", function(level)
+		level.difficulties.hard.countMult = nil
+	end)
+	names("a level with no difficulty at all", "the level lacks difficulties", function(level)
+		level.difficulties = {}
+	end)
+	names("a level with no material", "the level lacks material", function(level)
+		level.material = nil
+	end)
+	names("a stage with no name", "stage 3 has no name", function(level)
+		level.stages[3].name = nil
+	end)
+	names("a camp stage with no waves key", 'stage 2 ("Pickets") has no wave', function(level)
+		level.stages[2].waves = nil
+	end)
+	names("a wave with no groups", 'stage 2 ("Pickets") wave 1 has no groups', function(level)
+		level.stages[2].waves[1].groups = nil
+	end)
+	names("a group with no count", "wave 2: group 2 lacks its kind or its count", function(level)
+		level.stages[2].waves[2].groups[2].count = nil
+	end)
+	names("a boss with no place", "wave 2: its boss lacks its kind, its place or its valor", function(level)
+		level.stages[6].waves[2].boss.at = nil
+	end)
+	names("a boss with no valor", "wave 2: its boss lacks its kind, its place or its valor", function(level)
+		level.stages[6].waves[2].boss.valor = nil
+	end)
+	for _, key in { "gateSeconds", "triggerBelow", "triggerHeight", "closeInset", "closeGraceSeconds", "crowdCeiling", "fenceThickness", "startSpacing", "boxMargin" } do
+		names(`Combat.json levels without {key}`, `Combat.json lacks levels.{key}`, function(_level, _layout, rules)
+			rules[key] = nil
+		end)
+	end
+	local level = L1.level()
+	level.stages[3].name = nil
+	level.stages[4].name = nil
+	local unnamed = L1.plan(level)
+	check(unnamed ~= nil and unnamed.stages[3].name == "" and unnamed.stages[4].name == "", 'Plan gives a stage with no name "": the client is always told a string')
+
+	print(' Validate: zero and empty mean the same on both sides (the fix round\'s ruling 6)')
+	names("a stage's maxAlive of 0", "maxAlive is 0, not a whole number of at least 1", function(given)
+		given.stages[2].maxAlive = 0
+	end)
+	names("a stage's maxAlive of 2.5", "maxAlive is 2.5, not a whole number of at least 1", function(given)
+		given.stages[2].maxAlive = 2.5
+	end)
+	names("the level's maxAlive of 0", "crowd.maxAlive is 0, not a whole number of at least 1", function(given)
+		given.crowd.maxAlive = 0
+	end)
+	names("the level's maxAlive of 40.5", "crowd.maxAlive is 40.5", function(given)
+		given.crowd.maxAlive = 40.5
+	end)
+	names("a burst of 0", "crowd.burst is 0: a burst is at least 1 body", function(given)
+		given.crowd.burst = 0
+	end)
+	names("a targetWaveSeconds of 0", 'stage 4 ("Main Camp") has no targetWaveSeconds', function(given)
+		given.stages[4].targetWaveSeconds = 0
+	end)
+	names("a camp with no targetWaveSeconds", 'stage 4 ("Main Camp") has no targetWaveSeconds', function(given)
+		given.stages[4].targetWaveSeconds = nil
+	end)
+	names("a breather of -1", "breatherSeconds is -1, not a time", function(given)
+		given.stages[2].breatherSeconds = -1
+	end)
+	level = L1.level()
+	level.stages[2].maxAlive = 1
+	level.crowd.burst = 1
+	level.stages[2].breatherSeconds = 0
+	check(#problems(level) == 0, `a cap of 1, a burst of 1 and a breather of 0 are all legal ({problems(level)[1] or "no problem"})`)
+	local rested = L1.plan(level)
+	local state = L1.toFight(rested, 2, 0)
+	check(rested.stages[2].breatherSeconds == 0 and L1.get(L1.advance(rested, state, { now = 30, breatherSeconds = 9 }), "breather").at == 30, "and a breather of 0 is a breather of no length: only a stage that names none takes the director's")
+
+	print(" Validate: the wire's reach on every axis, the wall, the stages")
+	local function moved(x: number, y: number, z: number, rules: any?): { string }
+		local layout = L1.layout()
+		layout.camps[1] = L1.camp("A", x, y, z, 60, 60)
+		return problems(nil, layout, rules)
+	end
+	check(L1.has(moved(971, 0, 100), "beyond 1000 studs") and L1.has(moved(-971, 0, 100), "beyond 1000 studs") and #moved(970, 0, 100) == 0, "on X: a camp 60 wide at x 971 reaches 1,001 and is refused, on either side; at 970 it is not")
+	check(L1.has(moved(0, 0, 971), "beyond 1000 studs") and #moved(0, 0, -970) == 0, "on Z the same")
+	check(L1.has(moved(0, 801, 100), "beyond 1000 studs") and #moved(0, 800, 100) == 0, "on Y the crowd's ceiling counts: a floor at 801 with bodies launched up to 200 over it is refused, one at 800 is not")
+	check(L1.has(moved(0, -1001, 100), "beyond 1000 studs") and #moved(0, -1000, 100) == 0, "and a floor under -1,000 is refused")
+	local low = L1.copy(L1.rules)
+	low.crowdCeiling = 100
+	check(#moved(0, 900, 100, low) == 0 and L1.has(moved(0, 901, 100, low), "beyond 1000 studs"), "(the ceiling is levels.crowdCeiling: with 100 the floor may stand at 900)")
+	local layout = L1.layout()
+	layout.barrier = { height = 0, thickness = 8 }
+	check(L1.has(problems(nil, layout), "has no barrier"), "a barrier of height 0 is no barrier")
+	level = L1.level()
+	level.stages = {}
+	check(L1.has(problems(level), "it has no stage"), "a level with no stage")
+
+	print(" Resolve: the arena's one difficulty is the map's first")
+	local file = { version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village", recommendedTier = 2 }
+	local easy = Flow.Resolve(file, L1.village, 1800, "easy")
+	check(easy ~= nil and easy.difficulties.easy ~= nil and easy.difficulties.easy.hpScale == L1.village.crowd.hpScale and easy.difficulties.normal == nil, "on a map whose first difficulty is `easy` the arena is played on `easy`: one source, the map")
+	check(Flow.Resolve(file, L1.village, 1800, nil) == nil, "(a map with no difficulty: no level)")
+
+	print(" what only a camp that is not square, or a start off the axes, shows (the real files' mutations, on fixtures)")
+	local arena = Flow.Resolve(file, L1.village, 1800, "normal")
+	local own = Flow.Resolve(L1.level(), nil, 1800, "normal")
+	check(arena ~= nil and arena.id == "raiderArena" and own ~= nil and own.id == "road" and own.layout == "Road", "a level keeps its file's id: not its mission's (village), not its layout's (Road)")
+	local plan = L1.plan()
+	local b = plan.stages[4].zone
+	check(b.rect.hx == 50 and b.rect.hz == 47 and b.inner.hx == 48 and b.inner.hz == 45 and b.trigger.hx == 51 and b.trigger.hz == 48, "camp B is 100 x 94: its floor, its close's rectangle and its trigger each keep their own width and depth")
+	check(Flow.MustEnter(b, vec(100, 15, 346.5)) and not Flow.MustEnter(b, vec(147.5, 15, 300)) and Flow.MustEnter(b, vec(148.5, 15, 300)) and not Flow.MustEnter(b, vec(100, 15, 344.5)), "the close judges each axis by its own half: 46.5 from the centre is outside on Z (45) and inside on X (48)")
+	local inB = L1.toFight(plan, 4, 0)
+	local function out(x: number, z: number): boolean
+		return Flow.IsOut(plan, inB, vec(x, 15, z), L1.rescue, L1.rules.boxMargin)
+	end
+	check(out(100, 352) and not out(100, 350) and not out(153, 300) and out(155, 300), "while B is closed the rescue reaches 47 + 4 on Z and 50 + 4 on X, not the other way round")
+	local road = L1.toFight(plan, 2, 0)
+	L1.advance(plan, road, { now = 10 })
+	L1.advance(plan, road, { now = road.breatherUntil })
+	L1.advance(plan, road, { now = 20 })
+	check(road.step == "travel" and #L1.advance(plan, road, { now = 30, roots = { vec(100, 15, 251.5) } }) == 0 and #L1.advance(plan, road, { now = 30, roots = { vec(151.5, 15, 300) } }) == 0, "B's trigger reaches 48 on Z and 51 on X: a root 48.5 before its centre on Z, or 51.5 beside it on X, is outside")
+	check(L1.names(L1.advance(plan, road, { now = 30, roots = { vec(100, 15, 252.5) } })) == "gate", "and one 47.5 before it on Z, in the fence line, triggers it")
+	local shifted = L1.layout()
+	shifted.start = { x = -260, y = 2, z = 40 }
+	local far = L1.plan(nil, shifted)
+	check(far ~= nil and L1.same(far.start, vec(-260, 2, 40)) and L1.same(Flow.StartPoint(far, 2, 4), vec(-256, 2, 40)) and L1.same(Flow.SafePoint(far, Flow.Begin(far)), vec(-260, 2, 40)), "a start off both axes is kept as it is written: x, y, z")
+end
+L1.group("shapeTests", L1.shapeTests)
+
+function L1.ruleTests(): ()
+	local Flow = L1.Flow
+	local rules = L1.rules
+	local plan = L1.plan()
+
+	print(" the trigger's depth under the floor is levels.triggerBelow")
+	local shallow = L1.copy(rules)
+	shallow.triggerBelow = 1
+	local function sunk(y: number): string
+		return L1.names(Flow.Advance(plan, Flow.Begin(plan), L1.input({ roots = { vec(0, y, 100) } }), shallow))
+	end
+	check(sunk(-1) == "gate" and sunk(-2) == "", "with triggerBelow 1 a root 1 under the floor triggers and one 2 under does not (4 under does, with the 4 that ships)")
+
+	print(" a countdown that ends with nobody on their feet: the camp is armed again")
+	local state = Flow.Begin(plan)
+	L1.advance(plan, state, { now = 10, roots = { L1.inCamp(plan, 2) } })
+	check(#L1.advance(plan, state, { now = 12, fallen = "wipe" }) == 0 and state.step == "gate", "a reset during the countdown ends nothing by itself: the field is clear")
+	local actions = L1.advance(plan, state, { now = 13, fallen = "wipe" })
+	check(L1.names(actions) == "rearm" and L1.at(actions, 1).stage == 2 and state.step == "armed" and state.stage == 2 and state.ended == nil, `at the countdown's end the gates do not close on an empty yard: \`rearm\`, and camp A is armed again ({L1.names(actions)})`)
+	check(Flow.Phase(state, false) == "travel" and L1.same(Flow.SafePoint(plan, state), plan.start) and not Flow.Directs(state), "the run is on the road again: a respawn goes to the start")
+	check(#L1.advance(plan, state, { now = 14, fallen = "wipe" }) == 0 and #L1.advance(plan, state, { now = 20, roots = { vec(0, 3, 0) } }) == 0 and state.step == "armed", "nothing happens while they are away, nor when they stand on the road")
+	actions = L1.advance(plan, state, { now = 30, roots = { L1.inCamp(plan, 2) } })
+	check(L1.names(actions) == "gate" and L1.at(actions, 1).stage == 2 and L1.at(actions, 1).at == 33, "it triggers again when someone walks in, with a whole countdown")
+	actions = L1.advance(plan, state, { now = 33 })
+	check(L1.names(actions) == "close wave" and L1.at(actions, 2).wave == 1 and state.step == "fight", "and then closes as any camp does")
+	state = Flow.Begin(plan)
+	L1.advance(plan, state, { now = 10, roots = { L1.inCamp(plan, 2) } })
+	check(L1.names(L1.advance(plan, state, { now = 13, fallen = "down" })) == "rearm", "(a fighter who is down counts as nobody too)")
+	state = Flow.Begin(plan)
+	Flow.Skip(plan, state, "boss", 0, rules)
+	actions = L1.advance(plan, state, { now = 3, fallen = "wipe" })
+	check(L1.names(actions) == "rearm" and state.stage == 6 and state.firstWave == 2 and state.cleared == 2, "after a boss skip the armed camp is still the boss's, and its first wave still his")
+	L1.advance(plan, state, { now = 9, roots = { L1.inCamp(plan, 6) } })
+	actions = L1.advance(plan, state, { now = 12 })
+	check(L1.names(actions) == "close wave" and L1.at(actions, 2).wave == 2, "so walking in again opens on the boss")
+
+	print(" the star: for those who were fighting before the last boundary")
+	state = L1.toFight(plan, 6, 0)
+	L1.advance(plan, state, { now = 200, fighters = { 7, 8 } })
+	L1.advance(plan, state, { now = state.breatherUntil, fighters = { 7 } })
+	check(state.wave == 2 and not Flow.EarnsStar(state, 7), "nobody has earned a star while the run is live")
+	local last = { 7 }
+	actions = L1.advance(plan, state, { now = 300, fighters = last })
+	last[1] = 99
+	check(state.ended == "cleared" and L1.names(actions) == "clear bank boundary open end" and Flow.EarnsStar(state, 7), "the one who fought the last wave earns it")
+	check(not Flow.EarnsStar(state, 8), "the one who fought the wave before and waited through the last does not, though the boundary let them in before the end")
+	check(not Flow.EarnsStar(state, 9) and not Flow.EarnsStar(state, 99), "nor a stranger (and the run keeps its own list: changing the caller's changes nothing)")
+	for _, reason in { "down", "wipe", "runCap", "abandoned" } do
+		local lost = L1.toFight(plan, 2, 0)
+		L1.advance(plan, lost, { now = 10, fighters = { 7 } })
+		L1.advance(plan, lost, { now = lost.breatherUntil })
+		if reason == "abandoned" then
+			Flow.Finish(plan, lost, reason)
+		elseif reason == "runCap" then
+			L1.advance(plan, lost, { now = 20, runCap = true })
+		else
+			L1.advance(plan, lost, { now = 20, fallen = reason, fieldClear = false })
+		end
+		check(lost.ended == reason and lost.fought[1] == 7 and not Flow.EarnsStar(lost, 7), `a run that ended "{reason}" gives no star, whoever fought`)
+	end
+	state = L1.toFight(plan, 6, 0)
+	Flow.Skip(plan, state, "stage", 5, rules, { 5 })
+	check(state.ended == "cleared" and Flow.EarnsStar(state, 5) and not Flow.EarnsStar(state, 7), "a skip that ends the run at a boundary notes who was fighting when it was asked")
+	state = L1.toFight(plan, 6, 0)
+	L1.advance(plan, state, { now = 200, fighters = { 7 } })
+	Flow.Skip(plan, state, "stage", 205, rules)
+	check(state.ended == "cleared" and not Flow.EarnsStar(state, 7), "(told of nobody, it notes nobody: an earlier wave's fighters are not kept)")
+
+	print(" the director's tempo runs while a camp is closed: its fights and its breathers")
+	local road = Flow.Begin(plan)
+	local counting = Flow.Begin(plan)
+	L1.advance(plan, counting, { now = 0, roots = { L1.inCamp(plan, 2) } })
+	local fighting = L1.toFight(plan, 2, 0)
+	local resting = L1.toFight(plan, 2, 0)
+	L1.advance(plan, resting, { now = 10 })
+	local done = L1.toFight(plan, 2, 0)
+	Flow.Finish(plan, done, "abandoned")
+	local single = L1.level()
+	single.stages = { single.stages[2] }
+	local armed = Flow.Begin(L1.plan(single))
+	check(Flow.Directs(fighting) and resting.step == "breather" and Flow.Directs(resting), "in a fight, and through the breather after it (as P5 ran it)")
+	check(not Flow.Directs(road) and not Flow.Directs(counting) and armed.step == "armed" and not Flow.Directs(armed) and not Flow.Directs(done), "not on the road, not before a camp, not in a countdown, not once the run is over")
+
+	print(" the close is judged again for levels.closeGraceSeconds")
+	state = Flow.Begin(plan)
+	L1.advance(plan, state, { now = 10, roots = { L1.inCamp(plan, 2) } })
+	check(not Flow.StillClosing(state, 10, rules) and not Flow.StillClosing(road, 0, rules), "on the road and in the countdown nothing is closing")
+	L1.advance(plan, state, { now = 13 })
+	check(state.closedAt == 13 and Flow.StillClosing(state, 13, rules) and Flow.StillClosing(state, 13.49, rules), "for 0.5 s after the gates close the question stays open")
+	check(not Flow.StillClosing(state, 13.5, rules) and not Flow.StillClosing(state, 60, rules), "and then it is closed for good")
+	local once = L1.copy(rules)
+	once.closeGraceSeconds = 0
+	check(not Flow.StillClosing(state, 13, once), "(a grace of 0: the close is judged once, at the close)")
+	L1.advance(plan, state, { now = 13.2 })
+	check(state.step == "breather" and Flow.StillClosing(state, 13.3, rules), "a wave beaten inside the grace does not end it early")
+	local skipped = Flow.Begin(plan)
+	Flow.Skip(plan, skipped, "stage", 5, rules)
+	Flow.Skip(plan, skipped, "stage", 6, rules)
+	check(skipped.step == "fight" and skipped.closedAt == 6 and Flow.StillClosing(skipped, 6.2, rules) and not Flow.StillClosing(skipped, 6.6, rules), "a skip that closes the gates starts the grace too")
+	local second = L1.toFight(plan, 4, 100)
+	check(second.closedAt > 100 and Flow.StillClosing(second, second.closedAt + 0.1, rules), "each camp's close starts its own")
+
+	print(" Rescue: which box judges a body, and where it is put")
+	local lobby = { minX = -24, minY = -2, minZ = -364, maxX = 24, maxY = 6, maxZ = -316 }
+	local function rescue(given: any, flow: any, waiting: boolean, x: number, y: number, z: number): any
+		return Flow.Rescue(given, flow, waiting, vec(x, y, z), L1.rescue, rules.boxMargin, lobby, -12)
+	end
+	check(rescue(nil, nil, false, 0, 3, -340) == nil and rescue(nil, nil, false, 63, 3, -340) == nil, "no run: a body in the lobby camp, or within boxMargin of it, stays")
+	check(rescue(nil, nil, false, 0, -13, -340) == "lobby" and rescue(nil, nil, false, 65, 3, -340) == "lobby" and rescue(nil, nil, false, 0, 3, 100) == "lobby", "one under the lobby's kill height, or outside its box, is put on a lobby point")
+	local live = L1.toFight(plan, 2, 0)
+	check(rescue(plan, live, true, 0, 3, -340) == nil and rescue(plan, live, true, 0, 3, 100) == "lobby", "a member who waits is judged by the lobby's box, whatever the run is doing")
+	check(rescue(plan, road, false, 0, 3, 0) == nil and rescue(plan, road, false, 0, -61, 100) == "level" and rescue(plan, road, false, 0, 3, -340) == "level", "a fighter in a live run is judged by the level's box and put at the safe point")
+	check(rescue(plan, live, false, 0, 3, 100) == nil and rescue(plan, live, false, 35, 3, 100) == "level", "by the camp's own box while it is closed")
+	local cleared = L1.toFight(plan, 6, 0)
+	L1.advance(plan, cleared, { now = 500 })
+	L1.advance(plan, cleared, { now = cleared.breatherUntil })
+	L1.advance(plan, cleared, { now = 600 })
+	local downed = L1.toFight(plan, 2, 0)
+	L1.advance(plan, downed, { now = 5, fallen = "down", fieldClear = false })
+	for _, over in { cleared, downed } do
+		local how = `once the run is over ({tostring(over.ended)})`
+		check(over.step == "over" and rescue(plan, over, false, 0, 3, -340) == nil, `{how}: a body in the lobby camp stays there (a respawn, an admit on the summary, a rejoin): nobody is put into a level that is over`)
+		check(rescue(plan, over, false, 0, 3, 100) == nil and rescue(plan, over, false, 100, 15, 300) == nil, `{how}: a body still in the level stays where the end left it, until the return`)
+		check(rescue(plan, over, false, 0, -61, 100) == "lobby" and rescue(plan, over, false, 0, 3, -200) == "lobby" and rescue(plan, over, false, 0, -13, -340) == "lobby", `{how}: one that is in neither (a fall from the level, from the lobby, or between them) goes to the lobby camp, never back into the level`)
+	end
+
+	print(" Skip (Studio): a boss skip from the countdown of a camp with no boss")
+	state = Flow.Begin(plan)
+	L1.advance(plan, state, { now = 0, roots = { L1.inCamp(plan, 2) } })
+	actions = Flow.Skip(plan, state, "boss", 1, rules)
+	check(L1.names(actions) == "drop open open move gate" and L1.at(actions, 1).stage == 2 and L1.at(actions, 2).stage == 2 and L1.at(actions, 3).stage == 4 and L1.at(actions, 4).stage == 6 and L1.at(actions, 5).at == 4, `camp A's countdown is dropped, A and B count as cleared, and the party is moved to the boss's camp ({L1.names(actions)})`)
+	check(state.stage == 6 and state.step == "gate" and state.cleared == 2 and state.lastCleared == 4 and state.firstWave == 2, "whose countdown starts, to open on his wave")
+
+	print(" in the close's grace only a body off the floor itself is brought in (Strayed)")
+	local a = plan.stages[2].zone
+	local b = plan.stages[4].zone
+	check(not Flow.Strayed(a, vec(0, 3, 71)) and not Flow.Strayed(a, vec(-29.5, 3, 100)) and Flow.MustEnter(a, vec(0, 3, 71)), "a fighter a stud inside the floor's edge, who dashed at the gate after the close, stays: the wall holds them, and only the close itself judges its margin")
+	check(Flow.Strayed(a, vec(0, 3, 69.5)) and Flow.Strayed(a, vec(-30.5, 3, 100)) and Flow.Strayed(a, vec(0, 3, 60)), "one in a gate gap, in the fence line or on the road (the close read a lagged copy of them) is brought in")
+	check(not Flow.Strayed(b, vec(100, 15, 346.5)) and Flow.Strayed(b, vec(100, 15, 347.5)) and not Flow.Strayed(b, vec(149.5, 15, 300)) and Flow.Strayed(b, vec(150.5, 15, 300)), "each axis by its own half: camp B is 100 x 94")
+	check(not Flow.Strayed(a, a.entry) and not Flow.Strayed(b, b.entry), "(the entry is on the floor)")
+
+	print(" only a body on its feet triggers a camp")
+	local function stand(roots: { any }, standing: { boolean }?): string
+		return L1.names(L1.advance(plan, Flow.Begin(plan), { roots = roots, standing = standing }))
+	end
+	local inside = L1.inCamp(plan, 2)
+	check(stand({ inside }, { false }) == "" and stand({ inside, vec(0, 3, 0) }, { false, true }) == "", "a downed body inside the trigger does not trigger it, though a partner stands on the road")
+	check(stand({ vec(0, 3, 0), inside }, { false, true }) == "gate" and stand({ inside }, { true }) == "gate" and stand({ inside }) == "gate", "one standing inside does (and with no list, every root stands)")
+	state = Flow.Begin(plan)
+	L1.advance(plan, state, { now = 0, roots = { inside } })
+	L1.advance(plan, state, { now = 3, roots = { inside }, standing = { false }, fallen = "down" })
+	local gates = 0
+	for tick = 1, 40 do
+		if L1.find(L1.advance(plan, state, { now = 3 + tick * 0.5, roots = { inside }, standing = { false }, fallen = "down" }), "gate") ~= nil then
+			gates += 1
+		end
+	end
+	check(state.step == "armed" and gates == 0, `a camp re-armed with its one fighter down inside it stays armed: no gate in 20 s ({gates})`)
+	check(L1.names(L1.advance(plan, state, { now = 30, roots = { inside }, standing = { true } })) == "gate", "until that fighter stands")
+
+	print(" the last clear lets nobody into a level that is about to go")
+	local function released(actions: { any }): any
+		local boundary = L1.find(actions, "boundary")
+		return if boundary ~= nil then boundary.release else "none"
+	end
+	state = L1.toFight(plan, 2, 0)
+	check(released(L1.advance(plan, state, { now = 10 })) == true, "a wave's clear lets those who waited in")
+	L1.advance(plan, state, { now = state.breatherUntil })
+	check(released(L1.advance(plan, state, { now = 20 })) == true, "so does the clear of a camp the run goes on from")
+	state = L1.toFight(plan, 6, 0)
+	L1.advance(plan, state, { now = 200 })
+	L1.advance(plan, state, { now = state.breatherUntil })
+	actions = L1.advance(plan, state, { now = 300 })
+	check(L1.names(actions) == "clear bank boundary open end" and released(actions) == false, "the last camp's last clear stands the downed up and lets nobody in: the run ends in the same batch")
+	check(released(Flow.Skip(plan, L1.toFight(plan, 2, 0), "stage", 5, rules)) == true and released(Flow.Skip(plan, L1.toFight(plan, 6, 0), "stage", 5, rules)) == false, "a skip that clears a camp: the same rule, by whether the run ends there")
+end
+L1.group("ruleTests", L1.ruleTests)
+
+function L1.chunkTests(): ()
+	print(" CrowdService: a full packet is encoded against the world origin too")
+	local Codec = load("CrowdCodec")
+	fresh()
+	check(Crowd.SetBounds(vec(100, 12, 300), vec(50, 200, 47)) == true, "a camp's floor at height 12, off the origin")
+	root.Position = vec(100, 15, 300)
+	local ids = {}
+	for index = 0, Codec.MAX_ENTRIES - 1 do
+		-- Eight rows of eight, 6 studs apart: nobody pushes anybody.
+		table.insert(ids, Crowd.Spawn("pawn", vec(79 + (index % 8) * 6, 12, 279 + (index // 8) * 6), "idle"))
+	end
+	step2(2)
+	local decoded = Codec.Decode(lastSnapshot, vec(0, 0, 0))
+	local first = seen(ids[1])
+	local last = seen(ids[#ids])
+	check(#decoded == Codec.MAX_ENTRIES and ids[#ids] ~= 0, `exactly MAX_ENTRIES ({Codec.MAX_ENTRIES}) bodies make one full packet and no second one ({#decoded} decoded)`)
+	check(near(first.position.X, 79, 1 / 16) and near(first.position.Y, 12, 1 / 16) and near(first.position.Z, 279, 1 / 16) and near(last.position.X, 121, 1 / 16) and near(last.position.Z, 321, 1 / 16), `and it decodes against the world origin, like a packet that is not full ({first.position.X}, {first.position.Y}, {first.position.Z})`)
+	fresh()
+	check(Crowd.SetBounds(vec(0, 0, 0), vec(100, 50, 100)) == true, "(the bounds go back to the origin)")
+	fresh()
+end
+L1.group("chunkTests", L1.chunkTests)
+
+-- A seeded fuzz of StageFlow alone: 2,000 runs on generated levels, each a long random mix of
+-- Advance (with a field that queues, spawns and dies as WaveService's does), Skip, Force and
+-- Finish, then played straight to the end. What must hold whatever the order:
+--   field   no `gate`, and no wave that is not merged, on a field with a body alive or queued;
+--   bank    no `bank` in a batch that ends the run for any reason but "cleared", and none from a
+--           skip, a forced wave or an abandon;
+--   last    `end` is the last action of its batch, and nothing is answered after it;
+--   release a `boundary` lets the waiting in exactly when its batch does not end the run;
+--   ends    every run ends;
+--   count   a cleared run has cleared every camp, and one no skip touched has banked every wave
+--           exactly once.
+function L1.fuzzTests(): ()
+	print(" a seeded fuzz: 2,000 runs mixing Advance, Skip, Force and Finish")
+	local Flow = L1.Flow
+	local rules = L1.rules
+	local RUNS = 2000
+	-- A generator of its own (Lehmer, exact in doubles), so a seed is the same run everywhere.
+	local seed = 1
+	local function roll(below: number): number
+		seed = (seed * 48271) % 2147483647
+		return seed % below
+	end
+	local zones = { "A", "B", "C" }
+
+	-- A level of one to three camps of one to four waves, with or without a road before it, a
+	-- boss on some waves, and each stage merging, banking each wave and resting as it likes.
+	local function generate(): (any, number)
+		local level = L1.level()
+		local stages = {}
+		local waves = 0
+		if roll(2) == 0 then
+			table.insert(stages, { kind = "travel", name = "Road" })
+		end
+		local camps = 1 + roll(3)
+		for index = 1, camps do
+			local list = {}
+			for _ = 1, 1 + roll(4) do
+				local wave: any = { groups = { { kind = "fodder", count = 4 } } }
+				if roll(4) == 0 then
+					wave.boss = { kind = "colossus", at = { 0, 10 }, valor = 10 }
+				end
+				table.insert(list, wave)
+			end
+			waves += #list
+			local stage: any = { kind = "camp", zone = zones[index], name = "Camp " .. zones[index], targetWaveSeconds = 20, merge = roll(2) == 0, bankEachWave = roll(2) == 0, waves = list }
+			if roll(2) == 0 then
+				stage.breatherSeconds = roll(4)
+			end
+			table.insert(stages, stage)
+			if index < camps then
+				table.insert(stages, { kind = "travel", name = "Road" })
+			end
+		end
+		level.stages = stages
+		return L1.plan(level), waves
+	end
+
+	-- One run. Returns what it broke, by rule, and how it ended.
+	local function play(run: number): ({ [string]: string }, string)
+		seed = run * 7919 + 13
+		local broken: { [string]: string } = {}
+		local plan, waves = generate()
+		local state = Flow.Begin(plan)
+		-- 0: nothing but Advance. 1: the fallen and the cap too. 2: skips and forced waves. 3: all.
+		local chaos = roll(4)
+		local field = { queued = 0, alive = 0, boss = false }
+		local now = 0
+		local touched = false
+		local banked = 0
+		local opened = 0
+		local function breaks(rule: string, what: string): ()
+			if broken[rule] == nil then
+				broken[rule] = `run {run} ({#plan.stages} stages, chaos {chaos}): {what}`
+			end
+		end
+		-- The batch, on the field, as WaveService.execute would run it.
+		local function execute(how: string, actions: { any }): ()
+			local ended = false
+			local banks = false
+			local ending = false
+			for _, action in actions do
+				ending = ending or action.kind == "end"
+			end
+			for _, action in actions do
+				local kind = action.kind
+				local stage = plan.stages[action.stage]
+				local busy = field.queued > 0 or field.alive > 0 or field.boss
+				if ended then
+					breaks("last", `{how} answered {kind} after end`)
+				end
+				if kind == "gate" and busy then
+					breaks("field", `{how} answered a gate with {field.alive} alive and {field.queued} queued`)
+				elseif kind == "wave" then
+					if stage == nil or stage.kind ~= "camp" or action.wave < 1 or action.wave > stage.waves then
+						breaks("field", `{how} answered wave {tostring(action.wave)} of stage {action.stage}, which has none`)
+					elseif action.merged ~= true and busy then
+						breaks("field", `{how} queued wave {action.wave} over a field with {field.alive} alive and {field.queued} queued`)
+					elseif action.merged == true and (not stage.merge or stage.boss[action.wave] or stage.boss[action.wave - 1]) then
+						breaks("field", `{how} merged wave {action.wave} of stage {action.stage} where no merge is allowed`)
+					end
+					field.queued += 4
+					if stage ~= nil and stage.boss[action.wave] then
+						field.boss = true
+					end
+				elseif kind == "drop" then
+					field.queued = 0
+					field.alive = 0
+					field.boss = false
+				elseif kind == "bank" then
+					banks = true
+					banked += action.count
+					if how ~= "Advance" then
+						breaks("bank", `{how} answered a bank`)
+					end
+				elseif kind == "open" then
+					opened += 1
+				elseif kind == "boundary" and action.release ~= not ending then
+					breaks("release", `{how}: a boundary that lets the waiting in is {tostring(action.release)} in a batch that {if ending then "ends" else "does not end"} the run`)
+				elseif kind == "end" then
+					ended = true
+					if banks and action.reason ~= "cleared" then
+						breaks("bank", `{how} banked in the batch that ended the run "{tostring(action.reason)}"`)
+					end
+				end
+			end
+		end
+		-- The camp that may trigger now: where the party must walk to move the run on.
+		local function entry(): any
+			local index = if state.step == "armed" then state.stage else state.stage + 1
+			local stage = plan.stages[index]
+			local zone = if stage ~= nil then stage.zone else nil
+			return if zone ~= nil then vec(zone.entry.X, zone.floorY + 3, zone.entry.Z) else vec(0, 3, 0)
+		end
+		local function ask(over: any): ()
+			local done = field.queued == 0 and not field.boss
+			over.now = now
+			over.fighters = { 1 }
+			over.spawningDone = done
+			over.fieldClear = done and field.alive == 0
+			execute("Advance", Flow.Advance(plan, state, L1.input(over), rules))
+		end
+
+		for _ = 1, 40 + roll(160) do
+			if state.step == "over" then
+				break
+			end
+			now += roll(3)
+			if state.step == "fight" then
+				-- The field moves on: bursts arrive, the boss is placed, bodies die.
+				local arriving = math.min(field.queued, roll(6))
+				field.queued -= arriving
+				field.alive += arriving
+				if field.boss and roll(2) == 0 then
+					field.boss = false
+					field.alive += 1
+				end
+				field.alive -= math.min(field.alive, roll(7))
+			end
+			local lever = if chaos >= 2 then roll(24) else 99
+			if lever == 0 then
+				local actions = Flow.Skip(plan, state, if roll(2) == 0 then "stage" else "boss", now, rules, { 1 })
+				touched = touched or #actions > 0
+				execute("Skip", actions)
+			elseif lever == 1 then
+				local actions = Flow.Force(plan, state, roll(7) - 1)
+				touched = touched or #actions > 0
+				execute("Force", actions)
+			elseif lever == 2 and chaos == 3 and roll(4) == 0 then
+				execute("Finish", Flow.Finish(plan, state, "abandoned"))
+			else
+				local harsh = chaos == 1 or chaos == 3
+				ask({
+					roots = if roll(2) == 0 then { entry() } else { vec(0, 3, -50) },
+					mergeOk = roll(2) == 0,
+					fallen = if harsh and roll(30) == 0 then (if roll(2) == 0 then "down" else "wipe") else nil,
+					runCap = harsh and roll(400) == 0,
+				})
+			end
+		end
+		-- Played straight from wherever that left it: walk in, wait, beat every wave as it comes.
+		for _ = 1, 400 do
+			local step = state.step
+			if step == "over" then
+				break
+			elseif step == "gate" then
+				now = math.max(now, state.gateAt)
+			elseif step == "breather" then
+				now = math.max(now, state.breatherUntil)
+			elseif step == "fight" then
+				field.queued = 0
+				field.alive = 0
+				field.boss = false
+			end
+			now += 1
+			ask({ roots = { entry() } })
+		end
+
+		local ended = tostring(state.ended)
+		if state.step ~= "over" then
+			breaks("ends", `still in stage {state.stage} ({state.step}) after 400 straight asks`)
+			return broken, "never"
+		end
+		local after = #Flow.Advance(plan, state, L1.input({ now = now + 9, roots = { entry() }, runCap = true, fallen = "down", fieldClear = false }), rules)
+			+ #Flow.Skip(plan, state, "stage", now + 9, rules, { 1 })
+			+ #Flow.Skip(plan, state, "boss", now + 9, rules)
+			+ #Flow.Force(plan, state, 1)
+			+ #Flow.Finish(plan, state, "abandoned")
+		if after > 0 then
+			breaks("last", `{after} actions were answered after the run was over ({ended})`)
+		end
+		if opened ~= state.cleared or state.cleared > plan.camps then
+			breaks("count", `{state.cleared} camps cleared, {opened} opened, of {plan.camps}`)
+		end
+		if ended == "cleared" then
+			if state.cleared ~= plan.camps then
+				breaks("count", `cleared with {state.cleared} of {plan.camps} camps`)
+			end
+			if not touched and banked ~= waves then
+				breaks("count", `no skip, cleared, and {banked} of {waves} waves banked`)
+			end
+			if not Flow.EarnsStar(state, 1) then
+				breaks("count", "cleared, and its one fighter earned no star")
+			end
+		elseif not touched and banked > waves then
+			breaks("count", `{banked} waves banked of {waves}`)
+		end
+		return broken, ended
+	end
+
+	local first: { [string]: string } = {}
+	local count: { [string]: number } = { field = 0, bank = 0, last = 0, release = 0, ends = 0, count = 0, threw = 0 }
+	local ends: { [string]: number } = {}
+	for run = 1, RUNS do
+		local ok, broken, ended = pcall(play, run)
+		if not ok then
+			broken = { threw = `run {run}: {tostring(broken)}` }
+			ended = "threw"
+		end
+		ends[ended] = (ends[ended] or 0) + 1
+		for rule, what in broken do
+			count[rule] = (count[rule] or 0) + 1
+			first[rule] = first[rule] or what
+		end
+	end
+	local function said(rule: string): string
+		return if count[rule] > 0 then `: {count[rule]} runs, the first {first[rule]}` else ""
+	end
+	local tally = {}
+	for _, reason in { "cleared", "down", "wipe", "runCap", "abandoned", "never", "threw" } do
+		if ends[reason] ~= nil then
+			table.insert(tally, `{ends[reason]} {reason}`)
+		end
+	end
+	check(count.threw == 0, `no run threw{said("threw")}`)
+	check(count.ends == 0 and (ends.cleared or 0) > RUNS / 4 and (ends.down or 0) + (ends.wipe or 0) > 0 and (ends.abandoned or 0) > 0, `every one of the {RUNS} runs ends, and they end every way ({table.concat(tally, ", ")}){said("ends")}`)
+	check(count.field == 0, `no gate, and no wave that is not merged, on a field with a body alive or queued; no merge where none is allowed{said("field")}`)
+	check(count.bank == 0, `no bank in a batch that loses the run, and none from a skip, a forced wave or an abandon{said("bank")}`)
+	check(count.last == 0, `\`end\` is the last action of its batch, and nothing is answered after it{said("last")}`)
+	check(count.release == 0, `a boundary lets the waiting into the level exactly when its batch does not end the run{said("release")}`)
+	check(count.count == 0, `a cleared run has cleared every camp and earned its fighter the star, and one no skip touched has banked every wave exactly once{said("count")}`)
+end
+L1.group("fuzzTests", L1.fuzzTests)
 
 -- The real files ---------------------------------------------------------------------------------
 -- Everything above runs on fixtures written for the cases. These run the same rules on the data
@@ -853,7 +1605,7 @@ L1.real = {
 	-- A root's height over the feet in these cases.
 	ROOT = 3,
 	-- Every action WaveService.execute has a branch for.
-	EXECUTED = { gate = true, close = true, wave = true, clear = true, bank = true, boundary = true, breather = true, open = true, travel = true, drop = true, move = true, ["end"] = true },
+	EXECUTED = { gate = true, rearm = true, close = true, wave = true, clear = true, bank = true, boundary = true, breather = true, open = true, travel = true, drop = true, move = true, ["end"] = true },
 	-- The actions that do nothing in WaveService.execute when their stage has no zone.
 	ZONED = { gate = true, close = true, open = true, move = true },
 }
@@ -915,7 +1667,7 @@ function L1.real.resolve(levelId: string): any
 		end
 	end
 	local layout, why = L1.real.layout(file.layout)
-	local read, level = pcall(L1.Flow.Resolve, file, mission, L1.combat.director.runCapSeconds)
+	local read, level = pcall(L1.Flow.Resolve, file, mission, L1.combat.director.runCapSeconds, L1.real.map.difficulties[1])
 	return { file = file, mission = mission, level = if read then level else nil, layout = layout, why = why }
 end
 
@@ -931,7 +1683,17 @@ function L1.real.sizes(): any
 		end
 		return nil
 	end
-	return { fence = L1.real.rules.fenceThickness, checkpoint = size(L1.real.rules.checkpointSize), sign = size(L1.real.map.sign.size) }
+	local function length(value: any): any
+		return if type(value) == "number" and value > 0 and value < math.huge then value else nil
+	end
+	local rules = L1.real.rules
+	return { fence = length(rules.fenceThickness) or 0, floor = length(rules.floorThickness), checkpoint = size(rules.checkpointSize), sign = size(L1.real.map.sign.size) }
+end
+
+-- A layout's box as WaveService.startLevel and LevelService ask for it: with the floors as deep
+-- as they are built (levels.floorThickness).
+function L1.real.bounds(layout: any): any
+	return L1.Geo.Bounds(layout, L1.real.rules.floorThickness)
 end
 
 -- LevelService.piecesOf: Pieces behind a pcall, so a key of the wrong type refuses the layout.
@@ -943,8 +1705,9 @@ function L1.real.pieces(layout: any): (any, string?)
 	return pieces, refusal
 end
 
--- StageFlow.Plan as these cases ask it. WaveService calls it bare: a layout or a level file that
--- makes it throw gives the leader no answer at all, so a throw is reported here as a refusal.
+-- StageFlow.Plan as these cases ask it. WaveService asks it behind a pcall (a throw answers the
+-- leader `unavailable`, with one warn); here a throw is reported as a refusal, so the case says
+-- which level made it throw.
 function L1.real.plan(level: any, layout: any, difficulty: string, bounds: any): (any, string?)
 	local ok, plan, why = pcall(L1.Flow.Plan, level, layout, difficulty, L1.real.rules, bounds)
 	if not ok then
@@ -1190,7 +1953,7 @@ function L1.real.planChecks(tag: string, level: any, layout: any, plan: any, pie
 		local function insetBy(inner: any, by: number): boolean
 			return near(inner.x, rect.x) and near(inner.z, rect.z) and near(inner.hx, rect.hx - by) and near(inner.hz, rect.hz - by)
 		end
-		check(insetBy(zone.trigger, rules.triggerInset) and insetBy(zone.inner, rules.closeInset), `{where}: its trigger is its floor inset by levels.triggerInset ({rules.triggerInset}) and its close keeps the floor inset by levels.closeInset ({rules.closeInset}), on both axes`)
+		check(insetBy(zone.trigger, -rules.fenceThickness) and insetBy(zone.inner, rules.closeInset), `{where}: its trigger is its whole fenced rectangle (the floor grown by levels.fenceThickness, {rules.fenceThickness}) and its close keeps the floor inset by levels.closeInset ({rules.closeInset}), on both axes`)
 		local edge: { string } = {}
 		local sides = { { "north", 0, -1 }, { "south", 0, 1 }, { "west", -1, 0 }, { "east", 1, 0 } }
 		for _, side in sides do
@@ -1347,10 +2110,12 @@ function L1.real.campChecks(name: string, layout: any, pieces: { any }): ()
 		local unwalled: { string } = {}
 		for _, piece in pieces do
 			local box = piece.box
-			-- The wall's inner face is the fence's outer face: a wall that reached over the fence
-			-- line or the floor would hold fighters off the edge of their own camp.
-			if piece.role == "barrier" and piece.camp == camp.id and math.abs(box.x - camp.x) - box.sx / 2 < hx + thickness - 1e-6 and math.abs(box.z - camp.z) - box.sz / 2 < hz + thickness - 1e-6 then
-				table.insert(unwalled, `{piece.name} reaches inside the fence line`)
+			-- The wall's inner face is the floor's edge (the fix round's ruling 2): it stands in
+			-- the fence line, so nobody can stand on a fence in a closed camp, and never over the
+			-- floor, where it would hold fighters off the edge of their own camp. Each side's box
+			-- has that face on its own axis and runs past the floor on the other.
+			if piece.role == "barrier" and piece.camp == camp.id and not near(math.max(math.abs(box.x - camp.x) - box.sx / 2 - hx, math.abs(box.z - camp.z) - box.sz / 2 - hz), 0) then
+				table.insert(unwalled, `{piece.name}'s inner face is not on the floor's edge`)
 			end
 		end
 		local sides = { { "north", 0, -1 }, { "south", 0, 1 }, { "west", -1, 0 }, { "east", 1, 0 } }
@@ -1390,7 +2155,7 @@ function L1.real.campChecks(name: string, layout: any, pieces: { any }): ()
 			way("entry", camp.entry)
 			way("exit", camp.exit)
 		end
-		check(#unwalled == 0, `{where}: the invisible wall stands behind all four sides and nowhere inside the fence line{if gates > 0 then ", and straight out from its entry and from its exit the fence line holds a gate with the wall across it" else " (it has no gate)"}{real.list(unwalled)}`)
+		check(#unwalled == 0, `{where}: the invisible wall stands behind all four sides, its inner face on the floor's edge{if gates > 0 then ", and straight out from its entry and from its exit the fence line holds a gate with the wall across it" else " (it has no gate)"}{real.list(unwalled)}`)
 	end
 end
 
@@ -1427,7 +2192,7 @@ function L1.realLevelTests(): ()
 		if level == nil or layout == nil then
 			continue
 		end
-		local validated, problems = pcall(Flow.Validate, level, layout, real.kinds, ranks)
+		local validated, problems = pcall(Flow.Validate, level, layout, real.kinds, ranks, real.rules)
 		if not validated then
 			problems = { `Validate threw: {tostring(problems)}` }
 		end
@@ -1443,7 +2208,7 @@ function L1.realLevelTests(): ()
 		check(offered > 0 and #strange == 0, `{id}: each of its {offered} difficulties is one of the map's (one that is not has rank 0, and fields no minDifficulty group){real.list(strange)}`)
 		check(level.runCapSeconds > 0 and level.crowd.burst >= 1, `{id}: a run cap ({level.runCapSeconds} s) and a burst size ({level.crowd.burst})`)
 		local pieces = real.pieces(layout)
-		local bounds = L1.Geo.Bounds(layout)
+		local bounds = L1.real.bounds(layout)
 		for _, difficulty in real.map.difficulties do
 			if level.difficulties[difficulty] == nil then
 				continue
@@ -1472,7 +2237,7 @@ function L1.realLevelTests(): ()
 	-- Every number a level's start, its run, the session and the builder read from Combat.json.
 	-- A missing one is arithmetic on nil in the remote's thread or in the tick, not a refusal.
 	local needs = {
-		levels = { "gateSeconds", "triggerInset", "closeInset", "triggerHeight", "startSpacing", "startCooldownSeconds", "fenceThickness", "boxMargin", "maxParts" },
+		levels = { "gateSeconds", "triggerBelow", "triggerHeight", "closeInset", "closeGraceSeconds", "crowdCeiling", "floorThickness", "startSpacing", "startCooldownSeconds", "fenceThickness", "boxMargin", "maxParts" },
 		director = { "windowSeconds", "tempoWarmupSeconds", "eliteTempo", "runCapSeconds" },
 		coop = { "maxParty", "joinUntilWave", "contributionFloor", "countPerExtraPlayer", "bossHpPerExtraPlayer", "mentorMinDamageShare", "mentorValor", "lobbyWaitSeconds", "returnGroupSeconds" },
 		remotes = { "combatStateHz" },
@@ -1494,7 +2259,7 @@ function L1.realLevelTests(): ()
 	table.sort(missing)
 	check(#missing == 0, `Combat.json holds every number a level's start, its run, the session and the builder read (levels, director, coop, remotes, player.rescue){real.list(missing)}`)
 end
-L1.realLevelTests()
+L1.group("realLevelTests", L1.realLevelTests)
 
 function L1.realWorldTests(): ()
 	print(" the real files: every layout builds (LevelGeometry.Pieces, as LevelService asks it) and check_levels.py counts the same Parts")
@@ -1520,7 +2285,7 @@ function L1.realWorldTests(): ()
 		end
 		local expected = if counts ~= nil then counts[name] else nil
 		check(#pieces == expected and #pieces > 0, `{name}: {#pieces} Parts, the number check_levels.py counts ({tostring(expected)})`)
-		local bounds = Geo.Bounds(layout)
+		local bounds = real.bounds(layout)
 		local margin = real.rules.boxMargin
 		local outside: { string } = {}
 		local far: { string } = {}
@@ -1559,7 +2324,7 @@ function L1.realWorldTests(): ()
 	check(lobby ~= nil and lobby.arena == nil, `the map's lobby layout ({real.map.lobby.layout}) is a layout file of its own`)
 	local lobbyPieces = if lobby ~= nil and lobby.arena == nil then real.pieces(lobby) else nil
 	if lobby ~= nil and lobbyPieces ~= nil then
-		local bounds = Geo.Bounds(lobby)
+		local bounds = real.bounds(lobby)
 		local points = { lobby.start }
 		for _, point in lobby.spawns or {} do
 			table.insert(points, point)
@@ -1631,7 +2396,7 @@ function L1.realWorldTests(): ()
 	end
 	check(seen == arenaLayouts, `check_levels.py read every layout that names an arena ({seen} of {arenaLayouts})`)
 end
-L1.realWorldTests()
+L1.group("realWorldTests", L1.realWorldTests)
 
 function L1.realRunTests(): ()
 	print(" the real files: a whole run of every built level at every difficulty, through Begin and Advance")
@@ -1647,7 +2412,7 @@ function L1.realRunTests(): ()
 			continue
 		end
 		local pieces = real.pieces(layout)
-		local bounds = L1.Geo.Bounds(layout)
+		local bounds = L1.real.bounds(layout)
 		local waves = 0
 		local camps = 0
 		local merges = false
@@ -1784,7 +2549,7 @@ function L1.realRunTests(): ()
 		end
 	end
 end
-L1.realRunTests()
+L1.group("realRunTests", L1.realRunTests)
 
 function L1.realMapTests(): ()
 	print(" the real files: the map (Expeditions.json) as a leader with no star sees it")
@@ -1860,6 +2625,6 @@ function L1.realMapTests(): ()
 	end
 	check(still == #unbuilt and shown, "with the leader's star on forestRoad its star shows, and the unbuilt nodes stay notBuilt")
 end
-L1.realMapTests()
+L1.group("realMapTests", L1.realMapTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

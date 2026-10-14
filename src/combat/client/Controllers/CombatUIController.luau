@@ -45,9 +45,8 @@
 -- BossBar; the touch buttons come with InputController and MovementController) under the run
 -- layer of CombatHud with no Attack / stance / ability cluster: on a phone attacks are the
 -- range's auto-fire and auto-swing. Wave banners, `bossDown` and `mentor` stay
--- CombatFxController's; there is no per-kill pop (ruling 23). The summary card path is C1's.
--- In Studio, B and N skip to the next boss wave and the next wave (RequestDebug "skip"), and a
--- corner line names the keys; the C1 lever strip stays, its spawn buttons naming crowd kinds.
+-- CombatFxController's; there is no per-kill pop (ruling 23). The summary card and the Studio
+-- keys are L1's (below); the C1 lever strip stays, its spawn buttons naming crowd kinds.
 --
 -- Mission layout (review of 2026-10-13; the ScreenGui is the viewport less the top inset):
 --  * The boss bar sits in the top strip between the run header and the party list, shrunk to
@@ -74,6 +73,24 @@
 --  * Studio keys: N finishes the stage, B jumps to the boss, G steps the gear (RequestDebug).
 --  * The C1 `boot` is still unreachable and still cannot fight; it is kept typechecking against
 --    the level's RunState until L4 deletes it.
+--
+-- L1 fix round (docs/prompts/l1-fix-round.md, part U), all in `bootMission`:
+--  * Abandon's key is Backspace, pressed twice (CombatHud.PressAbandon), in every live phase
+--    and never while a text box has the keyboard. While it is armed the camera keeps a cursor
+--    the player freed with Alt.
+--  * A body the server has placed (CameraController.OnPlaced, from the server's own signal on
+--    the character) faces the way forward: along the level's route from the point the server
+--    named, or to the lobby camp's centre. It is turned as soon as the word arrives, not when
+--    the body does. The same is done again when a RunState names a new level while that word
+--    is still news, because the two arrive in either order.
+--  * A Depart pressed during the server's start cooldown after a return is held by the map and
+--    sent when the cooldown ends (MapScreen.Rest); it no longer does nothing.
+--  * One message per event: a banner is not mirrored into a toast, and the banner is given a
+--    frame that keeps clear of the run header's column (placeBanner).
+--  * A key that was already down when the map's or the summary's keys were bound is not sunk,
+--    so its release still reaches the movement keys under them.
+--  * The Studio strip is off the screen while the map is open, and a client with no MapState
+--    asks for its snapshot again, a few times.
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -164,6 +181,16 @@ local MAP_KEYS: { Enum.KeyCode } = table.clone(CONFIRM_KEYS)
 for key in MAP_STEP_KEYS do
 	table.insert(MAP_KEYS, key)
 end
+-- Which of those are a gamepad's: whether one is down is asked of the pad, not the keyboard.
+local PAD_KEYS: { [Enum.KeyCode]: boolean } = {
+	[Enum.KeyCode.ButtonA] = true,
+	[Enum.KeyCode.DPadLeft] = true,
+	[Enum.KeyCode.DPadRight] = true,
+	[Enum.KeyCode.DPadUp] = true,
+	[Enum.KeyCode.DPadDown] = true,
+}
+-- Fix round, ruling 7: Abandon's key, pressed twice. A gamepad has none yet (carried).
+local ABANDON_KEY = Enum.KeyCode.Backspace
 -- What a refused RequestStartLevel tells the player (ActionResult.reason).
 local START_ACTION = "startLevel"
 local START_REFUSALS: { [string]: string } = {
@@ -401,6 +428,179 @@ local function placeMissionBoss(
 	width = math.max(math.min(width, cross.X - boxHalf - 2 * margin), 0)
 	bossBar.SetRect(scale, margin + width / 2, top, width)
 	return nil
+end
+
+-- Fix round, item 5. Where the banner goes, in px of the viewport (CombatFxController's overlay
+-- ignores the top-bar inset; `size`, `edges` and `bossBottom` are the HUD ScreenGui's, which
+-- starts under it). Centred near the top, as it always was, wherever that is clear of the run
+-- header's block (header, wallet, "Progress saved"): any monitor. Where it is not:
+--  * landscape (a phone): the block is a column at the left, and the banner takes the room to
+--    the right of it and of the crosshair's box (on a screen that short the banner reaches down
+--    to the box);
+--  * portrait: the block spans the top, and the banner goes under it.
+-- Wherever it lands it starts under the boss bar, when that stands over the middle of the
+-- screen (`bossBottom`): on a monitor the bar is far above it already.
+local function placeBanner(
+	scale: number,
+	size: Vector2,
+	viewport: Vector2,
+	inset: Vector2,
+	edges: CombatHud.HudEdges,
+	bossBottom: number?
+): ()
+	local margin = Theme.SCREEN_MARGIN * scale
+	local width = math.min(Theme.COMBAT_BANNER_WIDTH * scale, math.max(size.X - 2 * margin, 0))
+	local centreX = size.X / 2
+	local top = viewport.Y * Theme.COMBAT_BANNER_TOP_FRACTION
+	local blockBottom = inset.Y + edges.savedBottom + margin
+	if top < blockBottom and centreX - width / 2 < edges.headerRight + margin then
+		if size.X > size.Y then
+			local boxRight = viewport.X / 2 + Theme.COMBAT_RANGE_CROSSHAIR_SIZE / 2 * scale
+			local left = math.max(edges.headerRight, boxRight) + margin
+			width = math.max(math.min(width, size.X - margin - left), 0)
+			centreX = left + width / 2
+		else
+			top = blockBottom
+		end
+	end
+	if bossBottom ~= nil then
+		top = math.max(top, inset.Y + bossBottom + margin)
+	end
+	CombatFxController.SetBannerLayout(scale, centreX, top, width)
+end
+
+-- Fix round, item 7. The keys of `keys` that are down right now. An action bound over a key
+-- that is already down must not sink it: the release would never reach the binding under it,
+-- and a character walking on an arrow key when the map opened would walk on for good.
+local function keysDown(keys: { Enum.KeyCode }): { [Enum.KeyCode]: boolean }
+	local held: { [Enum.KeyCode]: boolean } = {}
+	for _, key in keys do
+		local down = if PAD_KEYS[key]
+			then UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, key)
+			else UserInputService:IsKeyDown(key)
+		if down then
+			held[key] = true
+		end
+	end
+	return held
+end
+
+-- True when this input is one of those keys (the handler then passes it on untouched); the
+-- key leaves the set when it is let go, and from its next press it is the action's own. A
+-- press of a key still in the set means its release was never seen (the window lost focus
+-- with it down): that press is a new one, and the action's.
+local function passesHeld(
+	held: { [Enum.KeyCode]: boolean },
+	state: Enum.UserInputState,
+	input: InputObject
+): boolean
+	if held[input.KeyCode] ~= true then
+		return false
+	end
+	if state == Enum.UserInputState.Begin then
+		held[input.KeyCode] = nil
+		return false
+	end
+	if state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+		held[input.KeyCode] = nil
+	end
+	return true
+end
+
+-- Fix round, item 2. The way forward along a level's route from `position`, as a point to look
+-- at, and the flat distance from `position` to the route (so the caller can tell a body in the
+-- level from one in the lobby camp). Forward is the route's own way where the body stands: on
+-- the nearest stretch, toward that stretch's end, or, within COMBAT_FORWARD_NEAR_STUDS of that
+-- end, the way the next stretch runs. So a body put beside the road looks along it, not across
+-- it at the nearest point. nil = the route has no stretch.
+local function routeForward(route: { Types.LevelRoutePoint }, position: Vector3): (Vector3?, number)
+	local nearest = 0
+	local distance = math.huge
+	local onward = Vector3.zero
+	for index = 1, #route - 1 do
+		local a, b = route[index], route[index + 1]
+		local span = Vector3.new(b.x - a.x, 0, b.z - a.z)
+		local lengthSquared = span:Dot(span)
+		if lengthSquared > 0 then
+			local offset = Vector3.new(position.X - a.x, 0, position.Z - a.z)
+			local share = math.clamp(offset:Dot(span) / lengthSquared, 0, 1)
+			local gap = (offset - span * share).Magnitude
+			if gap < distance then
+				nearest = index
+				distance = gap
+				onward = span * (1 - share)
+			end
+		end
+	end
+	if nearest == 0 then
+		return nil, math.huge
+	end
+	if onward.Magnitude < Theme.COMBAT_FORWARD_NEAR_STUDS then
+		-- At the stretch's end: the next stretch with any length says which way; with none
+		-- left (the last camp), forward stays the way this one ran.
+		local last = route[nearest]
+		local ended = route[nearest + 1]
+		onward = Vector3.new(ended.x - last.x, 0, ended.z - last.z)
+		for index = nearest + 1, #route - 1 do
+			local a, b = route[index], route[index + 1]
+			local span = Vector3.new(b.x - a.x, 0, b.z - a.z)
+			if span.Magnitude > 0 then
+				onward = span
+				break
+			end
+		end
+	end
+	return position + onward, distance
+end
+
+-- Fix round, item 2. What a body the server has just put at `position` should face: the way
+-- forward in the level being played, or the lobby camp's centre, whichever of the two places it
+-- stands in (a member who waits in the camp while a run is live is in the camp). nil = nothing
+-- to turn to.
+local function forwardPoint(
+	map: Types.ExpeditionsConfig?,
+	levelId: string,
+	position: Vector3
+): Vector3?
+	local lobbyAt: Vector3? = nil
+	local lobbyDistance = math.huge
+	local lobby = if map ~= nil then Catalog.GetLevelLayout(map.lobby.layout) else nil
+	-- A layout is a JSON file: what is read from it is checked, because this runs inside the
+	-- camera's frame and the RunState handler, and neither may stop on a file's mistake.
+	if lobby ~= nil and typeof(lobby.start) == "table" then
+		local centre = Vector3.new(lobby.start.x, lobby.start.y, lobby.start.z)
+		lobbyAt = centre
+		lobbyDistance = Vector3.new(centre.X - position.X, 0, centre.Z - position.Z).Magnitude
+	end
+	if levelId == "" then
+		return lobbyAt -- no level is live: the lobby camp is all there is
+	end
+	local file = Catalog.GetLevelFile(levelId)
+	local layout = if file ~= nil then Catalog.GetLevelLayout(file.layout) else nil
+	local target: Vector3? = nil
+	local distance = math.huge
+	if layout ~= nil and layout.arena ~= nil then
+		-- A layout that names an arena holds nothing else. The server turns the arena into one
+		-- camp centred on the world origin (LevelGeometry.FromArena, ruling 13): forward is
+		-- its middle, and the body is in it when it is over its floor.
+		local arena = Catalog.GetArenaLayout(layout.arena)
+		if arena ~= nil then
+			target = Vector3.zero
+			distance = math.max(
+				math.abs(position.X) - arena.size.x / 2,
+				math.abs(position.Z) - arena.size.z / 2,
+				0
+			)
+		end
+	elseif layout ~= nil and typeof(layout.route) == "table" then
+		target, distance = routeForward(layout.route, position)
+	end
+	if target == nil then
+		-- A live level with no way forward to read: where the body stands cannot be told, so
+		-- nothing is turned.
+		return nil
+	end
+	return if distance <= lobbyDistance then target else lobbyAt
 end
 
 -- A boot's first layout pass. It must never take the boot down with it: the snapshot request
@@ -982,7 +1182,13 @@ local function bootMission(): ()
 	-- What the last RunState, Snapshot and MapState said, as far as the next one is compared
 	-- against it. `departToken` names the latest reason Depart is busy, so an older timer
 	-- cannot free a newer wait. `floor` is the crowd's floor as last handed to CrowdRenderer.
+	-- Fix round: `mapStateSeen` = a MapState has arrived (until then the snapshot is asked for
+	-- again); `mapHeld` and `summaryHeld` are the keys that were down when those actions were
+	-- bound, which pass through until let go (keysDown); `placedPoint` / `placedAt` are the last
+	-- feet point the server said it put the body at, and the os.clock() it said so.
 	local st = {
+		placedPoint = nil :: Vector3?,
+		placedAt = 0,
 		loaded = false,
 		phase = "",
 		wave = 0,
@@ -992,10 +1198,13 @@ local function bootMission(): ()
 		material = "",
 		prewarmed = 0,
 		mapSeeded = false,
+		mapStateSeen = false,
 		departToken = 0,
 		lastIntentTime = 0,
 		mapKeys = false,
 		summaryKeys = false,
+		mapHeld = {} :: { [Enum.KeyCode]: boolean },
+		summaryHeld = {} :: { [Enum.KeyCode]: boolean },
 		bossShown = false,
 		bossLimit = nil :: number?,
 		vitalsLayout = nil :: VitalsHud.Layout?,
@@ -1070,12 +1279,16 @@ local function bootMission(): ()
 	end
 
 	-- While the map is open the arrows pick a level and a difficulty and Enter departs. Bound
-	-- above the movement keys and sunk, so an arrow does not also turn the camera.
+	-- above the movement keys and sunk, so an arrow does not also turn the camera. A key that
+	-- was down before the map opened is not the map's until it is let go.
 	local function onMapKey(
 		_action: string,
 		state: Enum.UserInputState,
 		input: InputObject
 	): Enum.ContextActionResult
+		if passesHeld(st.mapHeld, state, input) then
+			return Enum.ContextActionResult.Pass
+		end
 		local screen = mapScreen
 		if state == Enum.UserInputState.Begin and screen ~= nil then
 			local step: Vector2? = MAP_STEP_KEYS[input.KeyCode]
@@ -1093,6 +1306,7 @@ local function bootMission(): ()
 		end
 		st.mapKeys = bound
 		if bound then
+			st.mapHeld = keysDown(MAP_KEYS)
 			ContextActionService:BindActionAtPriority(
 				MAP_ACTION,
 				onMapKey,
@@ -1108,8 +1322,11 @@ local function bootMission(): ()
 	local function onSummaryKey(
 		_action: string,
 		state: Enum.UserInputState,
-		_input: InputObject
+		input: InputObject
 	): Enum.ContextActionResult
+		if passesHeld(st.summaryHeld, state, input) then
+			return Enum.ContextActionResult.Pass
+		end
 		if state == Enum.UserInputState.Begin then
 			abandon()
 		end
@@ -1121,6 +1338,7 @@ local function bootMission(): ()
 		end
 		st.summaryKeys = bound
 		if bound then
+			st.summaryHeld = keysDown(CONFIRM_KEYS)
 			ContextActionService:BindActionAtPriority(
 				SUMMARY_ACTION,
 				onSummaryKey,
@@ -1132,6 +1350,23 @@ local function bootMission(): ()
 			ContextActionService:UnbindAction(SUMMARY_ACTION)
 		end
 	end
+
+	-- Studio only, by contract: a live client never builds the strip, and the server ignores
+	-- the remote even if one were forged. Built before the map, which takes it off the screen
+	-- while it is open.
+	local debugPanel = if studio
+		then DebugPanel.new(screenGui, {
+			onLever = function(lever: string, value: any)
+				local remote = remotes.requestDebug
+				if remote ~= nil then
+					remote:FireServer(lever, value)
+				end
+			end,
+			onToggle = function(open: boolean)
+				CameraController.SetCursorHold(HOLD_DEBUG, open)
+			end,
+		})
+		else nil
 
 	if expeditions ~= nil then
 		mapScreen = MapScreen.new(screenGui, expeditions, {
@@ -1150,6 +1385,11 @@ local function bootMission(): ()
 			onOpenChanged = function(open: boolean)
 				CameraController.SetCursorHold(HOLD_MAP, open)
 				bindMapKeys(open)
+				-- The strip's tab drew over the map in the phone emulator (both are sheets of
+				-- one ZIndex tier): it is away while the map has the screen.
+				if debugPanel ~= nil then
+					debugPanel.SetVisible(not open)
+				end
 			end,
 			onReturn = if proving then nil else leave,
 			keyHint = if UserInputService.KeyboardEnabled then MAP_KEY_HINT else nil,
@@ -1172,6 +1412,10 @@ local function bootMission(): ()
 		onMap = if mapScreen ~= nil then openMap else nil,
 		onLeave = leave,
 		onAbandon = abandon,
+		-- Fix round: Abandon has a key, named on its button, and while it waits for its second
+		-- press the camera keeps a cursor the player freed with Alt to click it.
+		abandonKey = if UserInputService.KeyboardEnabled then ABANDON_KEY.Name else nil,
+		onAbandonArmed = CameraController.KeepAltFree,
 		onStance = InputController.ToggleStance,
 		onAttackDown = InputController.AttackDown,
 		onAttackUp = InputController.AttackUp,
@@ -1185,38 +1429,58 @@ local function bootMission(): ()
 		onReturn = leave,
 		canReturn = not proving,
 	})
-	-- Studio only, by contract: a live client never builds the strip, and the server ignores
-	-- the remote even if one were forged.
-	local debugPanel = if studio
-		then DebugPanel.new(screenGui, {
-			onLever = function(lever: string, value: any)
-				local remote = remotes.requestDebug
-				if remote ~= nil then
-					remote:FireServer(lever, value)
-				end
-			end,
-			onToggle = function(open: boolean)
-				CameraController.SetCursorHold(HOLD_DEBUG, open)
-			end,
-		})
-		else nil
 
 	-- A proving build opens on the level and the difficulty the config names (ruling 32), so
 	-- one click or one key departs. Any other build is seeded by its first MapState.
 	if proving and mapScreen ~= nil and expeditions ~= nil and combatConfig ~= nil then
-		local level = (combatConfig.debug :: any).provingLevel
-		local difficulty = (combatConfig.debug :: any).provingDifficulty
+		local level = combatConfig.debug.provingLevel
+		local difficulty = combatConfig.debug.provingDifficulty
 		for _, node in expeditions.nodes do
 			if node.level ~= nil and node.level == level then
-				mapScreen.Select(
-					node.id,
-					if typeof(difficulty) == "string" then difficulty else nil
-				)
+				-- An unknown difficulty is no pick: the map then keeps the node's first.
+				mapScreen.Select(node.id, difficulty)
 				st.mapSeeded = true
 				break
 			end
 		end
 	end
+
+	-- Fix round, item 2: a body the server has placed looks the way forward (see forwardPoint).
+	-- The camera says when and where; this only knows which level is live. The look starts at
+	-- `position`, where the body is or is about to be, never at wherever it happens to stand.
+	local function faceFrom(position: Vector3): ()
+		local target = forwardPoint(expeditions, st.levelId, position)
+		if target ~= nil then
+			CameraController.LookToward(target, position)
+		end
+	end
+	-- The feet point of the last move the server announced, while that is still news.
+	local function recentPlace(): Vector3?
+		local point = st.placedPoint
+		if point ~= nil and os.clock() - st.placedAt <= Theme.COMBAT_PLACED_TIMEOUT_SECONDS then
+			return point
+		end
+		return nil
+	end
+	CameraController.OnPlaced(function(position: Vector3, signalled: boolean, far: boolean)
+		if signalled then
+			-- A short nudge (a camp's close putting the player at its entry, a few studs) leaves
+			-- the view alone: a player who turned round to watch the gates shut must not be
+			-- swung down the road as the wave starts. Only a far move is a new place to face
+			-- from, and only that is remembered for a RunState that names the level after it.
+			if far then
+				-- The server's word: turn now, from the point it named. The body follows.
+				st.placedPoint = position
+				st.placedAt = os.clock()
+				faceFrom(position)
+			end
+		elseif recentPlace() == nil then
+			-- A body the camera has only just picked up, and no word about it (a server that
+			-- sends none, or one that did not move it): forward from where it stands. With
+			-- a word still fresh that look is the better one, and the camera has taken it.
+			faceFrom(position)
+		end
+	end)
 
 	-- Wallet: cash and Valor always; the material chip is the level's (RunState.material), so
 	-- it is blank in the lobby. Never predicted: every bank re-sends the Snapshot it shows.
@@ -1327,6 +1591,7 @@ local function bootMission(): ()
 			return
 		end
 		local state = payload :: Types.MapState
+		st.mapStateSeen = true
 		screen.SetState(state)
 		seedMap(state)
 	end
@@ -1385,6 +1650,26 @@ local function bootMission(): ()
 			if debugPanel ~= nil then
 				debugPanel.SetKinds(rewardedKinds(run.levelId))
 			end
+			-- A new level (or the lobby again) comes with a move of the body, and the server's
+			-- word of the move and this RunState arrive in either order: a word that came first
+			-- was read against the level before. Face forward again from the point it named,
+			-- now that the level is known.
+			local placed = recentPlace()
+			if placed ~= nil then
+				faceFrom(placed)
+			end
+		end
+		if last == "" and recentPlace() == nil then
+			-- The first RunState. This HUD booted after the camera picked the body up, so it
+			-- heard neither the server's word nor the pick-up; the body stands where it was
+			-- put, and forward is told from there.
+			local character = player.Character
+			local root = if character ~= nil
+				then character:FindFirstChild("HumanoidRootPart")
+				else nil
+			if root ~= nil and root:IsA("BasePart") then
+				faceFrom(root.Position)
+			end
 		end
 		if typeof(run.maxAlive) == "number" and run.maxAlive > st.prewarmed then
 			st.prewarmed = run.maxAlive
@@ -1401,12 +1686,12 @@ local function bootMission(): ()
 		if expeditions ~= nil then
 			difficultyName = expeditions.difficultyNames[run.difficulty] or run.difficulty
 		end
-		hud.SetMission(
-			if run.levelName == ""
-				then mapName
-				elseif difficultyName ~= "" then run.levelName .. " · " .. difficultyName
-				else run.levelName
-		)
+		-- The level's name is the title; the difficulty has a chip of its own beside it.
+		if run.levelName == "" then
+			hud.SetMission(mapName, nil)
+		else
+			hud.SetMission(run.levelName, difficultyName)
+		end
 		CameraController.SetPhase(phase)
 		hud.SetRunState(run)
 		CombatFxController.SetParty(run.party)
@@ -1434,21 +1719,19 @@ local function bootMission(): ()
 		InputController.SetPhase(phase, waiting)
 
 		-- The map opens whenever the phase becomes `lobby` (the first RunState and every
-		-- return) and closes when the phase leaves it. On a return Depart rests for the
-		-- server's own start cooldown, which would refuse it anyway.
+		-- return) and closes when the phase leaves it. On a return the server refuses a start
+		-- for its own cooldown: the map holds a Depart pressed inside it and sends it when it
+		-- ends, so the press is never lost and never refused.
 		local screen = mapScreen
 		if screen ~= nil then
 			screen.SetParty(run.party, userId, run.leaderUserId)
 			if phase == "lobby" and last ~= "lobby" then
-				local levels = if combatConfig ~= nil then (combatConfig :: any).levels else nil
-				local cooldown = if typeof(levels) == "table"
-					then levels.startCooldownSeconds
-					else nil
-				if last ~= "" and typeof(cooldown) == "number" and cooldown > 0 then
-					busyFor(cooldown)
-				else
-					freeDepart()
-				end
+				freeDepart()
+				screen.Rest(
+					if last ~= "" and combatConfig ~= nil
+						then combatConfig.levels.startCooldownSeconds
+						else 0
+				)
 				screen.Open()
 			elseif phase ~= "lobby" and screen.IsOpen() then
 				freeDepart()
@@ -1572,6 +1855,7 @@ local function bootMission(): ()
 		local viewport = if camera ~= nil then camera.ViewportSize else size + inset
 		local bossBottom = placeMissionBoss(bossBar, scale, size, edges, viewport / 2 - inset)
 		st.bossLimit = if bossBottom ~= nil then bossBottom + inset.Y else nil
+		placeBanner(scale, size, viewport, inset, edges, bossBottom)
 		st.vitalsLayout = {
 			scale = scale,
 			rightReserve = 0,
@@ -1581,11 +1865,18 @@ local function bootMission(): ()
 		applyVitalsLayout()
 	end
 
-	-- M opens and closes the map in the lobby. Studio (ruling 33): N finishes the stage, B
-	-- jumps to the boss, G steps the gear; the server ignores the levers anywhere else, and a
-	-- skip it carries out shows as a new stage or wave, which is what clears the screen.
+	-- M opens and closes the map in the lobby. Backspace is Abandon, pressed twice (the HUD
+	-- says whether it may: a live run, and this player's to end). Studio (ruling 33): N
+	-- finishes the stage, B jumps to the boss, G steps the gear; the server ignores the levers
+	-- anywhere else, and a skip it carries out shows as a new stage or wave, which is what
+	-- clears the screen. None of them while a text box has the keyboard: `processed` says so
+	-- for the chat, and the focus is asked as well, because Backspace is what one types there.
 	local function onKey(input: InputObject, processed: boolean): ()
-		if processed then
+		if processed or UserInputService:GetFocusedTextBox() ~= nil then
+			return
+		end
+		if input.KeyCode == ABANDON_KEY then
+			hud.PressAbandon()
 			return
 		end
 		if input.KeyCode == MAP_TOGGLE_KEY then
@@ -1606,10 +1897,9 @@ local function bootMission(): ()
 		end
 	end
 
-	CombatFxController.SetBannerHandler(function(title: string)
-		-- The banner fades; the toast is the record of it for anyone looking elsewhere.
-		toast.Show(title, Theme.TOAST_ERROR_SECONDS, false)
-	end)
+	-- No banner handler here: a banner mirrored into a toast was a second message for one
+	-- event, and with "Progress saved" a third in one band of a landscape phone. The objective
+	-- line is the record of where the run stands. Personal notices keep the toast.
 	CombatFxController.SetToastHandler(function(text: string)
 		toast.Show(text, Theme.TOAST_ERROR_SECONDS, false)
 	end)
@@ -1617,9 +1907,28 @@ local function bootMission(): ()
 	remotes.stateChanged.OnClientEvent:Connect(onStateChanged)
 	remotes.actionResult.OnClientEvent:Connect(onActionResult)
 	remotes.runState.OnClientEvent:Connect(onRunState)
+	-- The map rides with the snapshot (the server sends both for RequestSnapshot), and it is
+	-- also sent at every admit. Should none have come (this client asked before it was
+	-- admitted and the admit's own was lost), the snapshot is asked for again, a few times.
+	local function askForMap(asked: number): ()
+		task.delay(Theme.MAP_STATE_RETRY_SECONDS, function()
+			if st.mapStateSeen then
+				return
+			end
+			if asked >= Theme.MAP_STATE_RETRIES then
+				warn("[CombatUIController] no MapState came: the map shows every level closed")
+				return
+			end
+			remotes.requestSnapshot:FireServer()
+			askForMap(asked + 1)
+		end)
+	end
 	local mapStateEvent = remotes.mapState
 	if mapStateEvent ~= nil then
 		mapStateEvent.OnClientEvent:Connect(onMapState)
+		if mapScreen ~= nil then
+			askForMap(0)
+		end
 	else
 		warn("[CombatUIController] MapState missing: the map shows every level closed")
 	end

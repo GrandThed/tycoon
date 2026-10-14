@@ -109,6 +109,10 @@ local vignetteBars: { Frame } = {}
 local bannerFrame: Frame? = nil
 local bannerTitle: TextLabel? = nil
 local bannerSub: TextLabel? = nil
+-- L1 fix round: the banner's own scale, and the frame its host last gave it (SetBannerLayout),
+-- kept so a layout that arrives before the overlay is built is not lost.
+local bannerScale: UIScale? = nil
+local bannerLayout: { scale: number, centreX: number, top: number, width: number }? = nil
 local hurtFlash: Frame? = nil
 local bannerToken = 0
 local vignetteToken = 0
@@ -586,6 +590,20 @@ local function watchEnemies(): ()
 		table.insert(connections, folder.ChildAdded:Connect(watchEnemy))
 		table.insert(connections, folder.ChildRemoved:Connect(forgetEnemy))
 	end)
+end
+
+-- The banner in the frame its host gave it: scaled like the rest of the HUD, at that place and
+-- no wider than that. Without one it keeps its design size, centred near the top.
+local function applyBannerLayout(): ()
+	local frame = bannerFrame
+	local uiScale = bannerScale
+	local layout = bannerLayout
+	if frame == nil or uiScale == nil or layout == nil then
+		return
+	end
+	uiScale.Scale = layout.scale
+	frame.Position = UDim2.fromOffset(layout.centreX, layout.top)
+	frame.Size = UDim2.fromOffset(layout.width / layout.scale, Theme.COMBAT_BANNER_HEIGHT)
 end
 
 local function showBanner(title: string, sub: string, seconds: number): ()
@@ -1237,8 +1255,10 @@ local function onRefused(fx: { [string]: any }): ()
 	toast(WAITING_TEXT)
 end
 
--- L1: a camp's gates closed behind the party (the banner is its name) or it was cleared, which
--- is also the checkpoint that banks the pool. No sound: the banner is the cue.
+-- L1: a camp's gates closed behind the party (the banner is its name) or it was cleared. No
+-- sound: the banner is the cue. One message per event (fix round, item 5): the clear is the
+-- banner's, and the checkpoint that banks with it is the HUD's "Progress saved" notice, which
+-- reads RunState.banked, so `saved` is not said a second time here.
 local function onCamp(fx: { [string]: any }): ()
 	local name = fx.name
 	if typeof(name) ~= "string" or name == "" then
@@ -1247,11 +1267,7 @@ local function onCamp(fx: { [string]: any }): ()
 	if fx.event == "closed" then
 		showBanner(name, "", bannerSeconds())
 	elseif fx.event == "cleared" then
-		showBanner(
-			name .. " cleared",
-			if fx.saved == true then "Progress saved" else "",
-			bannerSeconds()
-		)
+		showBanner(name .. " cleared", "", bannerSeconds())
 	end
 end
 
@@ -1423,23 +1439,33 @@ local function buildOverlay(): ()
 		ZIndex = Theme.ZINDEX_CARD,
 		Parent = screenGui,
 	}) :: Frame
-	bannerTitle = Create("TextLabel", {
+	bannerScale = Create("UIScale", { Parent = banner }) :: UIScale
+	-- The title is scaled to its frame: at its design size wherever that fits, smaller for a
+	-- long camp name or a narrow frame, so it never runs out of the frame over the HUD.
+	local title = Create("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, Theme.COMBAT_BANNER_TEXT + Theme.SCREEN_MARGIN),
 		Font = Theme.FONT_BOLD,
 		TextSize = Theme.COMBAT_BANNER_TEXT,
 		TextColor3 = Theme.COLOR_TEXT,
-		TextScaled = false,
+		TextScaled = true,
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		Text = "",
 		ZIndex = Theme.ZINDEX_CARD,
 		Parent = banner,
 	}) :: TextLabel
+	Create("UITextSizeConstraint", {
+		MinTextSize = Theme.COMBAT_BANNER_MIN_TEXT,
+		MaxTextSize = Theme.COMBAT_BANNER_TEXT,
+		Parent = title,
+	})
 	Create("UIStroke", {
 		Color = Theme.COLOR_TEXT_DARK,
 		Thickness = Theme.STROKE_THICKNESS,
-		Parent = bannerTitle,
+		Parent = title,
 	})
+	bannerTitle = title
 	bannerSub = Create("TextLabel", {
 		Name = "Sub",
 		BackgroundTransparency = 1,
@@ -1448,11 +1474,13 @@ local function buildOverlay(): ()
 		Font = Theme.FONT,
 		TextSize = Theme.COMBAT_BANNER_SUB_TEXT,
 		TextColor3 = Theme.COLOR_TEXT_DIM,
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		Text = "",
 		ZIndex = Theme.ZINDEX_CARD,
 		Parent = banner,
 	}) :: TextLabel
 	bannerFrame = banner
+	applyBannerLayout()
 end
 
 function CombatFxController.Init(): ()
@@ -1504,10 +1532,28 @@ function CombatFxController.SetHealth(health: number, maxHealth: number): ()
 	end
 end
 
--- CombatUIController mirrors every banner into the HUD's wave line, so a player who missed
--- the banner still sees what the director did.
+-- The C1 HUD mirrors every banner into its toast, so a player who missed the banner still sees
+-- what the director did. A crowd mission sets no handler: its objective line says where the
+-- run stands, and a banner mirrored as a toast was a second message for one event.
 function CombatFxController.SetBannerHandler(handler: (string) -> ()): ()
 	onBanner = handler
+end
+
+-- L1 fix round, item 5. The host's frame for the banner, in px of the viewport (this overlay
+-- ignores the top-bar inset): `scale` is the HUD's UI scale, `centreX` and `top` where the
+-- banner's top centre goes, `width` the most it may take. The mission HUD keeps it clear of
+-- the run header's column on a short landscape screen.
+function CombatFxController.SetBannerLayout(
+	scale: number,
+	centreX: number,
+	top: number,
+	width: number
+): ()
+	if scale <= 0 then
+		return
+	end
+	bannerLayout = { scale = scale, centreX = centreX, top = top, width = math.max(width, 0) }
+	applyBannerLayout()
 end
 
 -- C2 personal notices (a buff landed on you, your Mentor Valor, a waiting refusal) go to

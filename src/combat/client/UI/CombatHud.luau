@@ -40,7 +40,7 @@
 --  * The bottom-left buttons. In the lobby: Map and Return to your city (`deps.runButtons =
 --    false`, a proving build, hides only Return: the trip home kicks from Studio). In a run:
 --    Abandon, for whoever ruling 21 lets abandon (the only human, else the leader); it asks
---    twice, with no dialog: the first press reads "Abandon? Press again" for
+--    twice, with no dialog: the first press reads "Press again to abandon" for
 --    Theme.COMBAT_ABANDON_CONFIRM_SECONDS. There is no Ready (the leader departs from the map)
 --    and no Return in a run.
 --  * On a touch device Abandon is not there while the local player fights in a `wave` or
@@ -51,6 +51,20 @@
 --    waiting or down. Keyboard and gamepad keep it in every live phase.
 --  * `fighting` covers the five live phases (travel, gate, wave, boss, breather). The old boss
 --    frame went with RunState.boss: the boss bar is the range's.
+--
+-- L1 fix round (docs/prompts/l1-fix-round.md, part U; ruling 7 of that round):
+--  * Abandon has a KEY. On a PC the cursor is locked at the screen's centre in every live
+--    phase, so the button could not be clicked at all. The host binds a key and calls
+--    PressAbandon, which is the button's own press: the first arms it ("Press again to abandon"
+--    for Theme.COMBAT_ABANDON_CONFIRM_SECONDS), the second sends. On keyboard devices the button
+--    names the key (`deps.abandonKey`). The key works wherever Abandon is allowed, also where
+--    the touch rule above keeps the BUTTON away: a device with both (Studio's phone emulator)
+--    then shows the armed line as a label that cannot be tapped, so the thumb rule holds.
+--    `deps.onAbandonArmed` tells the host while it is armed (the camera keeps a freed cursor).
+--  * The difficulty has a chip of its own at the right end of the title's row, and the level's
+--    name shrinks to its room before it would truncate ("Raider Arena · Normal" did).
+--  * The wallet's material chip is not shown where there is no material (the lobby read "0").
+--  * `HudEdges.savedBottom` is where "Progress saved" ends, for the banner's place.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -74,6 +88,11 @@ export type Deps = {
 	onLeave: () -> (),
 	-- L1: "Abandon", after its second press (RequestAbandon); nil = no such button.
 	onAbandon: (() -> ())?,
+	-- Fix round: the name of the key the host binds to PressAbandon, shown on the button on
+	-- keyboard devices; nil = the host binds none.
+	abandonKey: string?,
+	-- Fix round: Abandon was armed by its first press (true), or is armed no longer (false).
+	onAbandonArmed: ((armed: boolean) -> ())?,
 	onStance: () -> (),
 	onAttackDown: () -> (),
 	onAttackUp: () -> (),
@@ -91,14 +110,24 @@ export type Deps = {
 
 -- P5: where the run layer's top blocks ended up, in px of the parent, for what must keep clear
 -- of them (the range's boss bar): the header-and-wallet block's bottom and right edges, and the
--- party list's left edge.
-export type HudEdges = { headerBottom: number, headerRight: number, partyLeft: number }
+-- party list's left edge. `savedBottom` (fix round) is the bottom of "Progress saved", which
+-- hangs under that block: what the banner must keep clear of.
+export type HudEdges = {
+	headerBottom: number,
+	headerRight: number,
+	partyLeft: number,
+	savedBottom: number,
+}
 
 export type AbilityInfo = { name: string, cooldown: number }
 export type AbilitySet = { melee: AbilityInfo?, ranged: AbilityInfo? }
 
 export type CombatHudHandle = {
-	SetMission: (name: string) -> (),
+	-- The header's title, and the difficulty for its chip (nil or "" = no chip: the lobby).
+	SetMission: (name: string, difficulty: string?) -> (),
+	-- Fix round: the host's Abandon key. The button's own press, without its click; it does
+	-- nothing where Abandon is not allowed (not a live run, or not this player's to end).
+	PressAbandon: () -> (),
 	SetRunState: (run: Types.RunState) -> (),
 	SetHealth: (health: number, maxHealth: number) -> (),
 	SetWallet: (cash: number, material: string, amount: number, valor: number) -> (),
@@ -137,7 +166,7 @@ local ROAD_TEXT = "Follow the road"
 local MAP_TEXT = "Map"
 local RETURN_TEXT = "Return to your city"
 local ABANDON_TEXT = "Abandon"
-local ABANDON_CONFIRM_TEXT = "Abandon? Press again"
+local ABANDON_CONFIRM_TEXT = "Press again to abandon"
 local SAVED_TEXT = "✓ Progress saved"
 -- L1 ruling 8: the phases in which a member may act; the run layer shows its fight pieces.
 local LIVE_PHASES: { [string]: boolean } =
@@ -171,6 +200,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	-- L1: what the objective line and the notices are painted from. `gateAt` / `breatherAt` are
 	-- os.clock stamps (nil = not counting) re-anchored by every RunState; `savedUntil` is when
 	-- "Progress saved" goes; `abandonUntil` is until when a second press of Abandon confirms.
+	-- Fix round: `mayAbandon` = the local player may end this run now (ruling 21), whether or
+	-- not the button is on screen; `armed` = what the host was last told (onAbandonArmed).
 	local objective = {
 		run = nil :: Types.RunState?,
 		gateAt = nil :: number?,
@@ -178,6 +209,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		banked = 0,
 		savedUntil = 0,
 		abandonUntil = 0,
+		mayAbandon = false,
+		armed = false,
 	}
 
 	local function bar(parentFrame: Frame, name: string, height: number): Frame
@@ -217,19 +250,52 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	local headerRightInset = Theme.COMBAT_TEMPO_DOT_SIZE
 		+ Theme.SCREEN_MARGIN * 2
 		+ Theme.COMBAT_HEADER_TIMER_WIDTH
+	-- The title's row: the level's name, and (fix round) the difficulty in a chip at the row's
+	-- right end. The name has the whole row in the lobby and gives up the chip's width in a
+	-- run; it shrinks to its room (never under COMBAT_HEADER_TITLE_MIN_TEXT) before it would
+	-- truncate. Fixed rects, so nothing here waits on the engine to measure text. The row is the
+	-- old 24 px label grown by a pixel above and below (the same centre line): scaled text is
+	-- fitted to its box's height as well, and TEXT_LARGE must keep its full size in it.
+	local titleLeft = 14
+	local titleTop = 6
+	local titleHeight = 26
+	local titleWidth = Theme.TOP_BAR_WIDTH - titleLeft - headerRightInset
 	local missionLabel = Create("TextLabel", {
 		Name = "Mission",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(14, 7),
-		Size = UDim2.new(1, -14 - headerRightInset, 0, 24),
+		Position = UDim2.fromOffset(titleLeft, titleTop),
+		Size = UDim2.fromOffset(titleWidth, titleHeight),
 		Font = Theme.FONT_BOLD,
 		TextSize = Theme.TEXT_LARGE,
 		TextColor3 = Theme.COLOR_TEXT,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextScaled = true,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Text = BLANK,
 		Parent = topFrame,
 	}) :: TextLabel
+	Create("UITextSizeConstraint", {
+		MinTextSize = Theme.COMBAT_HEADER_TITLE_MIN_TEXT,
+		MaxTextSize = Theme.TEXT_LARGE,
+		Parent = missionLabel,
+	})
+	local difficultyChip = Create("TextLabel", {
+		Name = "Difficulty",
+		Active = false,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.fromOffset(titleLeft + titleWidth, titleTop + titleHeight / 2),
+		Size = UDim2.fromOffset(Theme.COMBAT_HEADER_CHIP_WIDTH, Theme.COMBAT_HEADER_CHIP_HEIGHT),
+		BackgroundColor3 = Theme.COLOR_BG_LIGHT,
+		BorderSizePixel = 0,
+		Font = Theme.FONT_BOLD,
+		TextSize = Theme.TEXT_SMALL,
+		TextColor3 = Theme.COLOR_HIGHLIGHT,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = "",
+		Visible = false,
+		Parent = topFrame,
+	}) :: TextLabel
+	Create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = difficultyChip })
 	local waveLabel = Create("TextLabel", {
 		Name = "Wave",
 		BackgroundTransparency = 1,
@@ -292,7 +358,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		Parent = walletFrame,
 	})
 
-	local function walletChip(name: string, order: number, color: Color3): TextLabel
+	-- A chip's value label and the chip itself (hidden where its number has nothing to count).
+	local function walletChip(name: string, order: number, color: Color3): (TextLabel, Frame)
 		local chip = Create("Frame", {
 			Name = name,
 			LayoutOrder = order,
@@ -303,7 +370,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			Parent = walletFrame,
 		}) :: Frame
 		Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = chip })
-		return Create("TextLabel", {
+		local value = Create("TextLabel", {
 			Name = "Value",
 			BackgroundTransparency = 1,
 			Size = UDim2.fromScale(1, 1),
@@ -315,10 +382,11 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			Text = BLANK,
 			Parent = chip,
 		}) :: TextLabel
+		return value, chip
 	end
 
 	local cashChip = walletChip("Cash", 1, Theme.COLOR_ACCENT)
-	local materialChip = walletChip("Material", 2, Theme.COLOR_TEXT)
+	local materialChip, materialFrame = walletChip("Material", 2, Theme.COLOR_TEXT)
 	local valorChip = walletChip("Valor", 3, Theme.COLOR_HIGHLIGHT)
 
 	-- L1: "Progress saved", under the wallet, when a checkpoint banks.
@@ -451,6 +519,25 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		actionButton("Return", RETURN_TEXT, 2, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
 	local abandonButton =
 		actionButton("Abandon", ABANDON_TEXT, 3, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
+	-- Fix round: the armed line where the button itself is kept off the screen (a touch device
+	-- in a fight, armed by the key). A label, not a button: the thumb that lands there to move
+	-- must not be able to confirm with it, and it takes no touch from the thumbstick.
+	local abandonPrompt = Create("TextLabel", {
+		Name = "AbandonArmed",
+		Active = false,
+		LayoutOrder = 4,
+		Size = UDim2.fromOffset(Theme.COMBAT_RUN_BUTTON_WIDTH, Theme.ROW_BUTTON_HEIGHT),
+		BackgroundColor3 = Theme.COLOR_ERROR,
+		BorderSizePixel = 0,
+		Font = Theme.FONT_BOLD,
+		TextSize = Theme.COMBAT_RUN_BUTTON_TEXT,
+		TextColor3 = Theme.COLOR_TEXT_DARK,
+		TextWrapped = true,
+		Text = ABANDON_CONFIRM_TEXT,
+		Visible = false,
+		Parent = buttonRow,
+	}) :: TextLabel
+	Create("UICorner", { CornerRadius = UDim.new(0, Theme.CORNER_RADIUS), Parent = abandonPrompt })
 
 	-- Right-thumb cluster (C2.5). One frame with one UIScale holds every combat control, so
 	-- the arc keeps its shape at any scale. Offsets are design px from the attack centre.
@@ -938,11 +1025,44 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		return ""
 	end
 
+	-- On keyboard devices the button names the key the host bound: with the cursor locked at
+	-- the centre the key is the only way to press it.
+	local abandonKey = deps.abandonKey
+	local abandonText = if keyHints and abandonKey ~= nil
+		then ABANDON_TEXT .. "\n[" .. abandonKey .. "]"
+		else ABANDON_TEXT
+
 	local function paintAbandon(): ()
 		local armed = os.clock() < objective.abandonUntil
-		abandonButton.Text = if armed then ABANDON_CONFIRM_TEXT else ABANDON_TEXT
+		abandonButton.Text = if armed then ABANDON_CONFIRM_TEXT else abandonText
 		abandonButton.BackgroundColor3 = if armed then Theme.COLOR_ERROR else Theme.COLOR_BG_LIGHT
 		abandonButton.TextColor3 = if armed then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
+		-- Armed with the button off the screen: the label says it instead.
+		abandonPrompt.Visible = armed and not abandonButton.Visible
+		if armed ~= objective.armed then
+			objective.armed = armed
+			local onArmed = deps.onAbandonArmed
+			if onArmed ~= nil then
+				onArmed(armed)
+			end
+		end
+	end
+
+	-- One press of Abandon, from the button or the host's key. It asks twice, with no dialog:
+	-- the first press arms it, and only a second inside the window sends.
+	local function pressAbandon(): ()
+		local onAbandon = deps.onAbandon
+		if onAbandon == nil or not objective.mayAbandon then
+			return
+		end
+		if os.clock() < objective.abandonUntil then
+			objective.abandonUntil = 0
+			paintAbandon()
+			onAbandon()
+		else
+			objective.abandonUntil = os.clock() + Theme.COMBAT_ABANDON_CONFIRM_SECONDS
+			paintAbandon()
+		end
 	end
 
 	local function setRunState(run: Types.RunState): ()
@@ -962,10 +1082,6 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			savedFrame.Visible = true
 		end
 		objective.banked = run.banked
-		if not live then
-			objective.abandonUntil = 0
-			paintAbandon()
-		end
 		fighting = live
 		controls.Visible = fighting and actions
 		reticle.Visible = fighting and shoulderCamera and actions
@@ -1060,16 +1176,21 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			and (phase == "wave" or phase == "boss")
 			and not localWaiting
 			and not localDown
-		local offered = live
-			and not underThumb
+		-- Fix round: who may abandon is one question and whether the button shows is another.
+		-- The host's key works wherever the first is true.
+		local mayAbandon = live
 			and deps.onAbandon ~= nil
 			and (humans <= 1 or run.leaderUserId == localUserId)
-		if not offered and objective.abandonUntil > 0 then
-			-- A first press must not stay armed on a button that is gone.
-			objective.abandonUntil = 0
-			paintAbandon()
-		end
+		local offered = mayAbandon and not underThumb
+		objective.mayAbandon = mayAbandon
 		abandonButton.Visible = offered
+		if objective.abandonUntil > 0 and (not mayAbandon or not (offered or keyHints)) then
+			-- A first press must not stay armed where no second press can follow: nobody may
+			-- abandon any more, or the button is gone and there is no key to press instead.
+			objective.abandonUntil = 0
+		end
+		-- Always: the armed label depends on whether the button is on screen.
+		paintAbandon()
 		if phase == "summary" or phase == "ended" then
 			table.clear(seenFighting) -- nothing carries past a run
 		end
@@ -1136,15 +1257,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			connections,
 			abandonButton.Activated:Connect(function()
 				SoundController.Play("uiClick")
-				-- It asks twice, with no dialog: only a second press inside the window sends.
-				if os.clock() < objective.abandonUntil then
-					objective.abandonUntil = 0
-					paintAbandon()
-					onAbandon()
-				else
-					objective.abandonUntil = os.clock() + Theme.COMBAT_ABANDON_CONFIRM_SECONDS
-					paintAbandon()
-				end
+				pressAbandon()
 			end)
 		)
 	end
@@ -1181,15 +1294,26 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	end
 
 	local handle: CombatHudHandle = {
-		SetMission = function(name: string)
+		SetMission = function(name: string, difficulty: string?)
+			local chip = difficulty ~= nil and difficulty ~= ""
 			missionLabel.Text = name
+			difficultyChip.Text = difficulty or ""
+			difficultyChip.Visible = chip
+			missionLabel.Size = UDim2.fromOffset(
+				if chip
+					then titleWidth - Theme.COMBAT_HEADER_CHIP_WIDTH - Theme.COMBAT_HEADER_CHIP_GAP
+					else titleWidth,
+				titleHeight
+			)
 		end,
+		PressAbandon = pressAbandon,
 		SetRunState = setRunState,
 		SetHealth = setHealth,
 		SetWallet = function(cash: number, material: string, amount: number, valor: number)
 			cashChip.Text = "$" .. Format.Cash(cash)
-			materialChip.Text = Format.Cash(amount)
-				.. (if material ~= "" then " " .. material else "")
+			-- No material, no chip: with no level to name one (the lobby) it read a bare "0".
+			materialFrame.Visible = material ~= ""
+			materialChip.Text = Format.Cash(amount) .. " " .. material
 			valorChip.Text = Format.Cash(valor) .. " Valor"
 		end,
 		SetStance = function(nextStance: string)
@@ -1330,6 +1454,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 					then margin + headerWidth
 					else (viewportSize.X + headerWidth) / 2,
 				partyLeft = viewportSize.X - margin - Theme.COMBAT_PARTY_WIDTH * scale,
+				savedBottom = savedTop + Theme.COMBAT_SAVED_NOTICE_HEIGHT * scale,
 			}
 		end,
 		Destroy = function()

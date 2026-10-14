@@ -45,6 +45,22 @@
 -- frame drops every lag, and the camera is simply there. No phase rule changed: `travel` and
 -- `gate` are not in camera.freeCursorPhases, so they lock the cursor like a fight.
 --
+-- L1 fix round (docs/prompts/l1-fix-round.md, part U, items 1 to 3):
+--  * A body the server PLACED is announced (OnPlaced). The server says so itself: after every
+--    move ArenaService.MoveMember writes two attributes on the character, `Placed` (the feet
+--    point it put the body at) and `PlacedSeq` (a count that rises with every move). This
+--    module watches them and hands the destination on; nothing is guessed from how far the
+--    root travelled, and the snap above is for the camera's own lag and nothing else. A body
+--    the camera has only just picked up (a new one, the first frame after the summary) is
+--    announced too, as "no word from the server". MovementController drops the speed the body
+--    carried, and the mission HUD turns the view along the way forward. A build whose server
+--    writes no such attributes simply hears nothing.
+--  * LookToward turns the VIEW to a point (the body follows the view's yaw), from the body or
+--    from a point the body is about to be at. FaceToward is not that: it turns the body alone
+--    for a moment and hands it back to the view.
+--  * KeepAltFree: while Abandon waits for its second press, a new phase does not take back the
+--    cursor the player freed with Alt to press it; it is taken back when the wait is over.
+--
 -- P3 (docs/INTERFACES.md "P3 contracts"): during a Leap Smash or an Impale Dash
 -- (MovementController.BeginMotion) the pivot's horizontal position trails the character by
 -- the same clamped lag the height uses, so a 60-100 stud/s burst reads as speed instead of
@@ -77,6 +93,10 @@ local FOV_KICK_DECAY = 5
 local FOV_KICK_MAX = 15
 local LAG_EPSILON = 0.01
 local ENEMIES_FOLDER = "Enemies"
+-- The server's word that it moved a body, on the character model (ArenaService.MoveMember):
+-- where it put the feet, and a count that rises by one with every move.
+local PLACED_ATTRIBUTE = "Placed"
+local PLACED_SEQ_ATTRIBUTE = "PlacedSeq"
 -- Phases in which the run is over: the ordinary camera and cursor return for the summary.
 local DEFAULT_CAMERA_PHASES: { [string]: boolean } = { summary = true, ended = true }
 -- Fallbacks used only when Combat.json is missing; the config is the real home of these.
@@ -113,8 +133,28 @@ local pivotHeight: number? = nil
 local motionUntil = 0
 local flatLag = Vector3.zero
 local lastRootFlat: Vector3? = nil
--- L1: where the root stood last frame, to tell a move by the server from a move by the player.
+-- L1: where the root stood last frame. A jump of COMBAT_CAMERA_SNAP_STUDS in a frame drops the
+-- camera's lag; it says nothing else (see `placement`).
 local lastRoot: Vector3? = nil
+-- Told each time the server placed the local body (CameraController.OnPlaced).
+local placedHandlers: { (position: Vector3, signalled: boolean, far: boolean) -> () } = {}
+-- The server's placement signal, as watched on the local character. `seq` is the last
+-- `PlacedSeq` read (nil = none yet on this body); `dirty` = it changed, or the body is new, and
+-- both attributes are read on the next frame, when whatever order they arrived in no longer
+-- matters. `lookYaw` / `lookAt` hold the last LookToward and when it was asked: a camera that
+-- is down, or about to bind a new body, takes it when it picks the body up. `rootSeen` is the
+-- root as last seen, camera up or not, and `jumpedAt` when it last jumped further than
+-- COMBAT_CAMERA_SNAP_STUDS in a frame: how far a signalled move took the body (see `far`).
+local placement = {
+	character = nil :: Model?,
+	connections = {} :: { RBXScriptConnection },
+	seq = nil :: number?,
+	dirty = false,
+	lookYaw = nil :: number?,
+	lookAt = 0,
+	rootSeen = nil :: Vector3?,
+	jumpedAt = -math.huge,
+}
 local fovKick = 0
 local fovKickShown = 0
 local boundHumanoid: Humanoid? = nil
@@ -128,6 +168,9 @@ local aimFrame: CFrame? = nil
 
 local cursorHolds: { [string]: true } = {}
 local altFree = false
+-- KeepAltFree: `keep` while a new phase must not take the freed cursor back, `pending` once one
+-- tried to (it is taken back when the keep ends).
+local altHold = { keep = false, pending = false }
 -- Alt is ignored while the window is unfocused, and focus changes reset it, so Alt-Tab
 -- never leaves the lock flipped.
 local windowFocused = true
@@ -521,7 +564,84 @@ local function kickedFieldOfView(deltaTime: number): number
 	return fovKickShown
 end
 
+-- Watches the server's placement signal on `character` (nil = no body). Whatever the body
+-- already carries is read on the next frame: a new body arrives with the attributes of the
+-- move that put it where it is, and no change is ever signalled for those.
+local function watchPlacement(character: Model?): ()
+	for _, connection in placement.connections do
+		connection:Disconnect()
+	end
+	table.clear(placement.connections)
+	placement.character = character
+	placement.seq = nil
+	placement.dirty = character ~= nil
+	if character ~= nil then
+		table.insert(
+			placement.connections,
+			character:GetAttributeChangedSignal(PLACED_SEQ_ATTRIBUTE):Connect(function()
+				placement.dirty = true
+			end)
+		)
+	end
+end
+
+-- Where the local root is, every frame and whether or not the shoulder camera is up, and when
+-- it last jumped further than COMBAT_CAMERA_SNAP_STUDS in a frame.
+local function trackRoot(): ()
+	local character = Players.LocalPlayer.Character
+	local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+	if root == nil or not root:IsA("BasePart") then
+		placement.rootSeen = nil
+		return
+	end
+	local now = root.Position
+	local before = placement.rootSeen
+	placement.rootSeen = now
+	if before ~= nil and (now - before).Magnitude > Theme.COMBAT_CAMERA_SNAP_STUDS then
+		placement.jumpedAt = os.clock()
+	end
+end
+
+-- Reads the signal once it has changed. A count that is not new, or a destination that is not
+-- a point, says nothing; a server that writes neither attribute never gets here with a number,
+-- so that build hears nothing and nothing is said about it.
+--
+-- `far` = the move took the body further than COMBAT_CAMERA_SNAP_STUDS: a level's start, the
+-- lobby, a rescue, a skip. A short nudge (a camp's close putting a fighter at its entry, the
+-- grace re-move) is not far, and the view the player chose stands through it. Either the body
+-- has not moved yet, and the destination is that far from the root, or it moved first, and the
+-- root jumped that far a moment ago: the two arrive in either order.
+local function readPlacement(): ()
+	placement.dirty = false
+	local character = placement.character
+	if character == nil then
+		return
+	end
+	local seq = character:GetAttribute(PLACED_SEQ_ATTRIBUTE)
+	if typeof(seq) ~= "number" or seq == placement.seq then
+		return
+	end
+	placement.seq = seq
+	local destination = character:GetAttribute(PLACED_ATTRIBUTE)
+	if typeof(destination) ~= "Vector3" then
+		return
+	end
+	local seen = placement.rootSeen
+	local far = seen == nil
+		or (destination - seen).Magnitude > Theme.COMBAT_CAMERA_SNAP_STUDS
+		or os.clock() - placement.jumpedAt <= Theme.COMBAT_PLACED_TIMEOUT_SECONDS
+	for _, handler in placedHandlers do
+		handler(destination, true, far)
+	end
+end
+
 local function update(deltaTime: number): ()
+	-- First, and whether or not the shoulder camera is up: a body moved during the summary is
+	-- placed all the same.
+	trackRoot()
+	if placement.dirty then
+		readPlacement()
+	end
 	local camera = currentCamera()
 	local rig = localRig()
 	local phaseEndsCamera = not rangeMode and DEFAULT_CAMERA_PHASES[phase] == true
@@ -529,16 +649,52 @@ local function update(deltaTime: number): ()
 		deactivate()
 		return
 	end
+	-- `pickedUp` = a body the camera was not following until this frame: a new one, or the one
+	-- it comes back to after the summary. With no word from the server it still counts as placed.
+	local pickedUp = false
 	if not active then
 		activate(camera, rig)
+		pickedUp = true
 	elseif boundHumanoid ~= rig.humanoid then
 		bindHumanoid(rig) -- respawned while the shoulder camera stayed up
+		pickedUp = true
+	end
+	if pickedUp then
+		-- Picking a body up takes the view from the old camera or the body's own facing. A look
+		-- asked for a moment ago (the server's word came before the body could be followed) is
+		-- the one that stands.
+		local held = placement.lookYaw
+		placement.lookYaw = nil
+		if held ~= nil and os.clock() - placement.lookAt <= Theme.COMBAT_PLACED_TIMEOUT_SECONDS then
+			yaw = held
+		end
 	end
 	if camera.CameraType ~= Enum.CameraType.Scriptable then
 		camera.CameraType = Enum.CameraType.Scriptable -- something reset it; take it back
 	end
 	rig.humanoid.AutoRotate = false
 	applyMouse(not cursorFree())
+
+	local rootPosition = rig.root.Position
+	local rootBefore = lastRoot
+	lastRoot = rootPosition
+	if
+		rootBefore ~= nil
+		and (rootPosition - rootBefore).Magnitude > Theme.COMBAT_CAMERA_SNAP_STUDS
+	then
+		-- The server moved the body: no lag is carried over the jump. That is all this says:
+		-- what else a move means comes from the server's own signal (readPlacement).
+		pivotHeight = nil
+		motionUntil = 0
+		flatLag = Vector3.zero
+		lastRootFlat = nil
+	end
+	if pickedUp then
+		-- Before this frame's look and facing, so a view a handler turns is this frame's view.
+		for _, handler in placedHandlers do
+			handler(rootPosition, false, true)
+		end
+	end
 
 	consumeLookInput(deltaTime)
 	faceCharacter(rig)
@@ -547,19 +703,6 @@ local function update(deltaTime: number): ()
 
 	local yawFrame = CFrame.Angles(0, yaw, 0)
 	local rotation = yawFrame * CFrame.Angles(pitch, 0, 0)
-	local rootPosition = rig.root.Position
-	local rootBefore = lastRoot
-	lastRoot = rootPosition
-	if
-		rootBefore ~= nil
-		and (rootPosition - rootBefore).Magnitude > Theme.COMBAT_CAMERA_SNAP_STUDS
-	then
-		-- The server moved the body: no lag is carried over the jump.
-		pivotHeight = nil
-		motionUntil = 0
-		flatLag = Vector3.zero
-		lastRootFlat = nil
-	end
 	local flatPivot = followFlat(rootPosition, deltaTime)
 	local pivot = Vector3.new(
 		flatPivot.X,
@@ -609,6 +752,7 @@ local function onInputBegan(input: InputObject, processed: boolean): ()
 		local key = input.KeyCode
 		if windowFocused and (key == Enum.KeyCode.LeftAlt or key == Enum.KeyCode.RightAlt) then
 			altFree = not altFree
+			altHold.pending = false -- the player's own press is the newest word on the cursor
 		end
 	end
 end
@@ -688,16 +832,45 @@ function CameraController.Start(): ()
 	end
 	table.insert(connections, Players.PlayerAdded:Connect(watchPlayer))
 	table.insert(connections, Players.PlayerRemoving:Connect(forgetPlayer))
+	-- The server's placement signal is on the local character: each new body is watched from
+	-- the moment it is there, and a body that goes takes its watch with it.
+	local localPlayer = Players.LocalPlayer
+	table.insert(connections, localPlayer.CharacterAdded:Connect(watchPlacement))
+	table.insert(
+		connections,
+		localPlayer.CharacterRemoving:Connect(function(removed: Model)
+			if placement.character == removed then
+				watchPlacement(nil)
+			end
+		end)
+	)
+	watchPlacement(localPlayer.Character)
 	RunService:BindToRenderStep(BIND_NAME, Enum.RenderPriority.Camera.Value, update)
 end
 
 -- Pushed from every RunState. A new phase re-locks a cursor the player freed with Alt, so
--- the next wave never starts with the pointer loose.
+-- the next wave never starts with the pointer loose. While KeepAltFree holds, the re-lock waits.
 function CameraController.SetPhase(nextPhase: string): ()
 	if nextPhase ~= phase then
-		altFree = false
+		if altHold.keep then
+			altHold.pending = true
+		else
+			altFree = false
+		end
 	end
 	phase = nextPhase
+end
+
+-- L1 fix round, item 1. Abandon asks twice, and a player who freed the cursor with Alt to click
+-- it must still have the cursor for the second click when a phase changes in between (the road
+-- into a camp's countdown, the countdown into the wave). `keep` = Abandon is armed. When it is
+-- armed no longer, a re-lock that a new phase asked for meanwhile is carried out.
+function CameraController.KeepAltFree(keep: boolean): ()
+	altHold.keep = keep
+	if not keep and altHold.pending then
+		altHold.pending = false
+		altFree = false
+	end
 end
 
 -- A modal or strip that needs the pointer (debug strip, load card) holds the cursor free
@@ -763,6 +936,57 @@ function CameraController.FaceToward(position: Vector3, seconds: number): ()
 	end
 end
 
+-- L1 fix round, item 2. Turns the VIEW to a world point; the body turns with it, because the
+-- rig faces the view's yaw. The pitch is the player's and stays. `from` is where the look
+-- starts: nil = the body as it stands; a point = where the body is about to be (the server's
+-- destination, named before the body's new position has arrived). With the shoulder camera up
+-- the view turns now; the look is also held for a moment (Theme.COMBAT_PLACED_TIMEOUT_SECONDS),
+-- so a camera that is down, or about to bind a new body, takes it when it picks the body up.
+-- False when there is nothing to turn to: no body to look from, or the point is over or under
+-- where the look starts.
+function CameraController.LookToward(position: Vector3, from: Vector3?): boolean
+	local origin: Vector3
+	if from ~= nil then
+		origin = from
+	else
+		local rig = localRig()
+		if rig == nil then
+			return false
+		end
+		origin = rig.root.Position
+	end
+	local flat = Vector3.new(position.X - origin.X, 0, position.Z - origin.Z)
+	if flat.Magnitude < Theme.COMBAT_LOOK_MIN_STUDS then
+		return false
+	end
+	local wanted = yawOf(flat.Unit)
+	placement.lookYaw = wanted
+	placement.lookAt = os.clock()
+	if active then
+		yaw = wanted
+		faceTarget = nil -- a melee assist still turning the body would turn it away again
+	end
+	return true
+end
+
+-- L1 fix round, items 2 and 3. `handler` is told each time the server placed the local body.
+--  * `signalled` true: the server said so (the character's `Placed` and `PlacedSeq`
+--    attributes) and `position` is the feet point it named. The body's new position reaches
+--    this client a moment before or after the word does, so the body may not be there yet.
+--  * `signalled` false: no word, but the body is one the camera had not followed before this
+--    frame (a new body, the first frame after a summary), and `position` is its root now.
+--  * `far`: the move took the body more than COMBAT_CAMERA_SNAP_STUDS (see readPlacement);
+--    always true for a body only just picked up. A view is turned only for a far move.
+-- Called from the camera's render step, before the frame's look and facing. Handlers stay for
+-- the session; one registered twice is still told once.
+function CameraController.OnPlaced(
+	handler: (position: Vector3, signalled: boolean, far: boolean) -> ()
+): ()
+	if table.find(placedHandlers, handler) == nil then
+		table.insert(placedHandlers, handler)
+	end
+end
+
 -- The finger holding the attack button also steers, so a phone player can fire and track
 -- with one thumb. The touch is dropped when it ends.
 function CameraController.AdoptTouch(input: InputObject): ()
@@ -822,6 +1046,7 @@ function CameraController.Destroy(): ()
 		connection:Disconnect()
 	end
 	table.clear(characterConnections)
+	watchPlacement(nil)
 	collisionParams = nil
 	deactivate()
 end

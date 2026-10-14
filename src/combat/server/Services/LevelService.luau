@@ -13,6 +13,11 @@
 -- A camp's invisible wall is in BarrierGroups' collision group, so only characters meet it;
 -- the camera and every ray pass. Build and Clear never yield. Build runs in the remote's own
 -- thread; WaveService defers Clear out of its tick.
+--
+-- Nothing here throws on what a config or a layout says. A look with an unknown material, a
+-- colour that is not three numbers or no sign block leaves that one property as the engine made
+-- it, with one warn. Whatever still fails while the Parts are made (the build is behind a
+-- pcall) leaves no Part behind: half a level would be stacked on by the next Build.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -76,24 +81,40 @@ local function warnOnce(key: string, message: string): ()
 	warn(message)
 end
 
-local function colorOf(rgb: { number }): Color3
-	return Color3.fromRGB(rgb[1] or 255, rgb[2] or 255, rgb[3] or 255)
-end
-
--- nil for a name the engine does not know: the Part then keeps the material it has.
-local function materialOf(name: string): Enum.Material?
-	local material = (Enum.Material :: any)[name]
-	if typeof(material) == "EnumItem" then
-		return material :: Enum.Material
+-- nil for a colour that is not three numbers: the Part then keeps the colour it has.
+local function colorOf(rgb: { number }?, what: string): Color3?
+	if type(rgb) == "table" then
+		local r, g, b = rgb[1], rgb[2], rgb[3]
+		if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+			return Color3.fromRGB(r, g, b)
+		end
 	end
-	warnOnce(`material:{name}`, `[LevelService] unknown material "{name}"; left as it was`)
+	warnOnce(
+		`color:{what}`,
+		`[LevelService] the colour of {what} is not three numbers; left as it was`
+	)
 	return nil
 end
 
--- A missing look leaves the Part as the engine made it: a placeholder, never an error.
+-- nil for a name the engine does not know: the Part then keeps the material it has. Behind a
+-- pcall, because indexing an Enum with a name it does not have throws.
+local function materialOf(name: string): Enum.Material?
+	local ok, material = pcall(function(): any
+		return (Enum.Material :: any)[name]
+	end)
+	if ok and typeof(material) == "EnumItem" then
+		return material :: Enum.Material
+	end
+	local shown = tostring(name)
+	warnOnce(`material:{shown}`, `[LevelService] unknown material "{shown}"; left as it was`)
+	return nil
+end
+
+-- A missing look leaves the Part as the engine made it: a placeholder, never an error. SetCamp
+-- calls this from the run's tick, so nothing in it may throw.
 local function applyLook(part: BasePart, looks: Looks?, name: string): ()
 	local look = if looks ~= nil then looks[name] else nil
-	if look == nil then
+	if type(look) ~= "table" then
 		warnOnce(`look:{name}`, `[LevelService] Expeditions.json has no look "{name}"`)
 		return
 	end
@@ -101,37 +122,50 @@ local function applyLook(part: BasePart, looks: Looks?, name: string): ()
 	if material ~= nil then
 		part.Material = material
 	end
-	part.Color = colorOf(look.color)
-	part.Transparency = look.transparency or 0
+	local color = colorOf(look.color, `look "{name}"`)
+	if color ~= nil then
+		part.Color = color
+	end
+	local transparency = look.transparency
+	part.Transparency = if type(transparency) == "number" then transparency else 0
+end
+
+-- A length the config gave: a positive, finite number. nil for anything else.
+local function lengthOf(value: number?): number?
+	if type(value) == "number" and value > 0 and value < math.huge then
+		return value
+	end
+	return nil
 end
 
 -- A config size, { x, y, z } studs. nil when the key is absent or is not three positive
 -- numbers: no size lives in code, so the Part it sizes is then not built.
 local function sizeOf(value: { number }?): LevelGeometry.Size?
-	if value == nil then
+	if type(value) ~= "table" then
 		return nil
 	end
-	local sx, sy, sz = value[1], value[2], value[3]
-	local function positive(number: number?): boolean
-		return number ~= nil and number > 0 and number < math.huge
-	end
-	if positive(sx) and positive(sy) and positive(sz) then
+	local sx, sy, sz = lengthOf(value[1]), lengthOf(value[2]), lengthOf(value[3])
+	if sx ~= nil and sy ~= nil and sz ~= nil then
 		return { sx = sx, sy = sy, sz = sz }
 	end
 	return nil
 end
 
--- What LevelGeometry needs beyond the layout, all of it from the config: the fence's thickness
--- and a checkpoint marker's size (Combat.json levels), a secret's sign's size (Expeditions.json
--- sign).
+-- What LevelGeometry needs beyond the layout, all of it from the config: the fence's thickness,
+-- the ground's depth and a checkpoint marker's size (Combat.json levels), a secret's sign's
+-- size (Expeditions.json sign). A length the config does not give is left out: with no
+-- fenceThickness a camp has no fence, and with no floorThickness LevelGeometry refuses a
+-- layout that has a camp (and says so) and builds a lobby's blocks as its layout writes them.
 local function sizesOf(
 	expeditions: Types.ExpeditionsConfig?,
 	rules: Types.CombatLevelsConfig?
 ): LevelGeometry.Sizes
+	local sign = if expeditions ~= nil then expeditions.sign else nil
 	return {
-		fence = if rules ~= nil then rules.fenceThickness else 0,
+		fence = (if rules ~= nil then lengthOf(rules.fenceThickness) else nil) or 0,
+		floor = if rules ~= nil then lengthOf(rules.floorThickness) else nil,
 		checkpoint = sizeOf(if rules ~= nil then rules.checkpointSize else nil),
-		sign = sizeOf(if expeditions ~= nil then expeditions.sign.size else nil),
+		sign = sizeOf(if type(sign) == "table" then sign.size else nil),
 	}
 end
 
@@ -174,22 +208,34 @@ local function piecesOf(
 	return pieces :: { LevelGeometry.Piece }?, problem :: string?
 end
 
+-- A block's text, on its four side faces. Without Expeditions.json `sign` the text is still
+-- there, in the engine's own colour and density.
 local function addText(part: BasePart, text: string, expeditions: Types.ExpeditionsConfig): ()
 	local sign = expeditions.sign
+	local density: number? = nil
+	local textColor: Color3? = nil
+	if type(sign) == "table" then
+		density = lengthOf(sign.pixelsPerStud)
+		textColor = colorOf(sign.textColor, "Expeditions.json sign.textColor")
+	else
+		warnOnce("sign", "[LevelService] Expeditions.json has no sign block; texts are unstyled")
+	end
 	for _, face in CONST.TEXT_FACES do
 		local gui = Instance.new("SurfaceGui")
 		gui.Name = `Text_{face.Name}`
 		gui.Face = face
 		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		if sign.pixelsPerStud > 0 then
-			gui.PixelsPerStud = sign.pixelsPerStud
+		if density ~= nil then
+			gui.PixelsPerStud = density
 		end
 		local label = Instance.new("TextLabel")
 		label.Name = "Label"
 		label.Size = UDim2.fromScale(1, 1)
 		label.BackgroundTransparency = 1
 		label.Text = text
-		label.TextColor3 = colorOf(sign.textColor)
+		if textColor ~= nil then
+			label.TextColor3 = textColor
+		end
 		label.TextScaled = true
 		label.TextWrapped = true
 		label.Parent = gui
@@ -251,7 +297,10 @@ local function construct(
 		end
 		local ownColor = piece.color
 		if ownColor ~= nil then
-			part.Color = colorOf(ownColor)
+			local color = colorOf(ownColor, piece.name)
+			if color ~= nil then
+				part.Color = color
+			end
 		end
 		if not piece.collide then
 			part.CanCollide = false
@@ -287,6 +336,29 @@ local function construct(
 		part.Parent = folder
 	end
 	return camps
+end
+
+-- `layout` as Parts under `folder`: what SetCamp will need of each camp, or nil and why. With
+-- nil the folder is left empty: LevelGeometry refused the layout before a Part was made, or a
+-- Part could not be made and the ones before it are cleared away. Half a level must not stand;
+-- the next Build would put a second copy on it.
+local function raise(
+	folder: Folder,
+	layout: Types.LevelLayout,
+	sizes: LevelGeometry.Sizes,
+	maxParts: number,
+	expeditions: Types.ExpeditionsConfig?
+): ({ [string]: CampParts }?, string?)
+	local pieces, problem = piecesOf(layout, sizes, maxParts)
+	if pieces == nil then
+		return nil, problem
+	end
+	local ok, camps = pcall(construct, folder, pieces, expeditions)
+	if not ok then
+		folder:ClearAllChildren()
+		return nil, `a Part could not be made ({tostring(camps)})`
+	end
+	return camps, nil
 end
 
 local function newFolder(name: string): Folder
@@ -335,17 +407,19 @@ function LevelService.BuildLobby(): ()
 	local sizes = sizesOf(expeditions, rules)
 	local maxParts = if rules ~= nil then rules.maxParts else math.huge
 	local layout = lobbyLayout(expeditions)
-	local pieces, problem = piecesOf(layout, sizes, maxParts)
-	if pieces == nil then
+	local built, problem = raise(folder, layout, sizes, maxParts, expeditions)
+	if built == nil then
 		warn(`[LevelService] the lobby layout cannot be built ({problem}); using the bare pad`)
+		-- In no look at all: whatever stopped the file's lobby (its layout, or a look of
+		-- Expeditions.json) cannot stop the stand-in.
 		layout = LevelGeometry.BareLobby()
-		pieces = piecesOf(layout, sizes, math.huge)
-	end
-	if pieces ~= nil then
-		construct(folder, pieces, expeditions)
+		built, problem = raise(folder, layout, sizes, math.huge, nil)
+		if built == nil then
+			warn(`[LevelService] nor can the bare pad ({problem}); the lobby has no floor`)
+		end
 	end
 	warnUnsized(layout, sizes)
-	state.lobbyBounds = LevelGeometry.Bounds(layout)
+	state.lobbyBounds = LevelGeometry.Bounds(layout, sizes.floor)
 
 	local start = layout.start
 	local points: { Vector3 } = {}
@@ -396,9 +470,10 @@ function LevelService.LobbyBounds(): LevelGeometry.Bounds
 end
 
 -- Builds `layout` under Workspace.Level, every camp open. false with one warn, and nothing
--- built, when a level is already standing, before Init, or when LevelGeometry.Pieces refuses
--- the layout (it still names an arena, gates with no fence, a bad size, over levels.maxParts).
--- Never yields.
+-- built, when a level is already standing, before Init, when LevelGeometry.Pieces refuses the
+-- layout (it still names an arena, gates with no fence, a camp and no levels.floorThickness, a
+-- size of 0 or less, over levels.maxParts), or when a Part cannot be made: the Parts made
+-- before it are cleared, so the next Build starts from an empty folder. Never yields.
 function LevelService.Build(
 	layout: Types.LevelLayout,
 	expeditions: Types.ExpeditionsConfig,
@@ -414,13 +489,13 @@ function LevelService.Build(
 		return false
 	end
 	local sizes = sizesOf(expeditions, rules)
-	local pieces, problem = piecesOf(layout, sizes, rules.maxParts)
-	if pieces == nil then
+	local camps, problem = raise(folder, layout, sizes, rules.maxParts, expeditions)
+	if camps == nil then
 		warn(`[LevelService] the level was not built: {problem}`)
 		return false
 	end
 	warnUnsized(layout, sizes)
-	state.camps = construct(folder, pieces, expeditions)
+	state.camps = camps
 	state.looks = expeditions.looks
 	state.built = true
 	return true
