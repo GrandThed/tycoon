@@ -133,6 +133,9 @@ local hooks = {
 	character = nil :: ((player: Player, character: Model) -> ())?,
 	-- Is this member down (VitalsService), for PartyMember.down.
 	down = nil :: ((userId: number) -> boolean)?,
+	-- L1b: is this member in a resident fight (WaveService, from CrowdService.Engaged), for
+	-- PartyMember.engaged: the phone client hides Abandon while it is true.
+	engaged = nil :: ((userId: number) -> boolean)?,
 	-- Called after every move this service makes of a human's body, so whoever measures that
 	-- body's motion can forget the jump (WeaponService.ForgetMotion).
 	moved = nil :: ((player: Player) -> ())?,
@@ -176,8 +179,8 @@ export type RunFields = {
 	left: number,
 	bossName: string?,
 	gateIn: number?,
-	banked: number,
-	floor: Types.RunFloor?,
+	-- L1b: every camp's floor in floor-index order ({} in the lobby), and the plan's population.
+	floors: { Types.RunFloor },
 	maxAlive: number,
 }
 local runFields: RunFields = {
@@ -201,8 +204,7 @@ local runFields: RunFields = {
 	left = 0,
 	bossName = nil,
 	gateIn = nil,
-	banked = 0,
-	floor = nil,
+	floors = {},
 	maxAlive = 0,
 }
 
@@ -553,6 +555,11 @@ local function isDown(member: Types.RunMember): boolean
 	return not member.bot and source ~= nil and source(member.userId)
 end
 
+local function isEngaged(member: Types.RunMember): boolean
+	local source = hooks.engaged
+	return not member.bot and source ~= nil and source(member.userId)
+end
+
 -- L1 ruling 7: the host when the host is in the roster, else the first human in party order.
 -- 0 with no human member.
 function ArenaService.LeaderUserId(): number
@@ -590,6 +597,7 @@ local function memberEntry(member: Types.RunMember, leader: number): Types.Party
 		host = member.userId == leader,
 		waiting = member.waiting,
 		damageShare = damageShareOf(member.userId),
+		engaged = isEngaged(member),
 		down = isDown(member),
 	}
 end
@@ -638,8 +646,7 @@ function ArenaService.BuildRunState(
 		left = runFields.left,
 		bossName = runFields.bossName,
 		gateIn = runFields.gateIn,
-		banked = runFields.banked,
-		floor = runFields.floor,
+		floors = runFields.floors,
 		maxAlive = runFields.maxAlive,
 		leaderUserId = leader,
 		result = result,
@@ -659,7 +666,7 @@ function ArenaService.MarkRunStarted(): ()
 	play.endedAt = 0
 end
 
--- The run's card for one member: what this run banked for them.
+-- The run's card for one member: what this run credited them.
 function ArenaService.GetSummary(userId: number): Types.RunSummary
 	local summary = runSummaryFor(userId)
 	summary.seconds = math.floor(ArenaService.RunSeconds())
@@ -779,6 +786,11 @@ end
 -- Fills PartyMember.down (always false for bots).
 function ArenaService.SetDownSource(source: (userId: number) -> boolean): ()
 	hooks.down = source
+end
+
+-- Fills PartyMember.engaged (L1b; always false for bots, and without a source).
+function ArenaService.SetEngagedSource(source: (userId: number) -> boolean): ()
+	hooks.engaged = source
 end
 
 -- L1 ruling 18: where a member's body belongs right now (feet) and whether they wait for the
@@ -1332,7 +1344,8 @@ end
 
 -- Credits -------------------------------------------------------------------------------------
 
--- WaveService credits the split of a banked pool here, so both cards and the profile agree.
+-- WaveService credits each member's share of every kill here (L1b-15), so both cards and the
+-- profile agree.
 function ArenaService.CreditSummary(
 	userId: number,
 	cash: number,

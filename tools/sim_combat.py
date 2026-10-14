@@ -694,13 +694,45 @@ def camp_wave(wave_def, regen_share, scales, rank, ranks, party_size, combat_cfg
     }
 
 
-def camp_reward(rewards, kind, spec):
-    """Combat.CampReward -- (round(cash x rewardMult), round(materials x rewardMult)) for one
-    kill of `kind`; a kind with no rewards entry pays (0, 0)."""
+def kill_reward(rewards, kind, reward_mult):
+    """Combat.KillReward (L1b-15) -- (round(cash x rewardMult), round(materials x rewardMult))
+    for one kill of `kind`; a kind with no rewards entry pays (0, 0)."""
     reward = rewards.get(kind)
     if reward is None:
         return 0, 0
-    return luau_round(reward["cash"] * spec["rewardMult"]), luau_round(reward["materials"] * spec["rewardMult"])
+    return luau_round(reward["cash"] * reward_mult), luau_round(reward["materials"] * reward_mult)
+
+
+def camp_reward(rewards, kind, spec):
+    """Combat.CampReward -- KillReward at the spec's rewardMult."""
+    return kill_reward(rewards, kind, spec["rewardMult"])
+
+
+def split_carry(pool, shares, carry, cash_mults=None):
+    """Combat.SplitCarry (L1b-15) -- one kill's pool split the moment it falls. Each member is
+    paid the whole units of (pool x share, cash x their cash multiplier, + their carry), floored
+    with a 1e-9 allowance, and keeps the fraction in `carry` (mutated) for their next credit. A
+    share that is not a finite number of at least 0 pays nothing and leaves that carry as it
+    was; a member not in `shares` keeps theirs."""
+    split = {}
+    for user, share in shares.items():
+        if not (isinstance(share, (int, float)) and share >= 0 and share < math.inf):
+            continue
+        held = carry.get(user)
+        if held is None:
+            held = {"cash": 0, "materials": 0, "valor": 0}
+            carry[user] = held
+        mult = (cash_mults.get(user) if cash_mults is not None else None)
+        mult = 1 if mult is None else mult
+        paid = {}
+        for key, exact in (("cash", pool["cash"] * share * mult + held["cash"]),
+                           ("materials", pool["materials"] * share + held["materials"]),
+                           ("valor", pool["valor"] * share + held["valor"])):
+            whole_units = math.floor(exact + 1e-9)
+            paid[key] = whole_units
+            held[key] = max(exact - whole_units, 0)
+        split[user] = paid
+    return split
 
 
 def burst_seconds(target_wave_seconds, bursts, tempo_value):

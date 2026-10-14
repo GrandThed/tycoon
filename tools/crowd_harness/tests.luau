@@ -355,7 +355,7 @@ end
 local function stepSim(sim: Sim): ()
 	sim.now += DT
 	sim.clock += DT
-	Brain.BeginStep(sim.now, 0, 196.2, 0, 140)
+	Brain.BeginStep(sim.now, 196.2, 0, 140)
 	for _, target in sim.targets do
 		Brain.AddTarget(target.userId, target.position, 3, target.lag or 0)
 	end

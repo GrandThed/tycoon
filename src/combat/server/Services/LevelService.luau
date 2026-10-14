@@ -5,8 +5,8 @@
 -- are plain anchored Parts in the looks of Expeditions.json: no mesh, no upload.
 --
 -- This service owns every Instance of the lobby and of the level and nothing else. It moves no
--- body and knows nothing of the run: WaveService tells it which camp closes and which is
--- cleared (SetCamp). It does no arithmetic either: LevelGeometry says which Parts a layout
+-- body and knows nothing of the run: WaveService tells it which camp closes, which checkpoint
+-- is reached and which camp is cleared (SetCamp). It does no arithmetic either: LevelGeometry says which Parts a layout
 -- becomes and where each stands, and the harness tests that list. What is left here, and can
 -- only be checked in Studio, is turning a piece into a Part.
 --
@@ -30,8 +30,11 @@ local BarrierGroups = require(script.Parent:WaitForChild("BarrierGroups"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 
 type Looks = { [string]: Types.LevelLook }
--- What SetCamp changes of one camp.
+-- What SetCamp changes of one camp. Every camp of the level has one.
 type CampParts = {
+	-- It has gates or an invisible wall: the boss room (L1b-12). Open and closed mean nothing to
+	-- an open camp.
+	locking: boolean,
 	gates: { BasePart },
 	-- A closed gate shows at its look's transparency.
 	gateTransparency: number,
@@ -152,8 +155,8 @@ local function sizeOf(value: { number }?): LevelGeometry.Size?
 end
 
 -- What LevelGeometry needs beyond the layout, all of it from the config: the fence's thickness,
--- the ground's depth and a checkpoint marker's size (Combat.json levels), a secret's sign's
--- size (Expeditions.json sign). A length the config does not give is left out: with no
+-- the ground's depth, a checkpoint marker's and a fire marker's size (Combat.json levels), a
+-- secret's sign's size (Expeditions.json sign). A length the config does not give is left out: with no
 -- fenceThickness a camp has no fence, and with no floorThickness LevelGeometry refuses a
 -- layout that has a camp (and says so) and builds a lobby's blocks as its layout writes them.
 local function sizesOf(
@@ -165,23 +168,31 @@ local function sizesOf(
 		fence = (if rules ~= nil then lengthOf(rules.fenceThickness) else nil) or 0,
 		floor = if rules ~= nil then lengthOf(rules.floorThickness) else nil,
 		checkpoint = sizeOf(if rules ~= nil then rules.checkpointSize else nil),
+		fire = sizeOf(if rules ~= nil then rules.fireMarkerSize else nil),
 		sign = sizeOf(if type(sign) == "table" then sign.size else nil),
 	}
 end
 
 -- Says once which Parts a layout asks for and the config gives no size for.
 local function warnUnsized(layout: Types.LevelLayout, sizes: LevelGeometry.Sizes): ()
-	if sizes.checkpoint == nil then
-		-- A lobby file may leave `camps` out.
-		local camps: { Types.LevelCamp } = layout.camps or {}
-		for _, camp in camps do
-			if camp.checkpoint ~= nil then
+	-- A lobby file may leave `camps` out.
+	local camps: { Types.LevelCamp } = layout.camps or {}
+	for _, camp in camps do
+		if sizes.checkpoint == nil and camp.checkpoint ~= nil then
+			warnOnce(
+				"size:checkpoint",
+				"[LevelService] Combat.json levels.checkpointSize is missing or not three "
+					.. "positive numbers; no checkpoint marker is built"
+			)
+		end
+		local spots: { Types.LevelSpot } = camp.spots or {}
+		for _, spot in spots do
+			if sizes.fire == nil and spot.posture == "fire" then
 				warnOnce(
-					"size:checkpoint",
-					"[LevelService] Combat.json levels.checkpointSize is missing or not three "
-						.. "positive numbers; no checkpoint marker is built"
+					"size:fire",
+					"[LevelService] Combat.json levels.fireMarkerSize is missing or not three "
+						.. "positive numbers; no fire marker is built"
 				)
-				break
 			end
 		end
 	end
@@ -246,7 +257,8 @@ end
 local function campOf(camps: { [string]: CampParts }, id: string): CampParts
 	local camp = camps[id]
 	if camp == nil then
-		camp = { gates = {}, gateTransparency = 0, barriers = {}, checkpoint = nil }
+		camp =
+			{ locking = false, gates = {}, gateTransparency = 0, barriers = {}, checkpoint = nil }
 		camps[id] = camp
 	end
 	return camp
@@ -308,6 +320,9 @@ local function construct(
 			part.CanQuery = false
 		end
 		local campId = piece.camp
+		-- Every camp is known to SetCamp, the open ones too (their checkpoint is reached and
+		-- they are cleared like any other).
+		local camp = if campId ~= nil then campOf(camps, campId) else nil
 		if isBarrier then
 			-- The group is what lets the camera and rays through, never CanQuery. Off as built.
 			part.CollisionGroup = BarrierGroups.BARRIER
@@ -315,19 +330,20 @@ local function construct(
 			part.CanTouch = false
 			part.CastShadow = false
 			part.CanCollide = false
-			if campId ~= nil then
-				table.insert(campOf(camps, campId).barriers, part)
+			if camp ~= nil then
+				camp.locking = true
+				table.insert(camp.barriers, part)
 			end
 		elseif piece.role == "gate" then
 			local shown = part.Transparency
 			setGate(part, false, shown)
-			if campId ~= nil then
-				local camp = campOf(camps, campId)
+			if camp ~= nil then
+				camp.locking = true
 				camp.gateTransparency = shown
 				table.insert(camp.gates, part)
 			end
-		elseif piece.role == "checkpoint" and campId ~= nil then
-			campOf(camps, campId).checkpoint = part
+		elseif piece.role == "checkpoint" and camp ~= nil then
+			camp.checkpoint = part
 		end
 		local text = piece.text
 		if text ~= nil and text ~= "" and expeditions ~= nil then
@@ -518,25 +534,41 @@ end
 
 -- "open" (as built): the gates are not there and the invisible wall is off. "closed": the gates
 -- stand, visible and solid, and the wall holds every character in. "cleared": as open, and the
--- checkpoint marker takes the look `checkpointDone`. An unknown camp or state changes nothing.
+-- checkpoint marker takes the look `checkpointDone`. "reached" (L1b-18): the checkpoint marker
+-- takes the look `checkpointDone`, nothing else. On an open camp (no gate, no wall) "open" and
+-- "closed" change nothing. An unknown camp or state changes nothing.
 function LevelService.SetCamp(zoneId: string, campState: string): ()
 	local camp = state.camps[zoneId]
 	if camp == nil then
 		warn(`[LevelService] SetCamp: no camp "{zoneId}" in the level that is built`)
 		return
 	end
-	if campState ~= "open" and campState ~= "closed" and campState ~= "cleared" then
+	if
+		campState ~= "open"
+		and campState ~= "closed"
+		and campState ~= "cleared"
+		and campState ~= "reached"
+	then
 		warn(`[LevelService] SetCamp: unknown state "{campState}" for camp {zoneId}`)
 		return
 	end
 	local closed = campState == "closed"
+	local checkpoint = camp.checkpoint
+	if campState == "reached" then
+		if checkpoint ~= nil then
+			applyLook(checkpoint, state.looks, "checkpointDone")
+		end
+		return
+	end
+	if not camp.locking and campState ~= "cleared" then
+		return
+	end
 	for _, gate in camp.gates do
 		setGate(gate, closed, camp.gateTransparency)
 	end
 	for _, barrier in camp.barriers do
 		barrier.CanCollide = closed
 	end
-	local checkpoint = camp.checkpoint
 	if checkpoint ~= nil and not closed then
 		applyLook(
 			checkpoint,

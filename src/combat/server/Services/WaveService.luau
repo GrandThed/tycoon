@@ -4,25 +4,28 @@
 -- the server clock.
 --
 -- L1 makes this one stage-driven machine for every level (ruling 1). The RULES of a run are not
--- here: which stage is next, when a camp triggers, when it is clear, what a checkpoint banks,
--- what ends the run, where a body belongs, what a skip does, which node is open. They are
--- StageFlow's, a pure module the harness loads and mutates (ruling 2). This file only builds
--- StageFlow's input once a tick and EXECUTES the actions it returns: it moves the crowd's floor,
--- closes and opens gates, queues waves, banks the pool, moves bodies.
+-- here: which stage is next, when the boss room triggers, when a camp is clear, when a
+-- checkpoint is reached, what ends the run, where a body belongs, what a skip does, which node is
+-- open. They are StageFlow's, a pure module the harness loads and mutates (ruling 2), and the
+-- split of a kill's reward is Combat's. This file only builds StageFlow's input once a tick and
+-- EXECUTES the actions it returns: it closes and opens gates, queues waves, marks camps, moves
+-- bodies.
 --
 -- Kept from P5, unchanged in meaning:
--- * Waves are crowd groups arriving in bursts at the camp's spawn points; a kill pays its kind's
---   fixed reward into a pool and books the HP its body lost per player (CrowdKillInfo).
+-- * The boss room's waves are crowd groups arriving in bursts at its spawn points.
 -- * The pacing director only ever changes PACING (burst interval, merges, breather length, the
 --   one extra elite), never enemy HP or damage.
 -- * This is the only place under src/combat that writes a profile, and it writes nothing but
 --   cash, materials, Valor, combat stats and (for a level that names a mission) its record.
 -- * Nothing in the tick yields. The level's removal is deferred out of it.
 --
--- New with L1: only a checkpoint pays (ruling 15: whatever ends the run drops the pool that was
--- not banked); every run ends in a summary and then the lobby camp, never the city (ruling 20);
--- the leader starts a level with RequestStartLevel (ruling 7); stars are session memory, kept
--- here per userId (ruling 25).
+-- From L1: every run ends in a summary and then the lobby camp, never the city (ruling 20); the
+-- leader starts a level with RequestStartLevel (ruling 7); stars are session memory, kept here
+-- per userId (ruling 25).
+-- New with L1b ("L1b contracts — the living road"): the crowd has one floor per camp, set once at
+-- the start; every camp's residents are placed at the start and live on their own; every kill is
+-- paid the moment it falls, split by that body's own damage book (L1b-15), and the wallet goes
+-- out at most once a second (L1b-16). Nothing is pooled, so nothing is ever dropped.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -46,6 +49,7 @@ local RunFx = require(script.Parent:WaitForChild("RunFx"))
 local StageFlow = require(script.Parent:WaitForChild("StageFlow"))
 local LevelService = require(script.Parent:WaitForChild("LevelService"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
+local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
 
 -- Degrade value: without Combat.json the place never leaves the lobby, but the broadcast loop
 -- still needs a legal period.
@@ -55,7 +59,6 @@ local FIGHT = "fight"
 -- One burst of one group: up to crowd.burst bodies of a kind, arriving together at one spawn
 -- point in a grid. `placed` survives a hold (maxAlive, or a refused spawn), so the grid carries on.
 type Burst = { kind: string, left: number, placed: number, at: Vector3? }
-type Pool = Combat.RewardPool
 type StartRefusal = "notLeader" | "busy" | "locked" | "unavailable"
 
 -- Everything a run holds, in one table (Studio's 200-local limit and one place to reset).
@@ -88,33 +91,29 @@ type Run = {
 	laterBodies: number,
 	-- os.clock() the live camp's gates closed: the director's warmup counts from it.
 	campClosedAt: number,
-	-- The crowd's floor from a camp's trigger until it is cleared (ruling 30).
-	floor: Types.RunFloor?,
+	-- Every camp's floor in floor-index order, set once at the start (L1b-1); {} in the lobby.
+	floors: { Types.RunFloor },
+	-- The plan's population (L1b-11): the client prewarms its pool with it.
 	maxAlive: number,
 	runEndsAt: number,
 	-- os.clock() the summary ends and the party is back in the lobby; 0 = nothing pending.
 	returnAt: number,
 	tempo: number,
-	pool: Pool,
-	killsByUser: { [number]: number },
-	bossClearsThisFlush: number,
 	killStamps: { number },
-	-- The damage split of the current pool, and of the whole run (PartyMember.damageShare and
-	-- RunSummary.damageShare read the latter; it is never drained mid-run).
-	damageTally: { [number]: number },
+	-- The damage of the whole run (PartyMember.damageShare and RunSummary.damageShare read it).
 	runDamage: { [number]: number },
 	runDamageTotal: number,
-	-- Checkpoints banked this run, and the stage name of the last one ("" = nothing was banked).
-	banked: number,
-	savedAt: string,
+	-- L1b-15: each member's fractions not paid yet; L1b-16: whose wallet a credit changed, and
+	-- when each was last sent (os.clock()).
+	carry: Combat.Carry,
+	walletDirty: { [number]: boolean },
+	walletSentAt: { [number]: number },
+	-- A resident was refused at the start: warned once per run.
+	warnedResident: boolean,
 	-- Who the live camp's close has brought to its entry, by userId: once each (the close is
 	-- judged again for levels.closeGraceSeconds, and a body just moved still reads as outside).
 	entered: { [number]: boolean },
 }
-
-local function emptyPool(): Pool
-	return { cash = 0, materials = 0, valor = 0, kills = 0 }
-end
 
 local function freshRun(): Run
 	return {
@@ -138,20 +137,18 @@ local function freshRun(): Run
 		nextBurstAt = 0,
 		laterBodies = 0,
 		campClosedAt = 0,
-		floor = nil,
+		floors = {},
 		maxAlive = 0,
 		runEndsAt = 0,
 		returnAt = 0,
 		tempo = 1,
-		pool = emptyPool(),
-		killsByUser = {},
-		bossClearsThisFlush = 0,
 		killStamps = {},
-		damageTally = {},
 		runDamage = {},
 		runDamageTotal = 0,
-		banked = 0,
-		savedAt = "",
+		carry = {},
+		walletDirty = {},
+		walletSentAt = {},
+		warnedResident = false,
 		entered = {},
 	}
 end
@@ -180,6 +177,8 @@ local boot = {
 	returning = false,
 	-- The lobby camp's kill height, read once (its layout is a file).
 	lobbyKillY = nil :: number?,
+	-- The living bodies on each floor, refilled by every advance (no table per tick).
+	aliveByFloor = {} :: { number },
 }
 
 local WaveService = {}
@@ -248,7 +247,9 @@ local function pushRunFields(): ()
 	local flow = run.flow
 	local stage = currentStage()
 	local inCamp = flow ~= nil and (flow.step == "fight" or flow.step == "breather")
-	local alive = CrowdService.AliveCount()
+	-- The live boss room's own floor: the residents of the open camps are not its bodies.
+	local _liveStage, live = liveZone()
+	local alive = if live ~= nil then CrowdService.AliveOn(live.floor) else 0
 	local queued = queuedBodies()
 	ArenaService.SetRunFields({
 		phase = phase,
@@ -275,8 +276,7 @@ local function pushRunFields(): ()
 		left = if inCamp then alive + queued + run.laterBodies else 0,
 		bossName = if run.bossId ~= 0 or run.bossPending ~= nil then run.bossName else nil,
 		gateIn = if phase == "gate" and flow ~= nil then math.max(0, flow.gateAt - now) else nil,
-		banked = run.banked,
-		floor = run.floor,
+		floors = run.floors,
 		maxAlive = run.maxAlive,
 	})
 end
@@ -589,10 +589,10 @@ local function missionRecord(state: Types.PlayerState, missionId: string): Types
 	return record
 end
 
--- Mentor bonus at a banked boss clear (docs/INTERFACES.md "C2 contracts"): each human is paid
--- Combat.MentorBonus against the rates of the OTHER members present whose raw share of THIS
--- pool reached coop.mentorMinDamageShare, so an idle alt parked in the party earns its main
--- nothing. Bots report debug.botIncomeRate and are never mentors.
+-- Mentor bonus at the boss's kill (docs/INTERFACES.md "C2 contracts", L1b-15): each human is
+-- paid Combat.MentorBonus against the rates of the OTHER members present whose raw share of the
+-- boss's damage book reached coop.mentorMinDamageShare, so an idle alt parked in the party earns
+-- its main nothing. Bots report debug.botIncomeRate and are never mentors.
 local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: number }): ()
 	local total = 0
 	for _, damage in tally do
@@ -634,6 +634,7 @@ local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: n
 		end
 		state.combat.valor += bonus
 		ArenaService.CreditMentor(mentor.userId, bonus)
+		run.walletDirty[mentor.userId] = true
 		RunFx.Push({
 			kind = "mentor",
 			userId = mentor.userId,
@@ -644,87 +645,157 @@ local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: n
 	end
 end
 
--- A checkpoint (ruling 15): the pool, split by damage share with a floor and written straight
--- into the profiles. `waveNumber` is the live camp's wave that was just cleared and `waveCount`
--- how many waves this bank covers. Only a checkpoint calls this: nothing that ends a run does.
-local function flushPool(waveNumber: number, waveCount: number): ()
+-- The humans in the fight, each at 0 damage: ContributionShares splits a reward evenly over it.
+local function evenTally(): { [number]: number }
+	local tally: { [number]: number } = {}
+	for _, userId in fightingIds() do
+		tally[userId] = 0
+	end
+	return tally
+end
+
+-- L1b-15: one reward (a kill's, or a camp clear's bonus) split over `tally` with the floor share
+-- (Combat.ContributionShares) and paid in whole units with each member's carry
+-- (Combat.SplitCarry, each member's CombatCashMult inside it), written into the profile and both
+-- summaries; each wallet it changed is marked dirty (L1b-16). `killer` (0 = none) is credited
+-- the kill. Never yields: it runs inside the strike that killed the body.
+local function credit(pool: Combat.RewardPool, tally: { [number]: number }, killer: number): ()
 	local level = run.level
 	local combatConfig = config()
 	if level == nil or combatConfig == nil then
 		return
 	end
-	local tally = run.damageTally
-	run.damageTally = {}
-	if next(tally) == nil then
-		-- Nobody damaged anything that died (the killAll lever, or a boss's fight ended by it):
-		-- the pot is still theirs. Zero damage each is an even split (ContributionShares).
-		for _, member in ArenaService.GetMembers() do
-			if not member.waiting then
-				tally[member.userId] = 0
-			end
-		end
-	end
-	if run.bossClearsThisFlush > 0 then
-		-- Before the per-member loop below, whose snapshot then carries the Mentor Valor too.
-		payMentors(combatConfig, tally)
-	end
-	local shares = Combat.ContributionShares(tally, combatConfig.coop.contributionFloor)
-	local split = Combat.SplitPool(run.pool, shares)
 	local gameConfig = Catalog.GetGameConfig()
 	local shopConfig = Catalog.GetLegacyShopConfig()
-	local material = level.material
-	local missionId = level.mission
-
-	for _, member in ArenaService.GetMembers() do
-		local player = member.player
-		if member.bot or player == nil then
-			continue
+	local states: { [number]: Types.PlayerState } = {}
+	local mults: { [number]: number } = {}
+	for userId in tally do
+		local member = ArenaService.GetMember(userId)
+		local player = if member ~= nil and not member.bot then member.player else nil
+		local state = if player ~= nil then DataService.GetState(player) else nil
+		if state ~= nil then
+			states[userId] = state
+			mults[userId] = Combat.CombatCashMult(state, gameConfig, shopConfig)
 		end
-		local state = DataService.GetState(player)
+	end
+	local shares = Combat.ContributionShares(tally, combatConfig.coop.contributionFloor)
+	local split = Combat.SplitCarry(pool, shares, run.carry, mults)
+	local material = level.material
+	local killCounted = false
+	for userId, share in split do
+		local state = states[userId]
 		if state == nil then
 			continue
 		end
-		local share = split[member.userId]
-		local kills = run.killsByUser[member.userId] or 0
-		if share ~= nil then
-			local mult = Combat.CombatCashMult(state, gameConfig, shopConfig)
-			local cash = math.floor(share.cash * mult)
-			state.cash += cash
-			state.combat.valor += share.valor
-			if share.materials > 0 and material ~= "" then
-				local owned = state.combat.materials[material] or 0
-				state.combat.materials[material] = owned + share.materials
-			end
-			state.combat.stats.cashFromCombat += cash
-			ArenaService.CreditSummary(
-				member.userId,
-				cash,
-				material,
-				share.materials,
-				share.valor,
-				kills
-			)
+		state.cash += share.cash
+		state.combat.valor += share.valor
+		if share.materials > 0 and material ~= "" then
+			local owned = state.combat.materials[material] or 0
+			state.combat.materials[material] = owned + share.materials
 		end
-		state.combat.stats.kills += kills
-		state.combat.stats.wavesCleared += waveCount
-		if missionId ~= nil then
-			-- Ruling 26: only a level that names a mission writes a mission record (the arena
-			-- writes `village`, as before). Forest Road writes none.
-			local record = missionRecord(state, missionId)
-			record.bestWave = math.max(record.bestWave, waveNumber)
-			record.bossClears += run.bossClearsThisFlush
-		end
-		-- The wallet strip is fed by Snapshots in this place (EconomyService is hub-only).
-		ArenaService.SendSnapshot(player)
+		state.combat.stats.cashFromCombat += share.cash
+		local kills = if userId == killer then 1 else 0
+		killCounted = killCounted or kills > 0
+		ArenaService.CreditSummary(
+			userId,
+			share.cash,
+			material,
+			share.materials,
+			share.valor,
+			kills
+		)
+		run.walletDirty[userId] = true
 	end
-
-	ArenaService.MarkWaveCleared(waveNumber, waveCount)
-	run.pool = emptyPool()
-	run.killsByUser = {}
-	run.bossClearsThisFlush = 0
+	if killer == 0 then
+		return
+	end
+	local member = ArenaService.GetMember(killer)
+	local player = if member ~= nil and not member.bot then member.player else nil
+	local state = if player ~= nil then DataService.GetState(player) else nil
+	if state ~= nil then
+		state.combat.stats.kills += 1
+		if not killCounted then
+			-- The killing blow's owner took no share (a profile that loaded late): the card still
+			-- counts the kill.
+			ArenaService.CreditSummary(killer, 0, material, 0, 0, 1)
+		end
+	end
 end
 
--- The crowd and everything it had in the air go, and the players' shots with them.
+-- The waves a clear covers, in every fighting human's stats and (for a level that names a
+-- mission, ruling 26: the arena writes `village`) their mission record's best wave.
+local function countWaves(wave: number, count: number): ()
+	local missionId = if run.level ~= nil then run.level.mission else nil
+	for _, userId in fightingIds() do
+		local member = ArenaService.GetMember(userId)
+		local player = if member ~= nil then member.player else nil
+		local state = if player ~= nil then DataService.GetState(player) else nil
+		if state == nil then
+			continue
+		end
+		state.combat.stats.wavesCleared += count
+		if missionId ~= nil then
+			local record = missionRecord(state, missionId)
+			record.bestWave = math.max(record.bestWave, wave)
+		end
+	end
+end
+
+-- L1b-17: a camp is cleared (an open one when its last resident falls, the boss room when its
+-- last wave does): the banner, its checkpoint marked done, one more wave cleared in every
+-- fighting human's stats, and crowd.clearBonus x the difficulty's rewardMult split evenly among
+-- them (0 by default: Ben's "disregarding clearing status").
+local function campCleared(zone: StageFlow.Zone): ()
+	LevelService.SetCamp(zone.id, "cleared")
+	RunFx.Push({ kind = "camp", event = "cleared", name = zone.name })
+	countWaves(0, 1)
+	local level = run.level
+	local scales = run.scales
+	local bonus = if level ~= nil then level.crowd.clearBonus else nil
+	if bonus == nil or scales == nil then
+		return
+	end
+	local cash, materials = Combat.KillReward({ clear = bonus }, "clear", scales.rewardMult)
+	if cash > 0 or materials > 0 then
+		credit({ cash = cash, materials = materials, valor = 0, kills = 0 }, evenTally(), 0)
+	end
+end
+
+-- The boss fell: every human's mission record counts the clear (a level that names a mission).
+local function recordBossClear(): ()
+	local missionId = if run.level ~= nil then run.level.mission else nil
+	if missionId == nil then
+		return
+	end
+	for _, member in ArenaService.GetMembers() do
+		local player = member.player
+		local state = if not member.bot and player ~= nil then DataService.GetState(player) else nil
+		if state ~= nil then
+			missionRecord(state, missionId).bossClears += 1
+		end
+	end
+end
+
+-- L1b-6 to L1b-22's executor: a group that wakes (rest to rise, a close's release included)
+-- puts a "!" over each of its living bodies on every member's screen (L1b-21).
+local function onGroupEvent(event: CrowdService.GroupEvent): ()
+	local plan = run.plan
+	if plan == nil or not isLive(run.phase) then
+		return
+	end
+	if event.from == "rest" and event.to == "rise" then
+		local zone = plan.zones[event.floor]
+		RunFx.Push({
+			kind = "camp",
+			event = "alert",
+			name = if zone ~= nil then zone.name else "",
+			ids = table.clone(event.ids),
+		})
+	end
+end
+
+-- The crowd and everything it had in the air go, and the players' shots with them. No body is
+-- credited (CrowdService.Clear fires no kill).
 local function clearField(): ()
 	run.queue = {}
 	run.bossPending = nil
@@ -735,45 +806,62 @@ local function clearField(): ()
 	WeaponService.AbandonProjectiles()
 end
 
--- Ruling 15: what no checkpoint banked is gone. The pool, and the kills, the damage and the
--- boss clears booked against it, so the next bank pays for nothing that came before this.
-local function dropPool(): ()
-	run.pool = emptyPool()
-	run.killsByUser = {}
-	run.damageTally = {}
-	run.bossClearsThisFlush = 0
-end
-
--- P5 ruling 14: a kill pays its kind's fixed reward into the pool and books the HP its body
--- lost. Runs inside the strike that killed it (CrowdService's callbacks are synchronous threads),
--- so it must not yield.
+-- L1b-15: a kill is paid the moment it falls, in every live phase, its kind's fixed reward x the
+-- difficulty's rewardMult (and the boss's Valor), split by that body's own damage book kept to
+-- the humans of the session (nobody's damage, a Studio lever's kill: an even split among the
+-- fighting humans). The boss pays the Mentor bonus first, from its own book. Runs inside the
+-- strike that killed it (CrowdService's callbacks are synchronous threads): it must not yield.
 local function onCrowdKilled(id: number, byUserId: number, info: CrowdService.CrowdKillInfo): ()
-	local phase = run.phase
 	local level = run.level
-	if level == nil or (phase ~= "wave" and phase ~= "boss" and phase ~= "breather") then
+	local scales = run.scales
+	local combatConfig = config()
+	if level == nil or scales == nil or combatConfig == nil or not isLive(run.phase) then
 		return
 	end
-	local spec = run.spec
-	if spec ~= nil then
-		local cash, materials = Combat.CampReward(level.crowd.rewards, info.kind, spec)
-		run.pool.cash += cash
-		run.pool.materials += materials
-	end
-	run.pool.kills += 1
+	local tally: { [number]: number } = {}
 	for userId, damage in info.damageBy do
-		run.damageTally[userId] = (run.damageTally[userId] or 0) + damage
 		run.runDamage[userId] = (run.runDamage[userId] or 0) + damage
 		run.runDamageTotal += damage
+		local member = ArenaService.GetMember(userId)
+		if member ~= nil and not member.bot and member.player ~= nil then
+			tally[userId] = damage
+		end
 	end
-	if ArenaService.GetMember(byUserId) ~= nil then
-		run.killsByUser[byUserId] = (run.killsByUser[byUserId] or 0) + 1
+	if next(tally) == nil then
+		tally = evenTally()
 	end
 	table.insert(run.killStamps, os.clock())
+	local cash, materials = Combat.KillReward(level.crowd.rewards, info.kind, scales.rewardMult)
+	local valor = 0
 	if info.boss and id == run.bossId then
 		run.bossId = 0
-		run.pool.valor += run.bossValor
-		run.bossClearsThisFlush += 1
+		valor = run.bossValor
+		payMentors(combatConfig, tally)
 		RunFx.Push({ kind = "bossDown", name = run.bossName or info.kind, valor = run.bossValor })
+		recordBossClear()
+	end
+	credit({ cash = cash, materials = materials, valor = valor, kills = 1 }, tally, byUserId)
+end
+
+-- L1b-16: each wallet a credit changed goes out at most once every levels.walletSendSeconds
+-- (the wallet is the whole PlayerState, and a fight kills several bodies a second); `all` sends
+-- every dirty one now (the run's end).
+local function sendWallets(now: number, all: boolean): ()
+	local combatConfig = config()
+	local every = if combatConfig ~= nil then combatConfig.levels.walletSendSeconds else 0
+	for userId in run.walletDirty do
+		local sentAt = run.walletSentAt[userId]
+		if not all and sentAt ~= nil and now - sentAt < every then
+			continue
+		end
+		run.walletDirty[userId] = nil
+		run.walletSentAt[userId] = now
+		local member = ArenaService.GetMember(userId)
+		local player = if member ~= nil then member.player else nil
+		if player ~= nil then
+			-- The wallet strip is fed by Snapshots in this place (EconomyService is hub-only).
+			ArenaService.SendSnapshot(player)
+		end
 	end
 end
 
@@ -801,7 +889,7 @@ local function spawnBoss(zone: StageFlow.Zone): ()
 		return
 	end
 	local at = StageFlow.BossPoint(zone, boss.at)
-	local id = CrowdService.Spawn(boss.kind, at, FIGHT, centreOf(zone), run.bossHpMult)
+	local id = CrowdService.Spawn(boss.kind, at, FIGHT, centreOf(zone), run.bossHpMult, zone.floor)
 	if id ~= 0 then
 		run.bossPending = nil
 		run.bossId = id
@@ -810,6 +898,7 @@ end
 
 -- P5 ruling 15: the next burst, when its time has come and the field has room. A burst held by
 -- maxAlive (or a refused spawn) stays at the head of the queue and carries on as room frees.
+-- L1b-14: the room is the boss room's own floor, its residents included.
 local function spawnBursts(stage: StageFlow.Stage, zone: StageFlow.Zone): ()
 	local level = run.level
 	local burst = run.queue[1]
@@ -825,9 +914,9 @@ local function spawnBursts(stage: StageFlow.Stage, zone: StageFlow.Zone): ()
 	burst.at = at
 	local size = burst.placed + burst.left
 	local centre = centreOf(zone)
-	while burst.left > 0 and CrowdService.AliveCount() < stage.maxAlive do
+	while burst.left > 0 and CrowdService.AliveOn(zone.floor) < stage.maxAlive do
 		local position = StageFlow.BurstPoint(zone, at, size, burst.placed, crowd.burstSpacing)
-		if CrowdService.Spawn(burst.kind, position, FIGHT, centre) == 0 then
+		if CrowdService.Spawn(burst.kind, position, FIGHT, centre, nil, zone.floor) == 0 then
 			break
 		end
 		burst.placed += 1
@@ -874,7 +963,7 @@ local function placer(_member: Types.RunMember): (Vector3, boolean)
 	if phase == "wave" or phase == "boss" then
 		return LevelService.LobbyPoint(), true
 	end
-	return StageFlow.SafePoint(plan, flow), false
+	return StageFlow.SafePoint(plan, flow, CrowdService.Busy()), false
 end
 
 -- The lobby's kill height: its layout's. With no layout file LevelService stands the party on
@@ -894,8 +983,8 @@ local function lobbyKillY(): number
 end
 
 -- Ruling 19: a human whose root is under the kill height or outside the box is put back on the
--- ground with the get-up i-frames. Never a down, no cost, in every phase: falling out is the
--- level's fault. Which box judges them, and whether they go to the run's safe point or to the
+-- ground with the get-up i-frames, none while they are engaged in a resident fight (L1b-20).
+-- Never a down, no cost, in every phase: falling out is the level's fault. Which box judges them, and whether they go to the run's safe point or to the
 -- lobby camp, is StageFlow.Rescue's (once a run is over nobody is put into its level). A member
 -- just rescued is left alone for the length of those i-frames: their client still reports the
 -- old place for a frame or two, and a second rescue would only move them again. Without
@@ -912,6 +1001,8 @@ local function rescueFallen(combatConfig: Types.CombatConfig): ()
 	local flow = run.flow
 	local lobby = LevelService.LobbyBounds()
 	local lobbyFloor = lobbyKillY()
+	-- Asked only when somebody is put back into the level (it is a new table).
+	local busy: { [number]: boolean }? = nil
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
 		local root = rootOf(member)
@@ -936,11 +1027,15 @@ local function rescueFallen(combatConfig: Types.CombatConfig): ()
 		if verdict == "lobby" then
 			target = LevelService.LobbyPoint()
 		elseif verdict == "level" and plan ~= nil and flow ~= nil then
-			target = StageFlow.SafePoint(plan, flow)
+			busy = busy or CrowdService.Busy()
+			target = StageFlow.SafePoint(plan, flow, busy)
 		end
 		if target ~= nil and ArenaService.MoveMember(member, target) then
 			boot.rescuedAt[member.userId] = now
-			WeaponService.GrantIframes(player, iframes)
+			local grace = StageFlow.RescueGrace(CrowdService.Engaged(member.userId), iframes)
+			if grace > 0 then
+				WeaponService.GrantIframes(player, grace)
+			end
 		end
 	end
 end
@@ -995,10 +1090,11 @@ local function fallenReason(): (string?, { number })
 	return reason, fallen
 end
 
--- Ruling 20: every run ends in a summary. What was not banked is dropped (ruling 15: only a
--- checkpoint pays); the field is cleared; a lost run marks its fallen; a cleared one gives the
--- star of its difficulty to every human StageFlow says earned it (those fighting before the last
--- boundary). The level stays built while the card is up.
+-- Ruling 20: every run ends in a summary. Nothing is dropped and nothing more is paid (L1b-15:
+-- every kill was paid as it fell; the carry, under 1 of each, goes with the run); every wallet a
+-- credit changed is sent now (L1b-16); the field is cleared; a lost run marks its fallen; a
+-- cleared one gives the star of its difficulty to every human StageFlow says earned it (those
+-- fighting before the last boundary). The level stays built while the card is up.
 function WaveService.EndRun(asked: string): ()
 	local plan = run.plan
 	local flow = run.flow
@@ -1010,7 +1106,7 @@ function WaveService.EndRun(asked: string): ()
 	-- the one StageFlow ended the run for.
 	StageFlow.Finish(plan, flow, asked)
 	local reason = flow.ended or asked
-	dropPool()
+	sendWallets(os.clock(), true)
 	if reason == "down" or reason == "wipe" then
 		local _lost, fallen = fallenReason()
 		for _, userId in fallen do
@@ -1019,7 +1115,6 @@ function WaveService.EndRun(asked: string): ()
 	end
 	clearField()
 	run.spec = nil
-	run.floor = nil
 
 	local results: { [number]: Types.RunResult } = {}
 	for _, member in ArenaService.GetMembers() do
@@ -1035,7 +1130,6 @@ function WaveService.EndRun(asked: string): ()
 			reason = reason,
 			campsCleared = flow.cleared,
 			camps = plan.camps,
-			savedAt = run.savedAt,
 			star = star,
 		}
 	end
@@ -1091,58 +1185,22 @@ end
 
 -- Executing StageFlow's actions ---------------------------------------------------------------
 
--- Ruling 11: the crowd's floor is set at a camp's trigger, with no body alive. halfSize.Y is
--- levels.crowdCeiling, the highest a launch may carry a body above the floor. False when the
--- crowd refused the bounds: no camp can be fought on a floor the crowd does not stand on.
-local function setCrowdFloor(
-	stage: StageFlow.Stage,
-	zone: StageFlow.Zone,
-	rules: Types.CombatLevelsConfig
-): boolean
-	CrowdService.Clear()
-	VitalsService.ClearThreats()
-	local centre = centreOf(zone)
-	local half = Vector3.new(zone.rect.hx, rules.crowdCeiling, zone.rect.hz)
-	if not CrowdService.SetBounds(centre, half) then
-		return false
-	end
-	WeaponService.SetArena(centre, half)
-	run.floor = {
-		x = zone.rect.x,
-		y = zone.floorY,
-		z = zone.rect.z,
-		hx = zone.rect.hx,
-		hz = zone.rect.hz,
-	}
-	run.maxAlive = stage.maxAlive
-	return true
-end
-
--- The contract's table "What WaveService does for each action", in the order StageFlow gave.
+-- The contract's table "What WaveService does for each action" (L1b "Flow"), in the order
+-- StageFlow gave. `reach` and `campClear` name their camp by zone index; the others by stage.
 local function execute(actions: { StageFlow.Action }): ()
 	local plan = run.plan
 	local flow = run.flow
-	local combatConfig = config()
-	if plan == nil or flow == nil or combatConfig == nil or #actions == 0 then
+	if plan == nil or flow == nil or #actions == 0 then
 		return
 	end
-	local rules = combatConfig.levels
-	-- The stage a `bank` of this batch paid for: its `open` then says the progress was saved.
-	local bankedStage = 0
 	for _, action in actions do
 		local stage = plan.stages[action.stage]
 		local zone = if stage ~= nil then stage.zone else nil
 		local kind = action.kind
-		if kind == "gate" then
-			if stage ~= nil and zone ~= nil and not setCrowdFloor(stage, zone, rules) then
-				warn(`[WaveService] the crowd took no floor for "{stage.name}": the run ends here`)
-				WaveService.EndRun("abandoned")
-				return
-			end
-		elseif kind == "rearm" then
-			-- Nobody was left to fight when the countdown ended: no camp is counting down now.
-			run.floor = nil
-		elseif kind == "close" then
+		-- `gate` sets nothing on the crowd (L1b-14: the floors were set at the start), and `rearm`
+		-- and `breather` and `travel` change nothing here: StageFlow's state carries the time,
+		-- and the broadcast after the batch carries the news.
+		if kind == "close" then
 			if stage ~= nil and zone ~= nil then
 				-- Both in this frame, the move first: the wall that turns solid is 8 studs deep
 				-- from the floor's edge outward and runs across the gate gaps, so whoever stands
@@ -1154,7 +1212,9 @@ local function execute(actions: { StageFlow.Action }): ()
 				run.tempo = 1
 				run.killStamps = {}
 				run.campClosedAt = os.clock()
-				RunFx.Push({ kind = "camp", event = "closed", name = stage.name, saved = false })
+				RunFx.Push({ kind = "camp", event = "closed", name = stage.name })
+				-- L1b-13: the boss room's residents, held until now, wake with its first wave.
+				CrowdService.WakeFloor(zone.floor)
 			end
 		elseif kind == "wave" then
 			queueWave(action.stage, action.wave or 1, action.merged == true)
@@ -1162,33 +1222,41 @@ local function execute(actions: { StageFlow.Action }): ()
 			-- What the dead still had in the air (a lob, a slinger's shot) goes with them:
 			-- nothing lands on an empty field.
 			VitalsService.ClearThreats()
-		elseif kind == "bank" then
-			flushPool(action.wave or 0, action.count or 0)
-			run.banked += 1
-			run.savedAt = if stage ~= nil then stage.name else ""
-			bankedStage = action.stage
+			ArenaService.MarkWaveCleared(action.wave or 0, action.count or 0)
+			countWaves(action.wave or 0, action.count or 0)
 		elseif kind == "boundary" then
 			standUpDowned()
 			-- Not when the same batch ends the run: nobody is brought into a level about to go.
 			if action.release == true then
-				ArenaService.ReleaseWaiting(StageFlow.SafePoint(plan, flow))
+				ArenaService.ReleaseWaiting(StageFlow.SafePoint(plan, flow, CrowdService.Busy()))
 			end
 		elseif kind == "open" then
-			if stage ~= nil and zone ~= nil then
-				LevelService.SetCamp(zone.id, "cleared")
-				RunFx.Push({
-					kind = "camp",
-					event = "cleared",
-					name = stage.name,
-					saved = bankedStage == action.stage,
-				})
+			if zone ~= nil then
+				campCleared(zone)
 			end
-			run.floor = nil
 			run.spec = nil
+		elseif kind == "campClear" then
+			local cleared = plan.zones[action.zone or 0]
+			if cleared ~= nil then
+				campCleared(cleared)
+			end
+		elseif kind == "reach" then
+			local reached = plan.zones[action.zone or 0]
+			if reached ~= nil then
+				LevelService.SetCamp(reached.id, "reached")
+				RunFx.Push({ kind = "camp", event = "checkpoint", name = reached.name })
+			end
 		elseif kind == "drop" then
-			-- A skip pays nothing: what the dropped field had earned so far goes with it.
-			clearField()
-			dropPool()
+			-- L1b-22: a skip pays nothing. Only the live boss room's floor goes (its queue, its
+			-- bodies, its residents), without a kill; the open camps behind keep theirs.
+			run.queue = {}
+			run.bossPending = nil
+			run.bossId = 0
+			run.laterBodies = 0
+			if zone ~= nil then
+				CrowdService.ClearFloor(zone.floor)
+			end
+			VitalsService.ClearThreats()
 		elseif kind == "move" then
 			if zone ~= nil then
 				moveFighters(zone.entry, nil)
@@ -1197,8 +1265,6 @@ local function execute(actions: { StageFlow.Action }): ()
 			WaveService.EndRun(action.reason or "cleared")
 			return
 		end
-		-- `breather` and `travel` change nothing here: StageFlow's state carries the time, and the
-		-- broadcast below carries the news.
 	end
 end
 
@@ -1222,6 +1288,14 @@ local function advance(combatConfig: Types.CombatConfig): ()
 	local now = os.clock()
 	local roots: { Vector3 } = {}
 	local standing: { boolean } = {}
+	-- L1b-14 and L1b-19: the live boss room counts its own floor only; the road asks the groups.
+	local _stage, live = liveZone()
+	local alive = if live ~= nil then CrowdService.AliveOn(live.floor) else 0
+	local byFloor = boot.aliveByFloor
+	table.clear(byFloor)
+	for index = 1, #plan.zones do
+		byFloor[index] = CrowdService.AliveOn(index)
+	end
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
 		if not member.bot and player ~= nil and ArenaService.IsFighting(member) then
@@ -1232,7 +1306,6 @@ local function advance(combatConfig: Types.CombatConfig): ()
 			end
 		end
 	end
-	local alive = CrowdService.AliveCount()
 	local spawningDone = #run.queue == 0 and run.bossPending == nil
 	local spawned = run.spawnedThisGroup
 	local deadFraction = if spawned > 0 then math.max(spawned - alive, 0) / spawned else 0
@@ -1243,8 +1316,10 @@ local function advance(combatConfig: Types.CombatConfig): ()
 		roots = roots,
 		standing = standing,
 		fighters = fightingIds(),
-		fieldClear = spawningDone and alive == 0,
 		spawningDone = spawningDone,
+		alive = alive,
+		awake = CrowdService.Awake(),
+		aliveByFloor = byFloor,
 		mergeOk = Combat.ShouldMerge(run.tempo, deadFraction, combatConfig.director),
 		breatherSeconds = Combat.BreatherSeconds(run.tempo, combatConfig.director),
 		fallen = fallen,
@@ -1311,13 +1386,19 @@ local function readLevel(
 		local rescue = combatConfig.player.rescue
 		layout = LevelGeometry.FromArena(arena, -(if rescue ~= nil then rescue.below else 0))
 	end
+	local crowd = Tuning.Get().crowd
 	local problems = StageFlow.Validate(
 		level,
 		layout,
-		Tuning.Get().crowd.kinds,
+		crowd.kinds,
 		difficultyRanks(map),
-		combatConfig.levels
+		combatConfig.levels,
+		crowd.maxAlive
 	)
+	-- How the residents rest, wake and go home is the same for every level (Combat.json camps).
+	for _, problem in CampBrain.Problems(combatConfig.camps) do
+		table.insert(problems, `Combat.json camps: {problem}`)
+	end
 	for _, problem in problems do
 		warn(`[WaveService] {problem}`)
 	end
@@ -1342,6 +1423,42 @@ local function resolveLevel(
 		return nil, nil
 	end
 	return level, layout
+end
+
+-- L1b "Flow" → "Start" step 5: every resident group of the plan joins the crowd in its order,
+-- and its members are placed on the posts CampBrain gives it, kinds in the order of its units.
+-- A refused spawn is warned once per run and not retried: the population gate makes it a bug.
+local function placeResidents(plan: StageFlow.Plan): ()
+	for index, def in plan.groups do
+		local group = CrowdService.AddGroup(def)
+		if group ~= index then
+			warn(`[WaveService] the crowd took group {def.id} as {group}, not {index}`)
+		end
+		if group == 0 then
+			continue
+		end
+		local members = 0
+		for _, unit in def.units do
+			members += unit.count
+		end
+		local posts = CampBrain.Posts(def, members)
+		local placed = 0
+		for _, unit in def.units do
+			for _ = 1, unit.count do
+				placed += 1
+				local post = posts[placed]
+				local id = if post ~= nil
+					then CrowdService.SpawnResident(unit.kind, group, post)
+					else 0
+				if id == 0 and not run.warnedResident then
+					run.warnedResident = true
+					warn(
+						`[WaveService] a {unit.kind} of {def.id} was not placed (more refusals stay quiet)`
+					)
+				end
+			end
+		end
+	end
 end
 
 -- Starts `levelId` at `difficulty` for the leader `player`, or says why not: the contract's
@@ -1387,10 +1504,11 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 		return "busy"
 	end
 	local scales = level.difficulties[difficulty]
+	local ranks = difficultyRanks(map)
 	local planned, plan, problem = pcall(function(): (StageFlow.Plan?, string?)
 		-- The box as it is built: the floors as deep as LevelService makes them.
 		local bounds = LevelGeometry.Bounds(layout, rules.floorThickness)
-		return StageFlow.Plan(level, layout, difficulty, rules, bounds)
+		return StageFlow.Plan(level, layout, difficulty, rules, bounds, ranks)
 	end)
 	if not planned then
 		warn(`[WaveService] level {levelId}: no plan could be made of it ({tostring(plan)})`)
@@ -1408,6 +1526,28 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	if not LevelService.Build(layout, map, rules) then
 		return "unavailable"
 	end
+	-- L1b "Flow" → "Start": the field is cleared, then one crowd floor per camp is set, once for
+	-- the whole run (L1b-1), with nobody alive.
+	clearField()
+	local floors: { Types.CrowdFloor } = {}
+	local runFloors: { Types.RunFloor } = {}
+	for _, zone in plan.zones do
+		local rect = zone.rect
+		table.insert(floors, {
+			centre = Vector3.new(rect.x, zone.floorY, rect.z),
+			half = Vector3.new(rect.hx, rules.crowdCeiling, rect.hz),
+		})
+		table.insert(
+			runFloors,
+			{ x = rect.x, y = zone.floorY, z = rect.z, hx = rect.hx, hz = rect.hz }
+		)
+	end
+	if not CrowdService.SetFloors(floors) then
+		warn(`[WaveService] level {levelId}: the crowd took no floors; it cannot be played`)
+		LevelService.Clear()
+		return "unavailable"
+	end
+	CrowdService.SetCampRules(combatConfig.camps)
 	local flow = StageFlow.Begin(plan)
 
 	run = freshRun()
@@ -1415,11 +1555,9 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	run.plan = plan
 	run.flow = flow
 	run.scales = scales
-	run.rank = difficultyRanks(map)[difficulty] or 0
-	-- The biggest camp's cap until a camp sets its own: the client prewarms its pool with it.
-	for _, stage in plan.stages do
-		run.maxAlive = math.max(run.maxAlive, stage.maxAlive)
-	end
+	run.rank = ranks[difficulty] or 0
+	run.floors = runFloors
+	run.maxAlive = plan.population
 	ArenaService.SetLevel({
 		id = level.id,
 		name = level.name,
@@ -1428,9 +1566,10 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 		mission = level.mission,
 	})
 	ArenaService.ResetSummaries()
-	clearField()
+	-- Before any spawn, so the residents take the difficulty's HP and plate.
 	CrowdService.SetScales({ hp = scales.hpScale, plate = scales.plateScale })
 	VitalsService.SetMission(missionRules(scales.damageScale, level.crowd.regenShare))
+	placeResidents(plan)
 	-- Every member starts on their feet, at full health, with the gear's bar, at the trailhead.
 	local index = 0
 	for _, other in members do
@@ -1499,6 +1638,8 @@ local function tick(): ()
 		return
 	end
 	rescueFallen(combatConfig)
+	-- Before advance (L1b "A run"): a group that woke since the last tick shows its "!".
+	CrowdService.DrainGroupEvents(onGroupEvent)
 	local phase = run.phase
 	if phase == "lobby" then
 		tickAutoStart(combatConfig)
@@ -1535,7 +1676,7 @@ local function tick(): ()
 	if fighters == 0 and waitingAlive > 0 and plan ~= nil and flow ~= nil then
 		-- Every fighter LEFT (nobody fell): those waiting in the lobby camp take over now rather
 		-- than watching an unattended run until its cap.
-		ArenaService.ReleaseWaiting(StageFlow.SafePoint(plan, flow))
+		ArenaService.ReleaseWaiting(StageFlow.SafePoint(plan, flow, CrowdService.Busy()))
 		broadcast()
 	end
 	if stage ~= nil and zone ~= nil and flow ~= nil and flow.step == FIGHT then
@@ -1551,10 +1692,11 @@ local function tick(): ()
 		moveFighters(zone.entry, zone, true)
 	end
 	advance(combatConfig)
+	sendWallets(os.clock(), false)
 end
 
 -- RequestAbandon (ruling 21). In a live run, from any member when the run has one human, else
--- from the leader: the run ends `abandoned` with what was banked. On the summary, from the
+-- from the leader: the run ends `abandoned`, every kill already paid. On the summary, from the
 -- leader or a solo player: the wait ends and the party is in the lobby at once. Anything else
 -- is dropped silently.
 function WaveService.OnAbandon(player: Player): ()
@@ -1610,8 +1752,8 @@ end
 
 -- Studio levers -------------------------------------------------------------------------------
 
--- The N and B keys (ruling 33, through DebugService): "stage" finishes this part of the level,
--- "boss" goes to the next wave with a boss. Nothing is banked and nothing skipped is credited.
+-- The N and B keys (ruling 33, L1b-22, through DebugService): "stage" finishes this part of the
+-- level, "boss" goes to the next wave with a boss. Nothing skipped is credited.
 function WaveService.Skip(which: string): ()
 	local combatConfig = config()
 	local plan = run.plan
@@ -1648,20 +1790,24 @@ function WaveService.ForceWave(wave: number): ()
 	broadcast()
 end
 
--- The `spawn` lever: one extra body of a crowd kind at the live camp's next spawn point, with
--- the run's scales. Only while a camp fights.
+-- The `spawn` lever: one extra body of a crowd kind at the live camp's next spawn point, on its
+-- floor, with the run's scales. Only while the boss room fights; elsewhere it says so.
 function WaveService.SpawnOne(kind: string): ()
 	local _stage, zone = liveZone()
 	local flow = run.flow
 	if zone == nil or flow == nil or flow.step ~= FIGHT then
+		RunFx.Push({ kind = "notice", text = "No camp to spawn in" })
 		return
 	end
-	if CrowdService.Spawn(kind, nextSpawnPoint(zone), FIGHT, centreOf(zone)) ~= 0 then
+	if
+		CrowdService.Spawn(kind, nextSpawnPoint(zone), FIGHT, centreOf(zone), nil, zone.floor) ~= 0
+	then
 		run.spawnedThisGroup += 1
 	end
 end
 
--- The `killAll` lever: every living body dies with its normal rewards, credited to nobody.
+-- The `killAll` lever: every living body, on every floor, dies and is paid as any kill is
+-- (L1b-15), credited to nobody: an even split unless somebody had hurt it.
 function WaveService.KillAll(): ()
 	CrowdService.KillAll(0)
 end
@@ -1694,6 +1840,11 @@ function WaveService.Init(): ()
 		local member = ArenaService.GetMember(userId)
 		local player = if member ~= nil then member.player else nil
 		return player ~= nil and VitalsService.IsDown(player)
+	end)
+	-- L1b-20's test, for the phone client: in play for a camp group that is rising or fighting.
+	-- Never in the lobby or on the summary (CrowdService's last step may still say so).
+	ArenaService.SetEngagedSource(function(userId: number): boolean
+		return isLive(run.phase) and CrowdService.Engaged(userId)
 	end)
 	ArenaService.SetCharacterHook(WeaponService.PrepareCharacter)
 	-- A placement, a release or a rescue is not the player's own motion: without this the jump

@@ -33,10 +33,10 @@
 --    ("Follow the road"), "Gates close in 3" while a camp counts down, "Pickets: 14 left" in a
 --    camp of one wave and "Raider Arena: wave 3 / 10" in one of several, the boss's name, "Next
 --    wave in 6", "Run over". The two countdowns tick locally between RunStates.
---  * The dim line at the header's right reads "Camp 2 / 3" (a level of one camp shows what is
---    left of the wave there instead).
---  * "Progress saved" shows under the wallet for Theme.COMBAT_SAVED_NOTICE_SECONDS when
---    RunState.banked rises: a checkpoint is the only thing that pays (ruling 15).
+--  * The dim line at the header's right reads "Camps cleared 1 / 3" (L1b: open camps count
+--    too; a level of one camp shows what is left of the wave there instead).
+--  * L1b: "Progress saved" is gone (every kill pays at once, nothing is banked). Its place
+--    under the wallet is the notice line (ShowNotice): "Checkpoint" when one is reached.
 --  * The bottom-left buttons. In the lobby: Map and Return to your city (`deps.runButtons =
 --    false`, a proving build, hides only Return: the trip home kicks from Studio). In a run:
 --    Abandon, for whoever ruling 21 lets abandon (the only human, else the leader); it asks
@@ -64,7 +64,7 @@
 --  * The difficulty has a chip of its own at the right end of the title's row, and the level's
 --    name shrinks to its room before it would truncate ("Raider Arena · Normal" did).
 --  * The wallet's material chip is not shown where there is no material (the lobby read "0").
---  * `HudEdges.savedBottom` is where "Progress saved" ends, for the banner's place.
+--  * `HudEdges.noticeBottom` is where the notice line ends, for the banner's place.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -110,13 +110,13 @@ export type Deps = {
 
 -- P5: where the run layer's top blocks ended up, in px of the parent, for what must keep clear
 -- of them (the range's boss bar): the header-and-wallet block's bottom and right edges, and the
--- party list's left edge. `savedBottom` (fix round) is the bottom of "Progress saved", which
--- hangs under that block: what the banner must keep clear of.
+-- party list's left edge. `noticeBottom` (fix round; L1b) is the bottom of the notice line,
+-- which hangs under that block: what the banner must keep clear of.
 export type HudEdges = {
 	headerBottom: number,
 	headerRight: number,
 	partyLeft: number,
-	savedBottom: number,
+	noticeBottom: number,
 }
 
 export type AbilityInfo = { name: string, cooldown: number }
@@ -129,6 +129,8 @@ export type CombatHudHandle = {
 	-- nothing where Abandon is not allowed (not a live run, or not this player's to end).
 	PressAbandon: () -> (),
 	SetRunState: (run: Types.RunState) -> (),
+	-- L1b: a short line under the wallet ("Checkpoint") for `seconds`; a newer one replaces it.
+	ShowNotice: (text: string, seconds: number) -> (),
 	SetHealth: (health: number, maxHealth: number) -> (),
 	SetWallet: (cash: number, material: string, amount: number, valor: number) -> (),
 	SetStance: (stance: string) -> (),
@@ -167,7 +169,6 @@ local MAP_TEXT = "Map"
 local RETURN_TEXT = "Return to your city"
 local ABANDON_TEXT = "Abandon"
 local ABANDON_CONFIRM_TEXT = "Press again to abandon"
-local SAVED_TEXT = "✓ Progress saved"
 -- L1 ruling 8: the phases in which a member may act; the run layer shows its fight pieces.
 local LIVE_PHASES: { [string]: boolean } =
 	{ travel = true, gate = true, wave = true, boss = true, breather = true }
@@ -198,16 +199,15 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	local seenFighting: { [number]: boolean } = {}
 	local actions = deps.actions ~= false
 	-- L1: what the objective line and the notices are painted from. `gateAt` / `breatherAt` are
-	-- os.clock stamps (nil = not counting) re-anchored by every RunState; `savedUntil` is when
-	-- "Progress saved" goes; `abandonUntil` is until when a second press of Abandon confirms.
+	-- os.clock stamps (nil = not counting) re-anchored by every RunState; `noticeUntil` is when
+	-- the notice line goes; `abandonUntil` is until when a second press of Abandon confirms.
 	-- Fix round: `mayAbandon` = the local player may end this run now (ruling 21), whether or
 	-- not the button is on screen; `armed` = what the host was last told (onAbandonArmed).
 	local objective = {
 		run = nil :: Types.RunState?,
 		gateAt = nil :: number?,
 		breatherAt = nil :: number?,
-		banked = 0,
-		savedUntil = 0,
+		noticeUntil = 0,
 		abandonUntil = 0,
 		mayAbandon = false,
 		armed = false,
@@ -389,20 +389,26 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	local materialChip, materialFrame = walletChip("Material", 2, Theme.COLOR_TEXT)
 	local valorChip = walletChip("Valor", 3, Theme.COLOR_HIGHLIGHT)
 
-	-- L1: "Progress saved", under the wallet, when a checkpoint banks.
-	local savedFrame = Create("Frame", {
-		Name = "Saved",
+	-- L1b: the notice line, under the wallet ("Checkpoint"). Never a tap target.
+	local noticeFrame = Create("Frame", {
+		Name = "Notice",
 		Active = false,
-		Size = UDim2.fromOffset(Theme.COMBAT_SAVED_NOTICE_WIDTH, Theme.COMBAT_SAVED_NOTICE_HEIGHT),
+		Size = UDim2.fromOffset(
+			Theme.COMBAT_CHECKPOINT_NOTICE_WIDTH,
+			Theme.COMBAT_CHECKPOINT_NOTICE_HEIGHT
+		),
 		BackgroundColor3 = Theme.COLOR_BG,
 		BackgroundTransparency = Theme.BG_TRANSPARENCY,
 		BorderSizePixel = 0,
 		Visible = false,
 		Parent = parent,
 	}) :: Frame
-	Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = savedFrame })
-	local savedScale = Create("UIScale", { Parent = savedFrame }) :: UIScale
-	Create("TextLabel", {
+	Create(
+		"UICorner",
+		{ CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = noticeFrame }
+	)
+	local noticeScale = Create("UIScale", { Parent = noticeFrame }) :: UIScale
+	local noticeLabel = Create("TextLabel", {
 		Name = "Text",
 		Active = false,
 		BackgroundTransparency = 1,
@@ -410,9 +416,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		Font = Theme.FONT_BOLD,
 		TextSize = Theme.TEXT_SMALL,
 		TextColor3 = Theme.COLOR_ACCENT,
-		Text = SAVED_TEXT,
-		Parent = savedFrame,
-	})
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = "",
+		Parent = noticeFrame,
+	}) :: TextLabel
 
 	-- Party list: one row per member with the HP the server published for them.
 	local partyFrame = Create("Frame", {
@@ -1015,8 +1022,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		if not LIVE_PHASES[run.phase] then
 			return ""
 		elseif run.camps > 1 then
-			return "Camp "
-				.. Format.Cash(math.min(run.campsCleared + 1, run.camps))
+			return "Camps cleared "
+				.. Format.Cash(math.min(run.campsCleared, run.camps))
 				.. " / "
 				.. Format.Cash(run.camps)
 		elseif run.phase == "wave" or run.phase == "boss" then
@@ -1076,12 +1083,6 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			then os.clock() + breatherIn
 			else nil
 		waveLabel.Text = objectiveText()
-		-- A checkpoint banked: say so. A new run starts again from 0, which says nothing.
-		if run.banked > objective.banked then
-			objective.savedUntil = os.clock() + Theme.COMBAT_SAVED_NOTICE_SECONDS
-			savedFrame.Visible = true
-		end
-		objective.banked = run.banked
 		fighting = live
 		controls.Visible = fighting and actions
 		reticle.Visible = fighting and shoulderCamera and actions
@@ -1217,8 +1218,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			if run ~= nil and (run.phase == "gate" or run.phase == "breather") then
 				waveLabel.Text = objectiveText()
 			end
-			if savedFrame.Visible and os.clock() >= objective.savedUntil then
-				savedFrame.Visible = false
+			if noticeFrame.Visible and os.clock() >= objective.noticeUntil then
+				noticeFrame.Visible = false
 			end
 			if objective.abandonUntil > 0 and os.clock() >= objective.abandonUntil then
 				objective.abandonUntil = 0
@@ -1308,6 +1309,11 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		end,
 		PressAbandon = pressAbandon,
 		SetRunState = setRunState,
+		ShowNotice = function(text: string, seconds: number)
+			noticeLabel.Text = text
+			objective.noticeUntil = os.clock() + math.max(seconds, 0)
+			noticeFrame.Visible = seconds > 0
+		end,
 		SetHealth = setHealth,
 		SetWallet = function(cash: number, material: string, amount: number, valor: number)
 			cashChip.Text = "$" .. Format.Cash(cash)
@@ -1342,7 +1348,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		SetLayout = function(scale: number, viewportSize: Vector2)
 			topScale.Scale = scale
 			walletScale.Scale = scale
-			savedScale.Scale = scale
+			noticeScale.Scale = scale
 			partyScale.Scale = scale
 			hpScale.Scale = scale
 			buttonScale.Scale = scale
@@ -1371,8 +1377,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 					margin + (Theme.TOP_BAR_HEIGHT + Theme.SCREEN_MARGIN) * scale
 				)
 			end
-			-- "Progress saved" hangs under the wallet, on the header's side of the screen.
-			local savedTop = margin
+			-- The notice line hangs under the wallet, on the header's side of the screen.
+			local noticeTop = margin
 				+ (
 						Theme.TOP_BAR_HEIGHT
 						+ Theme.SCREEN_MARGIN
@@ -1380,10 +1386,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 						+ Theme.SCREEN_MARGIN
 					)
 					* scale
-			savedFrame.AnchorPoint = if landscape then Vector2.new(0, 0) else Vector2.new(0.5, 0)
-			savedFrame.Position = if landscape
-				then UDim2.fromOffset(margin, savedTop)
-				else UDim2.new(0.5, 0, 0, savedTop)
+			noticeFrame.AnchorPoint = if landscape then Vector2.new(0, 0) else Vector2.new(0.5, 0)
+			noticeFrame.Position = if landscape
+				then UDim2.fromOffset(margin, noticeTop)
+				else UDim2.new(0.5, 0, 0, noticeTop)
 			-- Portrait stacks header, wallet and boss down the middle, so the party list
 			-- starts below all three; landscape parks them at the left and the list can
 			-- sit beside them at the top-right corner. The boss row is the range's boss bar
@@ -1454,7 +1460,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 					then margin + headerWidth
 					else (viewportSize.X + headerWidth) / 2,
 				partyLeft = viewportSize.X - margin - Theme.COMBAT_PARTY_WIDTH * scale,
-				savedBottom = savedTop + Theme.COMBAT_SAVED_NOTICE_HEIGHT * scale,
+				noticeBottom = noticeTop + Theme.COMBAT_CHECKPOINT_NOTICE_HEIGHT * scale,
 			}
 		end,
 		Destroy = function()
@@ -1464,7 +1470,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			table.clear(connections)
 			topFrame:Destroy()
 			walletFrame:Destroy()
-			savedFrame:Destroy()
+			noticeFrame:Destroy()
 			partyFrame:Destroy()
 			hpFrame:Destroy()
 			buttonRow:Destroy()

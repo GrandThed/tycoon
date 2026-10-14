@@ -2,8 +2,8 @@
 -- Run summary card (C1 contract, docs/INTERFACES.md "Combat client"), rewritten for levels
 -- (docs/INTERFACES.md "L1 contracts" -> Client). Shown for a RunState that carries a `result`:
 -- the level and its difficulty, how the run ended, how far it got, what it paid, and where the
--- party goes next. Every number is the server's. Only a checkpoint pays (ruling 15), so the
--- rows are what was banked, and the card says where the last bank was, or that there was none.
+-- party goes next. Every number is the server's. L1b: every kill pays the moment it falls, so
+-- the rows are every kill of the run, a lost run included, and there is no "Saved at" line.
 -- Nothing is computed here; a missing summary renders dashes rather than inventing numbers.
 --
 -- Every run ends in the lobby camp, never in the city (ruling 20): the countdown reads "Back
@@ -16,7 +16,8 @@
 --
 -- The card must fit a 640x360 phone under a 58 px top bar (329 design px of height), with a
 -- party's two extra lines: so the lines sit COMBAT_SUMMARY_LINE_GAP apart and the two buttons
--- share one row. On that phone a solo card is about 271 design px tall and a party's 313.
+-- share one row. On that phone a solo card is about 250 design px tall and a party's 292
+-- (L1b took the "Saved at" line out).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -170,8 +171,6 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 	local killsLabel = line("Kills", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_TEXT)
 	local rewardLabel = line("Reward", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_ACCENT)
 	local materialsLabel = line("Materials", Theme.FONT, Theme.TEXT_SMALL, Theme.COLOR_TEXT_DIM)
-	-- Where the last checkpoint banked, or that nothing was: it explains the rows above.
-	local savedLabel = line("Saved", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_TEXT)
 	-- C2 lines, each hidden when it does not apply.
 	local shareLabel = line("Share", Theme.FONT, Theme.TEXT_SMALL, Theme.COLOR_TEXT)
 	local mentorLabel = line("Mentor", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_HIGHLIGHT)
@@ -288,7 +287,6 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 			titleLabel.Text = info.mapName
 			outcomeLabel.Visible = false
 			progressLabel.Visible = false
-			savedLabel.Visible = false
 			returnAt = nil
 			showButtons(false, false)
 			paintCountdown()
@@ -322,14 +320,6 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 				.. Format.Cash(info.waves)
 		else
 			progressLabel.Text = "Waves cleared " .. BLANK
-		end
-		savedLabel.Visible = true
-		if result.savedAt ~= "" then
-			savedLabel.Text = "Saved at: " .. result.savedAt
-			savedLabel.TextColor3 = Theme.COLOR_ACCENT
-		else
-			savedLabel.Text = "Nothing was saved"
-			savedLabel.TextColor3 = Theme.COLOR_TEXT_DIM
 		end
 		local returnIn = info.returnIn
 		returnAt = if typeof(returnIn) == "number" and returnIn > 0

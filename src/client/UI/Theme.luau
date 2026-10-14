@@ -1241,15 +1241,12 @@ local Theme = {
 	-- camp's entry, a rescue): the camera is there at once, with no lag left to close. No move
 	-- a player makes covers this in a frame (a slam is 120 studs a second).
 	COMBAT_CAMERA_SNAP_STUDS = 40,
-	-- The run layer (CombatHud). "Progress saved" shows this long when a checkpoint banks; the
-	-- first press of Abandon asks for a second one within this long.
-	COMBAT_SAVED_NOTICE_SECONDS = 3,
+	-- The run layer (CombatHud): the first press of Abandon asks for a second one within this
+	-- long.
 	COMBAT_ABANDON_CONFIRM_SECONDS = 3,
-	COMBAT_SAVED_NOTICE_WIDTH = 168,
 	-- The summary card's lines sit closer than a dialog's: with two buttons and a party's two
 	-- extra lines it must still fit 329 design px of height (640x360 under a 58 px top bar).
 	COMBAT_SUMMARY_LINE_GAP = 6,
-	COMBAT_SAVED_NOTICE_HEIGHT = 24,
 	-- The bottom-left buttons: Map, and a two-line button (Return to your city / Abandon).
 	COMBAT_MAP_BUTTON_WIDTH = 72,
 	COMBAT_RUN_BUTTON_WIDTH = 104,
@@ -1288,6 +1285,34 @@ local Theme = {
 	-- this often, at most this many times.
 	MAP_STATE_RETRY_SECONDS = 2,
 	MAP_STATE_RETRIES = 5,
+	-- L1b (docs/INTERFACES.md "L1b contracts" -> Client). A raider resting at a fire sits: its
+	-- body lowered by this share of its kind's height, legs out in front. Rising, it blends
+	-- from seated to standing over RISE_BLEND (and sits down again over the same time).
+	COMBAT_REST_DROP = 0.35,
+	COMBAT_RISE_BLEND_SECONDS = 0.5,
+	-- The seated legs: where they leave the body, as a share of the kind's radius in front of
+	-- its centre line (they then run forward their own standing length).
+	COMBAT_REST_HIP_SHARE = 0.3,
+	-- A woken group: a "!" over each of its bodies for this long, its foot this many studs
+	-- above the top of the head. Its size is studs plus pixels, so it grows near and keeps a
+	-- floor of pixels far away (about 31 px tall at 60 studs on a 375 px tall phone, 43 px on
+	-- a 1080 px monitor). It pops in (not where motion is reduced) and fades out.
+	COMBAT_ALERT_SECONDS = 1.5,
+	COMBAT_ALERT_STUDS = 3,
+	COMBAT_ALERT_WIDTH_STUDS = 1,
+	COMBAT_ALERT_HEIGHT_STUDS = 1.5,
+	COMBAT_ALERT_WIDTH_PX = 16,
+	COMBAT_ALERT_HEIGHT_PX = 24,
+	COMBAT_ALERT_STROKE = 3,
+	COMBAT_ALERT_COLOR = Color3.fromRGB(255, 196, 40),
+	COMBAT_ALERT_POP_SECONDS = 0.15,
+	COMBAT_ALERT_POP_FROM = 0.4,
+	COMBAT_ALERT_FADE_SECONDS = 0.3,
+	COMBAT_ALERT_MAX_DISTANCE = 200,
+	-- A checkpoint reached: "Checkpoint" under the wallet for this long (CombatHud.ShowNotice).
+	COMBAT_CHECKPOINT_NOTICE_SECONDS = 2,
+	COMBAT_CHECKPOINT_NOTICE_WIDTH = 128,
+	COMBAT_CHECKPOINT_NOTICE_HEIGHT = 24,
 
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,

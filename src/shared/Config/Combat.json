@@ -141,7 +141,23 @@
 		"fenceThickness": 1,
 		"boxMargin": 40,
 		"maxParts": 600,
-		"checkpointSize": [2, 10, 2]
+		"checkpointSize": [2, 10, 2],
+		"checkpointReach": 8,
+		"populationReserve": 21,
+		"walletSendSeconds": 1,
+		"fireMarkerSize": [3, 1, 3]
+	},
+	"camps": {
+		"guard": { "sight": 30, "cone": 140, "rise": 0 },
+		"patrol": { "sight": 24, "cone": 360, "rise": 0 },
+		"fire": { "sight": 16, "cone": 360, "rise": 1.5 },
+		"sightBelow": 4,
+		"sightAbove": 30,
+		"chaseMargin": 3,
+		"leashSeconds": 3,
+		"homePace": 1,
+		"patrolPace": 0.5,
+		"homeTolerance": 1
 	},
 	"crowdSkeleton": [
 		{ "introduces": ["fodder"] },

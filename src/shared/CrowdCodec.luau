@@ -34,9 +34,11 @@ local STATE_MASK = 0x0F
 local PLATED_BIT = 0x10
 local ATTACK_SHIFT = 5
 local MAX_ATTACK = 7
--- Wire order is part of the format: append new states (at most 16), never reorder.
+-- Wire order is part of the format: append new states (at most 16), never reorder. L1b appends
+-- the resting ("rest", 8) and the rising ("rise", 9) raider; FORMAT_VERSION does not change,
+-- because no older reader is ever sent them.
 local STATES: { Types.CrowdState } =
-	{ "idle", "move", "windup", "stagger", "airborne", "dead", "attack", "recover" }
+	{ "idle", "move", "windup", "stagger", "airborne", "dead", "attack", "recover", "rest", "rise" }
 
 local stateIndex: { [string]: number } = {}
 for index, state in STATES do

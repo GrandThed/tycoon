@@ -67,7 +67,7 @@
 --    departs. Only the leader's Depart is live; a refusal frees it and says why.
 --  * The level, not the mission: the header shows RunState.levelName and the difficulty, the
 --    wallet's material chip is RunState.material, CrowdRenderer is handed the level's cap and,
---    whenever it changes, the crowd's floor (RunState.floor, ruling 30).
+--    whenever it changes, the crowd's floors (L1b: RunState.floors, one per camp).
 --  * The summary card shows for a RunState that carries a `result`; Enter (or its button) is
 --    "Back to camp" (RequestAbandon), and Abandon in a live run is the same intent.
 --  * Studio keys: N finishes the stage, B jumps to the boss, G steps the gear (RequestDebug).
@@ -91,6 +91,14 @@
 --    so its release still reaches the movement keys under them.
 --  * The Studio strip is off the screen while the map is open, and a client with no MapState
 --    asks for its snapshot again, a few times.
+--
+-- L1b (docs/INTERFACES.md "L1b contracts — the living road" -> Client), in `bootMission`:
+--  * The crowd has a floor per camp: RunState.floors is handed to CrowdRenderer.SetFloors
+--    whenever it differs from what was handed last (`{}` in the lobby). The one-floor
+--    `applyFloor` of L1 is gone.
+--  * Nothing is banked any more: the server sends the wallet itself, at most once a second, as
+--    kills pay. Only the end of a run still asks for a fresh Snapshot.
+--  * CampFx's "Checkpoint" notice is the HUD's notice line under the wallet.
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -131,6 +139,7 @@ local MovementController = require(script.Parent:WaitForChild("MovementControlle
 local VitalsController = require(script.Parent:WaitForChild("VitalsController"))
 local ThreatFx = require(script.Parent:WaitForChild("ThreatFx"))
 local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
+local CampFx = require(script.Parent:WaitForChild("CampFx"))
 local Haptics = require(script.Parent:WaitForChild("Haptics"))
 
 local HUMANOID_WAIT_SECONDS = 5
@@ -215,7 +224,7 @@ local function isRunState(payload: any): boolean
 		and typeof(payload.camps) == "number"
 		and typeof(payload.campsCleared) == "number"
 		and typeof(payload.left) == "number"
-		and typeof(payload.banked) == "number"
+		and typeof(payload.floors) == "table"
 		and typeof(payload.leaderUserId) == "number"
 		and typeof(payload.wave) == "number"
 		and typeof(payload.waves) == "number"
@@ -231,7 +240,6 @@ local function isRunResult(payload: any): boolean
 		and typeof(payload.reason) == "string"
 		and typeof(payload.campsCleared) == "number"
 		and typeof(payload.camps) == "number"
-		and typeof(payload.savedAt) == "string"
 		and typeof(payload.star) == "boolean"
 end
 
@@ -433,7 +441,7 @@ end
 -- Fix round, item 5. Where the banner goes, in px of the viewport (CombatFxController's overlay
 -- ignores the top-bar inset; `size`, `edges` and `bossBottom` are the HUD ScreenGui's, which
 -- starts under it). Centred near the top, as it always was, wherever that is clear of the run
--- header's block (header, wallet, "Progress saved"): any monitor. Where it is not:
+-- header's block (header, wallet, the notice line): any monitor. Where it is not:
 --  * landscape (a phone): the block is a column at the left, and the banner takes the room to
 --    the right of it and of the crosshair's box (on a screen that short the banner reaches down
 --    to the box);
@@ -452,7 +460,7 @@ local function placeBanner(
 	local width = math.min(Theme.COMBAT_BANNER_WIDTH * scale, math.max(size.X - 2 * margin, 0))
 	local centreX = size.X / 2
 	local top = viewport.Y * Theme.COMBAT_BANNER_TOP_FRACTION
-	local blockBottom = inset.Y + edges.savedBottom + margin
+	local blockBottom = inset.Y + edges.noticeBottom + margin
 	if top < blockBottom and centreX - width / 2 < edges.headerRight + margin then
 		if size.X > size.Y then
 			local boxRight = viewport.X / 2 + Theme.COMBAT_RANGE_CROSSHAIR_SIZE / 2 * scale
@@ -1181,7 +1189,8 @@ local function bootMission(): ()
 
 	-- What the last RunState, Snapshot and MapState said, as far as the next one is compared
 	-- against it. `departToken` names the latest reason Depart is busy, so an older timer
-	-- cannot free a newer wait. `floor` is the crowd's floor as last handed to CrowdRenderer.
+	-- cannot free a newer wait. `floors` are the crowd's floors as last handed to CrowdRenderer
+	-- (L1b: one RunFloor per camp, copied, so the next RunState is compared by value).
 	-- Fix round: `mapStateSeen` = a MapState has arrived (until then the snapshot is asked for
 	-- again); `mapHeld` and `summaryHeld` are the keys that were down when those actions were
 	-- bound, which pass through until let go (keysDown); `placedPoint` / `placedAt` are the last
@@ -1193,7 +1202,6 @@ local function bootMission(): ()
 		phase = "",
 		wave = 0,
 		stage = 0,
-		banked = 0,
 		levelId = "",
 		material = "",
 		prewarmed = 0,
@@ -1208,7 +1216,7 @@ local function bootMission(): ()
 		bossShown = false,
 		bossLimit = nil :: number?,
 		vitalsLayout = nil :: VitalsHud.Layout?,
-		floor = { set = false, x = 0, y = 0, z = 0, hx = 0, hz = 0 },
+		floors = {} :: { Types.RunFloor },
 		wallet = { cash = 0, valor = 0, materials = {} :: { [string]: any } },
 	}
 	local mapName = if expeditions ~= nil then expeditions.name else DEFAULT_MAP_NAME
@@ -1228,7 +1236,7 @@ local function bootMission(): ()
 			remotes.requestLeave:FireServer()
 		end
 	end
-	-- Ruling 21: in a live run this ends it with what was banked; in the summary it ends the
+	-- Ruling 21: in a live run this ends it (every kill is already paid); in the summary it ends the
 	-- wait. The server drops it from anyone who may not.
 	local function abandon(): ()
 		local remote = remotes.requestAbandon
@@ -1596,40 +1604,50 @@ local function bootMission(): ()
 		seedMap(state)
 	end
 
-	-- The crowd's floor (ruling 30): handed on whenever it changes, nil when no camp holds it.
-	local function applyFloor(floor: Types.RunFloor?): ()
-		local held = st.floor
-		if
-			floor == nil
-			or typeof(floor) ~= "table"
-			or typeof(floor.x) ~= "number"
-			or typeof(floor.y) ~= "number"
-			or typeof(floor.z) ~= "number"
-			or typeof(floor.hx) ~= "number"
-			or typeof(floor.hz) ~= "number"
-		then
-			if held.set then
-				held.set = false
-				CrowdRenderer.SetFloor(nil, nil)
+	-- L1b: the crowd's floors, one per camp in floor-index order, handed on whenever they
+	-- differ from the last ones by value (a RunState comes four times a second and carries them
+	-- every time). The lobby's `{}` empties them. A malformed entry ends the list there, as
+	-- CrowdRenderer.SetFloors reads it.
+	local function applyFloors(list: { any }): ()
+		local held = st.floors
+		local fresh: { Types.RunFloor } = {}
+		for _, entry in list do
+			if
+				typeof(entry) ~= "table"
+				or typeof(entry.x) ~= "number"
+				or typeof(entry.y) ~= "number"
+				or typeof(entry.z) ~= "number"
+				or typeof(entry.hx) ~= "number"
+				or typeof(entry.hz) ~= "number"
+			then
+				break
 			end
+			table.insert(
+				fresh,
+				{ x = entry.x, y = entry.y, z = entry.z, hx = entry.hx, hz = entry.hz }
+			)
+		end
+		local same = #fresh == #held
+		if same then
+			for index, floor in fresh do
+				local old = held[index]
+				if
+					floor.x ~= old.x
+					or floor.y ~= old.y
+					or floor.z ~= old.z
+					or floor.hx ~= old.hx
+					or floor.hz ~= old.hz
+				then
+					same = false
+					break
+				end
+			end
+		end
+		if same then
 			return
 		end
-		if
-			held.set
-			and held.x == floor.x
-			and held.y == floor.y
-			and held.z == floor.z
-			and held.hx == floor.hx
-			and held.hz == floor.hz
-		then
-			return
-		end
-		held.set = true
-		held.x, held.y, held.z, held.hx, held.hz = floor.x, floor.y, floor.z, floor.hx, floor.hz
-		CrowdRenderer.SetFloor(
-			Vector3.new(floor.x, floor.y, floor.z),
-			Vector3.new(floor.hx, 0, floor.hz)
-		)
+		st.floors = fresh
+		CrowdRenderer.SetFloors(fresh)
 	end
 
 	local function onRunState(payload: any): ()
@@ -1680,7 +1698,7 @@ local function bootMission(): ()
 			CombatFxController.SetMaterial(run.material)
 			paintWallet()
 		end
-		applyFloor(run.floor)
+		applyFloors(run.floors)
 
 		local difficultyName = run.difficulty
 		if expeditions ~= nil then
@@ -1786,14 +1804,15 @@ local function bootMission(): ()
 		elseif phase == "breather" and last ~= "breather" then
 			ThreatFx.Clear()
 		end
-		-- A checkpoint banked, or the run ended: the wallet changed, so ask for it now.
-		if run.banked > st.banked or (over and not RUN_OVER_PHASES[last]) then
+		-- The run ended: ask for the wallet now (L1b-16: the server also sends every dirty
+		-- wallet at the end; a duplicate Snapshot is harmless). Kills during the run need no
+		-- ask: the server sends the wallet itself, at most once a second.
+		if over and not RUN_OVER_PHASES[last] then
 			remotes.requestSnapshot:FireServer()
 		end
 		st.phase = phase
 		st.wave = run.wave
 		st.stage = run.stage
-		st.banked = run.banked
 	end
 
 	local function onActionResult(payload: any): ()
@@ -1898,11 +1917,14 @@ local function bootMission(): ()
 	end
 
 	-- No banner handler here: a banner mirrored into a toast was a second message for one
-	-- event, and with "Progress saved" a third in one band of a landscape phone. The objective
+	-- event, and with the notice line a third in one band of a landscape phone. The objective
 	-- line is the record of where the run stands. Personal notices keep the toast.
 	CombatFxController.SetToastHandler(function(text: string)
 		toast.Show(text, Theme.TOAST_ERROR_SECONDS, false)
 	end)
+	-- L1b: "Checkpoint" goes on the notice line under the wallet, the place the banner already
+	-- keeps clear of (placeBanner), not into the toast with the personal notices.
+	CampFx.SetNoticeHandler(hud.ShowNotice)
 
 	remotes.stateChanged.OnClientEvent:Connect(onStateChanged)
 	remotes.actionResult.OnClientEvent:Connect(onActionResult)

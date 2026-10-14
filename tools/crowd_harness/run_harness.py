@@ -10,6 +10,10 @@ mission and Combat.json are injected as FIXTURES, the way Armory.json is.
 file, layout, mission and the map are injected as they stand, the arena layouts a level names
 are bundled as modules, and tools/check_levels.py is asked for its Part counts and its own
 reading of each arena, so the Luau rules and the Python gate are held to one answer.
+L1b adds the pure CampBrain (how a camp's resident groups rest, wake, chase and go home) and two
+case files: tests_l1b_crowd.luau (CampBrain and CrowdService's floors and groups) and
+tests_l1b.luau (StageFlow's open camps, checkpoints and clear field, Combat's per-kill split with
+its carry, LevelGeometry's open camps and fire markers).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -58,6 +62,7 @@ SOURCES = {
     "CrowdService": "src/combat/server/Services/CrowdService.luau",
     "VitalsService": "src/combat/server/Services/VitalsService.luau",
     "LevelGeometry": "src/combat/server/Services/LevelGeometry.luau",
+    "CampBrain": "src/combat/server/Services/CampBrain.luau",
     "StageFlow": "src/combat/server/Services/StageFlow.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
@@ -70,6 +75,8 @@ TESTS = [
     "tests_p5.luau",
     "tests_l1_world.luau",
     "tests_l1.luau",
+    "tests_l1b_crowd.luau",
+    "tests_l1b.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"

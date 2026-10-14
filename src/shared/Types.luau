@@ -1306,6 +1306,8 @@ export type CombatConfig = {
 	crowdSkeleton: { CrowdSkeletonWave },
 	-- L1: the rules every level shares (gates, triggers, the start, the build's size).
 	levels: CombatLevelsConfig,
+	-- L1b: how a camp's resident groups rest, wake, chase and go home (CampBrain).
+	camps: CampRulesConfig,
 }
 
 -- Missions/<eraIndex>_<EraName>.json v1, resolved by numeric prefix like era configs.
@@ -1445,6 +1447,9 @@ export type PartyMember = {
 	host: boolean,
 	waiting: boolean,
 	damageShare: number,
+	-- L1b: in play for a camp group that is rising or fighting, so the phone client can hide
+	-- Abandon during a resident fight (camp fights happen outside the `wave` phase).
+	engaged: boolean?,
 	-- P5 ruling 18: down in a crowd mission (until a wave boundary, or the revive in Wave 4);
 	-- false for bots.
 	down: boolean,
@@ -1529,9 +1534,9 @@ export type RunState = {
 	left: number,
 	bossName: string?,
 	gateIn: number?,
-	-- Checkpoints banked this run.
-	banked: number,
-	floor: RunFloor?,
+	-- L1b: every camp's floor in floor-index order; {} in the lobby.
+	floors: { RunFloor },
+	-- L1b: the plan's population (the client's pool).
 	maxAlive: number,
 	leaderUserId: number,
 	result: RunResult?,
@@ -2211,7 +2216,7 @@ export type ValleyPlan = {
 -- Crowd replication. CrowdSpawn (reliable) introduces an enemy once; CrowdSnapshot (unreliable,
 -- buffer via CrowdCodec) carries every live enemy at crowd.snapshotHz; CrowdRemove ends it.
 -- P4 adds attack (the active part: the lunge, the charge) and recover (exposed after it); windup
--- is the tell. Wire order is fixed in CrowdCodec.
+-- is the tell. Wire order is fixed in CrowdCodec's STATES: L1b appends "rest" and "rise".
 export type CrowdState =
 	"idle"
 	| "move"
@@ -2221,8 +2226,20 @@ export type CrowdState =
 	| "dead"
 	| "attack"
 	| "recover"
+	| "rest"
+	| "rise"
 -- summonerId (P4 Stop 3): the crowd id of the boss that called this body; nil for a set's own.
-export type CrowdSpawnInfo = { id: number, kind: string, maxHp: number, summonerId: number? }
+-- L1b: floor = the body's floor index in RunState.floors (nil = 1).
+export type CrowdSpawnInfo = {
+	id: number,
+	kind: string,
+	maxHp: number,
+	summonerId: number?,
+	floor: number?,
+}
+-- L1b: one floor of the crowd: centre = the floor's top centre; half.X and half.Z its half extents;
+-- half.Y the highest a launch may carry a body over it (levels.crowdCeiling).
+export type CrowdFloor = { centre: Vector3, half: Vector3 }
 export type CrowdSnapshotEntry = {
 	id: number,
 	position: Vector3,
@@ -2469,6 +2486,8 @@ export type LevelCrowdConfig = {
 	burstSpacing: number,
 	eliteKind: string?,
 	rewards: { [string]: MissionCrowdReward },
+	-- L1b: per camp cleared, x rewardMult; nil = nothing
+	clearBonus: MissionCrowdReward?,
 }
 export type LevelStage = {
 	-- kind: "travel" | "camp"
@@ -2481,7 +2500,6 @@ export type LevelStage = {
 	-- nil = the director's
 	breatherSeconds: number?,
 	merge: boolean?,
-	bankEachWave: boolean?,
 	maxAlive: number?,
 }
 export type LevelFile = {
@@ -2497,6 +2515,8 @@ export type LevelFile = {
 	difficulties: { [string]: LevelDifficulty }?,
 	crowd: LevelCrowdConfig?,
 	stages: { LevelStage }?,
+	-- L1b: the camps' names and residents
+	camps: { LevelCampConfig }?,
 }
 export type LevelConfig = {
 	version: number,
@@ -2510,6 +2530,8 @@ export type LevelConfig = {
 	difficulties: { [string]: LevelDifficulty },
 	crowd: LevelCrowdConfig,
 	stages: { LevelStage },
+	-- L1b: Resolve fills {} when the file has none
+	camps: { LevelCampConfig },
 }
 
 -- Layouts/Levels/<Name>.json. World coordinates, studs. A file with `arena` holds nothing else.
@@ -2544,6 +2566,9 @@ export type LevelCamp = {
 	checkpoint: ArenaPoint?,
 	spawns: { ArenaPoint },
 	obstacles: { ArenaObstacle }?,
+	-- L1b: true = the boss room (gates, the wall, a stage of its own); nil = open
+	locks: boolean?,
+	spots: { LevelSpot }?,
 }
 export type LevelSecret = {
 	id: string,
@@ -2627,6 +2652,14 @@ export type CombatLevelsConfig = {
 	-- When a camp's gates close, a fighter whose root is not at least this far inside the floor's
 	-- edge is moved to the camp's entry: the gate and the invisible wall turn solid on that edge.
 	closeInset: number,
+	-- L1b-18: how near (flat) a standing fighter's root must come to reach a camp's checkpoint.
+	checkpointReach: number,
+	-- L1b-11: bodies the crowd may raise by itself (the boss, summons, tents) beyond the residents.
+	populationReserve: number,
+	-- L1b-16: the least time between two wallet sends to one member during a run.
+	walletSendSeconds: number,
+	-- A fire spot's marker block, { x, y, z } studs (nil = no marker is built).
+	fireMarkerSize: { number }?,
 }
 
 -- RunState (built only by ArenaService)
@@ -2639,8 +2672,6 @@ export type RunResult = {
 	reason: string,
 	campsCleared: number,
 	camps: number,
-	-- the stage name of the last bank; "" = nothing was banked
-	savedAt: string,
 	-- this run gave this player a new star
 	star: boolean,
 }
@@ -2655,9 +2686,62 @@ export type MapNodeState = {
 }
 export type MapState = { kind: "map", leaderUserId: number, nodes: { MapNodeState } }
 
--- CombatFx gains two kinds. event: "closed" | "cleared"
-export type CombatFxCamp = { kind: "camp", event: string, name: string, saved: boolean }
+-- CombatFx gains two kinds. L1b: event: "closed" | "cleared" | "alert" | "checkpoint".
+-- ids: on "alert", the crowd ids of the group that woke; nil otherwise.
+export type CombatFxCamp = { kind: "camp", event: string, name: string, ids: { number }? }
 -- Studio levers
 export type CombatFxNotice = { kind: "notice", text: string }
+
+-- L1b (docs/INTERFACES.md "L1b contracts — the living road", Wave 1)
+
+-- Combat.json `camps` (CampBrain)
+export type CampPosture = "guard" | "patrol" | "fire"
+export type CampGroupState = "rest" | "rise" | "fight" | "home"
+export type CampPostureRules = {
+	sight: number, -- studs on the flat, from each member
+	cone: number, -- degrees, the whole angle about the post's facing; 360 = all round
+	rise: number, -- seconds from a wake to the fight
+}
+export type CampRulesConfig = {
+	guard: CampPostureRules,
+	patrol: CampPostureRules,
+	fire: CampPostureRules,
+	sightBelow: number, -- studs a root may be under the camp's floor and still be seen or in play
+	sightAbove: number, -- studs a root may be over it
+	chaseMargin: number, -- studs the in-play rectangle reaches past the floor's edge
+	leashSeconds: number,
+	homePace: number, -- x the kind's speed: walking home, and a resting body drifting back
+	patrolPace: number, -- x the kind's speed: a patrol at rest
+	homeTolerance: number, -- studs from its post that count as at its post
+}
+export type CampRect = { x: number, z: number, hx: number, hz: number }
+export type CampUnit = { kind: string, count: number }
+export type CampGroupDef = {
+	id: string, -- "<camp>.<spot>"
+	camp: string,
+	floor: number, -- index into the run's floor list
+	floorY: number,
+	rect: CampRect, -- the camp's floor
+	posture: CampPosture,
+	points: { Vector3 }, -- feet at floorY: the guard posts | the patrol loop | the fire's centre
+	yaw: number, -- guard: the posts' facing, radians (0 faces -Z)
+	radius: number, -- fire: the sitting circle, studs; 0 otherwise
+	held: boolean, -- a locking camp's group: sleeps and evades until the close
+	units: { CampUnit }, -- filtered by minDifficulty; members are spawned in this order
+}
+
+-- Layouts/Levels/<Name>.json: a LevelCamp's spots.
+-- facing: degrees, 0 faces -Z, 90 faces -X (CrowdService.yawToward's convention)
+export type LevelSpot = {
+	id: string,
+	posture: string, -- "guard" | "patrol" | "fire"
+	points: { ArenaPoint }, -- guard: one post per member | patrol: the closed loop | fire: its centre
+	facing: number?,
+	radius: number?,
+}
+
+-- Config/Levels/<n>_<Name>.json: residents. MissionCrowdGroup.perExtra is not read for them.
+export type LevelResidentGroup = { spot: string, units: { MissionCrowdGroup } }
+export type LevelCampConfig = { id: string, name: string, residents: { LevelResidentGroup } }
 
 return {}

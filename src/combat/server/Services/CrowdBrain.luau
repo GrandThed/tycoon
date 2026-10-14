@@ -42,6 +42,11 @@
 -- body's life (usable). Enraged, a kind with `enrage.brain` moves by that brain instead of its
 -- own: a commander who kept away closes in.
 --
+-- L1b ("L1b contracts — the living road", ruling L1b-1): the crowd has a list of floors, one per
+-- camp, and every body stands on its own (Body.floor). Its ground shapes lie on that floor, a
+-- retreat and a charge stop at that floor's edge, and a falling target is led down to it. A
+-- camp's resident in a fight goes only for the targets in play for its group (Think's `allowed`).
+--
 -- Rules that shape the module:
 -- * Nothing here yields, raycasts or builds a path: the crowd ignores world geometry (ruling 15).
 -- * A Strike is only queued. CrowdService drains the queue after its step, so nothing a hit
@@ -81,8 +86,8 @@ export type Strike = {
 	targetUserId: number,
 	-- The attacker's body centre: the shape's origin.
 	origin: Vector3,
-	-- The floor a ground shape lies on. It is the crowd's floor, not the attacker's feet: a hit
-	-- that did not cancel the windup may have it in the air at the impact.
+	-- The floor a ground shape lies on. It is the top of the attacker's own floor (L1b-1), not
+	-- its feet: a hit that did not cancel the windup may have it in the air at the impact.
 	floorY: number,
 	-- Flat unit heading: as locked for a lunge, an arc, a line and a lane; the way a shot
 	-- flies and a lob was thrown.
@@ -142,6 +147,7 @@ export type Mind = {
 }
 
 -- The fields of a CrowdService enemy record that the brain reads. `position` is the feet.
+-- `floor` = its index in the crowd's floor list (SetFloors).
 export type Body = {
 	id: number,
 	kind: string,
@@ -149,6 +155,7 @@ export type Body = {
 	hp: number,
 	maxHp: number,
 	plate: number,
+	floor: number,
 }
 
 -- A player the fighting crowd may go for, kept from step to step so their motion can be read.
@@ -160,8 +167,9 @@ type Target = {
 	-- The root's displacement over the last crowd step, never the replicated velocity, and no
 	-- faster than the fastest legal move: a client that jitters its root buys no miss.
 	velocity: Vector3,
-	-- Where the root is when they stand on the crowd's floor.
-	standY: number,
+	-- How far the root is above the floor they stand on (HipHeight + half the root's height): a
+	-- fall is led down to the attacker's floor + this.
+	lift: number,
 	-- How far the server's copy of them trails their own screen (Tuning.CommitLag): the commit
 	-- rule judges a shot against them that long after it gets there.
 	lag: number,
@@ -209,20 +217,32 @@ local places: { [string]: { [number]: number } } = {}
 local shotsHeld = 0
 local strikes: { Strike } = {}
 local stepNow = 0
-local stepFloorY = 0
 local stepGravity = 0
 local stepFastest = 0
--- The floor's XZ centre and half extents: a charge stops at its edge and a retreat ends there.
-local arenaCenter = Vector3.zero
-local arenaHalf = Vector3.new(1024, 0, 1024)
+-- Each floor's top centre and half extents, by floor index: a body's charge stops at its own
+-- floor's edge and a retreat ends there. Before SetFloors: one floor at the origin, effectively
+-- unbounded sideways.
+local DEFAULT_FLOOR: Types.CrowdFloor = { centre = Vector3.zero, half = Vector3.new(1024, 0, 1024) }
+local floors: { Types.CrowdFloor } = { DEFAULT_FLOOR }
 
 local CrowdBrain = {}
 
-local function nearest(position: Vector3): Target?
+-- A body's own floor. One whose index is not in the list (it cannot happen while SetFloors is
+-- refused with a body alive) stands on the first.
+local function floorOf(body: Body): Types.CrowdFloor
+	return floors[body.floor] or floors[1] or DEFAULT_FLOOR
+end
+
+-- The nearest target, among those in `allowed` when it is given (a resident's group's in-play
+-- set); every target otherwise.
+local function nearest(position: Vector3, allowed: { [number]: boolean }?): Target?
 	local best: Target? = nil
 	local bestDistance = math.huge
 	for index = 1, targetCount do
 		local target = targets[index]
+		if allowed ~= nil and not allowed[target.userId] then
+			continue
+		end
 		local dx = target.position.X - position.X
 		local dz = target.position.Z - position.Z
 		local distance = dx * dx + dz * dz
@@ -263,24 +283,25 @@ end
 
 -- Where a target will be `seconds` on if it keeps moving as it did over the last crowd step:
 -- straight on the flat, at the height it is at. Only one that is rising or falling is led down
--- a fall under gravity, as far as the surface it last stood on, or the crowd's floor once it
--- is below that (it stepped off). A player standing on a block is aimed at where they stand:
--- how high the root is says nothing about whether it is in the air.
-local function ahead(from: Vector3, target: Target, seconds: number): Vector3
+-- a fall under gravity, as far as the surface it last stood on, or the attacker's floor
+-- (`floorY`) once it is below that (it stepped off). A player standing on a block is aimed at
+-- where they stand: how high the root is says nothing about whether it is in the air.
+local function ahead(from: Vector3, target: Target, seconds: number, floorY: number): Vector3
 	local velocity = target.velocity
 	local y = from.Y
 	if not target.resting then
-		local floor = if y >= target.restY then target.restY else target.standY
+		local floor = if y >= target.restY then target.restY else floorY + target.lift
 		local fallen = y + velocity.Y * seconds - 0.5 * stepGravity * seconds * seconds
 		y = math.max(floor, fallen)
 	end
 	return Vector3.new(from.X + velocity.X * seconds, y, from.Z + velocity.Z * seconds)
 end
 
--- Where a point may stand in the arena: a body of `radius` stays wholly on the floor.
-local function inArena(point: Vector3, radius: number): Vector3
-	local limitX = math.max(arenaHalf.X - radius, 0)
-	local limitZ = math.max(arenaHalf.Z - radius, 0)
+-- Where a point may stand on a floor: a body of `radius` stays wholly on it.
+local function inArena(point: Vector3, radius: number, floor: Types.CrowdFloor): Vector3
+	local arenaCenter = floor.centre
+	local limitX = math.max(floor.half.X - radius, 0)
+	local limitZ = math.max(floor.half.Z - radius, 0)
 	return Vector3.new(
 		math.clamp(point.X, arenaCenter.X - limitX, arenaCenter.X + limitX),
 		point.Y,
@@ -288,11 +309,17 @@ local function inArena(point: Vector3, radius: number): Vector3
 	)
 end
 
--- How far a body of `radius` can run from `from` along the flat unit `heading` before the
--- arena's edge.
-local function runway(from: Vector3, heading: Vector3, radius: number): number
-	local limitX = math.max(arenaHalf.X - radius, 0)
-	local limitZ = math.max(arenaHalf.Z - radius, 0)
+-- How far a body of `radius` can run from `from` along the flat unit `heading` before its
+-- floor's edge.
+local function runway(
+	from: Vector3,
+	heading: Vector3,
+	radius: number,
+	floor: Types.CrowdFloor
+): number
+	local arenaCenter = floor.centre
+	local limitX = math.max(floor.half.X - radius, 0)
+	local limitZ = math.max(floor.half.Z - radius, 0)
 	local room = math.huge
 	if heading.X > 0 then
 		room = math.min(room, (arenaCenter.X + limitX - from.X) / heading.X)
@@ -541,7 +568,8 @@ local function ledAim(
 	origin: Vector3,
 	here: Vector3,
 	target: Target,
-	attack: Types.CrowdAttackDef
+	attack: Types.CrowdAttackDef,
+	floorY: number
 ): Vector3
 	local speed = attack.speed or 0
 	local lead = attack.lead or 0
@@ -551,7 +579,7 @@ local function ledAim(
 	local aim = here
 	for _ = 1, AIM_PASSES do
 		local flight = (aim - origin).Magnitude / speed
-		aim = here + (ahead(here, target, flight + target.lag) - here) * lead
+		aim = here + (ahead(here, target, flight + target.lag, floorY) - here) * lead
 	end
 	return aim
 end
@@ -565,6 +593,7 @@ local function land(body: Body, mind: Mind, def: Types.CrowdKindDef, threat: Thr
 	if attack ~= nil then
 		local shape = attack.shape
 		local origin = body.position + Vector3.new(0, def.height / 2, 0)
+		local floor = floorOf(body)
 		-- Its cooldown runs from the impact, and the impact is what `uses` counts.
 		mind.usedAt[mind.attack] = impactAt
 		mind.landed[mind.attack] = (mind.landed[mind.attack] or 0) + 1
@@ -577,7 +606,7 @@ local function land(body: Body, mind: Mind, def: Types.CrowdKindDef, threat: Thr
 			def = attack,
 			targetUserId = mind.targetUserId,
 			origin = origin,
-			floorY = stepFloorY,
+			floorY = floor.centre.Y,
 			facing = mind.facing,
 		}
 		if shape == "line" then
@@ -602,7 +631,9 @@ local function land(body: Body, mind: Mind, def: Types.CrowdKindDef, threat: Thr
 			if shape == "lob" then
 				strike.aim = here
 			else
-				strike.aim = if target ~= nil then ledAim(origin, here, target, attack) else here
+				strike.aim = if target ~= nil
+					then ledAim(origin, here, target, attack, floor.centre.Y)
+					else here
 			end
 			-- The body turns to its throw.
 			local heading = flatUnit((strike.aim :: Vector3) - origin)
@@ -619,7 +650,7 @@ local function land(body: Body, mind: Mind, def: Types.CrowdKindDef, threat: Thr
 			strike.feet = body.position
 			strike.aim = mind.aim
 			strike.length = if speed > 0
-				then math.min(range, runway(body.position, mind.facing, def.radius))
+				then math.min(range, runway(body.position, mind.facing, def.radius, floor))
 				else 0
 			mind.charge = strike
 		elseif shape == "ring" then
@@ -657,7 +688,8 @@ local function chain(
 	mind: Mind,
 	def: Types.CrowdKindDef,
 	threat: ThreatConfig,
-	now: number
+	now: number,
+	allowed: { [number]: boolean }?
 ): boolean
 	local phase = def.enrage
 	local attacks = def.attacks
@@ -676,7 +708,7 @@ local function chain(
 	if charge ~= nil and charge.feet ~= nil then
 		here = charge.feet + charge.facing * (charge.length or 0)
 	end
-	local target = nearest(here)
+	local target = nearest(here, allowed)
 	if target == nil then
 		return false
 	end
@@ -722,26 +754,18 @@ function CrowdBrain.NewMind(now: number): Mind
 	}
 end
 
--- center = the floor's XZ centre, halfSize.X/Z its half extents, as CrowdService.SetBounds has
--- them.
-function CrowdBrain.SetArena(center: Vector3, halfSize: Vector3): ()
-	arenaCenter = center
-	arenaHalf = halfSize
+-- The crowd's floors, by floor index, as CrowdService.SetFloors has them: each one's top centre
+-- and half extents (X and Z are read here).
+function CrowdBrain.SetFloors(list: { Types.CrowdFloor }): ()
+	floors = list
 end
 
 -- Opens a crowd step: `now` is the frame's os.clock() (every catch-up step of one frame gets
--- the same), `floorY` the crowd's floor, `gravity` the world's, `shotsAlive` the enemy shots in
--- the air and `fastest` the fastest legal move of a player (Tuning.FastestMove). Targets and
--- commits are added after this, before the first Think.
-function CrowdBrain.BeginStep(
-	now: number,
-	floorY: number,
-	gravity: number,
-	shotsAlive: number,
-	fastest: number
-): ()
+-- the same), `gravity` the world's, `shotsAlive` the enemy shots in the air and `fastest` the
+-- fastest legal move of a player (Tuning.FastestMove). Targets and commits are added after this,
+-- before the first Think.
+function CrowdBrain.BeginStep(now: number, gravity: number, shotsAlive: number, fastest: number): ()
 	stepNow = now
-	stepFloorY = floorY
 	stepGravity = gravity
 	stepFastest = fastest
 	targetCount = 0
@@ -752,9 +776,9 @@ function CrowdBrain.BeginStep(
 end
 
 -- A player the fighting crowd may go for this step: alive and not down. `position` = the root,
--- `standY` = the root's height when they stand on the crowd's floor, `lag` = their commit lag
--- (Tuning.CommitLag).
-function CrowdBrain.AddTarget(userId: number, position: Vector3, standY: number, lag: number): ()
+-- `lift` = the root's height over whatever they stand on (HipHeight + half the root's height),
+-- `lag` = their commit lag (Tuning.CommitLag).
+function CrowdBrain.AddTarget(userId: number, position: Vector3, lift: number, lag: number): ()
 	local target = tracks[userId]
 	if target == nil then
 		target = {
@@ -762,7 +786,7 @@ function CrowdBrain.AddTarget(userId: number, position: Vector3, standY: number,
 			position = position,
 			clock = stepNow,
 			velocity = Vector3.zero,
-			standY = standY,
+			lift = lift,
 			lag = lag,
 			still = true,
 			resting = true,
@@ -795,7 +819,7 @@ function CrowdBrain.AddTarget(userId: number, position: Vector3, standY: number,
 		target.position = position
 		target.clock = stepNow
 	end
-	target.standY = standY
+	target.lift = lift
 	target.lag = lag
 	targetCount += 1
 	targets[targetCount] = target
@@ -818,13 +842,15 @@ end
 -- One living fighting enemy's step. `free` = on the ground and not staggered: only then may it
 -- walk or start a windup (a stagger or a launch suspends the brain); the timeline of an attack
 -- already under way runs on regardless. Returns the point to walk to and how far short of it,
--- on the flat, to stop; nil to stand.
+-- on the flat, to stop; nil to stand. `allowed` (L1b-6): only the targets whose userId is in it
+-- may be chosen (a resident's group's in-play set); nil = every target.
 function CrowdBrain.Think(
 	body: Body,
 	mind: Mind,
 	def: Types.CrowdKindDef,
 	crowd: CrowdConfig,
-	free: boolean
+	free: boolean,
+	allowed: { [number]: boolean }?
 ): (Vector3?, number)
 	local now = stepNow
 	local threat = crowd.threat
@@ -838,7 +864,7 @@ function CrowdBrain.Think(
 		-- shorter recover, never a windup it could not have known was a chained one.
 		local chains = mind.enraged
 		enrage(body, mind, def)
-		if not (chains and free and chain(body, mind, def, threat, now)) then
+		if not (chains and free and chain(body, mind, def, threat, now, allowed)) then
 			expose(mind, def)
 		end
 	end
@@ -880,7 +906,7 @@ function CrowdBrain.Think(
 		-- No brain, or nothing to attack with: a dummy that stands.
 		return nil, 0
 	end
-	local target = nearest(body.position)
+	local target = nearest(body.position, allowed)
 	if target == nil then
 		return nil, 0
 	end
@@ -924,7 +950,12 @@ function CrowdBrain.Think(
 	if distance > bandMax then
 		return target.position, bandMax
 	elseif distance < bandMin then
-		return inArena(body.position - mind.facing * (bandMin - distance), def.radius), 0
+		return inArena(
+			body.position - mind.facing * (bandMin - distance),
+			def.radius,
+			floorOf(body)
+		),
+			0
 	end
 	return nil, 0
 end

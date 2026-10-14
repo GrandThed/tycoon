@@ -68,6 +68,18 @@
 --   (ForEachWard) and the pips on its bar (GetBoss). The word a hit on it earns comes
 --   with the hit itself. Its second phase begins when its plate breaks (`enrage.at` 1, the
 --   same latch), and from then it fights with `enrage.brain`.
+-- * L1b ("L1b contracts — the living road" -> Client). The crowd has a floor per camp
+--   (SetFloors, from RunState.floors; the range's one floor is index 1, SetFloor). Every body
+--   is announced with its floor index, and the four things that read a floor (a tell's
+--   height, a threat origin's height, the charge's bound, laneReach) read the body's own. A
+--   body whose floor has not arrived yet uses its own feet and no bound: nothing is dropped.
+--   Two new wire states are poses, drawn here with no animation id: `rest` is a raider
+--   seated at a fire (lowered by Theme.COMBAT_REST_DROP of its height, legs out in front; the
+--   figure has no arms to lower), `rise` is standing up. The seat eases both ways over
+--   Theme.COMBAT_RISE_BLEND_SECONDS, so a sitter is slow to stand and a guard (standing at
+--   rest, `idle` on the wire) never sits. The seat is information, so it is not thinned on
+--   reducedMotion. The server's hit shapes do not sit: a seated head is drawn lower than the
+--   head the server judges a crit on.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -315,6 +327,10 @@ type Entity = {
 	tint: number,
 	tintColor: Color3,
 	glow: boolean,
+	-- L1b. floorIndex = the body's floor in `floors` (its spawn info's, 1 when it names none).
+	-- seat = how far it sits (0 standing, 1 seated at a fire), eased toward the wire's state.
+	floorIndex: number,
+	seat: number,
 
 	dirty: boolean,
 	lastShown: Vector3,
@@ -323,17 +339,18 @@ type Entity = {
 	lastTumble: number,
 	lastSquash: number,
 	lastTuck: number,
+	lastSeat: number,
 	index: number,
 }
 
--- The crowd's floor: its top centre and its half extents in X and Z (nil = unknown).
+-- One floor of the crowd: its top centre and its half extents in X and Z (nil = unknown).
 type Floor = { centre: Vector3, half: Vector3? }
 
 local FOLDER_NAME = "CrowdBodies"
 -- The wire's origin is the world origin, for good (L1 ruling 12): CrowdService encodes every
--- snapshot against it wherever the crowd's floor is, and this decodes against it. Until L1 this
--- one constant was also the floor's height (a tell's, a threat origin's) and the centre a
--- charge is bounded round; those three now read `floor`, which the server tells (SetFloor).
+-- snapshot against it wherever the crowd's floors are, and this decodes against it. Until L1
+-- this one constant was also the floor's height (a tell's, a threat origin's) and the centre a
+-- charge is bounded round; those now read the body's own floor (SetFloors, L1b).
 local WIRE_ORIGIN = Vector3.zero
 
 -- Interpolation.
@@ -434,10 +451,10 @@ local newestStamp = -math.huge
 local burstsThisStep = 0
 local burstEmitters: { [string]: ParticleEmitter } = {}
 local burstColors: { [string]: Color3 } = {}
--- The crowd's floor as last told (SetFloor): its top centre, and its half extents in X and Z
--- (nil = unknown: nothing bounds a charge). A camp's floor in a level (L1 ruling 30), the
--- arena's in the range (SetArena). With no camp it is the world origin at height 0.
-local floor: Floor = { centre = Vector3.zero, half = nil }
+-- The crowd's floors as last told, index = floor index (L1b): every camp's in a level
+-- (SetFloors, from RunState.floors; none in the lobby), the arena's alone at index 1 in the
+-- range (SetArena through SetFloor).
+local floors: { Floor } = {}
 -- Stop 2: the boss the bar shows (the first one alive, kept through its death flight so the
 -- bar can empty and go).
 local bossEntity: Entity? = nil
@@ -489,6 +506,13 @@ end
 
 local function colorOf(rgb: { number }): Color3
 	return Color3.fromRGB(rgb[1] or 128, rgb[2] or 128, rgb[3] or 128)
+end
+
+-- L1b: the height of the floor this body stands on, or `feetY` (its own feet) while that
+-- floor is not known here yet.
+local function floorY(entity: Entity, feetY: number): number
+	local home = floors[entity.floorIndex]
+	return if home ~= nil then home.centre.Y else feetY
 end
 
 local function newPart(name: string, shape: Enum.PartType, castShadow: boolean): Part
@@ -647,6 +671,8 @@ local function newEntity(): Entity?
 		tint = 0,
 		tintColor = FLASH_COLOR,
 		glow = false,
+		floorIndex = 1,
+		seat = 0,
 		dirty = true,
 		lastShown = Vector3.zero,
 		lastYaw = 0,
@@ -654,6 +680,7 @@ local function newEntity(): Entity?
 		lastTumble = 0,
 		lastSquash = 1,
 		lastTuck = 0,
+		lastSeat = 0,
 		index = 0,
 	}
 	return entity
@@ -1033,8 +1060,15 @@ local function release(entity: Entity): ()
 	table.insert(pool, entity)
 end
 
--- summonerId = the crowd id of the boss that called this body, 0 for a set's own.
-local function spawnEntity(id: number, kind: string, maxHp: number, summonerId: number): ()
+-- summonerId = the crowd id of the boss that called this body, 0 for a set's own. floorIndex =
+-- its floor in `floors` (L1b).
+local function spawnEntity(
+	id: number,
+	kind: string,
+	maxHp: number,
+	summonerId: number,
+	floorIndex: number
+): ()
 	local def = kindDef(kind)
 	if def == nil then
 		return
@@ -1046,6 +1080,7 @@ local function spawnEntity(id: number, kind: string, maxHp: number, summonerId: 
 			existing.kind = kind
 			existing.maxHp = maxHp
 			existing.summonerId = summonerId
+			existing.floorIndex = floorIndex
 			applyKind(existing, def)
 			if existing.boss and bossEntity == nil then
 				bossEntity = existing
@@ -1076,6 +1111,8 @@ local function spawnEntity(id: number, kind: string, maxHp: number, summonerId: 
 	entity.enraged = false
 	entity.riseStart = -math.huge
 	entity.summonerId = summonerId
+	entity.floorIndex = floorIndex
+	entity.seat = 0
 	entity.wards = 0
 	entity.called = false
 	entity.opened = false
@@ -1331,7 +1368,8 @@ local function loadThreat(entity: Entity): boolean
 		elseif threat ~= nil then math.max(threat.strikeSeconds, 0)
 		else 0
 	entity.threatYaw = entity.yawC
-	entity.threatOrigin = Vector3.new(entity.posC.X, floor.centre.Y, entity.posC.Z)
+	local at = entity.posC
+	entity.threatOrigin = Vector3.new(at.X, floorY(entity, at.Y), at.Z)
 	entity.threatWidth = math.max(attack.width or 0, 0)
 	entity.threatLock = math.max(attack.lockSeconds or 0, 0)
 	entity.threatSpeed = math.max(speed, 0)
@@ -1486,6 +1524,8 @@ local function pushSample(
 		entity.shown = position
 		entity.yaw = yaw
 		entity.dirty = true
+		-- L1b: a body first seen seated is drawn seated, not sitting down.
+		entity.seat = if state == "rest" then 1 else 0
 		entity.model.Parent = folder
 		-- A body a boss called (it was announced with its summoner's id) comes up through
 		-- the floor instead of appearing. A client that joins later sees those already
@@ -1595,7 +1635,7 @@ local function pushSample(
 	-- recover the marksman turns to its target again, and that yaw is no longer the shot's: a
 	-- recover snapshot that beats this clock to the end of the blow must not swing the wall.
 	if entity.threat == "windup" then
-		entity.threatOrigin = Vector3.new(position.X, floor.centre.Y, position.Z)
+		entity.threatOrigin = Vector3.new(position.X, floorY(entity, position.Y), position.Z)
 	end
 	if
 		entity.threatShape == "line"
@@ -1681,11 +1721,18 @@ local function onSpawn(payload: any): ()
 			and typeof(info.kind) == "string"
 		then
 			local summoner = info.summonerId
+			-- L1b: the body's floor index; nil (the range, an older server) is floor 1.
+			local index = info.floor
 			spawnEntity(
 				info.id,
 				info.kind,
 				if typeof(info.maxHp) == "number" then info.maxHp else 0,
-				if typeof(summoner) == "number" and summoner == summoner then summoner else 0
+				if typeof(summoner) == "number" and summoner == summoner then summoner else 0,
+				if typeof(index) == "number"
+						and index >= 1
+						and index < math.huge
+					then math.floor(index)
+					else 1
 			)
 		end
 	end
@@ -1713,7 +1760,17 @@ local function onRemove(payload: any): ()
 	end
 end
 
-local function queuePose(entity: Entity, root: CFrame, squash: number, tuck: number): ()
+-- seat (L1b): 0 standing, 1 seated at a fire. Seated, everything above the legs is lowered
+-- by Theme.COMBAT_REST_DROP of the height and the legs lie on the ground pointing forward
+-- (turned a quarter about the body's side, so their length runs along its facing); between
+-- the two the legs swing through.
+local function queuePose(
+	entity: Entity,
+	root: CFrame,
+	squash: number,
+	tuck: number,
+	seat: number
+): ()
 	if math.abs(squash - entity.squash) > 0.005 then
 		local widen = 1 / math.sqrt(squash)
 		local size = entity.torsoSize
@@ -1721,10 +1778,25 @@ local function queuePose(entity: Entity, root: CFrame, squash: number, tuck: num
 		entity.squash = squash
 	end
 	local n = moveCount
+	local legs = if tuck ~= 0
+		then CFrame.new(0, entity.legHeight * 0.5 + tuck, 0)
+		else entity.legOffset
+	local feet = root
+	if seat > 0 then
+		local u = math.min(seat, 1)
+		local eased = u * u * (3 - 2 * u)
+		-- The legs' length is their Y size: a quarter turn about X lays it along -Z (the
+		-- facing), and their depth (Z size) becomes their height off the ground.
+		local seated = CFrame.new(
+			0,
+			entity.legs.Size.Z * 0.5,
+			-(entity.radius * Theme.COMBAT_REST_HIP_SHARE + entity.legHeight * 0.5)
+		) * CFrame.Angles(-math.pi * 0.5, 0, 0)
+		legs = legs:Lerp(seated, eased)
+		root *= CFrame.new(0, -entity.height * Theme.COMBAT_REST_DROP * eased, 0)
+	end
 	moveParts[n + 1] = entity.legs
-	moveFrames[n + 1] = if tuck ~= 0
-		then root * CFrame.new(0, entity.legHeight * 0.5 + tuck, 0)
-		else root * entity.legOffset
+	moveFrames[n + 1] = feet * legs
 	moveParts[n + 2] = entity.torso
 	moveParts[n + 3] = entity.head
 	moveParts[n + 4] = entity.visor
@@ -1855,7 +1927,7 @@ end
 -- wedge lies on the arena floor under the body's NEWEST position, not its delayed drawn one.
 local function drawTell(entity: Entity, tell: Tell, share: number, striking: boolean, u: number): ()
 	local at = entity.posC
-	local centre = Vector3.new(at.X, floor.centre.Y + Theme.COMBAT_RANGE_TELL_LIFT, at.Z)
+	local centre = Vector3.new(at.X, floorY(entity, at.Y) + Theme.COMBAT_RANGE_TELL_LIFT, at.Z)
 	local moved = not tell.laid or (centre - tell.centre).Magnitude > SETTLE_EPSILON
 	if moved then
 		tell.centre = centre
@@ -2027,15 +2099,16 @@ end
 -- is nearer. The server stops the body there while its `attack` state runs on for the full
 -- range / speed, so the wire never says the charge stopped short; the client has to know the
 -- edge. This mirrors CrowdBrain's runway (a body of its radius stays wholly on the floor),
--- and the floor is the one the server told (SetFloor), so it is the server's rectangle. With
--- no floor known nothing bounds the charge here.
+-- and the floor is the body's own as the server told it (SetFloors), so it is the server's
+-- rectangle. With that floor not known here nothing bounds the charge.
 local function laneReach(entity: Entity): number
 	local reach = entity.threatReach
-	local half = floor.half
-	if half == nil then
+	local home = floors[entity.floorIndex]
+	local half = if home ~= nil then home.half else nil
+	if home == nil or half == nil then
 		return reach
 	end
-	local middle = floor.centre
+	local middle = home.centre
 	local heading = lookOf(entity.threatYaw)
 	local from = entity.threatOrigin
 	-- The kind's radius as the config has it, which is what the server measures with: the
@@ -2105,11 +2178,22 @@ local function stepAlive(
 	serverNow: number,
 	renderTime: number,
 	yawAlpha: number,
-	leanAlpha: number
+	leanAlpha: number,
+	dt: number
 ): ()
 	if now >= entity.deathDue then
 		startDeath(entity, reactionDirection(entity, nil), defaultDeathStrength())
 		return
+	end
+	-- L1b: seated while the wire says `rest`, standing in every other state. The seat moves at
+	-- a fixed pace both ways, so a rise takes COMBAT_RISE_BLEND_SECONDS from seated (and a
+	-- guard's one-step `rise` changes nothing: it was standing).
+	local seatGoal = if entity.state == "rest" then 1 else 0
+	if entity.seat ~= seatGoal then
+		local stepSeat = dt / math.max(Theme.COMBAT_RISE_BLEND_SECONDS, 1e-3)
+		entity.seat = if seatGoal > entity.seat
+			then math.min(entity.seat + stepSeat, 1)
+			else math.max(entity.seat - stepSeat, 0)
 	end
 	local targetYaw = sampleAt(entity, renderTime)
 	local turn = angleDelta(entity.yaw, targetYaw)
@@ -2289,6 +2373,7 @@ local function stepAlive(
 		and tumbleAngle == entity.lastTumble
 		and squash == entity.lastSquash
 		and tuck == entity.lastTuck
+		and entity.seat == entity.lastSeat
 	then
 		return
 	end
@@ -2299,11 +2384,13 @@ local function stepAlive(
 	entity.lastTumble = tumbleAngle
 	entity.lastSquash = squash
 	entity.lastTuck = tuck
+	entity.lastSeat = entity.seat
 	queuePose(
 		entity,
 		rootFrame(entity, shown, drawnYaw, lean, entity.launchAxis, tumbleAngle),
 		squash,
-		tuck
+		tuck,
+		entity.seat
 	)
 end
 
@@ -2339,7 +2426,9 @@ local function stepDying(entity: Entity, now: number): ()
 	if age > DEATH_FADE_START then
 		setFade(entity, (age - DEATH_FADE_START) / (DEATH_SECONDS - DEATH_FADE_START))
 	end
-	queuePose(entity, root, 1, 0)
+	-- A sitter killed where it sat goes down seated: standing up mid-fling would read as a
+	-- second life.
+	queuePose(entity, root, 1, 0, entity.seat)
 end
 
 local function stepVanish(entity: Entity, now: number): ()
@@ -2350,7 +2439,13 @@ local function stepVanish(entity: Entity, now: number): ()
 	end
 	setFade(entity, u)
 	local feet = entity.shown - UP * (entity.height * VANISH_SINK * u)
-	queuePose(entity, rootFrame(entity, feet, entity.yaw, entity.lean, entity.launchAxis, 0), 1, 0)
+	queuePose(
+		entity,
+		rootFrame(entity, feet, entity.yaw, entity.lean, entity.launchAxis, 0),
+		1,
+		0,
+		entity.seat
+	)
 end
 
 local function step(dt: number): ()
@@ -2376,7 +2471,7 @@ local function step(dt: number): ()
 			continue
 		end
 		if entity.phase == "alive" then
-			stepAlive(entity, now, serverNow, renderTime, yawAlpha, leanAlpha)
+			stepAlive(entity, now, serverNow, renderTime, yawAlpha, leanAlpha, dt)
 		elseif entity.phase == "dying" then
 			stepDying(entity, now)
 		else
@@ -2459,20 +2554,44 @@ local CrowdRenderer = {}
 -- Main's controller contract; everything happens in Start.
 function CrowdRenderer.Init(): () end
 
--- L1 ruling 30: the crowd's floor, as the server tells it in RunState.floor from a camp's
--- trigger until that camp is cleared. `center` = the floor's top centre (its Y is the height
--- tells and threat origins are drawn at), `halfSize` = its half extents in X and Z (what a
--- charge is bounded by). nil = no camp: height 0 and no bound. The wire's origin does not move
--- with it (WIRE_ORIGIN), so a floor that arrives late only draws a tell at the old height for a
--- moment; no body is ever misplaced.
+-- One floor, at index 1 (the range's, through SetArena). `center` = the floor's top centre
+-- (its Y is the height tells and threat origins are drawn at), `halfSize` = its half extents
+-- in X and Z (what a charge is bounded by). nil = height 0 and no bound.
 function CrowdRenderer.SetFloor(center: Vector3?, halfSize: Vector3?): ()
-	floor.centre = center or Vector3.zero
-	floor.half = if center ~= nil then halfSize else nil
+	table.clear(floors)
+	floors[1] = {
+		centre = center or Vector3.zero,
+		half = if center ~= nil then halfSize else nil,
+	}
+end
+
+-- L1b: every camp's floor in a level, index = floor index, as RunState.floors carries them
+-- (`{}` in the lobby). The wire's origin does not move with them (WIRE_ORIGIN), so a floor
+-- that arrives after its bodies only draws their tells at their feet for a moment; no body is
+-- ever misplaced. An entry that is not a whole RunFloor ends the list there.
+function CrowdRenderer.SetFloors(list: { Types.RunFloor }): ()
+	table.clear(floors)
+	for index, entry in list do
+		if
+			typeof(entry) ~= "table"
+			or typeof(entry.x) ~= "number"
+			or typeof(entry.y) ~= "number"
+			or typeof(entry.z) ~= "number"
+			or typeof(entry.hx) ~= "number"
+			or typeof(entry.hz) ~= "number"
+		then
+			break
+		end
+		floors[index] = {
+			centre = Vector3.new(entry.x, entry.y, entry.z),
+			half = Vector3.new(entry.hx, 0, entry.hz),
+		}
+	end
 end
 
 -- The range's floor: Shared/Layouts/Arenas/<name> at the world origin, as ArenaService builds
 -- it (the range names its arena in ProvingGrounds.json). An unknown name leaves no bound. A
--- level never calls this: its floors come through SetFloor.
+-- level never calls this: its floors come through SetFloors.
 function CrowdRenderer.SetArena(name: string): ()
 	CrowdRenderer.SetFloor(nil, nil)
 	local layouts = sharedFolder:FindFirstChild("Layouts")
@@ -2585,6 +2704,16 @@ function CrowdRenderer.GetBody(id: number): Model?
 		return nil
 	end
 	return entity.model
+end
+
+-- L1b: the head part of a living, drawn body (what a mark over it is hung on: it follows the
+-- body, seated or standing); nil once the body is gone, dying or not drawn yet.
+function CrowdRenderer.GetHead(id: number): BasePart?
+	local entity = byId[id]
+	if entity == nil or entity.samples == 0 or entity.phase ~= "alive" then
+		return nil
+	end
+	return entity.head
 end
 
 function CrowdRenderer.GetHeight(id: number): number?

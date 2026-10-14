@@ -66,7 +66,8 @@ function L1W.village(): any
 end
 
 -- Camp A of the cases below: 60 x 60, its floor's top at (100, 5, -50), a fence 6 high, the
--- entry gate in the middle of the south side and the exit gate off-centre on the north side.
+-- entry gate in the middle of the south side and the exit gate off-centre on the north side. It
+-- locks (L1b-12): only such a camp has gates and an invisible wall (open camps: tests_l1b.luau).
 function L1W.camp(): any
 	return {
 		id = "A",
@@ -82,6 +83,7 @@ function L1W.camp(): any
 		checkpoint = { x = 110, z = -70 },
 		spawns = { { x = 80, z = -70 }, { x = 120, z = -70 }, { x = 80, z = -40 }, { x = 120, z = -40 } },
 		obstacles = { { x = 95, z = -55, sx = 4, sy = 3, sz = 6, material = "Slate", color = { 1, 2, 3 } } },
+		locks = true,
 	}
 end
 
@@ -456,6 +458,7 @@ function L1W.oblong(): any
 		checkpoint = { x = 134, z = -47 },
 		spawns = { { x = 60, z = -70 }, { x = 120, z = -70 }, { x = 60, z = 0 }, { x = 120, z = 0 } },
 		obstacles = { { x = 60, z = -66, sx = 10, sy = 3.5, sz = 8, material = "Slate", color = { 1, 2, 3 } } },
+		locks = true,
 	}
 end
 
