@@ -14206,3 +14206,14 @@ moves (the tents set camp A, a head crit still one-shots fodder), so the band wa
 8. The designer's `--bow` mode and the "step inside the fence" fix in `sim_range.py` are kept.
 9. If Ben still finds the bow stronger after this, the next lever is its safety (range, stand-off),
    not its damage: a question for Ben, not a further cut.
+
+### Review round (2026-10-15: one Opus reviewer, 0 Critical, 0 Major, 5 Minor; QA green at 1f1a589)
+
+10. **B goes to 42, not 40** (Minor 2). Damage scales with charge (`min + (1 − min) · charge`), so
+    at 40 a Quick shot was heavy only at a full draw (before the cut, from charge 0.82); an early
+    release or phone auto-fire would bounce off plates. At 42 it is heavy from about 0.90. A stays
+    45 (heavy from 0.78, was 0.60). Ruling 1's same factor yields for B by 2 points; no band fires B
+    in a level, so only the range's B rows move.
+11. Minors 1, 3, 4, 5 (simulator comments and tidying, BALANCE corrections) are fixed by the
+    designer. The in-play step stays "1 stud inside the floor" as a stated simplification of the
+    game's `chaseMargin` rule (a little less safe than the game for a bow), with a correct comment.
