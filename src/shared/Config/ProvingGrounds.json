@@ -138,8 +138,8 @@
 		"longbow": {
 			"name": "Longbow", "slot": "ranged", "era": 1, "default": "A",
 			"variants": {
-				"A": {"label": "Pierce + blast", "kind": "ranged", "shape": "ray", "range": 110, "width": 0.8, "pad": 0.6, "cap": 5, "damage": 50, "rate": 1.6, "knockback": 10, "launch": 0, "pierce": 5, "projectileSpeed": 170, "gravity": 18, "chargeSeconds": 1.0, "minChargeFraction": 0.5, "blastRadius": 5, "blastDamageMult": 0.5},
-				"B": {"label": "Quick shot", "kind": "ranged", "shape": "ray", "range": 100, "width": 0.8, "pad": 0.6, "cap": 3, "damage": 44, "rate": 2.0, "knockback": 8, "launch": 0, "pierce": 3, "projectileSpeed": 200, "gravity": 12, "chargeSeconds": 0.4, "minChargeFraction": 0.5}
+				"A": {"label": "Pierce + blast", "kind": "ranged", "shape": "ray", "range": 110, "width": 0.8, "pad": 0.6, "cap": 5, "damage": 39, "rate": 1.6, "knockback": 10, "launch": 0, "pierce": 5, "projectileSpeed": 170, "gravity": 18, "chargeSeconds": 1.0, "minChargeFraction": 0.5, "blastRadius": 5, "blastDamageMult": 0.5},
+				"B": {"label": "Quick shot", "kind": "ranged", "shape": "ray", "range": 100, "width": 0.8, "pad": 0.6, "cap": 3, "damage": 34, "rate": 2.0, "knockback": 8, "launch": 0, "pierce": 3, "projectileSpeed": 200, "gravity": 12, "chargeSeconds": 0.4, "minChargeFraction": 0.5}
 			},
 			"ability": {"id": "arrowRain", "name": "Arrow Rain", "cooldownSeconds": 12, "minCooldownSeconds": 5, "killRefundSeconds": 0.2, "damage": 8, "castRange": 90, "radius": 10, "delaySeconds": 0.6, "durationSeconds": 2.4, "tickSeconds": 0.2, "pad": 0.5, "cap": 0, "knockback": 0, "launch": 0}
 		},

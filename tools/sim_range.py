@@ -144,6 +144,9 @@ FAMILY_TARGETS = {
 AB_SPREAD = 0.20
 # One cast = this many seconds of the family's own crowd DPS (default variant) as a burst.
 BURST_SECONDS = (3.0, 5.0)
+# L1b Wave 3 (ruling 5): Arrow Rain's own numbers did not move, but the Longbow's shot damage was
+# cut x0.78 (50 -> 39), so one cast reads as more seconds of the weaker bow (4.2 -> 5.4).
+BURST_SECONDS_BY_ABILITY = {"arrowRain": (3.0, 6.0)}
 # Abilities allowed to lean single-target: their burst band is measured on the boss against the
 # family's single DPS instead, and their crowd burst only has the ceiling below.
 SINGLE_TARGET_ABILITIES = ("overchargedShot", "magDump")
@@ -327,6 +330,7 @@ BOSS_SECONDS = 240.0  # a boss fight is watched until the boss falls, and no lon
 CHASE_MARGIN = 1.5  # he closes to this far inside his weapon's reach of the boss
 RANGED_STAND = 24.0  # with a ranged weapon he stands no further from the boss than this
 ADDS_RANGE = 20.0  # with a ranged weapon he turns to what the boss called once it is this near
+IN_PLAY_STEP = 1.0  # a ranged player clearing an open camp walks this far past its fence onto its floor
 HOLD_STEP_SECONDS = 0.45  # holding his ground, he tries steps up to this long before a jump
 PLAN_DELAYS = tuple(k / 10 for k in range(1, 16))  # a jump he times: seconds he waits first
 MELEE_CAST_FRONT = 10.0  # a melee ability is measured on a boss this far ahead
@@ -658,6 +662,7 @@ class World:
         self.kills = 0
         self.front = None  # distance to the first row (front placements)
         self.dead = []
+        self.crits = []  # when each crit landed (dealt > 0): the bow report counts them (L1b Wave 3)
         # P5 ruling 9: only the HP loss follows the attacker's Armory tier (Armory.DamageScale);
         # armour, heavy hits, plates and interrupts read the tier-1 amount. 1 in the range.
         self.scale = 1.0
@@ -777,9 +782,11 @@ def cap_of(cap, count):
     return min(int(cap), count) if cap and cap > 0 else count
 
 
-def hit(world, tally, enemy, amount, seen=None):
+def hit(world, tally, enemy, amount, seen=None, crit=False):
     dealt, killed = world.damage(enemy, amount)
     tally.dealt += dealt
+    if crit and dealt > 0:
+        world.crits.append(world.now)
     if seen is None or enemy.id not in seen:
         tally.hits += 1
         if seen is not None:
@@ -878,7 +885,7 @@ def strike(world, cfg, spec):
     starts = []
     for _order, _id, enemy, crit in found[:limit]:
         amount = spec["damage"] * (crit_mult if crit else 1)
-        hit(world, tally, enemy, amount, seen)
+        hit(world, tally, enemy, amount, seen, crit)
         starts.append(enemy)
         if exclude is not None:
             exclude.add(enemy.id)
@@ -982,7 +989,7 @@ def fly(world, cfg, v, origin, direction, damage, full=False, seed=1):
         if capped():
             stop[index] = 0.0
             continue
-        hit(world, tally, enemy, damage * (crit_mult if crit else 1))
+        hit(world, tally, enemy, damage * (crit_mult if crit else 1), crit=crit)
         volley_hit.add(enemy.id)
         hits_left[index] -= 1
         if hits_left[index] <= 0 or capped():
@@ -6627,6 +6634,20 @@ class LevelRun(ThreatRun):
         self.kite["leashes"] = sum(1 for e in self.events if e[0] >= self.kite["at"] and e[2] == "fight" and e[3] == "home"
                                    and self.groups[e[1] - 1]["def"]["floor"] == floor)
 
+    def wanted(self, target):
+        """A ranged weapon reaches a camp's bodies from outside its fence, where every hit is
+        blocked (L1b-7: damage only from a player in play), and the group leashes home. Clearing
+        an open camp with one, he first steps onto its floor (L1b Wave 3: before this, the
+        Longbow alone stood off camp B forever)."""
+        want = super().wanted(target)
+        if self.melee or self.mode != "clear":
+            return want
+        cx, cz, hx, hz = self.zones[self.order[self.target] - 1]["rect"]
+        out = hs_flat_to_rect(self.x, self.z, cx, cz, hx, hz)
+        if out > 0:
+            want = min(want, max(math.hypot(target.x - self.x, target.z - self.z) - out - IN_PLAY_STEP, 0.0))
+        return want
+
     def swingable(self):
         if self.mode == "clear":
             floor = self.order[self.target]
@@ -7609,6 +7630,126 @@ def bow_rows(view, plan, hp, level, bow):
     return rows
 
 
+# L1b Wave 3 (`--bow`): the Longbow against the Broadsword at the proving gear, reported. Ruling 2's
+# band is on the head-aim bow's time over the Broadsword's.
+BOW_RATIO = (1.10, 1.25)
+
+
+def aimed(key, aim):
+    """A policy of THREAT_POLICIES with an aim ("body" or "head"), registered under its own key."""
+    name = f"_{key}_{aim}"
+    THREAT_POLICIES[name] = dict(THREAT_POLICIES[key], aim=aim, label=f"{THREAT_POLICIES[key]['label']}, {aim} aim")
+    return name
+
+
+def camp_split(run, r, boss):
+    """One Forest Road run cut at its camps: the start to A cleared, A to B cleared, B to the
+    boss's rise (the boss excluded, L1b-W3-2). [(seconds, hits taken, crits landed)]."""
+    rise = (r["bosses"].get(boss) or (None,))[0]
+    edges = [0.0, r["clearedAt"].get("A"), r["clearedAt"].get("B"), rise]
+    parts = []
+    for lo, hi in zip(edges, edges[1:]):
+        if lo is None or hi is None:
+            parts.append(None)
+            continue
+        parts.append((hi - lo, sum(1 for e in run.log if lo <= e[0] < hi),
+                      sum(1 for x in run.world.crits if lo <= x < hi)))
+    return parts
+
+
+def bow_report(cfg):
+    """L1b-W3-2/4: on Forest Road at Normal and the proving gear, solo, every MISSION_SEED, the
+    Broadsword alone and the Longbow alone (body aim, head aim), for the reacting player and the
+    human's reaction; and the two bosses with the Longbow, body and head aim: in the range
+    (the P4 rows' scales) and in the Raider Arena at the proving gear."""
+    ctx = level_context()
+    combat_cfg = ctx["combat"]
+    file = ctx["files"][FOREST_LEVEL]
+    difficulty = ctx["expeditions"]["difficulties"][0]
+    level = resolve_level(file, ctx["missions"].get(file.get("mission")), combat_cfg["director"]["runCapSeconds"],
+                          difficulty)
+    layout = load_level_layout(level["layout"], combat_cfg["player"]["rescue"]["below"])
+    gear = mission_gear()
+    view, hp = level_view(cfg, level["difficulties"][difficulty], level["crowd"]["regenShare"], ctx["armory"], gear)
+    bow = cfg["loadout"]["ranged"]
+    rows = []
+    for who in ("mission", "human"):
+        for label, weapon, aim in (("Broadsword", None, "body"), ("Longbow, body aim", bow, "body"),
+                                   ("Longbow, head aim", bow, "head")):
+            policy = dict(THREAT_POLICIES[who], aim=aim)
+            if weapon is not None:
+                policy["weapon"] = (weapon, None)
+            seeds = []
+            for seed in MISSION_SEEDS:
+                run = LevelRun(view, hp, ctx, level, layout, difficulty, policy, seed)
+                r = run.run()
+                seeds.append({"seed": seed, "end": r["end"], "at": r["at"], "downs": r["downs"],
+                              "camps": camp_split(run, r, FOREST_BOSS), "boss": r["bosses"].get(FOREST_BOSS),
+                              "hits": r["hits"], "crits": len(run.world.crits)})
+            rows.append({"who": who, "label": label, "seeds": seeds})
+    env = threat_env(cfg)
+    bosses = []
+    for set_name, name, _kind in boss_sets(cfg):
+        for aim in ("body", "head"):
+            bosses.append(("range", name, aim, boss_row(cfg, env, set_name, aimed("slay", aim), bow,
+                                                        seeds=BOSS_RANGED_SEEDS)))
+    arena = mission_report(cfg, careless=False)
+    if arena is not None:
+        plan = plan_level(arena["level"], arena["layout"], ctx["expeditions"]["difficulties"][0],
+                          combat_cfg["levels"], ctx["ranks"], cfg["crowd"]["kinds"])
+        for name in MISSION_BOSS_SECONDS:
+            spot = boss_spots(arena["level"]).get(name)
+            if spot is None:
+                continue
+            set_name = f"_bow_arena_{name}"
+            arena["view"]["dummySets"][set_name] = [{"kind": name, "behaviour": "fight", "count": 1,
+                                                     "at": list(spot[1]), "spacing": 0, "respawnSeconds": 12}]
+            env_arena = camp_env(plan, arena["hp"], spot[0], plan["start"])
+            for aim in ("body", "head"):
+                bosses.append(("arena", name, aim, boss_row(arena["view"], env_arena, set_name, aimed("slay", aim),
+                                                             bow, seeds=BOSS_RANGED_SEEDS)))
+    return {"gear": gear, "hp": hp, "rows": rows, "bosses": bosses, "arena": arena,
+            "damage": {k: v["damage"] for k, v in cfg["weapons"][bow]["variants"].items()}}
+
+
+def no_boss(s):
+    """A run's time to the boss's rise (None when it never rose)."""
+    return s["boss"][0] if s["boss"] else None
+
+
+def print_bow(cfg, rep):
+    print()
+    print(f"THE BOW (L1b Wave 3; Forest Road, Normal, gear {gear_text(rep['gear'])}, health {rep['hp']:.0f}, solo; "
+          "Longbow damage " + ", ".join(f"{k} {v}" for k, v in rep["damage"].items())
+          + "; time = the start point to the Colossus's rise, the boss excluded; per camp: seconds / hits taken / "
+          "crits landed)")
+    means = {}
+    for row in rep["rows"]:
+        print(f"  {row['label']} ({THREAT_POLICIES[row['who']]['label']}):")
+        for s in row["seeds"]:
+            camps = "; ".join(f"{z} {c[0]:.1f} s / {c[1]} / {c[2]}" if c else f"{z} -"
+                              for z, c in zip(("A", "B", "C"), s["camps"]))
+            boss = s["boss"]
+            fight = f"{boss[1] - boss[0]:.1f} s" if boss and boss[1] is not None else "not reached"
+            print(f"    seed {s['seed']}: {s['end']} at {s['at'] / 60:.2f} min, {s['downs']} down(s); {camps}; "
+                  f"to the boss {fmt(no_boss(s), 0, 1).strip()} s, {s['hits']} hits, {s['crits']} crits in all; "
+                  f"the Colossus {fight}")
+        times = [no_boss(s) for s in row["seeds"]]
+        means[(row["who"], row["label"])] = mean_of(times) if all(t is not None for t in times) else None
+    for who in ("mission", "human"):
+        sword = means.get((who, "Broadsword"))
+        for label in ("Longbow, body aim", "Longbow, head aim"):
+            bow = means.get((who, label))
+            ratio = f"x{bow / sword:.3f}" if bow and sword else "-"
+            band = (f" (ruling 2's band x{BOW_RATIO[0]:.2f}-x{BOW_RATIO[1]:.2f})"
+                    if who == "mission" and label.endswith("head aim") else "")
+            print(f"  {who}: {label} {fmt(bow, 0, 1).strip()} s against the Broadsword's {fmt(sword, 0, 1).strip()} s "
+                  f"= {ratio}{band}")
+    for where, name, aim, b in rep["bosses"]:
+        place = "the range (P4 scales)" if where == "range" else "the Raider Arena at the proving gear"
+        print(f"  the {name} with the Longbow, {aim} aim, {place}: {boss_text(b)}; hits of the boss {b['solid']}")
+
+
 def mission_report(cfg, path=None, mission=None, careless=True):
     """The Raider Arena: a mission's crowd block played as a level through the two adapters of
     L1 ruling 27. Everything its P5 bands read: the hit shares, the still player in the first
@@ -8303,7 +8444,8 @@ def check(cfg, fam_rows, ab_rows, threat=None, bosses=None, mission=None, forest
             expect(r["burst"] <= SINGLE_TARGET_CROWD_CEILING,
                    f"{name}: crowd burst {r['burst']:.1f} s <= {SINGLE_TARGET_CROWD_CEILING}")
         else:
-            expect(lo_b <= r["burst"] <= hi_b, f"{name}: burst {r['burst']:.1f} s of crowd DPS in [{lo_b}, {hi_b}]")
+            lo_n, hi_n = BURST_SECONDS_BY_ABILITY.get(name, BURST_SECONDS)
+            expect(lo_n <= r["burst"] <= hi_n, f"{name}: burst {r['burst']:.1f} s of crowd DPS in [{lo_n}, {hi_n}]")
         if r["busy"] > 0:
             net = r["burst"] - r["busy"]
             expect(net >= NET_AFTER_BUSY_SECONDS,
@@ -8337,10 +8479,15 @@ def main():
                         help="a Missions/*.json to play as the Raider Arena (default: Village)")
     parser.add_argument("--levels-only", "--mission-only", dest="levels_only", action="store_true",
                         help="only the level sections (the Raider Arena and Forest Road)")
+    parser.add_argument("--bow", action="store_true",
+                        help="only the bow report (L1b Wave 3): the Longbow against the Broadsword on Forest Road")
     parser.add_argument("--level", choices=("arena", "forest"), default=None,
                         help="with --levels-only: only that level")
     args = parser.parse_args()
     cfg = load_config(args.config)
+    if args.bow:
+        print_bow(cfg, bow_report(cfg))
+        return
     if args.levels_only:
         report = mission_report(cfg, args.mission) if args.level in (None, "arena") else None
         forest = forest_report(cfg) if args.level in (None, "forest") else None
