@@ -3144,7 +3144,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 | Wave | Scope | State |
 |---|---|---|
 | 1 "the camp is alive" | Today's road and camp sizes, residents, open camps, per-kill pay | Merged 2026-10-14 (`5423937`); Ben's look done ("feels really good right now!") |
-| 2 "the long road" | 1,000-stud road, camps ×2, 100–120 raiders, tents, dormancy, sneak path, ~10 min, plus Ben's four Wave 1 notes | **Built, reviewed, fixed, gates green 2026-10-15 (`46b31f2`); merge next** |
+| 2 "the long road" | 1,000-stud road, camps ×2, 100–120 raiders, tents, dormancy, sneak path, ~10 min, plus Ben's four Wave 1 notes | **Built, reviewed, fixed, QA green (21 of 21) and merged to `main` 2026-10-15 (`1ca5de8`); place files rebuilt; waiting on Ben's look** |
 | 3 | Numbers only, if Wave 2's stop asks | Not planned |
 
 **Wave 1, what shipped (`build/proving.rbxl`, Play, Depart on Forest Road):**
@@ -3365,8 +3365,8 @@ checkpoints on the road).
 
 - [x] Wave 2 built (`95e3312` … `f40509a`)
 - [x] Wave 2 reviewed, fix round, fix tail and fix-diff round done (`c1ea74f` … `46b31f2`)
-- [x] Wave 2 gates green (`46b31f2`)
-- [ ] Wave 2 merged to `main`, six place files rebuilt (lead)
+- [x] Wave 2 QA green (qa-runner, 21 of 21 gates, `46b31f2`)
+- [x] Wave 2 merged to `main`, six place files rebuilt (lead, 2026-10-15, `1ca5de8`)
 - [ ] Ben's Studio playtest of L1b Wave 2 (PLAYTEST "L1b Wave 2 — the long road")
 
 ## M12 — Growing city

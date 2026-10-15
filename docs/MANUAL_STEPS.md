@@ -1730,7 +1730,7 @@ Raider Arena can be played.
 
 **Status 2026-10-13:**
 - Built, reviewed and fixed on branch `l1-forest-road` (`de03e36`). QA is running.
-- **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+- **Merged to `main` on 2026-10-15 (`1ca5de8`), the six place files rebuilt.** Start at step 1.
 
 <!-- FILE TO OPEN: start. Lead: if L1 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
@@ -1845,10 +1845,10 @@ Normal: "feels really good right now!").
 
 **Steps:**
 
-- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+- [x] 0. (Lead) Merge, rebuild, tell Ben.
       - [x] Every gate green on `46b31f2`.
-      - [ ] `l1b-wave2` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L1b Wave 2 is merged, Build all".
+      - [x] `l1b-wave2` merged to `main`; the six place files rebuilt.
+      - [x] Ben told: "L1b Wave 2 is merged, Build all".
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
 - [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.

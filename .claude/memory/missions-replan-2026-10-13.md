@@ -151,3 +151,23 @@ preset becomes 2 / 2 (no weapon-number change, bosses keep their tuning); "agro 
 resting groups of the same camp within 2× sight wake with a group; a nicer end screen → L4. All folded
 into Wave 2 (he chose that over a separate small wave). Clear bonus still unanswered.
 Wave 2 starts in a NEW session from `docs/prompts/l1b-wave2.md` (written 2026-10-14 at his request).
+
+**L1b Wave 2 "the long road" merged to `main` 2026-10-15** (`1ca5de8`, a fast-forward of branch
+`l1b-wave2` in `tycoon-p5`), the six place files rebuilt; waiting on Ben's Studio look (PLAYTEST
+"L1b Wave 2", six key-only steps, five click questions at the end). Ben's picks this wave (click
+questions with ASCII maps): the **winding road** (1,055 studs; camps A 85×85, B 141×133, C 115×115;
+112 residents on Normal), **tents of 8, one every 6 s, then out**, a **small clear bonus** (0.1 of
+the camp's stock). The headshot complaint was a hit rule, not the drawing: a ray had to touch the
+body sphere first, so the top of a tall kind's head was a total miss (Colossus 63%); now
+`HitShapes.CrowdRay` with an upright capsule. Lead rulings worth keeping: the designer's tent pace
+8 s (to hit the lead's own band) was reverted to Ben's 6 s and the band moved instead (**Ben's
+click beats a lead's band**); **a tent never wakes a group unless a player is in play for its camp**
+(`CampBrain.TentRouse`; without it groups cycled rest → rise → leash forever); **one landing rule in
+`SwingGate`, fed the same samples on client and server**, with the server-only "landing ahead"
+allowance (the client taking it gave two swings in one hop and none in the next). Reviews: four
+slices 0 / 2 / 9, fix diff 0 / 1 / 2; QA 21 of 21 (harness 2,004, mutate 624 / 0, mirror mutants
+49 / 49, the new `tools/crowd_harness/mirror_mutants.py`). `mutate.py` now takes over an hour: give
+qa-runner a background run and expect the 15-turn limit (resume it by id). Process that worked:
+every brief and ruling in files (`docs/prompts/l1b-w2-*`, `l1b-w2-reports/lead-routing.md`), fresh
+agents per round, a short resume only for a one-ruling follow-up. Next: Ben's look, then Wave 3
+(numbers) or L2 only on his word.

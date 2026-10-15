@@ -4729,7 +4729,7 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 
 <!-- FILE TO OPEN: start. Lead: if L1b Wave 2 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
-- **Only after the lead says L1b Wave 2 is merged.** Then VS Code, **Ctrl+Shift+B** →
+- **L1b Wave 2 is merged (2026-10-15).** In VS Code, **Ctrl+Shift+B** →
   **"Build all"**.
 - Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
   was open before "Build all" is the old one.**
