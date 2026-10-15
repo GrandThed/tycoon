@@ -11,7 +11,7 @@ All gates PASS; mutate.py finished after the report: 624 run, 0 not caught.
 8. sim_range `CHECK: PASS`
 9. check_levels `CHECK: PASS`
 10. check_stage_mirror `CHECK: PASS`
-11. run_harness `HARNESS: PASS (2,004 checks, ...tycoon-p5	oolsowd_harness)`; mutate.py `MUTATIONS: 624 run, 0 not caught`
+11. run_harness `HARNESS: PASS (2,004 checks, tycoon-p5/tools/crowd_harness)`; mutate.py `MUTATIONS: 624 run, 0 not caught`
 12. no diff under src/server, src/client, src/combat
 13. Config diff = the two Longbow damage lines only
 14. gen_asset_manifest `CHECK: PASS -- configs valid, manifest up to date`
