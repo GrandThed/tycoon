@@ -407,3 +407,9 @@ Not seen in that run: the Chief's Clearing (the Colossus with the new headshots)
 Camp, the bow at 2 / 2. The checklist's five click questions (road length, tents, one swing per jump,
 the Server number with the Colossus up, the bow) are unanswered. Next: Wave 3 (numbers only) or L2
 (secrets, keys, the bought double jump), only on his word.
+
+**The Wave 2 click questions, answered 2026-10-15 (start of the Wave 3 session):** the road's length
+**about right**; the tents (8, one every 6 s) **about right**; the camps on Normal (sight, group
+sizes, hits) **about right**; at 2 / 2 the bow is **stronger** than the sword, so lower it a little.
+One swing per jump and the Server number were not asked again. **Wave 3 is that one change: the
+Longbow's shot damage, cut a little** (INTERFACES "Wave 3 — the bow"). **[Ben]**
