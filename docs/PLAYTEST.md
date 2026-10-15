@@ -4868,7 +4868,7 @@ Setup: `docs/MANUAL_STEPS.md` "L1b Wave 3".
       - Bug: another level or difficulty; gear not 2 / 2.
 - [ ] 2. **Enter** (Depart). Walk the road to the first camp (the Pickets).
 - [ ] 3. **The bow first.** Press **2**. Fight in the camp with the bow for a minute or two.
-      - Hold the click until the arrow glows, then release: a full draw.
+      - Hold the click until the ring round the crosshair is full, then release: a full draw.
       - Kills take a little longer than before.
       - Bug: arrows do nothing; the bow fires without drawing; damage numbers missing.
 - [ ] 4. **A plated raider** (the armoured one).
