@@ -14135,3 +14135,59 @@ since: `docs/prompts/l1b-w2-reports/lead-routing.md`.
 
 **Carried:** `FALL_GRAVITY` follows `Workspace.Gravity` only by value; a run with a player inside
 the camp is needed for a tent to wake its group (by design); every L1b carried item in PLAN stands.
+
+## Wave 3 — the bow (2026-10-15)
+
+Ben's answers to the Wave 2 click questions (2026-10-15): the road length, the tents and the camps
+(sight, group sizes, hits) are **about right**; at 2 / 2 the bow is **stronger** than the sword, and
+he chose "lower the bow's numbers a little". Studio's log cannot confirm the bow was used (weapon
+switches are not logged); his answer is taken as his verdict. Wave 3 is that one change, numbers
+only, no new mechanic. Brief for the owner: `docs/prompts/l1b-w3-bow.md`.
+
+### Rulings (L1b-W3-n, lead)
+
+1. **The lever is the Longbow's shot damage only:** `ProvingGrounds.json weapons.longbow.variants.A.damage`
+   and `.B.damage`, both cut by the same factor (rounded to whole numbers), so A and B keep their
+   relation. Charge, rate, pierce, blast, range and the Arrow Rain ability stay. No other family, no
+   Armory tier, no crit multiplier, no enemy number, no preset moves (`debug.provingGear` stays 2 / 2).
+2. **The target ("a little"):** at gear 2 / 2, Normal, solo, the reacting player of `sim_range.py`
+   (policy `mission`) aiming at heads where it can, **the Longbow alone takes 1.10–1.25× the
+   Broadsword alone's time** over Forest Road's three camps (start point to camp C cleared, boss
+   excluded), mean of the seeds the Wave 2 bands use. The bow is the safer weapon, so a bow that is
+   a little slower on the clock plays about even.
+3. **The stop rule:** if, before any change, the head-aim Longbow already takes 1.10× the sword's
+   time or more, nothing is tuned. The owner stops and reports the time, the hits taken and the
+   crits landed for both weapons, so the lead can find what makes the bow feel stronger and ask Ben.
+4. **Bosses are reported, not tuned:** the Colossus and the Warlord with the Longbow (body and head
+   aim), before and after. Every boss band in `sim_range.py --check` is a melee band and must stay
+   green unchanged.
+5. **Range rows that move only because the Longbow's damage moved** (P2/P3 Longbow rows, Volley if
+   it reads the Longbow, the P4 boss rows with the Longbow) may be re-banded. Each one is listed in
+   BALANCE with its old value, new value and old band. Any other row going red is a stop.
+6. **Frozen:** `Config/Missions`, `Layouts/Arenas`, `Config/Levels/*`, `Layouts/Levels/*`,
+   `Armory.json`, `Combat.json`. The Raider Arena at 2 / 2 is re-measured and reported.
+
+### Ownership
+
+| Owner | Files |
+|---|---|
+| economy-designer | `src/shared/Config/ProvingGrounds.json` (the two Longbow `damage` values only), `tools/sim_range.py` (Longbow-only rows' bands, by ruling 5), `docs/BALANCE.md` (new section "L1b Wave 3: the bow") |
+| lead | this section, `docs/prompts/l1b-w3-bow.md` |
+
+A failing harness test or mirror goes back to the lead with the file and line; the designer does
+not edit Luau.
+
+### Gates
+
+Wave 2's list, with gate 13 changed: `git diff main -- src/shared/Config` shows only the two
+Longbow `damage` lines; `src/shared/Layouts`, `Config/Missions` and `Config/Levels` are unchanged.
+Plus `py tools/check_compile.py`. qa-runner must end with its report even when every command passes.
+
+### Definition of done
+
+- Ruling 2 met (or ruling 3's stop reported), with the before/after table in BALANCE.
+- Gates green, reviewed by one reviewer (the diff is a config number, two bands and a doc section).
+- Merged to `main` under the L1b merge rule, the six place files rebuilt.
+- Ben's look: one Forest Road run on Normal using the bow (key **2**) in a camp, then the sword;
+  one click question: "the bow against the sword now: much weaker / a bit weaker / about even /
+  stronger".
