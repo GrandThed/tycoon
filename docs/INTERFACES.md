@@ -14191,3 +14191,18 @@ Plus `py tools/check_compile.py`. qa-runner must end with its report even when e
 - Ben's look: one Forest Road run on Normal using the bow (key **2**) in a camp, then the sword;
   one click question: "the bow against the sword now: much weaker / a bit weaker / about even /
   stronger".
+
+### Amendment after the designer's sweep (lead, 2026-10-15; wins over rulings 1–2)
+
+The first cut (×0.78, A 39 / B 34) met the band only by taking the arrow under `crowd.heavyHit` 40:
+body shots stop touching plates, the bow stops interrupting windups, and the bow alone cannot clear
+Main Camp without head aim. That is a role change, not "a little". Between 50 and 40 the clock barely
+moves (the tents set camp A, a head crit still one-shots fodder), so the band was the lead's error.
+
+7. **The cut is ×0.9: A 45, B 40.** Every arrow stays heavy (B at exactly 40 must still count as
+   heavy; verify the comparison in code is `>=`). Ruling 2's band becomes **1.05–1.15×** with head
+   aim; body aim is reported. The arrowRain burst band goes back to [3.0, 5.0] unless the measured
+   value at 45 falls outside it, in which case it is re-banded by ruling 5 and listed.
+8. The designer's `--bow` mode and the "step inside the fence" fix in `sim_range.py` are kept.
+9. If Ben still finds the bow stronger after this, the next lever is its safety (range, stand-off),
+   not its damage: a question for Ben, not a further cut.
