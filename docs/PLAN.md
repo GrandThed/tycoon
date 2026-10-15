@@ -3119,6 +3119,11 @@ families, abilities and the player's body go into the Expeditions missions, era 
   findings: `docs/prompts/l1b-w1-review/`.
 - Values: `docs/BALANCE.md` "L1b".
 - Branch `l1b-living-road`, worktree `C:\Users\benja\Desktop\tycoon-p5`.
+- **Wave 2:** Ben's Wave 1 verdict and notes in MISSIONS_DESIGN §17; contract INTERFACES "Wave 2 —
+  the long road (2026-10-14)" (rulings L1b-W2-1 to -29, the lead's answers to the draft points,
+  "Review round and state (2026-10-14/15)": amendments win); rulings
+  `docs/prompts/l1b-w2-reports/lead-routing.md`; review findings `docs/prompts/l1b-w2-review/`;
+  values `docs/BALANCE.md` "L1b: the long road, Wave 2". Branch `l1b-wave2`, same worktree.
 
 **Ben's decisions (2026-10-14; MISSIONS_DESIGN §16):**
 1. Running away: raiders chase to the camp's edge, walk back to their posts and heal. Slingers
@@ -3138,8 +3143,8 @@ families, abilities and the player's body go into the Expeditions missions, era 
 
 | Wave | Scope | State |
 |---|---|---|
-| 1 "the camp is alive" | Today's road and camp sizes, residents, open camps, per-kill pay | **Built, reviewed, fixed, QA green 2026-10-14 (`18a25fe`); merge next** |
-| 2 "the long road" | 1,000-stud road, camps ×2, 100–120 raiders, tents, dormancy, sneak path, ~10 min | Not started (own contract) |
+| 1 "the camp is alive" | Today's road and camp sizes, residents, open camps, per-kill pay | Merged 2026-10-14 (`5423937`); Ben's look done ("feels really good right now!") |
+| 2 "the long road" | 1,000-stud road, camps ×2, 100–120 raiders, tents, dormancy, sneak path, ~10 min, plus Ben's four Wave 1 notes | **Built, reviewed, fixed, gates green 2026-10-15 (`46b31f2`); merge next** |
 | 3 | Numbers only, if Wave 2's stop asks | Not planned |
 
 **Wave 1, what shipped (`build/proving.rbxl`, Play, Depart on Forest Road):**
@@ -3209,7 +3214,7 @@ checkpoints on the road).
   Timber a minute against L1's 24.
 - Raider Arena unchanged, except a failed run now keeps every kill.
 
-**Carried:**
+**Carried at Wave 1** (kept as the record; what is still open is in Wave 2's "Carried" below):
 - **Publish freeze (owner: lead):** no Expeditions publish from `main` until L4.
 - **Wave 2 (its own contract):**
   - **luau-engineer A:** dormancy and the tent's reinforcements; skip dormant bodies in the step
@@ -3238,7 +3243,7 @@ checkpoints on the road).
   budget 2 ms, the lead reads Studio's log); snapshot bytes with every resident sent (about 13
   KB/s a player); the "!" and the seated pose on a real phone (emulator only).
 
-**Next:**
+**Next (Wave 1; all done 2026-10-14):**
 1. The lead merges `l1b-living-road` to `main` and rebuilds the six place files.
 2. **Ben's Wave 1 look:** `docs/PLAYTEST.md` "L1b Wave 1 — the camp is alive"; setup
    `docs/MANUAL_STEPS.md` "L1b Wave 1".
@@ -3250,6 +3255,119 @@ checkpoints on the road).
 - [x] Wave 1 QA green (`18a25fe`)
 - [x] Wave 1 merged to `main` (5423937), six place files rebuilt (lead)
 - [x] Ben's Studio look at Wave 1 (2026-10-14, cleared Normal: "feels really good right now!"; four notes folded into Wave 2, the end screen to L4: MISSIONS_DESIGN §17)
+
+### L1b Wave 2 — the long road (2026-10-14 → 2026-10-15)
+
+**Ben's rulings this wave** (lead-routing "Ben's rulings"; MISSIONS_DESIGN §17):
+1. The winding road (west to east, along the north side of A and B).
+2. Tents: 8 bodies, one every 6 s, then out; not destroyable; C's tent is only where its waves
+   come out.
+3. A small clear bonus, about 10% of what the camp's raiders pay.
+4. From his Wave 1 notes: one sword swing per jump; headshots on big bodies; start gear 2 / 2;
+   nearby groups join in.
+5. Merge rule as Wave 1.
+
+**What shipped (`build/proving.rbxl`, Play, Depart on Forest Road, Normal):**
+- **The road:** 1,055 studs, winding west to east. Trailhead, the 12-stud gap, the creek bridge,
+  a jog north, the climb by the lookout, then the north side of A and B, then up into C.
+- **Camps:** A Pickets 85 × 85, B Main Camp 141 × 133, C Chief's Clearing 115 × 115. A and B
+  open, C locks.
+- **Residents:** 112 on Normal (A 30, B 46, C 36), 124 on Hard and Brutal. All drawn from the
+  moment you arrive (spawn infos carry position, yaw and state).
+- **Tents** (A and B): 8 bodies, one every 6 s once the camp is up, then out. A tent pauses while
+  its camp rests. Once no resident of its camp lives, it empties at its pace whatever the state,
+  so a camp can always be cleared. Tent bodies step out of the tent door and rise.
+- **A tent never wakes a group to fight nobody:** every tent-caused rouse needs a player in play
+  for the camp (`CampBrain.TentRouse`).
+- **Nearby groups join in:** a group woken by sight or a hit wakes every resting group of its camp
+  within 2 × its sight; the chain runs on (`CampBrain.JoinIn`).
+- **Dormant far camps:** no player within 120 studs of a camp's floor → its bodies are not moved
+  and not in snapshots. A hit still wakes them.
+- **The sneak path:** inside the north fence of A and B, 979 studs to C's entry, wakes nobody
+  (gated in `check_levels.py`, tool-only data).
+- **One swing per jump:** one landing rule in the pure `SwingGate`, fed the same samples on the
+  client and the server. The client drops the second air swing (no effect, no send). The server's
+  "landing ahead" allowance is server-only. The ground slam and abilities are not gated.
+- **Headshots on big bodies:** the pure ray rule `HitShapes.CrowdRay` (body or head, padded; crit
+  on the unpadded head). The body is an upright capsule for rays (`RayUpright`), so a brute's or
+  the Colossus's legs count. Melee and area shapes keep the sphere. A crit on a plate shows crit
+  yellow.
+- **Gear preset 2 / 2** (G: 2 / 2 → 4 / 4 → 6 / 6). No weapon number moved.
+- **Clear bonus:** 0.1 of the camp's whole stock at the difficulty's price, paid the moment the
+  camp clears, split among the fighting humans, never on a skip.
+- **`[Perf]` line:** Studio only, the crowd step's p95 goes to the Workspace attribute
+  `CrowdPerfMs` and a dim "Server N ms" HUD line.
+- Also: one `HitShapes.FlatToRect` helper; phone auto-target is the pure `CampAim.Takes` (never a
+  resting body, never in the boss room's countdown); the director's merge test leaves out grouped
+  bodies; `levels.populationReserve` is gone (the boss reserve is derived).
+
+**Gates (fix-diff round on `46b31f2`):**
+- `run_harness.py`: `HARNESS: PASS (2,004 checks, …)`.
+- `mutate.py`: 624 run, 0 not caught.
+- `mirror_mutants.py`: 49 of 49 caught.
+- `check_levels.py` PASS: population 147 / 157 / 157 of 160; 82 Parts; route 1,055 studs; sneak
+  979 studs.
+- `check_stage_mirror.py`, `sim_range.py --check`, `sim_combat.py --check` (23 / 23),
+  `check_compile.py`, stylua, selene, luau-lsp: all PASS.
+
+**Balance (`docs/BALANCE.md` "L1b: the long road, Wave 2"), Normal at 2 / 2:**
+- First clear 7.0–7.3 min, band **6.5–8** (the lead moved it from 7–8 to keep Ben's 6 s tents).
+  Ben, at about ×1.36, about 9–10.5 min.
+- Timber 39–41 a minute (band 37.8–46.2). Brutes pay 3 Timber on Forest Road.
+- A clear pays about 171,000 cash, 282 Timber, 10 Valor; the bonuses are 7.3% of it.
+- The Colossus alone 80.5 s (band 64–90). The bow on the Colossus: 95 s with head shots, 134 s
+  with body shots, against the sword's 80.
+- Hard and Brutal: the human clears, the never-dodger does not, one preset below is clearly worse.
+- Raider Arena at 2 / 2: every band holds, files frozen.
+
+**Review:**
+- Four Opus slices: **0 Critical, 2 Major, 9 Minor**. Majors: an honest held-Space hop could be
+  refused; the checklist woke Main Camp before the sneak. All fixed.
+- Fix-diff check: **0 Critical, 1 Major, 2 Minor** (the client took the server's "landing ahead"
+  allowance). All fixed.
+
+**Carried (current list, owners):**
+- **Publish freeze (lead):** no Expeditions publish from `main` until L4.
+- **Before any publish (luau-engineer A):** `OnDash` grants i-frames on the request alone; judge
+  it against the position ring. Same review: a cheat claiming a grounded origin inside the claim
+  slack gets a few swings in a low hop.
+- **luau-engineer A:** `SwingGate.FALL_GRAVITY` (196.2) follows `Workspace.Gravity` by value only;
+  pass `workspace.Gravity` in if a place ever changes gravity.
+- **luau-engineer A:** rewinding enemies for shots.
+- **ui-engineer:** the lean of the drawn head in a windup or stagger (about 2.7 studs on the
+  Colossus).
+- **economy-designer, lead decides:** boss bands are reported, not tuned, if headshots shorten
+  them (the bow kills the Colossus in 95 s; Ben judges the bow at 2 / 2).
+- **luau-engineer A + economy-designer:** the capsule for melee and area shapes, only if Ben asks
+  (it moves every boss).
+- **ui-engineer:** the phone frame time with every resident drawn, and the three Studio
+  screenshots (camp drawn on arrival, the perf line, a crit on a plate); distance culling on
+  phones only if the frame time asks.
+- **lead:** Brutal's own `minDifficulty` units (the cap leaves no room: Hard is at 157 of 160).
+- **lead:** Ben's `[Perf]` number in the boss room (a click question in the playtest).
+- **L4 (ui-engineer + luau-engineer A):** a shot at a seated raider's drawn head scores a body
+  hit; aim assist pulls to standing height.
+- **L4 (ui-engineer):** the end screen (Ben §17.5).
+- **L4 or later (luau-engineer A):** sight through walls.
+- **L5 (lead):** residents do not scale with party size; revive by a teammate.
+- By design, no owner: a tent only wakes its group with a player inside the camp.
+- Every L1 carried item above stands.
+- **Never measured, said plainly:** the crowd step with 110–160 bodies, most dormant (first read
+  is Ben's `[Perf]` number); the client frame with every resident drawn on a real phone; snapshot
+  bytes on the long road.
+
+**Next:**
+1. The lead merges `l1b-wave2` to `main` and rebuilds the six place files.
+2. **Ben's Wave 2 look:** `docs/PLAYTEST.md` "L1b Wave 2 — the long road"; setup
+   `docs/MANUAL_STEPS.md` "L1b Wave 2".
+3. The lead reads the `[Perf]` lines from Studio's log.
+4. Then Wave 3 (numbers only) or L2 (secrets, keys, bought double jump), only on Ben's word.
+
+- [x] Wave 2 built (`95e3312` … `f40509a`)
+- [x] Wave 2 reviewed, fix round, fix tail and fix-diff round done (`c1ea74f` … `46b31f2`)
+- [x] Wave 2 gates green (`46b31f2`)
+- [ ] Wave 2 merged to `main`, six place files rebuilt (lead)
+- [ ] Ben's Studio playtest of L1b Wave 2 (PLAYTEST "L1b Wave 2 — the long road")
 
 ## M12 — Growing city
 

@@ -1793,9 +1793,8 @@ Raider Arena can be played.
 
 **Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
 
-**Status 2026-10-14:**
-- Built, reviewed, fixed and QA green on branch `l1b-living-road` (`18a25fe`).
-- **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+**Status 2026-10-14: done.** Merged to `main` (`5423937`) and played the same day (Ben cleared
+Normal: "feels really good right now!").
 
 <!-- FILE TO OPEN: start. Lead: if L1b Wave 1 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
@@ -1808,18 +1807,61 @@ Raider Arena can be played.
 
 **Steps:**
 
-- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+- [x] 0. (Lead) Merge, rebuild, tell Ben.
       - [x] QA green on `18a25fe`.
-      - [ ] `l1b-living-road` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L1b Wave 1 is merged, Build all".
+      - [x] `l1b-living-road` merged to `main`; the six place files rebuilt.
+      - [x] Ben told: "L1b Wave 1 is merged, Build all".
+- [x] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [x] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [x] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
+- [x] 4. Press **Play**: the lobby camp, the map open on **Forest Road** at **Normal**.
+- [x] 5. Run `docs/PLAYTEST.md` "L1b Wave 1 — the camp is alive" (six steps, plus an optional
+      phone and two-player check).
+- [x] 6. Close Studio without saving `proving.rbxl`. Tell Claude when you are done. The lead
+      reads the `[Perf]` lines from Studio's log; nothing to copy.
+
+## L1b Wave 2
+
+**Studio only.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setup. The tent markers are
+  plain Parts the server builds.
+- Still silent (no audio step).
+- About 10 minutes with the checklist, keys only, no panel.
+
+**Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
+
+**Status 2026-10-15:**
+- Built, reviewed, fixed and every gate green on branch `l1b-wave2` (`46b31f2`).
+- **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L1b Wave 2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Wait for the lead's word first.** Before the merge, "Build all" gives Wave 1's short road.
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** after **Enter** the road runs about a minute (a gap, a bridge, a
+  climb by a lookout) before the first camp.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] Every gate green on `46b31f2`.
+      - [ ] `l1b-wave2` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L1b Wave 2 is merged, Build all".
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
 - [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
-- [ ] 4. Press **Play**: the lobby camp, the map open on **Forest Road** at **Normal**.
-- [ ] 5. Run `docs/PLAYTEST.md` "L1b Wave 1 — the camp is alive" (six steps, plus an optional
-      phone and two-player check).
+- [ ] 4. Press **Play**: the lobby camp, the map open on **Forest Road** at **Normal**, gear
+      **2 / 2**.
+- [ ] 5. Run `docs/PLAYTEST.md` "L1b Wave 2 — the long road" (six steps, plus an optional phone
+      and two-player check, then five click questions).
 - [ ] 6. Close Studio without saving `proving.rbxl`. Tell Claude when you are done. The lead
       reads the `[Perf]` lines from Studio's log; nothing to copy.
+
+**Notes:**
+- The grey **Server N ms** line shows in Studio only. Nothing to set up: the server writes it.
+- **G** now walks 2 / 2 → 4 / 4 → 6 / 6.
 
 ## M10 — Icon, store icons, thumbnails
 

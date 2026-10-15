@@ -4631,8 +4631,9 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - Every kill pays at once.
 - **About 8 minutes. Keys only, no panel.** Grey blocks, no sound.
 
-**Status 2026-10-14:** built, reviewed, fixed, QA green. **Wait for the lead's merge word, then
-"Build all".**
+**Status 2026-10-14:** merged (`5423937`) and played: Ben cleared Normal, "feels really good right
+now!". His four notes went into Wave 2 (MISSIONS_DESIGN §17). Superseded by "L1b Wave 2 — the
+long road" below.
 
 Setup: `docs/MANUAL_STEPS.md` "L1b Wave 1".
 
@@ -4721,6 +4722,119 @@ Asked afterwards, as click questions:
 - After the "!", is the time before they fight right?
 
 Timber per minute is about 42 against L1's 24 (fewer raiders, same pay per kill); Wave 2 rebalances.
+
+Also, if you have a view: anything wrong, by step number, PC or phone.
+
+## L1b Wave 2 — the long road
+
+<!-- FILE TO OPEN: start. Lead: if L1b Wave 2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Only after the lead says L1b Wave 2 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** after **Enter** the road runs about a minute (a gap, a bridge, a
+  climb by a lookout) before the first camp.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** judge the long road, the tents and Ben's four Wave 1 notes.
+- A winding road of about 1,055 studs, three bigger camps, 112 raiders on Normal.
+- **About 10 minutes. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-15:** built, reviewed, fixed, every gate green (`46b31f2`). **Wait for the
+lead's merge word, then "Build all".**
+
+Setup: `docs/MANUAL_STEPS.md` "L1b Wave 2".
+
+Press **Play**: the map is open on Forest Road, Normal, and your gear is **2 / 2**.
+
+**Keys:**
+- **Enter** = Depart / Back to camp; **arrows** = level and difficulty.
+- **1** / **2** = sword / bow.
+- **Space** jump (twice = double jump); **C** in the air = slam; **Left Shift** dash.
+- **N** = finish this part; **B** = jump to the boss; **G** = stronger gear.
+- **Backspace** twice = Abandon.
+
+**Good to know:**
+- Raiders still see by distance only, through fences and cover.
+- The grey **Server** number in a corner is for one question at the end.
+
+### The run (no panel)
+
+- [ ] 1. **The road and the first camp.**
+      - **Enter** (Depart). The road is long now: the gap, the bridge, the climb by the lookout,
+        about a minute's walk.
+      - The first camp stands on a raised floor behind a fence. From the road you see its tent's
+        roof.
+      - At the top of a jump (or from the step by the lookout) you see the raiders already
+        there: two fires beside the road, a line of guards and a patrol.
+      - Bug: at a jump's top the camp is empty; raiders pop in once you are close; a raider
+        stands frozen while you watch.
+- [ ] 2. **One swing per jump.**
+      - Jump and click as fast as you can, also holding **Space** to hop.
+      - One swing in each jump, then nothing until you land.
+      - On the ground the combo is as before; **Space** then **C** still slams.
+      - Bug: two or three swings in one jump; a swing that shows and then vanishes; no swing at
+        all on a later hop.
+- [ ] 3. **Pickets, the noisy way.**
+      - Walk the road into the first camp.
+      - A "!" pops over the fire nearest the road, and the other fire joins in with its own "!".
+      - Once the camp is up, a raider steps out of the tent about every 6 seconds (eight in all).
+      - Kill everything: the banner "Pickets cleared", and your cash jumps a little more than a
+        kill (the camp bonus).
+      - Bug: the tent never sends; it keeps sending forever; a raider appears out of nowhere; no
+        banner.
+- [ ] 4. **Main Camp, the quiet way.**
+      - Go in by the gate on the road, then turn left (north) at once to the fence.
+      - Walk east along the inside of it, close to it, to the far gate, and step back onto the
+        road.
+      - Nobody wakes.
+      - Bug: a "!" while you hug the fence.
+- [ ] 5. **Then wake it, if you like.**
+      - Walk into the middle: each group that wakes brings its neighbours.
+      - Clear it, or leave it and walk on: they chase to the edge, go home and heal, as in
+        Wave 1.
+- [ ] 6. **The Chief's Clearing.**
+      - Walk in (or **N**). The gates close and the waves come as before.
+      - **Headshots:** **2** for the bow. Shoot a brute in the head: a yellow crit number. Shoot
+        one in the legs: it counts. A plated raider's headshot is yellow too.
+      - When the **Colossus** is up, the same: a head shot is yellow.
+      - While he is up, look at the grey **Server** number for a few seconds.
+      - Kill him (**G** if you need it): the summary lists your kills and the camp bonuses.
+      - **Enter**.
+      - Bug: a head shot or a legs shot does nothing; the summary is empty; a bonus is paid for a
+        camp you skipped with N.
+
+**Optional, not one of the six:**
+- **Phone.** Test (Prueba) → Device (Dispositivo) → a 375×667 phone, turned to landscape
+  (667×375) → Play → Depart.
+  - On the road, auto-fire does not shoot at a resting camp.
+  - Walk the quiet way through Main Camp (step 4): auto-fire shoots at nobody.
+  - Walk into a group's sight: it wakes, then auto-swing and auto-fire fight it. One auto
+    swing per jump.
+  - The grey Server line sits bottom-left and covers neither the health bar, the boss bar nor
+    "Camps 1 / 3".
+  - Bug: auto-fire wakes a camp from the road or the fence; an Attack button; the Server line
+    over the health bar.
+- **Two players.** Test (Prueba) → **Local Server** (Servidor local), **2 players**
+  (2 jugadores) → **Start** (Iniciar). In the other window press **Enter** → both land on the
+  road.
+  - Both fight in the Pickets until "Pickets cleared".
+  - → each window's cash jumps by about half the camp bonus (it is split between the fighters).
+  - The camp has as many raiders as solo (residents do not scale with players yet: L5).
+  - Bug: one window gets the whole bonus and the other none; the bonus is paid twice.
+  - Parties in a level come in L5: anything else odd, note it and don't hunt it.
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- Did the whole road feel the right length (too short / about right / too long)?
+- Are the tents right (too many / about right / too few)?
+- Is one swing per jump right?
+- **What did the grey Server number read with the Colossus up, most of the time?** Under 1 ms /
+  1–2 / 2–4 / over 4 / did not see it.
+- **At 2 / 2, how does the bow feel against the sword now?** Much weaker / a bit weaker / about
+  even / stronger.
 
 Also, if you have a view: anything wrong, by step number, PC or phone.
 
