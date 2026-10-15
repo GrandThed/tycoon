@@ -4741,8 +4741,9 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - A winding road of about 1,055 studs, three bigger camps, 112 raiders on Normal.
 - **About 10 minutes. Keys only, no panel.** Grey blocks, no sound.
 
-**Status 2026-10-15:** built, reviewed, fixed, every gate green (`46b31f2`). **Wait for the
-lead's merge word, then "Build all".**
+**Status 2026-10-15:** merged (`1ca5de8`) and played: "everything looks good! lets close it".
+Three click questions answered at the start of Wave 3 (road, tents, camps: about right; the bow:
+stronger). Superseded by "L1b Wave 3 — the bow" below.
 
 Setup: `docs/MANUAL_STEPS.md` "L1b Wave 2".
 
@@ -4837,6 +4838,66 @@ Asked afterwards, as click questions:
   even / stronger.
 
 Also, if you have a view: anything wrong, by step number, PC or phone.
+
+## L1b Wave 3 — the bow
+
+<!-- FILE TO OPEN: start. Lead: if L1b Wave 3 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Only after the lead says L1b Wave 3 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- Nothing looks different: only the bow's damage changed. The numbers over a body are a little
+  smaller with the bow.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** is the bow now about even with the sword?
+- The Longbow hits a little softer: 45 a full arrow (was 50).
+- **About 5 minutes. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-15:** built, reviewed (0 Critical, 0 Major, 5 Minor, all fixed), QA green.
+**Wait for the lead's merge word, then "Build all".**
+
+Setup: `docs/MANUAL_STEPS.md` "L1b Wave 3".
+
+**Keys:** as Wave 2. **1** = sword, **2** = bow, **Enter** = Depart, **Backspace** twice = Abandon.
+
+### The run (no panel)
+
+- [ ] 1. Press **Play**: the map is open on **Forest Road**, **Normal**, gear **2 / 2**.
+      - Bug: another level or difficulty; gear not 2 / 2.
+- [ ] 2. **Enter** (Depart). Walk the road to the first camp (the Pickets).
+- [ ] 3. **The bow first.** Press **2**. Fight in the camp with the bow for a minute or two.
+      - Hold the click until the arrow glows, then release: a full draw.
+      - Kills take a little longer than before.
+      - Bug: arrows do nothing; the bow fires without drawing; damage numbers missing.
+- [ ] 4. **A plated raider** (the armoured one).
+      - Full-draw arrows still break its plate.
+      - **A quick release may not break a plate.** That is expected, not a bug: only a near-full
+        draw is heavy.
+      - Bug: full-draw arrows bounce off the plate every time.
+- [ ] 5. **A brute** (they come out of the tent).
+      - When it winds up its charge, a full-draw arrow still stops it.
+      - Bug: full-draw arrows never stop the windup.
+- [ ] 6. **Then the sword.** Press **1**. Fight the rest of the camp with the sword for a minute
+      or two.
+      - Bug: the sword feels different from Wave 2 (it should not have changed).
+- [ ] 7. Finish the run or **Backspace** twice. Close Studio without saving.
+
+**Optional, not one of the seven:**
+- **Phone.** Test (Prueba) → Device (Dispositivo) → a 375×667 phone, turned to landscape
+  (667×375) → Play → Depart.
+  - With the bow on, let auto-fire shoot a plated raider for a while.
+  - Note whether its arrows ever break the plate. Auto-fire can release early, and an early
+    arrow is light, so "rarely" is not a bug; "never, in a whole camp" is worth telling.
+- No two-player check: nothing multiplayer changed.
+
+### What to tell Claude
+
+One click question:
+- **The bow against the sword now:** much weaker / a bit weaker / about even / stronger.
+
+Also, if you have a view: anything wrong, by step number.
 
 ## M12 — Village growing city
 

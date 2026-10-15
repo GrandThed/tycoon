@@ -3124,6 +3124,10 @@ families, abilities and the player's body go into the Expeditions missions, era 
   "Review round and state (2026-10-14/15)": amendments win); rulings
   `docs/prompts/l1b-w2-reports/lead-routing.md`; review findings `docs/prompts/l1b-w2-review/`;
   values `docs/BALANCE.md` "L1b: the long road, Wave 2". Branch `l1b-wave2`, same worktree.
+- **Wave 3:** Ben's answers to the Wave 2 click questions in MISSIONS_DESIGN §18 (last paragraph);
+  contract INTERFACES "Wave 3 — the bow (2026-10-15)" (rulings L1b-W3-1 to -11: 7–9 win over 1–2,
+  10 sets B); reports `docs/prompts/l1b-w3-reports/` (designer, review, qa); values
+  `docs/BALANCE.md` "L1b Wave 3: the bow". Branch `l1b-wave3`, same worktree.
 
 **Ben's decisions (2026-10-14; MISSIONS_DESIGN §16):**
 1. Running away: raiders chase to the camp's edge, walk back to their posts and heal. Slingers
@@ -3371,7 +3375,91 @@ checkpoints on the road).
   "everything looks good! lets close it". Studio's log: one run of about 2.5 minutes on the rebuilt
   `proving.rbxl`, 112 → 54 alive (the Pickets and into Main Camp), no script error, `[Perf]` p95
   0.31–0.58 ms (budget 2). Not reached: the Chief's Clearing, the headshots, the sneak; the five click
-  questions unanswered. **L1b Wave 2 closed.**
+  questions unanswered (three answered later, at the start of Wave 3). **L1b Wave 2 closed.**
+
+### L1b Wave 3 — the bow (2026-10-15)
+
+**Ben's answers to the Wave 2 click questions (MISSIONS_DESIGN §18):**
+1. Road length, tents (8, one every 6 s) and camps on Normal: **about right**.
+2. At 2 / 2 the bow is **stronger** than the sword: "lower the bow's numbers a little".
+3. Studio's log cannot show weapon switches; his answer is taken as his verdict.
+
+**What shipped (numbers only, no new mechanic):**
+- **Longbow shot damage** in `Config/ProvingGrounds.json`: **A 50 → 45** (×0.9, ruling 7),
+  **B 44 → 42** (ruling 10). Nothing else in `src/` moved.
+- **Every full-draw arrow stays heavy** (`crowd.heavyHit` 40, compared with `>=`):
+  - A is heavy from a **78%** draw (was 60%);
+  - B is heavy from a **90%** draw (was 82%).
+  - A quick release can now be light: it bounces off plates and does not interrupt.
+- Charge, rate, pierce, range, Arrow Rain, every other family, Armory, presets: unchanged.
+- `tools/sim_range.py`:
+  - `--bow` mode (information only): Forest Road, Normal, 2 / 2, solo, three seeds, per camp
+    seconds / hits taken / crits.
+  - A ranged player steps 1 stud inside a camp's floor before shooting (`IN_PLAY_STEP`). Without
+    it the simulated bow stood off camp B until the run cap. Pinned by one `--check` expect: the
+    Longbow alone clears camp B on every seed.
+  - Crits are counted (`World.crits`).
+
+**Commits (`l1b-wave3`):**
+- `3844527` contract; `026c370` MISSIONS_DESIGN answers.
+- `5053fa8` first cut ×0.78 (rejected); `9960c9a` amendment; `1f1a589` cut ×0.9.
+- `1ef6a72` review and QA reports, ruling B 42; `04b4e9e` review fixes (B 42, step pinned,
+  `--bow` tidied, BALANCE corrections).
+- Plus this docs commit.
+
+**Rejected: the ×0.78 cut (A 39, B 34).**
+- It met the contract's first band (×1.10–1.25) only by going under `heavyHit` 40.
+- Body shots stopped touching plates; the bow stopped interrupting windups.
+- With body aim the bow never cleared camp B; a human with body aim needed ×2.94.
+- Bosses took the bow 20–67% longer; the Arrow Rain burst left its band.
+- A role change, not "a little". The lead amended the cut to ×0.9 and the band to ×1.05–1.15.
+
+**Balance (`docs/BALANCE.md` "L1b Wave 3: the bow"), Forest Road, Normal, 2 / 2, to the boss's rise:**
+- Sword 347.5 s. Bow, head aim: **×1.034 → ×1.084** (band 1.05–1.15: PASS). Body aim
+  ×1.037 → ×1.128 (reported).
+- Hits a human takes: bow 2–8, sword 10–12. The bow is still the safer weapon.
+- Bosses with the bow (reported, not tuned): **11–16% longer**. No boss lands a hit. Melee boss
+  bands unchanged.
+- Re-banded rows: none. Arrow Rain burst 4.6 s, inside [3.0, 5.0].
+- Raider Arena at 2 / 2: unchanged line for line.
+
+**Review:** one Opus reviewer, **0 Critical, 0 Major, 5 Minor**, all fixed (`04b4e9e`):
+1. The simulator's in-play step: comment corrected, step pinned through camp B.
+2. B at 40 heavy only at a full draw → B 42 (ruling 10).
+3. Empty Arrow Rain override table removed.
+4. `--bow` tidying.
+5. Two BALANCE errors.
+
+**QA:** qa-runner green at `1f1a589`, 14 gates (stylua, selene, luau-lsp, `check_compile.py`,
+three builds, `sim_economy`, `sim_combat` 23 / 23, `sim_range --check`, `check_levels`,
+`check_stage_mirror`, harness 2,004 checks, config diff = the two Longbow lines,
+`gen_asset_manifest`). The designer re-ran the five sim and harness commands on `04b4e9e`: all
+PASS.
+- `mutate.py`: <verdict pending>
+
+**Carried (owners):**
+- **economy-designer, lead decides:** B sits 2 above `heavyHit`, A 5 above. Any later bow cut or
+  `heavyHit` raise moves the heavy draws (90% / 78%).
+- **lead (a question for Ben):** if the bow still feels stronger, the next lever is its safety
+  (range, stand-off), not its damage (ruling 9).
+- **economy-designer:** the bow-to-sword ratio drifts about 0.01 between Python 3.12 (×1.084) and
+  3.14 (×1.092). Read it as "about 8%"; the PASS sits inside seed noise.
+- **economy-designer:** the simulated bow stands 1 stud inside the floor; the game counts a player
+  in play within `chaseMargin` 2.5 outside it. The simulated bow is a little less safe than a real
+  one (ruling 11).
+- Every Wave 2 carried item above stands.
+
+**Next:**
+1. The lead merges `l1b-wave3` to `main` and rebuilds the six place files.
+2. **Ben's Wave 3 look:** `docs/PLAYTEST.md` "L1b Wave 3 — the bow"; setup
+   `docs/MANUAL_STEPS.md` "L1b Wave 3".
+3. Then L2 (secrets, keys, bought double jump) or more numbers, only on Ben's word.
+
+- [x] Wave 3 built (`5053fa8` … `1f1a589`)
+- [x] Wave 3 reviewed, 5 Minor fixed (`1ef6a72`, `04b4e9e`)
+- [x] Wave 3 QA green (qa-runner, 14 gates, `1f1a589`; mutate.py pending)
+- [ ] Wave 3 merged to `main`, six place files rebuilt (lead)
+- [ ] Ben's Studio look at L1b Wave 3 (PLAYTEST "L1b Wave 3 — the bow")
 
 ## M12 — Growing city
 
