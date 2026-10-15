@@ -10,14 +10,17 @@
 -- * Every Heartbeat: the local root's Y, its vertical velocity, the footprint's floor and the
 --   knockdown (MovementController.IsDown) go to SwingGate.Observe. That is what clears `used`
 --   on a landing, on a held-Space hop whose one-frame contact a sample can step over, and on a
---   down and its get-up. Nothing else clears it: a Humanoid state the server cannot see (its
+--   down and its get-up. The turn window is the client's (SwingGate.CLIENT_TURN_WINDOW_SECONDS),
+--   stricter than the server's by one step of its 20 Hz copy, so a double jump close to the
+--   floor is never a landing here that the server's coarser copy does not also see. Nothing else clears it: a Humanoid state the server cannot see (its
 --   Landed, Running or GettingUp) would let a swing through for the server to refuse.
 -- * The footprint probe is the server's: SwingGate.PROBE_POINTS rays from GROUND_PROBE_LIFT
 --   above each of SwingGate.ProbePoint (the root's centre and its four corners), down
 --   GROUND_PROBE_DEPTH, collidable world only, every character skipped; the highest floor wins,
 --   so a ledge's lip, a fence top or a cover block under any corner reads grounded.
 -- * At a swing, Judge probes at the swing's origin (the root's position, which is what is sent)
---   and asks SwingGate.Judge with no lag: the samples here are the swinger's own, not a copy.
+--   and asks SwingGate.Judge with no lag: the samples here are the swinger's own, not a copy, so
+--   Judge never counts a landing ahead of them; only the touchdown's own sample clears.
 -- * A new character starts clear (SwingGate.Landed). The Heartbeat connection is this module's;
 --   it starts at the first Judge and Destroy drops it.
 
@@ -141,7 +144,8 @@ local function sample(): ()
 		root.AssemblyLinearVelocity.Y,
 		footprintFloor(position, root),
 		standOffset(root, humanoid),
-		MovementController.IsDown()
+		MovementController.IsDown(),
+		SwingGate.CLIENT_TURN_WINDOW_SECONDS
 	)
 end
 

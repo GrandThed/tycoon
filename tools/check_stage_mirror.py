@@ -120,7 +120,8 @@ MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Combat", "LevelGeomet
 NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
                      "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint",
-                        "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve"),
+                        "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve",
+                        "TentOwesRouse"),
           "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
                         "Struck", "Goal", "Shows", "Engaged", "Dormant", "Gap", "JoinIn", "Rouse", "TentRouse", "NewTent",
                         "TentActive", "TentDue", "TentSent"),
@@ -877,6 +878,16 @@ def swing_cases(data, expected):
     expected[case] = ("SwingGate.AIR_MARGIN_STUDS", "the margin the mirror uses", margin)
 
 
+def tent_owes_cases(data, expected):
+    """StageFlow.TentOwesRouse (the fix round's B-3): every combination of its three inputs (the
+    debt so far, the camp busy, the group up), against sim_range.tent_owes_rouse."""
+    rows = [[owed, busy, awake] for owed in (False, True) for busy in (False, True) for awake in (False, True)]
+    case = "flow.tentOwesRouse"
+    data["tentOwesCases"].append({"id": case, "rows": rows})
+    expected[case] = ("StageFlow.TentOwesRouse", f"all {len(rows)} combinations of owed, busy and awake",
+                      [sr.tent_owes_rouse(*row) for row in rows])
+
+
 def wave2_camp_cases(data, expected, rules, plans):
     """CampBrain's Wave 2 rules (L1b-W2-6, -7, -10, -12): Dormant on the edge of dormantRadius in
     every state, Gap and JoinIn on the shipped camps (every group alone, from rest, and with
@@ -1374,7 +1385,7 @@ def main():
             "layouts": raw_layouts, "ranks": ranks, "planDifficulties": plan_difficulties, "pointCases": [],
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
             "campRules": combat["camps"], "campCases": [], "splitCases": [], "rayCases": [], "swingCases": [],
-            "combatCases": [], "reserveCases": []}
+            "combatCases": [], "reserveCases": [], "tentOwesCases": []}
     shipped_plans = []  # (label, plan) of every level with residents at every difficulty: Wave 2's camp cases
     bursts, tempos = {}, {}
     scripted = {}  # trace id -> (label, the Python's ticks)
@@ -1536,6 +1547,7 @@ def main():
     split_cases(data, expected)
     ray_cases(data, expected, crowd_kinds)
     swing_cases(data, expected)
+    tent_owes_cases(data, expected)
     combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds, below)
     data["burstCases"] = [list(key) for key in bursts]
     data["tempoCases"] = [list(key) for key in tempos]

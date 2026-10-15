@@ -458,7 +458,12 @@ function W2A.landingTests(): ()
 	Gate.Observe(gate, 20, -5, 0, W2A.STAND, false)
 	Gate.Observe(gate, 19.9, -6, 0, W2A.STAND, false)
 	Gate.Took(gate, true)
-	check(not Gate.Judge(gate, 21, 0, W2A.STAND, 0.3), "a copy falling slowly far up (a double jump's claim) finds no landing: refused")
+	check(not Gate.Judge(gate, 21, 0, W2A.STAND, 0.1), "a copy falling slowly far up (a double jump's claim) finds no landing: refused")
+	-- Fix-diff round: the copy's fall speeds up inside the lag. At the 0.3 s ceiling the same copy,
+	-- 16.15 over the band, is inside the last lag of its fall (with the turn window at the speed it
+	-- will have), so the landing ahead is taken: the cost a cheating client can gain stays "one
+	-- swing in the last lag of a fall", now counted in time and not at today's speed.
+	check(Gate.Judge(gate, 21, 0, W2A.STAND, 0.3), "and at the 0.3 s lag ceiling it is inside the last lag of its fall: allowed")
 	gate = Gate.New()
 	Gate.Observe(gate, 3.1, 10, 0, W2A.STAND, false)
 	Gate.Observe(gate, 5, 60, 0, W2A.STAND, false)
@@ -468,7 +473,7 @@ function W2A.landingTests(): ()
 	Gate.Observe(gate, 14, -50, 0, W2A.STAND, false)
 	Gate.Observe(gate, 13, -60, 0, W2A.STAND, false)
 	Gate.Took(gate, true)
-	check(not Gate.Judge(gate, 9, 0, W2A.STAND, 0 / 0), "a NaN lag reads as 0: 9.25 over the band at 60 studs/s is past the window alone")
+	check(not Gate.Judge(gate, 9, 0, W2A.STAND, 0 / 0), "a NaN lag reads as 0, and with no lag nothing is taken ahead: 9.25 over the band, refused")
 	check(Gate.Judge(gate, 9, 0, W2A.STAND, 0.1), "and a lag of 0.1 s brings it within reach: allowed")
 	Gate.Took(gate, true)
 	check(not Gate.Judge(gate, 9, 0, W2A.STAND, 0.1), "once: the next swing before the copy's own landing is refused")
@@ -476,6 +481,239 @@ function W2A.landingTests(): ()
 	check(not Gate.Judge(gate, 9, 0, W2A.STAND, 0.1), "and that landing, taken ahead, does not clear it again")
 end
 L1BC.group("swing gate: landings", W2A.landingTests)
+
+-- SwingGate, fix-diff round M1 and m1: the client (lag 0, its own window) against the server ----------
+-- A trajectory at the 240 Hz physics with a jump of 18 taken at each of `starts` (from the ground),
+-- `total` seconds long.
+function W2A.jumpsAt(starts: { number }, total: number): { any }
+	local v0 = math.sqrt(2 * W2A.G * 18)
+	local steps = {}
+	local t, y, vy = 0, W2A.STAND, 0
+	local nextJump = 1
+	local grounded = true
+	while t <= total do
+		if grounded and starts[nextJump] ~= nil and t >= starts[nextJump] then
+			nextJump += 1
+			grounded = false
+			vy = v0
+		end
+		if not grounded then
+			vy -= W2A.G * W2A.DT
+			y += vy * W2A.DT
+			if y <= W2A.STAND and vy < 0 then
+				y, vy, grounded = W2A.STAND, 0, true
+			end
+		end
+		table.insert(steps, { t = t, y = y, vy = vy })
+		t += W2A.DT
+	end
+	return steps
+end
+
+-- The client as InputController drives it with the attack held: AirSwing's samples every 1/60 s
+-- (its own physics, its own turn window), a swing tried every frame once `interval` has passed
+-- since the last one sent, judged with lag 0. `apexOnly` = a click at the first sample past each
+-- apex instead (a jump's and a double jump's). Returns the swings sent { t, y, airborne }.
+function W2A.client(Gate: any, steps: { any }, phase: number, interval: number, apexOnly: boolean?): { any }
+	local gate = Gate.New()
+	local sent = {}
+	local lastAt = -math.huge
+	local wasRising = false
+	local t = phase
+	while t <= steps[#steps].t do
+		local s = W2A.at(steps, t)
+		Gate.Observe(gate, s.y, s.vy, 0, W2A.STAND, false, Gate.CLIENT_TURN_WINDOW_SECONDS)
+		local due = if apexOnly then wasRising and s.vy <= 0 else t - lastAt >= interval - 1e-9
+		wasRising = s.vy > 0
+		if due then
+			local allowed, airborne = Gate.Judge(gate, s.y, 0, W2A.STAND, 0)
+			if allowed then
+				Gate.Took(gate, airborne)
+				table.insert(sent, { t = t, y = s.y, airborne = airborne })
+				lastAt = t
+			end
+		end
+		t += 1 / 60
+	end
+	return sent
+end
+
+-- The server's copy of the same body: replicated at 20 Hz (from `offset`) and read `lag` behind,
+-- sampled every Heartbeat (1/60 s from `phase`) with the server's window; each swing the client
+-- sent is judged at the first Heartbeat at or after it, at its claim, with that lag. Returns the
+-- swings refused.
+function W2A.server(Gate: any, steps: { any }, sent: { any }, lag: number, offset: number, phase: number): number
+	local gate = Gate.New()
+	local refused = 0
+	local nextSwing = 1
+	local t = phase
+	local last = steps[#steps].t + lag + 0.1
+	while t <= last do
+		local copy = W2A.replicated(steps, math.max(t - lag, 0), 1 / 20, offset)
+		Gate.Observe(gate, copy.y, copy.vy, 0, W2A.STAND, false)
+		while sent[nextSwing] ~= nil and sent[nextSwing].t <= t + 1e-9 do
+			local swing = sent[nextSwing]
+			nextSwing += 1
+			local allowed, airborne = Gate.Judge(gate, swing.y, 0, W2A.STAND, lag)
+			if allowed then
+				Gate.Took(gate, airborne)
+			else
+				refused += 1
+			end
+		end
+		t += 1 / 60
+	end
+	return refused
+end
+
+W2A.LAGS = { 0.05, 0.1, 0.2, 0.3 }
+
+-- Air swings among the swings sent.
+function W2A.airCount(sent: { any }): number
+	local air = 0
+	for _, swing in sent do
+		if swing.airborne then
+			air += 1
+		end
+	end
+	return air
+end
+
+function W2A.lateFallTests(): ()
+	print(" SwingGate: the client takes no landing ahead (fix-diff round M1)")
+	local Gate = load("SwingGate")
+	local phases = 20
+	-- One jump, a late swing in its fall, the touchdown, a walk, a new jump (lag 0).
+	local steps = W2A.jumpsAt({ 0.1, 1.5 }, 2.6)
+	local bad = ""
+	for index = 0, phases - 1 do
+		local phase = index / phases / 60
+		local gate = Gate.New()
+		local stage = 0
+		local answers = {}
+		local t = phase
+		local wasRising = false
+		while t <= steps[#steps].t do
+			local s = W2A.at(steps, t)
+			Gate.Observe(gate, s.y, s.vy, 0, W2A.STAND, false, Gate.CLIENT_TURN_WINDOW_SECONDS)
+			local excess = s.y - W2A.STAND - Gate.AIR_MARGIN_STUDS
+			local want = nil
+			if stage == 0 and wasRising and s.vy <= 0 then
+				want = "apex"
+			elseif stage == 1 and s.vy < 0 and excess <= 4.5 and excess > 0 then
+				want = "late"
+			elseif stage == 2 and wasRising and s.vy <= 0 and t > 1.5 then
+				want = "apex"
+			end
+			wasRising = s.vy > 0
+			if want ~= nil then
+				stage += 1
+				local allowed, airborne = Gate.Judge(gate, s.y, 0, W2A.STAND, 0)
+				table.insert(answers, `{want}:{if allowed then "allowed" else "refused"}{if airborne then "" else "(ground)"}`)
+				if allowed then
+					Gate.Took(gate, airborne)
+				end
+			end
+			t += 1 / 60
+		end
+		local said = table.concat(answers, " ")
+		if bad == "" and said ~= "apex:allowed late:refused apex:allowed" then
+			bad = `phase {index}: {said}`
+		end
+	end
+	check(bad == "", `lag 0: an apex swing allowed, a swing at most 4.5 studs above the band late in the fall refused, then touchdown, a walk, a new jump and its apex swing allowed, at all {phases} phases {bad}`)
+
+	-- Held Space and a held attack, a swing due every 0.25 / 0.35 / 0.5 s, twelve hops.
+	local hopSteps, bounces = W2A.hops(12)
+	local twice, none, refusedByServer, sentAll = "", "", "", 0
+	for _, interval in { 0.25, 0.35, 0.5 } do
+		for index = 0, phases - 1 do
+			local phase = index / phases / 60
+			local sent = W2A.client(Gate, hopSteps, phase, interval)
+			sentAll += #sent
+			-- Hop k is the air between bounce k - 1 and bounce k.
+			for hop = 2, #bounces do
+				local from, to = bounces[hop - 1], bounces[hop]
+				local air, any = 0, 0
+				for _, swing in sent do
+					if swing.t > from and swing.t <= to then
+						any += 1
+						if swing.airborne then
+							air += 1
+						end
+					end
+				end
+				if twice == "" and air > 1 then
+					twice = `{interval} s, phase {index}, hop {hop}: {air} air swings`
+				end
+				if none == "" and any == 0 then
+					none = `{interval} s, phase {index}, hop {hop}`
+				end
+			end
+			for _, lag in W2A.LAGS do
+				local refused = W2A.server(Gate, hopSteps, sent, lag, phase * 0.7, phase * 0.3)
+				if refusedByServer == "" and refused > 0 then
+					refusedByServer = `{interval} s, phase {index}, lag {lag}: {refused} refused`
+				end
+			end
+		end
+	end
+	check(twice == "", `a held-Space hop with the attack held: never two air swings in one hop, at every interval and phase {twice}`)
+	check(none == "", `and never a hop with none {none}`)
+	check(refusedByServer == "", `and the server's 20 Hz copy at every lag it allows ({table.concat(W2A.LAGS, ", ")} s) refuses none of the {sentAll} swings the client sent {refusedByServer}`)
+end
+L1BC.group("swing gate: the client's late fall", W2A.lateFallTests)
+
+function W2A.clientWindowTests(): ()
+	print(" SwingGate: the client's turn window (fix-diff round m1)")
+	local Gate = load("SwingGate")
+	check(
+		near(Gate.CLIENT_TURN_WINDOW_SECONDS, Gate.TURN_WINDOW_SECONDS - 1 / 20, 1e-9),
+		`the client's turn window is the server's less one 20 Hz step ({Gate.CLIENT_TURN_WINDOW_SECONDS} against {Gate.TURN_WINDOW_SECONDS})`
+	)
+	local phases = 20
+	-- A double jump 6 to 7 studs up into 12 studs: the attack held from the take-off, or a click
+	-- at each apex.
+	local clientTwice = ""
+	for _, at in { 6, 6.5, 7 } do
+		local djSteps = W2A.hops(1, { at = at, into = 12 })
+		for index = 0, phases - 1 do
+			for _, apexOnly in { false, true } do
+				local air = W2A.airCount(W2A.client(Gate, djSteps, index / phases / 60, 0.25, apexOnly))
+				if clientTwice == "" and air ~= 1 then
+					clientTwice = `at {at}, phase {index}, {if apexOnly then "apex clicks" else "held attack"}: {air} air swings`
+				end
+			end
+		end
+	end
+	check(clientTwice == "", `a double jump 6, 6.5 and 7 studs up: the client sends one air swing in the whole jump, at all {phases} phases {clientTwice}`)
+	-- Over a wider sweep (held attack and apex clicks), wherever the client counts the double jump
+	-- a landing the server's copy agrees, at every lag.
+	local landedLow, serverDisagrees = 0, ""
+	for tenth = 30, 90, 5 do
+		local at = tenth / 10
+		local djSteps = W2A.hops(1, { at = at, into = 12 })
+		for index = 0, phases - 1 do
+			local phase = index / phases / 60
+			for _, apexOnly in { false, true } do
+				local sent = W2A.client(Gate, djSteps, phase, 0.25, apexOnly)
+				if W2A.airCount(sent) > 1 then
+					landedLow += 1
+				end
+				for _, lag in W2A.LAGS do
+					local refused = W2A.server(Gate, djSteps, sent, lag, phase * 0.7, phase * 0.3)
+					if serverDisagrees == "" and refused > 0 then
+						local how = if apexOnly then "apex clicks" else "held attack"
+						serverDisagrees = `at {at}, phase {index}, lag {lag}, {how}: {refused} refused`
+					end
+				end
+			end
+		end
+	end
+	check(landedLow > 0, `(a double jump low enough is a landing for the client too: {landedLow} runs from 3 to 9 studs)`)
+	check(serverDisagrees == "", `and from 3 to 9 studs the server's copy at every lag never refuses a swing the client sent {serverDisagrees}`)
+end
+L1BC.group("swing gate: the client's turn window", W2A.clientWindowTests)
 
 function W2A.footprintTests(): ()
 	print(" SwingGate: the footprint and the get-up (fix round A-1)")

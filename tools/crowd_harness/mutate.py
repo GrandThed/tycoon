@@ -3067,6 +3067,38 @@ L1B_W2_FIX_TAIL_MUTATIONS = {
 }
 MUTATIONS.update(L1B_W2_FIX_TAIL_MUTATIONS)
 
+# The fix-diff round (docs/prompts/l1b-w2-fix-diff-round.md): M1 the landing ahead only with a
+# lag (the server), m1 the client's stricter turn window, and the fall's speed-up inside the lag
+# that the held-hop and low double-jump cases at the 0.3 s ceiling need.
+L1B_W2_FIX_DIFF_MUTATIONS = {
+    "l1b w2 fix diff: the client takes the landing ahead too (no lag guard)": (
+        SWING,
+        "if lag > 0 and airborne and state.used and state.falling and not state.ahead then",
+        "if airborne and state.used and state.falling and not state.ahead then",
+    ),
+    "l1b w2 fix diff: the client's turn window is the server's": (
+        SWING,
+        "SwingGate.CLIENT_TURN_WINDOW_SECONDS = 0.05",
+        "SwingGate.CLIENT_TURN_WINDOW_SECONDS = 0.1",
+    ),
+    "l1b w2 fix diff: Observe ignores the window it is passed": (
+        SWING,
+        "local window = if turnWindow ~= nil then turnWindow else SwingGate.TURN_WINDOW_SECONDS",
+        "local window = SwingGate.TURN_WINDOW_SECONDS",
+    ),
+    "l1b w2 fix diff: the landing ahead without gravity": (
+        SWING,
+        "\n\t\t\t+ SwingGate.FALL_GRAVITY * lag * (SwingGate.TURN_WINDOW_SECONDS + lag * 0.5)",
+        "",
+    ),
+    "l1b w2 fix diff: the landing ahead's turn window at today's speed": (
+        SWING,
+        "SwingGate.FALL_GRAVITY * lag * (SwingGate.TURN_WINDOW_SECONDS + lag * 0.5)",
+        "SwingGate.FALL_GRAVITY * lag * (lag * 0.5)",
+    ),
+}
+MUTATIONS.update(L1B_W2_FIX_DIFF_MUTATIONS)
+
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

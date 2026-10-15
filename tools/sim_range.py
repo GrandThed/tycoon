@@ -5925,11 +5925,6 @@ def tent_owes_rouse(owed, camp_busy, group_awake):
     return owed and camp_busy and not group_awake
 
 
-def group_up(group):
-    """WaveService's run.awakeGroups[group] ~= nil: its last event went to rise or fight."""
-    return group["state"] in ("rise", "fight") and not group["held"]
-
-
 def cb_new_tent(stock):
     return {"left": stock, "nextAt": -math.inf}
 
@@ -6177,6 +6172,14 @@ class LevelRun(ThreatRun):
         self.first_windup = {}  # group index -> the first windup a member began
         self.woke = {}  # group index -> (when, cause) of its first wake
         self.events = []  # (time, group index, from, to, held)
+        # WaveService's run.awakeGroups: the groups whose last DRAINED event went to rise or fight.
+        # The server's tick drains CrowdService's events at its start, and its Heartbeat
+        # connection is made at boot, before CrowdService connects its own at the first run, so
+        # its tents read the state of the crowd step before (the fix-diff round, m2). Roblox does
+        # not promise the order of two connections; the live state (this sim before m2) passed
+        # every check too. `drained` = how many of self.events the last drain had read.
+        self.awake_groups = set()
+        self.drained = 0
         self.blocked = {}  # group index -> his hits it blocked
         self.wake_floors = set()  # CrowdService.WakeFloor: released at the next step
         self.engaged = False
@@ -6292,9 +6295,9 @@ class LevelRun(ThreatRun):
         while its camp is busy or once none of its camp's residents lives (its own bodies not
         counted); a due body comes out at its door (B-4) and walks to its ring post, its group is
         roused at the next camp step, and the clock moves on. A refused spawn (the cap) counts as
-        sent. A body sent while its camp is busy and its group is not up leaves a debt (B-3,
-        StageFlow.TentOwesRouse) that rouses the group every tick until it is up or the camp is
-        quiet. Every rouse a tent asks for acts only while the player is in play for the group,
+        sent. A body sent while its camp is busy and its group is not up (run.awakeGroups as last
+        drained, a crowd step behind) leaves a debt (B-3, StageFlow.TentOwesRouse) that rouses
+        the group every tick until it is up or the camp is quiet. Every rouse a tent asks for acts only while the player is in play for the group,
         from rest or home (cb_tent_rouse, the lead's ruling (i))."""
         if not self.tents:
             return
@@ -6305,7 +6308,7 @@ class LevelRun(ThreatRun):
             floor = tent["floor"]
             own = sum(1 for b in group["members"] if b.alive)
             camp_busy = busy.get(floor) is True
-            tent["owed"] = tent_owes_rouse(tent["owed"], camp_busy, group_up(group))
+            tent["owed"] = tent_owes_rouse(tent["owed"], camp_busy, tent["group"] in self.awake_groups)
             if tent["owed"]:
                 self.rouse_pending.add(tent["group"])
             active = cb_tent_active(camp_busy, self.alive_on(floor) - own)
@@ -6324,7 +6327,7 @@ class LevelRun(ThreatRun):
                 body.face = (-math.sin(post["yaw"]), -math.cos(post["yaw"]))
                 group["members"].append(body)
                 self.rouse_pending.add(tent["group"])
-                tent["owed"] = tent_owes_rouse(True, camp_busy, group_up(group))
+                tent["owed"] = tent_owes_rouse(True, camp_busy, tent["group"] in self.awake_groups)
                 self.count_alive()
             cb_tent_sent(tent["state"], t, tent["every"])
             tent["sent"] += 1
@@ -6362,6 +6365,16 @@ class LevelRun(ThreatRun):
         body.hp = body.max_hp
         body.plate = body.max_plate
         body.stagger_until = 0.0
+
+    def drain_group_events(self):
+        """CrowdService.DrainGroupEvents into WaveService.onGroupEvent's run.awakeGroups: a group
+        whose event went to rise or fight is awake, any other event takes it out."""
+        for _, index, _, after, _ in self.events[self.drained:]:
+            if after in ("rise", "fight"):
+                self.awake_groups.add(index)
+            else:
+                self.awake_groups.discard(index)
+        self.drained = len(self.events)
 
     def note(self, now, index, before, after, held, cause=None):
         self.events.append((now, index, before, after, held))
@@ -7314,6 +7327,8 @@ class LevelRun(ThreatRun):
             if self.walking():
                 self.walk_path(FRAME)
             accumulator += FRAME
+            # WaveService.tick's DrainGroupEvents, before this Heartbeat's crowd step (m2).
+            self.drain_group_events()
             while accumulator >= self.interval - THREAT_EPS:
                 accumulator -= self.interval
                 self.crowd_step(t, self.interval)

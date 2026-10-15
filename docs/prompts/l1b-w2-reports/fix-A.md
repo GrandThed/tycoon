@@ -94,8 +94,11 @@ the one way left to send a swing the server refuses.
   a swing sent just after a bounce reaches `OnAttack` while the copy is still falling. `Judge`
   with `lagSeconds` counts the landing "ahead" when the copy's fall is within
   `fallSpeed x (0.1 + lag)` of its floor; the copy's own later landing then does not clear a
-  second time. Lenient only on the server (an honest client's own gate, lag 0, never sends that
-  second swing); a cheating client can gain at most a swing in the last lag of a fall.
+  second time. Lenient only on the server; a cheating client can gain at most a swing in the
+  last lag of a fall. **Corrected in the fix-diff round** (`fix-diff-round.md`, review M1): as
+  shipped here the branch had no lag guard, so the client (lag 0) took it too and allowed a
+  second swing late in every fall. It now acts only when `lagSeconds > 0`, and its reach counts
+  gravity over the lag.
 - `WeaponService`: new local `footprintFloor(position, root, params)` (5 rays); `trackAir` feeds
   `SwingGate.Observe` every Heartbeat with `VitalsService.IsDown(player)`, and no longer calls
   `SwingGate.Landed` (the slam's own peak/dive/landing tracking is unchanged, still on

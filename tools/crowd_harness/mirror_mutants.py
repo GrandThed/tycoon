@@ -103,6 +103,13 @@ MUTANTS = [
      "local clear = if body ~= nil then body.radius else 0", "local clear = 0"),
     ("TentDoor: no clearance past the wall", "LevelGeometry",
      "local out = math.min(edge + math.max(clear, 0), distance)", "local out = math.min(edge, distance)"),
+    # The fix-diff round (m2): TentOwesRouse, compared over all its inputs.
+    ("TentOwesRouse: owed while the group is up", "StageFlow", "return owed and campBusy and not groupAwake",
+     "return owed and campBusy"),
+    ("TentOwesRouse: owed for a quiet camp", "StageFlow", "return owed and campBusy and not groupAwake",
+     "return owed and not groupAwake"),
+    ("TentOwesRouse: owed from nothing", "StageFlow", "return owed and campBusy and not groupAwake",
+     "return campBusy and not groupAwake"),
 ]
 
 

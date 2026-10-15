@@ -14099,3 +14099,39 @@ All 18 draft points are **confirmed as written**. Readings worth stating:
 - **(15)** Confirmed: during `gate` the phone auto-target skips every body with a camp floor.
 - **The tent ring against A.loop:** the economy-designer moves the patrol loop or the tent's ring (its
   choice; Ben's picture stays recognisable), and the post-spacing gate must pass on every difficulty.
+
+### Review round and state (2026-10-14/15)
+
+**The review: four Opus slices on `main..f40509a`, 0 Critical, 2 Major, 9 Minor**
+(`docs/prompts/l1b-w2-review/`). Majors: an honest held-Space hop could be refused (the server
+missed one-frame landings, and client and server cleared on different events); the checklist woke
+Main Camp before the sneak. Rulings and owners: `docs/prompts/l1b-w2-fix-round.md`; every ruling
+since: `docs/prompts/l1b-w2-reports/lead-routing.md`.
+
+**The fix-diff review: 0 Critical, 1 Major, 2 Minor** (`fix-diff.md`): the client took the server's
+"landing ahead" allowance; fixed (`docs/prompts/l1b-w2-fix-diff-round.md`).
+
+**Contract amendments (these win over the text above):**
+- **One landing rule** in `SwingGate`, fed the same samples on both sides: `Observe(state, y, vy,
+  floorY, standOffset, down, turnWindow?)`, `Judge(state, y, floorY, standOffset, lagSeconds)`
+  → `(allowed, airborne)`, `ProbePoint`, `Higher`, `Took`; `Landed` is a full reset. Grounded = the
+  highest of five rays (centre and the root's corners); a fall turning into a rise near the floor
+  is a landing (`TURN_WINDOW_SECONDS` 0.1 server, `CLIENT_TURN_WINDOW_SECONDS` 0.05 client); a down
+  clears. The "landing ahead" branch (server only, `lagSeconds > 0`) reaches
+  `fallSpeed × (W + lag) + FALL_GRAVITY × lag × (W + lag / 2)`. The client no longer clears on
+  `StateChanged`.
+- `CrowdSpawnInfo` gains `resting: boolean?` (held, at rest or dormant), re-announced on a rest
+  change through its own queue, and `rises: boolean?` (a tent body at its door, sent once).
+- Phone auto-target is the pure `CampAim.Takes`: never a resting group's body, never during `gate`.
+- Tent bodies spawn at `LevelGeometry.TentDoor` (`PlanTent.doors`), anchored at their post, and rise.
+- `CampBrain.Rouse(group, now, inPlay)` lifts a group from `home` only with a player in play;
+  **every tent-caused rouse goes through `CampBrain.TentRouse` and needs a player in play** (a tent
+  never wakes a group to fight nobody). `StageFlow.TentOwesRouse` keeps the debt.
+- `Validate` checks resident posts and tent rings at every difficulty; `check_levels` keeps every
+  post and patrol point of a camp clear of its tent marker; C's tent sits 2 studs north.
+- `CrowdService.SeparationCells()` (for the deterministic separation case).
+- Gate 10 adds `py tools/crowd_harness/mirror_mutants.py` (never beside `mutate.py`).
+- Checklist: the headshot step is in the Chief's Clearing (text above already amended).
+
+**Carried:** `FALL_GRAVITY` follows `Workspace.Gravity` only by value; a run with a player inside
+the camp is needed for a tent to wake its group (by design); every L1b carried item in PLAN stands.

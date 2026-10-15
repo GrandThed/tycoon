@@ -848,6 +848,15 @@ for _, case in data.reserveCases do
 		return { Flow.BossReserve(level, data.proving.crowd.kinds), Flow.BossReserve(level, nil) }
 	end)
 end
+for _, case in data.tentOwesCases do
+	J.try(case.id, function()
+		local found = {}
+		for index, row in case.rows do
+			found[index] = Flow.TentOwesRouse(row[1], row[2], row[3])
+		end
+		return found
+	end)
+end
 
 -- Combat.SplitCarry: the Python's seeded kills, the carry after each ------------------------------------
 for _, case in data.splitCases do

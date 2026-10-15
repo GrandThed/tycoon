@@ -11,13 +11,17 @@
 -- * A landing is a fall that ends grounded, or a fall that turns into a rise close enough to the
 --   floor that the samples may have stepped over the contact: a held-Space hop touches the floor
 --   for one physics step, which a 60 Hz sample (or a copy replicated slower) can miss. "Close
---   enough" is the distance the fall covers in TURN_WINDOW_SECONDS at its fastest, so a double
---   jump high in the air (slow fall, far floor) is never a landing.
+--   enough" is the distance the fall covers in a turn window at its fastest, so a double jump
+--   high in the air (slow fall, far floor) is never a landing. The client's window
+--   (CLIENT_TURN_WINDOW_SECONDS) is the server's (TURN_WINDOW_SECONDS) less one step of the
+--   server's 20 Hz copy: the copy's lowest sample of a fall can read up to a step's fall higher
+--   than the client's, so any turn the client calls a landing the server calls one too.
 -- * A down clears the gate: nothing is held across a knockdown and its get-up.
 -- * The server's copy of a character trails the client's screen by the lag, so a swing can
---   arrive before the copy has bounced. Judge then counts the landing the copy is about to show
---   when the copy's fall is within reach of its floor inside the lag. That landing is taken
---   "ahead" of the samples, and the copy's own turn later is not a second one.
+--   arrive before the copy has bounced. Judge (with a lag, so the server only) then counts the
+--   landing the copy is about to show when the copy's fall is within reach of its floor inside
+--   the lag. That landing is taken "ahead" of the samples, and the copy's own turn later is not
+--   a second one. The client's samples are its own (lag 0): its landings come only from them.
 
 export type State = {
 	used: boolean, -- an airborne swing was taken since the last landing
@@ -34,10 +38,19 @@ local SwingGate = {}
 -- How far over its standing height a root (or a swing's origin) may be and still count as
 -- grounded. WeaponService's air tracking reads the same number.
 SwingGate.AIR_MARGIN_STUDS = 0.75
--- A fall that turns within this long of its floor (at its fastest speed) is a landing. 0.1 s
--- covers a contact stepped over by samples at 10 Hz or faster, which is slower than any physics
--- replication; a double jump counts only when it is that close to touching down anyway.
+-- A fall that turns within this long of its floor (at its fastest speed) is a landing, on the
+-- server's copy. 0.1 s covers a contact stepped over by samples at 10 Hz or faster, which is
+-- slower than any physics replication; a double jump counts only when it is that close to
+-- touching down anyway.
 SwingGate.TURN_WINDOW_SECONDS = 0.1
+-- The same on the client's own 60 Hz samples: the server's window less one 20 Hz step (0.05 s),
+-- so a double jump the server's coarser copy sees turn higher is no landing here either. A
+-- held-Space bounce still clears: the client's lowest sample is within a 60 Hz step of contact.
+SwingGate.CLIENT_TURN_WINDOW_SECONDS = 0.05
+-- The fall's own speed-up inside the lag (studs/s^2): Roblox's default Workspace.Gravity, which
+-- no place changes. A copy 0.3 s behind is early in its fall and still slow, so without it a
+-- swing sent on the frame after a bounce (or a low double jump) read as one late in the fall.
+SwingGate.FALL_GRAVITY = 196.2
 -- A sample's direction is its height change since the last one: the server's copy is
 -- interpolated, and its replicated speed can still point down while the copy already rises off
 -- the floor. With no height change, a vertical speed beyond this (studs/s) gives the direction.
@@ -128,14 +141,17 @@ end
 
 -- One sample of the root, every frame (the server's Heartbeat, the client's own). y = the root's
 -- Y, vy = its vertical velocity, floorY = the footprint's highest floor (nil = none), down =
--- the player is down. True when this sample counts a landing.
+-- the player is down, turnWindow = the side's turn window (TURN_WINDOW_SECONDS on the server,
+-- CLIENT_TURN_WINDOW_SECONDS on the client; nil = the server's). True when this sample counts
+-- a landing.
 function SwingGate.Observe(
 	state: State,
 	y: number,
 	vy: number,
 	floorY: number?,
 	standOffset: number,
-	down: boolean
+	down: boolean,
+	turnWindow: number?
 ): boolean
 	if down then
 		state.used = false
@@ -168,7 +184,8 @@ function SwingGate.Observe(
 		end
 	elseif rising and state.falling then
 		-- The turn: a landing when the floor was within the fall's reach of the lowest sample.
-		local reach = state.fallSpeed * SwingGate.TURN_WINDOW_SECONDS
+		local window = if turnWindow ~= nil then turnWindow else SwingGate.TURN_WINDOW_SECONDS
+		local reach = state.fallSpeed * window
 		if math.min(state.lowest, excess) <= reach then
 			landed = true
 			land(state)
@@ -185,6 +202,8 @@ end
 -- (allowed, airborne) for a melee swing from a point at height y over floorY (the footprint
 -- probe at that point). lagSeconds = how far the samples trail the swing (the server: the
 -- commit lag; the client: 0). A swing that is not allowed is the second airborne one of a jump.
+-- The landing ahead applies only with a lag: the client's samples ARE the swinger, so its own
+-- touchdown sample clears the gate, and a swing late in a fall is refused there.
 function SwingGate.Judge(
 	state: State,
 	y: number,
@@ -194,14 +213,19 @@ function SwingGate.Judge(
 ): (boolean, boolean)
 	local height = if floorY ~= nil then y - floorY else nil
 	local airborne = SwingGate.IsAir(height, standOffset)
-	if airborne and state.used and state.falling and not state.ahead then
-		-- The samples are still falling, close enough to their floor to have touched it inside
-		-- the lag: the swing may come from the next hop. A claim cannot tell a client that has
-		-- bounced from one about to touch down, so both pass; an honest client's own gate
-		-- refuses the second, so only the bounce is ever sent.
-		-- A NaN lag fails every comparison, math.max included.
-		local lag = if lagSeconds == lagSeconds then math.max(lagSeconds, 0) else 0
-		if state.lowest <= state.fallSpeed * (SwingGate.TURN_WINDOW_SECONDS + lag) then
+	-- A NaN lag fails every comparison, math.max included.
+	local lag = if lagSeconds == lagSeconds then math.max(lagSeconds, 0) else 0
+	if lag > 0 and airborne and state.used and state.falling and not state.ahead then
+		-- The copy is still falling, close enough to its floor to have touched it inside the
+		-- lag: the swing may come from the next hop. A claim cannot tell a client that has
+		-- bounced from one about to touch down, so both pass here. An honest client sends only
+		-- the bounce's: with lag 0 its own gate never takes this branch and refuses a swing late
+		-- in a fall until its own samples land.
+		-- How far the copy's fall reaches inside the lag (the speed it has, plus gravity's over
+		-- the lag), plus the turn window at the speed it will have by then.
+		local within = state.fallSpeed * (SwingGate.TURN_WINDOW_SECONDS + lag)
+			+ SwingGate.FALL_GRAVITY * lag * (SwingGate.TURN_WINDOW_SECONDS + lag * 0.5)
+		if state.lowest <= within then
 			state.used = false
 			state.ahead = true
 		end

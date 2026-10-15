@@ -148,3 +148,8 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
   "landing ahead" branch: two swings in one hop, then none) → guard on `lagSeconds > 0`; m1 → a
   stricter client turn window (0.05 against 0.1); m2 → `TentOwesRouse` in the stage mirror and the
   sim's `group_up` on the server's trailing state. One fresh agent: `docs/prompts/l1b-w2-fix-diff-round.md`.
+- **Fix-diff round done (fix-diff-round.md):** M1 guard, m1 client window 0.05, m2 mirror; harness
+  2,004, mutate 624 / 0, mirror mutants 49 / 49, every gate green. **The gravity term in the
+  landing-ahead reach is confirmed** (server only; a cheater gains at most one swing in the last lag
+  of a fall). Carried: `SwingGate.FALL_GRAVITY` 196.2 must follow `Workspace.Gravity` if a place
+  ever changes gravity (then pass `workspace.Gravity` in).
