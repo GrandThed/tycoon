@@ -413,3 +413,32 @@ the Server number with the Colossus up, the bow) are unanswered. Next: Wave 3 (n
 sizes, hits) **about right**; at 2 / 2 the bow is **stronger** than the sword, so lower it a little.
 One swing per jump and the Server number were not asked again. **Wave 3 is that one change: the
 Longbow's shot damage, cut a little** (INTERFACES "Wave 3 — the bow"). **[Ben]**
+
+## 19. Ben's verdict on L1b Wave 3, and Wave 4 (2026-10-15)
+
+After his look at Wave 3: *"it feels right"*, *"the bow feels right"*, *"everything else feels good"*.
+**Wave 3 is closed.** **[Ben]** Two requests, settled by click questions the same day:
+
+1. *"the game has some unnecessary pauses, like waiting for enemies to spawn on tents"*. Only the tents
+   felt slow (not the boss room's waves, the fires' rise or the countdowns). **The tent becomes a pace
+   reserve:** it sends raiders only while the player clears the camp faster than the camp's target
+   pace ("so it makes enemies spawn only if the player is clearing it too fast"). At a normal pace it
+   sends none; a camp is cleared as soon as its raiders are dead, whatever the tent still holds.
+   Nobody ever waits for a tent. **[Ben]**
+2. *"the fact that the fighting areas are so well defined is really lazy [...] we cannot just block the
+   attacks of the enemies outside the battling area, we need to make it so if the player attacks enemies
+   outside of the area they follow it, if it means to make the paths a certain way, so be it"*.
+   - **No BLOCKED any more:** a hit from anywhere lands and wakes its group, which comes after the
+     player. This replaces the "damage only from a player in play" rule (L1b-7). **[Ben]**
+   - **One rule for both:** any awake raider follows the player out of the camp, whether hit from the
+     road or after the player walked in and left; the camp's edge stops nobody. **[Ben]**
+   - **They give up when they lose the player:** out of sight for a few seconds, they walk home and
+     heal, as today. **[Ben]**
+   - The road may be reshaped (flat at a camp's height near it, wider) so chases work. **[Ben]**
+   - **Natural barriers instead of fenced squares** (paths that hinder the enemies' passage) are for
+     later: with the real forest, L4. **[Ben]**
+
+**What closes L1:** Wave 4 "no waits, no walls" (the two requests), then Ben's look, which must also
+reach what he has never seen in Studio: the Chief's Clearing (the Colossus, the headshots) and the sneak
+past Main Camp. Everything else carried (the dash check before any publish, phones, two players, the
+end screen) belongs to L4 and L5. Brief: `docs/prompts/l1b-wave4.md`.

@@ -188,3 +188,9 @@ damage cut against the heavy-hit line and the charge scaling before setting a ti
 real edge is safety (half the hits taken): if Ben still finds it strong, ask about range/stand-off,
 not more damage. `mutate.py` took about 2 hours. Waiting on his look (PLAYTEST "L1b Wave 3", one click
 question); then L2 only on his word.
+**Wave 3 closed 2026-10-15** ("it feels right", "the bow feels right"). His Wave 4 asks (MISSIONS_DESIGN
+§19, brief `docs/prompts/l1b-wave4.md`): no BLOCKED, raiders follow a player out of the camp (hit from the
+road or after leaving) until they lose him; the tent is a pace reserve that sends only when he clears too
+fast (his own option, over the lead's "no waiting" pick); only the tents felt slow; natural barriers
+instead of fenced squares go to L4. He called the fenced fighting areas "really lazy". Wave 4 + his look at
+the Chief's Clearing and the sneak close L1.
