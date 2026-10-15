@@ -3435,7 +3435,7 @@ three builds, `sim_economy`, `sim_combat` 23 / 23, `sim_range --check`, `check_l
 `check_stage_mirror`, harness 2,004 checks, config diff = the two Longbow lines,
 `gen_asset_manifest`). The designer re-ran the five sim and harness commands on `04b4e9e`: all
 PASS.
-- `mutate.py`: <verdict pending>
+- `mutate.py`: `MUTATIONS: 624 run, 0 not caught` (at `1f1a589`; no Luau changed after it)
 
 **Carried (owners):**
 - **economy-designer, lead decides:** B sits 2 above `heavyHit`, A 5 above. Any later bow cut or
@@ -3457,7 +3457,7 @@ PASS.
 
 - [x] Wave 3 built (`5053fa8` … `1f1a589`)
 - [x] Wave 3 reviewed, 5 Minor fixed (`1ef6a72`, `04b4e9e`)
-- [x] Wave 3 QA green (qa-runner, 14 gates, `1f1a589`; mutate.py pending)
+- [x] Wave 3 QA green (qa-runner, 14 gates, `1f1a589`; mutate.py 624 run, 0 not caught)
 - [ ] Wave 3 merged to `main`, six place files rebuilt (lead)
 - [ ] Ben's Studio look at L1b Wave 3 (PLAYTEST "L1b Wave 3 — the bow")
 
