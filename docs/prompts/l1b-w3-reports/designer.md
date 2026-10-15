@@ -1,6 +1,6 @@
-# L1b Wave 3, the bow: economy-designer report (2026-10-15; final after the lead's amendment)
+# L1b Wave 3, the bow: economy-designer report (2026-10-15; final after the amendment and the review)
 
-**What ships: the Longbow cut by x0.9, A 50 → 45, B 44 → 40** (rulings 7–9). With head aim the bow
+**What ships: Longbow A 50 → 45 (x0.9, ruling 7) and B 44 → 42 (ruling 10).** With head aim the bow
 now takes **x1.084** the sword's time, inside the amended band x1.05–x1.15. Every arrow stays heavy,
 and all five commands pass. The first cut (x0.78, A 39 / B 34) was rejected; it is kept below as the
 record.
@@ -27,6 +27,14 @@ Two simulator changes, both kept by ruling 8:
 
    Against `main`'s simulator, the only `--check` lines this moves are two information rows. No band
    moves.
+
+   The step is a stated simplification (ruling 11). The game counts a player in play within
+   `chaseMargin` 2.5 OUTSIDE the floor rectangle; the simulated bow walks 1 stud INSIDE it, so it is a
+   little less safe than a real bow.
+
+   It is now pinned by one `--check` expect: on Normal the Longbow alone clears camp B on every seed
+   (244 / 229 / 271 s). Without the step it stood off B until the run cap. The pin adds three runs of
+   a few seconds each.
 2. **Crits are counted** (`World.crits`).
 
 ## Before (A 50, B 44)
@@ -52,14 +60,21 @@ to the boss as a multiple of the sword's:
 
 - Below `heavyHit` 40, a body shot no longer touches a plate and the bow stops interrupting heavy
   windups.
-- x0.9 is the largest common cut that keeps B heavy: under 0.909, B drops below 40.
+- x0.9 is the largest common cut that keeps a full draw of B heavy: under 0.909, B drops below 40.
+- Ruling 10 gives B 2 more points, because damage scales with the draw.
+  - B 42 is heavy from charge 0.90. At 40 it was heavy only at a full draw.
+  - A 45 is heavy from 0.78.
+- The sweep is not monotonic, and the ratio moves about 0.01 between Python 3.12 and 3.14 (x1.092
+  on 3.14). That is seed noise, so read the ratio as "about 8%".
 
-**heavyHit is compared with `>=`, so B at 40 counts as heavy:**
+**heavyHit is compared with `>=`, so a hit at exactly 40 counts as heavy:**
 - `src/combat/server/Services/CrowdService.luau:1926`: `if amount < crowd.heavyHit then return 0, false, "blocked"` (the plate);
 - `src/combat/server/Services/CrowdBrain.luau:1006`: `(rule == "heavy" and amount >= heavyHit)` (the interrupt);
 - `tools/sim_range.py:1962` and `:2027` mirror both.
 
-## After (A 45, B 40)
+## After (A 45, B 42)
+
+The levels never fire B, so these numbers are the same at B 40 and B 42.
 
 Each camp cell: seconds / hits taken / crits landed.
 
@@ -81,14 +96,14 @@ Each camp cell: seconds / hits taken / crits landed.
 
 **Bosses with the Longbow** (`slay`, no ability, seeds 11 / 23; ruling 4: reported, not tuned):
 
-| Boss, where | Aim | Before (50/44) | After (45/40) | Rejected (39/34) |
+| Boss, where | Aim | Before (50/44) | After (45/42) | Rejected (39/34) |
 |---|---|---|---|---|
 | Colossus, range | body / head | 142.8 / 98.2 s | 161.2 / 113.9 s | 223.7 / 152.8 s |
 | Warlord, range | body / head | 162.2 / 102.9 s | 182.2 / 116.5 s | 199.3 / 125.7 s |
 | Colossus, Raider Arena 2/2 | body / head | 134.9 / 97.6 s | 154.4 / 108.1 s | 220.5 / 163.3 s |
 | Warlord, Raider Arena 2/2 | body / head | 154.4 / 105.0 s | 173.8 / 117.6 s | 208.9 / 125.8 s |
 
-- At 45 / 40 the bosses take the bow 11–16% longer.
+- At 45 / 42 the bosses take the bow 11–16% longer.
 - No boss lands a hit.
 - The Warlord with the Longbow alone still finds a way through with no ground slam (guard down at
   86.6 s, plate broken at 96.1 s).
@@ -102,17 +117,17 @@ Each camp cell: seconds / hits taken / crits landed.
 
 ## Re-banded rows (ruling 5)
 
-**None.** At 45 the Arrow Rain burst measures 4.6 s (was 4.2), inside its default band [3.0, 5.0],
-so `BURST_SECONDS_BY_ABILITY` is empty again. The x0.78 cut had re-banded it to [3.0, 6.0].
+**None.** At 45 the Arrow Rain burst measures 4.6 s (was 4.2), inside its default band [3.0, 5.0].
+The override table the x0.78 cut needed is removed (review Minor 3).
 
 These rows moved and stayed green:
 - Longbow A single / crowd DPS: 48 / 279 → 43 / 251;
-- Longbow B: 80 / 182 → 73 / 165;
+- Longbow B: 80 / 182 → 76 / 174 at 42 (73 / 165 at 40);
 - the P4 Longbow boss rows.
 
 The plate list is the same as `main`'s.
 
-## Commands (verdict lines; the gate's Python, 64-bit 3.12.10, A 45 / B 40)
+## Commands (verdict lines; the gate's Python, 64-bit 3.12.10, A 45 / B 42)
 
 | Command | Verdict |
 |---|---|
@@ -123,15 +138,18 @@ The plate list is the same as `main`'s.
 | `py tools/crowd_harness/run_harness.py C:\Users\benja\Desktop\tycoon-p5 C:\Users\benja\Desktop\tycoon\tools\bin\luau.exe` | `HARNESS: PASS (2,004 checks, C:\Users\benja\Desktop\tycoon-p5\tools\crowd_harness)` |
 | Gate 13: `git diff main -- src/shared/Config src/shared/Layouts` | only the two Longbow `damage` lines |
 
-The `--check` run started before one last `sim_range.py` edit. That edit changed only the `--bow`
-mode's printed band (`BOW_RATIO` 1.05–1.15 and its label), which no check reads.
+`py tools/sim_range.py --bow` was also run on the final tree. It prints the numbers above, and
+reads x1.084 against ruling 7's band x1.05–x1.15.
 
 `mutate.py` was not run; QA owns it.
 
 ## For the lead
 
-- **B now sits exactly on `heavyHit` 40.** Any later cut to B, or any raise of `heavyHit`, takes it
-  off plates and interrupts. A has 5 in hand.
+- **Both variants sit near `heavyHit` 40.**
+  - B 42 has 2 in hand and is heavy from a 90% draw.
+  - A 45 has 5 in hand and is heavy from a 78% draw.
+
+  PLAYTEST should state those draws.
 - **Ruling 9:** if Ben still finds the bow stronger, the lever is its safety (range or stand-off),
   not its damage.
 - **Nothing is needed from another owner:** no Luau, harness or mirror change.

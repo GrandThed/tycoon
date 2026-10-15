@@ -4524,7 +4524,8 @@ the unmutated mirror is red, so a standing DIFF cannot pass for a catch.
 
 ## L1b Wave 3: the bow (2026-10-15)
 
-Contract: `docs/INTERFACES.md` "Wave 3 — the bow" (rulings L1b-W3-1…6). Ben, at gear 2 / 2: the
+Contract: `docs/INTERFACES.md` "Wave 3 — the bow" (rulings L1b-W3-1…11: 7–9 win over 1–2, and 10
+sets B). Ben, at gear 2 / 2: the
 bow is stronger than the sword; "lower the bow's numbers a little". Measured with the new
 `py tools/sim_range.py --bow`: Forest Road, Normal, gear 2 / 2, solo, seeds 11 / 23 / 37, the
 gate's Python (64-bit 3.12). The time runs from the start point to the Colossus's rise, so the
@@ -4602,14 +4603,26 @@ The time jumps from x1.07 to x1.22. The first cut met the contract's first band 
 **x0.78 (A 39, B 34)**, and the lead rejected it. The record of that rejected cut:
 - the body-aim bow never cleared camp B;
 - a human with body aim needed x2.94 and hit the run cap once;
-- the bosses took the bow 22–67% longer (range Colossus 142.8 → 223.7 s with body aim, 98.2 →
+- the bosses took the bow 20–67% longer (range Colossus 142.8 → 223.7 s with body aim, 98.2 →
   152.8 s with head aim; the Arrow Rain burst 5.4 s, out of its band).
 
-**What ships, by the amendment (ruling 7): x0.9, A 50 → 45, B 44 → 40.** It is the largest cut that
-keeps both variants heavy: any common factor under 0.909 takes B under 40. The band is now
-x1.05–x1.15 with head aim.
+**What ships: A 50 → 45 (x0.9, ruling 7) and B 44 → 42 (ruling 10).** The band is now x1.05–x1.15
+with head aim.
+- x0.9 is the largest common cut that keeps a full draw of B heavy: under 0.909, B drops below 40.
+- Damage scales with the draw: `minChargeFraction + (1 − min) · charge`, with min 0.5. So an arrow
+  is heavy from charge `80 / damage − 1`:
+  - A 45 is heavy from 0.78 (was 0.60 at 50);
+  - B at 40 would have been heavy only at a full draw (was 0.82 at 44).
+- Ruling 10 therefore gives B 2 points over the common factor: **B 42 is heavy from charge 0.90**.
+  No level band fires B (the simulator's player fires the default, A), so only the range's B rows
+  move.
+- The simulator fires only full or minimum draws, so it cannot see these thresholds.
 
-B at exactly 40 still counts as heavy. The code compares with `>=` (a plate blocks only
+**The sweep is not monotonic** (43 → x1.062, 45 → x1.084, 40–42 → x1.066). The ratio also moves by
+about 0.01 between Python 3.12 and 3.14: on 3.14, 32-bit, head aim reads x1.092. The PASS sits
+inside seed noise, so read it as "about 8%", not a measured 8.4%.
+
+A hit at exactly 40 counts as heavy. The code compares with `>=` (a plate blocks only
 `amount < heavyHit`):
 - `src/combat/server/Services/CrowdService.luau:1926`: `if amount < crowd.heavyHit then` (the plate
   block);
@@ -4617,7 +4630,9 @@ B at exactly 40 still counts as heavy. The code compares with `>=` (a plate bloc
   interrupt);
 - `tools/sim_range.py` mirrors both (lines 1962 and 2027).
 
-### L1b W3: after (Longbow A 45, B 40)
+### L1b W3: after (Longbow A 45, B 42)
+
+B is never fired in a level, so these are the same at B 40 and B 42.
 
 Each camp cell: seconds / hits taken / crits landed.
 
@@ -4645,7 +4660,7 @@ Each camp cell: seconds / hits taken / crits landed.
 
 The `slay` player, abilities off, seeds 11 / 23:
 
-| Boss, where | Aim | Before (50 / 44) | After (45 / 40) | Rejected x0.78 (39 / 34) |
+| Boss, where | Aim | Before (50 / 44) | After (45 / 42) | Rejected x0.78 (39 / 34) |
 |---|---|---|---|---|
 | Colossus, the range (P4 scales) | body | 142.8 s | 161.2 s | 223.7 s |
 | | head | 98.2 s | 113.9 s | 152.8 s |
@@ -4656,18 +4671,21 @@ The `slay` player, abilities off, seeds 11 / 23:
 | Warlord, Raider Arena at 2 / 2 | body | 154.4 s | 173.8 s | 208.9 s |
 | | head | 105.0 s | 117.6 s | 125.8 s |
 
-- At 45 / 40 the bosses take the bow 11–16% longer.
+- At 45 / 42 the bosses take the bow 11–16% longer. These rows fire A, so B 40 or 42 reads the
+  same.
 - No boss lands a hit in any row.
 - Every melee boss band is unchanged and green.
 
 ### L1b W3: re-banded rows (ruling 5)
 
-None at 45 / 40. In `sim_range.py --check` the Arrow Rain burst measures 4.6 s (was 4.2), inside its
-default band [3.0, 5.0], so `BURST_SECONDS_BY_ABILITY` is empty again. The x0.78 cut had needed
-[3.0, 6.0] for 5.4 s.
+None at 45 / 42. In `sim_range.py --check` the Arrow Rain burst measures 4.6 s (was 4.2), inside its
+default band [3.0, 5.0]. The per-ability override that the x0.78 cut needed ([3.0, 6.0] for 5.4 s) is
+removed.
 
 These Longbow rows move with the damage and stay green without a re-band:
-- the family DPS: A 48 / 279 → 43 / 251, B 80 / 182 → 73 / 165;
+- the family DPS, single / crowd:
+  - A 48 / 279 → 43 / 251;
+  - B 80 / 182 → 76 / 174 at 42 (73 / 165 at 40);
 - the P4 Longbow boss rows above.
 
 The loadout's thinning stays at 4.8 kills/s.
@@ -4687,9 +4705,16 @@ melee:
 
 ### L1b W3: flags for the lead
 
-- The bow's damage now sits on two thresholds:
-  - B (40) is exactly at `heavyHit`, so any later cut to B, or any raise of `heavyHit`, takes it
-    off plates and interrupts;
-  - A (45) has 5 in hand.
+- The bow's damage sits near `heavyHit` 40:
+  - B (42) has 2 in hand and is heavy from a 90% draw;
+  - A (45) has 5 in hand and is heavy from a 78% draw.
+
+  Any later cut to the bow, or any raise of `heavyHit`, moves those draws. PLAYTEST should say: "B
+  is heavy from a 90% draw, A from 78%".
+- The in-play step is a simplification of the game's rule. The simulated bow walks 1 stud inside
+  the floor rectangle, while the game already counts a player within `chaseMargin` 2.5 outside it.
+  So the simulated bow is a little less safe than a real one.
+- `--check` pins the step: on Normal the Longbow alone clears camp B on every seed (244 / 229 /
+  271 s). Without the step it stood off camp B until the run cap.
 - What made the bow feel stronger was mostly safety. Ruling 9: if Ben still finds it stronger, the
   next lever is its range or how far off it lets him stand, which is a question for Ben.
