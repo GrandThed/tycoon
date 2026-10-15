@@ -4568,7 +4568,7 @@ multiplier.
 | Longbow, body aim | 360.4 s = **x1.037** | 373.6 s = x1.141 (1, 1, 3) |
 | Longbow, head aim | 359.3 s = **x1.034** | 358.0 s = x1.093 (4, 4, 6) |
 
-- **Ruling 3 does not stop the tuning:** the head-aim bow is at x1.034, under 1.10. (`main`'s
+- **Ruling 3 does not stop the tuning:** the head-aim bow is at x1.034, under 1.10 (the band later became x1.05–x1.15 by ruling 7). (`main`'s
   simulator read x1.18, but only because of the stand-off above.)
 - **What makes the bow feel stronger.** On the clock it is even with the sword. The bow is much
   safer, though: a human takes 4–6 hits with it against 10–12 with the sword. With head aim it
@@ -4577,15 +4577,15 @@ multiplier.
 - Camp A takes the same ~58–61 s with any weapon: its tent sends one body every 6 s, and that
   sets the floor of the camp's clear.
 
-### L1b W3: how the cut was chosen (ruling 1: A and B by one factor)
+### L1b W3: how the cut was chosen (ruling 1, then the lead's amendment, rulings 7–9)
 
-The player in the simulator fires the default variant, A. Mean time to the boss over the sword's
-347.5 s, by A's damage:
+The player in the simulator fires the default variant, A. Each cell is the mean time to the boss
+as a multiple of the sword's 347.5 s, by A's damage:
 
-| A's damage | 50 | 45 | 43 | 42 | 41 | 40 | **39** | 38 | 35 | 32 |
+| A's damage | 50 | **45** | 43 | 42 | 41 | 40 | 39 | 38 | 35 | 32 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Head aim | x1.034 | x1.084 | x1.062 | x1.066 | x1.066 | x1.066 | **x1.218** | x1.218 | x1.294 | x1.271 |
-| Body aim | x1.037 | x1.128 | x1.095 | x1.186 | x1.186 | x1.186 | never clears B | never | never | never |
+| Head aim | x1.034 | **x1.084** | x1.062 | x1.066 | x1.066 | x1.066 | x1.218 | x1.218 | x1.294 | x1.271 |
+| Body aim | x1.037 | **x1.128** | x1.095 | x1.186 | x1.186 | x1.186 | never clears B | never | never | never |
 
 **The time does not fall smoothly with the damage.** From 50 down to 40 the head-aim bow barely
 slows, for three reasons:
@@ -4593,74 +4593,88 @@ slows, for three reasons:
 - a crit on a head still kills fodder and slingers in one arrow;
 - every arrow is still a heavy hit (`crowd.heavyHit` 40).
 
-Below 40 the arrow is no longer heavy. Plates then block every body shot, and the bow can no
-longer interrupt a brute's lane, an armoured raider's arc or the bosses' heavy attacks. The
-time jumps from x1.07 to x1.22.
+Below 40 the arrow is no longer heavy, and two things change:
+- plates block every body shot;
+- the bow can no longer interrupt a brute's lane, an armoured raider's arc or the bosses' heavy
+  attacks.
 
-**So ruling 2's band (x1.10–x1.25) is reachable only below `heavyHit`.** The smallest cut inside
-it is **x0.78: A 50 → 39, B 44 → 34** (34.32 rounded). That is what ships on `l1b-wave3`.
+The time jumps from x1.07 to x1.22. The first cut met the contract's first band (x1.10–x1.25) at
+**x0.78 (A 39, B 34)**, and the lead rejected it. The record of that rejected cut:
+- the body-aim bow never cleared camp B;
+- a human with body aim needed x2.94 and hit the run cap once;
+- the bosses took the bow 22–67% longer (range Colossus 142.8 → 223.7 s with body aim, 98.2 →
+  152.8 s with head aim; the Arrow Rain burst 5.4 s, out of its band).
 
-### L1b W3: after (Longbow A 39, B 34)
+**What ships, by the amendment (ruling 7): x0.9, A 50 → 45, B 44 → 40.** It is the largest cut that
+keeps both variants heavy: any common factor under 0.909 takes B under 40. The band is now
+x1.05–x1.15 with head aim.
 
-| Weapon, aim | Seed | A (s / hits / crits) | B | C to the boss | To the boss | The Colossus in the run |
+B at exactly 40 still counts as heavy. The code compares with `>=` (a plate blocks only
+`amount < heavyHit`):
+- `src/combat/server/Services/CrowdService.luau:1926`: `if amount < crowd.heavyHit then` (the plate
+  block);
+- `src/combat/server/Services/CrowdBrain.luau:1006`: `(rule == "heavy" and amount >= heavyHit)` (the
+  interrupt);
+- `tools/sim_range.py` mirrors both (lines 1962 and 2027).
+
+### L1b W3: after (Longbow A 45, B 40)
+
+Each camp cell: seconds / hits taken / crits landed.
+
+| Weapon, aim | Seed | A | B | C to the boss | To the boss | The Colossus in the run |
 |---|---|---|---|---|---|---|
 | Broadsword | all | unchanged | | | 339.3 / 357.7 / 345.5 | 76.7 / 74.4 / 74.4 |
-| Longbow, body | 11, 23, 37 | 66.4 / 0 / 0 (each) | **never cleared** (plated elites take no body shot) | – | run cap, 25 min | not reached |
-| Longbow, head | 11 | 58.7 / 0 / 44 | 187.4 / 0 / 173 | 178.5 / 0 / 149 | 424.6 | 109.2 |
-| | 23 | 58.7 / 0 / 43 | 186.5 / 0 / 171 | 180.3 / 0 / 150 | 425.4 | 114.5 |
-| | 37 | 59.6 / 0 / 44 | 185.4 / 0 / 170 | 174.6 / 0 / 147 | 419.5 | 116.6 |
+| Longbow, body | 11 | 63.2 / 0 / 0 | 180.7 / 0 / 16 | 150.6 / 0 / 5 | 394.5 | 132.3 |
+| | 23 | 63.2 / 0 / 0 | 166.0 / 0 / 13 | 142.3 / 0 / 7 | 371.4 | 134.4 |
+| | 37 | 62.1 / 0 / 0 | 208.9 / 0 / 14 | 138.9 / 0 / 9 | 409.8 | 140.7 |
+| Longbow, head | 11 | 57.7 / 0 / 39 | 167.5 / 0 / 146 | 156.4 / 0 / 134 | 381.6 | 96.6 |
+| | 23 | 57.6 / 0 / 37 | 156.9 / 0 / 138 | 154.2 / 0 / 126 | 368.8 | 88.2 |
+| | 37 | 58.2 / 0 / 37 | 162.4 / 0 / 138 | 159.0 / 0 / 129 | 379.6 | 80.9 |
 
 | Mean time to the boss | Reacting player | Human's reaction (hits taken per seed) |
 |---|---|---|
 | Broadsword | 347.5 s | 327.5 s (11, 12, 10) |
-| Longbow, body aim | never clears B | 961.3 s = x2.94 (10, 14, 11; seed 37 hit the run cap) |
-| Longbow, head aim | **423.2 s = x1.218** (band 1.10–1.25: **PASS**) | 423.1 s = x1.292 (7, 6, 10) |
+| Longbow, body aim | 391.9 s = x1.128 (reported) | 407.7 s = x1.245 (4, 7, 2) |
+| Longbow, head aim | **376.6 s = x1.084** (band 1.05–1.15: **PASS**) | 372.4 s = x1.137 (6, 8, 6) |
+
+- The bow is still the safer weapon, with 2–8 hits against the sword's 10–12. It is now a little
+  slower on the clock in every column, where before it was even.
+- The Colossus in the run with head aim: 81–97 s (was 77–88).
 
 ### L1b W3: the bosses with the Longbow (ruling 4: reported, not tuned)
 
 The `slay` player, abilities off, seeds 11 / 23:
 
-| Boss, where | Aim | Before (50 / 44) | After (39 / 34) | At x0.9 (45 / 40), for the lead |
+| Boss, where | Aim | Before (50 / 44) | After (45 / 40) | Rejected x0.78 (39 / 34) |
 |---|---|---|---|---|
-| Colossus, the range (P4 scales) | body | 142.8 s | 223.7 s | 161.2 s |
-| | head | 98.2 s | 152.8 s | 113.9 s |
-| Warlord, the range | body | 162.2 s | 199.3 s | 182.2 s |
-| | head | 102.9 s | 125.7 s | 116.5 s |
-| Colossus, Raider Arena at 2 / 2 | body | 134.9 s | 220.5 s | 154.4 s |
-| | head | 97.6 s | 163.3 s | 108.1 s |
-| Warlord, Raider Arena at 2 / 2 | body | 154.4 s | 208.9 s | 173.8 s |
-| | head | 105.0 s | 125.8 s | 117.6 s |
-| Colossus, Forest Road's boss spot (`bow_rows`, capsule rule) | body | 133.9 s | 211.6 s | |
-| | head | 95.0 s | 139.1 s | |
+| Colossus, the range (P4 scales) | body | 142.8 s | 161.2 s | 223.7 s |
+| | head | 98.2 s | 113.9 s | 152.8 s |
+| Warlord, the range | body | 162.2 s | 182.2 s | 199.3 s |
+| | head | 102.9 s | 116.5 s | 125.7 s |
+| Colossus, Raider Arena at 2 / 2 | body | 134.9 s | 154.4 s | 220.5 s |
+| | head | 97.6 s | 108.1 s | 163.3 s |
+| Warlord, Raider Arena at 2 / 2 | body | 154.4 s | 173.8 s | 208.9 s |
+| | head | 105.0 s | 117.6 s | 125.8 s |
 
-- With Arrow Rain (the range's P4 rows), the Colossus goes 110.2 → 154.6 s and the Warlord
-  150.7 → 181.4 s. No boss lands a hit in any row.
-- The Warlord's plate now needs the ground slam: 11 slams, plate phase 16.6 s (band ≤ 20, PASS).
+- At 45 / 40 the bosses take the bow 11–16% longer.
+- No boss lands a hit in any row.
 - Every melee boss band is unchanged and green.
-
-**The alternative at x0.9 (A 45, B 40).** It keeps every arrow heavy. It measures head aim
-x1.084, body aim x1.128, and the human with head aim x1.137 (body x1.245). It is outside ruling
-2's band, so it does not ship. It is listed so the lead can choose it in one line.
 
 ### L1b W3: re-banded rows (ruling 5)
 
-| Row | Old value | New value | Old band | New band |
-|---|---|---|---|---|
-| `arrowRain`: burst, in seconds of the Longbow's own crowd DPS (`BURST_SECONDS_BY_ABILITY`) | 4.2 s | 5.4 s | [3.0, 5.0] | **[3.0, 6.0]** |
+None at 45 / 40. In `sim_range.py --check` the Arrow Rain burst measures 4.6 s (was 4.2), inside its
+default band [3.0, 5.0], so `BURST_SECONDS_BY_ABILITY` is empty again. The x0.78 cut had needed
+[3.0, 6.0] for 5.4 s.
 
-Arrow Rain's own numbers did not move. The same cast simply reads as more seconds of a weaker
-bow.
+These Longbow rows move with the damage and stay green without a re-band:
+- the family DPS: A 48 / 279 → 43 / 251, B 80 / 182 → 73 / 165;
+- the P4 Longbow boss rows above.
 
-Longbow rows that moved and stayed green without a re-band:
-- Longbow A single / crowd DPS: 48 / 279 → 37 / 218.
-- Longbow B: 80 / 182 → 62 / 141.
-- The loadout's thinning: 4.8 → 3.8 kills/s.
-- The P4 boss rows above.
-- The plate list: the families that cannot break a plate alone now include Longbow A and B.
+The loadout's thinning stays at 4.8 kills/s.
 
-Information rows, not banded: on Hard and Brutal, the Longbow alone at the proving gear no longer
-clears camp A on every seed. Hard: 238 s, 412 s, run cap (was 64 s each). Brutal: run cap,
-536 s, 440 s (was 61–62 s).
+The plate list is the same as `main`'s: the Longbow still breaks plates on its own. The Warlord row
+with the Longbow alone still finds a way through with no ground slam (guard down at 86.6 s, plate
+broken at 96.1 s).
 
 ### L1b W3: the Raider Arena at 2 / 2
 
@@ -4673,13 +4687,9 @@ melee:
 
 ### L1b W3: flags for the lead
 
-- **The cut crosses `crowd.heavyHit` (40).** This is a change of role, not "a little":
-  - A Longbow can no longer break a plate with a body shot, or stop a heavy windup.
-  - Alone it cannot clear the Main Camp unless it aims at heads.
-  - Bosses take it 22–67% longer.
-  - Any factor under 0.909 makes B (44) non-heavy. Any factor under 0.8 makes A non-heavy.
-- In real play Ben switches to the sword (key 1) for plates, so the bow-only stall is a simulator
-  extreme. The lead decides whether "the sword for plates" is the intended answer.
-- If it is not, the in-band options are:
-  - x0.9 (45 / 40), which needs ruling 2's band moved to about x1.08;
-  - a lower `heavyHit`, which is outside this wave's lever (ruling 1).
+- The bow's damage now sits on two thresholds:
+  - B (40) is exactly at `heavyHit`, so any later cut to B, or any raise of `heavyHit`, takes it
+    off plates and interrupts;
+  - A (45) has 5 in hand.
+- What made the bow feel stronger was mostly safety. Ruling 9: if Ben still finds it stronger, the
+  next lever is its range or how far off it lets him stand, which is a question for Ben.

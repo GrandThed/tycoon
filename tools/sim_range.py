@@ -144,9 +144,9 @@ FAMILY_TARGETS = {
 AB_SPREAD = 0.20
 # One cast = this many seconds of the family's own crowd DPS (default variant) as a burst.
 BURST_SECONDS = (3.0, 5.0)
-# L1b Wave 3 (ruling 5): Arrow Rain's own numbers did not move, but the Longbow's shot damage was
-# cut x0.78 (50 -> 39), so one cast reads as more seconds of the weaker bow (4.2 -> 5.4).
-BURST_SECONDS_BY_ABILITY = {"arrowRain": (3.0, 6.0)}
+# Per-ability burst bands where one must differ from BURST_SECONDS (ruling 5 of a wave that moves
+# a family's own damage). Empty: at Longbow 45 / 40 (L1b Wave 3) Arrow Rain is back inside the default.
+BURST_SECONDS_BY_ABILITY = {}
 # Abilities allowed to lean single-target: their burst band is measured on the boss against the
 # family's single DPS instead, and their crowd burst only has the ceiling below.
 SINGLE_TARGET_ABILITIES = ("overchargedShot", "magDump")
@@ -7630,9 +7630,9 @@ def bow_rows(view, plan, hp, level, bow):
     return rows
 
 
-# L1b Wave 3 (`--bow`): the Longbow against the Broadsword at the proving gear, reported. Ruling 2's
+# L1b Wave 3 (`--bow`): the Longbow against the Broadsword at the proving gear, reported. Ruling 7's
 # band is on the head-aim bow's time over the Broadsword's.
-BOW_RATIO = (1.10, 1.25)
+BOW_RATIO = (1.05, 1.15)
 
 
 def aimed(key, aim):
@@ -7741,7 +7741,7 @@ def print_bow(cfg, rep):
         for label in ("Longbow, body aim", "Longbow, head aim"):
             bow = means.get((who, label))
             ratio = f"x{bow / sword:.3f}" if bow and sword else "-"
-            band = (f" (ruling 2's band x{BOW_RATIO[0]:.2f}-x{BOW_RATIO[1]:.2f})"
+            band = (f" (ruling 7's band x{BOW_RATIO[0]:.2f}-x{BOW_RATIO[1]:.2f})"
                     if who == "mission" and label.endswith("head aim") else "")
             print(f"  {who}: {label} {fmt(bow, 0, 1).strip()} s against the Broadsword's {fmt(sword, 0, 1).strip()} s "
                   f"= {ratio}{band}")
