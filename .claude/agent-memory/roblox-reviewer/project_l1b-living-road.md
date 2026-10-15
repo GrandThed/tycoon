@@ -252,4 +252,27 @@ Findings are in `docs/prompts/l1b-w2-review/fix-diff.md`.
   - `CampBrain.Step` returns before writing `inPlay` for an empty group. A tent body is added
     before the step, so `TentRouse` reads a current set.
 
+## Wave 3, the bow (2026-10-15, diff main...l1b-wave3): 0 Critical, 0 Major, 5 Minor
+Findings are in `docs/prompts/l1b-w3-reports/review.md`. Longbow damage ×0.9 (A 45, B 40 = heavyHit);
+a `--bow` report and a ranged "step inside the fence" in `LevelRun.wanted`.
+
+**Patterns:**
+- **A damage number sitting exactly on a threshold is heavy only at full charge.** Bow damage is
+  `minChargeFraction + (1 - min) * charge` times `damage` (`WeaponService.resolveCharge`), and the
+  sim fires only full or minimum charge. Whenever a cut lands a value on `heavyHit`, give the
+  charge at which it stops being heavy, before and after.
+- **A sim "course" fix that moves no band also has no gate.** Ask which `expect` would go red if the
+  fix were reverted. Here none would: the only ranged level row stops at camp A, and the bug was in
+  camp B.
+- **Compare the sim's in-play step with CampBrain's rule:** `chaseMargin` OUTSIDE the floor rect,
+  rounded, or a keepAway member's reach. It is not "on the floor".
+
+**Recipes:**
+- `py` is 3.14 32-bit, and the designers' gate is `py -3.12`, 64-bit. Level runs drift about 1% per
+  seed between them (PLAN:2266), so recompute a quoted ratio on both before calling a band edge.
+- To get a level run's per-camp times without the report mode: `sys.path.insert(0, <wt>\tools)`,
+  `import sim_range as S`, then build it the way `bow_report` does. `r["clearedAt"]` is keyed by camp
+  id, and "C" on Forest Road is the locked boss room. 9 runs take about 5 minutes.
+- A full `sim_range.py --check` takes about 10 minutes in the background and writes nothing.
+
 See [[p5-missions-review]] and [[p4-enemy-roles-review]].

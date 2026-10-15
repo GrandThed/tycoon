@@ -177,3 +177,14 @@ p95 0.31–0.58 ms, the first real crowd-step number with 100+ residents). He di
 Clearing, the headshots or the sneak, and answered none of the five click questions (MISSIONS_DESIGN §18).
 Next only on his word: Wave 3 (numbers) or L2. The worktree `tycoon-p5` stays (branch `l1b-wave2`, merged).
 
+
+**L1b Wave 3 "the bow" merged to `main` 2026-10-15** (fast-forward of `l1b-wave3` in `tycoon-p5`, place
+files rebuilt). Ben's answers to Wave 2's click questions: road, tents, camps "about right"; the bow at
+2 / 2 "stronger". Longbow shot damage A 50 → 45, B 44 → 42 (charge-scaled: heavy from 78% / 90% of a
+full draw). Lesson: the lead's first band (bow 1.10–1.25× the sword's time) was reachable only by
+taking the arrow under `crowd.heavyHit` 40, a role change (plates, interrupts); between 50 and 40 the
+clock barely moves because the tents set camp A and a head crit still one-shots fodder. **Check a
+damage cut against the heavy-hit line and the charge scaling before setting a time band.** The bow's
+real edge is safety (half the hits taken): if Ben still finds it strong, ask about range/stand-off,
+not more damage. `mutate.py` took about 2 hours. Waiting on his look (PLAYTEST "L1b Wave 3", one click
+question); then L2 only on his word.

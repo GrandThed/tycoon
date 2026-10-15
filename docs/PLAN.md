@@ -3458,7 +3458,7 @@ PASS.
 - [x] Wave 3 built (`5053fa8` … `1f1a589`)
 - [x] Wave 3 reviewed, 5 Minor fixed (`1ef6a72`, `04b4e9e`)
 - [x] Wave 3 QA green (qa-runner, 14 gates, `1f1a589`; mutate.py 624 run, 0 not caught)
-- [ ] Wave 3 merged to `main`, six place files rebuilt (lead)
+- [x] Wave 3 merged to `main` (fast-forward to `8ea194c`), six place files rebuilt (lead, 2026-10-15)
 - [ ] Ben's Studio look at L1b Wave 3 (PLAYTEST "L1b Wave 3 — the bow")
 
 ## M12 — Growing city
