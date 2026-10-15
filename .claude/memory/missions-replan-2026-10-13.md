@@ -171,3 +171,9 @@ qa-runner a background run and expect the 15-turn limit (resume it by id). Proce
 every brief and ruling in files (`docs/prompts/l1b-w2-*`, `l1b-w2-reports/lead-routing.md`), fresh
 agents per round, a short resume only for a one-ruling follow-up. Next: Ben's look, then Wave 3
 (numbers) or L2 only on his word.
+**Closed 2026-10-15 on Ben's "everything looks good! lets close it"** after a real Studio run (log: about
+2.5 min on the rebuilt `proving.rbxl`, 112 → 54 alive, Pickets and into Main Camp, no error, `[Perf]`
+p95 0.31–0.58 ms, the first real crowd-step number with 100+ residents). He did not reach the Chief's
+Clearing, the headshots or the sneak, and answered none of the five click questions (MISSIONS_DESIGN §18).
+Next only on his word: Wave 3 (numbers) or L2. The worktree `tycoon-p5` stays (branch `l1b-wave2`, merged).
+

@@ -3367,7 +3367,11 @@ checkpoints on the road).
 - [x] Wave 2 reviewed, fix round, fix tail and fix-diff round done (`c1ea74f` … `46b31f2`)
 - [x] Wave 2 QA green (qa-runner, 21 of 21 gates, `46b31f2`)
 - [x] Wave 2 merged to `main`, six place files rebuilt (lead, 2026-10-15, `1ca5de8`)
-- [ ] Ben's Studio playtest of L1b Wave 2 (PLAYTEST "L1b Wave 2 — the long road")
+- [x] Ben's Studio playtest of L1b Wave 2 (PLAYTEST "L1b Wave 2 — the long road"): 2026-10-15,
+  "everything looks good! lets close it". Studio's log: one run of about 2.5 minutes on the rebuilt
+  `proving.rbxl`, 112 → 54 alive (the Pickets and into Main Camp), no script error, `[Perf]` p95
+  0.31–0.58 ms (budget 2). Not reached: the Chief's Clearing, the headshots, the sneak; the five click
+  questions unanswered. **L1b Wave 2 closed.**
 
 ## M12 — Growing city
 

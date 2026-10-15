@@ -395,3 +395,15 @@ Notes he gave, and how they were settled (click questions, same day):
 **All of 1–4 are folded into Wave 2 "the long road"** (his choice over a separate small wave).
 **Clear bonus (asked at the start of the Wave 2 session, same day): a small bonus**, about 10% of
 what that camp's raiders pay, on top of the per-kill pay; a config number. **[Ben]**
+
+## 18. Ben's verdict on L1b Wave 2 (2026-10-15)
+
+Studio's log: "Build all" at 00:07, the rebuilt `proving.rbxl` opened at 00:08, one Forest Road run on
+Normal of about 2.5 minutes, the crowd going from 112 to 54 alive (the Pickets and into Main Camp), no
+script error. The server's crowd step read p95 0.31–0.58 ms with 54–112 alive (budget 2 ms). His words:
+*"everything looks good! lets close it"*. **L1b Wave 2 is closed.** **[Ben]**
+
+Not seen in that run: the Chief's Clearing (the Colossus with the new headshots), the sneak past Main
+Camp, the bow at 2 / 2. The checklist's five click questions (road length, tents, one swing per jump,
+the Server number with the Colossus up, the bow) are unanswered. Next: Wave 3 (numbers only) or L2
+(secrets, keys, the bought double jump), only on his word.
