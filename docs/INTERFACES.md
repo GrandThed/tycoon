@@ -15586,3 +15586,19 @@ All 21 draft points are taken as written. Notes:
 - Build order: A lands the Types block first and says so; the designer lands `Combat.json` first.
   All four owners share one worktree: commit only your own paths (`git commit -- <paths>`), and retry
   if `index.lock` is held. Never `git add -A`, never stash, never reset.
+
+### Lead's rulings on the build reports (2026-10-15)
+
+- **L1b-W4-31 amended:** N never moves a party backwards; `nextApproach` starts past the furthest
+  checkpoint reached (B, 99d2dd6).
+- **The sniper-perch gate excludes a locking camp's own floor, fences and cover** (they are listed as
+  the "shooting out of the boss room" item in Open for later).
+- **Scene bands not visible on Normal** (the archer's walk-out, the sniper's stand-down): reported, with
+  the rule proved in the mirror's Step timeline. Accepted.
+- **Known limits, told to Ben:** the ledge sniper clears the Pickets in about 25 s at about 70% of the
+  mission's cash per minute (his "they give up" working as chosen); RoadBC5–6 lie outside the region (the
+  lock clearance), so B's raiders cannot follow there and no slinger answers, but B's floor is 127 studs
+  away, past the Longbow's range 110 — revisit when a longer-range weapon reaches this level (L3).
+- **The lose distance** sits at 108–109 against the band's 110 because sight crosses the U-bend's void;
+  accepted.
+- A's executor points 1–6 ("Beyond the contract", `l1b-w4-reports/crowd.md`) are rulings.
