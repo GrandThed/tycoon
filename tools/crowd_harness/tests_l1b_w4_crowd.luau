@@ -814,4 +814,44 @@ function W4C.blowTests(): ()
 end
 L1BC.crowdGroup("fix round: the blow", W4C.blowTests)
 
+-- Steps until the body `id` stands within 1 of (x, z) with `hp` (the step count), or nil.
+function W4C.untilAt(id: number, x: number, z: number, hp: number, limit: number): number?
+	for count = 1, limit do
+		step2()
+		local body = Crowd.Get(id)
+		if body ~= nil and W4C.flat(id, x, z) <= 1 and body.hp == hp then
+			return count
+		end
+	end
+	return nil
+end
+
+-- R4: a stood-down rusher is healed once at its post; a hit after that stays, and the latch is
+-- cleared only when the stand-down is.
+function W4C.healOnceTests(): ()
+	print(" fix round R4: heal once at the post")
+	W4C.enter()
+	root.Position = vec(0, 20, -4)
+	local group, ids = W4C.place("guard", { vec(-6, 8, 6), vec(6, 8, 6) }, { "fodder", "slinger" })
+	step2(2)
+	Crowd.Damage(ids[1], 10, 7, nil, nil)
+	check(W4C.untilEvent(group, "fight", 10) ~= nil, "(R4: the pair fights the player on the ledge)")
+	local first = W4C.untilAt(ids[1], -6, 6, 40, 200)
+	check(first ~= nil, "(the fodder stands down, walks to its post and is healed there)")
+	Crowd.Damage(ids[1], 10, 7, nil, nil)
+	step2(30)
+	local left = false
+	for _, event in L1BC.events() do
+		left = left or event.group == group
+	end
+	check(Crowd.Get(ids[1]).hp == 30 and W4C.flat(ids[1], -6, 6) <= 1 and not left, `R4: a hit on it at its post while its slinger fights stays for 2 s (hp {Crowd.Get(ids[1]).hp}, 30): healed once, not every step`)
+	-- Melee-reachable again (on the floor beside it): the stand-down clears, and with it the latch.
+	root.Position = vec(-6, 11, 1)
+	step2(20)
+	root.Position = vec(0, 20, -4)
+	local second = W4C.untilAt(ids[1], -6, 6, 40, 200)
+	check(second ~= nil, `R4: stood down again, it is healed again on arriving at its post (step {second or "never"})`)
+end
+L1BC.crowdGroup("fix round: heal once", W4C.healOnceTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

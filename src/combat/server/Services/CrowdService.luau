@@ -1058,8 +1058,8 @@ end
 -- group in index order its input is rebuilt in its own tables (`closing` from its members' stamps
 -- of the last integrate), then (1) a pending WakeFloor releases a held group, or else (2) it takes
 -- one CampBrain.Step, and (3) a pending RouseGroup rises it. A change of state is queued for
--- DrainGroupEvents. A resident at its post while its group goes home, or while it is a stood-down
--- rusher, is healed first, so the step that finds them all home has healed every one. After every
+-- DrainGroupEvents. A resident at its post while its group goes home is healed first, so the step
+-- that finds them all home has healed every one; a stood-down rusher once, on arriving. After every
 -- group: (4) the join-in of the groups Step woke, (5) dormancy, stamped on each group's bodies, and
 -- (6) engagement from each group's reachable set, stamped with this step's clock and kept for
 -- camps.engagedHoldSeconds. Nothing here yields or casts a ray, and nothing allocates per body (the
@@ -1114,11 +1114,18 @@ local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
 			end
 			member.at = body.position
 			local def = currentDef(body, kinds)
+			-- R4: a stood-down rusher is healed once, on arriving at its post; while its shooters
+			-- keep the group fighting, a heal every step would erase every hit on it.
+			local rusherDown = CampBrain.StandsDown(brain, def.brain ~= "keepAway")
+			if not rusherDown then
+				body.healed = false
+			end
 			if
-				(homeward or CampBrain.StandsDown(brain, def.brain ~= "keepAway"))
+				(homeward or (rusherDown and not body.healed))
 				and CampBrain.AtPost(resident.post, body.position, rules)
 			then
 				heal(body)
+				body.healed = rusherDown
 			end
 			table.insert(members, member)
 			if body.closing then
