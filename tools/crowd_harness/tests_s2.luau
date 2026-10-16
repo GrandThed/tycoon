@@ -316,7 +316,7 @@ function S2.ringTests(): ()
 	T = slam()
 	root.Position = vec(0, 3 - 8, 0)
 	step2(12)
-	check(humanoid.Health == 104, "its height is measured from the crowd's floor, upper bound alone: feet under the floor are hit")
+	check(humanoid.Health == 130 and #log == 0, "R15: its height is measured from the crowd's floor, above and below: feet 8 under the floor are missed")
 
 	-- The front is `width` thick: its leading edge is what arrives, and landing inside the band
 	-- is still a hit.
