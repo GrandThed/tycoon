@@ -4882,7 +4882,7 @@ Rulings: `docs/prompts/l1b-w4-fix-round.md`. Same gate, Normal at gear 2 / 2, se
 | `Combat.json camps.meleeBelow` | — | 1.5 | R14 (A's value). It must lie in [0, min(`sightBelow` 4, the lowest rusher ground height 5 − root 3 − cover margin 0.5)] = [0, 1.5]. That is a new `check_levels` gate. A step down of up to 4.5 studs (feet) stays melee-reachable. The foot of the climb (feet 8 under) does not. |
 | A `tent.pace` | 15 s, lead 0.2 | 12 s, 0.2 | R7 restarts the measure whenever the whole camp is at rest. A player who wipes one group before waking the next restarts it once per group, so every later group looks like a fresh, small camp that is easy to be "ahead" of. Under 15 / 0.2, at 2 / 2 the tent sent 1–2 (band ≤ 1). Under 12 / 0.2 it sends 1, 1, 1; at 4 / 4 it sends 2, 2, 2. |
 | B `tent.pace` | 90 s, 0.15 | 35 s, 0.2 | Under R7, 90 / 0.15 sent 4–8 at 2 / 2 and 0–8 on Hard (band ≤ 1). A grid of 27 settings (seconds 15–90, lead 0.05–0.4) never made B send 4 at 4 / 4 without also sending 2 or more at pace. 35 / 0.2 sends 0 at pace on every difficulty and 3 at 4 / 4. |
-| `sim_range.py TENT_FAST["B"]` (contract band "B at least 4") | 4 | 3 | Follows from the line above. **For the lead:** this band is in the contract, so the change needs a ruling. The other option is a per-difficulty or per-camp pace key (A's rule, not data). |
+| `sim_range.py TENT_FAST["B"]` (contract band "B at least 4") | 4 | 3 | Follows from the line above. Accepted by the lead (2026-10-16): "the tent when fast: B at least 3". |
 
 No resident, post, stock, `every`, reward, weapon, kind or `ProvingGrounds.json` number moved.
 The resident posts tried for R8 below were scratch experiments and are not shipped.
@@ -4966,12 +4966,12 @@ Cash and Timber a minute, seeds 11 / 23 / 37, against the `mission` player on th
 | ShrineSignPad | 0 | 0 | 0 | 0 | pass |
 | Road3 | 22,957 / 11,938 / 11,938 | 32.1 / 13.8 / 13.8 | 13,535 / 18,365 / 18,365 | 17.5 / 27.5 / 27.5 | pass (seed 11 at 96%) |
 | Road4 (the foot of the climb) | 1,601 / 1,067 / 1,067 | 0 | 0 | 0 | pass |
-| **LookoutLedge** | **33,664 ×3** | **44.1 ×3** | 18,313 / 17,756 / 15,846 | 9.6 / 17.8 / 9.9 | **Normal red: R8's stop** |
+| **LookoutLedge** | **33,664 ×3** | **44.1 ×3** | 18,313 / 17,756 / 15,846 | 9.6 / 17.8 / 9.9 | **Normal: known limit, L4 (reported)** |
 | LookoutSignPad (the strip) | 13,494 ×3 | 15.6 ×3 | 7,306 / 10,025 / 12,457 | 0 / 9.1 / 8.3 | pass |
 | RoadBC5 | 0 | 0 | 0 | 0 | pass |
 | RoadBC6 | 0 | 0 | 0 | 0 | pass |
-| **Secret_lookout** (top 38) | **39,541 / 41,395 / 41,395** | **53.7 / 56.2 / 56.2** | 11,218 / 11,412 / 5,397 | 10.2 / 10.4 / 0 | **Normal red: R8's stop** |
-| **Secret_cache** (top 18) | **27,153 / 23,702 / 24,236** | **42.7 / 36.9 / 40.5** | 0 | 0 | **Normal red on seeds 11 and 37: R8's stop** |
+| **Secret_lookout** (top 38) | **39,541 / 41,395 / 41,395** | **53.7 / 56.2 / 56.2** | 11,218 / 11,412 / 5,397 | 10.2 / 10.4 / 0 | **Normal: known limit, L4 (reported)** |
+| **Secret_cache** (top 18) | **27,153 / 23,702 / 24,236** | **42.7 / 36.9 / 40.5** | 0 | 0 | **Normal: known limit, L4 (reported)** |
 
 - **The ledge and the lookout on Normal.** He kills 29–31 of the Pickets' residents within 11 s of arriving and takes no hit. Normal's slingers die in the first volleys: the Longbow's pierce 5 and blast go through fire circles and the watch line.
   - Tried: the watch group (4 slingers) moved to stand within 13 studs of the ledge (shift −40, −70). The ledge then earned 28,145 / 38,266 / 35,566, the lookout 38,951–41,395, with 0–2 hits on him.
@@ -4987,3 +4987,9 @@ Cash and Timber a minute, seeds 11 / 23 / 37, against the `mission` player on th
   - Moving the ledge would move the double-jump secret.
   - A sight rule that blocks the lip and fences for the crowd and the bow is L4's wall-aware sight.
   - The lead asks Ben.
+
+**Ben's ruling (2026-10-16): accepted for L1, fixed in L4.**
+- On Normal at 2 / 2, the LookoutLedge, Secret_lookout and Secret_cache snipers out-earn the mission: ×1.0–1.7 its cash a minute.
+- Camps never refill, so a sniper's total pay is bounded by what the camp fields. The spot only clears a camp faster; it does not farm it.
+- `sim_range.py` reports those three Normal rows as "known limit, L4" (`SNIPER_KNOWN_LIMIT_L4`) and gates only that every hit of his lands. Every other spot, and every Hard row, stays gated. `check_levels`' spot list stays pinned.
+- L4 re-places the perches. The gate must pass on every spot, with `SNIPER_KNOWN_LIMIT_L4` empty, before L4 ships.

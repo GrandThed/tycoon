@@ -6637,6 +6637,11 @@ SNIPER_PULL_SECONDS = 5.0  # his first arrow from the gate lands within this, or
 SNIPER_SPOT_SECONDS = 240.0  # the longest he shoots from a spot
 SNIPER_IDLE_SECONDS = 10.0  # he stops once no hit of his has landed for this long
 SNIPER_HARD = "hard"  # R8: rated on Normal and on this difficulty, both at the proving gear (2 / 2)
+# Ben's ruling on R8's stop (2026-10-16): on Normal these spots out-earn the mission and are accepted
+# for L1 as a known limit (camps never refill, so the pay is bounded and a camp only clears faster).
+# Their rate is reported, not gated; every hit landing stays gated. L4 re-places the perches, and the
+# set must be empty before L4 ships.
+SNIPER_KNOWN_LIMIT_L4 = {"normal": ("LookoutLedge", "Secret_lookout", "Secret_cache")}
 
 
 def sniper_spots_of(level, layout, combat_cfg, cfg):
@@ -9515,17 +9520,24 @@ def check_scenes(cfg, row, tag, expect):
     # the proving gear; and every hit of his lands. One band per spot (R8's stop rule names one).
     under = row["under"] or {}
     snipers, mission = (row["sniper"], row["runs"]) if row["sniper"] else (under.get("sniper") or {}, under.get("runs"))
+    known = SNIPER_KNOWN_LIMIT_L4.get("normal" if row["sniper"] else SNIPER_HARD, ())
     for spot, runs in (snipers or {}).items():
         told = []
-        good = True
+        good = landed = True
         for seed, r, m in zip(MISSION_SEEDS, runs, mission):
             cash, timber = sniper_rate(r)
             mine_cash, mine_timber = pay_rate(m)
-            ok = cash < mine_cash and timber < mine_timber and r["evaded"] == 0
-            good = good and ok
+            good = good and cash < mine_cash and timber < mine_timber
+            landed = landed and r["evaded"] == 0
             told.append(f"seed {seed} {cash:,.0f} / {timber:.1f} against {mine_cash:,.0f} / {mine_timber:.1f}"
                         + ("" if r["evaded"] == 0 else f", {r['evaded']} hit(s) of his blocked"))
-        expect(good, f"{tag} at the proving gear: the sniper from {spot} earns less cash and less Timber a minute than "
+        if spot in known:
+            ratio = max(sniper_rate(r)[0] / max(pay_rate(m)[0], 1) for r, m in zip(runs, mission))
+            print(f"  note  {tag} at the proving gear: the sniper from {spot}, known limit, L4 (Ben's ruling; reported, "
+                  f"not gated; up to x{ratio:.2f} the mission's cash a minute): " + "; ".join(told))
+            expect(landed, f"{tag} at the proving gear: the sniper from {spot} (known limit, L4): every hit lands")
+            continue
+        expect(good and landed, f"{tag} at the proving gear: the sniper from {spot} earns less cash and less Timber a minute than "
                f"the mission player on the same seeds (R8; his minutes to his last landed hit, at least his arrival "
                f"+ {SNIPER_IDLE_SECONDS:g} s), every hit lands: " + "; ".join(told))
 

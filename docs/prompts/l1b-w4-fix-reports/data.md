@@ -121,3 +121,10 @@ Branch `l1b-wave4` in `tycoon-p5`. Rulings: `docs/prompts/l1b-w4-fix-round.md` (
 1. **The Python mirror lacked `begin`'s refusal loop.** Before R14 it did not matter, because a cap refusal is the same for every attack of a kind; now `reaches` and `laneRuns` turn down single attacks. Mirrored.
 2. **R7 changes what "ahead" means.** A player who clears group by group restarts the measure between groups, so camps with many groups (B) cannot separate "at pace" from "fast" by pace data. This needs the lead's ruling (see Constants).
 3. **The rate yardstick for a short course is fragile.** One opening arrow into a sleeping fire circle kills 14 in about a second. A course of under 15 s is dominated by that, for any player with a bow. I set the floor at arrival + 10 s and the straight walk at speed 20; both are stated in BALANCE.
+
+## After Ben's ruling (2026-10-16)
+
+- The three Normal spots are accepted for L1 and fixed in L4. `sim_range.py` (`SNIPER_KNOWN_LIMIT_L4`) now reports their rows as "known limit, L4", at up to x1.41, x1.73 and x1.14 the mission's cash a minute, and gates only "every hit lands" for them. Every other spot and every Hard row stays gated, and the `check_levels` list stays pinned.
+- The lead accepted "the tent when fast: B at least 3".
+- BALANCE records both rulings.
+- `py tools/sim_range.py --check`: `CHECK: PASS`.
