@@ -1871,9 +1871,8 @@ looks good! lets close it").
 
 **Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
 
-**Status 2026-10-15:**
-- Built, reviewed and QA green on branch `l1b-wave3`.
-- **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+**Status 2026-10-15: done.** Merged to `main` (`8ea194c`) and played the same day ("the bow
+feels right").
 
 <!-- FILE TO OPEN: start. Lead: if L1b Wave 3 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -1884,15 +1883,61 @@ looks good! lets close it").
 
 **Steps:**
 
+- [x] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] mutate.py verdict in.
+      - [x] `l1b-wave3` merged to `main`; the six place files rebuilt.
+      - [x] Ben told: "L1b Wave 3 is merged, Build all".
+- [x] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [x] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [x] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
+- [x] 4. Run `docs/PLAYTEST.md` "L1b Wave 3 — the bow" (seven steps, one click question).
+- [x] 5. Close Studio without saving `proving.rbxl`. Tell Claude when you are done.
+
+## L1b Wave 4
+
+**Studio only.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setup.
+- No new Parts to place: the chase region is data; the game builds nothing for it.
+- Still silent (no audio step).
+- About 12 minutes with the checklist, keys only, no panel.
+
+**Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
+
+**Status 2026-10-16:**
+- Built, reviewed, fix round and fix-diff fixes done on `l1b-wave4` / `l1b-wave4-fix`.
+- **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L1b Wave 4 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Wait for the lead's word first.** Before the merge, "Build all" gives Wave 3's camps (BLOCKED
+  from the road, a tent that makes you wait).
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the key hint reads **"N next camp · B boss · G gear"**.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
 - [ ] 0. (Lead) Merge, rebuild, tell Ben.
-      - [ ] mutate.py verdict in.
-      - [ ] `l1b-wave3` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L1b Wave 3 is merged, Build all".
+      - [ ] mutate.py verdict in (PLAN "L1b Wave 4", QA).
+      - [ ] R16–R18 (`l1b-wave4-fix`) and `l1b-wave4` merged to `main`; the six place files
+            rebuilt.
+      - [ ] Ben told: "L1b Wave 4 is merged, Build all".
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
 - [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
-- [ ] 4. Run `docs/PLAYTEST.md` "L1b Wave 3 — the bow" (seven steps, one click question).
-- [ ] 5. Close Studio without saving `proving.rbxl`. Tell Claude when you are done.
+- [ ] 4. Press **Play**: the lobby camp, the map open on **Forest Road** at **Normal**, gear
+      **2 / 2**.
+- [ ] 5. Run `docs/PLAYTEST.md` "L1b Wave 4 — no waits, no walls" (ten steps, plus an optional
+      phone, two-player and fall check, then three click questions).
+- [ ] 6. Close Studio without saving `proving.rbxl`. Tell Claude when you are done. The lead
+      reads the `[Perf]` lines from Studio's log; nothing to copy.
+
+**Notes:**
+- **N** now stops at every camp: the foot of the Pickets' climb, the road before Main Camp, then
+  the Chief's Clearing.
+- **G** walks 2 / 2 → 4 / 4 → 6 / 6, as before.
+- The ledge snipe pays well on Normal: known, accepted for L1, fixed in L4.
 
 ## M10 — Icon, store icons, thumbnails
 

@@ -4855,8 +4855,8 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - The Longbow hits a little softer: 45 a full arrow (was 50).
 - **About 5 minutes. Keys only, no panel.** Grey blocks, no sound.
 
-**Status 2026-10-15:** built, reviewed (0 Critical, 0 Major, 5 Minor, all fixed), QA green.
-**Wait for the lead's merge word, then "Build all".**
+**Status 2026-10-15:** merged (`8ea194c`) and played: "it feels right", "the bow feels right".
+**Closed.** Superseded by "L1b Wave 4 — no waits, no walls" below.
 
 Setup: `docs/MANUAL_STEPS.md` "L1b Wave 3".
 
@@ -4898,6 +4898,148 @@ One click question:
 - **The bow against the sword now:** much weaker / a bit weaker / about even / stronger.
 
 Also, if you have a view: anything wrong, by step number.
+
+## L1b Wave 4 — no waits, no walls
+
+<!-- FILE TO OPEN: start. Lead: if L1b Wave 4 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Only after the lead says L1b Wave 4 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** the key hint on screen reads **"N next camp · B boss · G gear"**
+  and the first **N** on the road puts you at the foot of the climb, not at the Chief's Clearing.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** no waits, no walls.
+- Raiders follow you out of their camp, and give up when they lose you.
+- No "BLOCKED" from the road.
+- Tents send raiders only when you clear fast. You never wait for one.
+- Also the two things you have never seen: the sneak past Main Camp, and the Chief's Clearing
+  (the Colossus, bow headshots).
+- **About 12 minutes. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-16:** built, reviewed (four slices: 0 Critical, 4 Major, 12 Minor; fix-diff:
+0 / 1 / 2; all fixed). **Wait for the lead's merge word, then "Build all".**
+
+Setup: `docs/MANUAL_STEPS.md` "L1b Wave 4".
+
+**Keys:**
+- **Enter** = Depart / Back to camp; **arrows** = level and difficulty.
+- **1** / **2** = sword / bow.
+- **Space** jump (twice = double jump); **C** in the air = slam; **Left Shift** dash.
+- **N** = next camp; **B** = jump to the boss; **G** = stronger gear (2 / 2 → 4 / 4 → 6 / 6).
+- **Backspace** twice = Abandon.
+
+**Good to know:**
+- Nothing says "BLOCKED" any more, except a plated raider's armour and the Chief's raiders before
+  his gates close.
+- Raiders still see through fences.
+- **N** now steps through the camps in order: foot of the Pickets' climb → road before Main Camp
+  → the Chief's Clearing. It never takes you back.
+
+### The run (no panel)
+
+- [ ] 1. Press **Play**: the map is open on **Forest Road**, **Normal**, gear **2 / 2**.
+      - Bug: another level or difficulty; gear not 2 / 2.
+- [ ] 2. **Enter** (Depart), then **N**.
+      - You stand on the road at the foot of the climb, below the first camp (the Pickets).
+      - Bug: N puts you anywhere else; at the Chief's Clearing.
+- [ ] 3. **Shoot from the road.**
+      - Press **2** (bow). Jump up the climb onto the road. Walk to the Pickets' west gate.
+      - Shoot the nearest raider through the gate.
+      - Every arrow hurts. No "BLOCKED".
+      - Its group shows "!" and comes out of the gate after you. The group beside it may join.
+      - Bug: "BLOCKED" over a raider; the group stays inside; a raider walks through the fence.
+- [ ] 4. **Drop below the climb.**
+      - At once jump back down the climb. Stand at its foot. Hop a few times.
+      - They come to the top of the drop, stand about 3 s, then walk home.
+      - No lunge or swing from the top hurts you. A slinger's shot may.
+      - Shoot them as they walk home: every arrow still hurts.
+      - Bug: they jump down to you; a lunge from the top hurts you; they stay at the edge for good
+        (also while you hop).
+- [ ] 5. **Run away.**
+      - Climb back up. Go in by the west gate until a group wakes ("!").
+      - Walk out of the far (east) gate. Keep running along the road, round the bend.
+      - They follow you out of the camp and down the road.
+      - About 100 studs out (near the bend) they lose you, turn and walk home.
+      - Back at their places, the ones you hurt are whole again (about 12 s later).
+      - Bug: they stop at the gate; they never give up; they walk through the fence or off the
+        road.
+- [ ] 6. **Clear the Pickets, fast.**
+      - So far, at 2 / 2, at most one raider came out of the tent. Nobody waited for it.
+      - Now press **G** once (gear **4 / 4**). Go back in and clear the camp quickly (**1** sword,
+        **2** bow).
+      - Because you are fast, one or two raiders step out of the tent, about 6 s apart.
+      - "Pickets cleared" shows the moment the last raider falls, even one that chased you onto
+        the road. The tent may still hold raiders: they stay inside.
+      - **The bonus:** watch the **$** cash chip when the banner shows. It jumps by more than one
+        kill (the camp bonus, about $700). The HUD reads **Camps 1 / 3**.
+      - Bug: you wait for the tent; no banner; the banner with a raider still standing; no jump at
+        the banner.
+- [ ] 7. **N**, then **the sneak past Main Camp.**
+      - You stand on the road before Main Camp's west gate.
+      - Go in by the gate. Turn left (north) at once to the fence.
+      - Walk east along the inside of it, close to it, to the far gate. Step back onto the road.
+      - Nobody wakes. No "Main Camp cleared"; the HUD still reads **Camps 1 / 3**.
+      - Bug: a "!" while you hug the fence; N put you back at the Pickets.
+- [ ] 8. **N**: the Chief's Clearing.
+      - The countdown starts and the gates close, as before.
+      - Its raiders fight you anywhere in the room.
+      - **B** brings the **Colossus**.
+      - **2** for the bow: shoot its head. The numbers are yellow.
+      - While it is up, look at the grey **Server** number for a few seconds.
+      - Bug: a head shot shows white; the Chief's raiders stand idle; Main Camp's raiders waiting
+        at the road's end outside.
+- [ ] 9. Kill it (**G** again for 6 / 6 if you need it).
+      - The summary lists your kills. **Enter**.
+      - Bug: an empty summary; the run ends with no summary.
+- [ ] 10. **A second short run: the ledge (a known limit).**
+      - **Enter** (Depart), then **N**. Climb onto the road.
+      - Double jump onto the tall block beside the road, between the climb and the west gate (the
+        lookout ledge).
+      - Shoot the Pickets from there with the bow.
+      - Every arrow hurts. No raider can climb up to you. The slingers shoot back.
+      - Any raider that comes below you waits about 3 s, then walks home.
+      - **Known, not a bug:** on Normal the camp falls fast from here and pays well. You accepted
+        it for L1; L4 fixes the perches with the real forest.
+      - Bug: "BLOCKED"; a raider climbs up to you; they stand below for good.
+      - **Backspace** twice. Close Studio without saving.
+
+**Optional, not one of the ten:**
+- **Phone.** Test (Prueba) → Device (Dispositivo) → a 375×667 phone, turned to landscape
+  (667×375) → Play → Depart.
+  - Walk the road: auto-fire never shoots at a sleeping camp.
+  - **Through a pierce:** wake a Pickets group and lead it toward Main Camp's west gate. Stand so
+    an awake raider is in front of a sleeping Main Camp raider on your line. With the bow on,
+    auto-fire holds and Main Camp stays asleep. Turn so only the awake raider is on the line:
+    auto-fire shoots again.
+  - **A blast:** an awake raider right beside a sleeping one: auto-fire holds.
+  - **The sword:** next to a sleeping raider and an awake one, auto-swing holds.
+  - The key hint and the Server line cover neither the health bar nor "Camps 1 / 3".
+  - Bug: auto-fire wakes a sleeping camp, by any route; an Attack button.
+- **Two players.** Test (Prueba) → **Local Server** (Servidor local), **2 players**
+  (2 jugadores) → **Start** (Iniciar). In the other window press **Enter** → both land on the
+  road.
+  - Player 1 shoots a Pickets raider from the road. Player 2 stands further back.
+  - The group goes for whichever of you it saw or was hit by, the nearer first.
+  - Both run east round the bend: they give up and walk home.
+  - Bug: the group freezes between you; one window shows "BLOCKED".
+- **A fall.** Wake a Pickets group, run out of the east gate and fall off the road at the bend
+  while it chases.
+  - You land back on the road at the Pickets' checkpoint, not at the trailhead.
+  - Fall again while the group walks home over that checkpoint: you are not put among them.
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- When you ran out of the Pickets, did they follow you far enough? Not far enough / about right /
+  too far.
+- Did you ever wait for raiders to come out of a tent? Never / once or twice / often.
+- **What did the grey Server number read with the Colossus up, most of the time?** Under 1 ms /
+  1–2 / 2–4 / over 4 / did not see it.
+
+Also, if you have a view: anything wrong, by step number, PC or phone.
 
 ## M12 — Village growing city
 

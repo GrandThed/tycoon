@@ -3128,6 +3128,9 @@ families, abilities and the player's body go into the Expeditions missions, era 
   contract INTERFACES "Wave 3 — the bow (2026-10-15)" (rulings L1b-W3-1 to -11: 7–9 win over 1–2,
   10 sets B); reports `docs/prompts/l1b-w3-reports/` (designer, review, qa); values
   `docs/BALANCE.md` "L1b Wave 3: the bow". Branch `l1b-wave3`, same worktree.
+- **Wave 4:** MISSIONS_DESIGN §19; contract INTERFACES "L1b Wave 4 — no waits, no walls"; fix
+  round `docs/prompts/l1b-w4-fix-round.md`; values `docs/BALANCE.md` "L1b Wave 4" and "L1b W4 fix
+  round". Branches `l1b-wave4` (`tycoon-p5`) and `l1b-wave4-fix` (`tycoon-p5b`).
 
 **Ben's decisions (2026-10-14; MISSIONS_DESIGN §16):**
 1. Running away: raiders chase to the camp's edge, walk back to their posts and heal. Slingers
@@ -3149,7 +3152,8 @@ families, abilities and the player's body go into the Expeditions missions, era 
 |---|---|---|
 | 1 "the camp is alive" | Today's road and camp sizes, residents, open camps, per-kill pay | Merged 2026-10-14 (`5423937`); Ben's look done ("feels really good right now!") |
 | 2 "the long road" | 1,000-stud road, camps ×2, 100–120 raiders, tents, dormancy, sneak path, ~10 min, plus Ben's four Wave 1 notes | **Built, reviewed, fixed, QA green (21 of 21) and merged to `main` 2026-10-15 (`1ca5de8`); place files rebuilt; waiting on Ben's look** |
-| 3 | Numbers only, if Wave 2's stop asks | Not planned |
+| 3 "the bow" | Longbow damage only | Merged 2026-10-15; Ben: "the bow feels right". Closed |
+| 4 "no waits, no walls" | Tent as pace reserve, no BLOCKED, the chase leaves the camp along the road | Built, reviewed, fix round done 2026-10-16; QA and merge pending |
 
 **Wave 1, what shipped (`build/proving.rbxl`, Play, Depart on Forest Road):**
 - **Residents:** placed at the start, all alive.
@@ -3460,6 +3464,170 @@ PASS.
 - [x] Wave 3 QA green (qa-runner, 14 gates, `1f1a589`; mutate.py 624 run, 0 not caught)
 - [x] Wave 3 merged to `main` (fast-forward to `8ea194c`), six place files rebuilt (lead, 2026-10-15)
 - [x] Ben's Studio look at L1b Wave 3 (PLAYTEST "L1b Wave 3 — the bow"): 2026-10-15, "it feels right", "the bow feels right". **Wave 3 closed.** Next: Wave 4 "no waits, no walls" (MISSIONS_DESIGN §19, `docs/prompts/l1b-wave4.md`)
+
+### L1b Wave 4 — no waits, no walls (2026-10-15/16)
+
+**Documents:**
+- Ben's words and rulings: MISSIONS_DESIGN §19 and its two paragraphs after it.
+- Study: `docs/prompts/l1b-w4-study-report.md`.
+- Contract: INTERFACES "L1b Wave 4 — no waits, no walls" (rulings L1b-W4-1 to -33, the lead's
+  answers to the 21 draft points, "Lead's rulings on the build reports"). Amendments win.
+- Fix round: `docs/prompts/l1b-w4-fix-round.md` (R1–R18 and the rulings after them).
+- Reports: `docs/prompts/l1b-w4-reports/`, `docs/prompts/l1b-w4-fix-reports/`. Findings:
+  `docs/prompts/l1b-w4-review/` (four slices and `fix-diff.md`).
+- Values: `docs/BALANCE.md` "L1b Wave 4" and "L1b W4 fix round".
+- Branch `l1b-wave4` (worktree `tycoon-p5`); the fix-diff fixes on `l1b-wave4-fix` (worktree
+  `tycoon-p5b`).
+
+**Ben's decisions (2026-10-15/16, click questions):**
+1. **The tent is a pace reserve.** It sends only while you clear its camp faster than the camp's
+   pace. Nobody ever waits for a tent; a camp clears when its raiders are dead.
+2. **No BLOCKED.** A hit from anywhere lands and wakes its group, which comes after you.
+3. **One rule for both:** an awake raider follows you out of its camp, whether hit from the road
+   or after you walked in and left.
+4. **They give up when they lose you:** out of sight for a few seconds, they walk home and heal.
+5. **Anywhere on the road:** A's raiders may follow you to B's gate and fight beside B's.
+6. **Unreachable shooter:** every hit lands; the melee raiders wait about 3 s at the edge and walk
+   home to heal; their shooters still shoot back.
+7. **Natural barriers instead of fenced squares:** later, with the real forest (L4).
+8. **The three Normal sniper spots** (2026-10-16): "accept, fix in L4".
+
+**What shipped:**
+- **The chase region.** One region, `plateau` (y 8): A's and B's floors plus 13 road cells, 15
+  cells in a tree joined by doors.
+  - New pure `src/shared/Region.luau`: clamp, route through the doors, cut a charge at the edge.
+    Server, client and simulator use the same rules.
+  - Fences stay; bodies go in and out by the gates.
+  - The region stops 58 studs short of the Chief's Clearing (lock clearance 56).
+- **The chase.** A group *knows* a player it saw within `chaseSight` 40 or who hit it within
+  `hitMemorySeconds` 8. It goes for the nearest known player.
+  - Lost for `leashSeconds` 3 → home, healed at the posts. Measured lose: 108–109 studs past A's
+    east edge, at the U-bend; at rest about 12 s later.
+  - **Stand-down:** a player the rushers cannot reach (over `meleeAbove` 7.5, or more than
+    `meleeBelow` 1.5 below the floor): the rushers walk home and heal; the shooters keep shooting.
+  - **Home** takes hits and turns back only for a reachable player.
+  - **The close forgets the road:** when the Chief's gates close, every other group goes home.
+- **No BLOCKED from camp rules** (L1b-7 gone). Left: the Chief's held residents before the close,
+  and plates.
+- **No hit through a cliff** (fix round): every ground shape, the moving charge and the ring have a
+  lower bound as well as an upper one. A blow is never started at feet it cannot reach.
+- **The tent.** Sends one raider every 6 s only while the camp is busy, a resident lives and the
+  camp is ahead of its pace (A 12 s, B 35 s, lead 0.2). The pace restarts when the whole camp is
+  back at rest (R7). Stock not sent is forfeit.
+- **The clear:** every raider the camp fielded is dead, wherever it stands. **Bonus:** 10% of what
+  it fielded (a refused tent spawn is not priced).
+- **N** steps through every camp: A's approach at the foot of the climb (−322, 0, −44), B's on
+  the road before its west gate (−108, 8, −44), then the Chief's countdown. Never backwards.
+  HUD hint "N next camp · B boss · G gear".
+- **Phone:** `CampAim` lost its in-play clause. Touch auto-fire holds while a sleeping body is on
+  the shot's line, inside a melee or cone shape, or inside a splash or blast at the stop point.
+- **Client:** the drawn charge is cut by `Region.Runway` over `RunFloor.cells`.
+- **Rescue:** the safe point judges a region camp by where its bodies stand; homeward groups count
+  as threats.
+- **Config:** `Combat.json` `camps.chaseSight`, `hitMemorySeconds`, `meleeAbove`, `meleeBelow`;
+  `levels.regionLockMargin` 8, `levels.doorSpare` 0.5; Forest Road `regions`, `approach` points,
+  `tent.pace`; `targetMinutes` 7 → 6. No resident, stock, reward, weapon or kind changed.
+- **Gates:** `check_levels.py` (doors, tree, lock clearance, `meleeAbove` and `meleeBelow` ranges,
+  the cliff gate, 11 pinned sniper spots); `sim_range.py` chase scenes, tent bands and straight
+  sniper courses; `check_stage_mirror.py`; `mirror_mutants.py` 90 of 90.
+
+**Commits:**
+- Study and contract: `3c2ff93`, `31a232b`, `91de79e`.
+- Build: `0546e24` config keys; `36ea31b` Types; `d4f3c06`, `6b607fe` Forest Road region,
+  approaches, tent pace; `c94f016` Region and CampBrain; `e98923c` crowd; `08c2e04`, `7639aee`
+  run and harness; `f33a72b` client; `d15055c`, `7266835`, `bf60c52` mirrors, bands, gates,
+  BALANCE; `99d2dd6` N never backwards; `529122d` sourcemap; reports `38eaad4`, `5c06284`,
+  `f34b55b`, `53255c9`, `7152e4f`; `2ec9da9` lead's rulings.
+- Review: `d1363b8` brief, `71caad3` four slices.
+- Fix round: `9e197bb` rulings; R1 `7a76d76`; R2 `2d95152`; R3 `ac71e28`; R4 `55728ac`; R5
+  `0544b26`; R6 `5dd0662`, `cef3d38`; R7 `9022272`, `b05e5a9`; R10–R12 `6fe388b`; R13 `7a65b51`,
+  `713e6f8`; R14 `04242df`, `f72e244`, `8f8d996`, `90c211e`; R15 `16ff974`, `fb14538`, `de66b13`,
+  `6ffd491`; mutations `235fe89`, `8d5a647`; mirrors and gates `9244f4a`, `23cbc35`, `c8af9aa`;
+  BALANCE `6b5e70c`; Ben's sniper ruling `0ffbce8`, `e428e85`; report `4e63335`.
+- Fix-diff review: `f45e093` brief, `e979742` findings and R16–R18. On `l1b-wave4-fix`: R16
+  `8341f8b`; R17–R18 and the designer's R16 mirror follow (the lead adds their hashes).
+- Plus this docs commit.
+
+**Review: four Opus slices, 0 Critical, 4 Major, 12 Minor** (crowd 1 / 4, run 0 / 3, client
+0 / 1, data 3 / 4). All resolved:
+- **Major, crowd M1:** rushers pressed against one clamped point kept "closing" and never leashed
+  → **R1**, closing means progress.
+- **Major, data 1:** rushers at the lip lunged a player at the foot of the climb through 8 studs of
+  cliff → **R6** (lower bound on every ground shape), **R14** (`meleeBelow`; no blow started at
+  unreachable feet), **R15** (charge and ring), and a `check_levels` cliff gate.
+- **Major, data 2:** after the checklist's chase steps the Pickets' tent could never send again →
+  **R7**, the pace restarts after rest, plus a band run in the checklist's order.
+- **Major, data 3:** a sniper going straight to the lookout ledge out-earned the mission (the 70%
+  figure came from a script that idled) → **R8**, straight courses from every spot. Three Normal
+  spots could not be fixed by data: **Ben accepted them for L1, fixed in L4.**
+- **Minors:** the close lets a blow finish (R2); engagement check restored (R3); heal once at the
+  post (R4); brutes walk round the U-bend (R5); the simulator's heights and retreat (R9); the
+  rescue by position (R10); two untested rules pinned (R11); auto-fire through a pierce (R13);
+  the sniper gates and the secret lookout (R8). Plus R12 (a refused tent spawn is not priced),
+  from the data slice's note for run.
+- **Not fixed now:** RunState resending `cells`, and the per-camp bonus display (Carried).
+
+**Fix-diff review** (`git diff 2ec9da9 e428e85`): **0 Critical, 1 Major, 2 Minor.**
+- **Major:** a player hopping at the foot of the climb held the rushers at the lip for good →
+  **R16**, `Melee` judges height on the surface last stood on.
+- **Minor 1:** auto-fire ignored splash and blast → **R17**.
+- **Minor 2:** `enemyInSights` built a table every frame → **R18**, one reused table.
+
+**Balance (BALANCE "L1b W4 fix round"), Normal, 2 / 2:**
+- First clear mean **6.33 min** (band 5.75–7). Human reaction 5.43–5.61 min, no down.
+- The Colossus 72.5–74.8 s. Hard 4 / 4 6.36–6.78 min; Brutal 6 / 6 6.44–6.89 min.
+- Tents: Normal 2 / 2 A 1, B 0; Normal 4 / 4 A 2, B 3; Hard and Brutal at most 1. In the
+  checklist's order at 4 / 4, A sends 1 (0 without R7).
+- Clear bonuses 7.1% of the run's cash (Hard 7.3%, Brutal 7.4%). `sim_combat` 23 / 23.
+- Sniper: every hit lands on every spot. LookoutLedge, Secret_lookout and Secret_cache on Normal
+  earn ×1.0–1.7 the mission's cash a minute (known limit, L4); every other spot and every Hard
+  row pass.
+
+**QA:**
+- Fix-diff snapshot (reviewer, `e428e85`): harness PASS (2,337 checks), `mirror_mutants` 90 / 90,
+  `check_levels`, `check_stage_mirror`, `sim_combat`, `check_compile` PASS, luau-lsp 0 errors,
+  stylua and selene clean. `sim_range --check` PASS after Ben's ruling.
+- qa-runner on the final tree (after R16–R18): pending.
+- mutate.py: <verdict pending>
+
+**Carried (owners):**
+- **economy-designer + lead (L4):** the three Normal sniper spots (LookoutLedge, Secret_lookout,
+  Secret_cache). L4 re-places the perches with the real forest; `SNIPER_KNOWN_LIMIT_L4` must be
+  empty and the gate green on every spot before L4 ships (Ben's ruling).
+- **luau-engineer B (L4):** RunState resends `floors[i].cells` every state send (about 30 records,
+  data that never changes). With the "snapshot bytes" item.
+- **ui-engineer (L4):** the per-camp clear bonus on screen, in L4's end screen. Today only the
+  cash jump at the "cleared" banner shows it.
+- **ui-engineer:** the auto-fire wiring in `InputController` (R13, R17) is tested only in Studio;
+  the harness covers the pure `CampAim` helper. Ben's phone pass is the only check.
+- **ui-engineer:** auto-fire tests the straight crosshair line: an arrow's drop and a Splitbow's
+  side arrows can still reach a sleeping body beside it. Mag Dump's buffed pierce is unknown to
+  the client.
+- **economy-designer + luau-engineer A:** `meleeBelow` 1.5 sits at the top of its allowed range
+  [0, 1.5]. Any change to `sightBelow`, a rusher's ground height or the root height moves the
+  ceiling; `check_levels` gates it.
+- **luau-engineer A (found, not fixed):** a resident killed at rest by one shot can be absorbed by
+  R7's restart for one tick; a brute's diagonal lane on a cell barely wider than it is refused
+  (Forest Road's cells are wide enough).
+- **lead:** INTERFACES "Open for later" (natural barriers, per-body floors, per-role stand-down,
+  shooting out of the boss room, sight through walls, `OnDash` before any publish, L5 parties).
+- **Publish freeze (lead):** no Expeditions publish from `main` until L4.
+- **Never measured:** the crowd step with A's and B's groups routed along the road; snapshot bytes
+  with both camps awake; the phone's frame with raiders on the road.
+
+**Next:**
+1. The lead fills in the mutate.py verdict, merges to `main` and rebuilds the six place files.
+2. **Ben's Wave 4 look:** `docs/PLAYTEST.md` "L1b Wave 4 — no waits, no walls"; setup
+   `docs/MANUAL_STEPS.md` "L1b Wave 4". It must reach the Chief's Clearing and the sneak.
+3. Then L2 or more numbers, only on Ben's word.
+
+- [x] Wave 4 built (`0546e24` … `2ec9da9`)
+- [x] Wave 4 reviewed: four slices, 0 Critical, 4 Major, 12 Minor (`71caad3`)
+- [x] Wave 4 fix round R1–R15 (`9e197bb` … `e428e85`)
+- [x] Fix-diff review fixes R16–R18 (`l1b-wave4-fix`)
+- [ ] Wave 4 QA green (qa-runner; mutate.py verdict)
+- [ ] Wave 4 merged to `main`, six place files rebuilt (lead)
+- [ ] Ben's Studio look at L1b Wave 4 (PLAYTEST "L1b Wave 4 — no waits, no walls")
 
 ## M12 — Growing city
 
