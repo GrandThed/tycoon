@@ -9,8 +9,9 @@ FLOOR_WALLS, WALLED_CEILING), runs every gate (check_levels.run_gates) and expec
 for a control. A rule is named by text its line always carries. Nothing on disk is written,
 except for the stage-mirror cases (MIRROR_CASES), which run tools/check_stage_mirror.py with a line
 of StageFlow.luau and/or sim_range.py broken, from copies in a temporary folder, and expect it red:
-m2 (the "residents under the boss room's maxAlive" rule out of both) and the second fix round's F1
-(the walled camp's trigger band out of the Python mirror alone).
+m2 (the "residents under the boss room's maxAlive" rule out of both), the second fix round's F1
+(the walled camp's trigger band out of the Python mirror alone) and the third's m3 (gate_nudge's
+fenced-rectangle test out of the Python mirror alone).
 
 Usage:
   py tools/check_levels_mutants.py                       # every case; exit 1 when one is not as expected
@@ -54,6 +55,7 @@ LOCKED = re.compile(r"camp C: \d+ residents at the highest difficulty")
 COUNTDOWN = "(The Chief's Clearing): its own gateSeconds"
 PROBLEMS = "forestRoad: maxAlive is an integer of at least 1 wherever"
 CEILING = "camp C (walled): it triggers up to"
+NUDGE = "camp C: the close's nudge lands clear"
 
 
 def layout(data):
@@ -187,6 +189,18 @@ CASES = (
      lambda d: camp(d)["obstacles"][0].__setitem__("sy", 22), {}, CEILING, True),
     ("F1 control: C's first cover 21 high (a root 64, at the fence's top)",
      lambda d: camp(d)["obstacles"][0].__setitem__("sy", 21), {}, CEILING, False),
+    # The third fix round's m2 and m3: every nudge lands on the inset rectangle's edge (z -24 along
+    # the north side), so the entry and the cover stand 3 studs inside it.
+    ("m2: C's entry back at the second round's (313.5, -23), 1 inside the edge",
+     lambda d: camp(d)["entry"].update({"x": 313.5, "z": -23}), {}, NUDGE, True),
+    ("m2: C's entry at (309.5, -22), 2 inside the edge",
+     lambda d: camp(d)["entry"].__setitem__("z", -22), {}, NUDGE, True),
+    ("m2 control: C's entry at (309.5, -21), exactly 3 inside the edge",
+     lambda d: camp(d)["entry"].__setitem__("z", -21), {}, NUDGE, False),
+    ("m3: C's first cover 2 off the inset rectangle's east edge (x 358)",
+     lambda d: camp(d)["obstacles"][0].__setitem__("x", 358), {}, NUDGE, True),
+    ("m3 control: C's first cover 3 off it (x 357)",
+     lambda d: camp(d)["obstacles"][0].__setitem__("x", 357), {}, NUDGE, False),
 )
 
 
@@ -232,10 +246,16 @@ MIRROR_CASES = (
     # The second fix round's F1: the walled camp's band taken out of the Python mirror alone (the
     # Luau side's mutants are tools/crowd_harness/mirror_mutants.py's).
     ("F1: sim_range's trigger asks triggerHeight again (the mirror alone)", None,
-     ('<= above <= zone["ceiling"]', '<= above <= self.rules["triggerHeight"]'), "StageFlow.Advance: scripted runs"),
+     ('self.rules["triggerBelow"] <= above <= zone["ceiling"]',
+      'self.rules["triggerBelow"] <= above <= self.rules["triggerHeight"]'), "StageFlow.Advance: scripted runs"),
     ("F1: sim_range's trigger_ceiling ignores the fence (the mirror alone)", None,
      ("return top if finite(top) and top > trigger_height else trigger_height", "return trigger_height"),
      "StageFlow.Ceiling"),
+    # The third fix round's m3: gate_nudge without its fenced-rectangle test (the mirror alone): a
+    # root out on the road would be nudged, not sent to the entry.
+    ("m3: sim_range's gate_nudge drops the fenced-rectangle test (the mirror alone)", None,
+     ("    if not (abs(x - tx) <= thx and abs(z - tz) <= thz):\n        return None\n", ""),
+     "StageFlow.GateNudge"),
 )
 
 

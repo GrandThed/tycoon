@@ -5712,50 +5712,20 @@ def trigger_ceiling(camp, trigger_height):
     return top if finite(top) and top > trigger_height else trigger_height
 
 
-GATE_SIDES = {"north": (True, -1), "south": (True, 1), "west": (False, -1), "east": (False, 1)}
-
-
-def gate_lanes(camp, inner, fence):
-    """StageFlow.Lanes (the L1c second fix round's F2): one lane per gate of a locking camp whose
-    side is known and whose opening overlaps `inner`'s span along that side, as a dict: alongX (a
-    north or south gate), low..high (the opening along the side, held to inner's span), outer (the
-    fence's outer face) and edge (inner's edge), on the normal's axis."""
-    lanes = []
-    if camp.get("locks") is not True:
-        return lanes
-    ix, iz, ihx, ihz = inner
-    for gate in camp.get("gates") or []:
-        side = GATE_SIDES.get(gate.get("side"))
-        if side is None or not (finite(gate.get("at")) and finite(gate.get("width"))):
-            continue
-        along_x, sign = side
-        centre, half = (ix, ihx) if along_x else (iz, ihz)
-        low = max(centre + gate["at"] - gate["width"] / 2, centre - half)
-        high = min(centre + gate["at"] + gate["width"] / 2, centre + half)
-        if not high > low:
-            continue
-        middle = camp["z"] if along_x else camp["x"]
-        floor_half = (camp["sz"] if along_x else camp["sx"]) / 2
-        inner_half = ihz if along_x else ihx
-        lanes.append({"alongX": along_x, "low": low, "high": high,
-                      "outer": middle + sign * (floor_half + max(fence, 0)), "edge": middle + sign * inner_half})
-    return lanes
-
-
 def gate_nudge(zone, position, rules):
-    """StageFlow.GateNudge (the L1c second fix round's F2): for a root (x, y, z) in one of the
-    zone's gate lanes, between triggerBelow under and its ceiling over its floor, the nearest point
-    of `inner` along the gate's inward normal (the other coordinates kept); None otherwise."""
+    """StageFlow.GateNudge (the L1c third fix round's m3): for a root (x, y, z) inside the zone's
+    fenced rectangle (its trigger), between triggerBelow under and its ceiling over its floor, the
+    nearest point of `inner` (x and z each held to it, the height kept); None otherwise (the
+    entry)."""
     x, y, z = position
     above = y - zone["floorY"]
     if not (-rules["triggerBelow"] <= above <= zone["ceiling"]):
         return None
-    for lane in zone["lanes"]:
-        along, depth = (x, z) if lane["alongX"] else (z, x)
-        if (lane["low"] <= along <= lane["high"]
-                and min(lane["outer"], lane["edge"]) <= depth <= max(lane["outer"], lane["edge"])):
-            return (x, y, lane["edge"]) if lane["alongX"] else (lane["edge"], y, z)
-    return None
+    tx, tz, thx, thz = zone["trigger"]
+    if not (abs(x - tx) <= thx and abs(z - tz) <= thz):
+        return None
+    ix, iz, ihx, ihz = zone["inner"]
+    return (min(max(x, ix - ihx), ix + ihx), y, min(max(z, iz - ihz), iz + ihz))
 
 
 def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
@@ -5817,8 +5787,6 @@ def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
                 "inner": (camp["x"], camp["z"], max(hx - keep, 0), max(hz - keep, 0)),
                 "trigger": (camp["x"], camp["z"], max(hx + grow, 0), max(hz + grow, 0)),
                 "ceiling": trigger_ceiling(camp, rules["triggerHeight"]),
-                "lanes": gate_lanes(camp, (camp["x"], camp["z"], max(hx - keep, 0), max(hz - keep, 0)),
-                                    rules["fenceThickness"]),
                 "entry": (entry["x"], entry["z"]), "exit": (leave["x"], leave["z"]),
                 "spawns": [(p["x"], p["z"]) for p in camp.get("spawns") or []],
                 "region": graphs.get(camp["id"]),
@@ -6815,7 +6783,7 @@ class LevelRun(ThreatRun):
         self.fighters_now = [LEVEL_USER]
         self.entered = False
         self.grace_moves = 0
-        self.gate_nudges = 0  # closes that nudged the fighter in from a gate's lane (F2)
+        self.gate_nudges = 0  # closes that nudged the fighter onto `inner` (F2, m3)
         # WaveService's run.
         self.ids = 0
         self.cursor = 0
@@ -7809,8 +7777,8 @@ class LevelRun(ThreatRun):
 
     def on_close(self, t):
         """`close`: the gates shut. A fighter outside the floor inset by levels.closeInset is put
-        on the entry point, or, standing in a gate's lane, only nudged inside along its normal
-        (gate_nudge, the L1c second fix round's F2); the boss room's held residents are released
+        on the entry point, or, inside the fenced rectangle, only nudged onto the nearest point of
+        `inner` (gate_nudge, the L1c fix rounds' F2 and m3); the boss room's held residents are released
         at the next step (CrowdService.WakeFloor); tempo back to 1, kill stamps cleared."""
         zone = self.plan["stages"][self.stage - 1]["zone"]
         cx, cz = zone["rect"][0], zone["rect"][1]

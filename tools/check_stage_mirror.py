@@ -24,8 +24,9 @@ and compares what they answer, value by value:
     trigger's ceiling (the L1c second fix round's F1: a walled camp's fence top), entry, exit and
     spawn points); every resident group; the population (L1b-11);
   * `StageFlow.Ceiling` against `sim_range.trigger_ceiling`: every shipped camp and the edges;
-  * `StageFlow.GateNudge` against `sim_range.gate_nudge` on a grid round every gate lane of every
-    shipped locking camp (the lanes themselves, `StageFlow.Lanes`, are in the zone rows);
+  * `StageFlow.GateNudge` against `sim_range.gate_nudge` on a grid over the fenced rectangle of
+    every shipped locking camp (its edges, `inner`'s, the corners, half a stud either side) and
+    in height;
   * `StageFlow.BurstPoint` and `BossPoint` against `sim_range.burst_point` and the boss's place;
   * `Combat.CampWave` against `sim_combat.camp_wave`: every wave of every camp of every level, at
     every difficulty, for parties of 1 to coop.maxParty;
@@ -137,7 +138,7 @@ MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "L
 NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
                      "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint", "Ceiling",
-                        "Lanes", "GateNudge",
+                        "GateNudge",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve",
                         "TentOwesRouse", "Fielded", "Threatening"),
           "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
@@ -822,7 +823,7 @@ def zone_row(zone):
             "checkpoint": None if mark is None else [mark[0], floor, mark[1]], "residents": zone["residents"],
             "stock": dict(zone["stock"]), "tentStock": zone["tentStock"],
             "floorY": floor, "rect": list(zone["rect"]), "inner": list(zone["inner"]), "trigger": list(zone["trigger"]),
-            "ceiling": zone["ceiling"], "lanes": plain(zone["lanes"]),
+            "ceiling": zone["ceiling"],
             "entry": [zone["entry"][0], floor, zone["entry"][1]], "exit": [zone["exit"][0], floor, zone["exit"][1]],
             "spawns": [[x, floor, z] for x, z in zone["spawns"]],
             "region": graph_row(zone["region"]) if zone.get("region") is not None else None,
@@ -1922,30 +1923,34 @@ def main():
                                 expected[case] = ("StageFlow.BurstPoint",
                                                   f"{name} camp {zone['id']} spawn {spawn}, body {body + 1} of {size}",
                                                   [x + cx, zone["floorY"], z + cz])
-                    # The L1c second fix round's F2: the close's nudge out of a gate's lane, on a
-                    # grid round every lane (along, across the normal, and in height).
+                    # The L1c fix rounds' F2 and m3: the close's nudge onto `inner`, on a grid
+                    # over the fenced rectangle (its edges, inner's, the centre, half a stud either
+                    # side of each edge) and in height.
                     nudges = 0
-                    for lane in zone["lanes"]:
-                        low, high, outer, edge = lane["low"], lane["high"], lane["outer"], lane["edge"]
-                        inward = 1 if edge > outer else -1
-                        alongs = (low - 0.5, low, (low + high) / 2, high, high + 0.5)
-                        depths = (outer - inward * 0.5, outer, (outer + edge) / 2, edge, edge + inward * 0.5)
-                        floor = zone["floorY"]
-                        rises = (-rules["triggerBelow"] - 0.5, -rules["triggerBelow"], sr.ROOT_HEIGHT,
-                                 rules["triggerHeight"] + 0.5, zone["ceiling"], zone["ceiling"] + 0.5)
-                        for along in alongs:
-                            for depth in depths:
-                                for rise in rises:
-                                    x, z = (along, depth) if lane["alongX"] else (depth, along)
-                                    nudges += 1
-                                    case = f"point.{number}.{index}.nudge.{nudges}"
-                                    at = (x, floor + rise, z)
-                                    data["pointCases"].append({"id": case, "level": number, "difficulty": difficulty,
-                                                               "stage": index, "nudge": list(at)})
-                                    moved = sr.gate_nudge(zone, at, rules)
-                                    expected[case] = ("StageFlow.GateNudge: the close's nudge out of a gate's lane (F2)",
-                                                      f"{name} camp {zone['id']} at {at}",
-                                                      list(moved) if moved is not None else None)
+                    floor = zone["floorY"]
+                    rises = (-rules["triggerBelow"] - 0.5, -rules["triggerBelow"], sr.ROOT_HEIGHT,
+                             rules["triggerHeight"] + 0.5, zone["ceiling"], zone["ceiling"] + 0.5)
+                    axes = []
+                    for centre, half_in, half_out in ((zone["trigger"][0], zone["inner"][2], zone["trigger"][2]),
+                                                      (zone["trigger"][1], zone["inner"][3], zone["trigger"][3])):
+                        marks = [centre]
+                        for sign in (-1, 1):
+                            near, far = centre + sign * half_in, centre + sign * half_out
+                            marks += [near - sign * 0.5, near, near + sign * 0.5, (near + far) / 2,
+                                     far - sign * 0.5, far, far + sign * 0.5]
+                        axes.append(marks)
+                    for x in axes[0]:
+                        for z in axes[1]:
+                            for rise in rises:
+                                nudges += 1
+                                case = f"point.{number}.{index}.nudge.{nudges}"
+                                at = (x, floor + rise, z)
+                                data["pointCases"].append({"id": case, "level": number, "difficulty": difficulty,
+                                                           "stage": index, "nudge": list(at)})
+                                moved = sr.gate_nudge(zone, at, rules)
+                                expected[case] = ("StageFlow.GateNudge: the close's nudge onto inner (F2, m3)",
+                                                  f"{name} camp {zone['id']} at {at}",
+                                                  list(moved) if moved is not None else None)
                     for wave, wave_def in enumerate(stage["defs"], 1):
                         if wave_def.get("boss"):
                             at = wave_def["boss"]["at"]

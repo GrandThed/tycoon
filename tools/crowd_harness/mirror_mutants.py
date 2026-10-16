@@ -214,14 +214,16 @@ MUTANTS = [
      "if fence == nil then"),
     ("L1c F1: Ceiling takes a fence under triggerHeight", "StageFlow",
      "if isFinite(top) and top > triggerHeight then", "if isFinite(top) then"),
-    # F2: the close's nudge out of a gate's lane.
-    ("L1c F2: the nudge puts the root on the fence's face", "StageFlow",
-     "then Vector3.new(position.X, position.Y, lane.edge)", "then Vector3.new(position.X, position.Y, lane.outer)"),
-    ("L1c F2: the lane starts at the floor's edge", "StageFlow",
-     "outer = middle + side.sign * (floorHalf + math.max(fence, 0)),", "outer = middle + side.sign * floorHalf,"),
+    # F2 and the third fix round's m3: the close's nudge onto `inner`.
     ("L1c F2: the nudge ignores the ceiling", "StageFlow",
      "if not (above <= zone.ceiling and above >= -rules.triggerBelow) then",
      "if not (above >= -rules.triggerBelow) then"),
+    ("L1c m3: the nudge drops the fenced-rectangle test", "StageFlow",
+     "if not inRect(zone.trigger, position.X, position.Z) then\n\t\treturn nil", "if false then\n\t\treturn nil"),
+    ("L1c m3: the nudge does not hold X to inner", "StageFlow",
+     "math.min(math.max(position.X, inner.x - inner.hx), inner.x + inner.hx),", "position.X,"),
+    ("L1c m3: the nudge lands on the floor's edge", "StageFlow",
+     "local inner = zone.inner\n\treturn Vector3.new(", "local inner = zone.rect\n\treturn Vector3.new("),
 ]
 
 

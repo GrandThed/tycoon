@@ -474,11 +474,13 @@ function L1C.ceilingTests(): ()
 end
 L1.group("l1c fix2 ceilingTests", L1C.ceilingTests)
 
--- F2: with C's countdown of 0 the close comes in the trigger's own tick, with the root still in
--- the opening. The lead's ruling (code option a): a fighter in a gate's lane is only nudged onto
--- `inner` along the gate's inward normal (StageFlow.GateNudge); everyone else outside goes to the entry.
+-- F2 and m3: with C's countdown of 0 the close comes in the trigger's own tick, with the root still
+-- in the fenced rectangle. The lead's rulings (the second round's code option a, then the third
+-- round's m3): a fighter anywhere in the fenced rectangle, in the trigger's band, is only nudged
+-- onto the nearest point of `inner` (StageFlow.GateNudge); only one outside it goes to the entry,
+-- which stands clear of every point a nudge lands on (m2, co-op: a road player is placed there).
 function L1C.entryTests(): ()
-	print(" The Chief's Clearing's close on the trigger's tick: the gate-lane nudge (the L1c second fix round's F2)")
+	print(" The Chief's Clearing's close on the trigger's tick: the nudge onto inner (the L1c fix rounds' F2 and m3)")
 	local Flow = L1.Flow
 	local rules = L1.real.rules
 	local plan, zone, index, shipped = L1C.clearing()
@@ -489,8 +491,9 @@ function L1C.entryTests(): ()
 	local gate = shipped.gates[1]
 	local gateX = shipped.x + gate.at
 	local edge = zone.trigger.z - zone.trigger.hz
-	local limit = rules.fenceThickness + rules.closeInset + 0.05
-	check(#zone.lanes == #shipped.gates, `camp C has a lane for each of its {#shipped.gates} gates ({#zone.lanes})`)
+	local inner = zone.inner
+	local depth = rules.fenceThickness + rules.closeInset
+	local limit = depth + 0.05
 	local quiet, wrong, worst = {}, {}, 0
 	for _, rise in { 3, 33, 43 } do
 		for step = 0, gate.width * 2 do
@@ -503,7 +506,7 @@ function L1C.entryTests(): ()
 			if L1.find(actions, "close") == nil then
 				table.insert(quiet, `x {x} at {rise}`)
 			end
-			-- WaveService.moveFighters at the close: MustEnter, then the lane's nudge, else the entry.
+			-- WaveService.moveFighters at the close: MustEnter, then the nudge, else the entry.
 			local to = if Flow.MustEnter(zone, position) then Flow.GateNudge(zone, position, rules) else position
 			if to == nil then
 				table.insert(wrong, `x {x} at {rise}: sent to the entry`)
@@ -517,38 +520,84 @@ function L1C.entryTests(): ()
 		end
 	end
 	check(#quiet == 0, `a root anywhere on the north gate's trigger line (z {edge}), standing or at the top of a jump, shuts the gate in that tick{L1.real.list(quiet)}`)
-	check(#wrong == 0, `and the close only nudges it inside along the gate's inward normal, X and height kept, at most fenceThickness + closeInset ({limit - 0.05}) + 0.05 (worst {string.format("%.2f", worst)}){L1.real.list(wrong)}`)
-	-- Elsewhere outside: the entry, as before.
+	check(#wrong == 0, `and the close only nudges it inside along the gate's inward normal, X and height kept, at most fenceThickness + closeInset ({depth}) + 0.05 (worst {string.format("%.2f", worst)}){L1.real.list(wrong)}`)
+	-- m3: every root in the fenced rectangle outside `inner` (the fence band and the inset strip
+	-- on all four sides, the corners too), on a quarter-stud grid across the band and a half-stud
+	-- one along it: onto the nearest point of inner, height kept, at most `depth` on an axis.
+	local trigger = zone.trigger
+	local bad, far, nearest, samples = {}, 0, math.huge, 0
+	local function judge(x: number, z: number): ()
+		for _, rise in { 3, 33, 43 } do
+			local position = vec(x, zone.floorY + rise, z)
+			if not Flow.MustEnter(zone, position) then
+				continue
+			end
+			samples += 1
+			local to = Flow.GateNudge(zone, position, rules)
+			if to == nil then
+				table.insert(bad, `({x}, {z}) at {rise}: sent to the entry`)
+				continue
+			end
+			local wantX = math.min(math.max(x, inner.x - inner.hx), inner.x + inner.hx)
+			local wantZ = math.min(math.max(z, inner.z - inner.hz), inner.z + inner.hz)
+			local dx, dz = math.abs(to.X - x), math.abs(to.Z - z)
+			far = math.max(far, math.sqrt(dx * dx + dz * dz))
+			nearest = math.min(nearest, math.sqrt((to.X - zone.entry.X) ^ 2 + (to.Z - zone.entry.Z) ^ 2))
+			if
+				not near(to.X, wantX)
+				or not near(to.Z, wantZ)
+				or to.Y ~= position.Y
+				or dx > limit
+				or dz > limit
+				or Flow.MustEnter(zone, to)
+			then
+				table.insert(bad, `({x}, {z}) at {rise}: to ({to.X}, {to.Y}, {to.Z})`)
+			end
+		end
+	end
+	local bands = math.floor(depth * 4 + 0.5)
+	for step = 0, math.floor(trigger.hx * 4 + 0.5) do
+		local x = trigger.x - trigger.hx + step / 2
+		for k = 0, bands do
+			judge(x, trigger.z - trigger.hz + k / 4)
+			judge(x, trigger.z + trigger.hz - k / 4)
+		end
+	end
+	for step = 0, math.floor(trigger.hz * 4 + 0.5) do
+		local z = trigger.z - trigger.hz + step / 2
+		for k = 0, bands do
+			judge(trigger.x - trigger.hx + k / 4, z)
+			judge(trigger.x + trigger.hx - k / 4, z)
+		end
+	end
+	check(samples > 0 and #bad == 0, `every root in C's fenced rectangle outside inner ({samples} samples, all four sides and the corners) is nudged onto inner's nearest point, height kept, at most {depth} on an axis (furthest move {string.format("%.2f", far)}){L1.real.list(bad)}`)
+	check(nearest >= 3, `m2: no nudge lands within 3 studs of the entry, where a road player is placed in the same close (nearest {string.format("%.2f", nearest)})`)
+	-- The reviewer's m3: a 45-degree dash past the gate's east edge, first sampled in the inset
+	-- strip beside the opening, goes on from inner's edge 0.4 studs in, not 10 sideways.
+	local dash = vec(gateX + gate.width / 2 + 2.1, zone.floorY + 3, inner.z - inner.hz - 0.4)
+	local fromDash = if Flow.MustEnter(zone, dash) then Flow.GateNudge(zone, dash, rules) else nil
+	check(fromDash ~= nil and fromDash.X == dash.X and near(fromDash.Z, inner.z - inner.hz) and fromDash.Y == dash.Y, "m3: a diagonal dash seen in the strip beside the opening is nudged 0.4 onto inner's edge, X and height kept")
 	local beside = vec(gateX + gate.width / 2 + 2, zone.floorY + 3, edge)
+	local fromBeside = Flow.GateNudge(zone, beside, rules)
+	check(fromBeside ~= nil and fromBeside.X == beside.X and near(fromBeside.Z, inner.z - inner.hz), "a root in the fence band beside the opening: onto inner's edge too")
+	local corner = vec(trigger.x + trigger.hx, zone.floorY + 3, trigger.z - trigger.hz)
+	local fromCorner = Flow.GateNudge(zone, corner, rules)
+	check(fromCorner ~= nil and near(fromCorner.X, inner.x + inner.hx) and near(fromCorner.Z, inner.z - inner.hz), `the fenced rectangle's corner: onto inner's corner ({depth} on each axis)`)
+	-- Outside the band or the rectangle: the entry, as before.
 	local above = vec(gateX, zone.floorY + zone.ceiling + 0.5, edge)
 	local below = vec(gateX, zone.floorY - rules.triggerBelow - 0.5, edge)
+	check(Flow.GateNudge(zone, above, rules) == nil and Flow.GateNudge(zone, below, rules) == nil, "not one over the camp's ceiling or under triggerBelow")
 	local road = vec(gateX, zone.floorY + 3, edge - 0.5)
-	check(Flow.MustEnter(zone, beside) and Flow.GateNudge(zone, beside, rules) == nil, "a fighter in the fence band beside the opening is not in the lane: the entry")
-	check(Flow.GateNudge(zone, above, rules) == nil and Flow.GateNudge(zone, below, rules) == nil, "nor is one over the camp's ceiling or under triggerBelow")
-	check(Flow.GateNudge(zone, road, rules) == nil, "nor one half a stud out on the road, past the fence's outer face")
-	local strip = vec(gateX + 3, zone.floorY + 3, zone.inner.z - zone.inner.hz - 0.5)
-	local fromStrip = Flow.GateNudge(zone, strip, rules)
-	check(fromStrip ~= nil and near(fromStrip.Z, zone.inner.z - zone.inner.hz) and fromStrip.X == strip.X, "one in the inset strip in front of the gate: onto inner's edge, half a stud")
-	-- An east gate: the normal is along X (inward = -X on the east side).
+	local side = vec(trigger.x + trigger.hx + 0.5, zone.floorY + 3, shipped.z)
+	check(Flow.GateNudge(zone, road, rules) == nil and Flow.GateNudge(zone, side, rules) == nil, "nor one half a stud out on the road past the fence's outer face, on Z or on X")
+	-- An east gate: the move is along -X, Z and height kept.
 	local east = shipped.gates[2]
 	if east ~= nil and east.side == "east" then
 		local eastZ = shipped.z + east.at
-		local outside = vec(zone.trigger.x + zone.trigger.hx, zone.floorY + 3, eastZ)
+		local outside = vec(trigger.x + trigger.hx, zone.floorY + 3, eastZ)
 		local to = Flow.GateNudge(zone, outside, rules)
-		check(to ~= nil and near(to.X, zone.inner.x + zone.inner.hx) and to.Z == eastZ and to.Y == outside.Y, "through the east gate: along -X onto inner's east edge, Z and height kept")
+		check(to ~= nil and near(to.X, inner.x + inner.hx) and to.Z == eastZ and to.Y == outside.Y, "through the east gate: along -X onto inner's east edge, Z and height kept")
 	end
-	-- A synthetic open camp has no lanes.
-	local open = nil
-	for _, other in plan.zones do
-		if not other.locks then
-			open = other
-			break
-		end
-	end
-	check(open ~= nil and #open.lanes == 0, "an open camp has no gate lane")
-	local lanes = Flow.Lanes({ id = "X", locks = true, x = 0, y = 0, z = 0, sx = 20, sz = 20, gates = { { side = "south", at = 0, width = 30 }, { side = "up", at = 0, width = 4 }, { side = "west", at = 0, width = L1C.NAN } } }, { x = 0, z = 0, hx = 8, hz = 8 }, 1)
-	local south = lanes[1]
-	check(#lanes == 1 and south.alongX == true and south.low == -8 and south.high == 8 and south.outer == 11 and south.edge == 8, `Lanes: a south gate wider than the side is held to inner's span (-8..8), outer 11, edge 8; an unknown side and a NaN width give none ({#lanes})`)
 end
 L1.group("l1c fix2 entryTests", L1C.entryTests)
 

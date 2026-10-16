@@ -4207,43 +4207,44 @@ L1C_FIX2_MUTATIONS = {
         "return seeds, index",
         "return seeds, #seeds",
     ),
-    "l1c fix2: the nudge puts the root on the fence's face (F2)": (
-        FLOW,
-        "then Vector3.new(position.X, position.Y, lane.edge)",
-        "then Vector3.new(position.X, position.Y, lane.outer)",
-    ),
-    "l1c fix2: an east or west gate's nudge moves Z (F2)": (
-        FLOW,
-        "else Vector3.new(lane.edge, position.Y, position.Z)",
-        "else Vector3.new(position.X, position.Y, lane.edge)",
-    ),
     "l1c fix2: the nudge ignores the height band (F2)": (
         FLOW,
         "\tif not (above <= zone.ceiling and above >= -rules.triggerBelow) then\n\t\treturn nil\n\tend\n",
         "",
     ),
-    "l1c fix2: the lane runs the whole side (F2)": (
-        FLOW,
-        "\t\t\talong >= lane.low\n\t\t\tand along <= lane.high\n",
-        "\t\t\ttrue\n",
-    ),
-    "l1c fix2: the lane starts at the floor's edge, not the fence's face (F2)": (
-        FLOW,
-        "outer = middle + side.sign * (floorHalf + math.max(fence, 0)),",
-        "outer = middle + side.sign * floorHalf,",
-    ),
-    "l1c fix2: a lane is not held to inner's span (F2)": (
-        FLOW,
-        "local low = math.max(centre + gate.at - gate.width / 2, centre - half)",
-        "local low = centre + gate.at - gate.width / 2",
-    ),
-    "l1c fix2: Plan gives a locking camp no lanes (F2)": (
-        FLOW,
-        "lanes = StageFlow.Lanes(camp, inner, rules.fenceThickness),",
-        "lanes = {},",
-    ),
 }
 MUTATIONS.update(L1C_FIX2_MUTATIONS)
+
+# The L1c third fix round (docs/prompts/l1c-fix3.md): m3, the close nudges any root in the fenced
+# rectangle onto the nearest point of `inner` (the second round's lanes are gone).
+L1C_FIX3_MUTATIONS = {
+    "l1c fix3: the nudge drops the fenced-rectangle (depth) test (m3)": (
+        FLOW,
+        "\tif not inRect(zone.trigger, position.X, position.Z) then\n\t\treturn nil\n\tend\n",
+        "",
+    ),
+    "l1c fix3: the nudge does not hold X to inner (m3)": (
+        FLOW,
+        "\t\tmath.min(math.max(position.X, inner.x - inner.hx), inner.x + inner.hx),\n",
+        "\t\tposition.X,\n",
+    ),
+    "l1c fix3: the nudge does not hold Z to inner (m3)": (
+        FLOW,
+        "\t\tmath.min(math.max(position.Z, inner.z - inner.hz), inner.z + inner.hz)\n",
+        "\t\tposition.Z\n",
+    ),
+    "l1c fix3: the nudge lands on the floor's edge, not inner's (m3)": (
+        FLOW,
+        "\tlocal inner = zone.inner\n\treturn Vector3.new(\n",
+        "\tlocal inner = zone.rect\n\treturn Vector3.new(\n",
+    ),
+    "l1c fix3: the nudge drops the root to the floor (m3)": (
+        FLOW,
+        "inner.x + inner.hx),\n\t\tposition.Y,\n",
+        "inner.x + inner.hx),\n\t\tzone.floorY + 3,\n",
+    ),
+}
+MUTATIONS.update(L1C_FIX3_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

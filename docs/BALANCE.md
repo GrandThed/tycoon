@@ -5395,3 +5395,54 @@ minutes):
 | control: C's first cover 21 high, a root 64 at the fence's top | walled: the trigger's ceiling | green |
 | `sim_range`'s trigger asks `triggerHeight` again (Python alone) | `check_stage_mirror` "StageFlow.Advance: scripted runs" | red (12 of 20) |
 | `sim_range.trigger_ceiling` ignores the fence (Python alone) | `check_stage_mirror` "StageFlow.Ceiling" | red (3 of 12) |
+
+## L1c third fix round (2026-10-16)
+
+Rulings: `docs/prompts/l1c-fix3.md` (findings m1–m3 in `docs/prompts/l1c-review/fix2-diff.md`). Same gate:
+Normal 2 / 2, Hard 4 / 4, Brutal 6 / 6, seeds 11 / 23 / 37, `py tools/sim_range.py --check` on the gate's
+64-bit Python 3.12.
+
+### L1c fix 3: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `StageFlow.GateNudge` / `sim_range.gate_nudge` | a root in a gate's lane (the opening held to `inner`'s span) is moved along the gate's normal onto `inner`'s edge; any other root outside `inner` goes to the entry | **any** root in the fenced rectangle, in the trigger's band, goes to the nearest point of `inner` (X and Z each held to it, height kept: at most 3 on an axis, 4.24 at a corner); only roots outside the fenced rectangle go to the entry. `Zone.lanes`, `StageFlow.Lanes` and `gate_lanes` are gone | m3: a diagonal dash first sampled in the strip beside the opening was in no lane and was sent to the entry, about 10 studs sideways |
+| Camp C `entry` (layout), the route's last two points before C's camp leg, the sneak path's end | (313.5, −23); route through (313.5, −44) | **(309.5, −16)**; route through **(309.5, −44)** | m2: a road player placed on the entry in the same close as a nudged one landed 1 stud from him. Every nudge lands on `inner`'s edge (z −24 on the north side), so the entry now stands 8 inside it, 4 off the lane's centre line |
+| `check_levels.py` | — | locking camp: "the close's nudge lands clear": the entry and every obstacle (and tent) stand `NUDGE_CLEAR` 3 inside the inset rectangle's edge | m2 and m3 |
+| `check_levels_mutants.py` | 36 data cases, 3 stage-mirror cases (one stale, m1) | 41 data cases, 4 stage-mirror cases | m1 re-anchored on `self.rules["triggerBelow"] <= above <= zone["ceiling"]`; new cases below |
+
+**Why x 309.5, not 317.5.** Both are 8 inside the nudge line and 4 off the lane's centre. At 317.5 the gate's
+64-bit run turned R8 red on Hard: seed 11's mission player made 26.5 Timber a minute against Road2's sniper
+26.6, because the route's last leg moved and seed 11's clear came out about 4% slower (the 32-bit
+interpreter passed the same data). At 309.5 the row is 27.4 against 26.6. (313.5, −16) and (313.5, −18) gave
+27.5, the second round's number, since the nudge, not the entry, decides where the simulated player starts
+the fight.
+
+### L1c fix 3: measured
+
+| Gate | Value |
+|---|---|
+| check_levels: the nudge lands clear | entry **8** inside the inset edge, nearest cover 19.5 (needs 3) |
+| check_levels: tightest eye / camera | +1.57 / +2.73 (unchanged) |
+| Route / sneak | 1,079 studs (band 900–1,100) / 1,059 |
+| C: the Colossus from the entry / the nearest spawn | 78 / 77 studs |
+| Normal ambush (band 15–35 s) | 20.0 / 19.6 / 20.1 s |
+| Hard / Brutal ambush (band 15–60 s) | 21.6 / 18.7 / 17.7 s; 21.6 / 18.7 / 19.9 s |
+| Normal 2 / 2 clear (band 4.5–5.75) | 5.26 / 4.69 / 5.04 min |
+| Normal 2 / 2 cash / Timber a minute | 25,104 / 28,041 / 26,091; 40.1 / 45.0 / 41.9 |
+| Hard 4 / 4 | 5.11–5.33 min; 282,400–285,020 cash |
+| Brutal 6 / 6 | 5.10–5.36 min; 564,800–570,040 cash |
+| R8, Hard at 2 / 2 | Road2 26.6 Timber a minute against 27.4 (**+3.0%**); LookoutLedge 18,313 cash against 18,614 (**+1.6%**, the thinnest) |
+| One preset below | Hard at 2 / 2: down in Pickets 1.43 min, Main Camp 7.46 min, or ×2.94; Brutal's Colossus alone at 4 / 4 211.2 s |
+| `sim_combat` 23 | green: Normal pays 131,733 cash, bonuses 5.8%, Hard ×2.15, Brutal ×4.32 |
+
+**`check_levels_mutants.py`, new cases** (all as expected):
+
+| Case | Rule | Expected |
+|---|---|---|
+| C's entry back at (313.5, −23), 1 inside the inset edge | the nudge lands clear | red |
+| C's entry at (309.5, −22), 2 inside | the nudge lands clear | red |
+| control: (309.5, −21), exactly 3 inside | the nudge lands clear | green |
+| C's first cover at x 358, 2 off the inset east edge | the nudge lands clear | red |
+| control: the same cover at x 357, 3 off | the nudge lands clear | green |
+| `sim_range.gate_nudge` without its fenced-rectangle test (Python alone) | `check_stage_mirror` "StageFlow.GateNudge" | red (392 of 2,700) |

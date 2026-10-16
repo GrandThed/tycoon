@@ -30,11 +30,6 @@ local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
 
 -- A floor rectangle: centre and half extents.
 export type Rect = { x: number, z: number, hx: number, hz: number }
--- A locking camp's gate lane (the L1c second fix round's F2): the gate's opening, held to the
--- span of `inner`, from the fence's outer face to `inner`'s edge on that side. alongX: a north or
--- south gate (the opening runs along X, the inward normal along Z); low..high: the opening along
--- the side; outer: the fence's outer face and edge: `inner`'s edge, on the normal's axis.
-export type Lane = { alongX: boolean, low: number, high: number, outer: number, edge: number }
 -- A camp as the run needs it: one for every camp of the layout, in its order. Points are feet,
 -- on the floor. trigger, inner, entry, exit and spawns are read only of a camp that locks.
 export type Zone = {
@@ -68,8 +63,6 @@ export type Zone = {
 	-- a double jump from cover carries a root 43 over the floor, and at 30 the top of one in the
 	-- gate left the camp untriggered and cut the boom of a fighter inside (RunFloor.ceiling).
 	ceiling: number,
-	-- Its gate lanes (StageFlow.GateNudge); empty for an open camp.
-	lanes: { Lane },
 	entry: Vector3,
 	exit: Vector3,
 	spawns: { Vector3 },
@@ -1539,48 +1532,6 @@ function StageFlow.Ceiling(camp: Types.LevelCamp, triggerHeight: number): number
 	return triggerHeight
 end
 
--- Zone.lanes (the L1c second fix round's F2): one per gate of a locking camp whose side is known
--- and whose opening overlaps `inner`'s span along that side. A gate's `at` is from the floor's
--- centre along the side, as LevelGeometry cuts the fence.
-function StageFlow.Lanes(camp: Types.LevelCamp, inner: Rect, fence: number): { Lane }
-	local lanes: { Lane } = {}
-	if not (camp.locks == true) then
-		return lanes
-	end
-	local sides: { [string]: { alongX: boolean, sign: number } } = {
-		north = { alongX = true, sign = -1 },
-		south = { alongX = true, sign = 1 },
-		west = { alongX = false, sign = -1 },
-		east = { alongX = false, sign = 1 },
-	}
-	local gates: { Types.LevelGate } = camp.gates or {}
-	for _, gate in gates do
-		local side = sides[gate.side]
-		if side == nil or not (isFinite(gate.at) and isFinite(gate.width)) then
-			continue
-		end
-		local alongX = side.alongX
-		local centre = if alongX then inner.x else inner.z
-		local half = if alongX then inner.hx else inner.hz
-		local low = math.max(centre + gate.at - gate.width / 2, centre - half)
-		local high = math.min(centre + gate.at + gate.width / 2, centre + half)
-		if not (high > low) then
-			continue
-		end
-		local middle = if alongX then camp.z else camp.x
-		local floorHalf = (if alongX then camp.sz else camp.sx) / 2
-		local innerHalf = if alongX then inner.hz else inner.hx
-		table.insert(lanes, {
-			alongX = alongX,
-			low = low,
-			high = high,
-			outer = middle + side.sign * (floorHalf + math.max(fence, 0)),
-			edge = middle + side.sign * innerHalf,
-		})
-	end
-	return lanes
-end
-
 -- The level as the run walks it, at one difficulty: a zone for every camp of the layout (its
 -- floor index is its place in `layout.camps`), the stages, every resident group, every tent and
 -- the population. `ranks` (the place of every difficulty in Expeditions.json) decides which
@@ -1669,7 +1620,6 @@ function StageFlow.Plan(
 			inner = inner,
 			trigger = grown(rect, rules.fenceThickness),
 			ceiling = StageFlow.Ceiling(camp, rules.triggerHeight),
-			lanes = StageFlow.Lanes(camp, inner, rules.fenceThickness),
 			entry = Vector3.new(entry.x, camp.y, entry.z),
 			exit = Vector3.new(exit.x, camp.y, exit.z),
 			spawns = spawns,
@@ -2423,12 +2373,15 @@ function StageFlow.MustEnter(zone: Zone, position: Vector3): boolean
 	return not inRect(zone.inner, position.X, position.Z)
 end
 
--- The L1c second fix round's F2: where the close puts a fighter MustEnter names who stands in one
--- of the zone's gate lanes, between levels.triggerBelow under and its ceiling over its floor: the
--- nearest point of `inner` along the gate's inward normal, the other two coordinates as they are
--- (WaveService moves the body by that much and leaves its speed alone, so a jump goes on). With a
--- countdown of 0 the close comes in the tick the camp triggers, with the root in the opening;
--- sent to the entry it was yanked up to 9 studs. nil = in no lane: the entry, as before.
+-- The L1c third fix round's m3: where the close puts a fighter MustEnter names whose root is in
+-- the zone's fenced rectangle (its trigger), between levels.triggerBelow under and its ceiling
+-- over its floor: the nearest point of `inner`, X and Z each held to it and the height kept, a
+-- move of at most fenceThickness + closeInset on an axis. WaveService moves the body by that much
+-- and leaves its speed alone, so a jump or a dash goes on. With a countdown of 0 the close comes
+-- in the tick the camp triggers, wherever in that rectangle the root was first seen: a dash past
+-- a gate's edge is first sampled in the strip beside the opening, and held to the opening alone
+-- (the second fix round's lanes) it went to the entry, 10 studs sideways. nil = outside the
+-- rectangle or the band: the entry, as before.
 function StageFlow.GateNudge(
 	zone: Zone,
 	position: Vector3,
@@ -2438,21 +2391,15 @@ function StageFlow.GateNudge(
 	if not (above <= zone.ceiling and above >= -rules.triggerBelow) then
 		return nil
 	end
-	for _, lane in zone.lanes do
-		local along = if lane.alongX then position.X else position.Z
-		local depth = if lane.alongX then position.Z else position.X
-		if
-			along >= lane.low
-			and along <= lane.high
-			and depth >= math.min(lane.outer, lane.edge)
-			and depth <= math.max(lane.outer, lane.edge)
-		then
-			return if lane.alongX
-				then Vector3.new(position.X, position.Y, lane.edge)
-				else Vector3.new(lane.edge, position.Y, position.Z)
-		end
+	if not inRect(zone.trigger, position.X, position.Z) then
+		return nil
 	end
-	return nil
+	local inner = zone.inner
+	return Vector3.new(
+		math.min(math.max(position.X, inner.x - inner.hx), inner.x + inner.hx),
+		position.Y,
+		math.min(math.max(position.Z, inner.z - inner.hz), inner.z + inner.hz)
+	)
 end
 
 -- The close judged again, in its grace (StillClosing): a body is brought to the entry only when

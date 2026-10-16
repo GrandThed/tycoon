@@ -249,7 +249,6 @@ function L.zone(zone: any): any
 		inner = L.rect(zone.inner),
 		trigger = L.rect(zone.trigger),
 		ceiling = zone.ceiling,
-		lanes = zone.lanes,
 		entry = zone.entry,
 		exit = zone.exit,
 		spawns = zone.spawns,

@@ -175,6 +175,9 @@ CONE_SAMPLE = 0.5  # studs between two samples of the sneak path for the cone-aw
 JOIN_FACTOR_FIXED = 2  # L1b-W2-12 / Ben's "at least double": Combat.json camps.joinFactor
 BODY_HEIGHT = 6.0  # a character, feet to head: what stands this far under a barrier's foot is in it
 CLOSE_SPARE = 1.0  # a camp's entry point lies this far inside the close rule's inset rectangle
+# The L1c third fix round's m2 and m3: a locking camp's entry, and its cover, stand this far inside
+# the close rule's inset rectangle, whose edge is where every nudge of the close lands.
+NUDGE_CLEAR = 3.0
 SAMPLE = 0.25  # studs between two samples of a walked leg
 GATE_FLOOR = 1.0  # levels.gateSeconds' least, and a stage's own (L1c fix round M3) where the close brings a body
 # L1c (docs/prompts/l1c-contract.md, L1c-1 and L1c-3): the walled boss room.
@@ -778,6 +781,23 @@ def check_layout(name, layout, ctx, expect):
             mark = camp.get("checkpoint")
             expect(mark is not None and x0 <= mark["x"] <= x1 and z0 <= mark["z"] <= z1,
                    f"{tag} camp {cid} (locks) has a checkpoint on its floor")
+            # The L1c third fix round's m2 and m3: at the close a root in the fenced rectangle is
+            # nudged onto the nearest point of the inset rectangle (StageFlow.GateNudge), so onto
+            # its edge, anywhere along a gate's width or past it; a road player is placed on the
+            # entry in the same close (feet up, speed zeroed). The entry stands NUDGE_CLEAR inside
+            # that edge, so a road player never lands on a nudged one, and so does every solid on
+            # the floor, so a nudge never lands in cover.
+            inset = levels.get("closeInset") or 0
+            ix0, ix1, iz0, iz1 = x0 + inset, x1 - inset, z0 + inset, z1 - inset
+            entry_clear = min(entry["x"] - ix0, ix1 - entry["x"], entry["z"] - iz0, iz1 - entry["z"])
+            boxes = list(camp.get("obstacles") or []) + ([camp["tent"]] if camp.get("tent") else [])
+            covered = [round(min(o["x"] - o["sx"] / 2 - ix0, ix1 - o["x"] - o["sx"] / 2,
+                                 o["z"] - o["sz"] / 2 - iz0, iz1 - o["z"] - o["sz"] / 2), 2) for o in boxes]
+            near_cover = min(covered, default=math.inf)
+            expect(entry_clear >= NUDGE_CLEAR - EPS and near_cover >= NUDGE_CLEAR - EPS,
+                   f"{tag} camp {cid}: the close's nudge lands clear: the entry stands {entry_clear:g} studs and its "
+                   f"nearest cover {near_cover:g} inside the inset rectangle's edge, where every nudge lands (needs "
+                   f"{NUDGE_CLEAR:g})")
         # Flat: nothing but its own obstacles rises from the floor, and they stand on it.
         bumps = [s.name for s in solids if s.kind in ("block", "secret") and s.top > camp["y"] + EPS
                  and s.bottom < camp["y"] + (barrier.get("height") or 0)

@@ -1127,9 +1127,11 @@ end
 -- Every fighting member's body goes to `feet` (a skip's `move`). With `closing`, the camp whose
 -- gates are closing, only those StageFlow says must be brought inside, and each of them once per
 -- close: at the close itself by MustEnter, in its grace (`late`) by Strayed. At the close itself
--- a fighter in a gate's lane is only nudged inside (StageFlow.GateNudge, the L1c second fix
--- round's F2): the pivot shifts, its speed and facing are kept, so a jump goes on; no `Placed`
--- is written (the client would drop its speed), but the weapon forgets the motion as for a move.
+-- a fighter inside the fenced rectangle is only nudged onto the nearest point of `inner`
+-- (StageFlow.GateNudge, the L1c fix rounds' F2 and m3): the pivot shifts, its speed and facing are
+-- kept, so a jump goes on; no `Placed` is written (the client would drop its speed), but the
+-- weapon forgets the motion as for a move. Only a fighter outside that rectangle (on the road)
+-- goes to the entry, which check_levels keeps clear of every point a nudge lands on.
 local function moveFighters(feet: Vector3, closing: StageFlow.Zone?, late: boolean?): ()
 	local combatConfig = config()
 	for _, member in ArenaService.GetMembers() do
