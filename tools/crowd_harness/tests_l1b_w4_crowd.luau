@@ -1042,4 +1042,43 @@ function W4C.footTests(): ()
 end
 L1BC.crowdGroup("fix round: the foot of the climb", W4C.footTests)
 
+-- R15: the travelling ground shapes have R6's under side too. The windup begins with the player
+-- on the crowd's floor (y 0, R14 lets it), then he drops under it before the shape reaches him:
+-- tests_w2's brute charge (height 5) and tests_s2's ringer's ring (height 4), from the same spots
+-- as their jump cases.
+function W4C.travelTests(): ()
+	print(" fix round R15: a charge and a ring under the floor")
+	local function charged(feet: number): number
+		fresh()
+		local id = Crowd.Spawn("brute", vec(0, 0, 20), "fight")
+		waitFor(id, "windup", 40)
+		root.Position = vec(0, 3 + feet, 0)
+		step2(30)
+		local health = humanoid.Health
+		root.Position = vec(0, 3, 0)
+		return health
+	end
+	check(charged(-5.5) == 130, `R15: feet 5.5 under the charge's floor (height 5): it passes over (health {charged(-5.5)})`)
+	check(charged(-4.5) < 130, "R15: feet 4.5 under it: hit (the edge stays in)")
+	local function ringed(feet: number): number
+		fresh()
+		local id = Crowd.Spawn("ringer", vec(0, 0, 12), "fight")
+		waitFor(id, "windup", 40)
+		local T = stamp() + 1.0
+		S2.runTo(T)
+		step2()
+		kill(id)
+		root.Position = vec(0, 3 + feet, 0)
+		S2.runTo(T + (12 + 1.5) / 34 + LAG + 3 * DT)
+		local health = humanoid.Health
+		root.Position = vec(0, 3, 0)
+		step2(12)
+		return health
+	end
+	check(ringed(-4.5) == 130, "R15: feet 4.5 under the ring's floor (height 4): its front passes over")
+	check(ringed(-3.5) < 130, "R15: feet 3.5 under it: hit")
+	fresh()
+end
+L1BC.group("fix round: travelling shapes", W4C.travelTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

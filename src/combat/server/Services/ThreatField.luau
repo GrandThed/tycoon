@@ -295,7 +295,10 @@ local function stepCharge(
 		end
 		local to = math.min(now - who.lag, endAt)
 		local from = math.max(before - who.lag, strike.at)
-		if to < from or (height ~= nil and who.feetY - strike.floorY > height) then
+		-- R6 and R15: the charge runs on the crowd's floor, so it misses feet more than `height`
+		-- over it (a jump) and more than `height` under it (a player below a region's lip).
+		local over = who.feetY - strike.floorY
+		if to < from or (height ~= nil and (over > height or over < -height)) then
 			continue
 		end
 		-- On the flat: the body's centre against the root, both at the lane's own level.
@@ -343,7 +346,9 @@ local function stepRing(
 		end
 		local to = math.min(now - who.lag, endAt)
 		local from = math.max(before - who.lag, leftAt)
-		if to < from or (height ~= nil and who.feetY - strike.floorY > height) then
+		-- R6 and R15: the ring's front runs along the crowd's floor, above and below alike.
+		local rise = who.feetY - strike.floorY
+		if to < from or (height ~= nil and (rise > height or rise < -height)) then
 			continue
 		end
 		local dx = who.position.X - origin.X

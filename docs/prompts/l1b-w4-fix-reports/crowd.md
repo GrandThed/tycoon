@@ -240,3 +240,50 @@ CrowdService.Stirred(): { [number]: boolean }
   (`who.feetY − strike.floorY > height`, `ThreatField.luau:298` and `:346`). R6 gave the lower bound
   only to the queued shapes in VitalsService. A lane cut at the lip, or a ring, could still reach a
   player under the drop. `ThreatField` is on the untouched list.
+
+## R15 — the travelling ground shapes' under side (lead's ruling; ThreatField for this fix only)
+
+### Changes
+`ThreatField.luau` now gives the same lower bound R6 gave VitalsService to two shapes:
+- the charge, in `stepCharge`;
+- the ring, in `stepRing`.
+
+Each is measured as VitalsService measures it, `feetY − strike.floorY`. A player is passed over when
+that is above `height` or below `−height`.
+
+### Grep for other shapes testing the upper bound alone
+Nothing else in `src` tests the upper bound alone:
+- VitalsService (`decide`), `CrowdBrain.reaches` and both ThreatField judges now test both bounds.
+- `StageFlow.triggered` already has both.
+- Shots are swept as spheres, with no height band.
+- The client only draws.
+
+### Cases (`tests_l1b_w4_crowd.luau`, "fix round: travelling shapes")
+The windup begins with the player on the floor, then he drops under it before the shape arrives.
+- **Charge** (`tests_w2`'s brute, height 5): feet 5.5 under the floor are missed; 4.5 under are hit.
+- **Ring** (`tests_s2`'s ringer, height 4): feet 4.5 under the floor are missed; 3.5 under are hit.
+
+### Mutations
+- `L1B_W4_FIX_CROWD_R15_MUTATIONS` (2): a charge with no under side, and a ring with no under side.
+  Both were proved caught.
+- `L1B_W4_FIX_CROWD_R15_REPLACED` (2): `lane: it has no height` and `ring: it has no height`.
+  - Both were stale: one through `mutate.py`'s `RING_HEIGHT` constant, which can then be dropped,
+    the other through the lane's inline text.
+  - Both were proved caught.
+
+### For the lead: `tools/crowd_harness/tests_s2.luau:319` pins the old ring rule (untouched list)
+Verified in a scratch copy: with this change that check passes and nothing else moves.
+```diff
+-	check(humanoid.Health == 104, "its height is measured from the crowd's floor, upper bound alone: feet under the floor are hit")
++	check(humanoid.Health == 130 and #log == 0, "R15: its height is measured from the crowd's floor, above and below: feet 8 under the floor are missed")
+```
+
+### Verify
+- `stylua --check src`: clean.
+- `selene src`: 0 errors.
+- `check_compile`: PASS, 157 files.
+- Harness: `HARNESS: FAIL (1 of 2,337 checks)`. That one failure is the `tests_s2.luau:319` check
+  above, until it is routed.
+
+### For the designer
+`sim_range`'s charge and ring judges need the same lower bound, if it mirrors them.

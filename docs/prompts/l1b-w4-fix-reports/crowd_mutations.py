@@ -159,3 +159,33 @@ L1B_W4_FIX_CROWD_R14_REPLACED = {
 }
 # For the economy-designer's mirror_mutants.py, its entry of the same name:
 #   ("Melee ignores meleeAbove", "CampBrain", "and above <= rules.meleeAbove", "and true")
+
+# R15 (added during the round): the travelling ground shapes' under side. Each proved caught.
+FIELD = "src/combat/server/Services/ThreatField.luau"
+L1B_W4_FIX_CROWD_R15_MUTATIONS = {
+    "l1b w4 fix crowd: a charge has no under side (R15)": (
+        FIELD,
+        "(over > height or over < -height)",
+        "(over > height)",
+    ),
+    "l1b w4 fix crowd: a ring has no under side (R15)": (
+        FIELD,
+        "(rise > height or rise < -height)",
+        "(rise > height)",
+    ),
+}
+
+# R15 made these mutate.py entries stale (the RING_HEIGHT constant and the lane's inline text):
+# same label, same rule, the new text. RING_HEIGHT can then go.
+L1B_W4_FIX_CROWD_R15_REPLACED = {
+    "lane: it has no height": (
+        FIELD,
+        "if to < from or (height ~= nil and (over > height or over < -height)) then",
+        "if to < from then",
+    ),
+    "ring: it has no height": (
+        FIELD,
+        "if to < from or (height ~= nil and (rise > height or rise < -height)) then",
+        "if to < from then",
+    ),
+}
