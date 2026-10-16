@@ -51,6 +51,8 @@ TIMEOUT_SECONDS = 150
 SOURCES = {
     "CrowdCodec": "src/shared/CrowdCodec.luau",
     "HitShapes": "src/shared/HitShapes.luau",
+    # L1b Wave 4: the chase region (CrowdBrain, CampBrain, StageFlow and CampAim's renderer need it).
+    "Region": "src/shared/Region.luau",
     "Economy": "src/shared/Economy.luau",
     "Armory": "src/shared/Armory.luau",
     "Combat": "src/shared/Combat.luau",
@@ -84,6 +86,8 @@ TESTS = [
     "tests_l1b.luau",
     "tests_l1b_w2_crowd.luau",
     "tests_l1b_w2.luau",
+    # L1b Wave 4: the regions, the pace tent, Fielded and N (B's).
+    "tests_l1b_w4.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"

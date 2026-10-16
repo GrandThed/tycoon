@@ -1,7 +1,9 @@
 --!strict
 -- The rules of a run through a level (docs/INTERFACES.md "L1 contracts", rulings 1, 2, 9, 10,
 -- 13–19, 25, 27, 28 and "A run"; "L1b contracts", rulings L1b-1 to L1b-22; L1b Wave 2 "the
--- long road", L1b-W2-5 to -8 and -21: tents, the population rule, the clear bonus). A level is an
+-- long road", L1b-W2-5 to -8 and -21: tents, the population rule, the clear bonus; L1b Wave 4 "no
+-- waits, no walls", L1b-W4-14 to -16 and -28 to -31: the chase regions, the pace tent's stock, the
+-- clear on the fielded raiders, the bonus on what was fielded, N's approaches). A level is an
 -- ordered list of stages, `travel` and `camp`; since L1b only a camp that locks (the boss room)
 -- is a stage, and every other camp of the layout is open and inhabited. This module decides
 -- everything that is a rule: which stage is next, when the boss room triggers, when its gates
@@ -22,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
+local Region = require(sharedFolder:WaitForChild("Region"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
 
@@ -41,8 +44,8 @@ export type Zone = {
 	checkpoint: Vector3?,
 	-- Bodies placed in it at the start, at the played difficulty.
 	residents: number,
-	-- L1b-W2-21: its residents and its tent's stock at the played difficulty, by kind (a locking
-	-- camp: its residents only; the run adds the bodies its waves queue).
+	-- L1b-W4-30: its residents at the played difficulty, by kind (no tent stock: Fielded adds what
+	-- the tent sent; a locking camp's run adds the bodies its waves queue).
 	stock: { [string]: number },
 	-- L1b-W2-6: its tent's stock at the played difficulty; 0 for none.
 	tentStock: number,
@@ -58,6 +61,11 @@ export type Zone = {
 	entry: Vector3,
 	exit: Vector3,
 	spawns: { Vector3 },
+	-- L1b-W4-14: its region's graph, the same table on every zone of that region (nil = none).
+	region: Types.RegionGraph?,
+	-- L1b-W4-31: where N puts the party before this open camp, feet (nil = none, and always nil on
+	-- a locking camp).
+	approach: Vector3?,
 }
 export type Stage = {
 	-- "travel" | "camp"
@@ -85,6 +93,8 @@ export type PlanTent = {
 	-- kind's radius clear of the wall, on the wall when Plan had no kinds), paired with posts.
 	doors: { Vector3 },
 	every: number,
+	-- L1b-W4-28: the camp's own clock; it sends only while the camp is ahead of it.
+	pace: Types.LevelTentPace,
 }
 export type Plan = {
 	levelId: string,
@@ -128,6 +138,8 @@ export type State = {
 	-- waited: the star is theirs (EarnsStar).
 	fought: { number },
 	ended: string?,
+	-- L1b-W4-31: the last zone N moved the party to (0 = none): N never goes back before it.
+	approached: number,
 }
 export type Input = {
 	now: number,
@@ -144,10 +156,9 @@ export type Input = {
 	alive: number,
 	-- Groups in rise, fight or home with a living member (CrowdService.Awake).
 	awake: number,
-	-- Living bodies on each zone's floor, by zone index (CrowdService.AliveOn).
+	-- Living bodies on each zone's floor, by zone index (CrowdService.AliveOn). A body's floor is
+	-- its camp's for life, wherever it stands (L1b-W4-29).
 	aliveByFloor: { number },
-	-- L1b-W2-8: per zone index, its tent's stock not sent yet (0 where none).
-	tentLeft: { number },
 	mergeOk: boolean,
 	-- The director's breather, used by a stage that names none.
 	breatherSeconds: number,
@@ -156,8 +167,9 @@ export type Input = {
 	runCap: boolean,
 }
 -- kind: "gate" | "rearm" | "close" | "wave" | "clear" | "boundary" | "breather" | "open" |
--- "travel" | "drop" | "move" | "reach" | "campClear" | "end". `stage` is the stage the action is
--- about (the run's stage for `reach` and `campClear`, which name their camp by `zone`).
+-- "travel" | "drop" | "move" | "reach" | "campClear" | "approach" | "end". `stage` is the stage
+-- the action is about (the run's stage for `reach`, `campClear` and `approach`, which name their
+-- camp by `zone`).
 export type Action = {
 	kind: string,
 	stage: number,
@@ -166,7 +178,7 @@ export type Action = {
 	merged: boolean?,
 	-- On `clear`: the waves it covers.
 	count: number?,
-	-- On `reach` and `campClear`: the zone index.
+	-- On `reach`, `campClear` and `approach`: the zone index.
 	zone: number?,
 	reason: string?,
 	-- On `boundary`: whether those who wait in the lobby camp are let into the level now. False
@@ -202,6 +214,8 @@ local NEEDED = {
 		"boxMargin",
 		"checkpointReach",
 		"walletSendSeconds",
+		"regionLockMargin",
+		"doorSpare",
 	},
 	level = { "id", "name", "material" },
 	crowd = { "regenShare", "maxAlive", "burst", "burstSpacing" },
@@ -429,12 +443,14 @@ end
 -- their groups): what Plan places, and what Validate checks the posts of, so the two can never
 -- build a group differently. A camp the layout lacks, a spot its camp lacks and a group whose
 -- units all drop are left out. Also returns each layout camp's residents by its id, and its
--- residents by kind (L1b-W2-21's stock).
+-- residents by kind (L1b-W2-21's stock). `cells`: each region camp's region cells, by its id
+-- (L1b-W4-14), put on its groups; nil = none has a region.
 local function groupsOf(
 	level: Types.LevelConfig,
 	layout: Types.LevelLayout,
 	rank: number,
-	ranks: { [string]: number }?
+	ranks: { [string]: number }?,
+	cells: { [string]: { Types.CampRect } }?
 ): ({ Types.CampGroupDef }, { [string]: number }, {
 	[string]: { [string]: number },
 })
@@ -471,6 +487,7 @@ local function groupsOf(
 				-- L1b-13: a boss room's residents sleep and evade until its close.
 				held = camp.locks == true,
 				units = units,
+				region = if cells ~= nil then cells[camp.id] else nil,
 			})
 			residents[camp.id] = (residents[camp.id] or 0) + bodies
 			local stock = stocks[camp.id] or {}
@@ -486,13 +503,14 @@ end
 -- minDifficulty as residents are, never scaled by countMult or the party, expanded in file order.
 -- A tent whose units all drop is left out; so is a locking camp's (its tent is a marker only:
 -- Validate refuses a stock there). Also returns each camp's tent stock by its id. CampBrain.Posts
--- is asked with pcall: Validate reads a throw as a problem, Plan as no posts.
+-- is asked with pcall: Validate reads a throw as a problem, Plan as no posts. `cells` as groupsOf.
 local function tentsOf(
 	level: Types.LevelConfig,
 	layout: Types.LevelLayout,
 	rank: number,
 	ranks: { [string]: number }?,
-	crowdKinds: { [string]: Types.CrowdKindDef }?
+	crowdKinds: { [string]: Types.CrowdKindDef }?,
+	cells: { [string]: { Types.CampRect } }?
 ): ({ PlanTent }, { [string]: number })
 	local tents: { PlanTent } = {}
 	local stocks: { [string]: number } = {}
@@ -532,6 +550,7 @@ local function tentsOf(
 			radius = block.radius,
 			held = false,
 			units = units,
+			region = if cells ~= nil then cells[camp.id] else nil,
 		}
 		local placed, posts = pcall(CampBrain.Posts, def, #kinds)
 		local ring: { CampBrain.Post } = if placed then posts else {}
@@ -554,6 +573,7 @@ local function tentsOf(
 			posts = ring,
 			doors = doors,
 			every = tent.every,
+			pace = tent.pace,
 		})
 		stocks[camp.id] = #kinds
 	end
@@ -632,6 +652,242 @@ local function isFinite(value: any): boolean
 	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
 
+-- Regions ------------------------------------------------------------------------------------
+
+-- L1b-W4-14: a region's cells, in their order: the floors of its camps in the layout's camp order,
+-- then its road cells in file order. Read after Validate (Plan) or once its shapes are checked.
+local function regionCells(
+	region: Types.LevelRegion,
+	camps: { Types.LevelCamp }
+): { Types.CampRect }
+	local cells: { Types.CampRect } = {}
+	for _, camp in camps do
+		if table.find(region.camps, camp.id) ~= nil then
+			table.insert(cells, { x = camp.x, z = camp.z, hx = camp.sx / 2, hz = camp.sz / 2 })
+		end
+	end
+	local roads: { Types.LevelRegionCell } = region.cells or {}
+	for _, cell in roads do
+		table.insert(cells, { x = cell.x, z = cell.z, hx = cell.sx / 2, hz = cell.sz / 2 })
+	end
+	return cells
+end
+
+-- L1b-W4-15, -16: the widest body and the longest reach among the kinds the camps `ids` field, as
+-- residents or from their tents, at the level's highest difficulty (fielding only grows with the
+-- rank, so that is every difficulty's). A kind `kinds` lacks counts 0. Walks data Validate may not
+-- have passed yet, so it never throws on a broken entry.
+local function regionReach(
+	level: Types.LevelConfig,
+	ids: { string },
+	ranks: { [string]: number }?,
+	kinds: { [string]: Types.CrowdKindDef }?
+): (number, number)
+	local top = 0
+	local difficulties: any = level.difficulties
+	if ranks ~= nil and type(difficulties) == "table" then
+		for name in difficulties do
+			top = math.max(top, ranks[name] or 0)
+		end
+	end
+	local widest, longest = 0, 0
+	local function take(units: any): ()
+		if type(units) ~= "table" then
+			return
+		end
+		for _, unit in units do
+			if type(unit) ~= "table" or type(unit.kind) ~= "string" then
+				continue
+			end
+			local needs = unit.minDifficulty
+			local needsRank = if needs ~= nil and ranks ~= nil then ranks[needs] else nil
+			if needs ~= nil and (needsRank == nil or needsRank > top) then
+				continue
+			end
+			local def = if kinds ~= nil then kinds[unit.kind] else nil
+			if def ~= nil then
+				widest = math.max(widest, def.radius or 0)
+				longest = math.max(longest, StageFlow.LongestReach(def))
+			end
+		end
+	end
+	local configs: any = level.camps
+	if type(configs) ~= "table" then
+		return widest, longest
+	end
+	for _, config in configs do
+		if type(config) ~= "table" or table.find(ids, config.id) == nil then
+			continue
+		end
+		if type(config.residents) == "table" then
+			for _, group in config.residents do
+				if type(group) == "table" then
+					take(group.units)
+				end
+			end
+		end
+		if type(config.tent) == "table" then
+			take(config.tent.units)
+		end
+	end
+	return widest, longest
+end
+
+-- The flat gap between two rectangles: 0 when they touch or overlap.
+local function rectGap(a: Types.CampRect, b: Types.CampRect): number
+	local dx = math.max(math.abs(a.x - b.x) - a.hx - b.hx, 0)
+	local dz = math.max(math.abs(a.z - b.z) - a.hz - b.hz, 0)
+	return math.sqrt(dx * dx + dz * dz)
+end
+
+-- L1b-W4-14 to -16's lines of Validate, into `problem`: the shape of `layout.regions`, its camps
+-- and road cells, then (once those are sound) Region.Problems with the door the region's widest
+-- body needs, and the lock clearance from every locking floor.
+local function regionProblems(
+	level: Types.LevelConfig,
+	layout: Types.LevelLayout,
+	camps: { Types.LevelCamp },
+	kinds: { [string]: Types.CrowdKindDef },
+	ranks: { [string]: number },
+	rules: Types.CombatLevelsConfig,
+	problem: (text: string) -> ()
+): ()
+	local regions: any = layout.regions
+	if regions == nil then
+		return
+	elseif type(regions) ~= "table" then
+		problem("regions is not a list")
+		return
+	end
+	local numbers: any = rules
+	local spare = if isFinite(numbers.doorSpare) then numbers.doorSpare else 0
+	local margin = if isFinite(numbers.regionLockMargin) then numbers.regionLockMargin else 0
+	local ids: { [string]: boolean } = {}
+	local regionOf: { [string]: string } = {}
+	for index, region in regions do
+		local id = if type(region) == "table" then region.id else nil
+		local here = `region {index}`
+		if type(id) ~= "string" or id == "" then
+			problem(`{here} has no id`)
+		elseif ids[id] then
+			problem(`the region id "{id}" is used twice`)
+		else
+			ids[id] = true
+			here = `region "{id}"`
+		end
+		if type(region) ~= "table" then
+			continue
+		end
+		local sound = true
+		local y = region.y
+		if not isFinite(y) then
+			problem(`{here}: its y is {tostring(y)}, not a finite height`)
+			sound = false
+		end
+		local members: any = region.camps
+		if type(members) ~= "table" or #members == 0 then
+			problem(`{here} has no camps`)
+			continue
+		end
+		for _, campId in members do
+			local _floor, camp = campIndex(camps, if type(campId) == "string" then campId else nil)
+			if camp == nil then
+				problem(`{here} names camp "{tostring(campId)}", which the layout lacks`)
+				sound = false
+				continue
+			end
+			local other = regionOf[camp.id]
+			if other ~= nil then
+				problem(`camp {camp.id} is in two regions ({other} and {here})`)
+			end
+			regionOf[camp.id] = here
+			if camp.locks == true then
+				problem(`{here}: camp {camp.id} locks, and a boss room is in no region`)
+			end
+			local shaped = isFinite(camp.x)
+				and isFinite(camp.y)
+				and isFinite(camp.z)
+				and isFinite(camp.sx)
+				and isFinite(camp.sz)
+				and camp.sx > 0
+				and camp.sz > 0
+			if not shaped then
+				problem(`{here}: camp {camp.id} needs a finite x, y, z and a size above 0`)
+				sound = false
+			elseif isFinite(y) and math.abs(camp.y - y) > 1e-6 then
+				problem(`{here}: camp {camp.id}'s floor is at y {camp.y}, not the region's {y}`)
+			end
+		end
+		local roads: any = region.cells
+		if roads == nil then
+			roads = {}
+		elseif type(roads) ~= "table" then
+			problem(`{here}: cells is not a list`)
+			continue
+		end
+		local names: { string } = {}
+		for _, camp in camps do
+			if table.find(members, camp.id) ~= nil then
+				table.insert(names, `camp {camp.id}'s floor`)
+			end
+		end
+		for cellIndex, cell in roads do
+			local cellId = if type(cell) == "table" then cell.id else nil
+			local at = `{here} cell {cellIndex}`
+			if type(cellId) ~= "string" or cellId == "" then
+				problem(`{at} has no id`)
+			else
+				at = `{here} cell "{cellId}"`
+			end
+			table.insert(names, `cell {tostring(cellId or cellIndex)}`)
+			if
+				type(cell) ~= "table"
+				or not isFinite(cell.x)
+				or not isFinite(cell.z)
+				or not isFinite(cell.sx)
+				or not isFinite(cell.sz)
+			then
+				problem(`{at} needs a finite x, z, sx and sz`)
+				sound = false
+			elseif not (cell.sx > 0 and cell.sz > 0) then
+				problem(`{at}: its size must be above 0`)
+				sound = false
+			elseif
+				math.abs(cell.x) + cell.sx / 2 > WIRE_REACH
+				or math.abs(cell.z) + cell.sz / 2 > WIRE_REACH
+			then
+				problem(`{at} lies beyond {WIRE_REACH} studs of the world origin`)
+			end
+		end
+		if not sound then
+			-- Nothing more can be said of cells whose numbers are not there.
+			continue
+		end
+		local cells = regionCells(region, camps)
+		local widest, longest = regionReach(level, members, ranks, kinds)
+		for _, line in Region.Problems(cells, 2 * widest + spare) do
+			problem(`{here}: {line}`)
+		end
+		-- L1b-W4-16: no body of the region reaches into a boss room from anywhere it may stand.
+		local needed = longest + margin
+		for _, camp in camps do
+			if camp.locks ~= true or not (isFinite(camp.sx) and isFinite(camp.sz)) then
+				continue
+			end
+			local floor: Types.CampRect =
+				{ x = camp.x, z = camp.z, hx = camp.sx / 2, hz = camp.sz / 2 }
+			for cellIndex, cell in cells do
+				local gap = rectGap(cell, floor)
+				if gap < needed - 1e-6 then
+					problem(
+						`{here}: {names[cellIndex]} is {math.round(gap * 100) / 100} studs from locking camp {camp.id}'s floor, under its longest reach {longest} + regionLockMargin {margin} = {needed}`
+					)
+				end
+			end
+		end
+	end
+end
+
 -- Validate's L1b lines, one per problem, into `problems`: the numbers the run reads, which camps
 -- lock and which stage names them, the level's `camps` entries, every spot of every layout camp,
 -- every resident group and its units; then, once all of that is sound, every group's posts on
@@ -692,6 +948,29 @@ local function campProblems(
 	end
 
 	for _, camp in camps do
+		-- L1b-W4-31: N's stop, before an open camp only, where the crowd's wire reaches.
+		local approach: any = camp.approach
+		if approach ~= nil then
+			if
+				type(approach) ~= "table"
+				or not isFinite(approach.x)
+				or not isFinite(approach.y)
+				or not isFinite(approach.z)
+			then
+				problem(`camp {camp.id}: its approach needs a finite x, y and z`)
+			elseif
+				math.abs(approach.x) > WIRE_REACH
+				or math.abs(approach.y) > WIRE_REACH
+				or math.abs(approach.z) > WIRE_REACH
+			then
+				problem(
+					`camp {camp.id}: its approach lies beyond {WIRE_REACH} studs of the world origin`
+				)
+			end
+			if camp.locks == true then
+				problem(`camp {camp.id} locks, and a boss room has no approach`)
+			end
+		end
 		-- L1b-W2-6: a tent's marker and ring (a boss room's is a marker only, checked the same).
 		local block: any = camp.tent
 		if block ~= nil then
@@ -812,6 +1091,22 @@ local function campProblems(
 					)
 				end
 				unitProblems(`{here} tent`, tent.units)
+				-- L1b-W4-28: the camp's own clock, which decides whether its tent sends at all.
+				local pace = tent.pace
+				if type(pace) ~= "table" then
+					problem(`{here}: its tent has no pace`)
+				else
+					if not (isFinite(pace.seconds) and pace.seconds > 0) then
+						problem(
+							`{here}: its tent's pace.seconds is {tostring(pace.seconds)}, not a time above 0`
+						)
+					end
+					if not (isFinite(pace.lead) and pace.lead >= 0 and pace.lead <= 1) then
+						problem(
+							`{here}: its tent's pace.lead is {tostring(pace.lead)}, not from 0 to 1`
+						)
+					end
+				end
 				if camp ~= nil and camp.locks == true then
 					problem(`{here}: camp {camp.id} locks, and a boss room's tent has no stock`)
 				elseif camp ~= nil and camp.tent == nil then
@@ -1186,6 +1481,7 @@ function StageFlow.Validate(
 		problem,
 		checkKind
 	)
+	regionProblems(level, layout, camps, kinds, ranks, rules, problem)
 	return problems
 end
 
@@ -1210,8 +1506,11 @@ end
 -- gives the boss reserve; without it each boss counts 1. nil, with the reason, for a difficulty
 -- the level lacks, a camp stage whose zone the layout lacks, or a stage's camp whose entry lies
 -- within levels.closeInset of its floor's edge (the close would move a fighter who stands on the
--- entry back onto it, into a body the gate overlaps). Asked after Validate: it reads the keys
--- Validate answers for.
+-- entry back onto it, into a body the gate overlaps), or a region Region.Problems refuses (Validate
+-- names it first; with no `kinds` the door asked for is the narrower one). Each layout region is
+-- built once (Region.Build) and the same graph hangs on every zone of it, and its cells on every
+-- group of it (L1b-W4-14): that shared table is what lets one camp's raiders into the other's
+-- floor. Asked after Validate: it reads the keys Validate answers for.
 function StageFlow.Plan(
 	level: Types.LevelConfig,
 	layout: Types.LevelLayout,
@@ -1225,8 +1524,24 @@ function StageFlow.Plan(
 		return nil, `{level.id} has no difficulty "{difficulty}"`
 	end
 	local rank = if ranks ~= nil then ranks[difficulty] or 0 else 0
-	local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks)
-	local tents, tentStocks = tentsOf(level, layout, rank, ranks, kinds)
+	local graphs: { [string]: Types.RegionGraph } = {}
+	local cellsOf: { [string]: { Types.CampRect } } = {}
+	local regions: { Types.LevelRegion } = layout.regions or {}
+	for _, region in regions do
+		local cells = regionCells(region, layout.camps)
+		local widest = regionReach(level, region.camps, ranks, kinds)
+		local refused = Region.Problems(cells, 2 * widest + rules.doorSpare)
+		if #refused > 0 then
+			return nil, `{level.id}: region {region.id}: {refused[1]}`
+		end
+		local graph = Region.Build(cells)
+		for _, id in region.camps do
+			graphs[id] = graph
+			cellsOf[id] = graph.cells
+		end
+	end
+	local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks, cellsOf)
+	local tents, tentStocks = tentsOf(level, layout, rank, ranks, kinds, cellsOf)
 	-- What a zone is called: its camps entry's name, else the name of the stage that names it.
 	local names: { [string]: string } = {}
 	for _, stage in level.stages do
@@ -1257,14 +1572,7 @@ function StageFlow.Plan(
 			table.insert(spawns, Vector3.new(point.x, camp.y, point.z))
 		end
 		local mark = camp.checkpoint
-		local stock = table.clone(residentStocks[camp.id] or {})
-		for _, tent in tents do
-			if tent.zone == index then
-				for _, kind in tent.kinds do
-					stock[kind] = (stock[kind] or 0) + 1
-				end
-			end
-		end
+		local stop = if camp.locks == true then nil else camp.approach
 		local zone: Zone = {
 			id = camp.id,
 			floor = index,
@@ -1272,7 +1580,7 @@ function StageFlow.Plan(
 			name = names[camp.id] or camp.id,
 			checkpoint = if mark ~= nil then Vector3.new(mark.x, camp.y, mark.z) else nil,
 			residents = residents[camp.id] or 0,
-			stock = stock,
+			stock = table.clone(residentStocks[camp.id] or {}),
 			tentStock = tentStocks[camp.id] or 0,
 			floorY = camp.y,
 			rect = rect,
@@ -1281,6 +1589,8 @@ function StageFlow.Plan(
 			entry = Vector3.new(entry.x, camp.y, entry.z),
 			exit = Vector3.new(exit.x, camp.y, exit.z),
 			spawns = spawns,
+			region = graphs[camp.id],
+			approach = if stop ~= nil then Vector3.new(stop.x, stop.y, stop.z) else nil,
 		}
 		table.insert(zones, zone)
 		byId[camp.id] = zone
@@ -1375,6 +1685,7 @@ function StageFlow.Begin(plan: Plan): State
 		closedAt = 0,
 		fought = {},
 		ended = nil,
+		approached = 0,
 	}
 end
 
@@ -1413,7 +1724,7 @@ function StageFlow.StandsUp(plan: Plan, state: State, input: Input): boolean
 	return false
 end
 
--- L1b-20: the get-up i-frames a rescued body is given: none while it is engaged (in play for a
+-- L1b-20: the get-up i-frames a rescued body is given: none while it is engaged (reachable for a
 -- group that is rising or fighting), so a fall out of a resident fight is no free escape.
 function StageFlow.RescueGrace(engaged: boolean, iframes: number): number
 	return if engaged then 0 else iframes
@@ -1513,8 +1824,10 @@ end
 -- L1b-18 and L1b-17, in every live step before the rows, each zone at most once per run. A
 -- checkpoint is reached by a standing root within levels.checkpointReach of it on the flat, in
 -- the trigger's height band over its camp's floor. An open camp that had residents is cleared
--- when no body on its floor lives and its tent's stock is spent (L1b-W2-8): sneaking past it is
--- allowed, so a run never waits for it.
+-- when no body of its floor lives (L1b-W4-29): a body's floor is its camp's for life, so that is
+-- every raider it fielded, residents and tent bodies, wherever they stand (out on the road, in
+-- another camp). What its tent has not sent is forfeit: nobody waits for a tent. Sneaking past a
+-- camp is allowed, so a run never waits for it either.
 local function progress(
 	plan: Plan,
 	state: State,
@@ -1544,16 +1857,8 @@ local function progress(
 		end
 	end
 	local byFloor = input.aliveByFloor or {}
-	-- L1b-W2-8: and its tent's stock is spent (what is left of it is still to come out).
-	local tentLeft = input.tentLeft or {}
 	for index, zone in plan.zones do
-		if
-			zone.locks
-			or zone.residents <= 0
-			or state.done[index]
-			or byFloor[index] ~= 0
-			or (tentLeft[index] or 0) ~= 0
-		then
+		if zone.locks or zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then
 			continue
 		end
 		state.done[index] = true
@@ -1697,9 +2002,34 @@ local function bossWaveAfter(stage: Stage?, after: number): number
 	return 0
 end
 
--- Studio only (ruling 33, L1b-22). "stage" finishes this part: on the road the party is moved
--- to the next locking camp and its countdown starts (the open camps passed by are not cleared),
--- a countdown ends now, a live camp is dropped and counts as cleared. "boss" goes to the next
+-- L1b-W4-31: the zone N stops at next on the road, or 0: the first in layout order after the last
+-- one it stopped at, that is open, has an approach, is not cleared, whose checkpoint nobody has
+-- reached, and that lies before the armed locking camp (stage `armed`; none when 0).
+local function nextApproach(plan: Plan, state: State, armed: number): number
+	local stage = plan.stages[armed]
+	local lock = if stage ~= nil then stage.zone else nil
+	if lock == nil then
+		return 0
+	end
+	for index = state.approached + 1, lock.floor - 1 do
+		local zone = plan.zones[index]
+		if
+			zone ~= nil
+			and not zone.locks
+			and zone.approach ~= nil
+			and not state.done[index]
+			and not state.reached[index]
+		then
+			return index
+		end
+	end
+	return 0
+end
+
+-- Studio only (ruling 33, L1b-22). "stage" finishes this part: on the road the party is first
+-- moved to each open camp's approach in turn (L1b-W4-31: nothing else happens, no clear, no pay),
+-- then to the next locking camp and its countdown starts (the open camps passed by are not
+-- cleared); a countdown ends now, a live camp is dropped and counts as cleared. "boss" goes to the next
 -- wave with a boss, in this camp or a later one (the camps between count as cleared), and does
 -- nothing when none is left. A `drop` is the live locking camp's alone, and nothing skipped is
 -- credited. `fighters` is Input.fighters, for a skip that ends at a boundary.
@@ -1721,7 +2051,11 @@ function StageFlow.Skip(
 	if which == "stage" then
 		if step == "travel" or step == "armed" then
 			local index = armedCamp(plan, state)
-			if index ~= 0 then
+			local stop = nextApproach(plan, state, index)
+			if stop ~= 0 then
+				state.approached = stop
+				table.insert(actions, { kind = "approach", stage = state.stage, zone = stop })
+			elseif index ~= 0 then
 				table.insert(actions, { kind = "move", stage = index })
 				table.insert(actions, gate(state, index, now, rules))
 			end
@@ -1871,11 +2205,27 @@ end
 
 -- The fix round's B-3: whether a tent still owes its group a rouse. A body sent while its camp
 -- fights (a group of its floor in rise or fight) is roused, but a tent's rouse acts only while a
--- player is in play for its group, from rest or from the walk home, and never on a held group
+-- player is known and reachable for its group (L1b-W4-28), from rest or from the walk home, and
+-- never on a held group
 -- (CampBrain.TentRouse), so the executor asks again every tick until the group is up, or until
 -- the camp has nobody up to join.
 function StageFlow.TentOwesRouse(owed: boolean, campBusy: boolean, groupAwake: boolean): boolean
 	return owed and campBusy and not groupAwake
+end
+
+-- L1b-W4-30: what an open camp fielded, by kind, for its clear bonus: its residents (zone.stock)
+-- and the first `sent` bodies of its tent's stock, in the order the tent sends them. A new table.
+-- What the tent never sent is forfeit, so it is never priced.
+function StageFlow.Fielded(zone: Zone, tent: PlanTent?, sent: number): { [string]: number }
+	local fielded = table.clone(zone.stock)
+	if tent == nil then
+		return fielded
+	end
+	for index = 1, math.min(sent, #tent.kinds) do
+		local kind = tent.kinds[index]
+		fielded[kind] = (fielded[kind] or 0) + 1
+	end
+	return fielded
 end
 
 -- The longest reach among a kind's attacks (0 for none, or an unknown kind): what a body of it

@@ -20,7 +20,7 @@ local L1: any = {
 	Geo = load("LevelGeometry"),
 	village = FIXTURES.village,
 	combat = FIXTURES.combat,
-	rules = { gateSeconds = 3, triggerBelow = 4, triggerHeight = 30, closeInset = 2, closeGraceSeconds = 0.5, crowdCeiling = 200, floorThickness = 4, startSpacing = 4, startCooldownSeconds = 2, fenceThickness = 1, boxMargin = 40, maxParts = 600, checkpointReach = 8, walletSendSeconds = 1 },
+	rules = { gateSeconds = 3, triggerBelow = 4, triggerHeight = 30, closeInset = 2, closeGraceSeconds = 0.5, crowdCeiling = 200, floorThickness = 4, startSpacing = 4, startCooldownSeconds = 2, fenceThickness = 1, boxMargin = 40, maxParts = 600, checkpointReach = 8, walletSendSeconds = 1, regionLockMargin = 8, doorSpare = 0.5 },
 	-- ProvingGrounds.json crowd.maxAlive, for Validate's population gate.
 	crowdMax = 160,
 	ranks = { normal = 1, hard = 2, brutal = 3 },

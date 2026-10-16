@@ -2679,7 +2679,14 @@ MUTATIONS.update(W2_FIX_B_MUTATIONS)
 # auto-target's camp rule, CampAim.
 CAMP_AIM = "src/combat/client/Controllers/CampAim.luau"
 FILES.append(CAMP_AIM)
-W2_FIX_UI_MUTATIONS = {
+# L1b Wave 4 (L1b-W4-32) rewrote CampAim.Takes as (onCampFloor, resting, phase): the six texts
+# below are gone from the file. Kept as the record, never run; W4_UI_MUTATIONS holds their rules:
+#   "a resting body is taken", "engaged takes a resting body" -> "l1b w4 ui: a resting body is taken"
+#   "the gate takes camp bodies"                              -> "l1b w4 ui: the gate takes camp bodies"
+#   "auto-target corners square", "... has no sight band"     -> "l1b w4 ui: an awake camp body is refused"
+#                                                                (clause 4, in play, is gone)
+#   "a body with no camp floor is refused"                    -> "l1b w4 ui: a body with no camp floor is refused"
+W2_FIX_UI_REPLACED = {
     "l1b w2 ui: a resting body is taken": (CAMP_AIM, 'if phase == "gate" or resting then', 'if phase == "gate" then'),
     "l1b w2 ui: the gate takes camp bodies": (CAMP_AIM, 'if phase == "gate" or resting then', "if resting then"),
     "l1b w2 ui: engaged takes a resting body": (
@@ -2703,7 +2710,155 @@ W2_FIX_UI_MUTATIONS = {
         "if centre == nil or half == nil then\n\t\treturn false",
     ),
 }
-MUTATIONS.update(W2_FIX_UI_MUTATIONS)
+# The ui-engineer's L1b Wave 4 mutations (docs/prompts/l1b-w4-reports/client.md, texts as given).
+W4_UI_MUTATIONS = {
+    "l1b w4 ui: a resting body is taken": (
+        CAMP_AIM,
+        'return phase ~= "gate" and not resting',
+        'return phase ~= "gate"',
+    ),
+    "l1b w4 ui: the gate takes camp bodies": (
+        CAMP_AIM,
+        'return phase ~= "gate" and not resting',
+        "return not resting",
+    ),
+    "l1b w4 ui: an awake camp body is refused": (
+        CAMP_AIM,
+        'return phase ~= "gate" and not resting',
+        "return false",
+    ),
+    "l1b w4 ui: a body with no camp floor is refused": (
+        CAMP_AIM,
+        "if not onCampFloor then\n\t\treturn true",
+        "if not onCampFloor then\n\t\treturn false",
+    ),
+}
+MUTATIONS.update(W4_UI_MUTATIONS)
+
+# ------------------------------------------------------------------------------------------------
+# L1b Wave 4 (docs/INTERFACES.md "L1b Wave 4 — no waits, no walls").
+REGION = "src/shared/Region.luau"
+FILES.append(REGION)
+# Wave 1-3 entries of StageFlow whose text this wave changed (the camp's clear lost its tent clause,
+# L1b-W4-29, and is one line now; groupsOf takes the region's cells): same labels, same rules.
+CAMP_CLEAR_W4 = "if zone.locks or zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then"
+L1B_W4_RUN_REPLACED = {
+    "l1b: campClear twice": (FLOW, CAMP_CLEAR_W4, CAMP_CLEAR_W4.replace(" or state.done[index]", "")),
+    "l1b: campClear for a zone with no residents": (
+        FLOW,
+        CAMP_CLEAR_W4,
+        CAMP_CLEAR_W4.replace(" or zone.residents <= 0", ""),
+    ),
+    "l1b: campClear for the locking zone": (FLOW, CAMP_CLEAR_W4, CAMP_CLEAR_W4.replace("zone.locks or ", "")),
+    "l1b: countMult applied to residents": (
+        FLOW,
+        "local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks, cellsOf)",
+        "local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks, cellsOf)\n\tfor _, def in groups do\n\t\tfor _, unit in def.units do\n\t\t\tunit.count = math.round(unit.count * level.difficulties[difficulty].countMult)\n\t\tend\n\tend",
+    ),
+}
+MUTATIONS.update(L1B_W4_RUN_REPLACED)
+# Retired, never silently: their rules were reversed by this wave, and each has a Wave 4 entry
+# that holds the new rule.
+#   "l1b w2: campClear with tent stock left" -> "l1b w4: progress waits for tent stock again"
+#                                               (L1b-W4-29: the clear never waits for a tent)
+#   "l1b w2: a zone's stock without its tent" -> "l1b w4: zone.stock counts the tent again"
+#                                               (L1b-W4-30: zone.stock is the residents only)
+for label in ("l1b w2: campClear with tent stock left", "l1b w2: a zone's stock without its tent"):
+    del MUTATIONS[label]
+
+# luau-engineer B (the run): StageFlow's regions, approaches, pace, the clear and Fielded.
+L1B_W4_RUN_MUTATIONS = {
+    "l1b w4: progress waits for tent stock again": (
+        FLOW,
+        "byFloor[index] ~= 0 then",
+        "byFloor[index] ~= 0 or zone.tentStock > 0 then",
+    ),
+    "l1b w4: zone.stock counts the tent again": (
+        FLOW,
+        "local stop = if camp.locks == true then nil else camp.approach",
+        "local stop = if camp.locks == true then nil else camp.approach\n\t\tfor _, tent in tents do\n\t\t\tif tent.zone == index then\n\t\t\t\tlocal own = residentStocks[camp.id] or {}\n\t\t\t\tresidentStocks[camp.id] = own\n\t\t\t\tfor _, kind in tent.kinds do\n\t\t\t\t\town[kind] = (own[kind] or 0) + 1\n\t\t\t\tend\n\t\t\tend\n\t\tend",
+    ),
+    "l1b w4: Fielded counts the whole stock": (
+        FLOW,
+        "for index = 1, math.min(sent, #tent.kinds) do",
+        "for index = 1, #tent.kinds do",
+    ),
+    "l1b w4: Fielded ignores sent": (
+        FLOW,
+        "for index = 1, math.min(sent, #tent.kinds) do",
+        "for index = 1, math.min(0, #tent.kinds) do",
+    ),
+    "l1b w4: Plan gives B's zone its own copy of the graph": (
+        FLOW,
+        "graphs[id] = graph",
+        "graphs[id] = if id == region.camps[1] then graph else Region.Build(cells)",
+    ),
+    "l1b w4: Plan gives each def its own copy of the cells": (
+        FLOW,
+        "cellsOf[id] = graph.cells",
+        "cellsOf[id] = table.clone(graph.cells)",
+    ),
+    "l1b w4: a locking camp allowed in a region": (
+        FLOW,
+        "if camp.locks == true then\n\t\t\t\tproblem(`{here}: camp {camp.id} locks, and a boss room is in no region`)",
+        "if false then\n\t\t\t\tproblem(`{here}: camp {camp.id} locks, and a boss room is in no region`)",
+    ),
+    "l1b w4: the lock clearance skipped": (FLOW, "if gap < needed - 1e-6 then", "if false then"),
+    "l1b w4: the lock clearance measured from the floor's centre": (
+        FLOW,
+        "local gap = rectGap(cell, floor)",
+        "local gap = rectGap(cell, { x = floor.x, z = floor.z, hx = 0, hz = 0 })",
+    ),
+    "l1b w4: the lock clearance's reach at Normal only": (
+        FLOW,
+        "top = math.max(top, ranks[name] or 0)",
+        "top = math.min(math.max(top, ranks[name] or 0), 1)",
+    ),
+    "l1b w4: doorSpare ignored": (
+        FLOW,
+        "local spare = if isFinite(numbers.doorSpare) then numbers.doorSpare else 0",
+        "local spare = 0",
+    ),
+    "l1b w4: a road cell's wire check at its centre": (
+        FLOW,
+        "math.abs(cell.x) + cell.sx / 2 > WIRE_REACH",
+        "math.abs(cell.x) > WIRE_REACH",
+    ),
+    "l1b w4: a tent without pace passes": (
+        FLOW,
+        'if type(pace) ~= "table" then',
+        "if false then",
+    ),
+    "l1b w4: a pace lead over 1 passes": (
+        FLOW,
+        "pace.lead >= 0 and pace.lead <= 1",
+        "pace.lead >= 0",
+    ),
+    "l1b w4: an approach on a locking camp passes": (
+        FLOW,
+        "if camp.locks == true then\n\t\t\t\tproblem(`camp {camp.id} locks, and a boss room has no approach`)",
+        "if false then\n\t\t\t\tproblem(`camp {camp.id} locks, and a boss room has no approach`)",
+    ),
+    "l1b w4: Plan keeps a locking camp's approach": (
+        FLOW,
+        "local stop = if camp.locks == true then nil else camp.approach",
+        "local stop = camp.approach",
+    ),
+    "l1b w4: Skip passes over the open camps (Wave 2's N)": (
+        FLOW,
+        "local stop = nextApproach(plan, state, index)",
+        "local stop = 0",
+    ),
+    "l1b w4: Skip takes a done camp": (FLOW, "and not state.done[index]\n", "\n"),
+    "l1b w4: Skip takes a camp whose checkpoint was reached": (FLOW, "and not state.reached[index]\n", "\n"),
+    "l1b w4: Skip ignores approached": (
+        FLOW,
+        "for index = state.approached + 1, lock.floor - 1 do",
+        "for index = 1, lock.floor - 1 do",
+    ),
+    "l1b w4: Skip forgets where it stopped": (FLOW, "state.approached = stop", "state.approached = state.approached"),
+}
+MUTATIONS.update(L1B_W4_RUN_MUTATIONS)
 FILES += ["src/shared/SwingGate.luau", SPAWN_SEED]  # SwingGate: A's SWING
 
 # L1b Wave 2, luau-engineer A (docs/prompts/l1b-w2-reports/build-A.md "For B"): the crowd's ray,

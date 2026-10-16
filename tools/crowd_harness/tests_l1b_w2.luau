@@ -19,13 +19,15 @@ local W2B: any = {
 
 -- L1B's road with two tents: A's (2 fodder, a slinger from Hard, a brute; one every 6 s) round
 -- (10, 110), B's (3 fodder; every 4 s) round (120, 320), and a marker only on the boss room C.
+-- L1b Wave 4: each tent carries its pace (L1b-W4-28), which Validate requires.
 function W2B.level(): any
 	local level = L1B.level()
 	level.camps[1].tent = {
 		every = 6,
 		units = { { kind = "fodder", count = 2 }, { kind = "slinger", count = 1, minDifficulty = "hard" }, { kind = "brute", count = 1 } },
+		pace = { seconds = 25, lead = 0.15 },
 	}
-	level.camps[2].tent = { every = 4, units = { { kind = "fodder", count = 3 } } }
+	level.camps[2].tent = { every = 4, units = { { kind = "fodder", count = 3 } }, pace = { seconds = 130, lead = 0.15 } }
 	return level
 end
 
@@ -111,7 +113,7 @@ function W2B.validateTests(): ()
 		level.camps[1].tent.units[2].minDifficulty = "nightmare"
 	end)
 	names("a tent stock on the boss room", `camps entry 3 ("C"): camp C locks, and a boss room's tent has no stock`, function(level)
-		level.camps[3].tent = { every = 6, units = { { kind = "fodder", count = 2 } } }
+		level.camps[3].tent = { every = 6, units = { { kind = "fodder", count = 2 } }, pace = { seconds = 25, lead = 0.15 } }
 	end)
 	names("a tent stock whose layout camp has no tent block", `camps entry 2 ("B") has a tent stock, and camp B has no tent block`, function(_level, layout)
 		layout.camps[2].tent = nil
@@ -246,15 +248,16 @@ function W2B.planTests(): ()
 	dropped.camps[2].tent.units[1].minDifficulty = "hard"
 	check(#W2B.plan(dropped).tents == 1 and W2B.plan(dropped).zones[2].tentStock == 0, "a tent whose units all drop on Normal is left out (tentStock 0)")
 	local marker = W2B.level()
-	marker.camps[3].tent = { every = 6, units = { { kind = "fodder", count = 2 } } }
+	marker.camps[3].tent = { every = 6, units = { { kind = "fodder", count = 2 } }, pace = { seconds = 25, lead = 0.15 } }
 	check(#W2B.plan(marker).tents == 2, "a boss room's tent stock is never planned (Validate refuses it)")
 
 	local zones = plan.zones
 	check(zones[1].tentStock == 3 and zones[2].tentStock == 3 and zones[3].tentStock == 0, "tentStock: A 3, B 3, C 0")
-	check(W2B.stock(zones[1].stock) == "brute 1, fodder 11", `A's stock, residents 9 fodder and the tent's 2 fodder and a brute ({W2B.stock(zones[1].stock)})`)
-	check(W2B.stock(zones[2].stock) == "brute 1, fodder 8, slinger 2", `B's: 5 fodder, a brute, 2 slingers and the tent's 3 fodder ({W2B.stock(zones[2].stock)})`)
+	-- L1b-W4-30: a zone's stock is its residents only; Fielded adds what the tent sent.
+	check(W2B.stock(zones[1].stock) == "fodder 9", `A's stock, its 9 resident fodder, not its tent's ({W2B.stock(zones[1].stock)})`)
+	check(W2B.stock(zones[2].stock) == "brute 1, fodder 5, slinger 2", `B's: 5 fodder, a brute, 2 slingers, not its tent's 3 fodder ({W2B.stock(zones[2].stock)})`)
 	check(W2B.stock(zones[3].stock) == "fodder 3", `C's, the boss room: its residents only ({W2B.stock(zones[3].stock)})`)
-	check(W2B.stock(hard.zones[1].stock) == "brute 1, fodder 11, slinger 2", `A on Hard: the gate's slinger and the tent's ({W2B.stock(hard.zones[1].stock)})`)
+	check(W2B.stock(hard.zones[1].stock) == "fodder 9, slinger 1", `A on Hard: the gate's slinger joins, the tent's does not ({W2B.stock(hard.zones[1].stock)})`)
 	check(plan.population == 74 and hard.population == 78 and W2B.plan(nil, nil, "brutal").population == 78, `population by hand: Normal 74, Hard 78, Brutal 78 ({plan.population}, {hard.population})`)
 	check(W2B.plan(nil, nil, nil, false).population == 74 - 21 + 1, "without kinds the boss reserve is 1: 54")
 	check(W2B.plan(nil, nil, nil, W2B.real).population == 74 - 21 + 13, "with the real kinds, 13: 66")
@@ -266,25 +269,21 @@ L1.group("l1b w2 planTests", W2B.planTests)
 -- Advance: a tent holds its camp's clear ---------------------------------------------------------
 
 function W2B.advanceTests(): ()
-	print(" Advance: an open camp clears when its bodies are dead and its tent is spent (L1b-W2-8)")
+	print(" Advance: an open camp clears when every body of its floor is dead, its tent never waited for (L1b-W4-29)")
 	local Flow = W2B.Flow
 	local plan = W2B.plan()
 	local state = Flow.Begin(plan)
 	local function names(over: any): string
 		return L1.names(L1B.advance(plan, state, over))
 	end
-	check(names({ aliveByFloor = { 0, 8, 3 }, tentLeft = { 2, 0, 0 } }) == "", "A's floor empty with 2 of its stock to come: no campClear")
-	check(names({ aliveByFloor = { 0, 8, 3 }, tentLeft = { 1, 0, 0 } }) == "" and not state.done[1], "nor with 1")
-	local actions = L1B.advance(plan, state, { aliveByFloor = { 0, 8, 3 }, tentLeft = { 0, 0, 0 } })
-	check(L1.names(actions) == "campClear" and L1.get(actions, "campClear").zone == 1 and state.cleared == 1, "once the stock is spent: one campClear, zone 1")
-	check(names({ aliveByFloor = { 0, 8, 3 }, tentLeft = { 0, 0, 0 } }) == "", "never twice")
-	check(names({ aliveByFloor = { 0, 0, 3 }, tentLeft = { 0, 3, 0 } }) == "", "B empty with its whole stock to come: held")
-	check(names({ aliveByFloor = { 0, 1, 3 }, tentLeft = { 0, 0, 0 } }) == "", "B with its stock spent and one tent body alive: held")
-	check(names({ aliveByFloor = { 0, 0, 3 }, tentLeft = { 0, 0, 0 } }) == "campClear" and state.cleared == 2, "B, both: it clears")
-	local old = Flow.Begin(plan)
-	check(L1.names(Flow.Advance(plan, old, L1B.input({ aliveByFloor = { 0, 8, 3 } }), L1B.rules)) == "campClear", "an input with no tentLeft (no tents in the run) reads 0 left")
+	check(names({ aliveByFloor = { 1, 8, 3 } }) == "" and not state.done[1], "A with one body of its floor alive (wherever it stands): no campClear")
+	local actions = L1B.advance(plan, state, { aliveByFloor = { 0, 8, 3 } })
+	check(L1.names(actions) == "campClear" and L1.get(actions, "campClear").zone == 1 and state.cleared == 1, "A's floor at 0 with its whole tent stock unsent: one campClear, zone 1 (the stock is forfeit)")
+	check(names({ aliveByFloor = { 0, 8, 3 } }) == "", "never twice")
+	check(names({ aliveByFloor = { 0, 1, 3 } }) == "", "B with one tent body alive out on the road: held")
+	check(names({ aliveByFloor = { 0, 0, 3 } }) == "campClear" and state.cleared == 2, "B at 0: it clears")
 	local locked = Flow.Begin(plan)
-	check(L1.names(L1B.advance(plan, locked, { aliveByFloor = { 9, 8, 0 }, tentLeft = { 0, 0, 0 } })) == "", "the boss room never clears this way, its own floor empty or not")
+	check(L1.names(L1B.advance(plan, locked, { aliveByFloor = { 9, 8, 0 } })) == "", "the boss room never clears this way, its own floor empty or not")
 
 	print(" a skipped boss room's open carries skipped (no bonus)")
 	local skip = Flow.Begin(plan)
@@ -481,7 +480,7 @@ function W2B.realTests(): ()
 		end
 		local paid, paidMaterials = W2B.Combat.ClearBonus(zone.stock, level.crowd.rewards, scales.rewardMult, share)
 		print(`   {difficulty}: Pickets' clear bonus {paid} cash, {paidMaterials} {level.material} (stock {W2B.stock(zone.stock)})`)
-		check(paid == math.round(share * cash) and paidMaterials == math.round(share * materials) and paid > 0, `{difficulty}: Pickets' bonus is {share} of its whole stock ({paid}, {paidMaterials})`)
+		check(paid == math.round(share * cash) and paidMaterials == math.round(share * materials) and paid > 0, `{difficulty}: Pickets' bonus with nothing sent is {share} of its residents ({paid}, {paidMaterials})`)
 		local tentBodies = 0
 		for _, unit in file.camps[1].tent.units do
 			tentBodies += unit.count
@@ -603,60 +602,34 @@ function W2B.seedTests(): ()
 end
 L1.group("l1b w2 seedTests", W2B.seedTests)
 
--- L1b Wave 2 fix round, ui-2: touch auto-target never takes a resting group's body (CampAim).
+-- L1b Wave 4 (L1b-W4-32): touch auto-target takes every awake camp body wherever the player
+-- stands; never a resting group's body, never a camp body in the countdown (CampAim).
 do
 	local Aim = load("CampAim")
-	local camps: any = { sightBelow = 6, sightAbove = 12, chaseMargin = 2.5 }
-	local centre = vec(100, 8, 0)
-	local half = vec(20, 0, 15)
-	local inside = vec(105, 11, 3)
+	check(Aim.Takes(false, false, "travel"), "CampAim: a body with no camp floor is always taken")
 	check(
-		Aim.Takes(nil, nil, false, inside, "travel", false, camps),
-		"CampAim: a body with no camp floor is always taken"
+		Aim.Takes(false, true, "gate"),
+		"CampAim: a body with no camp floor is taken even in the gate, resting or not"
 	)
 	check(
-		Aim.Takes(nil, nil, true, inside, "gate", false, camps),
-		"CampAim: a body with no camp floor is taken even in the gate"
+		Aim.Takes(true, false, "travel"),
+		"CampAim: an awake group's body is taken, wherever the player stands"
 	)
 	check(
-		Aim.Takes(centre, half, false, inside, "travel", false, camps),
-		"CampAim: an awake group's body is taken in play"
+		Aim.Takes(true, false, "fight"),
+		"CampAim: after the close an awake body in the boss room is taken"
 	)
 	check(
-		not Aim.Takes(centre, half, true, inside, "travel", false, camps),
+		not Aim.Takes(true, true, "travel"),
 		"CampAim: a resting group's body is never taken (the sneak on touch)"
 	)
 	check(
-		not Aim.Takes(centre, half, true, inside, "travel", true, camps),
-		"CampAim: engaged by another group, a resting body is still not taken"
+		not Aim.Takes(true, false, "gate"),
+		"CampAim: in the gate no camp body is taken, awake or not"
 	)
 	check(
-		not Aim.Takes(centre, half, false, inside, "gate", true, camps),
-		"CampAim: in the gate no camp body is taken, engaged or not"
-	)
-	check(
-		Aim.Takes(centre, half, false, vec(400, 8, 0), "travel", true, camps),
-		"CampAim: engaged, an awake body is taken from out of play"
-	)
-	check(
-		Aim.Takes(centre, half, false, vec(122, 8, 0), "travel", false, camps),
-		"CampAim: within chaseMargin of an edge is in play"
-	)
-	check(
-		not Aim.Takes(centre, half, false, vec(122, 8, 17), "travel", false, camps),
-		"CampAim: past the rounded corner is out of play"
-	)
-	check(
-		not Aim.Takes(centre, half, false, vec(105, 1, 0), "travel", false, camps),
-		"CampAim: under the sight band is out of play"
-	)
-	check(
-		not Aim.Takes(centre, half, false, vec(105, 21, 0), "travel", false, camps),
-		"CampAim: over the sight band is out of play"
-	)
-	check(
-		Aim.Takes(centre, half, false, vec(400, 8, 0), "travel", false, nil),
-		"CampAim: with no camp rules loaded an awake body is taken"
+		not Aim.Takes(true, true, "gate"),
+		"CampAim: in the gate a resting camp body is not taken either"
 	)
 end
 

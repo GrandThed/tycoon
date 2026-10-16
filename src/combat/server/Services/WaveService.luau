@@ -26,9 +26,15 @@
 -- the start; every camp's residents are placed at the start and live on their own; every kill is
 -- paid the moment it falls, split by that body's own damage book (L1b-15), and the wallet goes
 -- out at most once a second (L1b-16). Nothing is pooled, so nothing is ever dropped.
--- L1b Wave 2 ("the long road"): an open camp's tent sends its stock while the camp is up (or once
--- its residents are dead), CampBrain's rule, executed here; a camp's clear pays a bonus on its
--- whole stock (Combat.ClearBonus); the merge test leaves the residents out (Combat.DeadFraction).
+-- L1b Wave 2 ("the long road"): an open camp's tent sends its stock, CampBrain's rule, executed
+-- here; a camp's clear pays a bonus (Combat.ClearBonus); the merge test leaves the residents out
+-- (Combat.DeadFraction).
+-- L1b Wave 4 ("no waits, no walls"): the open camps' floors share a chase region (the crowd's
+-- floors carry its graph, RunState's its cells); a tent is a pace reserve, sending only while its
+-- camp is ahead of its own clock and a resident lives; a camp clears when every raider it fielded
+-- is dead, and its bonus is priced on what it fielded (StageFlow.Fielded); the boss room's close
+-- makes every other camp forget the road (CrowdService.ForgetOthers); N stops at each open camp's
+-- approach first.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -198,8 +204,6 @@ local boot = {
 	lobbyKillY = nil :: number?,
 	-- The living bodies on each floor, refilled by every advance (no table per tick).
 	aliveByFloor = {} :: { number },
-	-- Each zone's tent stock left (L1b-W2-8), refilled by every advance.
-	tentLeft = {} :: { number },
 }
 
 local WaveService = {}
@@ -764,10 +768,11 @@ local function countWaves(wave: number, count: number): ()
 	end
 end
 
--- L1b-17: a camp is cleared (an open one when its last body falls with its tent spent, the boss
--- room when its last wave does): the banner, its checkpoint marked done, one more wave cleared in
--- every fighting human's stats, and (L1b-W2-21) its clear bonus, crowd.clearBonus.share of what
--- its whole `stock` pays at the difficulty's price, split evenly among them and kept at once. A
+-- L1b-17: a camp is cleared (an open one when the last raider it fielded falls, wherever it stands,
+-- L1b-W4-29; the boss room when its last wave does): the banner, its checkpoint marked done, one
+-- more wave cleared in every fighting human's stats, and its clear bonus, crowd.clearBonus.share
+-- of what `stock` pays at the difficulty's price (L1b-W4-30: what the camp fielded; the boss room:
+-- its residents and its waves), split evenly among them and kept at once. A
 -- camp a Studio skip passed (`skipped`) gets the banner and the mark only: a skip pays nothing
 -- (L1b-22).
 local function campCleared(zone: StageFlow.Zone, skipped: boolean, stock: { [string]: number }): ()
@@ -1296,6 +1301,8 @@ local function execute(actions: { StageFlow.Action }): ()
 				RunFx.Push({ kind = "camp", event = "closed", name = stage.name })
 				-- L1b-13: the boss room's residents, held until now, wake with its first wave.
 				CrowdService.WakeFloor(zone.floor)
+				-- L1b-W4-26: and every other camp's groups forget the road and walk home.
+				CrowdService.ForgetOthers(zone.floor)
 			end
 		elseif kind == "wave" then
 			queueWave(action.stage, action.wave or 1, action.merged == true)
@@ -1324,7 +1331,17 @@ local function execute(actions: { StageFlow.Action }): ()
 		elseif kind == "campClear" then
 			local cleared = plan.zones[action.zone or 0]
 			if cleared ~= nil then
-				campCleared(cleared, false, cleared.stock)
+				-- L1b-W4-30: priced on what it fielded, its residents and what its tent sent.
+				local tent: StageFlow.PlanTent? = nil
+				local sent = 0
+				for index, planned in plan.tents do
+					if planned.zone == cleared.floor then
+						tent = planned
+						sent = if run.tents[index] ~= nil then run.tents[index].sent else 0
+						break
+					end
+				end
+				campCleared(cleared, false, StageFlow.Fielded(cleared, tent, sent))
 			end
 		elseif kind == "reach" then
 			local reached = plan.zones[action.zone or 0]
@@ -1346,6 +1363,13 @@ local function execute(actions: { StageFlow.Action }): ()
 		elseif kind == "move" then
 			if zone ~= nil then
 				moveFighters(zone.entry, nil)
+			end
+		elseif kind == "approach" then
+			-- L1b-W4-31: N's stop before an open camp; nothing else happens.
+			local before = plan.zones[action.zone or 0]
+			local feet = if before ~= nil then before.approach else nil
+			if feet ~= nil then
+				moveFighters(feet, nil)
 			end
 		elseif kind == "end" then
 			WaveService.EndRun(action.reason or "cleared")
@@ -1392,18 +1416,6 @@ local function advance(combatConfig: Types.CombatConfig): ()
 			end
 		end
 	end
-	-- L1b-W2-8: each zone's tent stock not sent yet.
-	local tentLeft = boot.tentLeft
-	table.clear(tentLeft)
-	for index = 1, #plan.zones do
-		tentLeft[index] = 0
-	end
-	for index, tent in run.tents do
-		local planned = plan.tents[index]
-		if planned ~= nil then
-			tentLeft[planned.zone] = tent.state.left
-		end
-	end
 	local spawningDone = #run.queue == 0 and run.bossPending == nil
 	-- L1b-W2-26: the residents (and tent bodies) of the boss room are not the waves' bodies.
 	local queuedAlive = if live ~= nil then alive - CrowdService.GroupedOn(live.floor) else 0
@@ -1419,7 +1431,6 @@ local function advance(combatConfig: Types.CombatConfig): ()
 		alive = alive,
 		awake = CrowdService.Awake(),
 		aliveByFloor = byFloor,
-		tentLeft = tentLeft,
 		mergeOk = Combat.ShouldMerge(run.tempo, deadFraction, combatConfig.director),
 		breatherSeconds = Combat.BreatherSeconds(run.tempo, combatConfig.director),
 		fallen = fallen,
@@ -1585,17 +1596,18 @@ local function placeTents(plan: StageFlow.Plan): ()
 	end
 end
 
--- L1b-W2-7's executor, before advance: a tent whose camp is up (a group of its floor in rise or
--- fight), or whose camp's residents are all dead, sends its next body when CampBrain says it is
--- due, rising at its door (B-4) and walking to its own ring post, and rouses its group so the
--- body joins the fight. One body per tent per tick. A refused spawn warns once per run and counts
--- as sent: the population rule makes it a bug, and the camp must still be able to clear. Never
--- yields.
+-- L1b-W2-7's executor, before advance, with L1b-W4-28's pace: each tent's camp clock runs while
+-- the camp is up (a group of its floor in rise or fight), and the tent is active only while the
+-- camp is up, one of its residents lives and it is ahead of its clock (the killed share of its
+-- residents less busy time over pace.seconds, at least pace.lead). An active tent sends its next
+-- body when CampBrain says it is due, rising at its door (B-4) and walking to its own ring post,
+-- and rouses its group so the body joins the fight. One body per tent per tick. A refused spawn
+-- warns once per run and counts as sent: the population rule makes it a bug. Never yields.
 -- The fix round: a body that joins a group already up is a threat for the safe point at once
 -- (B-1: its group's state does not change, so no event lists it), and a body sent while its camp
 -- fights keeps its group roused until the group is up (B-3). Every rouse a tent asks for acts only
--- while a player is in play for its group (CampBrain.TentRouse): a tent never wakes a group to
--- fight nobody.
+-- while a player is known and reachable for its group (CampBrain.TentRouse): a tent never wakes a
+-- group to fight nobody.
 local function tickTents(): ()
 	local plan = run.plan
 	if plan == nil or #run.tents == 0 then
@@ -1614,8 +1626,17 @@ local function tickTents(): ()
 		if tent.owed then
 			CrowdService.RouseGroup(tent.group)
 		end
+		CampBrain.TentClock(tent.state, campBusy, now)
 		local residentsAlive = CrowdService.AliveOn(floor) - CrowdService.GroupAlive(tent.group)
-		local active = CampBrain.TentActive(campBusy, residentsAlive)
+		local zone = plan.zones[floor]
+		local residents = if zone ~= nil then zone.residents else 0
+		local ahead = CampBrain.Ahead(
+			residents - residentsAlive,
+			residents,
+			tent.state.busySeconds,
+			planned.pace
+		)
+		local active = CampBrain.TentActive(campBusy, residentsAlive, ahead)
 		if not CampBrain.TentDue(tent.state, active, now) then
 			continue
 		end
@@ -1723,14 +1744,21 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	local runFloors: { Types.RunFloor } = {}
 	for _, zone in plan.zones do
 		local rect = zone.rect
+		-- L1b-W4-14, -33: a region floor carries its graph to the crowd and its cells to the client.
+		local region = zone.region
 		table.insert(floors, {
 			centre = Vector3.new(rect.x, zone.floorY, rect.z),
 			half = Vector3.new(rect.hx, rules.crowdCeiling, rect.hz),
+			region = region,
 		})
-		table.insert(
-			runFloors,
-			{ x = rect.x, y = zone.floorY, z = rect.z, hx = rect.hx, hz = rect.hz }
-		)
+		table.insert(runFloors, {
+			x = rect.x,
+			y = zone.floorY,
+			z = rect.z,
+			hx = rect.hx,
+			hz = rect.hz,
+			cells = if region ~= nil then region.cells else nil,
+		})
 	end
 	if not CrowdService.SetFloors(floors) then
 		warn(`[WaveService] level {levelId}: the crowd took no floors; it cannot be played`)
@@ -2033,7 +2061,7 @@ function WaveService.Init(): ()
 		local player = if member ~= nil then member.player else nil
 		return player ~= nil and VitalsService.IsDown(player)
 	end)
-	-- L1b-20's test, for the phone client: in play for a camp group that is rising or fighting.
+	-- L1b-20's test (L1b-W4-27): reachable for a camp group that is rising or fighting.
 	-- Never in the lobby or on the summary (CrowdService's last step may still say so).
 	ArenaService.SetEngagedSource(function(userId: number): boolean
 		return isLive(run.phase) and CrowdService.Engaged(userId)
