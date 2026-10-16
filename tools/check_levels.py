@@ -88,6 +88,9 @@ EXPECTED = {
         # L1b Wave 4: one chase region on the plateau (ruling 1), an approach before each open camp.
         "regions": 1,
         "approaches": 2,
+        # The fix round's R8: the spots no rusher reaches within the Longbow's range of the region.
+        "sniperSpots": ["Creek", "LookoutLedge", "LookoutSignPad", "Road2", "Road3", "Road4", "RoadBC5", "RoadBC6",
+                        "Secret_cache", "Secret_lookout", "ShrineSignPad"],
     },
 }
 # What a sign must say for each key, so a player knows what to bring.
@@ -143,6 +146,11 @@ REGION_LOCK_MARGIN = 8.0  # L1b-W4-16 (ruling 1), fixed: Combat.json levels.regi
 DOOR_SPARE = 0.5  # L1b-W4-15, fixed: Combat.json levels.doorSpare
 CELL_STEP = 2.0  # L1b-W4-15: a cell is proved standable on this grid and at its corners
 PERCH_STEP = 1.0  # a perch's top is sampled this often for its distance to the region
+# L1b Wave 4 fix round (docs/prompts/l1b-w4-fix-round.md).
+# R6: VitalsService's and ThreatField's height rule gives every ground shape an under side. The
+# cliff gate reads the rule from here; set it False to see the gate fail on the shipped layout.
+UNDER_SIDE = True
+SPOT_STEP = 1.0  # R8: a standable top is sampled this often for the unreachable sniper spots
 # The `levels` numbers this tool itself reads to measure a layout.
 READ_RULES = ("fenceThickness", "floorThickness", "triggerHeight", "crowdCeiling", "startSpacing", "maxParts")
 GEAR_PRESETS = ((2, 2), (4, 4), (6, 6))  # L1b-W2-20: the Studio gear presets (melee, ranged)
@@ -1338,6 +1346,88 @@ def cell_box(cell):
     return cell["x"] - cell["hx"], cell["x"] + cell["hx"], cell["z"] - cell["hz"], cell["z"] + cell["hz"]
 
 
+def shape_extent(attack):
+    """How far a ground shape reaches on the flat from its body's centre (CrowdBrain's shapes): a
+    lunge's box `range` long and `width` wide, an arc's `range`, a lane's half width off the line
+    the body runs (the run itself stays on the region), a ring's `radius`."""
+    shape = attack["shape"]
+    if shape == "lunge":
+        return math.hypot(attack.get("range") or 0, (attack.get("width") or 0) / 2)
+    if shape == "arc":
+        return attack.get("range") or 0
+    if shape == "lane":
+        return (attack.get("width") or 0) / 2
+    if shape == "ring":
+        return attack.get("radius") or 0
+    return 0.0
+
+
+def shape_holds(above, height):
+    """VitalsService / ThreatField's height rule, feet `above` the crowd's floor (R6, R15)."""
+    return above <= height + EPS and (not UNDER_SIDE or above >= -height - EPS)
+
+
+def standable_points(solids, solid, step):
+    """The points of a solid's top a player stands on (nothing standable over them there), on a
+    `step` grid and its edges."""
+    kinds = ("block", "floor", "secret", "fence", "obstacle")
+    xs = [solid.x0 + step * k for k in range(int((solid.x1 - solid.x0) / step) + 1)] + [solid.x1]
+    zs = [solid.z0 + step * k for k in range(int((solid.z1 - solid.z0) / step) + 1)] + [solid.z1]
+    near = [o for o in solids if o is not solid and o.kind in kinds and o.top > solid.top + EPS
+            and o.x0 <= solid.x1 and o.x1 >= solid.x0 and o.z0 <= solid.z1 and o.z1 >= solid.z0]
+    return [(x, z) for x in xs for z in zs if not any(o.holds(x, z) for o in near)]
+
+
+def region_defn(region, layout):
+    """A region group as CampBrain.Melee reads it: its floor's height and its cells."""
+    return {"floorY": region["y"], "region": sr.region_cells(layout, region)}
+
+
+def sniper_spots(level, layout, ctx, solids):
+    """R8: every standable top that no rusher of a region reaches (CampBrain.Melee is false for a
+    player standing there: off the region by more than chaseMargin, over meleeAbove, under
+    meleeBelow, or out of the height band) and that lies within the Longbow's range of the region
+    (its camps' floors and the road its groups chase over). A locking camp's own floor, fence and
+    cover are left out (INTERFACES "Open for later": shooting out of the boss room). One spot per
+    solid: its name, its region, the open camp of the region whose floor is nearest, how many
+    points, the box of those points, and the point of them nearest the region (where a straight
+    sniper course stands). tools/sim_range.py rates a course from every spot this returns."""
+    rules = ctx["camps"]
+    reach = ctx["longbow"]
+    rooms = tuple(f"Camp_{c['id']}_" for c in layout["camps"] if c.get("locks") is True)
+    camps = {c["id"]: c for c in layout["camps"]}
+    spots = []
+    for region in layout.get("regions") or []:
+        defn = region_defn(region, layout)
+        rects = defn["region"]
+        open_camps = [camps[cid] for cid in region.get("camps") or [] if cid in camps and not camps[cid].get("locks")]
+        if not open_camps:
+            continue
+        for solid in solids:
+            if solid.kind not in ("block", "floor", "secret", "fence", "obstacle") or solid.name.startswith(rooms):
+                continue
+            box = (solid.x0, solid.x1, solid.z0, solid.z1)
+            if min(rect_gap(box, cell_box(c)) for c in rects) > reach + EPS:
+                continue
+            found = []
+            for x, z in standable_points(solids, solid, SPOT_STEP):
+                gap = sr.rg_distance(rects, x, z)
+                if gap > reach + EPS:
+                    continue
+                if sr.cb_melee(defn, {"userId": 1, "root": (x, solid.top + sr.ROOT_HEIGHT, z)}, rules):
+                    continue
+                found.append((gap, x, z))
+            if not found:
+                continue
+            gap, x, z = min(found)
+            camp = min(open_camps, key=lambda c: rect_distance(x, z, *camp_rect(c)))
+            spots.append({"id": solid.name, "region": region["id"], "camp": camp["id"], "top": solid.top,
+                          "points": len(found), "at": (x, solid.top, z), "gap": gap,
+                          "box": (min(f[1] for f in found), max(f[1] for f in found),
+                                  min(f[2] for f in found), max(f[2] for f in found))})
+    return spots
+
+
 def check_wave4(name, level, layout, ctx, expect, solids):
     """The L1b Wave 4 gates (INTERFACES "L1b Wave 4" -> "Config", the gates table): the regions'
     data as StageFlow.Validate reads it, standable cells, doors and the tree, fences crossed only at
@@ -1468,6 +1558,45 @@ def check_wave4(name, level, layout, ctx, expect, solids):
                f"{max(fences, default=0):g}) + ROOT_HEIGHT {sr.ROOT_HEIGHT:g}, the lowest rusher ground height "
                + (f"({low[1]}'s {low[2]} {low[0]:g})" if low else "(none)")
                + f" - COVER_MARGIN {COVER_MARGIN:g} + ROOT_HEIGHT] = [{lo:g}, {hi:g}]: a melee-reachable player can be hit")
+        # The fix round's R14: camps.meleeBelow in [0, min(sightBelow, the lowest rusher ground height
+        # - ROOT_HEIGHT - COVER_MARGIN)]: past the band's floor the band refuses first, and every
+        # melee-reachable player under the floor stands within every rusher shape's under side (R6).
+        below = rules["meleeBelow"]
+        top = min(rules["sightBelow"], (low[0] - sr.ROOT_HEIGHT - COVER_MARGIN) if low is not None else math.inf)
+        expect(-EPS <= below <= top + EPS,
+               f"{name} region {rid}: camps.meleeBelow {below:g} lies in [0, min(sightBelow {rules['sightBelow']:g}, the "
+               f"lowest rusher ground height " + (f"({low[1]}'s {low[2]} {low[0]:g})" if low else "(none)")
+               + f" - ROOT_HEIGHT {sr.ROOT_HEIGHT:g} - COVER_MARGIN {COVER_MARGIN:g})] = [0, {top:g}] (R14)")
+        # The fix round's R6: no standable ground under the region that a rusher's ground shape can
+        # still hit (its under side, UNDER_SIDE) while the player there is out of melee reach (his
+        # root more than meleeBelow under the floor), within the shape's flat reach less the body's
+        # radius of a cell's edge (a body is clamped that far inside its cell).
+        cliff, told = [], []
+        for kind in names:
+            for attack in kinds[kind].get("attacks") or []:
+                height = attack.get("height")
+                if height is None or attack["shape"] not in ("lunge", "arc", "lane", "ring"):
+                    continue
+                out = shape_extent(attack) - kinds[kind]["radius"]
+                told.append(f"{kind} {attack['shape']} {out:.1f}")
+                if out <= 0:
+                    continue
+                for solid in solids:
+                    if solid.kind not in ("block", "floor", "secret", "fence", "obstacle") or solid.top >= y - EPS:
+                        continue
+                    if min(rect_gap((solid.x0, solid.x1, solid.z0, solid.z1), cell_box(c)) for c in rects) > out + EPS:
+                        continue
+                    for x, z in standable_points(solids, solid, SPOT_STEP):
+                        feet = solid.top - y
+                        if feet + sr.ROOT_HEIGHT >= -below - EPS or not shape_holds(feet, height):
+                            continue
+                        if sr.rg_distance(rects, x, z) <= out + EPS:
+                            cliff.append(f"{solid.name} ({x:g}, {solid.top:g}, {z:g}) under {kind}'s {attack['shape']}")
+                            break
+        expect(not cliff, f"{name} region {rid}: no standable ground under the region, out of melee reach (root more "
+               f"than meleeBelow {below:g} under the floor), lies within a rusher ground shape's flat reach less its "
+               f"radius of a cell's edge where its height rule (under side {'on' if UNDER_SIDE else 'OFF'}) still holds "
+               f"(R6; {', '.join(told)})" + (": " + "; ".join(cliff[:4]) if cliff else ""))
         # The sniper perches (L1b-W4-19): every standable top near the region, in the band and over
         # meleeAbove, lies within the shortest keepAway reach of some region point.
         shooters = [longest for longest in (min((a["reach"] for a in kinds[u].get("attacks") or []
@@ -1511,6 +1640,18 @@ def check_wave4(name, level, layout, ctx, expect, solids):
                f"region whose standing root is in the band and over meleeAbove lies within the shortest keepAway reach "
                f"{shortest} of the region's kinds of some region point (shooters answer high ground)"
                + (": " + "; ".join(bad[:3]) if bad else f": {'; '.join(found) or 'none'}"))
+    # R8: the unreachable sniper spots, every one rated by tools/sim_range.py's straight course;
+    # the list is pinned in EXPECTED so a layout change that opens a new spot is seen.
+    spots = sniper_spots(level, layout, ctx, solids)
+    facts["spots"] = [f"{sp['id']} (camp {sp['camp']}, top {sp['top']:g}, {sp['points']} points, nearest "
+                      f"({sp['at'][0]:g}, {sp['at'][2]:g}) {sp['gap']:.1f} off the region)" for sp in spots]
+    pinned = spec.get("sniperSpots")
+    found = sorted(sp["id"] for sp in spots)
+    expect(pinned is None or found == sorted(pinned),
+           f"{name}: the unreachable sniper spots (R8: a standable top no rusher reaches, CampBrain.Melee false, within "
+           f"the Longbow's {ctx['longbow']:g} of a region; each rated by sim_range's straight course) are the pinned "
+           f"list: {', '.join(found) or 'none'}"
+           + (f" (pinned: {', '.join(sorted(pinned))})" if pinned is not None and found != sorted(pinned) else ""))
     # N's approaches (L1b-W4-31): only on open camps; standable at their y; farther than sight
     # from every resting place of every open-camp group at every difficulty (cones ignored).
     stops, bad = [], []
@@ -2052,8 +2193,14 @@ def load_all():
            "missions": {m["id"]: m for m in (sr.load_config(path) for path in sorted(sr.MISSIONS_DIR.glob("*.json")))},
            "runCap": combat["director"]["runCapSeconds"], "camps": combat.get("camps"),
            "ranks": sr.difficulty_ranks(expeditions), "snapshotHz": proving["crowd"]["snapshotHz"],
-           "gate16": {}, "chains": {}}
+           "gate16": {}, "chains": {}, "longbow": longbow_range(proving)}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
+
+
+def longbow_range(proving):
+    """The range of the default ranged family's default variant (the Longbow, R8's sniper)."""
+    weapon = proving["weapons"][proving["loadout"]["ranged"]]
+    return weapon["variants"][weapon["default"]]["range"]
 
 
 def stray_level_files():
@@ -2208,6 +2355,8 @@ def main():
                 print(f"    region      {line}")
             for line in found.get("approaches") or []:
                 print(f"    N           {line}")
+            for line in found.get("spots") or []:
+                print(f"    sniper      {line}")
     if not args.no_plan:
         scale_x, scale_z = args.scale
         for name, layout in layouts.items():
