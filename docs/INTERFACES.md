@@ -15602,3 +15602,8 @@ All 21 draft points are taken as written. Notes:
 - **The lose distance** sits at 108–109 against the band's 110 because sight crosses the U-bend's void;
   accepted.
 - A's executor points 1–6 ("Beyond the contract", `l1b-w4-reports/crowd.md`) are rulings.
+
+# L1c contracts — the Chief's Clearing redone
+
+Decisions: `docs/MISSIONS_DESIGN.md` §21. The contract of record is `docs/prompts/l1c-contract.md`
+(§1–§7 drafted by the study agent, §8 the lead's rulings), on branch `l1c-chief-clearing`.

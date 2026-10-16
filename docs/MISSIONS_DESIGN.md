@@ -463,3 +463,23 @@ headshots), never reached in any of his runs, are unplayed by him. PLAYTEST "L1b
 look. Carried to L4: the three Normal perch snipers, the phone auto-fire check in Studio, the per-camp bonus on
 screen, RunState's resent cells, natural barriers instead of fenced squares. Next: L2 (secrets, keys, the bought
 double jump), only on his word.
+
+## 21. The Chief's Clearing, redone before L2 (2026-10-16)
+
+Before starting L2 Ben said the boss camp "feels wrong": *"it should have an entrance where you dont see any
+enemies, and after you enter the camp you are ganked by a small group of enemies, the player should not be able
+to see the enemies from the outside of the camp"*. Today it is an open square with a 4-stud fence, a gate on the
+road's line, nine guards facing the player at that gate and three more groups in view from the road, then two
+waves of about 35 and the Colossus. Settled by click questions the same day (the lead's recommendation each time):
+
+- **Ambush, then the boss.** A small group (about 8 to 10) jumps the player as the gate shuts; when it is dead
+  the Colossus comes. The two big waves and every resident group of the clearing are gone. **[Ben]**
+- **From both flanks.** The ambushers wait behind cover on either side of the entrance, out of sight of the
+  passage, and rush in from left and right as the player steps in. **[Ben]**
+- **A bent passage.** A tall wall all round the clearing; the road reaches it through a short gatehouse that
+  turns once, so nothing inside is visible until the player is through the turn. Grey blocks now; the real
+  forest (L4) dresses it. **[Ben]**
+
+Lead's reading: nothing of the clearing (bodies, their markers, the Colossus) may be visible from the road or
+from any spot a player can reach outside it, including at the top of a double jump. This is a fix of L1, done
+before L2 on its own branch (`l1c-chief-clearing`), merged under the same rule once review and QA pass.
