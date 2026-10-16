@@ -51,7 +51,7 @@ The only visible change is the Studio key line. It is a `TextLabel` 200 px wide 
 - `py tools/check_compile.py --counts`: `CHECK: PASS -- 157 files compile with Studio settings (-O1 -g2)`. CrowdRenderer is at 154 (the limit is 154) and InputController at 149 (the limit is 149).
 - `luau-lsp analyze` (combat sourcemap, `--definitions=tools/types/globalTypes.d.luau`) on `src/combat/client`, with A's Region committed: no diagnostics.
 - Gate 12, `git diff --stat main -- src/server src/client`: empty.
-- Gate 18 on the client, `rg -n "\.inPlay" src/combat/client`: nothing.
+- Gate 18 on the client, `rg -n "\.inPlay\b" src/combat/client`: nothing.
 - CampAim's new cases and mutations, run against the real file under `tools\bin\luau.exe` in my scratch: the real file passes all 7 cases, and each of the 4 mutations fails 1 or 2 cases.
 
 ## Screenshots (Definition of done)
