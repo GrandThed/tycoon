@@ -986,24 +986,27 @@ function W2A.joinTests(): ()
 	check(not CB.TentRouse(tentRoused[6], 7, true) and tentRoused[6].since == 1, "fight: nothing")
 
 	print(" CampBrain: the tent rule")
-	check(CB.TentActive(true, 5) and CB.TentActive(false, 0) and CB.TentActive(false, -1) and not CB.TentActive(false, 3), "TentActive: busy, or no resident alive")
+	check(
+		CB.TentActive(true, 5, true) and not CB.TentActive(false, 0, true) and not CB.TentActive(false, 3, true) and not CB.TentActive(true, 0, true) and not CB.TentActive(true, 3, false),
+		"Wave 4 (L1b-W4-28): TentActive only busy, with a resident alive, and ahead (no longer once the residents are dead)"
+	)
 	local fresh = CB.NewTent(8)
-	check(fresh.left == 8 and fresh.nextAt == -math.huge, "NewTent: the stock, the first body due at once")
+	check(fresh.left == 8 and fresh.nextAt == -math.huge and fresh.busySeconds == 0 and fresh.lastAt == nil, "NewTent: the stock, the first body due at once, the pace clock at 0 and stopped")
 	-- Busy 0..13, paused 13..40, busy 40..50, at rest with residents alive 50..60, residents all
-	-- dead from 60 (the camp still at rest), to 100, at half-second ticks.
+	-- dead from 60 (the camp still at rest), to 100, at half-second ticks; always ahead.
 	local timeline = CB.NewTent(8)
 	local sent = {}
 	for tick = 0, 200 do
 		local now = tick * 0.5
 		local busy = now < 13 or (now >= 40 and now < 50)
 		local residents = if now >= 60 then 0 else 4
-		if CB.TentDue(timeline, CB.TentActive(busy, residents), now) then
+		if CB.TentDue(timeline, CB.TentActive(busy, residents, true), now) then
 			table.insert(sent, now)
 			CB.TentSent(timeline, now, 6)
 		end
 	end
-	check(W2A.list(sent) == "{0, 6, 12, 40, 46, 60, 66, 72}", `wake at 0: 0, 6, 12; paused 13 to 40, the next at 40; residents dead at rest: it keeps sending; then never ({W2A.list(sent)})`)
-	check(timeline.left == 0, "the stock spent")
+	check(W2A.list(sent) == "{0, 6, 12, 40, 46}", `wake at 0: 0, 6, 12; paused 13 to 40, the next at 40; at rest or with its residents dead it sends nothing ({W2A.list(sent)})`)
+	check(timeline.left == 3, "three of the stock never sent (forfeit at the clear)")
 	local spent = CB.NewTent(1)
 	CB.TentSent(spent, 0, 6)
 	CB.TentSent(spent, 6, 6)
@@ -1527,7 +1530,8 @@ function W2A.tentDoorTests(): ()
 		rose = rose or (event.group == group and event.to == "rise")
 	end
 	check(not rose and seen(ids[1]).state ~= "rise", `B-3 as ruled: with nobody in play for its camp, a group walking home is not roused ({#ignored} events)`)
-	-- A player steps into the camp while it walks home (home ignores sight, so only the rouse acts).
+	-- A player steps into the camp while it walks home, beyond every member's sight (so Step does
+	-- not turn it back and only the rouse acts).
 	root.Position = vec(-20, 11, -20)
 	Crowd.RouseGroup(group)
 	step2()

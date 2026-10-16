@@ -46,6 +46,9 @@
 -- camp, and every body stands on its own (Body.floor). Its ground shapes lie on that floor, a
 -- retreat and a charge stop at that floor's edge, and a falling target is led down to it. A
 -- camp's resident in a fight goes only for the targets in play for its group (Think's `allowed`).
+-- L1b Wave 4 (L1b-W4-17): a floor with a chase region cuts a retreat and a charge at the region's
+-- edge (Region.Clamp, Region.Runway), so a raider's run carries on through a door onto the road;
+-- `allowed` is its group's known set.
 --
 -- Rules that shape the module:
 -- * Nothing here yields, raycasts or builds a path: the crowd ignores world geometry (ruling 15).
@@ -62,6 +65,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local CrowdCodec = require(sharedFolder:WaitForChild("CrowdCodec"))
+local Region = require(sharedFolder:WaitForChild("Region"))
 
 type CrowdConfig = typeof((({} :: any) :: Types.ProvingGroundsConfig).crowd)
 type ThreatConfig = typeof((({} :: any) :: CrowdConfig).threat)
@@ -233,7 +237,7 @@ local function floorOf(body: Body): Types.CrowdFloor
 	return floors[body.floor] or floors[1] or DEFAULT_FLOOR
 end
 
--- The nearest target, among those in `allowed` when it is given (a resident's group's in-play
+-- The nearest target, among those in `allowed` when it is given (a resident's group's known
 -- set); every target otherwise.
 local function nearest(position: Vector3, allowed: { [number]: boolean }?): Target?
 	local best: Target? = nil
@@ -297,8 +301,13 @@ local function ahead(from: Vector3, target: Target, seconds: number, floorY: num
 	return Vector3.new(from.X + velocity.X * seconds, y, from.Z + velocity.Z * seconds)
 end
 
--- Where a point may stand on a floor: a body of `radius` stays wholly on it.
+-- Where a point may stand on a floor: a body of `radius` stays wholly on it, or wholly in its
+-- region when it has one.
 local function inArena(point: Vector3, radius: number, floor: Types.CrowdFloor): Vector3
+	local region = floor.region
+	if region ~= nil then
+		return Region.Clamp(region.cells, point, radius)
+	end
 	local arenaCenter = floor.centre
 	local limitX = math.max(floor.half.X - radius, 0)
 	local limitZ = math.max(floor.half.Z - radius, 0)
@@ -310,13 +319,17 @@ local function inArena(point: Vector3, radius: number, floor: Types.CrowdFloor):
 end
 
 -- How far a body of `radius` can run from `from` along the flat unit `heading` before its
--- floor's edge.
+-- floor's edge, or its region's (through the doors) when it has one.
 local function runway(
 	from: Vector3,
 	heading: Vector3,
 	radius: number,
 	floor: Types.CrowdFloor
 ): number
+	local region = floor.region
+	if region ~= nil then
+		return Region.Runway(region.cells, from, heading, radius)
+	end
 	local arenaCenter = floor.centre
 	local limitX = math.max(floor.half.X - radius, 0)
 	local limitZ = math.max(floor.half.Z - radius, 0)
@@ -843,7 +856,7 @@ end
 -- walk or start a windup (a stagger or a launch suspends the brain); the timeline of an attack
 -- already under way runs on regardless. Returns the point to walk to and how far short of it,
 -- on the flat, to stop; nil to stand. `allowed` (L1b-6): only the targets whose userId is in it
--- may be chosen (a resident's group's in-play set); nil = every target.
+-- may be chosen (a resident's group's known set, L1b-W4-21); nil = every target.
 function CrowdBrain.Think(
 	body: Body,
 	mind: Mind,

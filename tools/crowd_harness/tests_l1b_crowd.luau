@@ -46,6 +46,11 @@ function L1BC.rules(): any
 		tent = { sight = 24, cone = 360, rise = 0 },
 		joinFactor = 2,
 		dormantRadius = 1000,
+		-- L1b Wave 4 keys (CampBrain.Problems refuses rules without them). These Wave 1 groups have
+		-- no region, so they know and reach by the in-play rule and never read them.
+		chaseSight = 40,
+		hitMemorySeconds = 8,
+		meleeAbove = 7.5,
 	}
 end
 
@@ -226,16 +231,16 @@ function L1BC.stepTests(): ()
 	check(CB.Step(once, L1BC.input(5, onceMembers, sighted), R) == "rise" and once.state == "rise", "one transition per call: a rise of 0 is not skipped in the step that wakes")
 
 	local struck = guardGroup()
-	check(CB.Struck(struck, 9) == false and struck.hit == true, "a hit from a player not in play: no damage, but it is recorded")
+	check(CB.Struck(struck, 9, 0.5) == true and struck.hit == true, "Wave 4 (L1b-W4-25): a hit from a player not in play lands, and is recorded")
 	check(CB.Step(struck, L1BC.input(1, members, nobody), R) == "rise" and struck.hit == false, "a hit wakes it with nobody in sight, and the flag is cleared")
 
 	local held = guardGroup(true)
 	check(held.held == true, "a held def starts held")
 	check(CB.Step(held, L1BC.input(1, members, sighted), R) == nil and held.state == "rest", "a held group ignores sight")
-	check(held.inPlay[7] == true, "but its in-play set is rebuilt all the same")
+	check(held.reachable[7] == true and held.known[7] == true, "but its sets are rebuilt all the same (the in-play rule)")
 	held.hit = true
 	check(CB.Step(held, L1BC.input(2, members, nobody), R) == nil and held.state == "rest" and held.hit == false, "and ignores a hit (the flag is cleared)")
-	check(CB.Struck(held, 7) == false and held.hit == false, "a held group evades: nothing is recorded")
+	check(CB.Struck(held, 7, 2.5) == false and held.hit == false and held.hitAt[7] == nil, "a held group evades: nothing is recorded")
 	CB.Release(held, 3)
 	check(held.held == false and held.state == "rise" and held.since == 3, "Release: a held group goes to rise at now")
 	local loose = guardGroup()
@@ -276,14 +281,15 @@ function L1BC.stepTests(): ()
 	local home, homeList = fighting(20)
 	CB.Step(home, L1BC.input(23, homeList, nobody), R)
 	local away = { L1BC.member(vec(0, 8, -10), 0), { at = vec(4, 8, -20), post = homeList[2].post } }
-	check(CB.Struck(home, 7) == false and home.hit == false, "home evades every hit, a player's in play or not")
-	check(CB.Struck(home, 0) == false, "and the levers' (byUserId 0)")
-	home.hit = true
-	check(CB.Step(home, L1BC.input(24, away, sighted), R) == nil and home.state == "home", "home ignores a hit and sight while a member is away from its post")
+	check(CB.Struck(home, 7, 23.5) == true and home.hit == true and home.hitAt[7] == 23.5 and home.struckBy[7] == true, "Wave 4 (L1b-W4-24): home no longer evades; a player's hit lands and is recorded")
+	check(CB.Struck(home, 0, 23.5) == true, "and the levers' (byUserId 0)")
+	-- Seen by the first guard (26 in front of it) but 6 past the floor's edge: not reachable.
+	local unreachable = { L1BC.seen(7, 0, 10, -36) }
+	check(CB.Step(home, L1BC.input(24, away, unreachable), R) == nil and home.state == "home", "home walks on past a hit and a sighting from a player it cannot reach")
 	local almost = { L1BC.member(vec(0, 8, -10), 0), { at = vec(4, 8, -11.01), post = homeList[2].post } }
 	check(CB.Step(home, L1BC.input(25, almost, nobody), R) == nil, "one member 1.01 from its post: still home")
 	local there = { L1BC.member(vec(0, 8, -10), 0), { at = vec(4, 8, -11), post = homeList[2].post } }
-	check(CB.Step(home, L1BC.input(26, there, sighted), R) == "rest" and home.since == 26, "every member within homeTolerance: at rest again")
+	check(CB.Step(home, L1BC.input(26, there, nobody), R) == "rest" and home.since == 26, "every member within homeTolerance: at rest again")
 	check(CB.Step(home, L1BC.input(27, there, sighted), R) == "rise", "and it can wake again")
 
 	local empty = guardGroup()
@@ -292,12 +298,12 @@ function L1BC.stepTests(): ()
 
 	print(" CampBrain.Struck")
 	local open, openList = fighting(30)
-	check(open.inPlay[7] == true and open.inPlay[9] == nil, "(7 is in play at the last step, 9 is not)")
+	check(open.reachable[7] == true and open.reachable[9] == nil, "(7 is in play at the last step, 9 is not)")
 	open.hit = false
-	check(CB.Struck(open, 7) == true and open.hit == true, "in play: the damage lands, and the hit is recorded")
-	check(CB.Struck(open, 9) == false, "out of play: blocked")
-	check(CB.Struck(open, 0) == true, "byUserId 0 (a Studio lever): lands")
-	check(CB.Evades(open) == false and CB.Evades(home) == false and CB.Evades(held) == false, "(only held or home evades)")
+	check(CB.Struck(open, 7, 30) == true and open.hit == true, "in play: the damage lands, and the hit is recorded")
+	check(CB.Struck(open, 9, 30) == true and open.hitAt[9] == 30, "Wave 4: out of play lands too (L1b-7 is gone)")
+	check(CB.Struck(open, 0, 30) == true, "byUserId 0 (a Studio lever): lands")
+	check(CB.Evades(open) == false and CB.Evades(home) == false and CB.Evades(held) == false, "(only held evades: home no longer does)")
 	local holding = guardGroup(true)
 	check(CB.Evades(holding) == true, "a held group evades")
 	local _ = openList
@@ -360,6 +366,8 @@ function L1BC.goalTests(): ()
 	check(CB.Shows(fireRest, false) == "rise" and CB.Shows(fireRest, true) == "rise", "rise: rise")
 	fireRest.state = "fight"
 	check(CB.Shows(fireRest, false) == nil, "fight: nil (the brain's state)")
+	fireRest.standDown = true
+	check(CB.Shows(fireRest, false) == "idle" and CB.Shows(fireRest, true) == "move", "Wave 4: fight stood down: idle or move, as home")
 
 	print(" CampBrain.Problems")
 	check(#CB.Problems(R) == 0, "the contract's rules have no problem")
@@ -677,11 +685,11 @@ function L1BC.allowedTests(): ()
 	local guard = L1BC.def("guard", { vec(25, 8, 0) }, { yaw = math.pi / 2 })
 	local _, ids = L1BC.place(guard, { "fodder" })
 	step2(2)
-	local blocked, dead, verdict = Crowd.Damage(ids[1], 10, 8, vec(0, 0, 40), 4)
-	check(blocked == 0 and dead == false and verdict == "blocked", "a hit from a player out of play answers blocked")
-	check(Crowd.Get(ids[1]).hp == 40, "and does nothing")
+	local landed, dead, verdict = Crowd.Damage(ids[1], 10, 8, vec(0, 0, 40), 4)
+	check(landed == 10 and dead == false and verdict == nil, "Wave 4 (L1b-W4-25): a hit from a player out of play lands")
+	check(Crowd.Get(ids[1]).hp == 30, "and hurts")
 	step2()
-	check(#L1BC.events() == 1, "but wakes the group")
+	check(#L1BC.events() == 1, "and wakes the group")
 	step2(3)
 	local start = Crowd.Get(ids[1]).position.X
 	step2(15)
@@ -732,19 +740,16 @@ function L1BC.leashTests(): ()
 	check(wentHome, "with nobody in play for leashSeconds the group goes home")
 	check(Crowd.Awake() == 1, "a group walking home is awake (L1b-19: the field is not clear)")
 	check(Crowd.Busy()[1] == nil, "but its floor is not busy (the safe point may use it)")
-	-- Back into play while they walk home, and out again before they rest (sight would wake them).
-	root.Position = vec(0, 11, -25)
+	-- Wave 4 (L1b-W4-24): walking home it takes hits, the levers' too, and a hit from a player
+	-- it cannot reach (out of play, 30 past the floor's edge) does not turn it back.
+	local before = Crowd.Get(ids[1]).hp
+	local value, killed, verdict = Crowd.Damage(ids[1], 5, 7, vec(0, 0, 60), 6)
+	local lever, _, leverVerdict = Crowd.Damage(ids[1], 5, 0, nil, nil)
+	check(value == 5 and not killed and verdict == nil and lever == 5 and leverVerdict == nil, "walking home every hit lands, the levers' too")
+	check(Crowd.Get(ids[1]).hp == before - 10, "it is hurt")
 	step2()
-	check(not Crowd.Engaged(7), "a player in play for a group walking home is not engaged")
-	root.Position = vec(0, 11, -60)
-	local before = Crowd.Get(ids[1])
-	local value, killed, verdict = Crowd.Damage(ids[1], 30, 7, vec(0, 0, 60), 6)
-	local zero, _, leverVerdict = Crowd.Damage(ids[1], 30, 0, nil, nil)
-	step2()
-	check(value == 0 and not killed and verdict == "blocked" and zero == 0 and leverVerdict == "blocked", "walking home it evades: every hit, the levers' too, answers blocked")
-	check(#L1BC.events() == 0, "and a hit on the way home wakes nobody")
-	local after = Crowd.Get(ids[1])
-	check(after.hp >= before.hp and after.velocity.Y <= 0.001, "no damage and no launch")
+	check(Crowd.Get(ids[1]).velocity.Y > 0, "and launched")
+	check(#L1BC.events() == 0, "and a hit from a player it cannot reach turns nobody back")
 	local rested = false
 	for _ = 1, 120 do
 		step2()
