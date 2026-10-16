@@ -448,3 +448,8 @@ end screen) belongs to L4 and L5. Brief: `docs/prompts/l1b-wave4.md`.
 to the next camp" was not taken); a player shooting from a spot they cannot reach (the lookout ledge,
 below the drop) **makes them give up**: every hit lands, the melee raiders wait 3 s at the edge and walk
 home to heal, their shooters still shoot back. **[Ben]**
+
+**Wave 4 fix round (2026-10-16):** sniping from the lookout ledge, the secret lookout and the cache block
+on Normal pays 1.0–1.7× the fighting player's cash per minute (no data lever fixed it; camps never refill,
+so only the pace changes). Ben: **accept for L1, fix in L4** when the real forest re-places the perches;
+the simulator gate must pass on every spot before L4 ships. **[Ben]**

@@ -119,3 +119,11 @@ taller than the shape's height; the designer's boss sims confirm the bands. **`C
 `"meleeBelow": 1.5` before anything ships** (else `CampBrain.Problems` refuses the camp rules).
 
 **R15 — ThreatField's moving charge and ring get R6's lower bound (A).**
+
+**Ruled after the designer's report (2026-10-16):**
+- **R8's stop, Ben's ruling ("Accept, fix in L4"):** on Normal the snipers from the lookout ledge, the
+  secret lookout and the cache block out-earn the mission (cash per minute ×1.0–1.7; Hard is under it).
+  Bounded: camps never refill, so the total is the same and a camp only clears faster. Reported as a
+  known limit, not gated; L4 re-places the perches with the real forest and the gate must pass on every
+  spot before L4 ships.
+- **"The tent when fast: B at least 3"** (was 4): under R7 the pace restarts between groups; accepted.
