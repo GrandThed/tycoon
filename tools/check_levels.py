@@ -47,6 +47,9 @@ Usage:
   py tools/check_levels.py --no-plan      # the gates only
   py tools/check_levels.py --plan-only    # the plans only
   py tools/check_levels.py --scale 4 8    # studs per character across and down (default 4 8)
+
+Every rule L1c and its fix round added is shown red on a mutated copy by
+tools/check_levels_mutants.py (run_gates below is what it calls).
 """
 
 from __future__ import annotations
@@ -83,9 +86,9 @@ EXPECTED = {
         # under its stage's maxAlive), and a sneak path past the open camps (L1b-W2-3).
         "locks": ["C"],
         "residents": {"A": (30, 36), "B": (40, 50)},
-        # L1c-4: the boss room's ambush, at every difficulty (8 to 10 on Normal by Ben's word, 12 on
-        # Hard and Brutal), under its stage's maxAlive.
-        "lockedResidents": (8, 12),
+        # L1c-4: the boss room's ambush per difficulty (8 to 10 on Normal by Ben's word, 12 on Hard
+        # and Brutal), under its stage's maxAlive. A difficulty this lacks is held to nothing.
+        "lockedResidents": {"normal": (8, 10), "hard": (8, 12), "brutal": (8, 12)},
         # L1c-3: the camps that are walled: nothing inside is seen from outside before the close.
         "walled": ["C"],
         "sneak": True,
@@ -173,14 +176,34 @@ JOIN_FACTOR_FIXED = 2  # L1b-W2-12 / Ben's "at least double": Combat.json camps.
 BODY_HEIGHT = 6.0  # a character, feet to head: what stands this far under a barrier's foot is in it
 CLOSE_SPARE = 1.0  # a camp's entry point lies this far inside the close rule's inset rectangle
 SAMPLE = 0.25  # studs between two samples of a walked leg
+GATE_FLOOR = 1.0  # levels.gateSeconds' least, and a stage's own (L1c fix round M3) where the close brings a body
 # L1c (docs/prompts/l1c-contract.md, L1c-1 and L1c-3): the walled boss room.
 WALL_SPARE = 3.0  # a walled camp's fence stands this much over the highest camera (L1c-1)
 SIGHT_STEP = 2.0  # eye and camera points are sampled on this grid
 CAMERA_SPARE = 2.0  # camera points lie within camera.maxZoom + this of an eye point
-DOORWAY = 2.5  # the doorway exemption: this close to the fenced rectangle, inside a gate's lane
+DOORWAY = 2.5  # the doorway exemption: an eye this close to the fenced rectangle, inside a gate's lane
+# The L1c fix round's m1: near each gate (within camera.maxZoom + CAMERA_SPARE of its opening) eye
+# and camera points are also taken on this finer grid, along every edge of the regions they are
+# allowed in at SIGHT_EDGE, and at every corner exactly; a point on an edge is taken EDGE_IN on its
+# allowed side.
+SIGHT_FINE = 0.25
+SIGHT_EDGE = 0.05
+EDGE_IN = 0.01
+# Switches tools/check_levels_mutants.py turns to show what each fix-round rule catches (like
+# UNDER_SIDE): SIGHT_ZONES False is the 2-stud grid alone (m1); EXEMPT_CAMERAS True exempts camera
+# points in the doorway as 2a58134's gate did (C1); FLOOR_WALLS False measures Floors to the fence
+# alone (m4).
+SIGHT_ZONES = True
+EXEMPT_CAMERAS = False
+FLOOR_WALLS = True
 THEME_PATH = REPO_ROOT / "src" / "client" / "UI" / "Theme.luau"
 # The Theme numbers the highest camera is built from (the client's; read from the file, never copied).
 THEME_KEYS = ("COMBAT_CAMERA_PIVOT_HEIGHT", "COMBAT_CAMERA_MIN_PITCH_DEGREES", "COMBAT_SHAKE_MAX_STUDS")
+# ... and the spherecast's radius, which keeps a camera off a wall (the sight gate's stand-off).
+SIGHT_THEME_KEYS = ("COMBAT_CAMERA_COLLISION_RADIUS",)
+# m1: the drawn body (CrowdRenderer's torso, in radii), read from the file like Theme.
+RENDERER_PATH = REPO_ROOT / "src" / "combat" / "client" / "Controllers" / "CrowdRenderer.luau"
+RENDERER_KEYS = ("TORSO_WIDTH", "TORSO_DEPTH")
 EPS = 1e-6
 SIDES = ("north", "south", "west", "east")
 
@@ -410,13 +433,27 @@ def unclimbable(solids, move, ability):
 
 
 def theme_numbers():
-    """THEME_KEYS as Theme.luau sets them: {key: number}; a key it lacks is left out."""
+    """THEME_KEYS and SIGHT_THEME_KEYS as Theme.luau sets them: {key: number}; a key it lacks is
+    left out."""
     import re
 
     text = THEME_PATH.read_text(encoding="utf-8") if THEME_PATH.exists() else ""
     found = {}
-    for key in THEME_KEYS:
+    for key in THEME_KEYS + SIGHT_THEME_KEYS:
         match = re.search(rf"^\s*{key}\s*=\s*(-?[0-9.]+)\s*,", text, re.MULTILINE)
+        if match:
+            found[key] = float(match.group(1))
+    return found
+
+
+def renderer_numbers():
+    """RENDERER_KEYS as CrowdRenderer.luau sets them (`local KEY = number`): {key: number}."""
+    import re
+
+    text = RENDERER_PATH.read_text(encoding="utf-8") if RENDERER_PATH.exists() else ""
+    found = {}
+    for key in RENDERER_KEYS:
+        match = re.search(rf"^local\s+{key}\s*=\s*([0-9.]+)\s*$", text, re.MULTILINE)
         if match:
             found[key] = float(match.group(1))
     return found
@@ -1118,6 +1155,20 @@ def check_level_file(file, level, layouts, ctx, expect):
         roomy = [f"{k} {kinds[k]['bandMin']:g}" for k, _b in named if k in kinds and kinds[k].get("brain") == "keepAway"]
         expect(not tight, f"{tag} every keepAway kind's bandMin is at most {BAND_SHARE:g} x its shorter side "
                f"({BAND_SHARE * short:.1f}): " + (", ".join(tight) + " do not fit" if tight else ", ".join(roomy) or "none"))
+        # The L1c fix round's M3: a camp's own countdown. Under levels.gateSeconds' floor (which
+        # lets the client learn the floor before the first body) only where the close brings no
+        # body: a first wave with no group and no boss, in a camp whose residents stand there
+        # (drawn, floor and all, from the run's start).
+        countdown = stage.get("gateSeconds")
+        if countdown is not None:
+            first = (stage.get("waves") or [{}])[0]
+            empty = not first.get("groups") and not first.get("boss")
+            held = camp.get("locks") is True and any(
+                c.get("id") == camp["id"] and c.get("residents") for c in level.get("camps") or [])
+            expect(is_number(countdown) and countdown >= 0 and (countdown >= GATE_FLOOR or (empty and held)),
+                   f"{tag} its own gateSeconds {countdown} is 0 or more, and under {GATE_FLOOR:g} only when its first "
+                   f"wave brings no body (no group, no boss) and its residents already stand on its floor: first wave "
+                   f"{'empty' if empty else 'not empty'}, residents {'held there' if held else 'none'}")
         alive = stage["maxAlive"] if stage.get("maxAlive") is not None else level["crowd"]["maxAlive"]
         area = camp["sx"] * camp["sz"]
         expect(alive <= area / DENSITY_AREA + EPS and alive <= ctx["crowdMaxAlive"],
@@ -1214,12 +1265,14 @@ def check_residents(name, level, layout, ctx, expect):
         area = camp["sx"] * camp["sz"]
         dense = n <= area / DENSITY_AREA + EPS
         if camp.get("locks") is True:
-            lo, hi = spec.get("lockedResidents", (0, math.inf))
+            bands = spec.get("lockedResidents") or {}
             cap = caps.get(cid)
             each = {d: sr.groups_of(level, layout, ranks.get(d, 0), ranks)[1].get(cid, 0) for d in difficulties}
-            ok = dense and cap is not None and all(lo <= m <= hi and m < cap for m in each.values())
-            band = (f"{lo}-{hi} at every difficulty and under its stage's maxAlive {cap}: "
-                    + ", ".join(f"{d} {m}" for d, m in each.items()))
+            ok = dense and cap is not None and all(
+                bands.get(d, (0, math.inf))[0] <= m <= bands.get(d, (0, math.inf))[1] and m < cap for d, m in each.items())
+            band = (f"under its stage's maxAlive {cap}, per difficulty: "
+                    + ", ".join(f"{d} {m} (band {bands[d][0]}-{bands[d][1]})" if d in bands else f"{d} {m} (any)"
+                                for d, m in each.items()))
         elif cid in (spec.get("residents") or {}):
             lo, hi = spec["residents"][cid]
             ok = dense and lo <= n <= hi
@@ -2005,16 +2058,89 @@ def walled_bodies(level, layout, ctx, cid):
     return bodies, sorted(set(plated)), tallest
 
 
-def sight_points(layout, solids, ctx, camp, gates, walls, lockers, tall):
-    """The plan-view points a walled camp is looked at from: eye points on every outside top a
-    player reaches (SIGHT_STEP grid), and camera points within camera.maxZoom + CAMERA_SPARE of
-    one, outside every wall and locking camp, whose boom from that eye no wall or locking camp
-    cuts (the spherecast, and the clip of L1c-5a). Only points that could look through a gate:
-    (eyes, cameras)."""
+def body_reach(ctx):
+    """m1: how far a drawn body reaches past its centre, per stud of radius. CrowdRenderer draws a
+    torso TORSO_WIDTH x TORSO_DEPTH radii across, so at any facing its corner stands half that
+    diagonal out (1.151 at 1.9 x 1.3). None when the renderer lacks a key."""
+    found = ctx.get("renderer") or {}
+    if any(key not in found for key in RENDERER_KEYS):
+        return None
+    return math.hypot(found["TORSO_WIDTH"], found["TORSO_DEPTH"]) / 2
+
+
+def grown(rect, by):
+    return rect[0] - by, rect[1] + by, rect[2] - by, rect[3] + by
+
+
+def strictly_in(rect, x, z):
+    return rect[0] + EPS < x < rect[1] - EPS and rect[2] + EPS < z < rect[3] - EPS
+
+
+def gate_zone(camp, gate, thickness, reach):
+    """The ground outside a gate a point may look through it from: its lane widened by `reach`
+    each way, `reach` deep outward from the gate's outer face (x0, x1, z0, z1)."""
+    gx0, gx1, gz0, gz1 = gate_rect(camp, gate, thickness)
+    side = gate["side"]
+    if side == "north":
+        return gx0 - reach, gx1 + reach, gz0 - reach, gz0
+    if side == "south":
+        return gx0 - reach, gx1 + reach, gz1, gz1 + reach
+    if side == "west":
+        return gx0 - reach, gx0, gz0 - reach, gz1 + reach
+    return gx1, gx1 + reach, gz0 - reach, gz1 + reach
+
+
+def zone_points(zone, xs, zs):
+    """m1: the points of `zone` where a gate's sight is judged: a SIGHT_FINE grid, every line
+    x = c (c in xs) and z = c (c in zs) at SIGHT_EDGE, and every crossing of two such lines exactly
+    (the corners of the regions the lines bound, where a margin is least)."""
+    x0, x1, z0, z1 = zone
+
+    def run(a, b, step):
+        return [a + step * k for k in range(int((b - a) / step + EPS) + 1)] + [b]
+
+    lx = [x for x in xs if x0 - EPS <= x <= x1 + EPS]
+    lz = [z for z in zs if z0 - EPS <= z <= z1 + EPS]
+    found = {(x, z) for x in run(x0, x1, SIGHT_FINE) for z in run(z0, z1, SIGHT_FINE)}
+    found |= {(x, z) for x in lx for z in run(z0, z1, SIGHT_EDGE)}
+    found |= {(x, z) for z in lz for x in run(x0, x1, SIGHT_EDGE)}
+    found |= {(x, z) for x in lx for z in lz}
+    return {(round(x, 4), round(z, 4)) for x, z in found}
+
+
+def edge_lines(rects, by):
+    """The x lines and the z lines of every rectangle's edges, moved `by` outward (negative:
+    inward)."""
+    xs, zs = set(), set()
+    for x0, x1, z0, z1 in rects:
+        xs |= {x0 - by, x1 + by}
+        zs |= {z0 - by, z1 + by}
+    return xs, zs
+
+
+def sight_points(layout, solids, ctx, camp, gates, walls, tall, clip):
+    """The plan-view points a walled camp is looked at from (the L1c fix round's C1 and m1):
+    ({eye: it stands inside the clip}, {camera}, {camera whose reach is unproved}, reached).
+
+    Eyes: every outside top a player reaches, on a SIGHT_STEP grid; in each gate's zone also on
+    SIGHT_FINE, and along the tops' edges, the doorways' edges and the clip's edge at SIGHT_EDGE
+    with every corner. An eye inside `clip["grown"]` (the fenced rectangle grown by
+    levels.cameraClear) has its boom start inside the clipped rectangle, so the boom comes to the
+    head (WallClip.Reach answers 0): that eye's camera is the eye itself, judged with it.
+
+    Cameras: only from an eye outside the clip. A point within camera.maxZoom + CAMERA_SPARE of
+    such an eye, whose segment from it no tall wall and no clip keep-out cuts, and that stands in
+    no keep-out: `clip["keeps"]` (every locking camp's fenced rectangle grown by cameraClear less
+    the shake, which moves a clipped camera that far in) and every tall wall grown by the
+    spherecast's radius less the shake. SIGHT_STEP everywhere; in a gate's zone also SIGHT_FINE,
+    every keep-out edge at SIGHT_EDGE and their corners. Those zone points come back unproved
+    (`lazy`); `reached(x, z)` proves one, and check_walled asks only for the ones it needs, least
+    margin first."""
     thickness = ctx["levels"]["fenceThickness"]
     boom = (ctx.get("camera") or {}).get("maxZoom", 0) + CAMERA_SPARE
     outsides = [gate_faces(camp, g, thickness)[2] for g in gates]
     rects = [gate_rect(camp, g, thickness) for g in gates]
+    zones = [gate_zone(camp, g, thickness, boom) for g in gates]
 
     def near_outside(x, z):
         for g, (gx0, gx1, gz0, gz1) in zip(gates, rects):
@@ -2024,29 +2150,86 @@ def sight_points(layout, solids, ctx, camp, gates, walls, lockers, tall):
                 return True
         return False
 
+    reach = reachable_solids(layout, solids, ctx["move"], ctx["abilityHeight"], f"Camp_{camp['id']}_", tall)
+    standable = [o for o in solids if o.kind in ("block", "floor", "secret", "fence", "obstacle")]
+
+    def stands(x, z):
+        """On a reached top, with nothing standable over it there."""
+        for s in reach:
+            if s.holds(x, z) and not any(o is not s and o.top > s.top + EPS and o.holds(x, z) for o in standable):
+                return True
+        return False
+
     eyes = set()
-    for s in reachable_solids(layout, solids, ctx["move"], ctx["abilityHeight"], f"Camp_{camp['id']}_", tall):
+    for s in reach:
         for x, z in standable_points(solids, s, SIGHT_STEP):
             if near_outside(x, z):
-                eyes.add((round(x, 3), round(z, 3)))
-    blocked = walls + lockers
+                eyes.add((round(x, 4), round(z, 4)))
+    fenced = clip["fenced"]
+    doorways = [(gx0, gx1, fenced[2] - DOORWAY, fenced[3] + DOORWAY) if g["side"] in ("north", "south")
+                else (fenced[0] - DOORWAY, fenced[1] + DOORWAY, gz0, gz1)
+                for g, (gx0, gx1, gz0, gz1) in zip(gates, rects)]
+    txs, tzs = edge_lines([(s.x0, s.x1, s.z0, s.z1) for s in reach], -EDGE_IN)
+    dxs, dzs = edge_lines(doorways + [clip["grown"]], EDGE_IN)
+    for zone in zones if SIGHT_ZONES else []:
+        for x, z in zone_points(zone, txs | dxs, tzs | dzs):
+            if stands(x, z):
+                eyes.add((x, z))
+    inside = {p: strictly_in(clip["grown"], *p) for p in eyes}
+    keeps = clip["keeps"] + [grown(w, clip["standoff"]) for w in walls]
+    cuts = walls + clip["keeps"]
 
-    def inside_any(x, z):
-        return any(r[0] + EPS < x < r[1] - EPS and r[2] + EPS < z < r[3] - EPS for r in blocked)
+    def kept_out(x, z):
+        return any(strictly_in(r, x, z) for r in keeps)
 
+    booms = [p for p in eyes if not inside[p]]
     cams = set()
-    for ex, ez in eyes:
+    for ex, ez in booms:
         for i in range(int(math.floor((ex - boom) / SIGHT_STEP)), int(math.ceil((ex + boom) / SIGHT_STEP)) + 1):
             for k in range(int(math.floor((ez - boom) / SIGHT_STEP)), int(math.ceil((ez + boom) / SIGHT_STEP)) + 1):
                 cx, cz = i * SIGHT_STEP, k * SIGHT_STEP
                 if (cx, cz) in cams or math.hypot(cx - ex, cz - ez) > boom + EPS:
                     continue
-                if not any(out(cx, cz) for out in outsides) or inside_any(cx, cz):
+                if not any(out(cx, cz) for out in outsides) or kept_out(cx, cz):
                     continue
-                if any(seg_hits_rect(ex, ez, cx, cz, r) for r in blocked):
+                if any(seg_hits_rect(ex, ez, cx, cz, r) for r in cuts):
                     continue
                 cams.add((cx, cz))
-    return eyes, cams - eyes
+    lazy = set()
+    kxs, kzs = edge_lines(keeps, EDGE_IN)
+    for zone in zones if SIGHT_ZONES else []:
+        for x, z in zone_points(zone, kxs, kzs):
+            if (x, z) not in cams and any(out(x, z) for out in outsides) and not kept_out(x, z):
+                lazy.add((x, z))
+    bucket = {}
+    for ex, ez in booms:
+        bucket.setdefault((math.floor(ex / boom), math.floor(ez / boom)), []).append((ex, ez))
+
+    def reached(cx, cz):
+        """Some eye outside the clip swings its boom to (cx, cz) with nothing cutting it."""
+        bx, bz = math.floor(cx / boom), math.floor(cz / boom)
+        for i in (bx - 1, bx, bx + 1):
+            for k in (bz - 1, bz, bz + 1):
+                for ex, ez in bucket.get((i, k), ()):
+                    if math.hypot(cx - ex, cz - ez) <= boom + EPS and not any(
+                            seg_hits_rect(ex, ez, cx, cz, r) for r in cuts):
+                        return True
+        return False
+
+    return inside, cams, lazy - cams, reached
+
+
+def camera_lead(ctx):
+    """m4: how much nearer a wall than the surface it stands over the highest camera may be: the
+    boom's flat reach at the lowest pitch, the shoulder's sideways offset and the shake."""
+    camera, theme = ctx.get("camera") or {}, ctx.get("theme") or {}
+    pitch = math.radians(-theme["COMBAT_CAMERA_MIN_PITCH_DEGREES"])
+    return camera["maxZoom"] * math.cos(pitch) + abs(camera["shoulderOffset"][0]) + theme["COMBAT_SHAKE_MAX_STUDS"]
+
+
+def far_reach(rect, floor):
+    """How far the farthest corner of a camp's floor stands from a wall's footprint."""
+    return max(rect_gap(rect, (x, x, z, z)) for x in floor[:2] for z in floor[2:])
 
 
 def check_walled(name, level, layout, ctx, expect, solids):
@@ -2069,8 +2252,8 @@ def check_walled(name, level, layout, ctx, expect, solids):
             continue
         fence = camp.get("fence") or {}
         wall_top = camp["y"] + (fence.get("height") or 0)
-        x0, x1, z0, z1 = camp_rect(camp)
-        fenced = (x0 - thickness, x1 + thickness, z0 - thickness, z1 + thickness)
+        floor = camp_rect(camp)
+        fenced = grown(floor, thickness)
         # Height (L1c-1): over the highest camera, WALL_SPARE to spare.
         expect(top_cam is not None and (fence.get("height") or 0) >= top_cam + WALL_SPARE - EPS,
                f"{tag} its fence ({fence.get('height')}) stands at least the highest camera + {WALL_SPARE:g} over its "
@@ -2088,46 +2271,90 @@ def check_walled(name, level, layout, ctx, expect, solids):
         # Plates (L1c-6).
         bodies, plated, tallest = walled_bodies(level, layout, ctx, cid)
         expect(not plated, f"{tag} no resident carries a plate at any difficulty (L1c-6: the plate bar is drawn "
-               f"through walls)" + (": " + ", ".join(plated) if plated else f" ({len(bodies)} posts)"))
-        # Floors: a camera that tops the wall from an outside surface sees nothing: past the
-        # wall's top its line stays over the tallest body's head across the whole floor (its
-        # diagonal). At or under the wall's top the plan view below decides.
-        diagonal = math.hypot(camp["sx"], camp["sz"])
+               f"through walls)" + (f": {', '.join(plated)}" if plated else f" ({len(bodies)} posts)"))
+        # Floors (the fix round's m4): a camera that tops a tall wall from an outside surface
+        # sees nothing. Past that wall's top its line stays over the tallest body's head as far as
+        # the floor's farthest corner from that wall. The wall is the fence itself, or any wall
+        # block as tall within stray_reach + the boom of the fenced rectangle (a gatehouse wall: a
+        # line over it falls through an open gate, not over the fence). The camera may stand
+        # camera_lead nearer the wall than its surface. At or under every top the plan view below
+        # decides.
         head = camp["y"] + tallest
+        lead = camera_lead(ctx)
+        boom = (ctx.get("camera") or {}).get("maxZoom", 0) + CAMERA_SPARE
+        tops = [("the fence", fenced, wall_top, math.hypot(camp["sx"], camp["sz"]))]
+        tops += [(s.name, (s.x0, s.x1, s.z0, s.z1), s.top, far_reach((s.x0, s.x1, s.z0, s.z1), floor))
+                 for s in solids if FLOOR_WALLS and s.kind == "block" and s.look == "wall" and s.top >= wall_top - EPS
+                 and rect_gap((s.x0, s.x1, s.z0, s.z1), fenced) <= reach + boom + EPS]
         under, topped, over = None, None, []
         for s in solids:
             if (s.kind not in ("block", "floor", "secret", "fence", "obstacle") or s.name.startswith(f"Camp_{cid}_")
                     or s.name in tall):
                 continue
             cam = s.top + top_cam
-            if cam <= wall_top + EPS:
-                if under is None or wall_top - cam < under[0]:
-                    under = (wall_top - cam, s.name)
-                continue
-            d = rect_gap((s.x0, s.x1, s.z0, s.z1), fenced)
-            inward = (wall_top - head) * d / (cam - wall_top)
-            if topped is None or inward - diagonal < topped[0]:
-                topped = (inward - diagonal, s.name, d, cam)
-            if inward < diagonal - EPS:
-                over.append(f"{s.name} (top {s.top:g}, camera {cam:.1f}, {d:.1f} off: its line falls to a "
-                            f"{tallest:g}-stud head {inward:.1f} studs in; the floor is {diagonal:.0f} across)")
+            for wall, rect, top, far in tops:
+                if cam <= top + EPS:
+                    if under is None or top - cam < under[0]:
+                        under = (top - cam, s.name)
+                    continue
+                d = max(rect_gap((s.x0, s.x1, s.z0, s.z1), rect) - lead, 0.0)
+                inward = (top - head) * d / (cam - top)
+                if topped is None or inward - far < topped[0]:
+                    topped = (inward - far, s.name, d, cam, wall)
+                if inward < far - EPS:
+                    over.append(f"{s.name} (top {s.top:g}, camera {cam:.1f}) over {wall} ({d:.1f} off less the "
+                                f"camera's lead {lead:.2f}): its line falls to a {tallest:g}-stud head {inward:.1f} "
+                                f"studs past it; the floor's far corner is {far:.0f} past it")
         told = []
         if under is not None:
-            told.append(f"the highest camera under the top: {under[1]}, {under[0]:.2f} under")
+            told.append(f"the highest camera under a top: {under[1]}, {under[0]:.2f} under")
         if topped is not None:
-            told.append(f"the tightest over it: {topped[1]} (camera {topped[3]:.1f}, {topped[2]:.0f} off), its line "
-                        f"meets a head {topped[0] + diagonal:.0f} studs past the wall, {topped[0]:+.0f} past the floor")
-        expect(not over, f"{tag} from every outside surface the highest camera ({top_cam:.2f} over it) stays under the "
-               f"wall's top {wall_top:g}, or its line over the top passes over the tallest body ({tallest:g}) across "
-               f"the whole floor" + (": " + "; ".join(over[:3]) if over else f" ({'; '.join(told)})"))
-        # Sight in plan (the walls are over every camera, so plan is exact).
+            told.append(f"the tightest over one: {topped[1]} (camera {topped[3]:.1f}) over {topped[4]}, {topped[2]:.0f} "
+                        f"off less the lead, its line meets a head {topped[0]:+.0f} past the floor's far corner")
+        expect(not over, f"{tag} from every outside surface the highest camera ({top_cam:.2f} over it, up to "
+               f"{lead:.2f} nearer) stays under the fence's and every gatehouse wall's top, or its line over that top "
+               f"passes over the tallest body ({tallest:g}) to the floor's far corner"
+               + (": " + "; ".join(over[:3]) if over else f" ({'; '.join(told)})"))
+        # Sight in plan (the walls are over every camera, so plan is exact), with the camera clip
+        # of the fix round's C1: the client keeps the boom out of every locking camp's fenced
+        # rectangle grown by levels.cameraClear unless the root is inside the true rectangle.
         gates = camp.get("gates") or []
         walls = [(s.x0, s.x1, s.z0, s.z1) for s in solids
                  if s.kind == "block" and s.look == "wall" and s.top >= wall_top - EPS]
-        lockers = [(c["x"] - c["sx"] / 2 - thickness, c["x"] + c["sx"] / 2 + thickness,
-                    c["z"] - c["sz"] / 2 - thickness, c["z"] + c["sz"] / 2 + thickness)
-                   for c in layout["camps"] if c.get("locks") is True]
-        eyes, cams = sight_points(layout, solids, ctx, camp, gates, walls, lockers, tall)
+        theme = ctx.get("theme") or {}
+        clear, factor = levels.get("cameraClear"), body_reach(ctx)
+        shake, sphere = theme.get("COMBAT_SHAKE_MAX_STUDS"), theme.get("COMBAT_CAMERA_COLLISION_RADIUS")
+        if not is_number(clear) or clear < 0 or factor is None or not is_number(sphere):
+            expect(False, f"{tag} the sight gate reads Combat.json levels.cameraClear ({clear}, 0 or more), "
+                   f"CrowdRenderer's {' and '.join(RENDERER_KEYS)} and Theme's COMBAT_CAMERA_COLLISION_RADIUS ({sphere})")
+            continue
+        # Under the shake, a clipped camera could be shaken into a gate's opening, where no view
+        # is judged below; the plan then keeps it on the fence's face (and says so).
+        expect(clear >= shake - EPS, f"{tag} levels.cameraClear {clear:g} is at least the camera's shake {shake:g} (a "
+               f"clipped camera never enters the fence)")
+        keep = max(clear - shake, 0.0)
+        lockers = [grown(camp_rect(c), thickness) for c in layout["camps"] if c.get("locks") is True]
+        clip = {"fenced": fenced, "grown": grown(fenced, clear), "keeps": [grown(r, keep) for r in lockers],
+                "standoff": sphere - shake}
+        inside, cams, lazy, reached = sight_points(layout, solids, ctx, camp, gates, walls, tall, clip)
+        drawn = {at: (radius * factor, label) for at, (radius, label) in bodies.items()}
+
+        def judge(px, pz):
+            """The least margin from (px, pz) to any drawn body through any gate, or None when no
+            line from there goes through one: (margin, label, side, bx, bz)."""
+            least = None
+            for gate in gates:
+                arcs, ref = visible_arcs(px, pz, camp, gate, thickness, walls)
+                if not arcs:
+                    continue
+                for (bx, bz), (out, label) in drawn.items():
+                    d = math.hypot(bx - px, bz - pz)
+                    theta = wrap(math.atan2(bz - pz, bx - px) - ref)
+                    gap = min(0.0 if a0 <= theta <= a1 else min(abs(theta - a0), abs(theta - a1)) for a0, a1 in arcs)
+                    margin = d * math.sin(min(gap, math.pi / 2)) - out
+                    if least is None or margin < least[0]:
+                        least = (margin, label, gate["side"], bx, bz)
+            return least
 
         def doorway(x, z):
             for g in gates:
@@ -2137,43 +2364,67 @@ def check_walled(name, level, layout, ctx, expect, solids):
                     return True
             return False
 
-        tightest, seen, glimpse = None, [], None
-        for (px, pz), what in [(p, "eye") for p in sorted(eyes)] + [(p, "camera") for p in sorted(cams)]:
-            exempt = doorway(px, pz)
-            for gate in gates:
-                arcs, ref = visible_arcs(px, pz, camp, gate, thickness, walls)
-                if not arcs:
-                    continue
-                for (bx, bz), (radius, label) in bodies.items():
-                    d = math.hypot(bx - px, bz - pz)
-                    theta = wrap(math.atan2(bz - pz, bx - px) - ref)
-                    gap = min(0.0 if a0 <= theta <= a1 else min(abs(theta - a0), abs(theta - a1)) for a0, a1 in arcs)
-                    margin = d * math.sin(min(gap, math.pi / 2)) - radius
-                    if exempt:
-                        if glimpse is None or margin < glimpse[0]:
-                            glimpse = (margin, px, pz, label)
-                        continue
-                    if tightest is None or margin < tightest[0]:
-                        tightest = (margin, what, px, pz, label, gate["side"])
-                    if margin < -EPS:
-                        seen.append(f"{what} ({px:g}, {pz:g}) sees {label} at ({bx:g}, {bz:g}) through the "
-                                    f"{gate['side']} gate ({margin:+.2f})")
+        tight = {"eye": None, "camera": None}
+        seen, glimpse = [], None
+
+        def note(what, px, pz, found):
+            if tight[what] is None or found[0] < tight[what][0]:
+                tight[what] = (found[0], px, pz) + found[1:]
+            if found[0] < -EPS:
+                seen.append(f"{what} ({px:g}, {pz:g}) sees {found[1]} at ({found[3]:g}, {found[4]:g}) through the "
+                            f"{found[2]} gate ({found[0]:+.2f})")
+
+        # Eyes: only the doorway's are exempt (its camera, inside the clip, is the eye itself).
+        for px, pz in sorted(inside):
+            found = judge(px, pz)
+            if found is None:
+                continue
+            if doorway(px, pz):
+                if glimpse is None or found[0] < glimpse[0]:
+                    glimpse = (found[0], px, pz, found[1])
+                continue
+            note("eye", px, pz, found)
+        for px, pz in sorted(cams):
+            found = judge(px, pz)
+            if found is not None and not (EXEMPT_CAMERAS and doorway(px, pz)):
+                note("camera", px, pz, found)
+        # The zone's fine camera points, least margin first: prove each one's reach until one with
+        # nothing under it is proved (nothing after it can be tighter).
+        queue = sorted((found[0], px, pz, found) for px, pz in lazy for found in [judge(px, pz)] if found is not None)
+        proved = 0
+        for margin, px, pz, found in queue:
+            if margin >= -EPS and tight["camera"] is not None and margin >= tight["camera"][0]:
+                break
+            proved += 1
+            if EXEMPT_CAMERAS and doorway(px, pz):
+                continue
+            if reached(px, pz):
+                note("camera", px, pz, found)
+                if margin >= -EPS:
+                    break
+        held = sum(1 for p in inside.values() if p)
         rows.append(f"{cid}: wall top {wall_top:g} (fence {fence.get('height')}, the highest camera {top_cam:.2f} over its "
-                    f"surface); {len(eyes)} eye points, {len(cams)} camera points, {len(bodies)} posts")
-        if tightest is not None:
-            rows.append(f"{cid} sight margin {tightest[0]:+.2f} studs: {tightest[1]} ({tightest[2]:g}, {tightest[3]:g}) "
-                        f"to {tightest[4]} through the {tightest[5]} gate")
+                    f"surface); {len(inside)} eye points ({held} inside the camera clip), {len(cams)} camera points and "
+                    f"{len(lazy)} fine ones near the gates ({proved} proved), {len(bodies)} posts; clip cameraClear "
+                    f"{clear:g} (a camera {keep:g} off the fence at worst), drawn body {factor:.3f} x radius")
+        for what in ("eye", "camera"):
+            if tight[what] is not None:
+                t = tight[what]
+                rows.append(f"{cid} sight margin ({what}s) {t[0]:+.2f} studs: ({t[1]:g}, {t[2]:g}) to {t[3]} through "
+                            f"the {t[4]} gate")
         if glimpse is not None:
-            rows.append(f"{cid} doorway (exempt: within {DOORWAY:g} of the fence in a gate's lane): {glimpse[0]:+.2f} "
+            rows.append(f"{cid} doorway (exempt eyes: within {DOORWAY:g} of the fence in a gate's lane): {glimpse[0]:+.2f} "
                         f"at ({glimpse[1]:g}, {glimpse[2]:g}) to {glimpse[3]}")
-        expect(not seen and bool(eyes), f"{tag} from no eye point on an outside top a player reaches, and no camera "
-               f"point within camera.maxZoom + {CAMERA_SPARE:g} of one whose boom no wall cuts, is any part of a "
-               f"resident seen through a gate, every difficulty (in plan: the walls are over every camera; the doorway, "
-               f"{DOORWAY:g} from the fence in a gate's lane, is exempt)"
+        least = min((t for t in tight.values() if t is not None), default=None, key=lambda t: t[0])
+        expect(not seen and bool(inside), f"{tag} from no eye point on an outside top a player reaches and no camera "
+               f"point its boom reaches (kept {keep:g} off the fence by the clip, levels.cameraClear {clear:g} "
+               f"less the shake), is any part of a drawn resident (radius x {factor:.3f}) seen through a gate, every "
+               f"difficulty (in plan: the walls are over every camera; only eyes in the doorway, {DOORWAY:g} from the "
+               f"fence in a gate's lane, are exempt)"
                + (": " + "; ".join(seen[:3]) if seen else
-                  f" ({len(eyes)} eye and {len(cams)} camera points, {len(bodies)} posts; the tightest "
-                  + (f"{tightest[0]:+.2f} studs, {tightest[1]} ({tightest[2]:g}, {tightest[3]:g}) to {tightest[4]})"
-                     if tightest else "none: no line reaches a gate)")))
+                  f" ({len(inside)} eye and {len(cams) + proved} camera points, {len(bodies)} posts; the tightest "
+                  + (f"{least[0]:+.2f} studs at ({least[1]:g}, {least[2]:g}) to {least[3]})" if least else
+                     "none: no line reaches a gate)")))
 
 
 def member_kinds(defn):
@@ -2663,7 +2914,8 @@ def load_all():
            "runCap": combat["director"]["runCapSeconds"], "camps": combat.get("camps"),
            "ranks": sr.difficulty_ranks(expeditions), "snapshotHz": proving["crowd"]["snapshotHz"],
            "gate16": {}, "chains": {}, "longbow": longbow_range(proving),
-           "abilityHeight": ability_height(proving), "camera": combat.get("camera"), "theme": theme_numbers()}
+           "abilityHeight": ability_height(proving), "camera": combat.get("camera"), "theme": theme_numbers(),
+           "renderer": renderer_numbers()}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 
@@ -2737,9 +2989,9 @@ def check_rules(combat, level_files, ctx, expect):
                f"{fastest:g} / {ctx['snapshotHz']:g} = {need:.2f})")
         expect(camps["joinFactor"] == JOIN_FACTOR_FIXED,
                f"Combat.json camps.joinFactor is {JOIN_FACTOR_FIXED} (fixed: Ben's \"at least double\"): {camps['joinFactor']}")
-    expect(is_number(levels.get("gateSeconds")) and levels["gateSeconds"] >= 1,
-           f"Combat.json levels.gateSeconds {levels.get('gateSeconds')} is at least 1 (the client learns the floor that "
-           f"long before the first body)")
+    expect(is_number(levels.get("gateSeconds")) and levels["gateSeconds"] >= GATE_FLOOR,
+           f"Combat.json levels.gateSeconds {levels.get('gateSeconds')} is at least {GATE_FLOOR:g} (the client learns the "
+           f"floor that long before the first body)")
     debug = combat.get("debug") or {}
     presets = [(p.get("melee"), p.get("ranged")) for p in debug.get("gearPresets") or []]
     proving = debug.get("provingGear") or {}
@@ -2750,6 +3002,72 @@ def check_rules(combat, level_files, ctx, expect):
            f"Combat.json debug.gearPresets are {', '.join(f'{m}/{r}' for m, r in GEAR_PRESETS)} (the G key), the first "
            f"is debug.provingGear, and every difficulty's recommendedTier ({', '.join(map(str, tiers))}) is a preset's "
            f"melee tier: " + ", ".join(f"{m}/{r}" for m, r in presets))
+
+
+def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
+    """Every gate, as main runs them on the loaded files: `expect(ok, text)` is told each one. The
+    route facts per layout, or None when Combat.json lacks a number the layouts are measured
+    with. tools/check_levels_mutants.py runs this on mutated copies."""
+    lobby_name = (expeditions.get("lobby") or {}).get("layout")
+    by_layout = {level["layout"]: level for level in level_files}
+    facts = {}
+    move = ctx["move"]
+    jump = jump_facts(move)
+    print("check_levels (docs/INTERFACES.md \"L1 contracts\" -> \"Config\", and \"L1b contracts\" -> \"Config\")")
+    print(f"  one jump: {move['jumpHeight']:g} studs high, {jump['air']:.3f} s in the air, {jump['reach']:.1f} studs "
+          f"at walk speed {move['walkSpeed']:g}; a climb may rise {jump['climb']}, a gap may span {jump['gap']}; "
+          f"jump + double jump {move['jumpHeight'] + move['doubleJumpHeight']:g}")
+    print()
+    check_map(expeditions, level_files, layouts, expect)
+    check_rules(combat, level_files, ctx, expect)
+    # The layouts are measured with these: without one of them nothing below can be said.
+    lost = [key for key in READ_RULES if not is_number(ctx["levels"].get(key))]
+    if lost:
+        expect(False, f"Combat.json levels lacks {', '.join(lost)}; the layouts were not checked")
+        return None
+    stray = stray_level_files()
+    ids = [file["id"] for file in level_files]
+    expect(not stray and len(ids) == len(set(ids)),
+           "Config/Levels: every file is named <n>_<Name>.json, the only name Catalog reads, and no two share an id"
+           + (f" (Catalog would not read {', '.join(stray)})" if stray else f" ({len(ids)} files: {', '.join(ids)})"))
+    # The level files first: they say which kinds stand in which camp.
+    for file in level_files:
+        level = sr.resolve_level(file, ctx["missions"].get(file.get("mission")), ctx["runCap"])
+        check_level_file(file, level, layouts, ctx, expect)
+    bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
+                 for name, layout in layouts.items()}
+    for name, layout in layouts.items():
+        if name == lobby_name:
+            check_lobby(name, layout, ctx, bounds_of, expect)
+        elif layout.get("arena"):
+            check_arena_layout(name, layout, ctx, expect)
+        else:
+            facts[name] = check_layout(name, layout, ctx, expect)
+    orphan = [name for name in layouts if name != lobby_name and name not in by_layout]
+    expect(not orphan, "every layout but the lobby's belongs to a level file" + (f" ({orphan})" if orphan else ""))
+    # Gate 16 (INTERFACES "Wave 2 — the long road" -> "Gates"): the numbers QA copies.
+    print()
+    print("GATE 16 (the numbers QA copies into its report)")
+    for name, found in ctx["gate16"].items():
+        print(f"  {name}:")
+        for line in found.get("population") or []:
+            print(f"    population  {line}")
+        if name in facts:
+            print(f"    parts       {facts[name].get('parts')}")
+            print(f"    route       {facts[name]['length']:.0f} studs ({facts[name]['walked']:.0f} outside the camps)")
+        for line in found.get("sneak") or []:
+            print(f"    sneak       {line}")
+        for line in found.get("chain") or []:
+            print(f"    chain       {line}")
+        for line in found.get("regions") or []:
+            print(f"    region      {line}")
+        for line in found.get("approaches") or []:
+            print(f"    N           {line}")
+        for line in found.get("spots") or []:
+            print(f"    sniper      {line}")
+        for line in found.get("walled") or []:
+            print(f"    walled      {line}")
+    return facts
 
 
 def main():
@@ -2771,64 +3089,11 @@ def main():
 
     facts = {}
     if not args.plan_only:
-        move = ctx["move"]
-        jump = jump_facts(move)
-        print("check_levels (docs/INTERFACES.md \"L1 contracts\" -> \"Config\", and \"L1b contracts\" -> \"Config\")")
-        print(f"  one jump: {move['jumpHeight']:g} studs high, {jump['air']:.3f} s in the air, {jump['reach']:.1f} studs "
-              f"at walk speed {move['walkSpeed']:g}; a climb may rise {jump['climb']}, a gap may span {jump['gap']}; "
-              f"jump + double jump {move['jumpHeight'] + move['doubleJumpHeight']:g}")
-        print()
-        check_map(expeditions, level_files, layouts, expect)
-        check_rules(combat, level_files, ctx, expect)
-        # The layouts are measured with these: without one of them nothing below can be said.
-        lost = [key for key in READ_RULES if not is_number(ctx["levels"].get(key))]
-        if lost:
+        facts = run_gates(combat, expeditions, layouts, level_files, ctx, expect)
+        if facts is None:
             print()
-            print(f"CHECK: FAIL ({len(failures)}): Combat.json levels lacks {', '.join(lost)}; the layouts were not "
-                  f"checked")
+            print(f"CHECK: FAIL ({len(failures)}): the layouts were not checked")
             sys.exit(1)
-        stray = stray_level_files()
-        ids = [file["id"] for file in level_files]
-        expect(not stray and len(ids) == len(set(ids)),
-               "Config/Levels: every file is named <n>_<Name>.json, the only name Catalog reads, and no two share an id"
-               + (f" (Catalog would not read {', '.join(stray)})" if stray else f" ({len(ids)} files: {', '.join(ids)})"))
-        # The level files first: they say which kinds stand in which camp.
-        for file in level_files:
-            level = sr.resolve_level(file, ctx["missions"].get(file.get("mission")), ctx["runCap"])
-            check_level_file(file, level, layouts, ctx, expect)
-        bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
-                     for name, layout in layouts.items()}
-        for name, layout in layouts.items():
-            if name == lobby_name:
-                check_lobby(name, layout, ctx, bounds_of, expect)
-            elif layout.get("arena"):
-                check_arena_layout(name, layout, ctx, expect)
-            else:
-                facts[name] = check_layout(name, layout, ctx, expect)
-        orphan = [name for name in layouts if name != lobby_name and name not in by_layout]
-        expect(not orphan, "every layout but the lobby's belongs to a level file" + (f" ({orphan})" if orphan else ""))
-        # Gate 16 (INTERFACES "Wave 2 — the long road" -> "Gates"): the numbers QA copies.
-        print()
-        print("GATE 16 (the numbers QA copies into its report)")
-        for name, found in ctx["gate16"].items():
-            print(f"  {name}:")
-            for line in found.get("population") or []:
-                print(f"    population  {line}")
-            if name in facts:
-                print(f"    parts       {facts[name].get('parts')}")
-                print(f"    route       {facts[name]['length']:.0f} studs ({facts[name]['walked']:.0f} outside the camps)")
-            for line in found.get("sneak") or []:
-                print(f"    sneak       {line}")
-            for line in found.get("chain") or []:
-                print(f"    chain       {line}")
-            for line in found.get("regions") or []:
-                print(f"    region      {line}")
-            for line in found.get("approaches") or []:
-                print(f"    N           {line}")
-            for line in found.get("spots") or []:
-                print(f"    sniper      {line}")
-            for line in found.get("walled") or []:
-                print(f"    walled      {line}")
     if not args.no_plan:
         scale_x, scale_z = args.scale
         for name, layout in layouts.items():

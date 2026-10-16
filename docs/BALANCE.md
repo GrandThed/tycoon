@@ -5029,7 +5029,7 @@ seeds 11 / 23 / 37.
 | Level: C's stage | 3 waves (about 35, about 35, the Colossus at [14, 0]) | `[{groups: []}, {groups: [], boss: colossus at [0, 30]}]` | L1c-4: the empty wave 1 clears when the last ambusher falls, then `breatherSeconds` 3 and the Colossus, 78 studs from the entry. |
 | `crowd.rewards.colossus.cash` | 29,000 | **41,000** | L1c-7 and the lead's ruling: keep cash a minute. |
 | `targetMinutes` | 6 | **5** | L1c-7. `sim_combat` 21: the mean clear is 5.1 min. |
-| `check_levels.py` | — | the unclimbable-wall rule, the reach-based beside rule, the walled-camp gate, `lockedResidents` (8, 12) at every difficulty, the two gatehouse floors in the pinned sniper list | L1c-3, L1c-6 (below). |
+| `check_levels.py` | — | the unclimbable-wall rule, the reach-based beside rule, the walled-camp gate, `lockedResidents` (8, 12) at every difficulty (the fix round: per difficulty, Normal 8–10), the two gatehouse floors in the pinned sniper list | L1c-3, L1c-6 (below). |
 | `sim_range.py` | clear band 345–420 s | **270–345 s**; the ambush band (`FOREST_AMBUSH_SECONDS`); colliding `wall` blocks cut scene sight lines; the sniper list reads the unclimbable rule | L1c-7, contract §5. |
 
 **The one departure from the contract's mix.** The contract's Normal ambush (4 fodder + 1 brute a
@@ -5077,6 +5077,11 @@ contract's mix, so Normal's cash a minute ends 4% over L1b's. Measured before se
 | Sight in plan: eye points every 2 studs on every outside top a player reaches without entering C; camera points within `maxZoom` + 2 of one, outside every wall and locking camp, whose boom no wall cuts; targets the bodies (centre ± radius) at every post, every difficulty | 6,207 eye and 6,499 camera points, 12 posts. **Tightest margin +1.31 studs**: the camera at (306, −30), 3 studs short of the north fence in leg 2, to Brutal's innermost east fodder |
 | The doorway (within 2.5 of the fence in a gate's lane) is exempt | the glimpse there: −1.64 at (306, −28) to a Brutal east brute (accepted by the contract) |
 
+> **Superseded by the L1c fix round** (below): the sight row's "+1.31" was a 2-stud grid value against the
+> radius, and the doorway exempted camera points too. The client now keeps the camera `levels.cameraClear`
+> 3.5 off the fence; only eyes are exempt; near the gates the points are fine and exact at the corners; the
+> target is the drawn torso. The Floors row now also measures to each gatehouse wall.
+
 - "Floors" departs from the contract's literal "every standable surface within 200 studs at or
   under the floor's y": the cache secret (top 18, 149 studs off) would fail it, while its line over
   the wall cannot fall to a head for 1,000+ studs. The shadow form above is what the literal rule was
@@ -5086,6 +5091,9 @@ contract's mix, so Normal's cash a minute ends 4% over L1b's. Measured before se
 - Sight is exact in plan because every wall is over every camera; each point's view through a gate is
   the angular window of the gate's two faces less every wall's shadow, and a body's margin is its
   perpendicular distance to the nearest visible ray less its radius.
+
+> **Superseded by the L1c fix round** (below): these mutants are now committed and re-run by
+> `py tools/check_levels_mutants.py`, with the fix round's own cases.
 
 **Every new rule red on a mutated copy** (in memory; 0 failures on the shipped data):
 
@@ -5121,6 +5129,9 @@ contract's mix, so Normal's cash a minute ends 4% over L1b's. Measured before se
 - `sim_combat.py --check`: Normal 130,133 cash, 205 Timber, 10 Valor; Hard 289,360 (×2.22), 455
   Timber; Brutal 578,720 (×4.45), 909 Timber; `targetMinutes` 5 against a mean clear of 5.1 min; all
   23 assertions hold.
+
+> **Superseded by the L1c fix round** (below): C's gate now shuts on the step in (`gateSeconds` 0); the
+> clear, ambush, Hard, Brutal and sniper rows were re-measured there.
 
 ### L1c: Hard and Brutal
 
@@ -5158,3 +5169,100 @@ Every other row is as in the L1b W4 fix round, against the new mission rates: No
   count the 10-stud lift in the camera's height and in "unclimbable".
 - **Not gated:** the Colossus is not a resident, so the sight gate does not see it; it rises after
   the close, when nobody fighting is outside.
+
+## L1c fix round (2026-10-16)
+
+Rulings: `docs/prompts/l1c-fix-round.md` (findings in `docs/prompts/l1c-review/code.md` and
+`data-tools.md`). Same gate as L1c: Normal 2 / 2, Hard 4 / 4, Brutal 6 / 6, seeds 11 / 23 / 37.
+
+### L1c fix: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| C's stage `gateSeconds` (level file) | none (`levels.gateSeconds` 3) | **0** | M3: stepping in shuts the gate and the ambush rises in the same step; no 3 s of statues. `StageFlow` reads a stage's own countdown, `sim_range` mirrors it (and the same-step close, and a skip's), and both refuse one under 0 or not a number. |
+| `check_levels.py` sight gate | doorway exempted eyes **and** cameras; 2-stud grid; target = radius | the client's camera clip (`levels.cameraClear`, read from Combat.json); only eyes in the doorway exempt; near each gate a 0.25 grid, every region edge at 0.05 and every corner exactly; target = the drawn torso, radius × 1.151 (CrowdRenderer's `TORSO_WIDTH` 1.9 × `TORSO_DEPTH` 1.3, read from the file) | C1 and m1. |
+| `check_levels.py` Floors | the line over the fence only | over the fence **and** every gatehouse wall as tall within `stray_reach` + the boom of the fenced rectangle, the camera up to 7.57 nearer the wall than its surface | m4: a line over a gatehouse wall falls through the open gate, not over the fence. |
+| `check_levels.py` `lockedResidents` | (8, 12) at every difficulty | Normal (8, 10), Hard and Brutal (8, 12) | m3: Ben's "8 to 10". |
+| `check_levels.py` a stage's own `gateSeconds` | — | 0 or more; under `levels.gateSeconds`' floor of 1 only on a first wave with no group and no boss, in a camp whose residents stand on its floor | M3: the floor of 1 is there so the client learns a floor before its first body; C's bodies are residents, drawn from the run's start. |
+| `sim_range.py` `FOREST_AMBUSH_SECONDS` | Hard / Brutal (0, 60) | **(15, 60)** | m5: an ambush that never happened would have read 0 s and passed. |
+| `tools/check_levels_mutants.py` | the 12 mutants were run in memory | committed, 28 cases plus the stage-mirror case | m6. |
+
+### L1c fix: the walled camp's sight, re-measured
+
+**The camera model the gate now holds the layout to** (the client after C1):
+- An eye (a root) outside the clip, the fenced rectangle grown by `cameraClear` 3.5: its camera is
+  anywhere within `maxZoom` + 2 = 18 its boom reaches past no tall wall, but never inside the clip.
+  The shake (0.35) can move a clipped camera that far in, so the gate keeps cameras **3.15** off the
+  fence; and the spherecast's radius (0.5) less the shake keeps them 0.15 off any wall.
+- An eye inside the clip but not inside the fence: the boom starts inside the clip, so the camera comes
+  to the head (`WallClip.Reach` answers 0). That camera is the eye, judged with it.
+- Only eyes in the doorway (within 2.5 of the fence, in a gate's lane) are exempt. Before, cameras there
+  were too, and the client let a camera into the gate's mouth from a root 9 to 15 studs back (C1).
+
+| What | Shipped (`cameraClear` 3.5) |
+|---|---|
+| Points | 16,448 eyes (1,599 inside the clip), 8,040 camera points on the 2-stud grid and 30,089 fine ones near the gates, 12 posts |
+| **Tightest eye** | **+0.23 studs**: (305.51, −29.51), just outside the doorway against WallW's face, to Brutal's innermost east fodder (the west side mirrors it: (321.49, −29.51), +0.23) |
+| **Tightest camera** | **+1.20 studs**: (305.66, −30.15), the corner of the clip and WallW's stand-off, to the same fodder |
+| The doorway glimpse (exempt eyes) | −2.53 at (305.51, −27.75) to a Brutal east brute |
+| Floors | under every top: the highest camera is RoadBC6's, 3.51 under; over one: Secret_lookout (camera 98.5) over the fence, its line meets a head 1,012 studs past the floor's far corner |
+
+- The old "+1.31" was a 2-stud grid value against the radius. On the same data the 2-stud grid with the
+  radius reads +1.93 for eyes (the `m1` control below shows that gate passing a layout this one fails).
+- The eye margin, +0.23, is the one to watch: a post moved toward the gate's sight line by about a
+  quarter of a stud, or a wider body at the innermost post, turns it red. It is measured against a root
+  standing flush on the wall's face; a real root stands about a body's width off it.
+
+**`py tools/check_levels_mutants.py`** (every case below as expected; the shipped data green; about
+5 minutes):
+
+| Case | Rule | Expected |
+|---|---|---|
+| The 12 L1c mutants (above) and the control ledge 58 off | as listed above | red / control green |
+| `levels.cameraClear` 0.2 (2a58134's client) | walled: sight (and "at least the shake") | red |
+| `levels.cameraClear` 2 (over the shake, under a body's width) | walled: sight | red |
+| `levels.cameraClear` missing | walled: the sight gate reads its numbers | red |
+| control: 0.2 with cameras exempt in the doorway (2a58134's gate) | walled: sight | green: that gate was blind to C1 |
+| ambushE's two inner fodder 0.8 studs off the north wall | walled: sight | red |
+| control: the same on the 2-stud grid, radius only (2a58134's gate) | walled: sight | green: that gate was blind to m1 |
+| CrowdRenderer's torso keys missing | walled: the sight gate reads its numbers | red |
+| 11 residents on Normal | `lockedResidents` | red |
+| a ledge (top 20) 4 studs north of GatehouseWallN | walled: Floors | red |
+| control: the same ledge measured to the fence alone (2a58134's rule) | walled: Floors | green: that rule was blind to m4 |
+| `gateSeconds` 0 on a first wave that brings bodies | a stage's own countdown | red |
+| `gateSeconds` −1 | a stage's own countdown, and Validate's mirror | red |
+| control: `gateSeconds` 0.5 on the shipped (empty) first wave | a stage's own countdown | green |
+| m2: the "residents under the boss room's maxAlive" rule taken out of **both** `StageFlow.luau` and `sim_range.py` (copies) | `check_stage_mirror.py` "the boss room's residents at its maxAlive: accepted on both sides" | red |
+
+### L1c fix: the clear, re-measured
+
+| Normal 2 / 2 | Clear | The ambush | Cash / min | Timber / min |
+|---|---|---|---|---|
+| seed 11 | 5.28 min | 19.0 s | 24,714 | 38.9 |
+| seed 23 | 4.73 min | 19.0 s | 27,438 | 43.3 |
+| seed 37 | 5.07 min | 19.7 s | 25,542 | 40.4 |
+
+| | Clear | The ambush (band 15–60 s) | Cash / min |
+|---|---|---|---|
+| Hard 4 / 4 | 5.11 / 5.43 / 5.28 min | 22.9 / 22.9 / 25.3 s | 52.8–56.3k |
+| Brutal 6 / 6 | 5.16 / 5.48 / 5.24 min | 22.9 / 22.9 / 25.4 s | 105.3–112.1k |
+| Hard at 2 / 2 (one preset below) | about 14.3–15.3 min | — | 18,808 / 20,118 / 19,775 |
+| Brutal at 4 / 4 (one preset below) | — | — | 57,034–60,274 |
+
+- The ambush is 1–3 s shorter on Normal (19.0–19.7 s against 20.4–22.2) and 1–4 s shorter on Hard and
+  Brutal (measured: the gates now shut, and the simulated player is put on the entry point, the step he
+  comes in, instead of 3 s later wherever he has walked to). Every band holds: Normal 15–35 s, Hard and Brutal 15–60 s.
+- Normal's mean clear is 5.03 min (L1c 5.08); band 4.5–5.75 min unchanged. Pay per clear unchanged
+  (129,510 cash, 205 Timber, 10 Valor). `sim_combat.py --check`: all 23 hold, `targetMinutes` 5 against a
+  mean clear of 5.0 min, bonuses 5.8%.
+- The human clears Normal in 4.25–4.28 min, Hard in 4.82–5.08 and Brutal in 4.84–5.06, no down. One
+  preset below he still goes down (Hard at 2 / 2: Pickets 1.43 min, Main Camp 7.46 min, or ×2.92 on seed
+  37; Brutal at 4 / 4: Pickets in under a minute); the Colossus alone one preset below is not killed in
+  240 s (Hard) and takes 215.4 s (Brutal).
+- **R8 on Hard at 2 / 2 is thinner on this run:** LookoutLedge 18,313 cash a minute against the mission's
+  18,808 (+2.7%; L1c's run read +4.1%), Road2 26.6 Timber a minute against 27.3 (+2.6%; was +5.6%). Nothing
+  in this round changes Hard at 2 / 2 but the 3 s countdown, which makes the mission faster, not slower:
+  the difference is the run-order swing on the long 2 / 2 Colossus that L1c's flags describe. Green, and
+  the thinnest gate in the forest.
+- The gatehouse spots still pay 0–1,648 cash a minute on Normal and 0 on Hard. The three Normal known
+  limits stand (LookoutLedge up to ×1.36 the mission's cash a minute).

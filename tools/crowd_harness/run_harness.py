@@ -15,7 +15,10 @@ case files: tests_l1b_crowd.luau (CampBrain and CrowdService's floors and groups
 tests_l1b.luau (StageFlow's open camps, checkpoints and clear field, Combat's per-kill split with
 its carry, LevelGeometry's open camps and fire markers).
 L1c adds the pure WallClip (the camera boom kept out of a locking camp, the ground point's height
-rule) and tests_l1c.luau (it, and the walled Chief's Clearing as it ships).
+rule) and tests_l1c.luau (it, and the walled Chief's Clearing as it ships). Its fix round reads two
+lists out of source text, InputController's GROUND_AIMED and AbilityService's `target = "ground"`
+mechanics (neither file loads here), and combat.project.json's CameraMaxZoomDistance, so the cases
+can hold each to the other (FIXTURES.source).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -151,6 +154,34 @@ def gate_reading() -> dict:
         return {}
 
 
+INPUT_CONTROLLER = "src/combat/client/Controllers/InputController.luau"
+ABILITY_SERVICE = "src/combat/server/Services/AbilityService.luau"
+COMBAT_PROJECT = "combat.project.json"
+GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
+GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
+
+
+def source_reading(repo: Path) -> dict:
+    """The L1c fix round's m2 and M1, read as text (neither module loads in the harness):
+    `groundClient` = the names InputController's GROUND_AIMED lists, `groundServer` = the
+    AbilityService mechanics whose target is "ground", `zoomCap` = combat.project.json's
+    StarterPlayer.CameraMaxZoomDistance (None when unset). A file that is missing reads as empty,
+    and the cases fail on an empty list."""
+    def text(rel: str) -> str:
+        path = repo / rel
+        return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+    aimed = GROUND_AIMED.search(text(INPUT_CONTROLLER))
+    client = sorted(re.findall(r"(\w+)\s*=\s*true", aimed.group(1))) if aimed else []
+    server = sorted(GROUND_TARGET.findall(text(ABILITY_SERVICE)))
+    zoom = None
+    project = text(COMBAT_PROJECT)
+    if project:
+        player = json.loads(project).get("tree", {}).get("StarterPlayer", {})
+        zoom = player.get("$properties", {}).get("CameraMaxZoomDistance")
+    return {"groundClient": client, "groundServer": server, "zoomCap": zoom}
+
+
 def sources(repo: Path) -> dict:
     """SOURCES, plus every arena a level layout names: an arena is a .luau data module, bundled
     like a source and loaded as `Arena_<name>`."""
@@ -186,6 +217,7 @@ def fixtures(repo: Path) -> dict:
         "layouts": layouts,
         "arenas": [arena for arena in arenas if f"Arena_{arena}" in bundled],
         "gate": gate_reading(),
+        "source": source_reading(repo),
     }
 
 

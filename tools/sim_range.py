@@ -5003,7 +5003,7 @@ FOREST_STILL_DOWN = (6.0, 12.0)
 FOREST_BOSS_SECONDS = {"normal": (64.0, 90.0), "hard": (64.0, 100.0), "brutal": (64.0, 100.0)}
 # L1c-7: the Chief's Clearing's ambush, from the gates' closing to the last ambusher's fall (its
 # wave 1, which holds no group, clears then), every seed, at each difficulty's recommended gear.
-FOREST_AMBUSH_SECONDS = {"normal": (15.0, 35.0), "hard": (0.0, 60.0), "brutal": (0.0, 60.0)}
+FOREST_AMBUSH_SECONDS = {"normal": (15.0, 35.0), "hard": (15.0, 60.0), "brutal": (15.0, 60.0)}
 FOREST_HIT_SHARE = {"normal": 0.25, "hard": 0.30, "brutal": 0.30}
 
 # The ideal player takes no hit, so no band on his runs can see damageScale: skill beats gear.
@@ -5222,6 +5222,10 @@ def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=
         rest = stage.get("breatherSeconds")
         if rest is not None and (not is_num(rest) or rest < 0):
             problems.append(f"{where}: breatherSeconds {rest} is not a time")
+        # The L1c fix round's M3: a camp's own countdown, 0 or more and finite.
+        countdown = stage.get("gateSeconds")
+        if countdown is not None and (not is_num(countdown) or not 0 <= countdown < math.inf):
+            problems.append(f"{where}: gateSeconds {countdown} is not a time")
     if kinds is not None:
         camp_level_problems(level, layout, rules or {}, kinds, ranks or {}, crowd_max, problems)
     return problems
@@ -5766,7 +5770,8 @@ def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
     for stage in level["stages"]:
         if stage["kind"] != "camp":
             stages.append({"kind": "travel", "name": stage["name"], "zone": None, "waves": 0, "boss": {}, "defs": [],
-                           "breatherSeconds": None, "merge": False, "targetWaveSeconds": 0, "maxAlive": 0})
+                           "breatherSeconds": None, "merge": False, "targetWaveSeconds": 0, "maxAlive": 0,
+                           "gateSeconds": None})
             continue
         zone = by_id.get(stage.get("zone"))
         if zone is None:
@@ -5783,7 +5788,7 @@ def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
                        "merge": stage.get("merge") is True,
                        "targetWaveSeconds": (stage["targetWaveSeconds"]
                                              if stage.get("targetWaveSeconds") is not None else 0),
-                       "maxAlive": cap})
+                       "maxAlive": cap, "gateSeconds": stage.get("gateSeconds")})
     start = layout["start"]
     return {"levelId": level["id"], "difficulty": difficulty, "start": (start["x"], start["z"]),
             "startY": start["y"], "killY": layout["killY"], "camps": len(zones), "stages": stages, "zones": zones,
@@ -6664,7 +6669,8 @@ HOME_STOP_SHARE = 0.5
 class LevelWorld(ThreatWorld):
     """ThreatWorld with CrowdService.Damage's camp gate: a hit on a resident asks CampBrain.Struck
     first, after the dead check. Only a held group (the boss room's residents before the close)
-    answers "blocked": no damage, no knock, no stagger, no damage book (L1b-W4-25). Every other
+    answers "held" (the L1c fix round's M2; it was "blocked"): no damage, no knock, no stagger, no
+    damage book (L1b-W4-25), and no hit entry at all (StrikeTally drops it). Every other
     hit lands and is remembered."""
 
     def __init__(self, run, cfg, fighters):
@@ -7950,11 +7956,23 @@ class LevelRun(ThreatRun):
         return False
 
     def to_gate(self, index, t):
+        """StageFlow's gate: the countdown is the stage's own gateSeconds, else levels.gateSeconds
+        (the L1c fix round's M3)."""
+        stage = self.plan["stages"][index - 1] if 1 <= index <= len(self.plan["stages"]) else None
+        own = stage.get("gateSeconds") if stage is not None else None
+        seconds = own if own is not None else self.rules["gateSeconds"]
         self.stage = index
         self.flow = "gate"
-        self.gate_at = t + self.rules["gateSeconds"]
+        self.gate_at = t + seconds
         self.emit("gate", stage=index, at=self.gate_at)
         self.on_gate(index, t)
+
+    def skip_into(self, index, t):
+        """StageFlow's entered (named apart from the `entered` flag on_close sets): a skip into camp
+        `index`'s countdown; one of 0 closes at once."""
+        self.to_gate(index, t)
+        if self.flow == "gate" and t >= self.gate_at - THREAT_EPS:
+            self.to_close(t)
 
     def to_close(self, t):
         first = max(self.first_wave, 1)
@@ -8050,9 +8068,13 @@ class LevelRun(ThreatRun):
             return
         if self.flow in ("travel", "armed"):
             index = self.armed_index()
-            if index != 0 and self.triggered(stages[index - 1]["zone"], given):
-                self.to_gate(index, t)
-            return
+            if index == 0 or not self.triggered(stages[index - 1]["zone"], given):
+                return
+            # On into the countdown's row in this same step (the L1c fix round's M3): a countdown
+            # of 0 closes now, or arms the camp again with nobody standing.
+            self.to_gate(index, t)
+            if self.flow != "gate":
+                return  # a policy's hook ended the run there (the careless road stops at the countdown)
         if self.flow == "gate":
             if t >= self.gate_at - THREAT_EPS:
                 if fallen is not None:
@@ -8132,7 +8154,7 @@ class LevelRun(ThreatRun):
                 if index != 0:
                     self.emit("move", stage=index)
                     self.on_move(index, t)
-                    self.to_gate(index, t)
+                    self.skip_into(index, t)
             elif self.flow == "gate":
                 self.to_close(t)
             else:
@@ -8165,7 +8187,7 @@ class LevelRun(ThreatRun):
                     self.first_wave = wave
                     self.emit("move", stage=self.stage)
                     self.on_move(self.stage, t)
-                    self.to_gate(self.stage, t)
+                    self.skip_into(self.stage, t)
                 return
         target = target_wave = 0
         for index in range(self.stage + 1, len(stages) + 1):
@@ -8191,7 +8213,7 @@ class LevelRun(ThreatRun):
         self.wave = 0
         self.emit("move", stage=target)
         self.on_move(target, t)
-        self.to_gate(target, t)
+        self.skip_into(target, t)
 
     def force(self, wave, t):
         """StageFlow.Force, Studio only (the `wave` lever)."""

@@ -16,7 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
 
 -- What CrowdService.Damage said of the hit besides its number.
-export type Verdict = "blocked" | "guarded" | "plate" | "broke" | "gone"
+export type Verdict = "blocked" | "guarded" | "plate" | "broke" | "gone" | "held"
 
 export type Tally = {
 	hits: { Types.StrikeHit },
@@ -52,9 +52,11 @@ function StrikeTally.Add(
 	killed: boolean,
 	verdict: Verdict?
 ): ()
-	if verdict == "gone" then
+	if verdict == "gone" or verdict == "held" then
 		-- No such body any more: the blow that killed a boss removed its summons under the
-		-- same strike, and what the strike still held for them is no hit at all.
+		-- same strike, and what the strike still held for them is no hit at all. Nor is a blow
+		-- on a held resident (the L1c fix round's M2): a walled camp's ambush stands hidden,
+		-- and a "BLOCKED" drawn over it from outside the wall would give it away.
 		return
 	end
 	local guarded = verdict == "guarded"

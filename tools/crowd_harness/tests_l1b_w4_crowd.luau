@@ -554,7 +554,7 @@ function W4C.crowdTests(): ()
 	local woke = L1BC.events()
 	check(#woke >= 1 and woke[1].group == open and woke[1].to == "rise", "and wakes the group")
 	local heldDealt, _, heldVerdict = Crowd.Damage(heldIds[1], 10, 7, nil, nil)
-	check(heldDealt == 0 and heldVerdict == "blocked" and Crowd.Get(heldIds[1]).hp == 40, "a held group still answers blocked")
+	check(heldDealt == 0 and heldVerdict == "held" and Crowd.Get(heldIds[1]).hp == 40, "a held group still answers held (no hit; the L1c fix round's M2)")
 end
 L1BC.crowdGroup("region floor", W4C.crowdTests)
 

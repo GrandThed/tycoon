@@ -195,6 +195,16 @@ MUTANTS = [
      "local quiet = busy == nil or busy[index] ~= true"),
     ("R10: Threatening leaves home out", "StageFlow",
      'return state == "rise" or state == "fight" or state == "home"', 'return state == "rise" or state == "fight"'),
+    # The L1c fix round's M3: a camp's own countdown (the Chief's Clearing ships 0).
+    ("L1c M3: the countdown ignores the stage's own", "StageFlow", "\t\tthen stage.gateSeconds\n",
+     "\t\tthen rules.gateSeconds\n"),
+    ("L1c M3: Plan drops a stage's gateSeconds", "StageFlow", "\t\t\tgateSeconds = stage.gateSeconds,\n", ""),
+    ("L1c M3: a countdown of 0 waits a tick after the trigger", "StageFlow", '\t\tstep = "gate"\n',
+     "\t\treturn actions\n"),
+    ("L1c M3: a skip into a countdown of 0 waits a tick", "StageFlow",
+     "\tif now >= state.gateAt then\n\t\tclose(state, actions, now)\n", "\tif false then\n\t\tclose(state, actions, now)\n"),
+    ("L1c M3: Validate takes any gateSeconds", "StageFlow",
+     "\t\t\tproblem(`{where}: gateSeconds is {tostring(countdown)}, not a time`)\n", ""),
 ]
 
 

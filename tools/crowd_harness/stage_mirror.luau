@@ -275,6 +275,7 @@ function L.plan(plan: any): any
 			merge = stage.merge,
 			targetWaveSeconds = stage.targetWaveSeconds,
 			maxAlive = stage.maxAlive,
+			gateSeconds = stage.gateSeconds,
 			zone = if zone ~= nil then zone.id else nil,
 		}
 	end

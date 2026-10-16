@@ -54,6 +54,9 @@
 		},
 		"StarterPlayer": {
 			"$className": "StarterPlayer",
+			"$properties": {
+				"CameraMaxZoomDistance": 16
+			},
 			"StarterPlayerScripts": {
 				"$className": "StarterPlayerScripts",
 				"Client": {

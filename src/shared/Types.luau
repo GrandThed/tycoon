@@ -2519,6 +2519,9 @@ export type LevelStage = {
 	breatherSeconds: number?,
 	merge: boolean?,
 	maxAlive: number?,
+	-- L1c fix round M3: the camp's countdown from the trigger to the close, seconds (nil =
+	-- Combat.json levels.gateSeconds). 0 = stepping in shuts the gates in the same tick.
+	gateSeconds: number?,
 }
 export type LevelFile = {
 	version: number,
@@ -2688,6 +2691,10 @@ export type CombatLevelsConfig = {
 	regionLockMargin: number,
 	-- L1b-W4-15: a door is at least 2 x the region's widest body plus this, on both axes
 	doorSpare: number,
+	-- L1c fix round C1: studs the camera's boom keeps outside a locking camp's fenced rectangle
+	-- while the local root is not inside it (a brute's width, the camera shake and the pad), so
+	-- a boom swung back toward an open gate never ends in its mouth. Client only.
+	cameraClear: number,
 }
 
 -- RunState (built only by ArenaService)
@@ -2701,8 +2708,9 @@ export type RunFloor = {
 	hz: number,
 	cells: { CampRect }?,
 	-- L1c-5a: the zone's `locks` (the boss room). The client keeps its camera boom out of a
-	-- locking floor's fenced rectangle (the floor grown by levels.fenceThickness) until the local
-	-- root is inside it (WallClip.Reach); nil = an open camp, as false.
+	-- locking floor's fenced rectangle (the floor grown by levels.fenceThickness), and a further
+	-- levels.cameraClear round it, until the local root is inside the fenced rectangle within
+	-- levels.triggerHeight of the floor (WallClip.Reach); nil = an open camp, as false.
 	locks: boolean?,
 }
 export type RunResult = {

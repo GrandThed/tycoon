@@ -57,6 +57,7 @@
 			"targetWaveSeconds": 34,
 			"breatherSeconds": 3,
 			"maxAlive": 42,
+			"gateSeconds": 0,
 			"waves": [
 				{ "groups": [] },
 				{ "groups": [], "boss": { "kind": "colossus", "at": [0, 30], "valor": 10 } }

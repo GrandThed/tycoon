@@ -11,11 +11,13 @@ and compares what they answer, value by value:
   * `StageFlow.Resolve` against `sim_range.resolve_level`: every level file as a level;
   * `StageFlow.Validate` against `sim_range.level_problems`: the shipped levels are playable on
     both sides, and (the fix round's ruling 6) a level with a maxAlive of 0 or of 2.5, a burst of
-    0, a camp with a targetWaveSeconds of 0 or none, a breatherSeconds under 0 or no wave, and a
+    0, a camp with a targetWaveSeconds of 0 or none, a breatherSeconds or (the L1c fix round's M3)
+    a gateSeconds under 0 or not a number, or no wave, and a
     Combat.json that lacks any one of the `levels` numbers a run reads, is refused on both;
   * `StageFlow.Validate`'s L1b lines: the residents, the spots, which camps lock, the population
     gate and the three new `levels` numbers, each broken once in a copy of the shipped level, its
-    layout or Combat.json, refused alike;
+    layout or Combat.json, refused alike; and (the L1c fix round's data m2) every broken copy of
+    both lists refused, so a rule removed from both sides at once is caught too;
   * `StageFlow.Plan` against `sim_range.plan_level`: every level at every difficulty, and at one
     that does not exist: each stage's numbers; every camp of the layout as a zone (its floor
     index, `locks`, name, checkpoint, residents, floor, `inner` and trigger rectangles, entry,
@@ -184,6 +186,9 @@ REFUSALS = (
     ("a camp with no targetWaveSeconds", lambda file: first_camp(file).pop("targetWaveSeconds", None)),
     ("a camp with no wave", lambda file: first_camp(file).__setitem__("waves", [])),
     ("a camp's breatherSeconds -1", lambda file: first_camp(file).__setitem__("breatherSeconds", -1)),
+    # The L1c fix round's M3: a camp's own countdown.
+    ("a camp's gateSeconds -1", lambda file: first_camp(file).__setitem__("gateSeconds", -1)),
+    ("a camp's gateSeconds \"3\"", lambda file: first_camp(file).__setitem__("gateSeconds", "3")),
 )
 
 
@@ -200,13 +205,15 @@ def level_camp(file, cid):
 
 
 def boss_room_full(file):
-    """L1c: the walled boss room's ambush (`ambushW`) raised until camp C holds exactly its stage's
-    maxAlive on Normal, the least that Validate's "not fewer than its stage's maxAlive" refuses."""
+    """L1c, as its fix round has it (data m2): the walled boss room's stage maxAlive lowered to the
+    residents camp C holds on Normal, the least that Validate's "not fewer than its stage's
+    maxAlive" refuses (Hard and Brutal hold more). The residents are left alone, so that rule is the
+    only one the copy breaks: adding bodies to a guard spot also broke its posts, and both sides
+    refused for that reason with the maxAlive rule removed from both."""
     stage = next(stage for stage in file["stages"] if stage.get("zone") == "C")
     camp = level_camp(file, "C")
-    held = sum(unit["count"] for group in camp["residents"] for unit in group["units"] if "minDifficulty" not in unit)
-    group = next(group for group in camp["residents"] if group["spot"] == "ambushW")
-    group["units"].append({"kind": "fodder", "count": max(stage["maxAlive"] - held, 1)})
+    stage["maxAlive"] = sum(unit["count"] for group in camp["residents"] for unit in group["units"]
+                            if "minDifficulty" not in unit)
 
 
 def ring_only_normal_breaks(file, layout):
@@ -1806,6 +1813,9 @@ def main():
     # The cases, and the Python's own answers to them.
     report = Report(args.show)
     expected = {}  # id -> (kind, label, the Python's answer)
+    # The L1c fix round's data m2: the refusal cases a copy is broken for (all but "as shipped"). Two
+    # sides that agree prove nothing about a rule removed from both: each of these must be refused.
+    must_refuse = set()
     data = {"combat": combat, "expeditions": expeditions, "proving": cfg, "levels": files, "missions": missions,
             "layouts": raw_layouts, "ranks": ranks, "planDifficulties": plan_difficulties, "pointCases": [],
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
@@ -1842,6 +1852,7 @@ def main():
                     "kind": stage["kind"], "name": stage["name"], "waves": stage["waves"],
                     "boss": sorted(stage["boss"]), "breatherSeconds": stage["breatherSeconds"], "merge": stage["merge"],
                     "targetWaveSeconds": stage["targetWaveSeconds"], "maxAlive": stage["maxAlive"],
+                    "gateSeconds": stage.get("gateSeconds"),
                     "zone": None if zone is None else zone["id"]})
             start = layout["start"]
             expected[key] = ("StageFlow.Plan", f"{name} {difficulty}", plain({"plan": {
@@ -1937,6 +1948,8 @@ def main():
                 refused = level_changed is None or bool(sr.level_problems(level_changed, layout, rules, crowd_kinds, ranks,
                                                                           crowd_max))
                 expected[case] = ("ruling 6: refused alike", f"{name}, {label}", refused)
+                if label != "as shipped":
+                    must_refuse.add(case)
             # And Combat.json without one of the numbers a run reads: unavailable on both sides.
             for key in sr.LEVEL_RULES_NEEDED:
                 short_rules = {name_: value for name_, value in rules.items() if name_ != key}
@@ -1955,6 +1968,7 @@ def main():
                     refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
                                                                               ranks, crowd_max))
                     expected[case] = ("L1b: Validate's new lines refuse alike", f"{name}, {label}", refused)
+                    must_refuse.add(case)
     for target in sorted({key[0] for key in bursts}):
         for count in (0, -1):
             bursts[(target, count, 1.0)] = None
@@ -2040,6 +2054,9 @@ def main():
             report.compare(kind, label, luau_answer if isinstance(luau_answer, dict) else list(luau_answer or []), python)
             continue
         if kind.startswith("ruling 6") or kind.startswith("L1b: Validate"):
+            if key in must_refuse and not python and not luau_answer:
+                report.differ(kind, f"{label}: accepted on both sides (the rule it breaks is gone from both)")
+                continue
             if isinstance(luau_answer, dict) and "threw" in luau_answer:
                 report.compare(kind, label, luau_answer, python)
             else:

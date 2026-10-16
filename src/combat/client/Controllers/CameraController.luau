@@ -70,15 +70,23 @@
 -- L1c-5a (docs/prompts/l1c-contract.md): a locking camp is walled so nothing inside shows from
 -- outside, but an open gate does not stop the spherecast (open gates are CanQuery false), so a
 -- camera swung near the gate looked in along the inner wall. The boom, from the pivot through
--- the shoulder to the camera, never enters the fenced rectangle (floor + levels.fenceThickness)
--- of a locking camp unless the local root stands inside it; it stops COMBAT_CAMERA_COLLISION_PAD
--- short of the edge (WallClip.Reach, pure and tested in the harness). The floors are
--- RunState.floors, handed on by CombatUIController (SetFloors). Walls outside a camp keep doing
--- their job through the spherecast.
+-- the shoulder to the camera, never comes within levels.cameraClear of the fenced rectangle
+-- (floor + levels.fenceThickness) of a locking camp unless the local root stands inside that
+-- rectangle within levels.triggerHeight of its floor; it stops COMBAT_CAMERA_COLLISION_PAD short
+-- of the grown edge (WallClip.Reach, pure and tested in the harness). The L1c fix round grew the
+-- cut (C1: a boom swung back toward the gate ended in its mouth with the root 13 studs back) and
+-- added the height (m1: the top of a double jump in the gate's band freed the camera). The floors
+-- are RunState.floors, handed on by CombatUIController (SetFloors). Walls outside a camp keep
+-- doing their job through the spherecast.
+--
+-- The L1c fix round's M1: Reset Character would leave no rig, and with none the default camera
+-- takes over (free orbit, StarterPlayer's zoom) for the whole respawn: the menu item is turned
+-- off in this place. combat.project.json caps CameraMaxZoomDistance at camera.maxZoom behind it.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
@@ -166,8 +174,18 @@ local placement = {
 	jumpedAt = -math.huge,
 }
 -- L1c-5a: the run's locking camps as fenced rectangles (each floor grown by `fence`, read from
--- Combat.json levels.fenceThickness), which the boom stays out of. Empty outside a level.
-local wallClip = { rects = {} :: { WallClip.Rect }, fence = 0 }
+-- Combat.json levels.fenceThickness), which the boom stays out of. Empty outside a level. `clip`
+-- is how (WallClip.Clip): the pad, levels.cameraClear and levels.triggerHeight. Without them the
+-- clip is the first L1c one: nothing grown, a root inside at any height.
+-- `resetTries` and `resetWait`: SetCore throws until the CoreScripts have registered the reset
+-- callback, so turning Reset Character off is retried this often, this far apart.
+local wallClip = {
+	rects = {} :: { WallClip.Rect },
+	fence = 0,
+	clip = { pad = 0, margin = 0, height = math.huge } :: WallClip.Clip,
+	resetTries = 60,
+	resetWait = 0.5,
+}
 local fovKick = 0
 local fovKickShown = 0
 local boundHumanoid: Humanoid? = nil
@@ -418,8 +436,9 @@ local function campReach(from: Vector3, offset: Vector3, root: Vector3): number
 		offset.Z,
 		wallClip.rects,
 		root.X,
+		root.Y,
 		root.Z,
-		Theme.COMBAT_CAMERA_COLLISION_PAD
+		wallClip.clip
 	)
 	return length * math.min(math.max(share, 0), 1)
 end
@@ -845,12 +864,35 @@ function CameraController.Init(): ()
 	if typeof(levels) == "table" and typeof(levels.fenceThickness) == "number" then
 		wallClip.fence = math.max(levels.fenceThickness, 0)
 	end
+	wallClip.clip.pad = Theme.COMBAT_CAMERA_COLLISION_PAD
+	if typeof(levels) == "table" and typeof(levels.cameraClear) == "number" then
+		wallClip.clip.margin = levels.cameraClear
+	end
+	if typeof(levels) == "table" and typeof(levels.triggerHeight) == "number" then
+		wallClip.clip.height = levels.triggerHeight
+	end
 	-- On a Studio client this waits for game.Loaded (the Workspace lever replicates with it).
 	rangeMode = CombatMode.Get() == "range"
 	crowdCombat = Tuning.IsAvailable()
 end
 
+-- The fix round's M1: Reset Character off, on its own thread (SetCore throws until the
+-- CoreScripts are ready, so it is asked again until it takes).
+local function disableReset(): ()
+	for _ = 1, wallClip.resetTries do
+		local ok = pcall(function()
+			StarterGui:SetCore("ResetButtonCallback", false)
+		end)
+		if ok then
+			return
+		end
+		task.wait(wallClip.resetWait)
+	end
+	warn("[CameraController] Reset Character could not be turned off")
+end
+
 function CameraController.Start(): ()
+	task.spawn(disableReset)
 	table.insert(connections, UserInputService.InputBegan:Connect(onInputBegan))
 	table.insert(connections, UserInputService.InputChanged:Connect(onInputChanged))
 	table.insert(connections, UserInputService.InputEnded:Connect(onInputEnded))
@@ -890,13 +932,15 @@ function CameraController.Start(): ()
 end
 
 -- L1c-5a: the run's floors (RunState.floors, `{}` in the lobby). Only a locking camp's floor
--- keeps the boom out; it is grown by levels.fenceThickness, as the server's trigger is.
+-- keeps the boom out; it is grown by levels.fenceThickness, as the server's trigger is (the
+-- further levels.cameraClear is WallClip's, for the cut alone).
 function CameraController.SetFloors(floors: { Types.RunFloor }): ()
 	table.clear(wallClip.rects)
 	for _, floor in floors do
 		if floor.locks == true then
 			table.insert(wallClip.rects, {
 				x = floor.x,
+				y = floor.y,
 				z = floor.z,
 				hx = floor.hx + wallClip.fence,
 				hz = floor.hz + wallClip.fence,

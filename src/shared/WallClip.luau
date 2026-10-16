@@ -5,16 +5,28 @@
 --
 -- * Reach: the camera's boom. An open gate is CanQuery false, so the camera's spherecast passes
 --   through it; a camera swung behind a player at a locking camp's gate would end inside the camp
---   and show what its wall hides. The boom is cut where it would enter the fenced rectangle of a
---   camp the local root is not inside. Walls elsewhere keep doing that job through the spherecast.
+--   and show what its wall hides. The boom is cut where it would come within a margin of the
+--   fenced rectangle of a camp the local root is not inside (Clip below). Walls elsewhere keep
+--   doing that job through the spherecast.
 -- * TooHigh / Rise: an aimed ability's ground point. Leap Smash's target is a camera ray pulled
 --   back to castRange and dropped onto the floor there, so a player who aims over a tall wall can
 --   land the probe on the wall's top: a perch that sees everything. A ground point higher above
 --   the caster's floor than a jump and a double jump reach is refused. WeaponService.GroundPoint
 --   (server) and InputController.groundPoint (client) ask the same question with the same numbers.
 
--- A flat rectangle: centre and half sizes, studs (Types.CampRect's shape).
-export type Rect = { x: number, z: number, hx: number, hz: number }
+-- A locking camp's fenced rectangle: centre and half sizes on the flat, and `y` its floor's top
+-- (Types.RunFloor's numbers, the halves grown by the fence), studs.
+export type Rect = { x: number, y: number, z: number, hx: number, hz: number }
+-- How a boom is cut (the L1c fix round's C1 and m1):
+-- * pad: studs short of the edge the boom would cross (COMBAT_CAMERA_COLLISION_PAD);
+-- * margin: studs each rectangle is grown by for the cut alone (Combat.json levels.cameraClear).
+--   A boom swung back toward an open gate would otherwise end in its mouth, from where the sides
+--   of the view see along the inner wall; grown, it stops that far short of the fence line;
+-- * height: a root is inside a rectangle only up to this far above its floor (levels.triggerHeight),
+--   the band StageFlow's trigger asks, so the top of a double jump over the gate frees nothing.
+-- Whether the root is inside is always judged on the true rectangle, never the grown one: a root
+-- standing in the margin would otherwise free the boom to run through the gate into the camp.
+export type Clip = { pad: number, margin: number, height: number }
 
 local WallClip = {}
 
@@ -22,10 +34,16 @@ local function finite(value: number): boolean
 	return value == value and value ~= math.huge and value ~= -math.huge
 end
 
+-- A pad or margin that is not a positive finite number is none.
+local function length(value: number): number
+	return if value > 0 and value ~= math.huge then value else 0
+end
+
 -- A rectangle a caller built from bad data (NaN, infinite, a negative half) cannot be judged and
 -- is skipped, as CrowdRenderer drops a malformed floor.
 local function usable(rect: Rect): boolean
 	return finite(rect.x)
+		and finite(rect.y)
 		and finite(rect.z)
 		and finite(rect.hx)
 		and finite(rect.hz)
@@ -33,20 +51,33 @@ local function usable(rect: Rect): boolean
 		and rect.hz >= 0
 end
 
--- Closed: a root on the rectangle's edge is inside, as StageFlow's trigger counts one on the fence.
-local function holds(rect: Rect, x: number, z: number): boolean
-	return math.abs(x - rect.x) <= rect.hx and math.abs(z - rect.z) <= rect.hz
+-- Closed: a root on the rectangle's edge is inside, as StageFlow's trigger counts one on the fence;
+-- and no higher than `height` above its floor. A root that is not a number is in none.
+local function holds(rect: Rect, x: number, y: number, z: number, height: number): boolean
+	return math.abs(x - rect.x) <= rect.hx
+		and math.abs(z - rect.z) <= rect.hz
+		and y - rect.y <= height
 end
 
 -- The first share t of the segment from (fromX, fromZ) along (dx, dz), 0 <= t <= 1, that lies in
--- the closed rectangle; nil = none of it. 0 = it starts inside.
-local function entry(fromX: number, fromZ: number, dx: number, dz: number, rect: Rect): number?
+-- the closed rectangle centred on (cx, cz) with halves (hx, hz); nil = none of it. 0 = it starts
+-- inside. Numbers, not a table, so the camera's frame allocates nothing.
+local function entry(
+	fromX: number,
+	fromZ: number,
+	dx: number,
+	dz: number,
+	cx: number,
+	cz: number,
+	hx: number,
+	hz: number
+): number?
 	local first, last = 0, 1
 	for axis = 1, 2 do
 		local start = if axis == 1 then fromX else fromZ
 		local step = if axis == 1 then dx else dz
-		local low = if axis == 1 then rect.x - rect.hx else rect.z - rect.hz
-		local high = if axis == 1 then rect.x + rect.hx else rect.z + rect.hz
+		local low = if axis == 1 then cx - hx else cz - hz
+		local high = if axis == 1 then cx + hx else cz + hz
 		if step == 0 then
 			if start < low or start > high then
 				return nil
@@ -67,10 +98,11 @@ local function entry(fromX: number, fromZ: number, dx: number, dz: number, rect:
 end
 
 -- The share 0..1 of the flat boom from (fromX, fromZ) along (dx, dz) that stays outside every
--- rectangle of `rects` that does not hold the root (rootX, rootZ), pulled back `pad` studs along
--- the boom from the first edge it would cross. 0 when the boom starts inside such a rectangle;
--- 1 when nothing cuts it, or when the boom itself is not a number (nothing can be measured, so
--- the camera is left as it was). A NaN root is held by no rectangle: every one of them cuts.
+-- rectangle of `rects` that does not hold the root (rootX, rootY, rootZ), each grown by
+-- clip.margin, pulled back clip.pad studs along the boom from the first edge it would cross. 0
+-- when the boom starts inside such a grown rectangle; 1 when nothing cuts it, or when the boom
+-- itself is not a number (nothing can be measured, so the camera is left as it was). A root that
+-- is not a number is held by no rectangle: every one of them cuts.
 function WallClip.Reach(
 	fromX: number,
 	fromZ: number,
@@ -78,20 +110,22 @@ function WallClip.Reach(
 	dz: number,
 	rects: { Rect },
 	rootX: number,
+	rootY: number,
 	rootZ: number,
-	pad: number
+	clip: Clip
 ): number
 	if not (finite(fromX) and finite(fromZ) and finite(dx) and finite(dz)) then
 		return 1
 	end
-	local length = math.sqrt(dx * dx + dz * dz)
-	local back = if pad > 0 and pad ~= math.huge then pad else 0
+	local boom = math.sqrt(dx * dx + dz * dz)
+	local back = length(clip.pad)
+	local grow = length(clip.margin)
 	local share = 1
 	for _, rect in rects do
-		if usable(rect) and not holds(rect, rootX, rootZ) then
-			local at = entry(fromX, fromZ, dx, dz, rect)
+		if usable(rect) and not holds(rect, rootX, rootY, rootZ, clip.height) then
+			local at = entry(fromX, fromZ, dx, dz, rect.x, rect.z, rect.hx + grow, rect.hz + grow)
 			if at ~= nil then
-				share = math.min(share, if at <= 0 then 0 else math.max(at - back / length, 0))
+				share = math.min(share, if at <= 0 then 0 else math.max(at - back / boom, 0))
 			end
 		end
 	end

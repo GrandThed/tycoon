@@ -199,8 +199,10 @@ export type ThreatHooks = {
 
 -- What Damage did besides the number: blocked = a plate stopped it (nothing happened); plate =
 -- it went to the plate; broke = it emptied the plate; gone = there is no such body (any more);
--- guarded = blocked, heavy or not, because the body's guard lives (a `guarded` kind).
-export type Verdict = "blocked" | "guarded" | "plate" | "broke" | "gone"
+-- guarded = blocked, heavy or not, because the body's guard lives (a `guarded` kind); held = a
+-- resident of a held group (a walled camp's ambush before the close): no hit at all, and nothing
+-- for the striker to see (the L1c fix round's M2: a "BLOCKED" over it gave the ambush away).
+export type Verdict = "blocked" | "guarded" | "plate" | "broke" | "gone" | "held"
 
 local SPAWN_EVENT = "CrowdSpawn"
 local SNAPSHOT_EVENT = "CrowdSnapshot"
@@ -2041,14 +2043,15 @@ function CrowdService.Damage(
 	if enemy.deadAt ~= nil then
 		return 0, false, nil
 	end
-	-- L1b-13 and L1b-W4-25: a resident's group is asked first. A held one answers "blocked": no
-	-- damage, knock, stagger or book. Every other hit lands, wakes a resting group and is
-	-- remembered by it (L1b-7's out-of-play block and L1b-8's homeward evade are gone).
+	-- L1b-13 and L1b-W4-25: a resident's group is asked first. A held one answers "held": no
+	-- damage, knock, stagger or book, and no hit entry (StrikeTally drops it, as it drops "gone").
+	-- Every other hit lands, wakes a resting group and is remembered by it (L1b-7's out-of-play
+	-- block and L1b-8's homeward evade are gone).
 	local resident = enemy.resident
 	if resident ~= nil then
 		local group = camp.groups[resident.group]
 		if group ~= nil and not CampBrain.Struck(group.brain, byUserId, simTime) then
-			return 0, false, "blocked"
+			return 0, false, "held"
 		end
 	end
 	local crowd = Tuning.Get().crowd

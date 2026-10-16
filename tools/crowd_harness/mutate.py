@@ -3957,23 +3957,23 @@ FILES.append(WALL_CLIP)
 L1C_MUTATIONS = {
     "l1c: Reach cuts a box that holds the root": (
         WALL_CLIP,
-        "if usable(rect) and not holds(rect, rootX, rootZ) then",
+        "if usable(rect) and not holds(rect, rootX, rootY, rootZ, clip.height) then",
         "if usable(rect) then",
     ),
     "l1c: a root on the box's edge is outside it (open)": (
         WALL_CLIP,
-        "return math.abs(x - rect.x) <= rect.hx and math.abs(z - rect.z) <= rect.hz",
-        "return math.abs(x - rect.x) < rect.hx and math.abs(z - rect.z) < rect.hz",
+        "\treturn math.abs(x - rect.x) <= rect.hx\n\t\tand math.abs(z - rect.z) <= rect.hz\n",
+        "\treturn math.abs(x - rect.x) < rect.hx\n\t\tand math.abs(z - rect.z) < rect.hz\n",
     ),
     "l1c: Reach ignores the pad": (
         WALL_CLIP,
-        "math.max(at - back / length, 0)",
+        "math.max(at - back / boom, 0)",
         "math.max(at, 0)",
     ),
     "l1c: Reach lets the pad go negative": (
         WALL_CLIP,
-        "math.max(at - back / length, 0)",
-        "at - back / length",
+        "math.max(at - back / boom, 0)",
+        "at - back / boom",
     ),
     "l1c: a boom that starts inside a box is whole": (
         WALL_CLIP,
@@ -3982,8 +3982,8 @@ L1C_MUTATIONS = {
     ),
     "l1c: a negative or NaN pad is taken as it is": (
         WALL_CLIP,
-        "local back = if pad > 0 and pad ~= math.huge then pad else 0",
-        "local back = pad",
+        "local back = length(clip.pad)",
+        "local back = clip.pad",
     ),
     "l1c: a slab that ends before the other starts still enters": (
         WALL_CLIP,
@@ -4037,6 +4037,103 @@ L1C_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L1C_MUTATIONS)
+
+# The L1c fix round (docs/prompts/l1c-fix-round.md), from its code agent: WallClip's margin and
+# height (C1, m1), the held resident's verdict (M2), a stage's own countdown (M3), and the two lists
+# and the zoom cap the cases read from source text (m2, M1). The three text sources are copied into
+# every mutant root so run_harness.py reads the mutated copy.
+INPUT = "src/combat/client/Controllers/InputController.luau"
+ABILITY = "src/combat/server/Services/AbilityService.luau"
+PROJECT = "combat.project.json"
+FILES += [INPUT, ABILITY, PROJECT]
+L1C_FIX_MUTATIONS = {
+    "l1c fix: the margin is ignored (C1)": (
+        WALL_CLIP,
+        "rect.hx + grow, rect.hz + grow",
+        "rect.hx, rect.hz",
+    ),
+    "l1c fix: the root is judged inside on the grown rectangle (C1)": (
+        WALL_CLIP,
+        "not holds(rect, rootX, rootY, rootZ, clip.height)",
+        "not holds({ x = rect.x, y = rect.y, z = rect.z, hx = rect.hx + grow, hz = rect.hz + grow }, rootX, rootY, rootZ, clip.height)",
+    ),
+    "l1c fix: a negative or NaN margin is taken as it is (C1)": (
+        WALL_CLIP,
+        "local grow = length(clip.margin)",
+        "local grow = clip.margin",
+    ),
+    "l1c fix: the root's height is not asked (m1)": (
+        WALL_CLIP,
+        "\t\tand y - rect.y <= height\n",
+        "\t\tand true\n",
+    ),
+    "l1c fix: exactly the height is outside (m1)": (
+        WALL_CLIP,
+        "and y - rect.y <= height",
+        "and y - rect.y < height",
+    ),
+    "l1c fix: the height measured from the world's zero (m1)": (
+        WALL_CLIP,
+        "and y - rect.y <= height",
+        "and y <= height",
+    ),
+    "l1c fix: a box's floor height is not checked (m1)": (
+        WALL_CLIP,
+        "\t\tand finite(rect.y)\n",
+        "",
+    ),
+    "l1c fix: a held resident answers blocked again (M2)": (
+        CROWD,
+        '\t\t\treturn 0, false, "held"\n',
+        '\t\t\treturn 0, false, "blocked"\n',
+    ),
+    "l1c fix: StrikeTally books a hit on a held resident (M2)": (
+        TALLY,
+        'if verdict == "gone" or verdict == "held" then',
+        'if verdict == "gone" then',
+    ),
+    "l1c fix: the countdown ignores the stage's own (M3)": (
+        FLOW,
+        "\t\tthen stage.gateSeconds\n",
+        "\t\tthen rules.gateSeconds\n",
+    ),
+    "l1c fix: Plan drops a stage's gateSeconds (M3)": (
+        FLOW,
+        "\t\t\tgateSeconds = stage.gateSeconds,\n",
+        "",
+    ),
+    "l1c fix: Validate takes any gateSeconds (M3)": (
+        FLOW,
+        "\t\t\tproblem(`{where}: gateSeconds is {tostring(countdown)}, not a time`)\n",
+        "",
+    ),
+    "l1c fix: a countdown of 0 waits a tick after the trigger (M3)": (
+        FLOW,
+        '\t\tstep = "gate"\n',
+        "\t\treturn actions\n",
+    ),
+    "l1c fix: a skip into a countdown of 0 waits a tick (M3)": (
+        FLOW,
+        "\tif now >= state.gateAt then\n\t\tclose(state, actions, now)\n",
+        "\tif false then\n\t\tclose(state, actions, now)\n",
+    ),
+    "l1c fix: the client predicts a ground ability the server does not aim (m2)": (
+        INPUT,
+        "{ leapSmash = true, bladeStorm = true, arrowRain = true, stormCoil = true }",
+        "{ leapSmash = true, bladeStorm = true, arrowRain = true }",
+    ),
+    "l1c fix: the server aims a ground ability the client does not list (m2)": (
+        ABILITY,
+        'stormCoil = { target = "ground"',
+        'stormCoil = { target = "floor"',
+    ),
+    "l1c fix: the place's zoom cap drifts from camera.maxZoom (M1)": (
+        PROJECT,
+        '"CameraMaxZoomDistance": 16',
+        '"CameraMaxZoomDistance": 128',
+    ),
+}
+MUTATIONS.update(L1C_FIX_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

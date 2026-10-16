@@ -80,6 +80,9 @@ export type Stage = {
 	merge: boolean,
 	targetWaveSeconds: number,
 	maxAlive: number,
+	-- The L1c fix round's M3: the countdown from the trigger to the close (nil = levels.gateSeconds;
+	-- 0 = the gates shut in the tick the camp triggers).
+	gateSeconds: number?,
 }
 -- L1b-W2-6: a tent's stock as one group of its camp, posture "tent": kinds[k] stands on posts[k].
 export type PlanTent = {
@@ -1416,6 +1419,14 @@ function StageFlow.Validate(
 		if rest ~= nil and (type(rest) ~= "number" or rest < 0) then
 			problem(`{where}: breatherSeconds is {tostring(rest)}, not a time`)
 		end
+		-- A countdown that is not a number, under 0 or endless would never close the gates.
+		local countdown: any = stage.gateSeconds
+		if
+			countdown ~= nil
+			and (type(countdown) ~= "number" or not (countdown >= 0 and countdown < math.huge))
+		then
+			problem(`{where}: gateSeconds is {tostring(countdown)}, not a time`)
+		end
 		local waves: any = stage.waves
 		if type(waves) ~= "table" or #waves == 0 then
 			problem(`{where} has no wave`)
@@ -1641,6 +1652,7 @@ function StageFlow.Plan(
 			merge = stage.merge == true,
 			targetWaveSeconds = stage.targetWaveSeconds or 0,
 			maxAlive = cap,
+			gateSeconds = stage.gateSeconds,
 		})
 	end
 	return {
@@ -1771,16 +1783,23 @@ local function over(state: State, reason: string): Action
 	return { kind = "end", stage = state.stage, reason = reason }
 end
 
--- Into the countdown of camp `index`.
+-- Into the countdown of camp `index`: its stage's own gateSeconds, else levels.gateSeconds (the
+-- L1c fix round's M3). A countdown of 0 ends in the same tick: Advance runs the countdown's row
+-- straight after, and a skip closes at once (`entered`).
 local function gate(
+	plan: Plan,
 	state: State,
 	index: number,
 	now: number,
 	rules: Types.CombatLevelsConfig
 ): Action
+	local stage = plan.stages[index]
+	local seconds = if stage ~= nil and stage.gateSeconds ~= nil
+		then stage.gateSeconds
+		else rules.gateSeconds
 	state.stage = index
 	state.step = "gate"
-	state.gateAt = now + rules.gateSeconds
+	state.gateAt = now + seconds
 	return { kind = "gate", stage = index, at = state.gateAt }
 end
 
@@ -1794,6 +1813,22 @@ local function close(state: State, actions: { Action }, now: number): ()
 	state.closedAt = now
 	table.insert(actions, { kind = "close", stage = state.stage })
 	table.insert(actions, { kind = "wave", stage = state.stage, wave = first })
+end
+
+-- A skip into camp `index`'s countdown. One of 0 closes in the same batch, as a skip in the
+-- countdown closes it at once: no RunState ever goes out in a countdown of 0.
+local function entered(
+	plan: Plan,
+	state: State,
+	actions: { Action },
+	index: number,
+	now: number,
+	rules: Types.CombatLevelsConfig
+): ()
+	table.insert(actions, gate(plan, state, index, now, rules))
+	if now >= state.gateAt then
+		close(state, actions, now)
+	end
 end
 
 -- The live camp is behind the party (cleared, or `skipped`): on to the next stage, or the end.
@@ -1899,10 +1934,13 @@ function StageFlow.Advance(
 		local index = armedCamp(plan, state)
 		local camp = plan.stages[index]
 		local zone = if camp ~= nil then camp.zone else nil
-		if zone ~= nil and triggered(zone, input, rules) then
-			table.insert(actions, gate(state, index, input.now, rules))
+		if zone == nil or not triggered(zone, input, rules) then
+			return actions
 		end
-		return actions
+		table.insert(actions, gate(plan, state, index, input.now, rules))
+		-- On into the countdown's row in this same tick: a countdown of 0 (the fix round's M3,
+		-- "stepping in shuts the gate") closes now, or arms the camp again with nobody standing.
+		step = "gate"
 	end
 
 	if step == "gate" then
@@ -2058,7 +2096,7 @@ function StageFlow.Skip(
 				table.insert(actions, { kind = "approach", stage = state.stage, zone = stop })
 			elseif index ~= 0 then
 				table.insert(actions, { kind = "move", stage = index })
-				table.insert(actions, gate(state, index, now, rules))
+				entered(plan, state, actions, index, now, rules)
 			end
 		elseif step == "gate" then
 			close(state, actions, now)
@@ -2093,7 +2131,7 @@ function StageFlow.Skip(
 			else
 				state.firstWave = wave
 				table.insert(actions, { kind = "move", stage = state.stage })
-				table.insert(actions, gate(state, state.stage, now, rules))
+				entered(plan, state, actions, state.stage, now, rules)
 			end
 			return actions
 		end
@@ -2131,7 +2169,7 @@ function StageFlow.Skip(
 	state.firstWave = targetWave
 	state.wave = 0
 	table.insert(actions, { kind = "move", stage = target })
-	table.insert(actions, gate(state, target, now, rules))
+	entered(plan, state, actions, target, now, rules)
 	return actions
 end
 

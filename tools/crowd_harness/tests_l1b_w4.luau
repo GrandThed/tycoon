@@ -449,7 +449,15 @@ function W4B.realTests(): ()
 		if difficulty ~= "normal" then
 			continue
 		end
-		-- N from the trailhead: approach A, approach B, then the Chief's countdown.
+		-- N from the trailhead: approach A, approach B, then the Chief's countdown; a countdown of 0
+		-- (the L1c fix round's M3) shuts its gates in the same batch.
+		local shuts = false
+		for _, stage in plan.stages do
+			if stage.zone == zones[3] then
+				shuts = stage.gateSeconds == 0
+			end
+		end
+		local intoC = if shuts then "move gate close wave" else "move gate"
 		local state = W4B.Flow.Begin(plan)
 		local steps = {}
 		for now = 0, 2 do
@@ -459,7 +467,7 @@ function W4B.realTests(): ()
 		end
 		local line = table.concat(steps, "; ")
 		print(`   N from the trailhead: {line}`)
-		check(line == "approach 1; approach 2; move gate", `N from the trailhead: approach A, approach B, then move and gate to the Chief's Clearing ({line})`)
+		check(line == `approach 1; approach 2; {intoC}`, `N from the trailhead: approach A, approach B, then move and gate to the Chief's Clearing ({line})`)
 		local a = zones[1].approach
 		print(`   A's approach ({a.X}, {a.Y}, {a.Z}), B's ({zones[2].approach.X}, {zones[2].approach.Y}, {zones[2].approach.Z})`)
 		local done = W4B.Flow.Begin(plan)
@@ -475,7 +483,7 @@ function W4B.realTests(): ()
 		local pastB = W4B.Flow.Begin(plan)
 		pastB.reached[2] = true
 		local toC = W4B.Flow.Skip(plan, pastB, "stage", 0, L1.real.rules, { 1 })
-		check(L1.names(toC) == "move gate" and pastB.step == "gate", `walked to Main Camp's checkpoint without N: the Chief's gate, never the Pickets' approach ({L1.names(toC)})`)
+		check(L1.names(toC) == intoC and pastB.step == (if shuts then "fight" else "gate"), `walked to Main Camp's checkpoint without N: the Chief's gate, never the Pickets' approach ({L1.names(toC)})`)
 	end
 end
 L1.group("l1b w4 realTests", W4B.realTests)

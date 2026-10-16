@@ -2480,8 +2480,8 @@ function L1.realRunTests(): ()
 					table.insert(strange, `{kind} names stage {action.stage}, which has no zone`)
 				elseif kind == "wave" and (stageDef == nil or stageDef.waves == nil or stageDef.waves[action.wave] == nil) then
 					table.insert(strange, `wave {tostring(action.wave)} of stage {action.stage} is not in the file`)
-				elseif kind == "gate" and not near(action.at, action.now + real.rules.gateSeconds) then
-					table.insert(strange, `stage {action.stage}'s countdown is {action.at - action.now} s, not levels.gateSeconds`)
+				elseif kind == "gate" and not near(action.at, action.now + (if stageDef ~= nil and stageDef.gateSeconds ~= nil then stageDef.gateSeconds else real.rules.gateSeconds)) then
+					table.insert(strange, `stage {action.stage}'s countdown is {action.at - action.now} s, not its own gateSeconds or levels.gateSeconds`)
 				elseif kind == "breather" then
 					local expected = if stageDef ~= nil and stageDef.breatherSeconds ~= nil then stageDef.breatherSeconds else L1.Combat.BreatherSeconds(1, L1.combat.director)
 					if not near(action.at, action.now + expected) then
@@ -2495,7 +2495,7 @@ function L1.realRunTests(): ()
 					end
 				end
 			end
-			check(#strange == 0, `{tag}: every action is one WaveService executes, on a stage and a wave that are there, with the config's countdown and the stage's breather{real.list(strange)}`)
+			check(#strange == 0, `{tag}: every action is one WaveService executes, on a stage and a wave that are there, with the stage's countdown (its own, else the config's) and the stage's breather{real.list(strange)}`)
 			check(counted == waves and clears == waves, `{tag}: {clears} clears count all {waves} waves, none twice`)
 			check(run.held, `{tag}: a moment before a countdown or a breather is over, nothing happens`)
 			check(#run.unsafe == 0 and run.safe > camps * 3, `{tag}: the safe point is asked {run.safe} times (the start, each countdown, each wave, each breather, each cleared camp) and is always inside the level's bounds, above its kill height, on solid ground, inside nothing, and no place the rescue takes a body from{real.list(run.unsafe)}`)
