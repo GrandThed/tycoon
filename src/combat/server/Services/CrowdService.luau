@@ -654,23 +654,18 @@ local function integrate(
 	-- A fighting body looks where its brain says: its own target, which a downed player is not.
 	local target = if alive and mind == nil then nearestTarget(position) else nil
 	-- L1b: a resident thinks with the brain only while its group fights; otherwise it rests,
-	-- rises or walks home as CampBrain has it, and is never committed. L1b-W4-22: a rusher of a
-	-- group that stood down walks home too, once the blow it has in the air is done (a windup's
-	-- impact is owed, ruling 22, and a charge runs its lane): a mind frozen mid-windup would land a
-	-- stale blow when it thinks again.
+	-- rises or walks home as CampBrain has it, and is never committed. L1b-W4-22 and R2: a member
+	-- with a blow in the air (a windup, its attack or a charge) thinks on until it is done, however
+	-- its group left the fight (a stand-down, the leash, the close's Forget): a mind frozen there
+	-- would hold its kind's place against that player for good (Commit counts it) and land a stale
+	-- blow when it thinks again.
 	local resident = if alive then enemy.resident else nil
 	local group = if resident ~= nil then camp.groups[resident.group] else nil
 	local brain = if group ~= nil then group.brain else nil
 	local rusher = def.brain ~= "keepAway"
 	local resting = brain ~= nil
-		and (
-			brain.held
-			or brain.state ~= "fight"
-			or (
-				CampBrain.StandsDown(brain, rusher)
-				and not (mind ~= nil and (CrowdBrain.IsStriking(mind) or mind.charge ~= nil))
-			)
-		)
+		and not (mind ~= nil and (CrowdBrain.IsStriking(mind) or mind.charge ~= nil))
+		and (brain.held or brain.state ~= "fight" or CampBrain.StandsDown(brain, rusher))
 	if resident ~= nil then
 		enemy.closing = false
 	end

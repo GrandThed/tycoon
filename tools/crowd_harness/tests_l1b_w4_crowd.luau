@@ -765,4 +765,53 @@ function W4C.closingTests(): ()
 end
 L1BC.crowdGroup("fix round: closing", W4C.closingTests)
 
+-- R2: the close lets a blow finish. A guard winding up at its post when ForgetOthers sends its
+-- group home finishes the blow, rests only after it, and holds no fodder place against the player.
+function W4C.blowTests(): ()
+	print(" fix round R2: the close lets a blow finish")
+	W4C.enter()
+	-- Two free fodder on floor 2, past their spawn grace before the player comes to them.
+	local free = { Crowd.Spawn("fodder", vec(190, 12, -3), "fight", nil, nil, 2), Crowd.Spawn("fodder", vec(190, 12, 3), "fight", nil, nil, 2) }
+	root.Position = vec(-1, 11, 0)
+	local group, ids = W4C.place("guard", { vec(-5, 8, 0) }, { "fodder" }, { yaw = -math.pi / 2 })
+	local windup = false
+	for _ = 1, 60 do
+		step2()
+		if seen(ids[1]).state == "windup" then
+			windup = true
+			break
+		end
+	end
+	check(windup, "(R2: the guard winds up at its post at a player in front of it)")
+	L1BC.events()
+	Crowd.ForgetOthers(2)
+	root.Position = vec(200, 15, 0)
+	local homeAt: number? = nil
+	local restAt: number? = nil
+	local both = 0
+	for count = 1, 150 do
+		step2()
+		for _, event in L1BC.events() do
+			if event.group == group and event.to == "home" then
+				homeAt = homeAt or count
+			elseif event.group == group and event.to == "rest" then
+				restAt = restAt or count
+			end
+		end
+		local striking = 0
+		for _, id in free do
+			local state = seen(id).state
+			if state == "windup" or state == "attack" then
+				striking += 1
+			end
+		end
+		both = math.max(both, striking)
+	end
+	check(homeAt == 1, `the close sends the striking group home at the next step (step {homeAt or "never"})`)
+	-- windup 0.5 and strikeSeconds 0.2 from its start: about 10 steps.
+	check(restAt ~= nil and restAt >= 6, `R2: it rests only once the blow is done, though the guard stood at its post (step {restAt or "never"}, at least 6)`)
+	check(both == 2, `R2: no frozen mind holds a fodder place: both free fodder strike the player at once (at most {both} of perPlayer 2)`)
+end
+L1BC.crowdGroup("fix round: the blow", W4C.blowTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

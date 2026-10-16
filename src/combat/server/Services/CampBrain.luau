@@ -589,7 +589,9 @@ function CampBrain.Step(
 			group.quietSince = now
 			group.meleeQuietSince = now
 			group.standDown = false
-		else
+		elseif not input.striking then
+			-- R2: a member still finishing a blow (the close's Forget does not wait for it) is not
+			-- home yet: a group at rest may sleep, and a dormant body never thinks.
 			local home = true
 			for _, member in input.members do
 				if not CampBrain.AtPost(member.post, member.at, rules) then
