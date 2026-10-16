@@ -2393,6 +2393,18 @@ function CrowdService.Busy(): { [number]: boolean }
 	return busy
 end
 
+-- Fix round R7: the floors with an unheld group in rise, fight or home that has a living member
+-- (a new table). A camp's floor not in it stands wholly at rest (CampBrain.TentClock's `rested`).
+function CrowdService.Stirred(): { [number]: boolean }
+	local stirred: { [number]: boolean } = {}
+	for _, group in camp.groups do
+		if #group.bodies > 0 and not group.brain.held and group.brain.state ~= "rest" then
+			stirred[group.floor] = true
+		end
+	end
+	return stirred
+end
+
 -- Reachable for a group in rise or fight at a step within camps.engagedHoldSeconds of the last
 -- one (CampBrain.Engaged, on the crowd's step clock).
 function CrowdService.Engaged(userId: number): boolean

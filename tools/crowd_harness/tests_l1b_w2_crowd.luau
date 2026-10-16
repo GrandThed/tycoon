@@ -990,11 +990,11 @@ function W2A.joinTests(): ()
 		CB.TentActive(true, 5, true) and not CB.TentActive(false, 0, true) and not CB.TentActive(false, 3, true) and not CB.TentActive(true, 0, true) and not CB.TentActive(true, 3, false),
 		"Wave 4 (L1b-W4-28): TentActive only busy, with a resident alive, and ahead (no longer once the residents are dead)"
 	)
-	local fresh = CB.NewTent(8)
-	check(fresh.left == 8 and fresh.nextAt == -math.huge and fresh.busySeconds == 0 and fresh.lastAt == nil, "NewTent: the stock, the first body due at once, the pace clock at 0 and stopped")
+	local fresh = CB.NewTent(8, 12)
+	check(fresh.left == 8 and fresh.nextAt == -math.huge and fresh.busySeconds == 0 and fresh.lastAt == nil and fresh.residents == 12, "NewTent: the stock, the first body due at once, the pace clock at 0 and stopped, counting from the residents")
 	-- Busy 0..13, paused 13..40, busy 40..50, at rest with residents alive 50..60, residents all
 	-- dead from 60 (the camp still at rest), to 100, at half-second ticks; always ahead.
-	local timeline = CB.NewTent(8)
+	local timeline = CB.NewTent(8, 12)
 	local sent = {}
 	for tick = 0, 200 do
 		local now = tick * 0.5
@@ -1007,12 +1007,12 @@ function W2A.joinTests(): ()
 	end
 	check(W2A.list(sent) == "{0, 6, 12, 40, 46}", `wake at 0: 0, 6, 12; paused 13 to 40, the next at 40; at rest or with its residents dead it sends nothing ({W2A.list(sent)})`)
 	check(timeline.left == 3, "three of the stock never sent (forfeit at the clear)")
-	local spent = CB.NewTent(1)
+	local spent = CB.NewTent(1, 12)
 	CB.TentSent(spent, 0, 6)
 	CB.TentSent(spent, 6, 6)
 	check(spent.left == 0 and not CB.TentDue(spent, true, 1000), "a spent tent is never due, and its stock never goes under 0")
-	check(not CB.TentDue(CB.NewTent(3), false, 0), "an inactive tent is not due")
-	local onTime = CB.NewTent(3)
+	check(not CB.TentDue(CB.NewTent(3, 12), false, 0), "an inactive tent is not due")
+	local onTime = CB.NewTent(3, 12)
 	CB.TentSent(onTime, 1, 6)
 	check(onTime.nextAt == 7 and onTime.left == 2 and CB.TentDue(onTime, true, 7 - 1e-7) and not CB.TentDue(onTime, true, 6.99), "TentSent: nextAt = now + every; due at it (within the step's epsilon)")
 end

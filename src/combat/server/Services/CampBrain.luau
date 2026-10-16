@@ -76,8 +76,16 @@ export type Group = {
 	standDown: boolean,
 }
 -- A tent's stock not sent yet, the clock its next body is due (L1b-W2-7), and its camp's pace
--- clock (L1b-W4-28): the busy time summed, and the tick it was last busy at (nil = not busy then).
-export type TentState = { left: number, nextAt: number, busySeconds: number, lastAt: number? }
+-- clock (L1b-W4-28): the busy time summed, the tick it was last busy at (nil = not busy then), and
+-- (fix round R7) the residents the measure counts from: the living ones when the camp last stood
+-- wholly at rest, the zone's whole count before that.
+export type TentState = {
+	left: number,
+	nextAt: number,
+	busySeconds: number,
+	lastAt: number?,
+	residents: number,
+}
 
 -- A rise or a leash that ends exactly on a step must not wait one more because the summed step
 -- times came out a hair short (CrowdBrain's TIME_EPSILON).
@@ -837,15 +845,37 @@ function CampBrain.TentRouse(group: Group, now: number, reachable: boolean): boo
 	return CampBrain.Rouse(group, now, reachable)
 end
 
--- L1b-W2-7: a tent's stock, its first body due at once; its camp's pace clock at 0, not running.
-function CampBrain.NewTent(stock: number): TentState
-	return { left = stock, nextAt = -math.huge, busySeconds = 0, lastAt = nil }
+-- L1b-W2-7: a tent's stock, its first body due at once; its camp's pace clock at 0, not running,
+-- counting from `residents` (the zone's resident count at the played difficulty).
+function CampBrain.NewTent(stock: number, residents: number): TentState
+	return {
+		left = stock,
+		nextAt = -math.huge,
+		busySeconds = 0,
+		lastAt = nil,
+		residents = residents,
+	}
 end
 
 -- L1b-W4-28: the camp's pace clock, once per run tick. Only busy time counts: the time since the
 -- last tick is added only when this tick and the one before were both busy, so a gap with the camp
--- at rest is never counted.
-function CampBrain.TentClock(tent: TentState, busy: boolean, now: number): ()
+-- at rest is never counted. Fix round R7: while every group of the camp is at rest (`rested`), the
+-- measure starts afresh, as for a fresh camp of the residents still alive: busy time 0, counted
+-- from `residentsAlive`. A player who chased the raiders out and lost them, or sniped and left,
+-- has not spent the tent's pace for a later clear.
+function CampBrain.TentClock(
+	tent: TentState,
+	busy: boolean,
+	now: number,
+	rested: boolean,
+	residentsAlive: number
+): ()
+	if rested then
+		tent.busySeconds = 0
+		tent.lastAt = nil
+		tent.residents = residentsAlive
+		return
+	end
 	local lastAt = tent.lastAt
 	if busy and lastAt ~= nil then
 		tent.busySeconds += math.max(now - lastAt, 0)
@@ -855,7 +885,9 @@ end
 
 -- L1b-W4-28: is the camp ahead of its own clock: the share of its residents killed, less the busy
 -- time over pace.seconds, at least pace.lead (edge included). Never with no resident or no pace.
--- Tent bodies are never counted as kills (the caller's `killed` is residents only).
+-- Tent bodies are never counted as kills (the caller's `killed` is residents only). R7: the caller
+-- passes the tent's own count, `killed = tent.residents - residentsAlive`, `residents =
+-- tent.residents`.
 function CampBrain.Ahead(
 	killed: number,
 	residents: number,
