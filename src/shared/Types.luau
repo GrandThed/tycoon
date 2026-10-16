@@ -2255,7 +2255,9 @@ export type CrowdSpawnInfo = {
 }
 -- L1b: one floor of the crowd: centre = the floor's top centre; half.X and half.Z its half extents;
 -- half.Y the highest a launch may carry a body over it (levels.crowdCeiling).
-export type CrowdFloor = { centre: Vector3, half: Vector3 }
+-- CrowdFloor, replacing the type (L1b Wave 4). region: the chase region its bodies are clamped into
+-- and routed through (L1b-W4-17); nil = its rectangle, as before (a locking camp, the range, the arena).
+export type CrowdFloor = { centre: Vector3, half: Vector3, region: RegionGraph? }
 export type CrowdSnapshotEntry = {
 	id: number,
 	position: Vector3,
@@ -2587,6 +2589,8 @@ export type LevelCamp = {
 	spots: { LevelSpot }?,
 	-- L1b Wave 2: the tent's marker and the ring its bodies stand on
 	tent: LevelTentBlock?,
+	-- L1b Wave 4: N's stop before an open camp (L1b-W4-31); nil = none (always nil on a locking camp)
+	approach: { x: number, y: number, z: number }?,
 }
 export type LevelSecret = {
 	id: string,
@@ -2617,6 +2621,8 @@ export type LevelLayout = {
 	route: { LevelRoutePoint },
 	-- L1b Wave 2: tool-only (check_levels.py, the simulators); the game never reads it
 	sneak: { ArenaPoint }?,
+	-- L1b Wave 4: the chase regions (L1b-W4-14); nil = none
+	regions: { LevelRegion }?,
 }
 
 -- Config/Expeditions.json
@@ -2678,10 +2684,23 @@ export type CombatLevelsConfig = {
 	walletSendSeconds: number,
 	-- A fire spot's marker block, { x, y, z } studs (nil = no marker is built).
 	fireMarkerSize: { number }?,
+	-- L1b-W4-16: studs a region keeps beyond its camps' longest reach from every locking floor
+	regionLockMargin: number,
+	-- L1b-W4-15: a door is at least 2 x the region's widest body plus this, on both axes
+	doorSpare: number,
 }
 
 -- RunState (built only by ArenaService)
-export type RunFloor = { x: number, y: number, z: number, hx: number, hz: number }
+-- RunFloor, replacing the type (L1b Wave 4). cells: its region's cells (RegionGraph.cells), the same
+-- list on every floor of that region; nil = the rectangle alone.
+export type RunFloor = {
+	x: number,
+	y: number,
+	z: number,
+	hx: number,
+	hz: number,
+	cells: { CampRect }?,
+}
 export type RunResult = {
 	levelId: string,
 	levelName: string,
@@ -2721,37 +2740,44 @@ export type CampPostureRules = {
 	cone: number, -- degrees, the whole angle about the post's facing; 360 = all round
 	rise: number, -- seconds from a wake to the fight
 }
--- CampRulesConfig, replacing the type.
+-- CampRulesConfig, replacing the type (L1b Wave 4).
 export type CampRulesConfig = {
 	guard: CampPostureRules,
 	patrol: CampPostureRules,
 	fire: CampPostureRules,
 	tent: CampPostureRules,
-	sightBelow: number, -- studs a root may be under the camp's floor and still be seen or in play
+	sightBelow: number, -- studs a root may be under the camp's floor and still be seen, known or reachable
 	sightAbove: number, -- studs a root may be over it
-	chaseMargin: number, -- studs (flat, to the floor rectangle) a root may be past its edge and in play
+	chaseMargin: number, -- studs (flat, to the region or, with none, the floor rectangle) a root may be past its edge and reachable
 	leashSeconds: number,
 	homePace: number, -- x the kind's speed: walking home, and a resting body drifting back
 	patrolPace: number, -- x the kind's speed: a patrol at rest
 	homeTolerance: number, -- studs from its post that count as at its post
-	engagedHoldSeconds: number, -- seconds a player stays engaged after last in play for a group in rise or fight
+	engagedHoldSeconds: number, -- seconds a player stays engaged after last reachable for a group in rise or fight
 	joinFactor: number, -- x the waking group's sight: a resting group of its camp this near (post to post) wakes too
 	dormantRadius: number, -- studs (flat) from a camp's floor rectangle: no player root nearer = its resting groups are dormant
+	chaseSight: number, -- L1b-W4-18: studs (flat, all round, in the band) from any living member: that player is known
+	hitMemorySeconds: number, -- L1b-W4-18: seconds a group keeps knowing a player whose hit landed on a member
+	meleeAbove: number, -- L1b-W4-19: studs a root may be over the floor and still be reachable by the rushers
 }
 export type CampRect = { x: number, z: number, hx: number, hz: number }
 export type CampUnit = { kind: string, count: number }
+-- CampGroupDef, replacing the type (L1b Wave 4).
 export type CampGroupDef = {
-	id: string, -- "<camp>.<spot>"
+	id: string, -- "<camp>.<spot>" | "<camp>.tent"
 	camp: string,
 	floor: number, -- index into the run's floor list
 	floorY: number,
 	rect: CampRect, -- the camp's floor
 	posture: CampPosture,
-	points: { Vector3 }, -- feet at floorY: the guard posts | the patrol loop | the fire's centre
+	points: { Vector3 }, -- feet at floorY: the guard posts | the patrol loop | the fire's (or tent's) centre
 	yaw: number, -- guard: the posts' facing, radians (0 faces -Z)
-	radius: number, -- fire: the sitting circle, studs; 0 otherwise
+	radius: number, -- fire and tent: the circle, studs; 0 otherwise
 	held: boolean, -- a locking camp's group: sleeps and evades until the close
 	units: { CampUnit }, -- filtered by minDifficulty; members are spawned in this order
+	-- L1b-W4-14: its camp's region's cells; nil = the floor rectangle and Wave 2's in-play rule
+	-- for knowing and reaching (a locking camp's group, L1b-W4-20)
+	region: { CampRect }?,
 }
 
 -- Layouts/Levels/<Name>.json: a LevelCamp's spots.
@@ -2781,7 +2807,8 @@ export type LevelTentBlock = {
 
 -- Config/Levels/<n>_<Name>.json.
 -- units: as residents (perExtra is not read); every: seconds between two bodies.
-export type LevelTentConfig = { every: number, units: { MissionCrowdGroup } }
+-- LevelTentConfig, replacing the type (L1b Wave 4): pace is required (L1b-W4-28).
+export type LevelTentConfig = { every: number, units: { MissionCrowdGroup }, pace: LevelTentPace }
 -- LevelCampConfig, replacing the type.
 export type LevelCampConfig = {
 	id: string,
@@ -2791,5 +2818,30 @@ export type LevelCampConfig = {
 }
 -- share of what a camp's whole stock pays at the difficulty's price (L1b-W2-21)
 export type LevelClearBonus = { share: number }
+
+-- L1b Wave 4 (docs/INTERFACES.md "L1b Wave 4 — no waits, no walls")
+
+-- A chase region as Region.Build makes it (L1b-W4-14, -15): its cells (the region's open camps'
+-- floors in layout order, then its road cells in file order), all at one height, and the routes
+-- between them. Built once per run by StageFlow.Plan and shared by every floor of the region.
+export type RegionGraph = {
+	cells: { CampRect },
+	-- next[i][j]: the neighbour of cell i on the path to cell j; i when j == i; 0 = no path
+	next: { { number } },
+	-- hops[i][j]: neighbours crossed from i to j; 0 when j == i; math.huge = no path
+	hops: { { number } },
+	-- doors[i][j] (= doors[j][i]): the centre of cells i and j's overlap; neighbours only
+	doors: { [number]: { [number]: ArenaPoint } },
+}
+
+-- Layouts/Levels/<Name>.json.
+-- A road cell of a chase region: a flat rectangle at the region's height, centre and size.
+export type LevelRegionCell = { id: string, x: number, z: number, sx: number, sz: number }
+-- A chase region (L1b-W4-14): its open camps' floors plus its road cells, all at height y.
+export type LevelRegion = { id: string, y: number, camps: { string }, cells: { LevelRegionCell } }
+
+-- Config/Levels/<n>_<Name>.json.
+-- L1b-W4-28: a tent sends only while killed / residents - busySeconds / seconds >= lead.
+export type LevelTentPace = { seconds: number, lead: number }
 
 return {}
