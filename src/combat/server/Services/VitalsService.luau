@@ -382,10 +382,11 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 	local held = inPlan(strike, root.Position)
 	if held and height ~= nil then
 		-- A lob's floor is the surface under its target, which may be a block's top: a player
-		-- on the arena floor beside that block is under the circle, not in it. The other
-		-- ground shapes lie on the crowd's floor, where nothing stands below them.
+		-- on the arena floor beside that block is under the circle, not in it. The other ground
+		-- shapes lie on the crowd's floor, and since L1b Wave 4 a region floor ends at a drop
+		-- with standable ground below it (R6): a lunge at the lip must not land through the cliff.
 		local above = feetOf(root, humanoid) - strike.floorY
-		held = above <= height and (shape ~= "lob" or above >= -height)
+		held = above <= height and above >= -height
 	end
 	local verdict = rule(config, vitals, strike, held, entry.covered, root, humanoid, now)
 	if volley ~= nil and verdict ~= nil then

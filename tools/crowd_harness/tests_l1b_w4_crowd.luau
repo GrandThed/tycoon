@@ -854,4 +854,30 @@ function W4C.healOnceTests(): ()
 end
 L1BC.crowdGroup("fix round: heal once", W4C.healOnceTests)
 
+-- R6: no hit through a cliff. Every ground shape has the lob's lower bound: feet more than its
+-- height under the crowd's floor (a player at the foot of a drop below a region's lip) are missed.
+-- tests.luau's arc and lunge stand on floorY 0, the root 3 over the feet.
+function W4C.cliffTests(): ()
+	print(" fix round R6: no hit through a cliff")
+	fresh()
+	root.Position = vec(0, 3 - 8, 0)
+	hooks.impact(arc(fakeNow))
+	advance(0.25)
+	check(humanoid.Health == 130, `R6: an arc misses feet 8 under the crowd's floor, inside its plan (health {humanoid.Health})`)
+	hooks.impact(lunge(fakeNow))
+	advance(0.25)
+	check(humanoid.Health == 130, `R6: so does a lunge (feet 8 under, height 5) (health {humanoid.Health})`)
+	root.Position = vec(0, 3 - 6, 0)
+	hooks.impact(arc(fakeNow))
+	advance(0.25)
+	check(humanoid.Health == 100, `R6: feet exactly the arc's height (6) under its floor are still hit (health {humanoid.Health}, 100)`)
+	root.Position = vec(0, 3 - 5.1, 0)
+	advance(1)
+	hooks.impact(lunge(fakeNow))
+	advance(0.25)
+	check(humanoid.Health == 100, `R6: feet 5.1 under a height-5 lunge's floor: missed (health {humanoid.Health})`)
+	fresh()
+end
+L1BC.group("fix round: cliff", W4C.cliffTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)
