@@ -1904,8 +1904,8 @@ feels right").
 **Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
 
 **Status 2026-10-16:**
-- Built, reviewed, fix round and fix-diff fixes done on `l1b-wave4` / `l1b-wave4-fix`.
-- **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+- Merged to `main` and the place files rebuilt (PLAN "L1b Wave 4"). L1 closed on Ben's word.
+- **Unplayed.** Run it together with "L1c" below; its steps 8–9 are replaced by L1c's checklist.
 
 <!-- FILE TO OPEN: start. Lead: if L1b Wave 4 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -1918,11 +1918,11 @@ feels right").
 
 **Steps:**
 
-- [ ] 0. (Lead) Merge, rebuild, tell Ben.
-      - [ ] mutate.py verdict in (PLAN "L1b Wave 4", QA).
-      - [ ] R16–R18 (`l1b-wave4-fix`) and `l1b-wave4` merged to `main`; the six place files
+- [x] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] mutate.py verdict in (PLAN "L1b Wave 4", QA).
+      - [x] R16–R18 (`l1b-wave4-fix`) and `l1b-wave4` merged to `main`; the six place files
             rebuilt.
-      - [ ] Ben told: "L1b Wave 4 is merged, Build all".
+      - [ ] Ben told: "L1b Wave 4 is merged, Build all" (folded into L1c's step 0).
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
 - [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
@@ -1938,6 +1938,40 @@ feels right").
   the Chief's Clearing.
 - **G** walks 2 / 2 → 4 / 4 → 6 / 6, as before.
 - The ledge snipe pays well on Normal: known, accepted for L1, fixed in L4.
+
+## L1c
+
+**Studio only. Nothing to set up beyond opening the rebuilt file.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setup.
+- The new walls and the gatehouse are grey blocks the game builds from data.
+- Reset off and the zoom cap of 16 are in the build (`combat.project.json`); nothing to set.
+- Still silent (no audio step).
+
+**Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
+
+**Status 2026-10-16:** built, reviewed, three fix rounds, QA green on `l1c-chief-clearing`.
+**Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L1c is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Wait for the lead's word first.** Before the merge, "Build all" gives the old open clearing.
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** Esc → **Reset Character** is greyed out.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [ ] `l1c-chief-clearing` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L1c is merged, Build all".
+- [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
+- [ ] 4. Run `docs/PLAYTEST.md` "L1c — the Chief's Clearing" (eight steps, plus an optional phone
+      and two-player check, then two click questions).
+- [ ] 5. Optional, same file: "L1b Wave 4 — no waits, no walls" steps 1–7 and 10 (still unplayed).
+- [ ] 6. Close Studio without saving `proving.rbxl`. Tell Claude when you are done.
 
 ## M10 — Icon, store icons, thumbnails
 

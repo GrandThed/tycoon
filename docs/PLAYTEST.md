@@ -4920,7 +4920,9 @@ Also, if you have a view: anything wrong, by step number.
 - **About 12 minutes. Keys only, no panel.** Grey blocks, no sound.
 
 **Status 2026-10-16:** built, reviewed (four slices: 0 Critical, 4 Major, 12 Minor; fix-diff:
-0 / 1 / 2; all fixed). **Wait for the lead's merge word, then "Build all".**
+0 / 1 / 2; all fixed), merged to `main` the same day. **Unplayed.** After the L1c merge, steps 1–7
+and 10 still hold; **steps 8–9 (the Chief's Clearing) are replaced by "L1c — the Chief's Clearing"
+below**: no countdown, no BLOCKED there any more, and do not use **B** there.
 
 Setup: `docs/MANUAL_STEPS.md` "L1b Wave 4".
 
@@ -5038,6 +5040,101 @@ Asked afterwards, as click questions:
 - Did you ever wait for raiders to come out of a tent? Never / once or twice / often.
 - **What did the grey Server number read with the Colossus up, most of the time?** Under 1 ms /
   1–2 / 2–4 / over 4 / did not see it.
+
+Also, if you have a view: anything wrong, by step number, PC or phone.
+
+## L1c — the Chief's Clearing
+
+<!-- FILE TO OPEN: start. Lead: if L1c is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Only after the lead says L1c is merged.** Then VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** Esc → **Reset Character** (*Restablecer personaje*) is greyed out.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** the boss room is a surprise.
+- You walk in through a tall walled passage that turns once, and see no enemy.
+- The gate shuts behind you at once and a small group rushes you from left and right.
+- When they are dead the Colossus comes.
+- **About 8 minutes. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-16:** built, reviewed (2 Critical, 3 Major, 9 Minor; then two checks of the fixes:
+0 / 2 / 2 and 0 / 0 / 3; all fixed), QA green. **Wait for the lead's merge word.**
+
+Setup: `docs/MANUAL_STEPS.md` "L1c".
+
+**Keys:**
+- **Enter** = Depart; **1** / **2** = sword / bow; **E** = the bow's Arrow Rain.
+- **Space** jump (twice = double jump); **Left Shift** dash.
+- **N** = next camp; **G** = stronger gear; **Backspace** twice = Abandon.
+- **Do not use B here.** It brings the ambush and the Colossus at the same time, a fight the game
+  never has. That is a test shortcut, not a bug.
+
+### The run (no panel)
+
+- [ ] 1. Press **Play**: the map on **Forest Road**, **Normal**, gear **2 / 2**.
+      - Press **Esc**: **Reset Character** is greyed out. Esc again to close.
+      - Bug: Reset works, or the view floats free after it.
+- [ ] 2. **Enter** (Depart), then **N twice**: you stand on the road before Main Camp.
+      - Sneak past it: in by the west gate, left (north) to the fence, along it to the far gate.
+      - Follow the road east. It bends south and back, then climbs into a **tall grey walled
+        passage** (the gatehouse).
+      - **Don't press N a third time yet:** it puts you straight inside the clearing.
+      - If Main Camp wakes and follows you, run on until they give up, or **Backspace** twice and
+        start again.
+- [ ] 3. **The approach.** Walk the passage. It runs east, then turns right; the gate is ahead.
+      - Before the gate: turn the camera all the way round, zoom fully out (wheel), look down from
+        high, double jump.
+      - You see walls and the open gate. No raider, no "!", no health bar.
+      - In the last few steps before the gate the camera comes in close to your head: expected.
+      - Bug: any raider or bar seen; the camera goes through a wall or through the open gate.
+- [ ] 4. **Arrow Rain over the wall.** Press **2** (bow). Back in the passage, stand about 30 studs
+      from a wall.
+      - Aim at the wall's **top edge**, press **E**: nothing happens, the ability stays ready (no
+        cooldown ring).
+      - Aim further, over the wall into the clearing, press **E**: no "BLOCKED", no numbers, no
+        raider shows.
+      - Bug: "BLOCKED" anywhere; numbers over the wall; the cooldown spent on the top-edge cast.
+- [ ] 5. **Step through the gate.**
+      - It shuts behind you **at once**. No "Gates close in" text.
+      - Raiders rush in from left and right (10 on Normal: small ones and big brutes).
+      - You may slide a small step straight in (about 3 studs at most). No sideways jump; the view
+        does not turn.
+      - Bug: a countdown; you jump many studs; raiders stand still; nobody comes.
+- [ ] 6. **Fight the ambush** (about 20 s; **G** for stronger gear if you need it).
+      - While fighting, do a **late double jump** (the second jump near the top of the first), by
+        the wall and in the middle.
+      - The camera never snaps into your head.
+      - Backing into the tall wall pulls the camera in close: expected.
+      - Bug: the camera snaps into your head mid-jump.
+- [ ] 7. **The Colossus.** When the last raider dies: a short pause (about 3 s), then the Colossus.
+      - Kill it. The far (east) gate opens and the summary shows your kills. **Enter**.
+      - Bug: the Colossus with raiders still alive; no summary; the run ends with no exit.
+- [ ] 8. **Quick second run.** **Enter**, then **N three times**: you land just inside the gate,
+      it shuts and the raiders rush in.
+      - **Backspace** twice. Close Studio without saving.
+
+**Optional, not one of the eight:**
+- **Phone.** Test (Prueba) → Device (Dispositivo) → a 375×667 phone, turned to landscape
+  (667×375) → Play → Depart.
+  - Repeat step 3 with a finger-drag on the camera: no raider seen before the gate.
+  - The ability button, aimed at a wall's top edge: nothing happens, no cooldown ring.
+  - Inside, the Colossus's health bar does not sit on the crosshair.
+  - Bug: a raider seen through the gate; an Attack button.
+- **Two players.** Test (Prueba) → **Local Server** (Servidor local), **2 players**
+  (2 jugadores) → **Start** (Iniciar). Both Depart, N twice, walk to the gatehouse.
+  - Player 1 walks through the gate. Player 2 waits in the passage.
+  - At the close player 2 lands inside, well past the gate (about 8 studs in), not on top of
+    player 1.
+  - Known, not a bug: the ambush is not bigger for two (that comes with parties, L5).
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- **Does the Chief's Clearing feel right now?** Yes / almost (say what) / no.
+- **The shorter run (about 5 min on Normal, was about 6) and the Colossus pay (42,900, was
+  29,000):** too little / about right / too much.
 
 Also, if you have a view: anything wrong, by step number, PC or phone.
 

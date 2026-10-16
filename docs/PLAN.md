@@ -3636,6 +3636,150 @@ PASS.
   Wave 4 build (his last run, 2026-10-15 20:43, was the Wave 3 bow look), so PLAYTEST "L1b Wave 4 — no waits,
   no walls" is **unplayed**; it, and the Chief's Clearing he has never reached, open his first L2 look.
 
+## L1c — the Chief's Clearing redone
+
+**Goal:** the boss room is a surprise.
+- You walk in through a bent gatehouse and see no enemy.
+- The gate shuts behind you and a small group rushes you from both sides.
+- When they are dead the Colossus comes.
+- Nothing inside can be seen from outside, not even from the top of a double jump.
+- A fix of L1, done before L2. **No sound. Phones must work.**
+
+**Documents:**
+- Ben's words and his three click answers: `docs/MISSIONS_DESIGN.md` §21.
+- Contract: `docs/prompts/l1c-contract.md` (rulings L1c-1 to L1c-7, the lead's rulings in §8);
+  INTERFACES "# L1c contracts — the Chief's Clearing redone".
+- Fix rounds: `docs/prompts/l1c-fix-round.md`, `l1c-fix2.md`, `l1c-fix3.md`.
+- Reports: `docs/prompts/l1c-reports/`. Findings: `docs/prompts/l1c-review/` (`code.md`,
+  `data-tools.md`, `fix-diff.md`, `fix2-diff.md`).
+- Values: `docs/BALANCE.md` "L1c", "L1c fix round" (with "the margin ruling"), "L1c second fix
+  round", "L1c third fix round".
+- Branch `l1c-chief-clearing` (worktree `tycoon-p5`); fixes 2 and 3 on `l1c-fix2` (worktree
+  `tycoon-p5b`), folded back in.
+
+**Ben's decisions (2026-10-16, click questions):**
+1. **Ambush, then the boss.** A small group jumps you as the gate shuts; then the Colossus. The two
+   big waves and every resting group of the clearing are gone.
+2. **From both flanks.** They wait behind the wall either side of the entrance and rush in from left
+   and right.
+3. **A bent passage.** A tall wall all round; a short gatehouse that turns once. Grey blocks now;
+   the real forest (L4) dresses it.
+
+**What shipped:**
+- **The clearing.** Camp C moved south to (313.5, 12, 31.5), 115 × 115. Its fence is a 64-stud wall
+  (tops at y 76): taller than any camera can rise (60.5) and than anyone can climb (46).
+  - North gate = the way in; east gate = the exit. `TrailEnd` moved to (379, −10).
+  - The old guards, fires, both waves and C's tent are gone. Part count 86.
+- **The gatehouse.** `GatehouseWalk` (heading east), `GatehouseTurn` (heading south), four 76-high
+  walls. Nothing inside is in view until you are past the turn.
+- **The ambush.** Two held groups, `ambushW` and `ambushE`, stand behind the north wall from the
+  run's start. Each side: 2 fodder + 3 brutes, plus 1 fodder from Hard.
+  - Normal 10 bodies; Hard and Brutal 12. No plated raider (its bar shows through walls).
+  - Stage waves `[empty, Colossus]`: the empty wave clears when the last ambusher dies, then a 3 s
+    breather, then the Colossus. When he dies the exit opens.
+- **The gate shuts at once.** Per-stage `gateSeconds`; the clearing's is 0. Stepping in shuts the
+  gate and wakes the ambush in the same moment; no "Gates close in" text.
+  - Anyone in the fenced rectangle at the close is nudged straight in onto the floor (at most 3
+    studs, height and speed kept, the view does not turn). Anyone else goes to the entry (309.5, −16).
+  - A walled camp triggers up to its wall's top (64), not 30, so a jump in the gate still counts.
+- **Camera clip.** New pure `src/shared/WallClip.luau`. The camera never enters a locking camp's
+  walls grown by `levels.cameraClear` 3.5 until your root is inside (up to the wall's top). In the
+  last few studs before the gate the camera comes in to your head.
+- **Reset Character is off** in the dungeon place; the default camera's zoom is capped at 16
+  (`combat.project.json`), so a dead rig cannot look over the wall.
+- **Ground abilities** (Leap Smash, Blade Storm, Arrow Rain, Storm Coil) aimed at a point more than
+  jump + double jump (30) above your floor do nothing and spend no cooldown. Same rule on server
+  (`WeaponService.GroundPoint`) and client (`InputController.groundPoint`).
+- **No BLOCKED over hidden ambushers.** A held body answers `"held"`, which shows nothing; strikes
+  and chains skip it (new pure `StrikePick.luau`).
+- **Pay.** Colossus 29,000 → **42,900 cash**, 70 → **76 Timber**. `targetMinutes` 6 → **5**.
+- **Gates:** `check_levels.py` (unclimbable wall, walled camp: height, gatehouse, floors, sight with
+  `sightMargin` 1.5, trigger ceiling, the close's nudge lands clear); new
+  `tools/check_levels_mutants.py`; `sim_range.py` ambush band and per-stage countdown; new harness
+  suite `tests_l1c.luau`; `check_stage_mirror.py` (GateNudge, 2,700 cases).
+
+**Commits:**
+- Decisions, study, contract: `ce65105`. Build: `2a58134`.
+- Review: `8352177` brief, `0e82d46` findings and rulings.
+- Fix round: `2841862`; margin ruling `f06458a`.
+- Fix-diff review: `ef6fe6b`, `37100b9`. Fix 2: `71fba13`.
+- Second fix-diff review: `4825316`, `45fe93b`. Fix 3: `35a1f21`.
+- Plus this docs commit.
+
+**First review: two Opus slices.** Data and tools 1 Critical / 0 Major / 6 Minor; code 1 Critical /
+3 Major / 3 Minor. All resolved:
+- **Critical (both slices):** from the open gate's mouth the camera could swing through and see the
+  ambush → the clip grows by `levels.cameraClear` 3.5; the sight gate is red at the old number.
+- **Major M1:** Reset Character gave 8 s of the free default camera (zoom 128) → Reset off, zoom
+  capped at 16.
+- **Major M2:** a ground ability over the wall wrote "BLOCKED ×N" over the hidden ambush → `"held"`.
+- **Major M3:** a 3 s countdown with ten statues in view → per-stage `gateSeconds`, 0 here.
+- **Minors:** the clip's release needs a height test; a check that the client's ground-ability list
+  matches the server's; B from the road brings the ambush and the Colossus together (docs: use N);
+  exact sight extremes, the mirror's maxAlive case, per-difficulty resident counts, the floors
+  rule, a 15 s floor on every ambush band, a committed mutant driver.
+- **Margin ruling (lead):** every sight line clears by at least 1.5 studs. Only fodder fit as each
+  side's sixth body, so Hard's extra unit is fodder; the pay of the two brutes moved into the
+  Colossus (42,900 / 76).
+
+**Fix-diff review: 0 Critical, 2 Major, 2 Minor.**
+- **Major F1:** a late double jump inside the clearing collapsed the camera into the head → a
+  walled camp holds up to its wall's top.
+- **Major F2:** the player who stepped in was moved about 10 studs forward every run → the nudge.
+- **Minor F3:** the height fix was half done (same fix as F1). **Minor F4:** held bodies used up a
+  strike's cap and seeded chains → `StrikePick`.
+
+**Second fix-diff review: 0 Critical, 0 Major, 3 Minor.** A stale mutant text (re-anchored); in
+co-op the road player was placed onto the lane player (entry moved to (309.5, −16), 8 inside the
+nudge line, new 3-stud rule); a diagonal dash beside the opening was sent 10 studs sideways (every
+root in the fenced rectangle is now nudged onto the floor).
+
+**Balance (BALANCE "L1c third fix round"), Normal at 2 / 2:**
+- First clear **5.26 / 4.69 / 5.04 min** (was 6.33). Cash a minute 25.1–28.0k; Timber 40.1–45.0.
+- Ambush: Normal 19.6–20.1 s; Hard 17.7–21.6 s; Brutal 18.7–21.6 s (band 15–35, at most 60).
+- `sim_combat`: Normal 131,733 cash, bonuses 5.8%, Hard ×2.15, Brutal ×4.32.
+- Sight: eyes +1.57, cameras +2.73 studs; the doorway glimpse (−2.53) is exempt, since one more
+  step shuts the gate.
+- R8 Hard at 2 / 2: Road2 +3.0%; **LookoutLedge +1.6%, the thinnest gate.**
+
+**QA:**
+- Full `mutate.py` at `4825316`: **788 run, 0 not caught.**
+- Fix 3 (`35a1f21`): filtered `mutate.py` 236 run, 0 not caught; stale-text count over all entries
+  0 (mutate 787, mirror_mutants 104).
+- Harness PASS (2,489 checks); `check_levels`, `check_levels_mutants --luau` (41 data, 4 mirror
+  cases), `check_stage_mirror`, `mirror_mutants --only L1c` 13 / 13, `sim_range --check` (64-bit),
+  `sim_combat` 23 / 23, `check_compile` (159 files), stylua, selene, luau-lsp, rojo build: green.
+
+**Carried (owners):**
+- **lead + luau-engineer (L5):** the ambush does not scale with party size; four players flatten it.
+- **lead + luau-engineer (L5):** in co-op, two players who were on the road at the close both land
+  on the one entry point.
+- **lead + luau-engineer (later levels):** glide and the jetpack must be off near a walled camp, or
+  they reach over the wall.
+- **economy-designer:** R8's LookoutLedge row on Hard at 2 / 2 clears by only +1.6% and moves with
+  any change to the gatehouse route. Judge it on the 64-bit Python `sim_range --check` run; the
+  32-bit one disagreed.
+- **lead → Ben:** are the shorter run (about 5 min on Normal) and the Colossus pay (42,900) about
+  right? Asked at his look.
+- Every L1b carried item above stands. **Publish freeze (lead):** no Expeditions publish from
+  `main` until L4.
+
+**Next:**
+1. The lead merges `l1c-chief-clearing` to `main` and rebuilds the six place files.
+2. **Ben's look:** `docs/PLAYTEST.md` "L1c — the Chief's Clearing"; setup `docs/MANUAL_STEPS.md`
+   "L1c". "L1b Wave 4" is still unplayed: its steps 1–7 and 10 still hold; this replaces its
+   steps 8–9.
+3. Then L2, only on Ben's word.
+
+- [x] L1c built (`2a58134`)
+- [x] Reviewed: two slices, 2 Critical, 3 Major, 9 Minor (`0e82d46`)
+- [x] Fix round and margin ruling (`2841862`, `f06458a`)
+- [x] Fix-diff review 0 / 2 / 2, fixed (`71fba13`)
+- [x] Second fix-diff review 0 / 0 / 3, fixed (`35a1f21`)
+- [x] QA green (full mutate.py 788 / 0 at `4825316`; fix 3 filtered 236 / 0, 0 stale)
+- [ ] Merged to `main`, six place files rebuilt (lead)
+- [ ] L1c playtest (Ben)
+
 ## M12 — Growing city
 
 **Goal:** the city should feel "alive and like a growing city, not a grid being filled" (Ben,
