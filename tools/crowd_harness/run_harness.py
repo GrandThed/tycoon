@@ -86,7 +86,9 @@ TESTS = [
     "tests_l1b.luau",
     "tests_l1b_w2_crowd.luau",
     "tests_l1b_w2.luau",
-    # L1b Wave 4: the regions, the pace tent, Fielded and N (B's).
+    # L1b Wave 4: the region, the chase and the pace tent in the crowd (A's), then the run's
+    # regions, pace, Fielded and N (B's).
+    "tests_l1b_w4_crowd.luau",
     "tests_l1b_w4.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'

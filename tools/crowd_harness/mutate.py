@@ -2145,11 +2145,9 @@ for label in RETIRED:
     del MUTATIONS[label]
 
 CLEARED = "\tstate.settled = wave\n\tlocal lastWave = wave >= stage.waves"
-# L1b Wave 2 added the tent clause (L1b-W2-8): the camp's clear is one line per clause.
-CAMP_CLEAR = (
-    "\t\t\tzone.locks\n\t\t\tor zone.residents <= 0\n\t\t\tor state.done[index]\n"
-    "\t\t\tor byFloor[index] ~= 0\n\t\t\tor (tentLeft[index] or 0) ~= 0\n"
-)
+# The camp's clear. L1b Wave 2 gave it a tent clause (L1b-W2-8) and Wave 4 took it away again
+# (L1b-W4-29: the clear never waits for a tent), so it is one line once more.
+CAMP_CLEAR = "if zone.locks or zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then"
 SPLIT = "local paid = math.floor(exact + 1e-9)\n\treturn paid, math.max(exact - paid, 0)"
 KILL = "return math.round(reward.cash * rewardMult), math.round(reward.materials * rewardMult)"
 # From luau-engineer B (the run): StageFlow, Combat, LevelGeometry, tests_l1b.luau.
@@ -2168,17 +2166,17 @@ L1B_RUN_MUTATIONS = {
     "l1b: campClear twice": (
         FLOW,
         CAMP_CLEAR,
-        CAMP_CLEAR.replace("\t\t\tor state.done[index]\n", ""),
+        CAMP_CLEAR.replace(" or state.done[index]", ""),
     ),
     "l1b: campClear for a zone with no residents": (
         FLOW,
         CAMP_CLEAR,
-        CAMP_CLEAR.replace("\t\t\tor zone.residents <= 0\n", ""),
+        CAMP_CLEAR.replace(" or zone.residents <= 0", ""),
     ),
     "l1b: campClear for the locking zone": (
         FLOW,
         CAMP_CLEAR,
-        CAMP_CLEAR.replace("\t\t\tzone.locks\n\t\t\tor ", "\t\t\t"),
+        CAMP_CLEAR.replace("zone.locks or ", ""),
     ),
     "l1b: a reach from a downed root": (
         FLOW,
@@ -2480,12 +2478,9 @@ MUTATIONS.update(FIX_A_MUTATIONS)
 # tents in Plan and Validate, the population rule, the clear bonus, the dead fraction, the tent
 # marker. And the ui-engineer's SpawnSeed (two mutations, routed to B by the lead).
 SPAWN_SEED = "src/combat/client/Controllers/SpawnSeed.luau"
+# "l1b w2: campClear with tent stock left" was retired in L1b Wave 4 (its clause is gone, L1b-W4-29);
+# "l1b w4: progress waits for tent stock again" holds the reversed rule.
 W2_RUN_MUTATIONS = {
-    "l1b w2: campClear with tent stock left": (
-        FLOW,
-        CAMP_CLEAR,
-        CAMP_CLEAR.replace("\t\t\tor (tentLeft[index] or 0) ~= 0\n", ""),
-    ),
     "l1b w2: the tent stock left out of the population": (
         FLOW,
         "return placed + tents + room + reserve",
@@ -2739,17 +2734,9 @@ MUTATIONS.update(W4_UI_MUTATIONS)
 # L1b Wave 4 (docs/INTERFACES.md "L1b Wave 4 — no waits, no walls").
 REGION = "src/shared/Region.luau"
 FILES.append(REGION)
-# Wave 1-3 entries of StageFlow whose text this wave changed (the camp's clear lost its tent clause,
-# L1b-W4-29, and is one line now; groupsOf takes the region's cells): same labels, same rules.
-CAMP_CLEAR_W4 = "if zone.locks or zone.residents <= 0 or state.done[index] or byFloor[index] ~= 0 then"
+# Wave 1-3 entries of StageFlow whose text this wave changed: same labels, same rules. (The three
+# "l1b: campClear ..." entries follow CAMP_CLEAR, rewritten above for the one-line clear.)
 L1B_W4_RUN_REPLACED = {
-    "l1b: campClear twice": (FLOW, CAMP_CLEAR_W4, CAMP_CLEAR_W4.replace(" or state.done[index]", "")),
-    "l1b: campClear for a zone with no residents": (
-        FLOW,
-        CAMP_CLEAR_W4,
-        CAMP_CLEAR_W4.replace(" or zone.residents <= 0", ""),
-    ),
-    "l1b: campClear for the locking zone": (FLOW, CAMP_CLEAR_W4, CAMP_CLEAR_W4.replace("zone.locks or ", "")),
     "l1b: countMult applied to residents": (
         FLOW,
         "local groups, residents, residentStocks = groupsOf(level, layout, rank, ranks, cellsOf)",
@@ -2760,11 +2747,10 @@ MUTATIONS.update(L1B_W4_RUN_REPLACED)
 # Retired, never silently: their rules were reversed by this wave, and each has a Wave 4 entry
 # that holds the new rule.
 #   "l1b w2: campClear with tent stock left" -> "l1b w4: progress waits for tent stock again"
-#                                               (L1b-W4-29: the clear never waits for a tent)
+#                                               (L1b-W4-29; taken out of W2_RUN_MUTATIONS itself)
 #   "l1b w2: a zone's stock without its tent" -> "l1b w4: zone.stock counts the tent again"
 #                                               (L1b-W4-30: zone.stock is the residents only)
-for label in ("l1b w2: campClear with tent stock left", "l1b w2: a zone's stock without its tent"):
-    del MUTATIONS[label]
+del MUTATIONS["l1b w2: a zone's stock without its tent"]
 
 # luau-engineer B (the run): StageFlow's regions, approaches, pace, the clear and Fielded.
 L1B_W4_RUN_MUTATIONS = {
