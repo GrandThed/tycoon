@@ -923,4 +923,47 @@ function W4C.stirredTests(): ()
 end
 L1BC.crowdGroup("fix round: stirred", W4C.stirredTests)
 
+-- R5: a brute walks round the U-bend. On the road east (inset z -0.8..0.8 for its 2.2) with its
+-- player 20.7 away on the leg west across the void, its lane would run 0.8: it does not start
+-- one, walks round by the doors (27, 0) and (27, 24), and charges once the region gives it the run.
+function W4C.uBendBruteTests(): ()
+	print(" fix round R5: a brute walks round the U-bend")
+	W4C.enter()
+	table.clear(struck)
+	root.Position = vec(18, 11, 21.5)
+	local brute = Crowd.Spawn("brute", vec(18, 8, 0.8), "fight", nil, nil, 1)
+	local shortLane: any = nil
+	local round: number? = nil
+	for count = 1, 120 do
+		step2()
+		for _, strike in struck do
+			if strike.bodyId == brute and strike.length ~= nil and shortLane == nil then
+				shortLane = strike
+			end
+		end
+		table.clear(struck)
+		if round == nil and W4C.flat(brute, 27, 24) <= 2 then
+			round = count
+		end
+	end
+	check(shortLane == nil, `R5: across the void it starts no lane (one of {if shortLane then string.format("%.1f", shortLane.length) else "-"} studs from z {if shortLane and shortLane.feet then string.format("%.1f", shortLane.feet.Z) else "-"})`)
+	check(round ~= nil, `R5: it walks round by the doors to the leg west's door (step {round or "never"})`)
+	-- On the leg west's line, 9 away: the region gives the lane its run (10.8 to the inset end).
+	root.Position = vec(18, 11, 24)
+	local lane: any = nil
+	for _ = 1, 60 do
+		step2()
+		for _, strike in struck do
+			if strike.bodyId == brute and strike.length ~= nil then
+				lane = strike
+			end
+		end
+		if lane ~= nil then
+			break
+		end
+	end
+	check(lane ~= nil and lane.length >= 9 - 5, `R5: with the run there, it charges (length {if lane then string.format("%.1f", lane.length) else "none"})`)
+end
+L1BC.crowdGroup("fix round: the U-bend brute", W4C.uBendBruteTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

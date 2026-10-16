@@ -497,6 +497,28 @@ local function choose(
 	return if best == 0 and again then mind.last else best
 end
 
+-- Fix round R5: does a lane get its run? On a region floor (no longer convex: the U-bend's arms
+-- stand 22 apart across a void) only when the region's runway along the facing it would lock is at
+-- least the flat distance to the target less the lane's width; otherwise the brute walks the
+-- routed way round. Every other attack, and a lane on a floor with no region, always does.
+local function laneRuns(
+	body: Body,
+	mind: Mind,
+	def: Types.CrowdKindDef,
+	attack: Types.CrowdAttackDef,
+	distance: number
+): boolean
+	if attack.shape ~= "lane" then
+		return true
+	end
+	local floor = floorOf(body)
+	if floor.region == nil then
+		return true
+	end
+	local room = runway(body.position, snapped(mind.facing), def.radius, floor)
+	return room >= distance - math.max(attack.width or 0, 0)
+end
+
 -- Starts a windup against `target` if an attack is ready and admitted. The facing the caller
 -- turned to the target is locked here. `chained` = this attack's place in its chain.
 local function begin(
@@ -517,7 +539,10 @@ local function begin(
 			return false
 		end
 		local attack = attacks[index]
-		if admit(body, def, attack, target.userId, threat) then
+		if
+			laneRuns(body, mind, def, attack, distance)
+			and admit(body, def, attack, target.userId, threat)
+		then
 			mind.phase = "windup"
 			mind.phaseUntil = now + paced(mind, def, attack.windup, false)
 			mind.attack = index
