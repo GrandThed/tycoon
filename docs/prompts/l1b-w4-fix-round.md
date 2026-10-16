@@ -101,3 +101,13 @@ Each owner: the commits, each fix → file:function, the cases and mutations add
 B's `mutate.py` and the designer's `mirror_mutants.py`), each verify command's verdict line, and for
 the designer the sniper table (spot, cash per minute, Timber per minute, against `mission`) with R8's
 stop applied where it had to be.
+
+## Added during the round (lead)
+
+**R14 — a player below the floor is not melee-reachable (A; designer mirrors and sets the key).**
+`CampBrain.Melee` gains a lower bound, `camps.meleeBelow` (measured as `meleeAbove` is), so the foot of
+the climb (8 below) is out of melee reach while the road and the rim's step are in. `CrowdBrain.begin`
+never starts a ground-shape blow at a target whose feet lie outside the shape's vertical band (R6), so
+no windup at an unhittable player holds the leash. The designer adds `meleeBelow` to `Combat.json`
+(A's report names the value it needs) and mirrors both rules.
+- tests_w2's pinned arc check now expects R6 (lead, cef3d38).
