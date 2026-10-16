@@ -2425,6 +2425,16 @@ def check_walled(name, level, layout, ctx, expect, solids):
                   f" ({len(inside)} eye and {len(cams) + proved} camera points, {len(bodies)} posts; the tightest "
                   + (f"{least[0]:+.2f} studs at ({least[1]:g}, {least[2]:g}) to {least[3]})" if least else
                      "none: no line reaches a gate)")))
+        # The margin ruling (2026-10-16, after the fix round): a body drawn as its torso box is not
+        # all there is (animation, swinging arms, a held weapon), so every eye's and every camera's
+        # margin must be at least the camp's own `sightMargin` (the layout's number, never typed here).
+        want = camp.get("sightMargin")
+        short = [f"{what} {t[0]:+.2f} at ({t[1]:g}, {t[2]:g}) to {t[3]}" for what, t in tight.items()
+                 if t is not None and is_number(want) and t[0] < want - EPS]
+        expect(is_number(want) and want >= 0 and not short and least is not None,
+               f"{tag} every eye's and every camera's sight margin is at least its sightMargin ({want}): "
+               + ("; ".join(short) if short else
+                  ", ".join(f"{what}s {t[0]:+.2f}" for what, t in tight.items() if t is not None) or "none measured"))
 
 
 def member_kinds(defn):

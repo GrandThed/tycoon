@@ -5202,14 +5202,14 @@ Rulings: `docs/prompts/l1c-fix-round.md` (findings in `docs/prompts/l1c-review/c
 | What | Shipped (`cameraClear` 3.5) |
 |---|---|
 | Points | 16,448 eyes (1,599 inside the clip), 8,040 camera points on the 2-stud grid and 30,089 fine ones near the gates, 12 posts |
-| **Tightest eye** | **+0.23 studs**: (305.51, −29.51), just outside the doorway against WallW's face, to Brutal's innermost east fodder (the west side mirrors it: (321.49, −29.51), +0.23) |
-| **Tightest camera** | **+1.20 studs**: (305.66, −30.15), the corner of the clip and WallW's stand-off, to the same fodder |
+| **Tightest eye** (superseded: the margin ruling below, +1.57) | **+0.23 studs**: (305.51, −29.51), just outside the doorway against WallW's face, to Brutal's innermost east fodder (the west side mirrors it: (321.49, −29.51), +0.23) |
+| **Tightest camera** (superseded: +2.73) | **+1.20 studs**: (305.66, −30.15), the corner of the clip and WallW's stand-off, to the same fodder |
 | The doorway glimpse (exempt eyes) | −2.53 at (305.51, −27.75) to a Brutal east brute |
 | Floors | under every top: the highest camera is RoadBC6's, 3.51 under; over one: Secret_lookout (camera 98.5) over the fence, its line meets a head 1,012 studs past the floor's far corner |
 
 - The old "+1.31" was a 2-stud grid value against the radius. On the same data the 2-stud grid with the
   radius reads +1.93 for eyes (the `m1` control below shows that gate passing a layout this one fails).
-- The eye margin, +0.23, is the one to watch: a post moved toward the gate's sight line by about a
+- (Superseded by the margin ruling below.) The eye margin, +0.23, is the one to watch: a post moved toward the gate's sight line by about a
   quarter of a stud, or a wider body at the innermost post, turns it red. It is measured against a root
   standing flush on the wall's face; a real root stands about a body's width off it.
 
@@ -5235,6 +5235,9 @@ Rulings: `docs/prompts/l1c-fix-round.md` (findings in `docs/prompts/l1c-review/c
 | m2: the "residents under the boss room's maxAlive" rule taken out of **both** `StageFlow.luau` and `sim_range.py` (copies) | `check_stage_mirror.py` "the boss room's residents at its maxAlive: accepted on both sides" | red |
 
 ### L1c fix: the clear, re-measured
+
+> **Superseded by the margin ruling** (below): the posts moved, Hard's extra unit is a fodder and the
+> Colossus pays 42,900 cash and 76 Timber; every row here was measured again there.
 
 | Normal 2 / 2 | Clear | The ambush | Cash / min | Timber / min |
 |---|---|---|---|---|
@@ -5266,3 +5269,64 @@ Rulings: `docs/prompts/l1c-fix-round.md` (findings in `docs/prompts/l1c-review/c
   the thinnest gate in the forest.
 - The gatehouse spots still pay 0–1,648 cash a minute on Normal and 0 on Hard. The three Normal known
   limits stand (LookoutLedge up to ×1.36 the mission's cash a minute).
+
+### L1c fix: the margin ruling (2026-10-16)
+
+The lead's ruling: +0.23 is too thin for "can't see them from outside". Animation, swinging arms
+and held weapons reach past the torso box. Every eye's and every camera's margin must be at least
+the camp's own **`sightMargin` 1.5** (layout key on camp C; check_levels reads it and types no
+number). Mutants (in `check_levels_mutants.py`, all as expected):
+- the innermost fodder back on its old post: red;
+- `sightMargin` 2: red;
+- `sightMargin` missing: red;
+- Hard's extra unit a brute again: red;
+- control, the inner fodder 0.05 off the wall: green.
+
+**A fourth brute a flank has no hidden post.** The constraint:
+- Through the north gate, the eye at the doorway's edge (305.51 or 321.49, −29.51) looks along a line
+  that rises 0.219 studs south per stud east.
+- A guard post stands its group's widest radius + 1 inside the floor: z ≥ −22.8 and x ≤ 367.8 (east).
+- So the hidden band, at margin 1.5, is a sliver along the north wall:
+  - a brute fits from x 355.0, with z up to −22.77 + 0.218 (x − 355);
+  - a fodder fits from x 350.0 at z −22.8.
+
+It holds:
+- two fodder, three brutes 4.9 apart, and one more body only behind and between the last two brutes;
+- that sixth post fits a fodder (4.0 from each brute) but never a brute (4.9).
+
+So Hard and Brutal's extra unit per flank is now a **fodder** (it was a brute). Moving only the posts
+cannot meet 1.5 with L1c's mix: the best sixth post for a brute reads eye +0.64, and fails post spacing.
+
+**The pay.** A fodder for a brute on Hard took 12 Timber and 7,600 cash out of a Hard clear. That
+turned R8 red: Hard Road2's sniper made 26.6 Timber a minute against the mission's 26.4 on seed 11,
+and LookoutLedge's cash was +0.3%. Those two brutes' pay moves into the boss, so the run pays as before:
+
+| Key | Was | Now |
+|---|---|---|
+| ambushW and ambushE posts (layout) | x 345.5–367.7 (east), all at z −22.5 | east 350.4, 353.5 (fodder), 357.5, 362.4, 367.6 (brutes) at z −22.8, and (365, −19.7) for Hard's extra; the west mirrors them round x 313.5 |
+| Hard and Brutal's extra unit per flank | brute | **fodder** |
+| `crowd.rewards.colossus` | 41,000 cash, 70 Timber | **42,900 cash, 76 Timber** |
+| camp C `sightMargin` (layout) | — | **1.5** |
+
+**Measured:**
+
+| Gate | Value |
+|---|---|
+| check_levels: tightest eye | **+1.57** (321.49, −29.51) to the innermost west fodder (the east mirrors it) |
+| check_levels: tightest camera | **+2.73** (305.66, −30.15) |
+| Normal ambush | 18.4 / 18.4 / 18.7 s |
+| Hard ambush | 21.3 / 21.8 / 18.0 s |
+| Brutal ambush | 21.3 / 21.8 / 18.9 s |
+| Normal 2 / 2 clear | 5.21 / 4.67 / 5.04 min, mean 4.97 |
+| Normal 2 / 2 cash a minute | 25,208 / 28,121 / 26,094 |
+| Normal 2 / 2 Timber a minute (band 37.8–46.2) | 40.5 / 45.2 / 41.9 |
+| Normal pay a clear | 132,033 cash, 211 Timber |
+| Hard 4 / 4 | 5.11–5.48 min; 282,620–284,800 cash (×2.16), 454 Timber |
+| Brutal 6 / 6 | 5.09–5.50 min; ×4.31 cash |
+| R8, Hard at 2 / 2 | Road2 26.6 Timber a minute against 27.2 (+2.3%); LookoutLedge 18,313 cash against 18,592 (+1.5%) |
+| The human | clears every difficulty, no down; one preset below still goes down |
+| `sim_combat` 21 | green: bonuses 5.8%, Hard ×2.16, Brutal ×4.31 |
+
+The R8 Hard rows are now the thinnest gates in the forest (+1.5% cash). The run-order swing that
+L1c's flags describe is about ±10%, so a future change to C's pay or the 2 / 2 Colossus must be judged
+on the gate's own run.

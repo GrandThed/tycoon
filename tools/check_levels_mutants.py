@@ -46,6 +46,7 @@ GATEHOUSE = "camp C (walled): every wall block within"
 PLATES = "camp C (walled): no resident carries a plate"
 FLOORS = "camp C (walled): from every outside surface"
 SIGHT = "camp C (walled): from no eye point"
+MARGIN = "camp C (walled): every eye's and every camera's sight margin"
 CLEAR = "camp C (walled): levels.cameraClear"
 READS = "camp C (walled): the sight gate reads"
 LOCKED = re.compile(r"camp C: \d+ residents at the highest difficulty")
@@ -143,11 +144,21 @@ CASES = (
     ("C1 control: cameraClear 0.2 with cameras exempt in the doorway (2a58134's gate)",
      lambda d: levels(d).__setitem__("cameraClear", 0.2), {"EXEMPT_CAMERAS": True}, SIGHT, False),
     # m1: the exact extremes and the drawn body.
-    ("m1: ambushE's inner fodder 0.8 off the north wall", lambda d: shift_east(d, 0.8), {}, SIGHT, True),
+    ("m1: ambushE's inner fodder 2.4 off the north wall", lambda d: shift_east(d, 2.4), {}, SIGHT, True),
     ("m1 control: the same on the 2-stud grid, radius only (the build's gate)",
-     lambda d: (shift_east(d, 0.8), d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0})),
+     lambda d: (shift_east(d, 2.4), d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0})),
      {"SIGHT_ZONES": False}, SIGHT, False),
     ("m1: CrowdRenderer's torso keys missing", lambda d: d["ctx"].__setitem__("renderer", {}), {}, READS, True),
+    # The margin ruling: every margin at least the camp's sightMargin.
+    ("margin: ambushE's innermost fodder back on 2a58134's post (345.5, -22.5)",
+     lambda d: spot(d, "ambushE")["points"][0].update({"x": 345.5, "z": -22.5}), {}, MARGIN, True),
+    ("margin: Hard's extra unit a brute again (L1c's mix: a fourth brute fits no hidden post)",
+     lambda d: [unit.__setitem__("kind", "brute") for spot_id in ("ambushW", "ambushE")
+                for unit in residents(d, spot_id)["units"] if unit.get("minDifficulty") == "hard"], {}, MARGIN, True),
+    ("margin: sightMargin 2", lambda d: camp(d).__setitem__("sightMargin", 2), {}, MARGIN, True),
+    ("margin: sightMargin missing", lambda d: camp(d).pop("sightMargin"), {}, MARGIN, True),
+    ("margin control: sightMargin 1.5 with ambushE's inner fodder 0.05 off the wall",
+     lambda d: shift_east(d, 0.05), {}, MARGIN, False),
     # m3: the boss room's ambush per difficulty.
     ("m3: 11 on Normal (one more fodder in ambushW)",
      lambda d: residents(d, "ambushW")["units"].append({"kind": "fodder", "count": 1}), {}, LOCKED, True),

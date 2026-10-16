@@ -109,3 +109,41 @@ Worktree `C:\Users\benja\Desktop\tycoon-p5`, branch `l1c-chief-clearing`. Nothin
   - moving an inner ambush post about a quarter stud toward the gate's sight line turns it red;
   - so does putting a wider body there.
 - docs-keeper (code m3): the playtest reaches the clearing with N, not B.
+
+## Margin ruling (2026-10-16, after 2841862)
+
+**Deviation from "changing nothing else": the lead must confirm it.**
+
+- **Posts alone cannot reach 1.5.** Measured with check_levels' own viewpoints:
+  - At margin 1.5 the hidden band behind the north wall is a sliver. A brute fits only from x 355 (east; the west mirrors it) with z ≥ −22.8, because every post of a group stands the group's widest radius + 1 inside the floor.
+  - So a flank holds two fodder, three brutes and one more fodder. It never holds a fourth brute: the best fourth-brute post reads eye +0.64 and also fails post spacing.
+- **What changed:**
+  - Hard and Brutal's extra unit per flank is now a **fodder** instead of a brute.
+  - That alone turned R8 red: Hard Road2 sniper 26.6 against the mission's 26.4 Timber a minute.
+  - So the two brutes' pay moved into the boss: Colossus 41,000 / 70 → **42,900 cash / 76 Timber**. A Hard clear then pays about what it did.
+- **Alternatives if the lead prefers:**
+  - Hard and Brutal keep 10 bodies (drop the extra unit). This has the same R8 problem, so it needs the same pay move.
+  - A layout change: a narrower or moved gate.
+  - A lower margin for the fourth brute.
+- **Files:**
+  - `ForestRoad.json`: camp C `"sightMargin": 1.5`. ambushE points are 350.4, 353.5, 357.5, 362.4, 367.6 at z −22.8, plus (365, −19.7). ambushW mirrors them round x 313.5.
+  - `1_ForestRoad.json`: Hard units → fodder; Colossus 42,900 / 76.
+  - `check_levels.py`: new rule "every eye's and every camera's sight margin is at least its sightMargin".
+  - `check_levels_mutants.py`: 5 margin cases. The m1 shift is now 2.4, so it stays red under the new margins.
+  - `BALANCE.md`: "L1c fix: the margin ruling".
+- **Margins:**
+  - eye **+1.57** (was +0.23);
+  - camera **+2.73** (was +1.20);
+  - the exempt doorway glimpse is unchanged at −2.53.
+- **Ambush:** Normal 18.4 / 18.4 / 18.7 s; Hard 21.3 / 21.8 / 18.0 s; Brutal 21.3 / 21.8 / 18.9 s.
+- **Normal clear:** 4.67–5.21 min; 25.2–28.1k cash and 40.5–45.2 Timber a minute.
+- **R8 Hard at 2/2:**
+  - Road2 Timber +2.3%;
+  - LookoutLedge cash +1.5%: now the thinnest gate.
+- **Gates:**
+  - check_levels: PASS.
+  - check_levels_mutants: PASS, 35 of 35, m2 included.
+  - sim_range forest levels-only: PASS.
+  - check_stage_mirror: PASS.
+  - harness (`run_harness.py <worktree> <main>\tools\bin\luau.exe`): PASS, 2,455 checks.
+  - sim_combat: PASS 23 of 23 (Hard ×2.16, Brutal ×4.31).
