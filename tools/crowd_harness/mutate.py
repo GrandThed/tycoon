@@ -678,8 +678,8 @@ MUTATIONS = {
     "review: largeRadius may be tuned below 0": (TUNING, '\t"^crowd%.largeRadius$",\n', ""),
     "review: a removed body is booked as a hit of 0": (
         TALLY,
-        '\tif verdict == "gone" then\n',
-        '\tif false then\n',
+        '\tif verdict == "gone" or verdict == "held" then\n',
+        '\tif verdict == "held" then\n',
     ),
     "review: Damage does not say a body is gone": (
         CROWD,
@@ -889,13 +889,13 @@ L1_MUTATIONS = {
     ),
     "l1: the trigger ignores height": (
         FLOW,
-        "\t\t\tabove >= -rules.triggerBelow\n\t\t\tand above <= rules.triggerHeight\n\t\t\tand inRect(zone.trigger, root.X, root.Z)",
+        "\t\t\tabove >= -rules.triggerBelow\n\t\t\tand above <= zone.ceiling\n\t\t\tand inRect(zone.trigger, root.X, root.Z)",
         "\t\t\tinRect(zone.trigger, root.X, root.Z)",
     ),
     "l1: the trigger reaches any depth under the floor": (
         FLOW,
-        "\t\t\tabove >= -rules.triggerBelow\n\t\t\tand above <= rules.triggerHeight\n",
-        "\t\t\tabove <= rules.triggerHeight\n",
+        "\t\t\tabove >= -rules.triggerBelow\n\t\t\tand above <= zone.ceiling\n",
+        "\t\t\tabove <= zone.ceiling\n",
     ),
     "l1: the trigger stops at the floor's edge": (
         FLOW,
@@ -938,7 +938,7 @@ L1_MUTATIONS = {
         "return not inRect(zone.inner, position.X, position.Z)",
     ),
     "l1: the gates close at once": (FLOW, "if input.now >= state.gateAt then", "if true then"),
-    "l1: the countdown is not gateSeconds": (FLOW, "state.gateAt = now + rules.gateSeconds", "state.gateAt = now + 1"),
+    "l1: the countdown is not gateSeconds": (FLOW, "\t\telse rules.gateSeconds\n", "\t\telse 1\n"),
     "l1: the gates close on a yard nobody can fight in": (
         FLOW,
         "\t\t\tif fallen ~= nil then\n\t\t\t\t-- But somebody has to be able to fight.",
@@ -3962,8 +3962,8 @@ L1C_MUTATIONS = {
     ),
     "l1c: a root on the box's edge is outside it (open)": (
         WALL_CLIP,
-        "\treturn math.abs(x - rect.x) <= rect.hx\n\t\tand math.abs(z - rect.z) <= rect.hz\n",
-        "\treturn math.abs(x - rect.x) < rect.hx\n\t\tand math.abs(z - rect.z) < rect.hz\n",
+        "return math.abs(x - rect.x) <= rect.hx and math.abs(z - rect.z) <= rect.hz and",
+        "return math.abs(x - rect.x) < rect.hx and math.abs(z - rect.z) < rect.hz and",
     ),
     "l1c: Reach ignores the pad": (
         WALL_CLIP,
@@ -4064,18 +4064,18 @@ L1C_FIX_MUTATIONS = {
     ),
     "l1c fix: the root's height is not asked (m1)": (
         WALL_CLIP,
-        "\t\tand y - rect.y <= height\n",
-        "\t\tand true\n",
+        "and y - rect.y <= top\n",
+        "and true\n",
     ),
     "l1c fix: exactly the height is outside (m1)": (
         WALL_CLIP,
-        "and y - rect.y <= height",
-        "and y - rect.y < height",
+        "and y - rect.y <= top",
+        "and y - rect.y < top",
     ),
     "l1c fix: the height measured from the world's zero (m1)": (
         WALL_CLIP,
-        "and y - rect.y <= height",
-        "and y <= height",
+        "and y - rect.y <= top",
+        "and y <= top",
     ),
     "l1c fix: a box's floor height is not checked (m1)": (
         WALL_CLIP,
@@ -4134,6 +4134,116 @@ L1C_FIX_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L1C_FIX_MUTATIONS)
+
+# The L1c second fix round (docs/prompts/l1c-fix2.md), from its code agent: a walled camp's band
+# reaches its fence top (F1, F3: StageFlow.Ceiling, the trigger, WallClip's rectangle ceiling) and
+# a held resident is passed over by a strike's cap, seeds and chain jumps (F4: the pure StrikePick
+# WeaponService walks; WeaponService itself does not load here).
+STRIKE_PICK = "src/combat/server/Services/StrikePick.luau"
+FILES.append(STRIKE_PICK)
+L1C_FIX2_MUTATIONS = {
+    "l1c fix2: Plan gives every camp triggerHeight (F1)": (
+        FLOW,
+        "ceiling = StageFlow.Ceiling(camp, rules.triggerHeight),",
+        "ceiling = rules.triggerHeight,",
+    ),
+    "l1c fix2: the trigger asks triggerHeight again (F1, F3)": (
+        FLOW,
+        "and above <= zone.ceiling",
+        "and above <= rules.triggerHeight",
+    ),
+    "l1c fix2: an open camp's tall fence raises its band (F1)": (
+        FLOW,
+        "if camp.locks ~= true or fence == nil then",
+        "if fence == nil then",
+    ),
+    "l1c fix2: a fence under triggerHeight lowers the band (F1)": (
+        FLOW,
+        "if isFinite(top) and top > triggerHeight then",
+        "if isFinite(top) then",
+    ),
+    "l1c fix2: a fence height is not checked for a finite number (F1)": (
+        FLOW,
+        "if isFinite(top) and top > triggerHeight then",
+        "if top == top and top > triggerHeight then",
+    ),
+    "l1c fix2: WallClip ignores the rectangle's ceiling (F1)": (
+        WALL_CLIP,
+        "local top = if ceiling ~= nil and finite(ceiling) then ceiling else height",
+        "local top = height",
+    ),
+    "l1c fix2: WallClip takes a NaN or infinite ceiling as it is (F1)": (
+        WALL_CLIP,
+        "local top = if ceiling ~= nil and finite(ceiling) then ceiling else height",
+        "local top = if ceiling ~= nil then ceiling else height",
+    ),
+    "l1c fix2: a held body spends the cap and seeds (F4)": (
+        STRIKE_PICK,
+        "\t\tif land(candidate) then\n\t\t\ttable.insert(seeds, candidate)",
+        "\t\tif land(candidate) or true then\n\t\t\ttable.insert(seeds, candidate)",
+    ),
+    "l1c fix2: a chain jumps to a held body (F4)": (
+        STRIKE_PICK,
+        "if not taken(candidate) and land(candidate) then",
+        "if not taken(candidate) and (land(candidate) or true) then",
+    ),
+    "l1c fix2: a chain strikes a taken body (F4)": (
+        STRIKE_PICK,
+        "if not taken(candidate) and land(candidate) then",
+        "if land(candidate) and not taken(candidate) then",
+    ),
+    "l1c fix2: the cap is never spent (F4)": (
+        STRIKE_PICK,
+        "\t\t\tif #seeds >= cap then\n",
+        "\t\t\tif false then\n",
+    ),
+    "l1c fix2: a cap of 0 strikes everyone (F4)": (
+        STRIKE_PICK,
+        "\tif not (cap > 0) then\n\t\treturn seeds, nil\n\tend\n",
+        "",
+    ),
+    "l1c fix2: the cap is said spent at the seed count, not the candidate (F4)": (
+        STRIKE_PICK,
+        "return seeds, index",
+        "return seeds, #seeds",
+    ),
+    "l1c fix2: the nudge puts the root on the fence's face (F2)": (
+        FLOW,
+        "then Vector3.new(position.X, position.Y, lane.edge)",
+        "then Vector3.new(position.X, position.Y, lane.outer)",
+    ),
+    "l1c fix2: an east or west gate's nudge moves Z (F2)": (
+        FLOW,
+        "else Vector3.new(lane.edge, position.Y, position.Z)",
+        "else Vector3.new(position.X, position.Y, lane.edge)",
+    ),
+    "l1c fix2: the nudge ignores the height band (F2)": (
+        FLOW,
+        "\tif not (above <= zone.ceiling and above >= -rules.triggerBelow) then\n\t\treturn nil\n\tend\n",
+        "",
+    ),
+    "l1c fix2: the lane runs the whole side (F2)": (
+        FLOW,
+        "\t\t\talong >= lane.low\n\t\t\tand along <= lane.high\n",
+        "\t\t\ttrue\n",
+    ),
+    "l1c fix2: the lane starts at the floor's edge, not the fence's face (F2)": (
+        FLOW,
+        "outer = middle + side.sign * (floorHalf + math.max(fence, 0)),",
+        "outer = middle + side.sign * floorHalf,",
+    ),
+    "l1c fix2: a lane is not held to inner's span (F2)": (
+        FLOW,
+        "local low = math.max(centre + gate.at - gate.width / 2, centre - half)",
+        "local low = centre + gate.at - gate.width / 2",
+    ),
+    "l1c fix2: Plan gives a locking camp no lanes (F2)": (
+        FLOW,
+        "lanes = StageFlow.Lanes(camp, inner, rules.fenceThickness),",
+        "lanes = {},",
+    ),
+}
+MUTATIONS.update(L1C_FIX2_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

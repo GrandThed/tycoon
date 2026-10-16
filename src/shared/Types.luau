@@ -2710,8 +2710,12 @@ export type RunFloor = {
 	-- L1c-5a: the zone's `locks` (the boss room). The client keeps its camera boom out of a
 	-- locking floor's fenced rectangle (the floor grown by levels.fenceThickness), and a further
 	-- levels.cameraClear round it, until the local root is inside the fenced rectangle within
-	-- levels.triggerHeight of the floor (WallClip.Reach); nil = an open camp, as false.
+	-- `ceiling` of the floor (WallClip.Reach); nil = an open camp, as false.
 	locks: boolean?,
+	-- The L1c second fix round's F1: how far above `y` a root still counts as inside, the zone's
+	-- trigger band (StageFlow.Ceiling: a walled camp's fence top, else levels.triggerHeight);
+	-- nil = levels.triggerHeight.
+	ceiling: number?,
 }
 export type RunResult = {
 	levelId: string,

@@ -72,7 +72,8 @@
 -- camera swung near the gate looked in along the inner wall. The boom, from the pivot through
 -- the shoulder to the camera, never comes within levels.cameraClear of the fenced rectangle
 -- (floor + levels.fenceThickness) of a locking camp unless the local root stands inside that
--- rectangle within levels.triggerHeight of its floor; it stops COMBAT_CAMERA_COLLISION_PAD short
+-- rectangle within its trigger band (RunFloor.ceiling: levels.triggerHeight, or a walled camp's
+-- fence top, the L1c second fix round's F1); it stops COMBAT_CAMERA_COLLISION_PAD short
 -- of the grown edge (WallClip.Reach, pure and tested in the harness). The L1c fix round grew the
 -- cut (C1: a boom swung back toward the gate ended in its mouth with the root 13 studs back) and
 -- added the height (m1: the top of a double jump in the gate's band freed the camera). The floors
@@ -933,7 +934,8 @@ end
 
 -- L1c-5a: the run's floors (RunState.floors, `{}` in the lobby). Only a locking camp's floor
 -- keeps the boom out; it is grown by levels.fenceThickness, as the server's trigger is (the
--- further levels.cameraClear is WallClip's, for the cut alone).
+-- further levels.cameraClear is WallClip's, for the cut alone), and holds the root up to the
+-- floor's own ceiling, the server's trigger band (levels.triggerHeight when it names none).
 function CameraController.SetFloors(floors: { Types.RunFloor }): ()
 	table.clear(wallClip.rects)
 	for _, floor in floors do
@@ -944,6 +946,7 @@ function CameraController.SetFloors(floors: { Types.RunFloor }): ()
 				z = floor.z,
 				hx = floor.hx + wallClip.fence,
 				hz = floor.hz + wallClip.fence,
+				ceiling = floor.ceiling,
 			})
 		end
 	end

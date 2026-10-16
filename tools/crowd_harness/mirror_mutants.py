@@ -205,6 +205,23 @@ MUTANTS = [
      "\tif now >= state.gateAt then\n\t\tclose(state, actions, now)\n", "\tif false then\n\t\tclose(state, actions, now)\n"),
     ("L1c M3: Validate takes any gateSeconds", "StageFlow",
      "\t\t\tproblem(`{where}: gateSeconds is {tostring(countdown)}, not a time`)\n", ""),
+    # The L1c second fix round's F1 and F3: a walled camp's band reaches its fence top.
+    ("L1c F1: Plan gives every camp triggerHeight", "StageFlow",
+     "ceiling = StageFlow.Ceiling(camp, rules.triggerHeight),", "ceiling = rules.triggerHeight,"),
+    ("L1c F1: the trigger asks triggerHeight again", "StageFlow", "and above <= zone.ceiling",
+     "and above <= rules.triggerHeight"),
+    ("L1c F1: Ceiling ignores locks", "StageFlow", "if camp.locks ~= true or fence == nil then",
+     "if fence == nil then"),
+    ("L1c F1: Ceiling takes a fence under triggerHeight", "StageFlow",
+     "if isFinite(top) and top > triggerHeight then", "if isFinite(top) then"),
+    # F2: the close's nudge out of a gate's lane.
+    ("L1c F2: the nudge puts the root on the fence's face", "StageFlow",
+     "then Vector3.new(position.X, position.Y, lane.edge)", "then Vector3.new(position.X, position.Y, lane.outer)"),
+    ("L1c F2: the lane starts at the floor's edge", "StageFlow",
+     "outer = middle + side.sign * (floorHalf + math.max(fence, 0)),", "outer = middle + side.sign * floorHalf,"),
+    ("L1c F2: the nudge ignores the ceiling", "StageFlow",
+     "if not (above <= zone.ceiling and above >= -rules.triggerBelow) then",
+     "if not (above >= -rules.triggerBelow) then"),
 ]
 
 

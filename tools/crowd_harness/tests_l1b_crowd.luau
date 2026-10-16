@@ -810,6 +810,18 @@ function L1BC.wakeTests(): ()
 	local tally = heldTally.New(1)
 	heldTally.Add(tally, west[1], heldDealt, false, heldKilled, verdict)
 	check(#tally.hits == 0 and tally.enemies == 0 and tally.dealt == 0 and tally.kills == 0, `and a strike that meets it books no hit entry ({#tally.hits} entries, {tally.enemies} enemies)`)
+	-- The L1c second fix round's F4, on the real Damage: WeaponService's `land` (the verdict is
+	-- not "held") passes the held body over, so it seeds nothing and no chain jumps to it.
+	local pick = load("StrikePick")
+	local function landed(candidate: any): boolean
+		local _, _, said = Crowd.Damage(candidate.id, 10, 7, nil, nil)
+		return said ~= "held"
+	end
+	local heldSeeds = pick.Seeds({ { id = west[1] } }, 2, landed)
+	local heldJump = pick.Next({ { id = west[1] } }, function(): boolean
+		return false
+	end, landed)
+	check(#heldSeeds == 0 and heldJump == nil and Crowd.Get(west[1]).hp == 40, "a strike seeds nothing from it and a chain does not jump to it (the L1c second fix round's F4)")
 	step2()
 	check(#L1BC.events() == 0, "nor does a hit wake it")
 	root.Position = vec(200, 15, 0)

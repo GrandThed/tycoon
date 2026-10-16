@@ -48,6 +48,7 @@ local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
 local PositionRing = require(script.Parent:WaitForChild("PositionRing"))
+local StrikePick = require(script.Parent:WaitForChild("StrikePick"))
 local StrikeTally = require(script.Parent:WaitForChild("StrikeTally"))
 local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 
@@ -740,7 +741,7 @@ type Tally = StrikeTally.Tally
 -- crit) is already in `amount`, which stays in tier-1 units: CrowdService judges heavy hits,
 -- plates and armour on it and multiplies only the HP loss by the tally's Armory scale (rulings
 -- 8 and 9). StrikeTally builds the StrikeHit: blocked, on the plate, the one that broke it, or
--- plain.
+-- plain. Returns whether it killed, and the verdict ("held" = the hit did nothing: StrikePick).
 local function strike(
 	tally: Tally,
 	player: Player,
@@ -749,11 +750,11 @@ local function strike(
 	crit: boolean,
 	push: Vector3?,
 	launch: number
-): boolean
+): (boolean, StrikeTally.Verdict?)
 	local dealt: number, killed: boolean, verdict: StrikeTally.Verdict? =
 		CrowdService.Damage(id, amount, player.UserId, push, launch, tally.scale)
 	StrikeTally.Add(tally, id, dealt, crit, killed, verdict)
-	return killed
+	return killed, verdict
 end
 
 local function finish(
@@ -948,8 +949,11 @@ end
 -- to the nearest living enemy within `radius` of the last one (body centre to body centre) that
 -- `hit` does not hold yet, for damage x falloff^jump, pushed along the jump. Jumps never crit and
 -- sit outside any cap or pierce. Every seed and jump is added to `hit`, so the shared set also
--- keeps a later chain off an enemy an earlier one already struck. Returns the links: flat
--- {from, to} id pairs, 0 = the strike origin.
+-- keeps a later chain off an enemy an earlier one already struck. A held resident the jump struck
+-- is passed over for the next nearest (StrikePick.Next): no link names it and no jump goes on
+-- from it. It stays out of `hit`, the shared set a lasting ability keeps across its ticks, so the
+-- ambush takes the next tick once the close has woken it. Returns the links: flat {from, to} id
+-- pairs, 0 = the strike origin.
 local function chainFrom(
 	config: Types.ProvingGroundsConfig,
 	player: Player,
@@ -967,6 +971,10 @@ local function chainFrom(
 	end
 	local jumps = math.max(0, math.floor(chain.count))
 	local radius = math.max(chain.radius, 0)
+	local passed: { [number]: boolean } = {}
+	local function taken(candidate: Candidate): boolean
+		return hit[candidate.id] == true or passed[candidate.id] == true
+	end
 	for _, seed in seeds do
 		table.insert(links, 0)
 		table.insert(links, seed.id)
@@ -982,19 +990,28 @@ local function chainFrom(
 					return (if distance <= radius then distance else nil), false
 				end
 			)
-			local target: Candidate? = nil
-			for _, candidate in nearby do
-				if not hit[candidate.id] then
-					target = candidate
-					break
+			local from = fromBody
+			local target = StrikePick.Next(nearby, taken, function(candidate: Candidate): boolean
+				local push = outward(from, candidate.body, candidate.body - from) * knockback
+				local _, verdict = strike(
+					tally,
+					player,
+					candidate.id,
+					damage * chain.falloff ^ jump,
+					false,
+					push,
+					launch
+				)
+				if verdict == "held" then
+					passed[candidate.id] = true
+					return false
 				end
-			end
+				return true
+			end)
 			if target == nil then
 				break
 			end
 			hit[target.id] = true
-			local push = outward(fromBody, target.body, target.body - fromBody) * knockback
-			strike(tally, player, target.id, damage * chain.falloff ^ jump, false, push, launch)
 			table.insert(links, fromId)
 			table.insert(links, target.id)
 			fromId = target.id
@@ -1326,16 +1343,28 @@ local function resolveRanged(
 			then math.min(#candidates, math.max(1, math.floor(buffPierce)))
 			else capOf(variant, math.min(#candidates, pierceOf(variant)))
 		local endPoint = origin + unit * reach
-		local seeds: { Candidate } = {}
-		for index = 1, limit do
-			local candidate = candidates[index]
-			local amount = if candidate.crit then variant.damage * critMult else variant.damage
-			strike(tally, player, candidate.id, amount, candidate.crit, pushBase, variant.launch)
-			table.insert(seeds, candidate)
-			if index == limit and limit < #candidates then
-				-- Pierce spent: the beam visibly stops in the last enemy it went through.
-				endPoint = origin + unit * candidate.order
+		-- The L1c second fix round's F4: pierce counts, and the Chain Gun seeds from, only bodies
+		-- the hit landed on; a held resident is passed over (StrikePick).
+		local seeds, spent = StrikePick.Seeds(
+			candidates,
+			math.floor(limit),
+			function(candidate: Candidate): boolean
+				local amount = if candidate.crit then variant.damage * critMult else variant.damage
+				local _, verdict = strike(
+					tally,
+					player,
+					candidate.id,
+					amount,
+					candidate.crit,
+					pushBase,
+					variant.launch
+				)
+				return verdict ~= "held"
 			end
+		)
+		if spent ~= nil and spent < #candidates then
+			-- Pierce spent: the beam visibly stops in the last enemy it went through.
+			endPoint = origin + unit * candidates[spent].order
 		end
 		-- Chain Gun: every enemy the ray hit starts a chain from the base damage.
 		local links: { number }? = nil
@@ -2631,30 +2660,33 @@ function WeaponService.Strike(
 			table.insert(eligible, candidate)
 		end
 	end
-	local limit = if spec.cap > 0 then math.min(spec.cap, #eligible) else #eligible
 	local critMult = config.shooting.critMult
 	local pull = spec.pull or 0
 	-- Ruling 8: an ability hit scales by its family's slot at the Ascension's abilityMult.
 	local tally = StrikeTally.New(damageScale(player, slotOfFamily(config, family), true))
-	local seeds: { Candidate } = {}
-	for index = 1, limit do
-		local candidate = eligible[index]
-		local crit = shape == "ray" and spec.crit == true and candidate.crit
-		local push: Vector3
-		if pull > 0 then
-			push = -outward(origin, candidate.body, unit) * pull
-		elseif shape == "capsule" or shape == "ray" then
-			push = (flatten(unit) or outward(origin, candidate.body, unit)) * spec.knockback
-		else
-			push = outward(origin, candidate.body, unit) * spec.knockback
+	-- The L1c second fix round's F4: the cap counts, and the chain seeds from, only bodies the hit
+	-- landed on; a held resident is passed over (StrikePick).
+	local seeds, spent = StrikePick.Seeds(
+		eligible,
+		if spec.cap > 0 then math.floor(spec.cap) else math.huge,
+		function(candidate: Candidate): boolean
+			local crit = shape == "ray" and spec.crit == true and candidate.crit
+			local push: Vector3
+			if pull > 0 then
+				push = -outward(origin, candidate.body, unit) * pull
+			elseif shape == "capsule" or shape == "ray" then
+				push = (flatten(unit) or outward(origin, candidate.body, unit)) * spec.knockback
+			else
+				push = outward(origin, candidate.body, unit) * spec.knockback
+			end
+			local amount = if crit then spec.damage * critMult else spec.damage
+			local _, verdict = strike(tally, player, candidate.id, amount, crit, push, spec.launch)
+			return verdict ~= "held"
 		end
-		local amount = if crit then spec.damage * critMult else spec.damage
-		strike(tally, player, candidate.id, amount, crit, push, spec.launch)
-		table.insert(seeds, candidate)
-		if shape == "ray" and index == limit and limit < #eligible then
-			-- Cap spent: the ray visibly stops in the last enemy it went through.
-			fx.endPoint = origin + unit * candidate.order
-		end
+	)
+	if shape == "ray" and spent ~= nil and spent < #eligible then
+		-- Cap spent: the ray visibly stops in the last enemy it went through.
+		fx.endPoint = origin + unit * eligible[spent].order
 	end
 	local chain = spec.chain
 	if chain ~= nil then

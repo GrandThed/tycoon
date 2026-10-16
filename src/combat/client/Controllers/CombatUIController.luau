@@ -1655,6 +1655,7 @@ local function bootMission(): ()
 				hz = entry.hz,
 				cells = CrowdRenderer.ReadCells(entry.cells),
 				locks = if entry.locks == true then true else nil,
+				ceiling = if typeof(entry.ceiling) == "number" then entry.ceiling else nil,
 			})
 		end
 		local same = #fresh == #held
@@ -1668,6 +1669,7 @@ local function bootMission(): ()
 					or floor.hx ~= old.hx
 					or floor.hz ~= old.hz
 					or floor.locks ~= old.locks
+					or floor.ceiling ~= old.ceiling
 					or not sameCells(floor.cells, old.cells)
 				then
 					same = false

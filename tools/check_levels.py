@@ -192,10 +192,14 @@ EDGE_IN = 0.01
 # Switches tools/check_levels_mutants.py turns to show what each fix-round rule catches (like
 # UNDER_SIDE): SIGHT_ZONES False is the 2-stud grid alone (m1); EXEMPT_CAMERAS True exempts camera
 # points in the doorway as 2a58134's gate did (C1); FLOOR_WALLS False measures Floors to the fence
-# alone (m4).
+# alone (m4); WALLED_CEILING False (below).
 SIGHT_ZONES = True
 EXEMPT_CAMERAS = False
 FLOOR_WALLS = True
+# The L1c second fix round's F1 and F3: a walled camp triggers up to its fence's top
+# (sim_range.trigger_ceiling, StageFlow.Ceiling). False judges it at levels.triggerHeight, the
+# first fix round's rule, for the mutant driver.
+WALLED_CEILING = True
 THEME_PATH = REPO_ROOT / "src" / "client" / "UI" / "Theme.luau"
 # The Theme numbers the highest camera is built from (the client's; read from the file, never copied).
 THEME_KEYS = ("COMBAT_CAMERA_PIVOT_HEIGHT", "COMBAT_CAMERA_MIN_PITCH_DEGREES", "COMBAT_SHAKE_MAX_STUDS")
@@ -2259,6 +2263,29 @@ def check_walled(name, level, layout, ctx, expect, solids):
                f"{tag} its fence ({fence.get('height')}) stands at least the highest camera + {WALL_SPARE:g} over its "
                f"floor: " + (f"{top_cam:.2f} + {WALL_SPARE:g} = {top_cam + WALL_SPARE:.2f} ({parts})"
                              if top_cam is not None else parts))
+        # The trigger's ceiling (the L1c second fix round's F1 and F3): the camp triggers, and the
+        # client's clip lets the boom go, for a root anywhere in its fenced rectangle up to that
+        # ceiling over its floor. It must stand over the highest root a player gets there: from any
+        # surface within stray_reach of the rectangle (its floor, its cover, the road in a gate; the
+        # unclimbable walls are no surface), a jump, a double jump and the highest ability lift, plus
+        # the root. Then a root inside the rectangle has always triggered the camp, a fighter inside
+        # keeps his boom at the top of any jump, and the doorway exemption below ("one more step
+        # triggers") holds at every height a player reaches.
+        ceiling = sr.trigger_ceiling(camp, levels["triggerHeight"]) if WALLED_CEILING else levels["triggerHeight"]
+        lift = move["jumpHeight"] + move["doubleJumpHeight"] + ctx["abilityHeight"] + sr.ROOT_HEIGHT
+        launch = [s for s in solids if s.kind in ("block", "floor", "secret", "fence", "obstacle") and s.name not in tall
+                  and rect_gap((s.x0, s.x1, s.z0, s.z1), fenced) <= reach + EPS]
+        high = max(launch, key=lambda s: s.top, default=None)
+        root_top = (high.top - camp["y"] + lift) if high is not None else None
+        expect(root_top is not None and ceiling >= root_top - EPS,
+               f"{tag} it triggers up to {ceiling:g} over its floor (StageFlow.Ceiling: its fence's top), over the "
+               f"highest root a player gets in its fenced rectangle: "
+               + (f"{root_top:g} ({high.name} top {high.top - camp['y']:+g} over the floor, + jump "
+                  f"{move['jumpHeight']:g} + double jump {move['doubleJumpHeight']:g} + ability lift "
+                  f"{ctx['abilityHeight']:g} + root {sr.ROOT_HEIGHT:g}), {ceiling - root_top:+g} to spare"
+                  if root_top is not None else "no surface within reach"))
+        rows.append(f"{cid} trigger ceiling {ceiling:g} over the floor; the highest root in the fenced rectangle "
+                    + (f"{root_top:g} (from {high.name})" if root_top is not None else "none"))
         if top_cam is None:
             continue
         # The gatehouse: every wall block within stray_reach of the fenced rectangle is as tall.

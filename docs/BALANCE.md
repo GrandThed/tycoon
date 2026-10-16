@@ -5018,6 +5018,9 @@ seeds 11 / 23 / 37.
 
 ### L1c: what changed, and why
 
+> **Superseded in part by the second fix round** (below): C's entry is (313.5, −23), the route
+> 1,074 studs and the sneak 1,051; the Colossus rises 84 studs from the entry.
+
 | Key | Was | Now | Why |
 |---|---|---|---|
 | Layout: camp C | (313.5, 12, −44), gates west / east, fence 4 | (313.5, 12, 31.5), gates **north** (at 0) / **east** (at −41.5), **fence 64** | L1c-1 / L1c-2. The wall's top (y 76) is 3.5 over the highest camera (60.49 over the floor, below). C's west edge stays at x 256, which keeps the region's lock clearance (RoadBC3 58 from C, needs 56). |
@@ -5330,3 +5333,65 @@ and LookoutLedge's cash was +0.3%. Those two brutes' pay moves into the boss, so
 The R8 Hard rows are now the thinnest gates in the forest (+1.5% cash). The run-order swing that
 L1c's flags describe is about ±10%, so a future change to C's pay or the 2 / 2 Colossus must be judged
 on the gate's own run.
+
+## L1c second fix round (2026-10-16)
+
+Rulings: `docs/prompts/l1c-fix2.md` (findings F1–F4 in `docs/prompts/l1c-review/fix-diff.md`). Same
+gate: Normal 2 / 2, Hard 4 / 4, Brutal 6 / 6, seeds 11 / 23 / 37.
+
+### L1c fix 2: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| Camp C `entry` (layout), the route point before C's camp leg and the sneak path's end | (313.5, −16) | **(313.5, −23)** | F2: with `gateSeconds` 0 the close runs in the step the root first stands in the trigger rectangle (the fence band, z −27 to −26), which is always outside `inner` (z ≥ −24), so the close moves it to the entry. −23 is the nearest the entry may stand: `closeInset` 2 + `check_levels`' `CLOSE_SPARE` 1 inside the floor. |
+| `sim_range.trigger_ceiling` (new), plan zones' `ceiling`, `LevelFlow.triggered` | a root triggers up to `levels.triggerHeight` 30 | a locking camp whose fence is over `triggerHeight` triggers up to its fence's top (C: **64**); every other camp 30; checkpoints keep 30 | F1 and F3: mirrors `StageFlow.Ceiling` and `triggered` exactly. |
+| `check_levels.py` walled camp: the trigger's ceiling | — | the ceiling stands over the highest root a player gets in the fenced rectangle: the highest standable surface within `stray_reach` (the unclimbable walls are none) + jump 18 + double jump 12 + the highest ability lift 10 + root 3 | F1 and F3: a root inside the rectangle has always triggered, a fighter inside keeps his boom at the top of any jump, and the doorway exemption's "one more step triggers" holds at every height. Switch `WALLED_CEILING` for the mutants. |
+| `check_levels_mutants.py` | 33 cases + m2 | 36 cases + 3 stage-mirror cases (m2 and two for F1) | Below. |
+
+**F2 cannot be met by data.** The lead's bound was "moved under 1 stud". A root first seen in the fence
+band is at least 3 studs outside `inner` (fence 1 + `closeInset` 2), and the entry must stand inside
+`inner` (StageFlow.Plan refuses the level otherwise), so no entry point moves it under 3. With the entry
+at −23, a root first seen on the trigger line (z −27) moves:
+- 4.0 studs in the lane's centre (was 11.0);
+- up to 8.9 at the edge of the 16-wide opening (was 13.6), because the entry is one point;
+- and, since F1, a root up to 46.5 over the floor (a double jump plus Leap Smash in the opening) now
+  triggers and is put on the floor: a drop of up to 43.5 studs.
+
+Under 1 stud needs code (the lead's call): either the close moves a fighter in a gate's lane only to the
+nearest point of `inner`, keeping X and the height (3.0 studs on the line, 0 lateral), or a 0 s camp
+triggers on `inner` itself (no move at all, but the fence band and the 2-stud strip become a 3-stud
+mouth that does not trigger, so the sight gate's doorway premise would have to be restated for it).
+
+### L1c fix 2: measured
+
+| Gate | Value |
+|---|---|
+| check_levels: the trigger's ceiling | 64 over the floor against the highest root 46.5 (C's cover, 3.5): **+17.5** |
+| check_levels: tightest eye / camera | **+1.57 / +2.73** (unchanged; sightMargin 1.5); the exempt doorway glimpse −2.53 |
+| Route / sneak | 1,074 studs (was 1,079; band 900–1,100) / 1,051 (was 1,058) |
+| C: the Colossus from the entry / the nearest spawn | 84 studs (was 78) / 80 (was 74) |
+| Normal ambush (band 15–35 s) | 16.4 / 16.4 / 18.9 s (was 18.4 / 18.4 / 18.7) |
+| Hard / Brutal ambush (band 15–60 s) | 19.0 / 19.0 / 21.0 s; 19.0 / 19.0 / 19.0 s |
+| Normal 2 / 2 clear (band 4.5–5.75) | 5.16 / 4.64 / 5.09 min, mean 4.96 |
+| Normal 2 / 2 cash / Timber a minute (band 37.8–46.2) | 25,460 / 28,321 / 25,935; 40.9 / 45.5 / 41.4 |
+| Hard 4 / 4 | 5.03–5.36 min; 282,400–285,020 cash |
+| R8, Hard at 2 / 2 | Road2 26.6 Timber a minute against 27.5 (+3.4%; was +2.3%); LookoutLedge 18,313 cash against 18,685 (**+2.0%**, still the thinnest; was +1.5%) |
+| One preset below | Hard at 2 / 2: down in Pickets 1.43 min, Main Camp 7.46 min, or ×2.89; Brutal's Colossus alone at 4 / 4 214.1 s |
+| The human | clears every difficulty, no down |
+| `sim_combat` 23 | green: Normal pays 131,767 cash, bonuses 5.8%, Hard ×2.16 |
+
+The simulated player is now put 7 studs nearer the gate at the close. The ambush is 2–3 s shorter on
+most seeds and up to 3 s longer on one (Hard seed 37: 18.0 to 21.0 s); every band holds. Pay per clear
+moves only by the extra kills a seed happens to take (Normal seed 37: 143 kills, 132,110 cash, against
+136 and 131,410).
+
+**`check_levels_mutants.py`, new cases** (all as expected; 36 data cases and 3 stage-mirror cases, about 6
+minutes):
+
+| Case | Rule | Expected |
+|---|---|---|
+| C judged at `levels.triggerHeight` 30 (`WALLED_CEILING` off: the first fix round's rule) | walled: the trigger's ceiling | red (30 under 46.5) |
+| C's first cover 22 high: a root 65 over the floor (over 21 the cover is also a step onto the walls: 64 = 21 + 43) | walled: the trigger's ceiling | red |
+| control: C's first cover 21 high, a root 64 at the fence's top | walled: the trigger's ceiling | green |
+| `sim_range`'s trigger asks `triggerHeight` again (Python alone) | `check_stage_mirror` "StageFlow.Advance: scripted runs" | red (12 of 20) |
+| `sim_range.trigger_ceiling` ignores the fence (Python alone) | `check_stage_mirror` "StageFlow.Ceiling" | red (3 of 12) |

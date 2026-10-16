@@ -5,16 +5,17 @@ on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
-FLOOR_WALLS), runs every gate (check_levels.run_gates) and expects the named rule red, or green
+FLOOR_WALLS, WALLED_CEILING), runs every gate (check_levels.run_gates) and expects the named rule red, or green
 for a control. A rule is named by text its line always carries. Nothing on disk is written,
-except for the stage-mirror case (m2), which runs tools/check_stage_mirror.py with StageFlow.luau
-and sim_range.py both missing the "residents under the boss room's maxAlive" rule, from copies in
-a temporary folder, and expects it red.
+except for the stage-mirror cases (MIRROR_CASES), which run tools/check_stage_mirror.py with a line
+of StageFlow.luau and/or sim_range.py broken, from copies in a temporary folder, and expect it red:
+m2 (the "residents under the boss room's maxAlive" rule out of both) and the second fix round's F1
+(the walled camp's trigger band out of the Python mirror alone).
 
 Usage:
   py tools/check_levels_mutants.py                       # every case; exit 1 when one is not as expected
   py tools/check_levels_mutants.py --only sight          # the cases whose label holds this text
-  py tools/check_levels_mutants.py --luau <luau.exe>     # the interpreter for the stage-mirror case
+  py tools/check_levels_mutants.py --luau <luau.exe>     # the interpreter for the stage-mirror cases
                                                           # (default tools/bin/luau.exe; skipped if missing)
 """
 
@@ -52,6 +53,7 @@ READS = "camp C (walled): the sight gate reads"
 LOCKED = re.compile(r"camp C: \d+ residents at the highest difficulty")
 COUNTDOWN = "(The Chief's Clearing): its own gateSeconds"
 PROBLEMS = "forestRoad: maxAlive is an integer of at least 1 wherever"
+CEILING = "camp C (walled): it triggers up to"
 
 
 def layout(data):
@@ -175,6 +177,16 @@ CASES = (
      PROBLEMS, True),
     ("M3 control: gateSeconds 0.5 on the shipped (empty) first wave",
      lambda d: stage(d).__setitem__("gateSeconds", 0.5), {}, COUNTDOWN, False),
+    # The second fix round's F1 and F3: the walled camp triggers up to its fence's top, over the
+    # highest root a player gets in it (cover 3.5 + jump + double jump + Leap Smash + root = 46.5).
+    ("F1: C judged at levels.triggerHeight 30 (the first fix round's rule)", None, {"WALLED_CEILING": False},
+     CEILING, True),
+    # Over 21 the cover is also a step onto the walls (64 = 21 + the 43 a player climbs), so the
+    # highest root comes from GatehouseWallN's top: the rule is red either way.
+    ("F1: C's first cover 22 high (a root 65 over the floor; the walls turn climbable with it)",
+     lambda d: camp(d)["obstacles"][0].__setitem__("sy", 22), {}, CEILING, True),
+    ("F1 control: C's first cover 21 high (a root 64, at the fence's top)",
+     lambda d: camp(d)["obstacles"][0].__setitem__("sy", 21), {}, CEILING, False),
 )
 
 
@@ -209,22 +221,41 @@ def load():
     return {"combat": combat, "expeditions": expeditions, "layouts": layouts, "files": files, "ctx": ctx}
 
 
-def stage_mirror_case(luau):
-    """m2: the "residents under the boss room's maxAlive" rule taken out of both StageFlow.luau and
-    sim_range.py (copies in a temporary folder); check_stage_mirror's case for it must fail.
-    (ok, what was seen)."""
+# The stage-mirror cases: (label, StageFlow.luau's line -> its broken copy (None = untouched),
+# sim_range.py's line -> its broken copy, text check_stage_mirror's failing line must carry).
+MIRROR_CASES = (
+    # m2: the "residents under the boss room's maxAlive" rule taken out of BOTH sides at once.
+    ("m2: the boss room's maxAlive rule out of both mirrors",
+     ("if held >= cap then", "if held >= cap + 999999 then"),
+     ('if residents.get(camp["id"], 0) >= cap:', 'if residents.get(camp["id"], 0) >= cap + 999999:'),
+     "the boss room's residents at its maxAlive"),
+    # The second fix round's F1: the walled camp's band taken out of the Python mirror alone (the
+    # Luau side's mutants are tools/crowd_harness/mirror_mutants.py's).
+    ("F1: sim_range's trigger asks triggerHeight again (the mirror alone)", None,
+     ('<= above <= zone["ceiling"]', '<= above <= self.rules["triggerHeight"]'), "StageFlow.Advance: scripted runs"),
+    ("F1: sim_range's trigger_ceiling ignores the fence (the mirror alone)", None,
+     ("return top if finite(top) and top > trigger_height else trigger_height", "return trigger_height"),
+     "StageFlow.Ceiling"),
+)
+
+
+def stage_mirror_case(luau, flow_swap, py_swap, want):
+    """Run tools/check_stage_mirror.py against copies of StageFlow.luau and sim_range.py with one
+    line of each swapped (in a temporary folder; nothing in the repo is touched); its run must fail
+    with a FAIL line carrying `want`. (ok, what was seen)."""
     flow = REPO / "src" / "combat" / "server" / "Services" / "StageFlow.luau"
     mirror = TOOLS / "sim_range.py"
-    luau_rule, py_rule = "if held >= cap then", 'if residents.get(camp["id"], 0) >= cap:'
     flow_text, py_text = flow.read_text(encoding="utf-8"), mirror.read_text(encoding="utf-8")
-    if flow_text.count(luau_rule) != 1 or py_text.count(py_rule) != 1:
-        return False, "the rule's line is not found exactly once on both sides (the mutant is stale)"
+    for text, swap in ((flow_text, flow_swap), (py_text, py_swap)):
+        if swap is not None and text.count(swap[0]) != 1:
+            return False, f"the line {swap[0]!r} is not found exactly once (the mutant is stale)"
+    if flow_swap is not None:
+        flow_text = flow_text.replace(*flow_swap)
+    py_text = py_text.replace(*py_swap)
     with tempfile.TemporaryDirectory() as folder:
         root = Path(folder)
-        (root / "StageFlow.luau").write_text(flow_text.replace(luau_rule, "if held >= cap + 999999 then"),
-                                             encoding="utf-8", newline="\n")
-        (root / "sim_range.py").write_text(py_text.replace(py_rule, 'if residents.get(camp["id"], 0) >= cap + 999999:'),
-                                           encoding="utf-8", newline="\n")
+        (root / "StageFlow.luau").write_text(flow_text, encoding="utf-8", newline="\n")
+        (root / "sim_range.py").write_text(py_text, encoding="utf-8", newline="\n")
         # The broken mirror runs as tools/sim_range.py itself (its paths are its file's), then the
         # stage mirror imports it from sys.modules.
         boot = ("import sys, types, runpy; sys.path.insert(0, sys.argv[3]); "
@@ -237,15 +268,16 @@ def stage_mirror_case(luau):
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
     out = done.stdout + done.stderr
     verdict = next((line.strip() for line in out.splitlines() if line.startswith("CHECK:")), "no CHECK line")
-    named = [line.strip() for line in out.splitlines() if "the boss room's residents at its maxAlive" in line]
+    named = [line.strip() for line in out.splitlines()
+             if want in line and not line.lstrip().startswith(("ok", "note", "CHECK"))]
     return (done.returncode != 0 and verdict.startswith("CHECK: FAIL") and bool(named),
-            verdict + (f"; {named[0]}" if named else "; the case's line is missing"))
+            verdict + (f"; {named[0]}" if named else f"; no failing line carries {want!r}"))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--only", default=None, help="run only the cases whose label holds this text")
-    parser.add_argument("--luau", default=str(TOOLS / "bin" / "luau.exe"), help="the Luau interpreter (m2's case)")
+    parser.add_argument("--luau", default=str(TOOLS / "bin" / "luau.exe"), help="the Luau interpreter (the stage-mirror cases)")
     args = parser.parse_args()
     base = load()
     wrong = []
@@ -267,16 +299,17 @@ def main():
         print(f"  {'ok  ' if good else 'NOT '}  {label}: {want} -> {line[:220]}")
         if not good:
             wrong.append(label)
-    if not args.only or args.only in "m2: the boss room's maxAlive rule out of both mirrors":
-        luau = Path(args.luau)
-        if luau.exists():
-            good, seen = stage_mirror_case(luau)
-            print(f"  {'ok  ' if good else 'NOT '}  m2: the boss room's maxAlive rule out of both mirrors: "
-                  f"check_stage_mirror red -> {seen[:220]}")
-            if not good:
-                wrong.append("m2")
-        else:
-            print(f"  skip  m2: no Luau interpreter at {luau} (give --luau)")
+    luau = Path(args.luau)
+    for label, flow_swap, py_swap, want in MIRROR_CASES:
+        if args.only and args.only not in label:
+            continue
+        if not luau.exists():
+            print(f"  skip  {label}: no Luau interpreter at {luau} (give --luau)")
+            continue
+        good, seen = stage_mirror_case(luau, flow_swap, py_swap, want)
+        print(f"  {'ok  ' if good else 'NOT '}  {label}: check_stage_mirror red -> {seen[:220]}")
+        if not good:
+            wrong.append(label)
     print()
     print(f"MUTANTS: {'PASS' if not wrong else 'FAIL (' + ', '.join(wrong) + ')'}")
     sys.exit(0 if not wrong else 1)

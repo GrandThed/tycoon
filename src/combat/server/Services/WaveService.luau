@@ -1126,8 +1126,12 @@ end
 
 -- Every fighting member's body goes to `feet` (a skip's `move`). With `closing`, the camp whose
 -- gates are closing, only those StageFlow says must be brought inside, and each of them once per
--- close: at the close itself by MustEnter, in its grace (`late`) by Strayed.
+-- close: at the close itself by MustEnter, in its grace (`late`) by Strayed. At the close itself
+-- a fighter in a gate's lane is only nudged inside (StageFlow.GateNudge, the L1c second fix
+-- round's F2): the pivot shifts, its speed and facing are kept, so a jump goes on; no `Placed`
+-- is written (the client would drop its speed), but the weapon forgets the motion as for a move.
 local function moveFighters(feet: Vector3, closing: StageFlow.Zone?, late: boolean?): ()
+	local combatConfig = config()
 	for _, member in ArenaService.GetMembers() do
 		if member.bot or not ArenaService.IsFighting(member) then
 			continue
@@ -1142,6 +1146,19 @@ local function moveFighters(feet: Vector3, closing: StageFlow.Zone?, late: boole
 				)
 			if run.entered[member.userId] or not outside then
 				continue
+			end
+			local character = member.character
+			local player = member.player
+			if not late and root ~= nil and character ~= nil and combatConfig ~= nil then
+				local to = StageFlow.GateNudge(closing, root.Position, combatConfig.levels)
+				if to ~= nil then
+					character:PivotTo(character:GetPivot() + (to - root.Position))
+					run.entered[member.userId] = true
+					if player ~= nil then
+						WeaponService.ForgetMotion(player)
+					end
+					continue
+				end
 			end
 		end
 		if ArenaService.MoveMember(member, feet) and closing ~= nil then
@@ -1795,6 +1812,7 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 			hz = rect.hz,
 			cells = if region ~= nil then region.cells else nil,
 			locks = zone.locks,
+			ceiling = zone.ceiling,
 		})
 	end
 	if not CrowdService.SetFloors(floors) then

@@ -18,7 +18,8 @@ L1c adds the pure WallClip (the camera boom kept out of a locking camp, the grou
 rule) and tests_l1c.luau (it, and the walled Chief's Clearing as it ships). Its fix round reads two
 lists out of source text, InputController's GROUND_AIMED and AbilityService's `target = "ground"`
 mechanics (neither file loads here), and combat.project.json's CameraMaxZoomDistance, so the cases
-can hold each to the other (FIXTURES.source).
+can hold each to the other (FIXTURES.source). Its second fix round adds the pure StrikePick (which
+of a strike's candidates it lands on and chains from, a held resident passed over).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -78,6 +79,8 @@ SOURCES = {
     "CampAim": "src/combat/client/Controllers/CampAim.luau",
     # L1c: the camera boom's clip and the ground point's height rule (tests_l1c.luau).
     "WallClip": "src/shared/WallClip.luau",
+    # The L1c second fix round's F4: which candidates a strike lands on and chains from.
+    "StrikePick": "src/combat/server/Services/StrikePick.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.

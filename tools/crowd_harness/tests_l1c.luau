@@ -90,7 +90,15 @@ function L1C.marginTests(): ()
 	check(reach(0, -12, 0, -16, { box }, 0, 0, -12) == 0 and reach(0, -13.4, 0, -16, { box }, 0, 0, -13.4) == 0, "a root in the margin, outside the fence: the boom starts in the grown rectangle, so the camera comes to the pivot, whichever way it points")
 	check(reach(0, -10.5, 0, 16, { box }, 0, 0, -10.5) == 0, "and the margin never frees it: a root half a stud outside the fence is not inside (the release is the true rectangle)")
 	check(reach(0, -10, 0, 16, { box }, 0, 0, -10) == 1 and reach(0, -9, 0, -16, { box }, 0, 0, -9) == 1, "a root on the true fence line or inside is inside: nothing cuts")
-	check(reach(0, -9, 0, -16, { box }, 0, 30, -9) == 1 and reach(0, -9, 0, -16, { box }, 0, 30.01, -9) == 0, "inside on the flat but higher than `height` over the floor (the top of a double jump in the gate): not inside, cut; exactly `height` is inside")
+	-- The L1c second fix round's F1: a rectangle's own ceiling (RunFloor.ceiling, a walled camp's
+	-- fence top) is the band; `height` only stands in for a rectangle that names none.
+	local walled = { x = 0, y = 0, z = 0, hx = 10, hz = 10, ceiling = 64 }
+	check(reach(0, -9, 0, -16, { walled }, 0, 33, -9) == 1 and reach(0, -9, 0, -16, { walled }, 0, 43, -9) == 1, "inside a walled rectangle (ceiling 64) at 33 and 43 over its floor, a double jump from cover and a leap off it: held, nothing cut (F1: it was cut above `height`, the camera snapped to the head)")
+	check(reach(0, -9, 0, -16, { walled }, 0, 64, -9) == 1 and reach(0, -9, 0, -16, { walled }, 0, 64.01, -9) == 0, "exactly its ceiling is inside; a hundredth over it is not, and cuts")
+	check(reach(0, -9, 0, -16, { box }, 0, 30, -9) == 1 and reach(0, -9, 0, -16, { box }, 0, 30.01, -9) == 0, "a rectangle that names no ceiling: `height` (exactly is inside, over it cuts)")
+	local odd = { { x = 0, y = 0, z = 0, hx = 10, hz = 10, ceiling = nan }, { x = 0, y = 0, z = 0, hx = 10, hz = 10, ceiling = math.huge } }
+	check(reach(0, -9, 0, -16, { odd[1] }, 0, 30, -9) == 1 and reach(0, -9, 0, -16, { odd[1] }, 0, 30.01, -9) == 0 and reach(0, -9, 0, -16, { odd[2] }, 0, 30.01, -9) == 0, "a ceiling that is NaN or infinite is none: `height`")
+	check(reach(0, -9, 0, -16, { { x = 0, y = 12, z = 0, hx = 10, hz = 10, ceiling = 64 } }, 0, 76, -9) == 1 and reach(0, -9, 0, -16, { { x = 0, y = 12, z = 0, hx = 10, hz = 10, ceiling = 64 } }, 0, 76.1, -9) == 0, "the ceiling is measured from the rectangle's own floor (y 12: 76)")
 	check(reach(0, -9, 0, -16, { raised }, 0, 41.9, -9) == 1 and reach(0, -9, 0, -16, { raised }, 0, 42.1, -9) == 0, "the height is measured from the rectangle's own floor (y 12), not the world's zero")
 	check(reach(0, -9, 0, -16, { raised }, 0, 2, -9) == 1, "a root under the floor (sunk for a frame) is still inside: only a ceiling")
 	check(reach(0, -9, 0, -16, { box }, 0, nan, -9) == 0, "a root height that is not a number is inside nothing")
@@ -365,5 +373,252 @@ function L1C.planTests(): ()
 	end
 end
 L1.group("l1c planTests", L1C.planTests)
+
+-- The L1c second fix round (docs/prompts/l1c-fix2.md) -------------------------------------------
+
+-- The shipped Forest Road planned on Normal, its camp C's zone and the stage index that names it.
+function L1C.clearing(): (any, any, number, any)
+	local resolved, layout, camp = L1C.shipped()
+	if resolved.level == nil or layout == nil or camp == nil then
+		return nil, nil, 0, nil
+	end
+	local plan = L1.real.plan(resolved.level, layout, "normal", L1.real.bounds(layout))
+	if plan == nil then
+		return nil, nil, 0, camp
+	end
+	for index, stage in plan.stages do
+		if stage.zone ~= nil and stage.zone.id == "C" then
+			return plan, stage.zone, index, camp
+		end
+	end
+	return plan, nil, 0, camp
+end
+
+-- F1 and F3: a walled camp triggers, and holds the camera's root, up to its fence's top.
+function L1C.ceilingTests(): ()
+	print(" StageFlow.Ceiling and the walled clearing's band (the L1c second fix round's F1, F3)")
+	local Flow = L1.Flow
+	local rules = L1.real.rules
+	local height = rules.triggerHeight
+	local nan = L1C.NAN
+	local function camp(locks: boolean?, fence: any?): any
+		return { id = "X", locks = locks, fence = fence }
+	end
+	check(Flow.Ceiling(camp(true, { height = 64 }), 30) == 64, "a locking camp fenced 64 high: its fence top, 64")
+	check(Flow.Ceiling(camp(true, { height = 4 }), 30) == 30 and Flow.Ceiling(camp(true, { height = 30 }), 30) == 30, "a locking camp whose fence is no higher than triggerHeight: triggerHeight")
+	check(Flow.Ceiling(camp(nil, { height = 64 }), 30) == 30 and Flow.Ceiling(camp(false, { height = 64 }), 30) == 30, "an open camp, however tall its fence: triggerHeight")
+	check(Flow.Ceiling(camp(true, nil), 30) == 30, "a locking camp with no fence: triggerHeight")
+	check(Flow.Ceiling(camp(true, { height = nan }), 30) == 30 and Flow.Ceiling(camp(true, { height = math.huge }), 30) == 30 and Flow.Ceiling(camp(true, { height = "64" }), 30) == 30, "a fence height that is NaN, infinite or not a number: triggerHeight")
+
+	local plan, zone, index, shipped = L1C.clearing()
+	if plan == nil or zone == nil or shipped == nil then
+		check(false, "the shipped Forest Road plans on Normal with camp C's stage")
+		return
+	end
+	local top = shipped.fence.height
+	check(top > height and zone.ceiling == top, `camp C's zone carries its wall's top as its ceiling ({zone.ceiling}, fence {top}, triggerHeight {height})`)
+	local others = {}
+	for _, other in plan.zones do
+		if other.id ~= "C" and other.ceiling ~= height then
+			table.insert(others, `{other.id} {other.ceiling}`)
+		end
+	end
+	check(#others == 0, `every other camp keeps triggerHeight{L1.real.list(others)}`)
+
+	-- The north gate's opening, across the trigger rectangle's band: the way in.
+	local gate = shipped.gates[1]
+	local gateX = shipped.x + gate.at
+	local edge = zone.trigger.z - zone.trigger.hz
+	local floor = zone.floorY
+	local function armed(): any
+		local state = Flow.Begin(plan)
+		state.step = "armed"
+		state.stage = index
+		return state
+	end
+	local missed = {}
+	for _, rise in { height + 0.5, 33, 36.5, 43, top } do
+		for _, z in { edge, edge + rules.fenceThickness / 2, zone.rect.z - zone.rect.hz } do
+			local state = armed()
+			local actions = L1.advance(plan, state, { now = 5, roots = { vec(gateX, floor + rise, z) } })
+			if L1.find(actions, "gate") == nil then
+				table.insert(missed, `{rise} at z {z}`)
+			end
+		end
+	end
+	check(#missed == 0, `a root in the north gate's opening at the top of a jump (30.5 up to the wall's top over the floor) triggers C (F3: over 30 it saw the flanks and triggered nothing){L1.real.list(missed)}`)
+	local over = armed()
+	check(#L1.advance(plan, over, { now = 5, roots = { vec(gateX, floor + top + 0.5, edge) } }) == 0 and over.step == "armed", "over the wall's top, nothing")
+
+	-- The camera: inside C at 33 to 43 over the floor, the boom is held whole in every direction
+	-- (the rectangle and the clip exactly as CameraController builds them from RunState.floors).
+	local fence = rules.fenceThickness
+	local rect = { x = zone.rect.x, y = floor, z = zone.rect.z, hx = zone.rect.hx + fence, hz = zone.rect.hz + fence, ceiling = zone.ceiling }
+	local clip = { pad = 0.2, margin = FIXTURES.combat.levels.cameraClear, height = height }
+	local boom = FIXTURES.combat.camera.maxZoom
+	local cut = {}
+	for _, rise in { 33, 36.5, 40, 43 } do
+		for _, at in { { 0, 0 }, { -0.9, -0.9 }, { 0.9, 0.9 }, { -0.98, 0.5 }, { 0.5, -0.98 }, { 0, -1 } } do
+			local rootX, rootZ = rect.x + at[1] * zone.rect.hx, rect.z + at[2] * zone.rect.hz
+			for heading = 0, 350, 10 do
+				local a = math.rad(heading)
+				local share = L1C.Clip.Reach(rootX, rootZ, boom * math.sin(a), boom * math.cos(a), { rect }, rootX, floor + rise, rootZ, clip)
+				if share ~= 1 then
+					table.insert(cut, `{rise} at ({rootX}, {rootZ}) heading {heading}: {share}`)
+					break
+				end
+			end
+		end
+	end
+	check(#cut == 0, `a root 33 to 43 over C's floor inside the fence keeps the whole boom (F1: no snap into the head){L1.real.list(cut)}`)
+end
+L1.group("l1c fix2 ceilingTests", L1C.ceilingTests)
+
+-- F2: with C's countdown of 0 the close comes in the trigger's own tick, with the root still in
+-- the opening. The lead's ruling (code option a): a fighter in a gate's lane is only nudged onto
+-- `inner` along the gate's inward normal (StageFlow.GateNudge); everyone else outside goes to the entry.
+function L1C.entryTests(): ()
+	print(" The Chief's Clearing's close on the trigger's tick: the gate-lane nudge (the L1c second fix round's F2)")
+	local Flow = L1.Flow
+	local rules = L1.real.rules
+	local plan, zone, index, shipped = L1C.clearing()
+	if plan == nil or zone == nil or shipped == nil then
+		check(false, "the shipped Forest Road plans on Normal with camp C's stage")
+		return
+	end
+	local gate = shipped.gates[1]
+	local gateX = shipped.x + gate.at
+	local edge = zone.trigger.z - zone.trigger.hz
+	local limit = rules.fenceThickness + rules.closeInset + 0.05
+	check(#zone.lanes == #shipped.gates, `camp C has a lane for each of its {#shipped.gates} gates ({#zone.lanes})`)
+	local quiet, wrong, worst = {}, {}, 0
+	for _, rise in { 3, 33, 43 } do
+		for step = 0, gate.width * 2 do
+			local x = gateX - gate.width / 2 + step / 2
+			local position = vec(x, zone.floorY + rise, edge)
+			local state = Flow.Begin(plan)
+			state.step = "armed"
+			state.stage = index
+			local actions = L1.advance(plan, state, { now = 5, roots = { position } })
+			if L1.find(actions, "close") == nil then
+				table.insert(quiet, `x {x} at {rise}`)
+			end
+			-- WaveService.moveFighters at the close: MustEnter, then the lane's nudge, else the entry.
+			local to = if Flow.MustEnter(zone, position) then Flow.GateNudge(zone, position, rules) else position
+			if to == nil then
+				table.insert(wrong, `x {x} at {rise}: sent to the entry`)
+				continue
+			end
+			local moved = to.Z - position.Z
+			worst = math.max(worst, moved)
+			if to.X ~= position.X or to.Y ~= position.Y or moved < 0 or moved > limit or Flow.MustEnter(zone, to) then
+				table.insert(wrong, `x {x} at {rise}: to ({to.X}, {to.Y}, {to.Z})`)
+			end
+		end
+	end
+	check(#quiet == 0, `a root anywhere on the north gate's trigger line (z {edge}), standing or at the top of a jump, shuts the gate in that tick{L1.real.list(quiet)}`)
+	check(#wrong == 0, `and the close only nudges it inside along the gate's inward normal, X and height kept, at most fenceThickness + closeInset ({limit - 0.05}) + 0.05 (worst {string.format("%.2f", worst)}){L1.real.list(wrong)}`)
+	-- Elsewhere outside: the entry, as before.
+	local beside = vec(gateX + gate.width / 2 + 2, zone.floorY + 3, edge)
+	local above = vec(gateX, zone.floorY + zone.ceiling + 0.5, edge)
+	local below = vec(gateX, zone.floorY - rules.triggerBelow - 0.5, edge)
+	local road = vec(gateX, zone.floorY + 3, edge - 0.5)
+	check(Flow.MustEnter(zone, beside) and Flow.GateNudge(zone, beside, rules) == nil, "a fighter in the fence band beside the opening is not in the lane: the entry")
+	check(Flow.GateNudge(zone, above, rules) == nil and Flow.GateNudge(zone, below, rules) == nil, "nor is one over the camp's ceiling or under triggerBelow")
+	check(Flow.GateNudge(zone, road, rules) == nil, "nor one half a stud out on the road, past the fence's outer face")
+	local strip = vec(gateX + 3, zone.floorY + 3, zone.inner.z - zone.inner.hz - 0.5)
+	local fromStrip = Flow.GateNudge(zone, strip, rules)
+	check(fromStrip ~= nil and near(fromStrip.Z, zone.inner.z - zone.inner.hz) and fromStrip.X == strip.X, "one in the inset strip in front of the gate: onto inner's edge, half a stud")
+	-- An east gate: the normal is along X (inward = -X on the east side).
+	local east = shipped.gates[2]
+	if east ~= nil and east.side == "east" then
+		local eastZ = shipped.z + east.at
+		local outside = vec(zone.trigger.x + zone.trigger.hx, zone.floorY + 3, eastZ)
+		local to = Flow.GateNudge(zone, outside, rules)
+		check(to ~= nil and near(to.X, zone.inner.x + zone.inner.hx) and to.Z == eastZ and to.Y == outside.Y, "through the east gate: along -X onto inner's east edge, Z and height kept")
+	end
+	-- A synthetic open camp has no lanes.
+	local open = nil
+	for _, other in plan.zones do
+		if not other.locks then
+			open = other
+			break
+		end
+	end
+	check(open ~= nil and #open.lanes == 0, "an open camp has no gate lane")
+	local lanes = Flow.Lanes({ id = "X", locks = true, x = 0, y = 0, z = 0, sx = 20, sz = 20, gates = { { side = "south", at = 0, width = 30 }, { side = "up", at = 0, width = 4 }, { side = "west", at = 0, width = L1C.NAN } } }, { x = 0, z = 0, hx = 8, hz = 8 }, 1)
+	local south = lanes[1]
+	check(#lanes == 1 and south.alongX == true and south.low == -8 and south.high == 8 and south.outer == 11 and south.edge == 8, `Lanes: a south gate wider than the side is held to inner's span (-8..8), outer 11, edge 8; an unknown side and a NaN width give none ({#lanes})`)
+end
+L1.group("l1c fix2 entryTests", L1C.entryTests)
+
+-- F4: a held resident is passed over by a strike's cap and seeds, and by a chain's jumps.
+function L1C.pickTests(): ()
+	print(" StrikePick: the cap, the seeds and the chain pass over a held body (the L1c second fix round's F4)")
+	local Pick = load("StrikePick")
+	-- A `land` that records what it struck, in order, and refuses the ids in `held`.
+	local function striker(held: { [number]: boolean }): (any, { [number]: boolean }, { number })
+		local struck: { [number]: boolean } = {}
+		local order: { number } = {}
+		local function land(candidate: any): boolean
+			struck[candidate.id] = true
+			table.insert(order, candidate.id)
+			return not held[candidate.id]
+		end
+		return land, struck, order
+	end
+	local function ids(list: { any }): string
+		local out = {}
+		for _, candidate in list do
+			table.insert(out, tostring(candidate.id))
+		end
+		return table.concat(out, " ")
+	end
+	local five = { { id = 1 }, { id = 2 }, { id = 3 }, { id = 4 }, { id = 5 } }
+	local held = { [2] = true, [4] = true }
+	local allHeld = { [1] = true, [2] = true, [3] = true, [4] = true, [5] = true }
+	local land, struck = striker(held)
+	local seeds, spent = Pick.Seeds(five, 2, land)
+	check(ids(seeds) == "1 3" and spent == 3, `a cap of 2 over 1 to 5 with 2 and 4 held: seeds 1 3, the cap spent on the third ({ids(seeds)}, spent {tostring(spent)})`)
+	check(struck[1] and struck[2] and struck[3] and not struck[4] and not struck[5], "the held one before the cap is struck (a no-op) and passed over; nothing past the cap is struck")
+	local every, never = Pick.Seeds(five, math.huge, (striker(held)))
+	check(ids(every) == "1 3 5" and never == nil, `no cap: every body that took the hit, the cap never spent ({ids(every)})`)
+	local exact, last = Pick.Seeds(five, 3, (striker(held)))
+	check(ids(exact) == "1 3 5" and last == 5, `a cap met on the last candidate: spent at 5, so a ray does not stop short ({tostring(last)})`)
+	local landZero, struckZero = striker({})
+	local zero = Pick.Seeds(five, 0, landZero)
+	local nanSeeds = Pick.Seeds(five, L1C.NAN, (striker({})))
+	check(#zero == 0 and next(struckZero) == nil and #nanSeeds == 0, "a cap of 0 (or NaN) strikes nobody")
+	local hidden, hiddenSpent = Pick.Seeds(five, 2, (striker(allHeld)))
+	check(#hidden == 0 and hiddenSpent == nil, "over held bodies only: no seed, the cap never spent")
+
+	local function takenOf(set: { [number]: boolean }): (any) -> boolean
+		return function(candidate: any): boolean
+			return set[candidate.id] == true
+		end
+	end
+	local landNext, _, order = striker(held)
+	local target = Pick.Next(five, takenOf({ [1] = true }), landNext)
+	check(target ~= nil and target.id == 3 and table.concat(order, " ") == "2 3", `a jump passes over a taken body without striking it, and over a held one: it lands on 3 ({tostring(target and target.id)}; struck {table.concat(order, " ")})`)
+	check(Pick.Next(five, takenOf({ [1] = true }), (striker(allHeld))) == nil, "with every free body held: no jump")
+
+	-- Storm Coil over the posts (targets 2, chain 3) with every body under it held, linked as
+	-- WeaponService links them (each seed from the origin, each jump from the last): nothing.
+	local links = {}
+	for _, seed in (Pick.Seeds(five, 2, (striker(allHeld)))) do
+		table.insert(links, 0)
+		table.insert(links, seed.id)
+		for _ = 1, 3 do
+			local jump = Pick.Next(five, takenOf({ [seed.id] = true }), (striker(allHeld)))
+			if jump == nil then
+				break
+			end
+			table.insert(links, seed.id)
+			table.insert(links, jump.id)
+		end
+	end
+	check(#links == 0, `a coil cast over held bodies only makes no link ({#links // 2} links)`)
+end
+L1.group("l1c fix2 pickTests", L1C.pickTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

@@ -248,6 +248,8 @@ function L.zone(zone: any): any
 		rect = L.rect(zone.rect),
 		inner = L.rect(zone.inner),
 		trigger = L.rect(zone.trigger),
+		ceiling = zone.ceiling,
+		lanes = zone.lanes,
 		entry = zone.entry,
 		exit = zone.exit,
 		spawns = zone.spawns,
@@ -352,6 +354,10 @@ for index, file in data.levels do
 			end
 			local zone = plan.stages[case.stage].zone
 			J.try(case.id, function()
+				if case.nudge ~= nil then
+					local at = case.nudge
+					return Flow.GateNudge(zone, V.new(at[1], at[2], at[3]), rules)
+				end
 				if case.boss ~= nil then
 					return Flow.BossPoint(zone, case.boss)
 				end
@@ -448,6 +454,13 @@ J.try("grid.breatherSeconds", function()
 	end
 	return found
 end)
+
+-- The L1c second fix round's F1: how far above its floor a root still triggers a camp --------------------
+for _, case in data.ceilingCases do
+	J.try(case.id, function()
+		return Flow.Ceiling(case.camp, case.height)
+	end)
+end
 
 -- Ruling 6: is a level with one number set to zero or emptied refused? ---------------------------------
 for _, case in data.refusalCases do

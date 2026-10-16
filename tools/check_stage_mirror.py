@@ -20,8 +20,12 @@ and compares what they answer, value by value:
     both lists refused, so a rule removed from both sides at once is caught too;
   * `StageFlow.Plan` against `sim_range.plan_level`: every level at every difficulty, and at one
     that does not exist: each stage's numbers; every camp of the layout as a zone (its floor
-    index, `locks`, name, checkpoint, residents, floor, `inner` and trigger rectangles, entry,
-    exit and spawn points); every resident group; the population (L1b-11);
+    index, `locks`, name, checkpoint, residents, floor, `inner` and trigger rectangles, the
+    trigger's ceiling (the L1c second fix round's F1: a walled camp's fence top), entry, exit and
+    spawn points); every resident group; the population (L1b-11);
+  * `StageFlow.Ceiling` against `sim_range.trigger_ceiling`: every shipped camp and the edges;
+  * `StageFlow.GateNudge` against `sim_range.gate_nudge` on a grid round every gate lane of every
+    shipped locking camp (the lanes themselves, `StageFlow.Lanes`, are in the zone rows);
   * `StageFlow.BurstPoint` and `BossPoint` against `sim_range.burst_point` and the boss's place;
   * `Combat.CampWave` against `sim_combat.camp_wave`: every wave of every camp of every level, at
     every difficulty, for parties of 1 to coop.maxParty;
@@ -36,7 +40,8 @@ and compares what they answer, value by value:
     up to (past its reach, over the band, by a downed root, then on its edge) and its residents
     are killed off (L1b-17), with the boss room's floor empty all along (it never clears as an
     open camp). Each camp that locks is approached from outside its fence (outside the fenced
-    rectangle, above and under the trigger's height, on the fence line), waits its countdown,
+    rectangle, above its band and under it, a walled camp's band over triggerHeight, on the fence
+    line), waits its countdown,
     and plays its waves through: still spawning, the director asking to merge, bodies alive, a
     down on a field that is clear, the clear, the breather. One run of each is a clean clear,
     one ends with a down in a live camp, one with a down on the road while a group is awake
@@ -131,7 +136,8 @@ MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "L
 # The functions each comparison needs; one that is missing fails the run by name.
 NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
                      "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
-          "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint",
+          "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint", "Ceiling",
+                        "Lanes", "GateNudge",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve",
                         "TentOwesRouse", "Fielded", "Threatening"),
           "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
@@ -724,8 +730,12 @@ def script_run(run, variant, rules, start_y):
             x, z = out(fence + 0.5)
             tick((x, root, z))  # outside the fenced rectangle
             x, z = out(fence / 2)
-            tick((x, floor + rules["triggerHeight"] + 0.5, z))  # on the fence line, above the trigger
+            tick((x, floor + zone["ceiling"] + 0.5, z))  # on the fence line, above its band
             tick((x, floor - rules["triggerBelow"] - 0.5, z))  # and under it
+            if zone["ceiling"] > rules["triggerHeight"]:
+                # A walled camp (the L1c second fix round's F1, F3): over triggerHeight, inside its
+                # band up to the wall's top, a root at the top of a jump in the opening triggers.
+                tick((x, floor + rules["triggerHeight"] + 0.5, z))
             tick((x, root, z))  # on the fence line: the camp triggers
             if run.flow in ("travel", "armed"):
                 x, z = out(-(rules["closeInset"] + 1))
@@ -812,6 +822,7 @@ def zone_row(zone):
             "checkpoint": None if mark is None else [mark[0], floor, mark[1]], "residents": zone["residents"],
             "stock": dict(zone["stock"]), "tentStock": zone["tentStock"],
             "floorY": floor, "rect": list(zone["rect"]), "inner": list(zone["inner"]), "trigger": list(zone["trigger"]),
+            "ceiling": zone["ceiling"], "lanes": plain(zone["lanes"]),
             "entry": [zone["entry"][0], floor, zone["entry"][1]], "exit": [zone["exit"][0], floor, zone["exit"][1]],
             "spawns": [[x, floor, z] for x, z in zone["spawns"]],
             "region": graph_row(zone["region"]) if zone.get("region") is not None else None,
@@ -1820,7 +1831,23 @@ def main():
             "layouts": raw_layouts, "ranks": ranks, "planDifficulties": plan_difficulties, "pointCases": [],
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
             "campRules": combat["camps"], "campCases": [], "splitCases": [], "rayCases": [], "swingCases": [],
-            "combatCases": [], "reserveCases": [], "tentOwesCases": [], "regionCases": [], "fieldedCases": []}
+            "combatCases": [], "reserveCases": [], "tentOwesCases": [], "regionCases": [], "fieldedCases": [],
+            "ceilingCases": []}
+    # The L1c second fix round's F1: StageFlow.Ceiling against sim_range.trigger_ceiling, on every
+    # shipped camp and on the edges: a low fence, one at triggerHeight, an open camp's tall one,
+    # none, a height that is a string or absent.
+    edges = [{"locks": True, "fence": {"height": 64}}, {"locks": True, "fence": {"height": 4}},
+             {"locks": True, "fence": {"height": rules["triggerHeight"]}},
+             {"locks": True, "fence": {"height": rules["triggerHeight"] + 0.5}},
+             {"locks": False, "fence": {"height": 64}}, {"fence": {"height": 64}}, {"locks": True},
+             {"locks": True, "fence": {"height": "64"}}, {"locks": True, "fence": {"material": "Wood"}}]
+    shipped_camps = [(f"{name} camp {camp['id']}", camp) for name, layout in raw_layouts.items()
+                     for camp in layout.get("camps") or []]
+    for index, (label, camp) in enumerate([(f"edge {i}", c) for i, c in enumerate(edges, 1)] + shipped_camps, 1):
+        case = f"ceiling.{index}"
+        data["ceilingCases"].append({"id": case, "camp": camp, "height": rules["triggerHeight"]})
+        expected[case] = ("StageFlow.Ceiling: a camp's trigger band (the L1c second fix round's F1)", label,
+                          sr.trigger_ceiling(camp, rules["triggerHeight"]))
     shipped_plans = []  # (label, plan) of every level with residents at every difficulty: Wave 2's camp cases
     bursts, tempos = {}, {}
     scripted = {}  # trace id -> (label, the Python's ticks)
@@ -1895,6 +1922,30 @@ def main():
                                 expected[case] = ("StageFlow.BurstPoint",
                                                   f"{name} camp {zone['id']} spawn {spawn}, body {body + 1} of {size}",
                                                   [x + cx, zone["floorY"], z + cz])
+                    # The L1c second fix round's F2: the close's nudge out of a gate's lane, on a
+                    # grid round every lane (along, across the normal, and in height).
+                    nudges = 0
+                    for lane in zone["lanes"]:
+                        low, high, outer, edge = lane["low"], lane["high"], lane["outer"], lane["edge"]
+                        inward = 1 if edge > outer else -1
+                        alongs = (low - 0.5, low, (low + high) / 2, high, high + 0.5)
+                        depths = (outer - inward * 0.5, outer, (outer + edge) / 2, edge, edge + inward * 0.5)
+                        floor = zone["floorY"]
+                        rises = (-rules["triggerBelow"] - 0.5, -rules["triggerBelow"], sr.ROOT_HEIGHT,
+                                 rules["triggerHeight"] + 0.5, zone["ceiling"], zone["ceiling"] + 0.5)
+                        for along in alongs:
+                            for depth in depths:
+                                for rise in rises:
+                                    x, z = (along, depth) if lane["alongX"] else (depth, along)
+                                    nudges += 1
+                                    case = f"point.{number}.{index}.nudge.{nudges}"
+                                    at = (x, floor + rise, z)
+                                    data["pointCases"].append({"id": case, "level": number, "difficulty": difficulty,
+                                                               "stage": index, "nudge": list(at)})
+                                    moved = sr.gate_nudge(zone, at, rules)
+                                    expected[case] = ("StageFlow.GateNudge: the close's nudge out of a gate's lane (F2)",
+                                                      f"{name} camp {zone['id']} at {at}",
+                                                      list(moved) if moved is not None else None)
                     for wave, wave_def in enumerate(stage["defs"], 1):
                         if wave_def.get("boss"):
                             at = wave_def["boss"]["at"]

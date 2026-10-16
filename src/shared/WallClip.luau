@@ -15,15 +15,20 @@
 --   (server) and InputController.groundPoint (client) ask the same question with the same numbers.
 
 -- A locking camp's fenced rectangle: centre and half sizes on the flat, and `y` its floor's top
--- (Types.RunFloor's numbers, the halves grown by the fence), studs.
-export type Rect = { x: number, y: number, z: number, hx: number, hz: number }
+-- (Types.RunFloor's numbers, the halves grown by the fence), studs. `ceiling`: how far above `y` a
+-- root still counts as inside (RunFloor.ceiling, the camp's trigger band: a walled camp's fence
+-- top); nil, or not a finite number, = the clip's `height`.
+export type Rect = { x: number, y: number, z: number, hx: number, hz: number, ceiling: number? }
 -- How a boom is cut (the L1c fix round's C1 and m1):
 -- * pad: studs short of the edge the boom would cross (COMBAT_CAMERA_COLLISION_PAD);
 -- * margin: studs each rectangle is grown by for the cut alone (Combat.json levels.cameraClear).
 --   A boom swung back toward an open gate would otherwise end in its mouth, from where the sides
 --   of the view see along the inner wall; grown, it stops that far short of the fence line;
--- * height: a root is inside a rectangle only up to this far above its floor (levels.triggerHeight),
---   the band StageFlow's trigger asks, so the top of a double jump over the gate frees nothing.
+-- * height: a root is inside a rectangle only up to this far above its floor (levels.triggerHeight)
+--   when the rectangle names no ceiling of its own. A rectangle's ceiling is the band StageFlow's
+--   trigger asks of that camp (the L1c second fix round's F1): up to a walled camp's fence top, so
+--   a fighter inside who double-jumps from cover keeps the boom, and a root in the gate's opening
+--   at the top of a jump has triggered the camp.
 -- Whether the root is inside is always judged on the true rectangle, never the grown one: a root
 -- standing in the margin would otherwise free the boom to run through the gate into the camp.
 export type Clip = { pad: number, margin: number, height: number }
@@ -52,11 +57,12 @@ local function usable(rect: Rect): boolean
 end
 
 -- Closed: a root on the rectangle's edge is inside, as StageFlow's trigger counts one on the fence;
--- and no higher than `height` above its floor. A root that is not a number is in none.
+-- and no higher than the rectangle's ceiling (else `height`) above its floor. A root that is not a
+-- number is in none.
 local function holds(rect: Rect, x: number, y: number, z: number, height: number): boolean
-	return math.abs(x - rect.x) <= rect.hx
-		and math.abs(z - rect.z) <= rect.hz
-		and y - rect.y <= height
+	local ceiling = rect.ceiling
+	local top = if ceiling ~= nil and finite(ceiling) then ceiling else height
+	return math.abs(x - rect.x) <= rect.hx and math.abs(z - rect.z) <= rect.hz and y - rect.y <= top
 end
 
 -- The first share t of the segment from (fromX, fromZ) along (dx, dz), 0 <= t <= 1, that lies in
