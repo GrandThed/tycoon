@@ -127,3 +127,16 @@ taller than the shape's height; the designer's boss sims confirm the bands. **`C
   known limit, not gated; L4 re-places the perches with the real forest and the gate must pass on every
   spot before L4 ships.
 - **"The tent when fast: B at least 3"** (was 4): under R7 the pace restarts between groups; accepted.
+
+## Fix-diff round (2026-10-16; `docs/prompts/l1b-w4-review/fix-diff.md`)
+
+Applied after QA's `mutate.py` run at f45e093 finishes (it reads the source files while it runs).
+- **R16 (Major; A, designer mirrors):** `CampBrain.Melee` judges height on the surface last stood on (the
+  rest sample `CrowdBrain.reaches` uses), carried in `Seen`; harness case with a hopping hitter under the
+  lip (home within leash + margin); mutation putting the live root back; mirrored in `sim_range cb_melee`.
+- **R17 (Minor; ui-engineer):** auto-fire also holds when a refused body lies within the variant's splash
+  or burst radius (+ its radius + lag pad) of the predicted stop point; `CampAim` pure helper extended,
+  cases and mutations to B's files (the lead registers them if B is not running).
+- **R18 (Minor; ui-engineer):** `enemyInSights` reuses one entries table (no new top-level local).
+- QA gate 13: the `inPlay` hits are superseded mutation records and a case label in tools, none in `src`:
+  satisfied.
