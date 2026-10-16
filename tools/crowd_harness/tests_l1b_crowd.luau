@@ -85,8 +85,9 @@ function L1BC.input(now: number, members: { any }, targets: { any }?, shooters: 
 	return { now = now, members = members, targets = targets or {}, shooters = shooters or {}, striking = striking == true }
 end
 
-function L1BC.seen(userId: number, x: number, y: number, z: number): any
-	return { userId = userId, root = vec(x, y, z) }
+-- `rest` (R16) = the root's height when it last rested; a standing player's own height by default.
+function L1BC.seen(userId: number, x: number, y: number, z: number, rest: number?): any
+	return { userId = userId, root = vec(x, y, z), rest = rest or y }
 end
 
 -- The point `distance` from `from` on the flat at yaw `yaw` (0 faces -Z).

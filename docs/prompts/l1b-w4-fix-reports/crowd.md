@@ -287,3 +287,58 @@ Verified in a scratch copy: with this change that check passes and nothing else 
 
 ### For the designer
 `sim_range`'s charge and ring judges need the same lower bound, if it mirrors them.
+
+## R16 — Melee on the surface last stood on (fix-diff round, Major)
+
+### Changes
+- **`CampBrain.Seen`** gains `rest: number`: the root's height when it last rested (CrowdBrain's
+  `restY`, the surface the player stood on).
+- **`CampBrain.Melee`:** `local above = target.rest - def.floorY` (was `root.Y - def.floorY`). Both
+  `meleeAbove` and `meleeBelow` are judged on it. `inBand` and the region distance still read the
+  live root, so a fall out of the floor still leaves Melee once the root leaves the band.
+  - So a player hopping at the foot of the climb (rest 5 under the floor) is never melee-reachable
+    mid-hop, and a player jumping from the floor (rest 3 over it) stays melee-reachable at the apex
+    (root 21 over it): the same sample and the same answer as `CrowdBrain.reaches`.
+- **`CrowdBrain.AddTarget`** now returns the target's `restY` (`: number`); nothing else changes.
+- **`CrowdService.gatherTargets`** puts that value into the pooled `Seen` (`seen.rest = rest`).
+- `tests_l1b_crowd.luau` `L1BC.seen(userId, x, y, z, rest?)`: `rest` defaults to `y` (a standing player).
+
+### Cases
+- `tests_l1b_w4_crowd.luau`, "CampBrain.Melee, Reachable": root 10 with rest 3 (mid-hop from 5
+  under the floor 8) is not melee; root 21 with rest 11 (mid-jump from the floor) is.
+- `tests_l1b_w4_crowd.luau`, "fix round: the hopping hitter" (`W4C.hopTests`): R14's four fodder
+  at the road's end over a hitter at the foot of the climb (root y 3, floor 8) who hops every 20
+  steps (v0 84, g 196.2: 17.9 studs, about 13 steps in the air). (a) he hits every 4 s (60
+  steps); (b) he hits once, then only hops. In both: they fight, 0 body-steps in windup or attack,
+  home at step 112 (a) and 107 (b), at most 120.
+
+### Mutation
+- `L1B_W4_FIX_CROWD_R16_MUTATIONS` in `crowd_mutations.py` (one entry, "l1b w4 fix crowd: Melee
+  judges height on the live root again (R16)"), registered in `tools/crowd_harness/mutate.py` (B was
+  not running). Filtered run: `MUTATIONS: 1 run, 0 not caught` (3 checks fail: the unit check,
+  and both hop parts never go home).
+
+### Verify
+- `stylua --check src`: clean. `selene src`: 0 errors, 1 warning (the old one).
+- `py tools/check_compile.py`: `CHECK: PASS -- 157 files compile with Studio settings (-O1 -g2)`.
+- luau-lsp analyze on CampBrain, CrowdBrain, CrowdService: no diagnostics.
+- Harness: `HARNESS: PASS (2,346 checks, C:\Users\benja\Desktop\tycoon-p5b\tools\crowd_harness)`.
+- `check_stage_mirror.py`: **FAIL (6)** until the designer's part below lands: every case that
+  calls `Brain.Melee` or `Brain.Reachable` throws on `target.rest` being nil.
+
+### For the designer (mirror)
+- `tools/sim_range.py` `cb_melee`: `above = target["rest"] - defn["floorY"]` (was `root[1] - ...`);
+  `cb_in_band` and `rg_distance` keep reading `root`. Docstring: "the rest sample (restY), not the
+  live root (R16)".
+- `LevelRun` (sim_range.py about line 7090), the camp step's target:
+  `{"userId": LEVEL_USER, "root": self.world_root(now), "rest": <restY>}` where `<restY>` is
+  `self.track["restY"]` after this step's track update (CrowdService calls AddTarget before the
+  camps step), or the root's y when there is no track yet.
+- `tools/crowd_harness/stage_mirror.luau` `C.targets`:
+  `found[index] = { userId = row.userId, root = C.v(row.root), rest = if row.rest ~= nil then row.rest else row.root[2] }`
+- `tools/check_stage_mirror.py`: every target row passed to `cb_melee` / `cb_reachable` / a camp
+  step carries `"rest"` (equal to the root's y for the existing grids; line ~1314 must forward
+  `t["rest"]`), plus new rows where rest differs from the root: floor 8, root 10 rest 3 (False),
+  root 21 rest 11 (True).
+- `tools/crowd_harness/mirror_mutants.py`: `("Melee judges on the live root", "CampBrain",
+  "local above = target.rest - def.floorY", "local above = root.Y - def.floorY")`.

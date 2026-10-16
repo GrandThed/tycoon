@@ -283,6 +283,10 @@ function W4C.chaseTests(): ()
 	check(melee(77.12, 10, 7.12) and not melee(77.2, 10, 7.2), "off the road cell's far corner: rounded (2.998 yes, 3.11 no)")
 	check(not melee(0, 3.99, 0), "under the band: no")
 	check(melee(0, 6.5, 0) and not melee(0, 6.49, 0), "R14: meleeBelow (1.5) under the floor: at the edge yes, past it no (in the band, sightBelow 4)")
+	check(
+		not CB.Melee(def, L1BC.seen(7, 0, 10, 0, 3), R) and CB.Melee(def, L1BC.seen(7, 0, 21, 0, 11), R),
+		"R16: judged on the surface last stood on: mid-hop from 5 under the floor, no; mid-jump from the floor, root 13 over it, yes"
+	)
 	local shooters = { { at = vec(70, 8, 0), reach = 32 } }
 	local function reachable(x: number, y: number, z: number, list: { any }?): boolean
 		return CB.Reachable(def, L1BC.seen(7, x, y, z), list or {}, R)
@@ -1041,6 +1045,61 @@ function W4C.footTests(): ()
 	check(woundUp, "R14: a fodder still winds up under a player in the air over its floor (ruling 21)")
 end
 L1BC.crowdGroup("fix round: the foot of the climb", W4C.footTests)
+
+-- R16: the same four over a hitter at the foot of the climb who hops (v0 84, g 196.2: 18 studs,
+-- 0.86 s in the air) every 20 steps. Mid-hop his root passes meleeBelow and even meleeAbove for a
+-- few steps; judged on the live root that held the leash for good while every blow was refused.
+-- (a) He hits every 4 s. (b) He hits once, then only hops (each hop shows him to the guards).
+function W4C.hopTests(): ()
+	print(" fix round R16: a hopping hitter at the foot of the climb")
+	local V0, G = 84, 196.2
+	local function hopY(count: number): number
+		local t = (count % 20) * DT
+		return math.max(3, 3 + V0 * t - G / 2 * t * t)
+	end
+	for _, part in { "a", "b" } do
+		fresh()
+		W4C.enter()
+		root.Position = vec(31, 3, 0)
+		local group, ids = W4C.place("guard", W4C.fourPosts(), { "fodder", "fodder", "fodder", "fodder" }, { yaw = -math.pi / 2 })
+		step2(2)
+		Crowd.Damage(ids[1], 1, 7, nil, nil)
+		local fought: number? = nil
+		local high = 0
+		local wound = 0
+		local home: number? = nil
+		for count = 1, 450 do
+			if part == "a" and count % 60 == 0 then
+				Crowd.Damage(ids[1], 1, 7, nil, nil)
+			end
+			root.Position = vec(31, hopY(count), 0)
+			high = math.max(high, root.Position.Y)
+			step2()
+			for _, id in ids do
+				local state = seen(id).state
+				if state == "windup" or state == "attack" then
+					wound += 1
+				end
+			end
+			for _, event in L1BC.events() do
+				if event.group == group and event.to == "fight" then
+					fought = fought or count
+				elseif event.group == group and event.to == "home" then
+					home = home or count
+				end
+			end
+			if home ~= nil then
+				break
+			end
+		end
+		root.Position = vec(31, 3, 0)
+		check(fought ~= nil and high > 20, `(R16 {part}: the four fight him, and he hops {string.format("%.1f", high - 3)} studs)`)
+		check(wound == 0, `R16 {part}: no blow is begun at him ({wound} body-steps in windup or attack)`)
+		check(home ~= nil and home <= 120, `R16 {part}: hopping, they still go home within leash + a margin (step {home or "never"}, at most 120)`)
+	end
+	fresh()
+end
+L1BC.crowdGroup("fix round: the hopping hitter", W4C.hopTests)
 
 -- R15: the travelling ground shapes have R6's under side too. The windup begins with the player
 -- on the crowd's floor (y 0, R14 lets it), then he drops under it before the shape reaches him:

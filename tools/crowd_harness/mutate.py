@@ -3668,7 +3668,7 @@ W4_FIX_UI_MUTATIONS = {
     ),
     "l1b w4 fix ui: the shot ignores its pierce": (
         CAMP_AIM,
-        "local hits = math.max(1, math.floor(pierce or 0))",
+        "local hits = hitsOf(pierce)",
         "local hits = 1",
     ),
     "l1b w4 fix ui: a tie favours the shot": (
@@ -3693,6 +3693,63 @@ W4_FIX_UI_MUTATIONS = {
     ),
 }
 MUTATIONS.update(W4_FIX_UI_MUTATIONS)
+
+# The ui-engineer's R17 (fix-diff round; docs/prompts/l1b-w4-fix-reports/client.md): a shot that
+# bursts is held while a refused body lies within the burst of the stop span. ("the shot ignores
+# its pierce" above was re-aimed at the same round's `hitsOf`.)
+W4_FIX_UI_R17_MUTATIONS = {
+    "l1b w4 fix ui r17: the stop ignores its pierce": (
+        CAMP_AIM,
+        "local spent = hitsOf(pierce)",
+        "local spent = 1",
+    ),
+    "l1b w4 fix ui r17: the stop span is read unsorted": (
+        CAMP_AIM,
+        "\ttable.sort(takenEntries)\n",
+        "",
+    ),
+    "l1b w4 fix ui r17: a shot with exactly its hits on the line flies on": (
+        CAMP_AIM,
+        "if count >= spent then",
+        "if count > spent then",
+    ),
+    "l1b w4 fix ui r17: a passing shot's span stops short of its range": (
+        CAMP_AIM,
+        "else 0, range",
+        "else 0, 0",
+    ),
+    "l1b w4 fix ui r17: a passing shot's span starts at the muzzle": (
+        CAMP_AIM,
+        "then takenEntries[count] else 0",
+        "then 0 else 0",
+    ),
+    "l1b w4 fix ui r17: a tie at the burst's reach favours the shot": (
+        CAMP_AIM,
+        "gap * gap + off * off > reach * reach",
+        "gap * gap + off * off >= reach * reach",
+    ),
+    "l1b w4 fix ui r17: the burst ignores the distance off the line": (
+        CAMP_AIM,
+        "gap * gap + off * off > reach * reach",
+        "gap * gap > reach * reach",
+    ),
+    "l1b w4 fix ui r17: a body behind the span's start counts as inside it": (
+        CAMP_AIM,
+        "math.max(0, from - along, along - to)",
+        "math.max(0, along - to)",
+    ),
+    "l1b w4 fix ui r17: a body past the span's end counts as inside it": (
+        CAMP_AIM,
+        "math.max(0, from - along, along - to)",
+        "math.max(0, from - along)",
+    ),
+    "l1b w4 fix ui r17: a burst never holds the shot": (
+        CAMP_AIM,
+        "return gap * gap + off * off > reach * reach",
+        "return true",
+    ),
+}
+MUTATIONS.update(W4_FIX_UI_R17_MUTATIONS)
 
 # L1b Wave 4 fix round, luau-engineer A (docs/prompts/l1b-w4-fix-reports/crowd_mutations.py, texts
 # verbatim). The REPLACED table re-aims labels defined in earlier tables (same rule, new text); its
@@ -3878,6 +3935,16 @@ L1B_W4_FIX_CROWD_R15_REPLACED = {
 }
 MUTATIONS.update(L1B_W4_FIX_CROWD_R15_MUTATIONS)
 MUTATIONS.update(L1B_W4_FIX_CROWD_R15_REPLACED)
+# A's R16 (the same file, text verbatim).
+# R16 (the fix-diff round): Melee judges height on the surface last stood on. Proved caught.
+L1B_W4_FIX_CROWD_R16_MUTATIONS = {
+    "l1b w4 fix crowd: Melee judges height on the live root again (R16)": (
+        CAMP,
+        "\tlocal above = target.rest - def.floorY\n",
+        "\tlocal above = root.Y - def.floorY\n",
+    ),
+}
+MUTATIONS.update(L1B_W4_FIX_CROWD_R16_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

@@ -189,3 +189,12 @@ L1B_W4_FIX_CROWD_R15_REPLACED = {
         "if to < from then",
     ),
 }
+
+# R16 (the fix-diff round): Melee judges height on the surface last stood on. Proved caught.
+L1B_W4_FIX_CROWD_R16_MUTATIONS = {
+    "l1b w4 fix crowd: Melee judges height on the live root again (R16)": (
+        CAMP,
+        "\tlocal above = target.rest - def.floorY\n",
+        "\tlocal above = root.Y - def.floorY\n",
+    ),
+}

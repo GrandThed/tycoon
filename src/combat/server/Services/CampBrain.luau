@@ -36,8 +36,9 @@ export type Post = {
 }
 -- Kept on the crowd body; leg starts at post.leg.
 export type Resident = { group: number, post: Post, leg: number }
--- A target this step: alive, not down.
-export type Seen = { userId: number, root: Vector3 }
+-- A target this step: alive, not down. rest = the root's height when it last rested (CrowdBrain's
+-- restY: the surface it stood on), so a hop does not move it.
+export type Seen = { userId: number, root: Vector3, rest: number }
 -- A living keepAway member: feet, its longest attack reach.
 export type Shooter = { at: Vector3, reach: number }
 -- A living member: feet, its post.
@@ -413,6 +414,9 @@ end
 -- rushers would stand under it for good), at most meleeBelow under it (R14: the foot of a drop
 -- below the region's lip is out of their reach, as their blows are, R6), and within chaseMargin
 -- (flat, rounded corners) of the region. With none: the in-play rule.
+-- R16: both bounds are judged on the surface last stood on, the sample CrowdBrain's blows use. On
+-- the live root, a player hopping at the foot of the climb passed meleeBelow for a few steps of
+-- every hop, which held the leash for good while every blow was refused.
 function CampBrain.Melee(
 	def: Types.CampGroupDef,
 	target: Seen,
@@ -423,7 +427,7 @@ function CampBrain.Melee(
 		return CampBrain.InPlay(def, target, {}, rules)
 	end
 	local root = target.root
-	local above = root.Y - def.floorY
+	local above = target.rest - def.floorY
 	return inBand(def, root, rules)
 		and above <= rules.meleeAbove
 		and above >= -rules.meleeBelow

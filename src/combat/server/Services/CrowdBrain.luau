@@ -835,8 +835,9 @@ end
 
 -- A player the fighting crowd may go for this step: alive and not down. `position` = the root,
 -- `lift` = the root's height over whatever they stand on (HipHeight + half the root's height),
--- `lag` = their commit lag (Tuning.CommitLag).
-function CrowdBrain.AddTarget(userId: number, position: Vector3, lift: number, lag: number): ()
+-- `lag` = their commit lag (Tuning.CommitLag). Returns their restY, the height CampBrain.Melee
+-- judges them at (R16).
+function CrowdBrain.AddTarget(userId: number, position: Vector3, lift: number, lag: number): number
 	local target = tracks[userId]
 	if target == nil then
 		target = {
@@ -881,6 +882,7 @@ function CrowdBrain.AddTarget(userId: number, position: Vector3, lift: number, l
 	target.lag = lag
 	targetCount += 1
 	targets[targetCount] = target
+	return target.restY
 end
 
 -- Once per living fighting enemy, before the step's first Think: counts the place it holds

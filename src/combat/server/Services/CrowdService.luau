@@ -623,13 +623,14 @@ local function gatherTargets(shooting: Types.RangeShootingConfig): ()
 				-- whichever body it leads a fall for.
 				local lift = humanoid.HipHeight + root.Size.Y / 2
 				local lag = Tuning.CommitLag(shooting, player:GetNetworkPing())
-				CrowdBrain.AddTarget(player.UserId, root.Position, lift, lag)
+				local rest = CrowdBrain.AddTarget(player.UserId, root.Position, lift, lag)
 				local seen = camp.seenPool[player.UserId]
 				if seen == nil then
-					seen = { userId = player.UserId, root = root.Position }
+					seen = { userId = player.UserId, root = root.Position, rest = rest }
 					camp.seenPool[player.UserId] = seen
 				else
 					seen.root = root.Position
+					seen.rest = rest
 				end
 				table.insert(seenList, seen)
 			end
