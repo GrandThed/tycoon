@@ -3545,7 +3545,7 @@ PASS.
   `6ffd491`; mutations `235fe89`, `8d5a647`; mirrors and gates `9244f4a`, `23cbc35`, `c8af9aa`;
   BALANCE `6b5e70c`; Ben's sniper ruling `0ffbce8`, `e428e85`; report `4e63335`.
 - Fix-diff review: `f45e093` brief, `e979742` findings and R16–R18. On `l1b-wave4-fix`: R16
-  `8341f8b`; R17–R18 and the designer's R16 mirror follow (the lead adds their hashes).
+  `8341f8b`; R17–R18 and the held-draw fix (R19) `010e45e`; the R16 mirror `92d3d4c`.
 - Plus this docs commit.
 
 **Review: four Opus slices, 0 Critical, 4 Major, 12 Minor** (crowd 1 / 4, run 0 / 3, client
@@ -3587,8 +3587,13 @@ PASS.
 - Fix-diff snapshot (reviewer, `e428e85`): harness PASS (2,337 checks), `mirror_mutants` 90 / 90,
   `check_levels`, `check_stage_mirror`, `sim_combat`, `check_compile` PASS, luau-lsp 0 errors,
   stylua and selene clean. `sim_range --check` PASS after Ben's ruling.
-- qa-runner on the final tree (after R16–R18): pending.
-- mutate.py: <verdict pending>
+- qa-runner at `f45e093` (before R16–R18): all 14 gates PASS (gate 13's `inPlay` hits are superseded
+  mutation records and a case label in tools, none in `src`: satisfied); `mirror_mutants` 90 / 90.
+- mutate.py at `f45e093`: `MUTATIONS: 724 run, 0 not caught`. The 11 added after it (R16 1, R17 10)
+  were each proved caught by filtered runs; all 735 texts match the final tree once (lead's check).
+- Final tree (lead, 2026-10-16): stylua, selene (0 errors), luau-lsp hub and combat, check_compile,
+  harness `HARNESS: PASS (2,361 checks)`, sim_economy, sim_combat (23), check_levels, check_stage_mirror,
+  sim_range `CHECK: PASS`, gen_asset_manifest; `mirror_mutants` 91 / 91 (designer, `92d3d4c`).
 
 **Carried (owners):**
 - **economy-designer + lead (L4):** the three Normal sniper spots (LookoutLedge, Secret_lookout,
@@ -3625,8 +3630,8 @@ PASS.
 - [x] Wave 4 reviewed: four slices, 0 Critical, 4 Major, 12 Minor (`71caad3`)
 - [x] Wave 4 fix round R1–R15 (`9e197bb` … `e428e85`)
 - [x] Fix-diff review fixes R16–R18 (`l1b-wave4-fix`)
-- [ ] Wave 4 QA green (qa-runner; mutate.py verdict)
-- [ ] Wave 4 merged to `main`, six place files rebuilt (lead)
+- [x] Wave 4 QA green (qa-runner at `f45e093`; mutate.py 724 / 0; final-tree gates by the lead)
+- [x] Wave 4 merged to `main`, six place files rebuilt (lead, 2026-10-16)
 - [ ] Ben's Studio look at L1b Wave 4 (PLAYTEST "L1b Wave 4 — no waits, no walls")
 
 ## M12 — Growing city

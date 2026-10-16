@@ -140,3 +140,6 @@ Applied after QA's `mutate.py` run at f45e093 finishes (it reads the source file
 - **R18 (Minor; ui-engineer):** `enemyInSights` reuses one entries table (no new top-level local).
 - QA gate 13: the `inPlay` hits are superseded mutation records and a case label in tools, none in `src`:
   satisfied.
+- **R19 (lead, accepting the ui-engineer's addition in 010e45e):** a held shot never looses through the
+  hold: a bow mid-draw drops after `tapBufferSeconds` instead of releasing an under-charged arrow into a
+  refused body, and a held beam stops at once.
