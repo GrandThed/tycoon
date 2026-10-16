@@ -111,3 +111,11 @@ never starts a ground-shape blow at a target whose feet lie outside the shape's 
 no windup at an unhittable player holds the leash. The designer adds `meleeBelow` to `Combat.json`
 (A's report names the value it needs) and mirrors both rules.
 - tests_w2's pinned arc check now expects R6 (lead, cef3d38).
+
+**R14 delivered (A, f72e244):** `meleeBelow` **1.5** (must satisfy `0 ≤ meleeBelow ≤ min(sightBelow,
+lowest rusher height − root height − 0.5)`; the designer adds that `check_levels` gate). `CrowdBrain`'s
+new `reaches` applies on every floor: a boss no longer starts a slam or charge at a player on a block
+taller than the shape's height; the designer's boss sims confirm the bands. **`Combat.json` must carry
+`"meleeBelow": 1.5` before anything ships** (else `CampBrain.Problems` refuses the camp rules).
+
+**R15 — ThreatField's moving charge and ring get R6's lower bound (A).**
