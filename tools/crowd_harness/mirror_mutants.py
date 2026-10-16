@@ -99,7 +99,7 @@ MUTANTS = [
      "problem(`{here}: camp {camp.id} locks, and a boss room's tent has no stock`)", "local _ = here"),
     ("Advance: a camp clears with a body of its floor alive", "StageFlow", "or byFloor[index] ~= 0 then",
      "or byFloor[index] > 1 then"),
-    # Replaces Wave 2's "a campClear with tent stock left" (its `tentLeft` is gone, L1b-W4-29).
+    # Replaces Wave 2's "a campClear with tent stock left" (its input is gone, L1b-W4-29).
     ("Advance: the clear waits for the tent again", "StageFlow", "or byFloor[index] ~= 0 then",
      "or byFloor[index] ~= 0 or zone.tentStock > 0 then"),
     # The fix round (B-2 and B-4, mirrored by the economy-designer).
