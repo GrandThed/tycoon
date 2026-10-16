@@ -26,4 +26,29 @@ function CampAim.Takes(onCampFloor: boolean, resting: boolean, phase: string): b
 	return phase ~= "gate" and not resting
 end
 
+-- R13 (L1b Wave 4 fix round): a touch shot flies the crosshair line and pierces, so it would wake
+-- a refused body that the line meets within the shot's hits even when the trigger was an awake
+-- one. True when the shot spends its hits before it reaches the nearest refused body.
+-- refusedEntry = the entry distance of the nearest refused body on the line (nil: none);
+-- takenEntries = the entry distances of the bodies auto-fire may take; pierce = the variant's
+-- (the total enemies one shot hits, at least 1, as WeaponService's pierceOf). A tie counts
+-- against the shot: the server's order between equal entries is not the client's to guess.
+function CampAim.ShotSpares(
+	refusedEntry: number?,
+	takenEntries: { number },
+	pierce: number?
+): boolean
+	if refusedEntry == nil then
+		return true
+	end
+	local hits = math.max(1, math.floor(pierce or 0))
+	local before = 0
+	for _, entry in takenEntries do
+		if entry < refusedEntry then
+			before += 1
+		end
+	end
+	return before >= hits
+end
+
 return CampAim

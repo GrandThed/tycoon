@@ -1095,18 +1095,48 @@ end
 
 -- CrowdRenderer reports the ground point; the body sphere is centred at height/2 and the
 -- head sphere sits at the top (INTERFACES P1 decision 1).
+-- R13: the trigger is a takeable body in the assist cone, but the shot flies the crosshair line
+-- itself and pierces, so it is held while a refused body lies on that line within the shot's hits
+-- (HitShapes.CrowdRay, the server's ray shape; CampAim.ShotSpares). A refused body gets the lag
+-- pad on top of the variant's: a hold costs a frame, a wrong shot wakes a camp.
 local function enemyInSights(
+	variant: Types.RangeWeaponVariant,
 	origin: Vector3,
 	look: Vector3,
-	range: number,
 	degrees: number,
 	lagPad: number
 ): boolean
+	local range = variant.range
+	local width = variant.width or 0
 	local limit = math.rad(degrees)
 	local found = false
+	local refusedEntry: number? = nil
+	local takenEntries: { number } = {}
 	CrowdRenderer.ForEach(
 		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
-			if found or not autoMayTake(id) then
+			local taken = autoMayTake(id)
+			local pad = if taken then variant.pad else variant.pad + lagPad
+			local entry = HitShapes.CrowdRay(
+				origin,
+				look,
+				range,
+				width,
+				pad,
+				position,
+				radius,
+				height,
+				headRadius
+			)
+			if not taken then
+				if entry ~= nil and (refusedEntry == nil or entry < refusedEntry) then
+					refusedEntry = entry
+				end
+				return
+			end
+			if entry ~= nil then
+				table.insert(takenEntries, entry)
+			end
+			if found then
 				return
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
@@ -1115,7 +1145,7 @@ local function enemyInSights(
 				or sphereInSights(origin, look, range, limit, head, headRadius + lagPad)
 		end
 	)
-	return found
+	return found and CampAim.ShotSpares(refusedEntry, takenEntries, variant.pierce)
 end
 
 -- The same shape the server builds for this variant, via the shared HitShapes geometry. A
@@ -1153,18 +1183,33 @@ local function enemyInReach(
 	lagPad: number
 ): boolean
 	local found = false
+	local refused = false
 	CrowdRenderer.ForEach(
 		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
-			if found or not autoMayTake(id) then
+			if refused then
+				return
+			end
+			-- R13: a swing or a cone hits everything in its shape, so one refused body inside
+			-- the padded shape holds it, whatever the trigger was.
+			local taken = autoMayTake(id)
+			if taken and found then
 				return
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
 			local head = position + Vector3.new(0, height - headRadius, 0)
-			found = inMeleeShape(variant, origin, forward, extraPad, body, radius + lagPad)
+			local inside = inMeleeShape(variant, origin, forward, extraPad, body, radius + lagPad)
 				or inMeleeShape(variant, origin, forward, extraPad, head, headRadius + lagPad)
+			if not inside then
+				return
+			end
+			if taken then
+				found = true
+			else
+				refused = true
+			end
 		end
 	)
-	return found
+	return found and not refused
 end
 
 local function autoFireOn(cfg: Types.ProvingGroundsConfig): boolean
@@ -1190,7 +1235,7 @@ local function targetOnAuto(
 		if variant.shape == "cone" then
 			return enemyInReach(variant, origin, look, 0, lagPad)
 		end
-		return enemyInSights(origin, look, variant.range, controls.autoFireAssistDegrees, lagPad)
+		return enemyInSights(variant, origin, look, controls.autoFireAssistDegrees, lagPad)
 	end
 	return enemyInReach(variant, root, flatCameraLook(), controls.autoSwingPad, lagPad)
 end
