@@ -275,4 +275,156 @@ a `--bow` report and a ranged "step inside the fence" in `LevelRun.wanted`.
   id, and "C" on Forest Road is the locked boss room. 9 runs take about 5 minutes.
 - A full `sim_range.py --check` takes about 10 minutes in the background and writes nothing.
 
+## Wave 4, client slice (2026-10-15, diff main...l1b-wave4 at 2ec9da9): 0 Critical, 0 Major, 1 Minor
+Findings are in `docs/prompts/l1b-w4-review/client.md`. Wave 4 is "no waits, no walls": regions,
+the chase out of camp, every hit lands, and CampAim keeps only the gate and resting clauses.
+
+**Minor:** touch auto-fire triggers on an awake body inside the 5° assist cone, but the shot flies
+along the crosshair and pierces. It can therefore hit, and wake, a resting body of another camp
+(an A chaser in front of B.fire1).
+
+**Pattern: when a server rule stops blocking something, re-ask every client "only target X" gate
+about collateral.** Wave 2's L1b-7 (BLOCKED out of play) silently covered pierce, blast, arcs
+and near misses. With it gone, a gate on the trigger no longer bounds what the shot hits.
+
+**Verified, safe to reuse:**
+- The wire's `resting` bit is `held or state == "rest"` (`CrowdService` about :1270).
+  - Homeward bodies and stood-down rushers are takeable.
+- `applyFloors` runs before `SetPhase` in `onRunState`. A run leaves `lobby` only in a RunState
+  that carries the floors, so a "floor not yet told" body is never shootable.
+- RunState is sent at `stateHz` with whole `floors` every time, so per-floor data costs
+  bandwidth all run long. In Wave 4 that is 15 cells twice.
+- Read-only client gates: `py tools/check_compile.py --counts`, then `luau-lsp analyze
+  --sourcemap sourcemap.combat.json` on the named files. Both write nothing in the worktree.
+
+## Wave 4, crowd slice (2026-10-15, diff main..l1b-wave4 at 2ec9da9): 0 Critical, 1 Major, 4 Minor
+Findings are in `docs/prompts/l1b-w4-review/crowd.md`.
+
+**Major: `closing` is stamped from the desired seek speed, so it never clears.** Several rushers
+seek one region-clamped edge point with stop 0, and separation keeps all but one off it. They seek
+forever, so the group never stands down or leashes. This happens below a drop (with a hit every
+under 8 s) and under the lookout ledge (known by sight).
+- With 1 fodder the group goes home at 5.9 s. With 2 or more it never does.
+- The sim never showed it: the stand-down was "proved on Step timelines" only.
+
+**Patterns:**
+- **A "still moving" flag built from desired velocity is wrong whenever bodies share a goal.**
+  Separation makes desire permanent. Judge "arrived or still closing" from progress toward the
+  goal, and probe with 2, 4 and 6 bodies, not 1. Every single-body harness case passed.
+- **A forced state change that skips the "not striking" guard freezes a mind.** Here `Forget`
+  sent a group home mid-windup.
+  - `integrate` stops thinking for a group not in `fight`.
+  - `CrowdBrain.Commit` counts striking minds even while they rest, so the frozen mind holds a
+    `perPlayer` place for good. The probe showed 1 of 2 strikes allowed against that player.
+  - Grep every new path into home or rest for the leash's `not striking` guard.
+- **A non-convex region breaks "in flat reach ⇒ go".** A brute with lane reach 22 charges into
+  the U-bend's 6-stud void, with a runway of about 0, and never walks round.
+- **A deleted case can leave an OLD mutation alive.** Here "a group walking home engages" passes
+  without it. Apply old mutation texts to a snapshot whenever a wave deletes checks.
+- **A per-step heal at the post is invulnerability** when the group stays in `fight`, here a
+  stood-down rusher while its shooters fight.
+
+**Probe recipe (CrowdService internals, nothing in the worktree):**
+1. A scratch `build.py` imports `run_harness`.
+2. It takes `R.prelude(WT)` and replaces `"\nreturn CrowdService\n"` with `CrowdService._camp = camp`
+   added before the return.
+3. It appends every `R.TESTS` file with `VERDICT` stripped, then the probe, wrapped in
+   `L1BC.crowdGroup`.
+4. `W4C.enter()` gives the U-region fixture. `W4C.uBend()` is the real RoadAB1–5.
+5. To place a group: `W4C.place(posture, points, kinds, over)`.
+6. To read a group's brain: `Crowd._camp.groups[g].brain`.
+7. To hit as a player: `Crowd.Damage(id, amount, userId, nil, nil)`.
+
+## Wave 4, run slice (2026-10-15, diff main..2ec9da9, branch `l1b-wave4`): 0 Critical, 0 Major, 3 Minor
+Findings are in `docs/prompts/l1b-w4-review/run.md`. Wave 4 is the shared chase region, the pace
+tent, the clear on fielded raiders and N's approaches. B's code matched the contract, the harness
+passed 2,252 checks, and all 21 of B's mutations were caught.
+
+**Patterns:**
+- **A rule kept "unchanged" can rest on assumptions the wave broke.** `SafePoint` reads
+  "a group of floor i is busy" as "there is a fight at checkpoint i", and treats `home` as
+  harmless. Once groups chase along the road and `home` turns back, both readings are wrong.
+  Grep every consumer of `Busy()` and `awakeGroups` whenever group location or state semantics
+  change.
+- **A bound or clause that the shipped data never exercises is unpinned.** Two cases here:
+  - "before the locking camp", when the lock is always the last zone;
+  - "tent units count", when the residents already field the widest and longest kind.
+
+  Prove each with a one-line mutation on a scratch copy.
+
+**Forest Road facts:**
+- The plateau roads are 16 wide over void down to `killY` −13, so a fall during a road chase
+  triggers the rescue, which goes to `SafePoint`.
+- Checkpoints: A (−150, −44) on RoadAB1, B (110, −44) on RoadBC1. Walking the road always
+  reaches them (`checkpointReach` 8).
+- `Begin` puts the party in step "armed" when the first stage is the locking camp.
+
+**Recipe:** to run mutations, use `mutate.py <scratch-snapshot> <exe> "l1b w4:"`, which takes
+about 2 minutes. The verdict is "MUTATIONS: n run, 0 not caught".
+
+## Wave 4, data slice (2026-10-15, diff main..2ec9da9): 0 Critical, 3 Major, 4 Minor
+Findings are in `docs/prompts/l1b-w4-review/data.md`. Every gate was green, and the Region and
+CampBrain mirrors matched rule for rule. All three Majors came from probes the gates never ran.
+
+**Majors:**
+- **Lunges through the cliff.** Road5's cell runs to the lip of the climb.
+  - Think measures reach on the flat. VitalsService's height test (`feet − floorY ≤ height`) has
+    no lower bound except for the lob.
+  - So the fodder at the lip hit a player standing at the foot, 8 below. Checklist step 2 says
+    "stand below".
+- **The tent's pace clock was spent before the step that tests it.**
+  - `busySeconds` is cumulative. With A's pace 15 s and lead 0.2, the camp is never ahead again
+    after 12 s of busy time.
+  - The checklist's walk-out and lose (steps 2–3) burn 17+ s, so step 4's "at 4/4 a raider comes
+    out" cannot happen.
+- **The sniper band passed only on its script.** The scripted sniper idles 10 s below the drop.
+  Going straight to the ledge earned 35–42k cash a minute against the mission's 24–26k.
+
+**Patterns:**
+- **A scripted adversary in a "must earn less" band:** run its strongest course (no wasted
+  phases) before believing the band.
+- **A cumulative clock in a checklist:** replay the checklist's order in the simulator. Bands
+  measured on a fresh camp miss the state that earlier steps leave behind.
+- **A chase region that ends at a drop or a ledge:** check every ground-shape hit rule against
+  feet above and below the crowd floor. Rules written as "nothing stands below the floor"
+  break first.
+- **Perch gates:** check what they skip, not only what they test. Two gaps here:
+  - tops over `sightAbove` were skipped, though no shooter answers there (Reachable needs the
+    band);
+  - floor-height ground off the region was skipped.
+
+**Probe recipe:** the flow is the same as `bow_report`.
+1. `sys.path.insert(0, <wt>\tools)`, then `import sim_range as S`.
+2. Build the run: `S.level_context()`, `S.resolve_level(...)`, `S.load_level_layout(...)`,
+   `S.level_view(...)`.
+3. Make a policy: `dict(S.THREAT_POLICIES["sniper"], weapon=(bow, None))`.
+4. Patch module constants (`S.SNIPER_BACK`, `S.SNIPER_BELOW_SECONDS`) to move the course.
+5. Run `S.LevelRun(view, hp, ctx, level, layout, diff, policy, seed).run()`.
+6. Read `run.tents[*]["state"]["busySeconds"]`, `run.log` (hits on him) and `r["scene"]`.
+
+For gate mutations, `git archive HEAD src tools | tar -x` into the scratchpad, edit the copied
+JSON, and run `py -I <copy>/tools/check_levels.py --no-plan`. The 3.12 and 3.14 Pythons gave
+identical lose distances here.
+
+## Wave 4, fix-diff check (2026-10-16, diff 2ec9da9..e428e85): 0 Critical, 1 Major, 2 Minor
+Harness 2,337 PASS, mirror_mutants 90/90 caught (11 min), mutate.py 724 texts all exactly once,
+check_levels / stage mirror / sim_combat / compile / luau-lsp / stylua / selene clean.
+
+- **Major: two rules for one question read different heights.** `CampBrain.Melee` judges the
+  LIVE root (`Seen.root`), `CrowdBrain.reaches` judges the rest surface (`restY − lift`). A player
+  hopping at the foot of the climb enters the melee band for ~4 steps a hop: no stand-down
+  (anyMelee), no leash (anyReach), and no windup (reaches). Probe: still player, home at step
+  112; hopping (with or without hits), never home in 30 s, 4 of 4 packed at the lip.
+- **Pattern: when a fix splits one judgement across two modules, check both read the same
+  sample** (live vs rested, server vs client). Probe the "player jumps" variant of every
+  still-player case; jumping is constant in this game.
+- **Minor:** R13 covered pierce along the line but not splash (Launcher `splashRadius` 10,
+  Longbow A full-draw burst `blastRadius` 5).
+- **Verified:** R2 cannot block rest forever (a resting member never Thinks; a blow ends in
+  recover; dormancy only at rest). goalGap is stale only across goal-less steps (one false
+  step). Range hash case still passes, so R6/R14/R15 did not move the P4 range set.
+- **Recipe (hop probe):** scratch `build.py` = `R.prelude(snap)` + every `R.TESTS` file with
+  VERDICT stripped + probe; inside `L1BC.crowdGroup`, `W4C.enter()`, `W4C.place(...)`, set
+  `root.Position` per step on a parabola (v0 84, g 196.2 at 15 Hz), count `seen(id).state`.
+
 See [[p5-missions-review]] and [[p4-enemy-roles-review]].

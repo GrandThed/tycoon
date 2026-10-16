@@ -194,3 +194,22 @@ road or after leaving) until they lose him; the tent is a pace reserve that send
 fast (his own option, over the lead's "no waiting" pick); only the tents felt slow; natural barriers
 instead of fenced squares go to L4. He called the fenced fighting areas "really lazy". Wave 4 + his look at
 the Chief's Clearing and the sneak close L1.
+
+**L1b Wave 4 "no waits, no walls" merged to `main` 2026-10-16** (fast-forward of `l1b-wave4-fix`; place files
+rebuilt; waiting on Ben's look, PLAYTEST "L1b Wave 4"). Ben's picks (click questions with sketches): raiders
+follow anywhere on the road (over the lead's "halfway"), an unreachable shooter makes them give up, the tent
+sends only when he clears too fast, and on Normal the three perch snipers (ledge, secret lookout, cache) that
+out-earn fighting are **accepted until L4** (no data lever fixed them; camps never refill). Built as one shared
+height-8 region on the plateau (`Region.luau`, doors routing the U-bends), `known`/`reachable`, stand-down,
+`meleeAbove`/`meleeBelow`, the tent's pace restarting at rest, N stepping forward only. Reviews: four slices
+0/4/12, fix-diff 0/1/2 (R1–R19 in `docs/prompts/l1b-w4-fix-round.md`). Lessons:
+- **A promise made to Ben from a simulator number must be checked against a course that plays it straight:**
+  "the sniper pays about 70%" came from a scripted course that idled 10 s below the drop; the honest course
+  paid 1.4×.
+- **Height bands must be judged on one sample everywhere** (rest surface vs live root split Melee from
+  `reaches` and let a hopping player hold the rushers forever); every ground shape needs a lower bound once a
+  floor ends at a drop.
+- **Do not let a long gate block fixes:** `mutate.py` (~2 h, one shared `mutant/` root, so not parallel in one
+  checkout) read the source while fixes waited; a second worktree (`tycoon-p5b`, branch `l1b-wave4-fix`) let the
+  fixers, the docs and the run go at once. After the full run, a stale-text check over all entries plus filtered
+  runs of the new ones is enough. Ben found the waits too long: offered to shard `mutate.py` (pending his word).
