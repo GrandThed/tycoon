@@ -2759,6 +2759,7 @@ export type CampRulesConfig = {
 	chaseSight: number, -- L1b-W4-18: studs (flat, all round, in the band) from any living member: that player is known
 	hitMemorySeconds: number, -- L1b-W4-18: seconds a group keeps knowing a player whose hit landed on a member
 	meleeAbove: number, -- L1b-W4-19: studs a root may be over the floor and still be reachable by the rushers
+	meleeBelow: number, -- R14: studs a root may be under the floor and still be reachable by the rushers
 }
 export type CampRect = { x: number, z: number, hx: number, hz: number }
 export type CampUnit = { kind: string, count: number }

@@ -497,6 +497,25 @@ local function choose(
 	return if best == 0 and again then mind.last else best
 end
 
+-- Fix round R14: can this attack hit the target at all? A ground shape judged from the crowd's
+-- floor (a lunge, an arc, a lane, a ring: not a line, a lob or a shot) hits feet within its
+-- `height` of that floor, above or below (R6). The feet are those of the surface the target last
+-- stood on, so a player jumping over the floor is still wound up at (ruling 21) while one on a
+-- ledge, or at the foot of a drop below the region's lip, is not: a windup at someone the blow
+-- cannot reach would only hold its group's leash.
+local function reaches(body: Body, attack: Types.CrowdAttackDef, target: Target): boolean
+	local height = attack.height
+	local shape = attack.shape
+	if
+		height == nil
+		or not (shape == "lunge" or shape == "arc" or shape == "lane" or shape == "ring")
+	then
+		return true
+	end
+	local above = target.restY - target.lift - floorOf(body).centre.Y
+	return above <= height and above >= -height
+end
+
 -- Fix round R5: does a lane get its run? On a region floor (no longer convex: the U-bend's arms
 -- stand 22 apart across a void) only when the region's runway along the facing it would lock is at
 -- least the flat distance to the target less the lane's width; otherwise the brute walks the
@@ -540,7 +559,8 @@ local function begin(
 		end
 		local attack = attacks[index]
 		if
-			laneRuns(body, mind, def, attack, distance)
+			reaches(body, attack, target)
+			and laneRuns(body, mind, def, attack, distance)
 			and admit(body, def, attack, target.userId, threat)
 		then
 			mind.phase = "windup"

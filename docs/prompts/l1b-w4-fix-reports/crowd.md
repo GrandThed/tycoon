@@ -176,3 +176,67 @@ CrowdService.Stirred(): { [number]: boolean }
   the Chief's fodder still attack in pairs.
 - A U-bend brute walks round by AB3 rather than lunging at the void.
 - After chasing the Pickets out and losing them, then a fast clear at 4 / 4: the tent sends again.
+
+## R14 — the foot of the climb (added by the lead during the round)
+
+### Changes
+- **`CampBrain.Melee`:** a new lower bound, `root.Y − floorY ≥ −camps.meleeBelow`. It is measured
+  as `meleeAbove` is: the root against the floor.
+  - `meleeBelow` is in `RULE_KEYS`. It must be finite and not negative (0 is allowed).
+  - `Types.CampRulesConfig` gains `meleeBelow: number`.
+- **`CrowdBrain.begin`:** a new local `reaches`, asked before `laneRuns` and `admit`.
+  - It applies to a lunge, an arc, a lane or a ring that has a `height`. These are the ground
+    shapes judged from the crowd's floor; a line, a lob and a shot are left alone.
+  - Such an attack is not begun unless the target's feet lie within `height` of the floor, above
+    or below (R6's band).
+  - The feet are those of the surface the target last stood on (`restY − lift`), not the airborne
+    root. So ruling 21 holds: a player jumping over the floor is still wound up at. A player on a
+    ledge, or at the foot of a drop, is not.
+  - It applies on every floor, the range's and arena's included. Bosses will no longer start a slam
+    or a charge at a player standing on a block higher than its `height`; `choose` moves to their
+    next attack. Before, those blows started and missed. The designer's boss sims should confirm
+    this.
+
+### The value
+- I used `meleeBelow = 1.5` in the harness rules.
+- What it must cover:
+  - **At least 0:** a player standing on the floor or the road has a root 3 over it.
+  - **At most `lowest rusher ground height − ROOT_HEIGHT − COVER_MARGIN`:** that is 5 − 3 − 0.5 =
+    1.5. Then every melee-reachable player can be hit, mirroring the `meleeAbove` gate (7.5).
+  - **At most `sightBelow` (4):** past that, the band refuses first.
+- With 1.5, a step down off the region's edge of up to 4.5 studs (feet) still counts as reachable.
+  The foot of the climb (feet 8 under, root 5 under) does not. With today's `sightBelow` 4, the foot
+  of the climb is also out of the band.
+- **Combat.json must get `"meleeBelow": 1.5` before this ships.** Without it,
+  `CampBrain.Problems` refuses the camp rules: `WaveService` warns, and `SetCampRules` drops them.
+  The harness does not see this, because no real-file case runs `Problems` on `Combat.json`.
+- Suggested `check_levels` gate: `0 ≤ meleeBelow ≤ min(sightBelow, lowest rusher height −
+  ROOT_HEIGHT − COVER_MARGIN)`.
+
+### Cases (`tests_l1b_w4_crowd.luau`, "fix round: the foot of the climb", and the chase tests)
+- Problems with `meleeBelow` missing, NaN or negative: one line each. A value of 0 is fine.
+- `Melee` at the edge −1.5 is in; −1.51 is out.
+- Four fodder at the road's end over a hitter 8 under the floor, 2.3 flat past their inset end:
+  - (a) out of the band, known by his hits;
+  - (b) with `sightBelow` 6, in the band and seen.
+- In both, no blow is begun (0 body-steps in windup or attack), they go home by step 112 and step
+  101 (at most 120), and he is never engaged.
+- Ruling 21 kept: a fodder still winds up under a player in the air whose feet are 6 to 8 over the
+  floor.
+
+### Mutations and verify
+- Five new mutations and one replaced text (`l1b w4 crowd: Melee ignores meleeAbove`) are in
+  `crowd_mutations.py`. All six were proved caught.
+- The `mirror_mutants.py` entry "Melee ignores meleeAbove" is stale too. Its new text is in the
+  same file, for the designer.
+- Verify:
+  - `stylua --check src`: clean.
+  - `selene src`: 0 errors (the old `LegacyPanel` warning).
+  - `check_compile`: PASS, 157 files.
+  - Harness: **`HARNESS: PASS (2,333 checks)`**. This includes the lead's `tests_w2` fix.
+
+### Found
+- `ThreatField`'s travelling judges for a charge and a ring test only the upper bound
+  (`who.feetY − strike.floorY > height`, `ThreatField.luau:298` and `:346`). R6 gave the lower bound
+  only to the queued shapes in VitalsService. A lane cut at the lip, or a ring, could still reach a
+  player under the drop. `ThreatField` is on the untouched list.

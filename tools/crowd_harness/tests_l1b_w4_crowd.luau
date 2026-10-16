@@ -228,7 +228,7 @@ function W4C.chaseTests(): ()
 	print(" CampBrain.Problems (Wave 4 keys)")
 	check(#CB.Problems(R) == 0, "the rules with chaseSight, hitMemorySeconds and meleeAbove: no problem")
 	local each = true
-	for _, key in { "chaseSight", "hitMemorySeconds", "meleeAbove" } do
+	for _, key in { "chaseSight", "hitMemorySeconds", "meleeAbove", "meleeBelow" } do
 		each = each and #CB.Problems(W2A.rules({ [key] = 0 / 0 })) == 1 and #CB.Problems(W2A.rules({ [key] = -1 })) == 1
 		local missing = W2A.rules()
 		missing[key] = nil
@@ -237,6 +237,7 @@ function W4C.chaseTests(): ()
 	check(each, "each new key: missing, NaN or negative is one line")
 	check(#CB.Problems(W2A.rules({ chaseSight = 0 })) == 1 and #CB.Problems(W2A.rules({ meleeAbove = 0 })) == 1, "a chaseSight or a meleeAbove of 0 is a problem")
 	check(#CB.Problems(W2A.rules({ hitMemorySeconds = 0 })) == 0, "a hitMemorySeconds of 0 is not (no memory)")
+	check(#CB.Problems(W2A.rules({ meleeBelow = 0 })) == 0, "R14: a meleeBelow of 0 is not (the floor itself)")
 
 	print(" CampBrain.Struck (Wave 4)")
 	for _, state in { "rest", "rise", "fight", "home" } do
@@ -281,6 +282,7 @@ function W4C.chaseTests(): ()
 	check(melee(70, 10, 0) and melee(33, 10, 20), "on the road cell, and within chaseMargin (3) of the floor")
 	check(melee(77.12, 10, 7.12) and not melee(77.2, 10, 7.2), "off the road cell's far corner: rounded (2.998 yes, 3.11 no)")
 	check(not melee(0, 3.99, 0), "under the band: no")
+	check(melee(0, 6.5, 0) and not melee(0, 6.49, 0), "R14: meleeBelow (1.5) under the floor: at the edge yes, past it no (in the band, sightBelow 4)")
 	local shooters = { { at = vec(70, 8, 0), reach = 32 } }
 	local function reachable(x: number, y: number, z: number, list: { any }?): boolean
 		return CB.Reachable(def, L1BC.seen(7, x, y, z), list or {}, R)
@@ -965,5 +967,79 @@ function W4C.uBendBruteTests(): ()
 	check(lane ~= nil and lane.length >= 9 - 5, `R5: with the run there, it charges (length {if lane then string.format("%.1f", lane.length) else "none"})`)
 end
 L1BC.crowdGroup("fix round: the U-bend brute", W4C.uBendBruteTests)
+
+-- R14: a player at the foot of a drop below the lip. Four fodder at the road's end over a hitter
+-- 8 under the floor (root 5 under), 2.3 flat past their inset end, within a lunge's flat reach:
+-- no blow is begun at him (the lunge could not hit feet 8 under, R6), so nothing holds the leash.
+-- (a) He is out of the band (sightBelow 4), known by his hits. (b) With sightBelow 6 he is in the
+-- band and seen, and meleeBelow (1.5) keeps him out of the rushers' reach.
+function W4C.footTests(): ()
+	print(" fix round R14: the foot of the climb")
+	for _, part in { "a", "b" } do
+		fresh()
+		W4C.enter()
+		if part == "b" then
+			Crowd.SetCampRules(W2A.rules({ sightBelow = 6 }))
+		end
+		root.Position = vec(31, 3, 0)
+		local group, ids = W4C.place("guard", W4C.fourPosts(), { "fodder", "fodder", "fodder", "fodder" }, { yaw = -math.pi / 2 })
+		step2(2)
+		if part == "a" then
+			Crowd.Damage(ids[1], 1, 7, nil, nil)
+		end
+		local fought = W4C.untilEvent(group, "fight", 10)
+		local wound = 0
+		local engaged = false
+		local home: number? = nil
+		for count = 1, 150 do
+			if part == "a" and count % 60 == 0 then
+				Crowd.Damage(ids[1], 1, 7, nil, nil)
+			end
+			step2()
+			for _, id in ids do
+				local state = seen(id).state
+				if state == "windup" or state == "attack" then
+					wound += 1
+				end
+			end
+			engaged = engaged or Crowd.Engaged(7)
+			for _, event in L1BC.events() do
+				if event.group == group and event.to == "home" then
+					home = home or count
+				end
+			end
+			if home ~= nil then
+				break
+			end
+		end
+		local packed = 0
+		for _, id in ids do
+			if W4C.flat(id, 28.7, 0) <= 4.5 then
+				packed += 1
+			end
+		end
+		check(fought ~= nil and packed >= 1, `(R14 {part}: the four wake and reach the lip over him: {packed} near the end)`)
+		check(wound == 0, `R14 {part}: no blow is begun at a player 8 under the floor ({wound} body-steps in windup or attack)`)
+		check(home ~= nil and home <= 120, `R14 {part}: they go home within leash + a margin (step {home or "never"}, at most 120)`)
+		check(not engaged, `R14 {part}: he is never engaged`)
+	end
+
+	-- Ruling 21 kept: a player in the air over the floor, feet 6 to 8 over it (past the lunge's
+	-- height 5), is still wound up at, the band being judged on the surface he last stood on.
+	fresh()
+	W4C.enter()
+	root.Position = vec(200, 15, 0)
+	step2(2)
+	local jumper = Crowd.Spawn("fodder", vec(206, 12, 0), "fight", nil, nil, 2)
+	local woundUp = false
+	for count = 1, 45 do
+		root.Position = vec(200, if count % 2 == 0 then 21 else 23, 0)
+		step2()
+		woundUp = woundUp or seen(jumper).state == "windup"
+	end
+	root.Position = vec(200, 15, 0)
+	check(woundUp, "R14: a fodder still winds up under a player in the air over its floor (ruling 21)")
+end
+L1BC.crowdGroup("fix round: the foot of the climb", W4C.footTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

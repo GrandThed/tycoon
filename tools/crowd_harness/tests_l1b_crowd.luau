@@ -51,6 +51,8 @@ function L1BC.rules(): any
 		chaseSight = 40,
 		hitMemorySeconds = 8,
 		meleeAbove = 7.5,
+		-- R14 (fix round): root 1.5 under the floor, feet 4.5: a height-5 lunge still hits them.
+		meleeBelow = 1.5,
 	}
 end
 

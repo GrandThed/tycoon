@@ -113,6 +113,7 @@ local RULE_KEYS = {
 	"chaseSight",
 	"hitMemorySeconds",
 	"meleeAbove",
+	"meleeBelow",
 }
 -- Keys that must be above 0, not only not negative.
 local POSITIVE_KEYS: { [string]: boolean } = {
@@ -409,8 +410,9 @@ end
 
 -- L1b-W4-19: may the group's rushers reach this target? With a region: in the height band, at most
 -- meleeAbove over the floor (a ledge or a block over the road is the shooters' business, else the
--- rushers would stand under it for good), and within chaseMargin (flat, rounded corners) of the
--- region. With none: the in-play rule.
+-- rushers would stand under it for good), at most meleeBelow under it (R14: the foot of a drop
+-- below the region's lip is out of their reach, as their blows are, R6), and within chaseMargin
+-- (flat, rounded corners) of the region. With none: the in-play rule.
 function CampBrain.Melee(
 	def: Types.CampGroupDef,
 	target: Seen,
@@ -421,8 +423,10 @@ function CampBrain.Melee(
 		return CampBrain.InPlay(def, target, {}, rules)
 	end
 	local root = target.root
+	local above = root.Y - def.floorY
 	return inBand(def, root, rules)
-		and root.Y - def.floorY <= rules.meleeAbove
+		and above <= rules.meleeAbove
+		and above >= -rules.meleeBelow
 		and Region.Distance(region, root.X, root.Z) <= rules.chaseMargin
 end
 
