@@ -4974,7 +4974,7 @@ Setup: `docs/MANUAL_STEPS.md` "L1b Wave 4".
       - "Pickets cleared" shows the moment the last raider falls, even one that chased you onto
         the road. The tent may still hold raiders: they stay inside.
       - **The bonus:** watch the **$** cash chip when the banner shows. It jumps by more than one
-        kill (the camp bonus, about $700). The HUD reads **Camps 1 / 3**.
+        kill (the camp bonus, a tenth of what the camp's raiders pay). The HUD reads **Camps 1 / 3**.
       - Bug: you wait for the tent; no banner; the banner with a raider still standing; no jump at
         the banner.
 - [ ] 7. **N**, then **the sneak past Main Camp.**
