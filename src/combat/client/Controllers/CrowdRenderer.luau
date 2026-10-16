@@ -88,6 +88,13 @@
 --   and is never refused as stale), but everything that is timed off a sighting (a tell, the
 --   plate's break, the enrage beat) treats it as the first. An info with no `at` (the range)
 --   keeps the old rule: not drawn before its first snapshot. Absence never removes a body.
+-- * L1b Wave 4 ("L1b Wave 4 — no waits, no walls" -> Client, L1b-W4-33). An open camp's floor
+--   may belong to a chase region (RunFloor.cells: the region's cells, the same list on every
+--   floor of it), and the server then keeps its bodies in the union of those cells, not in the
+--   floor's rectangle. The one thing here that bounds a body, the drawn charge (laneReach),
+--   cuts with the shared Region.Runway over those cells, so a brute's lane runs along the road
+--   and through a door exactly as far as the server lets the brute run. Nothing else changes:
+--   a body keeps its floor's height wherever on the region it stands.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -96,6 +103,7 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local CrowdCodec = require(sharedFolder:WaitForChild("CrowdCodec"))
+local Region = require(sharedFolder:WaitForChild("Region"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
@@ -361,8 +369,9 @@ type Entity = {
 
 -- One floor of the crowd: its top centre and its half extents in X and Z (nil = unknown).
 -- camp = a level camp's floor (SetFloors), not the range's arena (SetFloor): only a camp's
--- floor gates touch auto-fire (CampFloor).
-type Floor = { centre: Vector3, half: Vector3?, camp: boolean }
+-- floor gates touch auto-fire (CampFloor). cells = its chase region's cells (L1b-W4-33), what
+-- bounds its bodies in place of the rectangle; nil = the rectangle.
+type Floor = { centre: Vector3, half: Vector3?, camp: boolean, cells: { Types.CampRect }? }
 
 local FOLDER_NAME = "CrowdBodies"
 -- The wire's origin is the world origin, for good (L1 ruling 12): CrowdService encodes every
@@ -2170,7 +2179,8 @@ end
 -- range / speed, so the wire never says the charge stopped short; the client has to know the
 -- edge. This mirrors CrowdBrain's runway (a body of its radius stays wholly on the floor),
 -- and the floor is the body's own as the server told it (SetFloors), so it is the server's
--- rectangle. With that floor not known here nothing bounds the charge.
+-- rectangle, or (L1b-W4-33) its region's cells. With that floor not known here nothing bounds
+-- the charge.
 local function laneReach(entity: Entity): number
 	local reach = entity.threatReach
 	local home = floors[entity.floorIndex]
@@ -2185,6 +2195,14 @@ local function laneReach(entity: Entity): number
 	-- drawn figure's is floored.
 	local def = kindDef(entity.kind)
 	local radius = if def ~= nil then def.radius else entity.radius
+	local cells = home.cells
+	if cells ~= nil then
+		-- The origin comes off the wire at 1/32 stud, so a brute standing on the inset edge
+		-- can decode a hair outside it, where Runway answers 0 and the whole lane would vanish.
+		-- The server's body is inside, so it is pulled back in before measuring.
+		local inside = Region.Clamp(cells, from, radius)
+		return math.max(math.min(reach, Region.Runway(cells, inside, heading, radius)), 0)
+	end
 	local limitX = math.max(half.X - radius, 0)
 	local limitZ = math.max(half.Z - radius, 0)
 	if heading.X > 0 then
@@ -2636,10 +2654,45 @@ function CrowdRenderer.SetFloor(center: Vector3?, halfSize: Vector3?): ()
 	}
 end
 
+-- L1b Wave 4: a RunFloor's `cells` as a fresh list of CampRects when it is a non-empty list
+-- of whole ones (every value a finite number, both half extents above 0), else nil, so a
+-- malformed region costs its floor only the region and the floor keeps its rectangle.
+-- CombatUIController reads RunState with it too, so both sides agree on what counts.
+function CrowdRenderer.ReadCells(raw: any): { Types.CampRect }?
+	if typeof(raw) ~= "table" then
+		return nil
+	end
+	local count = #raw
+	if count == 0 then
+		return nil
+	end
+	local kept: { Types.CampRect } = table.create(count)
+	for key, rect in raw do
+		if typeof(key) ~= "number" or key ~= math.floor(key) or key < 1 or key > count then
+			return nil
+		end
+		if typeof(rect) ~= "table" then
+			return nil
+		end
+		local x, z, hx, hz = rect.x, rect.z, rect.hx, rect.hz
+		for _, value in { x, z, hx, hz } do
+			if typeof(value) ~= "number" or value ~= value or math.abs(value) == math.huge then
+				return nil
+			end
+		end
+		if hx <= 0 or hz <= 0 then
+			return nil
+		end
+		kept[key] = { x = x, z = z, hx = hx, hz = hz }
+	end
+	return kept
+end
+
 -- L1b: every camp's floor in a level, index = floor index, as RunState.floors carries them
 -- (`{}` in the lobby). The wire's origin does not move with them (WIRE_ORIGIN), so a floor
 -- that arrives after its bodies only draws their tells at their feet for a moment; no body is
--- ever misplaced. An entry that is not a whole RunFloor ends the list there.
+-- ever misplaced. An entry that is not a whole RunFloor ends the list there; a malformed
+-- `cells` (L1b Wave 4) only leaves that floor its rectangle.
 function CrowdRenderer.SetFloors(list: { Types.RunFloor }): ()
 	table.clear(floors)
 	for index, entry in list do
@@ -2657,6 +2710,7 @@ function CrowdRenderer.SetFloors(list: { Types.RunFloor }): ()
 			centre = Vector3.new(entry.x, entry.y, entry.z),
 			half = Vector3.new(entry.hx, 0, entry.hz),
 			camp = true,
+			cells = CrowdRenderer.ReadCells(entry.cells),
 		}
 	end
 end
@@ -2789,9 +2843,10 @@ function CrowdRenderer.GetHead(id: number): BasePart?
 end
 
 -- L1b fix round: the camp floor a body stands on, as its top centre and half extents (half.Y
--- is 0); nil for the range's arena, a body not known, or a floor that has not arrived. Touch
--- auto-fire reads it so it never wakes a camp the player is not in play for. The third value
--- (L1b Wave 2 fix round, ui-2): whether that body's camp group rests (CampAim).
+-- is 0); nil for the range's arena, a body not known, or a floor that has not arrived. The
+-- third value (L1b Wave 2 fix round, ui-2): whether that body's camp group rests. Touch
+-- auto-fire reads both (CampAim) so it never wakes a resting camp; since L1b Wave 4 only
+-- whether a floor came back is asked, not where it lies.
 function CrowdRenderer.CampFloor(id: number): (Vector3?, Vector3?, boolean)
 	local entity = byId[id]
 	if entity == nil then

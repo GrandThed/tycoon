@@ -102,6 +102,11 @@
 --  * Fix round (ui-2): auto-target never takes a body whose camp group rests (held or dormant
 --    too), so a phone can sneak past a camp; it wakes one only by walking into its sight. The
 --    whole rule is the pure CampAim.Takes.
+--
+-- L1b Wave 4 (docs/INTERFACES.md "L1b Wave 4 — no waits, no walls", L1b-W4-32): raiders chase
+-- out of their camps and every hit on an awake one lands, so auto-target takes every awake camp
+-- body wherever the local root stands; only the countdown and a resting group stay off limits.
+-- The root and the engaged flag no longer enter the camp rule, so neither is kept for it.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -261,9 +266,6 @@ type RangeState = {
 	-- so does waiting on the pad for the next wave (the local PartyMember.waiting).
 	inMission: boolean,
 	waiting: boolean,
-	-- L1b: the local PartyMember.engaged (a camp group fights this player, a slinger's reach
-	-- included), so auto-fire may answer a shooter from the road.
-	engaged: boolean,
 	activeSlot: Stance,
 	-- nil until FeedbackController pushes the server's loadout: the config's starting loadout.
 	loadout: Types.RangeLoadout?,
@@ -307,7 +309,6 @@ local rangeState: RangeState = {
 	rangeStarted = false,
 	inMission = false,
 	waiting = false,
-	engaged = false,
 	activeSlot = MELEE_SLOT,
 	device = "pc",
 	rangeTouches = {},
@@ -1085,38 +1086,27 @@ local function sphereInSights(
 end
 
 -- Whether auto-fire and auto-swing may take this body by themselves (CampAim): a camp's body
--- only while the local root is in play for its floor and its group is awake, never in the boss
--- room's countdown; a body with no camp floor (the range) always.
-local function campInPlay(id: number, root: Vector3): boolean
-	local centre, half, resting = CrowdRenderer.CampFloor(id)
-	local cfg = combatConfig
-	return CampAim.Takes(
-		centre,
-		half,
-		resting,
-		root,
-		missionState.phase,
-		rangeState.engaged,
-		if cfg ~= nil then cfg.camps else nil
-	)
+-- only while its group is awake and never in the boss room's countdown; a body with no camp
+-- floor (the range) always.
+local function autoMayTake(id: number): boolean
+	local centre, _, resting = CrowdRenderer.CampFloor(id)
+	return CampAim.Takes(centre ~= nil, resting, missionState.phase)
 end
 
 -- CrowdRenderer reports the ground point; the body sphere is centred at height/2 and the
--- head sphere sits at the top (INTERFACES P1 decision 1). `root` = the local root, for the
--- camp in-play gate.
+-- head sphere sits at the top (INTERFACES P1 decision 1).
 local function enemyInSights(
 	origin: Vector3,
 	look: Vector3,
 	range: number,
 	degrees: number,
-	lagPad: number,
-	root: Vector3
+	lagPad: number
 ): boolean
 	local limit = math.rad(degrees)
 	local found = false
 	CrowdRenderer.ForEach(
 		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
-			if found or not campInPlay(id, root) then
+			if found or not autoMayTake(id) then
 				return
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
@@ -1160,13 +1150,12 @@ local function enemyInReach(
 	origin: Vector3,
 	forward: Vector3,
 	extraPad: number,
-	lagPad: number,
-	root: Vector3
+	lagPad: number
 ): boolean
 	local found = false
 	CrowdRenderer.ForEach(
 		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
-			if found or not campInPlay(id, root) then
+			if found or not autoMayTake(id) then
 				return
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
@@ -1199,18 +1188,11 @@ local function targetOnAuto(
 	if isRanged(variant) then
 		local origin, look = shotRay(rig)
 		if variant.shape == "cone" then
-			return enemyInReach(variant, origin, look, 0, lagPad, root)
+			return enemyInReach(variant, origin, look, 0, lagPad)
 		end
-		return enemyInSights(
-			origin,
-			look,
-			variant.range,
-			controls.autoFireAssistDegrees,
-			lagPad,
-			root
-		)
+		return enemyInSights(origin, look, variant.range, controls.autoFireAssistDegrees, lagPad)
 	end
-	return enemyInReach(variant, root, flatCameraLook(), controls.autoSwingPad, lagPad, root)
+	return enemyInReach(variant, root, flatCameraLook(), controls.autoSwingPad, lagPad)
 end
 
 -- A queued tap still inside its buffer; an expired one is dropped.
@@ -2485,11 +2467,10 @@ function InputController.SetAbilityReady(readyIn: SlotTiers): ()
 end
 
 -- Pushed from every RunState: the run phase, and (P5) whether the local member is waiting on
--- the pad for the next wave (nil = not), and (L1b) whether a camp group is fighting them.
-function InputController.SetPhase(nextPhase: string, waiting: boolean?, engaged: boolean?): ()
+-- the pad for the next wave (nil = not).
+function InputController.SetPhase(nextPhase: string, waiting: boolean?): ()
 	missionState.phase = nextPhase
 	rangeState.waiting = waiting == true
-	rangeState.engaged = engaged == true
 	if not inPlay() then
 		missionState.attackHeld = false
 		missionState.chargeStartedAt = nil

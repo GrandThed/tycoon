@@ -152,12 +152,13 @@ local MELEE_SLOT = "melee"
 local RANGED_SLOT = "ranged"
 local ADMIT_CHECK_LEVER = "admitCheck"
 -- L1 ruling 33, Studio only: the keys, the lever each sends and the line that names them.
+-- L1b-W4-31: on the road N stops at the next open camp's approach before the boss room.
 local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: string } } = {
 	[Enum.KeyCode.N] = { lever = "skip", value = "stage" },
 	[Enum.KeyCode.B] = { lever = "skip", value = "boss" },
 	[Enum.KeyCode.G] = { lever = "gear", value = "next" },
 }
-local DEBUG_HINT = "N stage · B boss · G gear"
+local DEBUG_HINT = "N next camp · B boss · G gear"
 -- Run phases with nothing left to fight: the summary card has the screen.
 local RUN_OVER_PHASES: { [string]: boolean } = { summary = true, ended = true }
 -- L1 ruling 8: the five phases in which a member may act.
@@ -1607,7 +1608,30 @@ local function bootMission(): ()
 	-- L1b: the crowd's floors, one per camp in floor-index order, handed on whenever they
 	-- differ from the last ones by value (a RunState comes four times a second and carries them
 	-- every time). The lobby's `{}` empties them. A malformed entry ends the list there, as
-	-- CrowdRenderer.SetFloors reads it.
+	-- CrowdRenderer.SetFloors reads it. L1b Wave 4: a floor's chase-region `cells` travel with
+	-- it (read by CrowdRenderer.ReadCells, so a malformed list is dropped the same way) and are
+	-- compared by value too: they bound the drawn charge (L1b-W4-33).
+	local function sameCells(a: { Types.CampRect }?, b: { Types.CampRect }?): boolean
+		if a == nil or b == nil then
+			return a == b
+		end
+		if #a ~= #b then
+			return false
+		end
+		for index, rect in a do
+			local other = b[index]
+			if
+				rect.x ~= other.x
+				or rect.z ~= other.z
+				or rect.hx ~= other.hx
+				or rect.hz ~= other.hz
+			then
+				return false
+			end
+		end
+		return true
+	end
+
 	local function applyFloors(list: { any }): ()
 		local held = st.floors
 		local fresh: { Types.RunFloor } = {}
@@ -1622,10 +1646,14 @@ local function bootMission(): ()
 			then
 				break
 			end
-			table.insert(
-				fresh,
-				{ x = entry.x, y = entry.y, z = entry.z, hx = entry.hx, hz = entry.hz }
-			)
+			table.insert(fresh, {
+				x = entry.x,
+				y = entry.y,
+				z = entry.z,
+				hx = entry.hx,
+				hz = entry.hz,
+				cells = CrowdRenderer.ReadCells(entry.cells),
+			})
 		end
 		local same = #fresh == #held
 		if same then
@@ -1637,6 +1665,7 @@ local function bootMission(): ()
 					or floor.z ~= old.z
 					or floor.hx ~= old.hx
 					or floor.hz ~= old.hz
+					or not sameCells(floor.cells, old.cells)
 				then
 					same = false
 					break
@@ -1720,7 +1749,6 @@ local function bootMission(): ()
 		local userId = player.UserId
 		local humans = 0
 		local waiting = false
-		local engaged = false
 		for _, member in run.party do
 			if typeof(member) ~= "table" then
 				continue
@@ -1733,10 +1761,9 @@ local function bootMission(): ()
 				-- Waiting in the lobby camp for the next boundary (ruling 18): the server
 				-- refuses every attack, so none is sent. CombatHud reads the flag the same way.
 				waiting = member.waiting == true and live
-				engaged = member.engaged == true and live
 			end
 		end
-		InputController.SetPhase(phase, waiting, engaged)
+		InputController.SetPhase(phase, waiting)
 
 		-- The map opens whenever the phase becomes `lobby` (the first RunState and every
 		-- return) and closes when the phase leaves it. On a return the server refuses a start
