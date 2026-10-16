@@ -1613,11 +1613,12 @@ local function placeTents(plan: StageFlow.Plan): ()
 			warn(`[WaveService] the crowd took group {tent.def.id} as {group}, not {wanted}`)
 		end
 		local stock = if group ~= 0 then #tent.kinds else 0
+		local zone = plan.zones[tent.zone]
 		table.insert(run.tents, {
 			group = group,
 			sent = 0,
 			refused = {},
-			state = CampBrain.NewTent(stock),
+			state = CampBrain.NewTent(stock, if zone ~= nil then zone.residents else 0),
 			owed = false,
 		})
 	end
@@ -1626,9 +1627,11 @@ end
 -- L1b-W2-7's executor, before advance, with L1b-W4-28's pace: each tent's camp clock runs while
 -- the camp is up (a group of its floor in rise or fight), and the tent is active only while the
 -- camp is up, one of its residents lives and it is ahead of its clock (the killed share of its
--- residents less busy time over pace.seconds, at least pace.lead). An active tent sends its next
--- body when CampBrain says it is due, rising at its door (B-4) and walking to its own ring post,
--- and rouses its group so the body joins the fight. One body per tent per tick. A refused spawn
+-- residents less busy time over pace.seconds, at least pace.lead). The fix round's R7: while
+-- every group of the camp stands at rest (its floor not in CrowdService.Stirred), the measure
+-- starts afresh, from the residents alive then, as a fresh camp would (CampBrain.TentClock). An
+-- active tent sends its next body when CampBrain says it is due, rising at its door (B-4) and
+-- walking to its own ring post, and rouses its group so the body joins the fight. One body per tent per tick. A refused spawn
 -- warns once per run and counts as sent, so the tent moves on, but is booked as refused and never
 -- priced in the clear bonus (R12): the population rule makes it a bug. Never yields.
 -- The fix round: a body that joins a group already up is a threat for the safe point at once
@@ -1642,6 +1645,7 @@ local function tickTents(): ()
 		return
 	end
 	local busy = CrowdService.Busy()
+	local stirred = CrowdService.Stirred()
 	local now = os.clock()
 	for index, tent in run.tents do
 		local planned = plan.tents[index]
@@ -1655,14 +1659,13 @@ local function tickTents(): ()
 		if tent.owed then
 			CrowdService.RouseGroup(tent.group)
 		end
-		CampBrain.TentClock(tent.state, campBusy, now)
 		local residentsAlive = CrowdService.AliveOn(floor) - CrowdService.GroupAlive(tent.group)
-		local zone = plan.zones[floor]
-		local residents = if zone ~= nil then zone.residents else 0
+		local clock = tent.state
+		CampBrain.TentClock(clock, campBusy, now, stirred[floor] ~= true, residentsAlive)
 		local ahead = CampBrain.Ahead(
-			residents - residentsAlive,
-			residents,
-			tent.state.busySeconds,
+			clock.residents - residentsAlive,
+			clock.residents,
+			clock.busySeconds,
 			planned.pace
 		)
 		local active = CampBrain.TentActive(campBusy, residentsAlive, ahead)
