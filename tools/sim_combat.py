@@ -2554,14 +2554,15 @@ def level_gates(file, level, layout, expeditions, proving, combat_cfg):
     return problems
 
 
-def level_pay(level, difficulty, ranks, combat_cfg, summon_kills, sent=None):
+def level_pay(level, difficulty, ranks, combat_cfg, summon_kills, sent=None, refused=None):
     """What a whole solo clear of a level pays at a difficulty (Combat.KillReward per kill, L1b-15):
     every resident of every camp (by minDifficulty, never countMult: L1b-10), the first `sent`
     {camp id: bodies} of each open camp's tent stock in its order (L1b-W4-28: a tent sends only a
     camp cleared ahead of its pace; none by default, the clear at pace), every configured body of
     the boss room's waves, every boss with its Valor, each camp's clear bonus (L1b-W4-30:
     Combat.ClearBonus over what it fielded, StageFlow.Fielded), and `summon_kills` {boss kind:
-    {kind: kills}} of what the bosses call. Returns (totals, per-camp and per-stage rows, kills by
+    {kind: kills}} of what the bosses call. `refused` {camp id: stock indices, 1-based} are tent bodies
+    the crowd refused: sent, never fielded, so neither killed nor priced (fix round R12). Returns (totals, per-camp and per-stage rows, kills by
     kind, each camp's bonus {camp id: (cash, materials)})."""
     import sim_range as sr
 
@@ -2582,7 +2583,9 @@ def level_pay(level, difficulty, ranks, combat_cfg, summon_kills, sent=None):
         if tent is not None and config["id"] not in locking and out > 0:
             stock_kinds = [u["kind"] for u in sr.fielded_units(tent.get("units") or [], ranks[difficulty], ranks)[0]
                            for _ in range(u["count"])]
-            units += [{"kind": kind, "count": 1} for kind in stock_kinds[:out]]
+            skipped = set((refused or {}).get(config["id"]) or ())
+            units += [{"kind": kind, "count": 1} for index, kind in enumerate(stock_kinds[:out], 1)
+                      if index not in skipped]
         for unit in units:
             c, m = kill_reward(rewards, unit["kind"], scales["rewardMult"])
             cash += c * unit["count"]
@@ -3451,10 +3454,10 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
                 if r["end"] != "cleared":
                     continue
                 cleared += 1
-                written = level_pay(level, difficulty, ranks, combat_cfg, {}, r["fielded"])[2]
+                written = level_pay(level, difficulty, ranks, combat_cfg, {}, r["fielded"], r.get("refusedTent"))[2]
                 extra = r["killed"].get(called, 0) - written.get(called, 0) if called else 0
                 owed, _rows, kills, bonuses = level_pay(level, difficulty, ranks, combat_cfg,
-                                                        {boss_kind: {called: extra}}, r["fielded"])
+                                                        {boss_kind: {called: extra}}, r["fielded"], r.get("refusedTent"))
                 if r["wallet"] != owed or r["killed"] != kills:
                     unpaid.append(f"{difficulty}: paid {r['wallet']['cash']:,}/{r['wallet']['materials']}/"
                                   f"{r['wallet']['valor']}, the file pays {owed['cash']:,}/{owed['materials']}/"

@@ -1828,7 +1828,7 @@ class Fighter(Enemy):
         self.floor = None
         self.resident = None
         self.idle = None
-        self.closing = False  # L1b-W4-23: a thinking rusher walked under its brain this step
+        self.closing = False  # L1b-W4-23, fix round R1: a thinking rusher got nearer its routed goal
         # L1b-W2-10: a dormant body (its resting group far from every player) is not integrated,
         # not separated and not clamped; it stays where it stood.
         self.dormant = False
@@ -1861,6 +1861,13 @@ class Fighter(Enemy):
         self.last = None
         self.enraged_at = None
         self.chain_left = 0
+        # Fix round R1: the flat distance to its routed goal at the last step that gave it one
+        # (CrowdService's Enemy.goalGap, math.huge at spawn), and whether this step's seek got
+        # nearer than that by more than MOVE_THRESHOLD x dt. R4: a stood-down rusher already
+        # healed at its post (Enemy.healed).
+        self.goal_gap = math.inf
+        self.progressed = False
+        self.healed = False
         self.place()
 
     def place(self):
@@ -1888,14 +1895,14 @@ class Fighter(Enemy):
         self.band_max = max(min(kind.get("bandMax") or self.reach, self.reach), 0)
         self.band_min = min(max(kind.get("bandMin") or 0, 0), self.band_max)
 
-    def choose(self, now, gap):
+    def choose(self, now, gap, refused=()):
         """[choice] CrowdBrain.choose: among the attacks allowed in this phase, in reach and off
         cooldown, the one whose last impact is oldest (never used = oldest; the list's order
         breaks a tie). The attack of the last windup is taken only when no other is ready.
-        None when nothing is."""
+        None when nothing is. `refused`: indices begin has already turned down this step."""
         best, best_at, again = None, math.inf, False
         for i, a in enumerate(self.attacks):
-            if not self.usable(i) or gap > a["reach"] + REACH_EPSILON:
+            if i in refused or not self.usable(i) or gap > a["reach"] + REACH_EPSILON:
                 continue
             if now < self.ready[i] - THREAT_EPS:
                 continue
@@ -2246,12 +2253,54 @@ class ThreatRun:
         level run routes a region's bodies through its doors)."""
         return gx, gz, stop
 
+    def stand_y(self):
+        """The height of the surface he stands on (an arena or a range: its one floor, 0)."""
+        return 0.0
+
+    def floor_y(self, e):
+        """The height of the crowd floor body `e` stands on (an arena or a range: 0)."""
+        return 0.0
+
+    def in_band(self, feet, height, floor_y):
+        """VitalsService's and ThreatField's height rule (fix round R6, R15; R9: measured from the
+        strike's floor as the game does): feet within `height` of that floor, above or below."""
+        above = self.stand_y() + feet - floor_y
+        return -height <= above <= height
+
+    def reaches(self, e, attack):
+        """CrowdBrain.begin's `reaches` (fix round R14): a ground shape judged from the crowd's
+        floor (a lunge, an arc, a lane, a ring with a height) is begun only at a target whose feet,
+        on the surface he last stood on (the track's restY less the root's lift), lie within its
+        height of the body's floor. A line, a lob, a shot and a summon always are."""
+        height = attack.get("height")
+        if height is None or attack["shape"] not in ("lunge", "arc", "lane", "ring"):
+            return True
+        rest = self.track["restY"] if self.track is not None else ROOT_HEIGHT
+        return self.in_band(rest - ROOT_HEIGHT, height, self.floor_y(e))
+
+    def lane_runs(self, e, attack, gap, face=None):
+        """CrowdBrain.begin's `laneRuns` (fix round R5): on a region floor a lane starts only when
+        the region's runway along the facing it would lock is at least the flat distance to the
+        target less the lane's width. Every other attack, and any lane off a region, always."""
+        if attack["shape"] != "lane" or self.region_of(e.floor) is None:
+            return True
+        room = self.runway(e.x, e.z, snap_face(face or e.face), e.r, e.floor)
+        return room >= gap - max(attack.get("width") or 0, 0)
+
+    def region_of(self, floor):
+        """The chase region of a floor (an arena or a range has none)."""
+        return None
+
     def seek(self, e, gx, gz, speed, stop, dt):
         """CrowdService.seek after the route: the step's velocity toward the goal, stopping
         `stop` short of it."""
         gx, gz, stop = self.route_goal(e, gx, gz, stop)
         ox, oz = gx - e.x, gz - e.z
         away = math.sqrt(ox * ox + oz * oz)
+        # Fix round R1 (CrowdService.integrate): progress against the last goal's distance,
+        # measured from where separation left the body, for every body that has a goal.
+        e.progressed = away < e.goal_gap - MOVE_THRESHOLD * dt
+        e.goal_gap = away
         if away > stop and speed > 0 and away > EPSILON:
             travel = min(speed, (away - stop) / dt)
             return ox / away * travel, oz / away * travel
@@ -2534,35 +2583,38 @@ class ThreatRun:
                 continue
             attack = e.attack
             if e.state == "windup":
+                level = self.floor_y(e)
                 if e.shape in ("lunge", "arc") and t >= e.started + seen:
                     found.append(("shape", ("w", e.id, e.started), e.until, attack, e.x, e.z, e.face, None,
-                                  e.shape == "lunge"))
+                                  e.shape == "lunge", level))
                 elif e.shape == "line" and e.locked and t >= e.until - (attack.get("lockSeconds") or 0) + seen:
-                    found.append(("shape", ("w", e.id, e.started), e.until, attack, e.x, e.z, e.face, None, False))
+                    found.append(("shape", ("w", e.id, e.started), e.until, attack, e.x, e.z, e.face, None, False,
+                                  level))
                 elif e.shape == "lane" and t >= e.started + seen:
                     length = min(attack.get("range") or 0, self.runway(e.x, e.z, e.face, e.r, e.floor))
-                    found.append(("lane", ("w", e.id, e.started), e.until, attack, e.x, e.z, e.face, length))
+                    found.append(("lane", ("w", e.id, e.started), e.until, attack, e.x, e.z, e.face, length, level))
                 elif e.shape == "ring" and t >= e.started + seen:
-                    found.append(("ring", ("w", e.id, e.started), e.until, attack, e.x, e.z))
+                    found.append(("ring", ("w", e.id, e.started), e.until, attack, e.x, e.z, level))
             elif e.state == "attack" and e.charge is not None:
                 c = e.charge
-                found.append(("lane", ("w", e.id, e.started), c["T"], attack, c["x"], c["z"], c["face"], c["length"]))
+                found.append(("lane", ("w", e.id, e.started), c["T"], attack, c["x"], c["z"], c["face"], c["length"],
+                              c["floorY"]))
         for entry in self.pending:
             if entry[9] is None:
                 # A blow that has struck and waits out his lag: its body no longer shows the
                 # windup, but stepping back into its shape now would still be a hit.
                 found.append(("shape", ("p", entry[1], entry[4], entry[5]), entry[1], entry[3], entry[4],
-                              entry[5], entry[6], None, entry[3]["shape"] == "lunge"))
+                              entry[5], entry[6], None, entry[3]["shape"] == "lunge", entry[10]))
             elif t >= entry[9] + seen:  # a lob in the air
                 found.append(("shape", ("l", entry[9], entry[8]), entry[1], entry[3], entry[4], entry[5],
-                              entry[6], entry[8], False))
+                              entry[6], entry[8], False, entry[10]))
         for shot in self.shots:
             if not shot["done"] and t >= shot["T"] + seen:
                 found.append(("shot", ("s", shot["T"], shot["origin"]), shot))
         for ring in self.rings:  # its windup showed it: a ring in flight is no news
             if not ring["done"]:
                 found.append(("ring", ("r", ring["T"], ring["x"], ring["z"]), ring["T"], ring["attack"],
-                              ring["x"], ring["z"]))
+                              ring["x"], ring["z"], ring["floorY"]))
         heed = self.policy.get("heed")
         if heed is not None:  # a player who answers only these tells
             found = [f for f in found if (f[3]["shape"] if f[0] == "shape" else f[0]) in heed]
@@ -2604,7 +2656,7 @@ class ThreatRun:
         step = self.interval
         for threat in threats:
             if threat[0] == "shape":
-                _kind, _key, impact, attack, ex, ez, face, aim, lunge = threat
+                _kind, _key, impact, attack, ex, ez, face, aim, lunge, level = threat
                 decided = impact + lag
                 if self.policy.get("hold"):
                     # The boss fight's player knows the hit is decided on the first frame at or
@@ -2625,7 +2677,8 @@ class ThreatRun:
                     frame = math.ceil(decided / FRAME - 1e-9) * FRAME
                     feet = min(feet, self.plan_state(plan, t0, frame - FRAME)[2], self.plan_state(plan, t0, frame)[2],
                                self.plan_state(plan, t0, frame + FRAME)[2])
-                if (height is not None and feet > height) or self.plan_shielded(plan, t0, impact, decided):
+                if ((height is not None and not self.in_band(feet, height, level))
+                        or self.plan_shielded(plan, t0, impact, decided)):
                     continue
                 if any(shape_contains(attack, ex, ez, face, x + ox, z + oz, aim) for ox, oz in PLAN_PROBES):
                     if lunge:
@@ -2634,7 +2687,7 @@ class ThreatRun:
                         solid += 1
                         first = min(first, decided)
             elif threat[0] == "lane":
-                _kind, _key, impact, attack, sx, sz, face, length = threat
+                _kind, _key, impact, attack, sx, sz, face, length, level = threat
                 speed = attack.get("speed") or 0
                 if speed <= 0:
                     continue
@@ -2657,7 +2710,8 @@ class ThreatRun:
                     if fine and height is not None:
                         feet = min(feet, self.plan_state(plan, t0, tau - FRAME)[2],
                                    self.plan_state(plan, t0, tau + FRAME)[2])
-                    if ((height is None or feet <= height) and not self.plan_shielded(plan, t0, tau - lag, tau)
+                    if ((height is None or self.in_band(feet, height, level))
+                            and not self.plan_shielded(plan, t0, tau - lag, tau)
                             and point_segment_gap((x, z), (sx + face[0] * back, sz + face[1] * back),
                                                   (sx + face[0] * front, sz + face[1] * front)) <= reach):
                         solid += 1
@@ -2665,7 +2719,7 @@ class ThreatRun:
                         break
                     tau += tick
             elif threat[0] == "ring":
-                _kind, _key, impact, attack, cx, cz = threat
+                _kind, _key, impact, attack, cx, cz, level = threat
                 speed, radius = attack.get("speed") or 0, attack.get("radius") or 0
                 if speed <= 0:
                     continue
@@ -2685,7 +2739,7 @@ class ThreatRun:
                             and not (impact + (away + half) / speed < start or impact + (away - half) / speed > to)):
                         feet = min(feet, self.plan_state(plan, t0, tau - FRAME)[2],
                                    self.plan_state(plan, t0, tau + FRAME)[2])
-                        if ((height is None or feet <= height)
+                        if ((height is None or self.in_band(feet, height, level))
                                 and not self.plan_shielded(plan, t0, tau - lag, tau)):
                             solid += 1
                             first = min(first, tau)
@@ -2872,7 +2926,7 @@ class ThreatRun:
         T + lag has come: a lunge, an arc, a line, and a lob at its landing."""
         self.judging, self.pending = self.pending, []
         for entry in self.judging:
-            decided, impact, kind, attack, ex, ez, face, voided, aim, _thrown = entry
+            decided, impact, kind, attack, ex, ez, face, voided, aim, _thrown, floor_y = entry
             if decided > t + THREAT_EPS:
                 self.pending.append(entry)
                 continue
@@ -2883,8 +2937,8 @@ class ThreatRun:
                 continue  # [barrage] a player takes at most one circle of a barrage
             held = shape_contains(attack, ex, ez, face, self.x, self.z, aim)
             height = None if attack["shape"] == "line" else attack.get("height")  # [height] [line]
-            if held and height is not None and self.feet(t) > height:
-                held = False
+            if held and height is not None and not self.in_band(self.feet(t), height, floor_y):
+                held = False  # fix round R6: every ground shape has an under side too
             if attack["shape"] == "arc":
                 push = (self.x - ex, self.z - ez)
             elif attack["shape"] == "lob":
@@ -2937,7 +2991,7 @@ class ThreatRun:
             start = max(before - lag, charge["T"])
             height = attack.get("height")
             if (self.down_until is None and not charge["done"] and to >= start and not self.was_down(now - lag)
-                    and (height is None or self.feet(now) <= height)):
+                    and (height is None or self.in_band(self.feet(now), height, charge["floorY"]))):  # R15
                 a = (charge["x"] + charge["face"][0] * self.charge_run(charge, start),
                      charge["z"] + charge["face"][1] * self.charge_run(charge, start))
                 b = (charge["x"] + charge["face"][0] * self.charge_run(charge, to),
@@ -2962,7 +3016,8 @@ class ThreatRun:
             to = min(now - lag, ends)
             start = max(before - lag, left)
             if (speed > 0 and self.down_until is None and not ring["done"] and to >= start
-                    and not self.was_down(now - lag) and (height is None or self.feet(now) <= height)):
+                    and not self.was_down(now - lag)
+                    and (height is None or self.in_band(self.feet(now), height, ring["floorY"]))):  # R15
                 away = math.hypot(self.x - ring["x"], self.z - ring["z"])
                 # He is in its way while within `radius`; the band, `width` wide round the
                 # front, covers his distance from its leading edge to its trailing one.
@@ -3086,7 +3141,7 @@ class ThreatRun:
         standing = self.down_until is None and not self.was_down(impact)
         if shape == "ring":  # [ring] the front leaves the body's feet at the impact
             self.rings.append({"T": impact, "x": e.x, "z": e.z, "attack": attack, "kind": e.name, "done": False,
-                               "blind": not standing})
+                               "blind": not standing, "floorY": self.floor_y(e)})
             return
         if shape == "summon":  # [summon]
             self.call(e, attack, now)
@@ -3095,7 +3150,8 @@ class ThreatRun:
             self.follow(e, now)  # a lock that falls on the impact itself
         if shape in ("lunge", "arc", "line"):
             if standing:
-                self.pending.append([impact + self.lag, impact, e.name, attack, e.x, e.z, e.face, False, None, None])
+                self.pending.append([impact + self.lag, impact, e.name, attack, e.x, e.z, e.face, False, None, None,
+                                     self.floor_y(e)])
             return
         # A shot and a lob are aimed now: at the target's place at the impact's own time, which
         # this step may have passed.
@@ -3119,7 +3175,7 @@ class ThreatRun:
                     far = spread * math.sqrt(self.rng.random())
                     cx, cz = cx + math.cos(turn) * far, cz + math.sin(turn) * far
                 self.pending.append([lands + self.lag, lands, e.name, attack, e.x, e.z, e.face, False,
-                                     (cx, cz), impact])
+                                     (cx, cz), impact, self.stand_y()])  # a lob's floor: under its target
         elif shape == "shot":  # [shot]
             speed = attack.get("speed") or 0
             seconds = attack.get("seconds") or 0
@@ -3140,7 +3196,7 @@ class ThreatRun:
                 return
             e.charge = {"T": impact, "x": e.x, "z": e.z, "face": e.face, "speed": speed, "length": length,
                         "end": impact + length / speed, "attack": attack, "kind": e.name, "done": False,
-                        "blind": not standing, "owner": e}
+                        "blind": not standing, "owner": e, "floorY": self.floor_y(e)}
             self.charges.append(e.charge)
 
     def crowd_step(self, now, dt):
@@ -3230,7 +3286,20 @@ class ThreatRun:
                 follow_on = None
                 if (chains and e.chain_left > 0 and self.down_until is None and now >= e.air_until
                         and now >= e.stagger_until and self.may_target(e)):
-                    follow_on = e.choose(now, gap)
+                    refused = set()
+                    while True:  # CrowdBrain.begin, chained: R14 and R5 turn a choice down too
+                        follow_on = e.choose(now, gap, refused)
+                        if follow_on is None:
+                            break
+                        picked = e.attacks[follow_on]
+                        toward = (dx / gap, dz / gap) if gap > EPSILON else e.face
+                        if self.reaches(e, picked) and self.lane_runs(e, picked, gap, toward):
+                            break
+                        if len(e.attacks) == 1:
+                            follow_on = None
+                            break
+                        refused.add(follow_on)
+                        follow_on = None
                 if follow_on is not None:
                     e.chain_left -= 1
                     if gap > EPSILON:
@@ -3272,14 +3341,25 @@ class ThreatRun:
                     e.face = (dx / gap, dz / gap)
                 ready = state == "approach" and now >= e.spawned_at + threat["spawnGrace"] - THREAT_EPS  # [spawn]
                 admitted = False
-                choice = e.choose(now, gap) if ready else None  # [windup] [choice]
-                if choice is not None:
-                    admitted = held.get(e.name, 0) < e.places  # [cap] its kind's turn
-                    if admitted and e.attacks[choice]["shape"] == "shot":
-                        admitted = shots_held < threat["maxShots"]  # [shot] a slinger at that cap waits
-                        shots_held += 1 if admitted else 0
+                choice = None
+                refused = set()
+                while ready:  # [windup] [choice] CrowdBrain.begin: a refused attack, the next choice
+                    choice = e.choose(now, gap, refused)
+                    if choice is None:
+                        break
+                    picked = e.attacks[choice]
+                    # Fix round R14 (reaches) and R5 (laneRuns), asked before the cap.
+                    if self.reaches(e, picked) and self.lane_runs(e, picked, gap):
+                        admitted = held.get(e.name, 0) < e.places  # [cap] its kind's turn
+                        if admitted and picked["shape"] == "shot":
+                            admitted = shots_held < threat["maxShots"]  # [shot] a slinger at that cap waits
+                            shots_held += 1 if admitted else 0
                     if admitted:
                         held[e.name] = held.get(e.name, 0) + 1
+                        break
+                    if len(e.attacks) == 1:
+                        break
+                    refused.add(choice)
                 if admitted:
                     # [enrage] An enraged body may follow this attack with chain - 1 more.
                     e.chain_left = max(math.floor(e.enrage["chain"]) - 1, 0) if e.enraged else 0
@@ -3289,20 +3369,20 @@ class ThreatRun:
                 elif e.reach == math.inf:
                     pass  # nothing left it may use: it stands
                 elif e.brain == "rush":
-                    if gap > e.reach:  # [rush] CrowdService.seek
-                        vx, vz = self.seek(e, self.x, self.z, e.speed, e.reach, dt)
+                    # [rush] CrowdBrain.Think gives the target with its shortest reach as the stop,
+                    # in reach too (a body the cap holds back waits there), and CrowdService.seek
+                    # routes it (fix round R1: the progress is measured on every such step).
+                    vx, vz = self.seek(e, self.x, self.z, e.speed, e.reach, dt)
+                    if e.resident is not None:
+                        e.closing = e.progressed  # fix round R1: closing means progress
                 elif gap > e.band_max:  # [keepAway] in, as far as the band
                     vx, vz = self.seek(e, self.x, self.z, e.speed, e.band_max, dt)
                 elif gap < e.band_min:  # ...and straight back, no further than the arena's edge
+                    # Fix round R9: Think's inArena point, walked through the region's doors as
+                    # CrowdService routes every goal (Region.Toward), stopping on it.
                     cx, cz = self.clamp_body(e.x - e.face[0] * (e.band_min - gap),
                                              e.z - e.face[1] * (e.band_min - gap), e.r, e.floor)
-                    gx, gz = cx - e.x, cz - e.z
-                    far = math.hypot(gx, gz)
-                    if far > EPSILON:
-                        travel = min(e.speed, far / dt)
-                        vx, vz = gx / far * travel, gz / far * travel
-                if e.resident is not None and e.brain == "rush":
-                    e.closing = math.hypot(vx, vz) > MOVE_THRESHOLD
+                    vx, vz = self.seek(e, cx, cz, e.speed, 0.0, dt)
             if e.charge is not None and state == "attack":
                 # [lane] CrowdBrain.Carried: the brain carries the body down its lane.
                 c = e.charge
@@ -5600,12 +5680,15 @@ def region_reach(level, region, kinds):
     return max([0] + [longest_reach(kinds.get(k)) for k in region_units(level, region) if k in kinds])
 
 
-def fielded(zone, tent, sent):
+def fielded(zone, tent, sent, refused=None):
     """StageFlow.Fielded (L1b-W4-30): a new table, the zone's residents by kind plus the first
-    `sent` kinds of its tent's stock (no tent, or nothing sent: the residents alone)."""
+    `sent` kinds of its tent's stock (no tent, or nothing sent: the residents alone), less every
+    stock index (1-based) in `refused` (fix round R12: a body the crowd refused was never fielded)."""
     stock = dict(zone["stock"])
     if tent is not None and sent > 0:
-        for kind in tent["kinds"][:min(sent, len(tent["kinds"]))]:
+        for index, kind in enumerate(tent["kinds"][:min(sent, len(tent["kinds"]))], 1):
+            if refused and index in refused:
+                continue
             stock[kind] = stock.get(kind, 0) + 1
     return stock
 
@@ -5907,7 +5990,8 @@ CB_CONE_EPSILON_DEGREES = 1e-6  # CampBrain.CONE_EPSILON_DEGREES
 CB_ARC_EPSILON = 1e-9  # CampBrain.ARC_EPSILON
 CB_POSTURE_KEYS = ("sight", "cone", "rise")
 CB_RULE_KEYS = ("sightBelow", "sightAbove", "chaseMargin", "leashSeconds", "homePace", "patrolPace", "homeTolerance",
-                "engagedHoldSeconds", "joinFactor", "dormantRadius", "chaseSight", "hitMemorySeconds", "meleeAbove")
+                "engagedHoldSeconds", "joinFactor", "dormantRadius", "chaseSight", "hitMemorySeconds", "meleeAbove",
+                "meleeBelow")
 
 
 def finite(value):
@@ -6082,14 +6166,16 @@ def cb_at_post(post, at, rules):
 
 
 def cb_melee(defn, target, rules):
-    """CampBrain.Melee (L1b-W4-19): a region group's rushers can reach him: in the band, at most
-    camps.meleeAbove over the floor, and within chaseMargin (flat, rounded) of the region. A group
-    with no region: InPlay with no shooter."""
+    """CampBrain.Melee (L1b-W4-19, fix round R14): a region group's rushers can reach him: in the
+    band, at most camps.meleeAbove over the floor and at most camps.meleeBelow under it (the root
+    against the floor), and within chaseMargin (flat, rounded) of the region. A group with no
+    region: InPlay with no shooter."""
     region = defn.get("region")
     if region is None:
         return cb_in_play(defn, target, [], rules)
     root = target["root"]
-    return (cb_in_band(defn, root, rules) and root[1] - defn["floorY"] <= rules["meleeAbove"]
+    above = root[1] - defn["floorY"]
+    return (cb_in_band(defn, root, rules) and above <= rules["meleeAbove"] and above >= -rules["meleeBelow"]
             and rg_distance(region, root[0], root[2]) <= rules["chaseMargin"])
 
 
@@ -6189,8 +6275,9 @@ def cb_step(group, step, rules):
             changed = "fight"
             group["quietSince"] = group["meleeQuietSince"] = now
             group["standDown"] = False
-        elif all(cb_at_post(member["post"], member["at"], rules) for member in step["members"]):
-            changed = "rest"
+        elif not step["striking"] and all(cb_at_post(member["post"], member["at"], rules)
+                                          for member in step["members"]):
+            changed = "rest"  # fix round R2: never with a member still finishing a blow
     if changed is not None:
         group["state"] = changed
         group["since"] = now
@@ -6382,17 +6469,31 @@ def cb_tent_rouse(group, now, reachable):
     return cb_rouse(group, now, reachable)
 
 
+def threatening(state):
+    """StageFlow.Threatening (Wave 4 fix round R10): a group whose living members are a threat for
+    the safe point."""
+    return state in ("rise", "fight", "home")
+
+
 def tent_owes_rouse(owed, camp_busy, group_awake):
     """StageFlow.TentOwesRouse (the fix round's B-3)."""
     return owed and camp_busy and not group_awake
 
 
-def cb_new_tent(stock):
-    return {"left": stock, "nextAt": -math.inf, "busySeconds": 0.0, "lastAt": None}
+def cb_new_tent(stock, residents):
+    """CampBrain.NewTent (fix round R7): the measure counts from `residents`, the zone's count."""
+    return {"left": stock, "nextAt": -math.inf, "busySeconds": 0.0, "lastAt": None, "residents": residents}
 
 
-def cb_tent_clock(tent, busy, now):
-    """CampBrain.TentClock (L1b-W4-28): the camp's pace clock runs only while it is busy."""
+def cb_tent_clock(tent, busy, now, rested, residents_alive):
+    """CampBrain.TentClock (L1b-W4-28): the camp's pace clock runs only while it is busy. Fix round
+    R7: while every group of the camp is at rest (`rested`), the measure starts afresh: busy time 0,
+    counted from the residents alive then."""
+    if rested:
+        tent["busySeconds"] = 0.0
+        tent["lastAt"] = None
+        tent["residents"] = residents_alive
+        return
     if busy and tent["lastAt"] is not None:
         tent["busySeconds"] += max(now - tent["lastAt"], 0)
     tent["lastAt"] = now if busy else None
@@ -6712,7 +6813,8 @@ class LevelRun(ThreatRun):
             self.tents.append({"group": len(self.groups), "id": tent["def"]["id"], "camp": tent["def"]["camp"],
                                "floor": tent["zone"], "kinds": tent["kinds"], "posts": tent["posts"],
                                "doors": tent["doors"], "every": tent["every"], "pace": tent.get("pace"), "sent": 0,
-                               "state": cb_new_tent(len(tent["kinds"])), "sentAt": [], "refused": 0, "owed": False})
+                               "state": cb_new_tent(len(tent["kinds"]), self.zones[tent["zone"] - 1]["residents"]), "sentAt": [], "refused": 0, "refusedAt": set(),
+                               "owed": False})
         # L1b-W2-12: CrowdService.AddGroup's posts and the gap between every two groups of one camp,
         # post to post, worked out once (posts never move).
         posts_of = [cb_posts(g["def"], sum(u["count"] for u in g["def"]["units"])) for g in self.groups]
@@ -6750,6 +6852,15 @@ class LevelRun(ThreatRun):
         cx, cz, hx, hz = self.zones[floor - 1]["rect"]
         limit_x, limit_z = max(hx - radius, 0), max(hz - radius, 0)
         return cx - limit_x, cx + limit_x, cz - limit_z, cz + limit_z
+
+    def stand_y(self):
+        """The height of the surface he stands on (fix round R9: heights are measured from the
+        crowd's floor, so his own ground counts)."""
+        return self.ground
+
+    def floor_y(self, e):
+        """The floor of the zone body `e` stands on; one with none shares his ground."""
+        return self.zones[e.floor - 1]["floorY"] if e.floor is not None else self.ground
 
     def region_of(self, floor):
         """The chase region of a floor (L1b-W4-14), or None."""
@@ -6825,13 +6936,15 @@ class LevelRun(ThreatRun):
         whether the camp is ahead of its clock (CampBrain.Ahead); active while busy, a resident
         alive and ahead. A due body comes out at its door (B-4) and walks to its ring post, its
         group is roused at the next camp step, and the clock moves on. A refused spawn (the cap)
-        counts as sent. A body sent while its camp is busy and its group is not up (run.awakeGroups
+        counts as sent, so the tent moves on, but is booked as refused and never priced (fix round
+        R12, StageFlow.Fielded's `refused`). A body sent while its camp is busy and its group is not up (run.awakeGroups
         as last drained, a crowd step behind) leaves a debt (B-3, StageFlow.TentOwesRouse) that
         rouses the group every tick until it is up or the camp is quiet. Every rouse a tent asks
         for acts only while a player is reachable for the group (cb_tent_rouse)."""
         if not self.tents:
             return
         busy = self.busy()
+        stirred = self.stirred()  # once per tick, before any body is sent (WaveService.tickTents)
         cap = self.cfg["crowd"]["maxAlive"]
         for tent in self.tents:
             group = self.groups[tent["group"] - 1]
@@ -6841,17 +6954,20 @@ class LevelRun(ThreatRun):
             tent["owed"] = tent_owes_rouse(tent["owed"], camp_busy, tent["group"] in self.awake_groups)
             if tent["owed"]:
                 self.rouse_pending.add(tent["group"])
-            cb_tent_clock(tent["state"], camp_busy, t)
-            residents = self.zones[floor - 1]["residents"]
             alive = self.alive_on(floor) - own
-            ahead = tent["pace"] is not None and cb_ahead(residents - alive, residents, tent["state"]["busySeconds"],
-                                                          tent["pace"])
+            clock = tent["state"]
+            # Fix round R7: rested = no unheld group of the floor in rise, fight or home with a living
+            # member (CrowdService.Stirred).
+            cb_tent_clock(clock, camp_busy, t, not stirred.get(floor), alive)
+            ahead = tent["pace"] is not None and cb_ahead(clock["residents"] - alive, clock["residents"],
+                                                          clock["busySeconds"], tent["pace"])
             active = cb_tent_active(camp_busy, alive, ahead)
             if not cb_tent_due(tent["state"], active, t):
                 continue
             k = tent["sent"]
             if sum(1 for f in self.fighters if f.alive) >= cap:
                 tent["refused"] += 1
+                tent["refusedAt"].add(k + 1)  # fix round R12: sent, never fielded, never priced
             else:
                 post = tent["posts"][k]
                 # The fix round's B-4: it comes out at its door (CrowdService.SpawnResident's
@@ -6871,6 +6987,12 @@ class LevelRun(ThreatRun):
     def alive_on(self, floor):
         return sum(1 for f in self.fighters if f.alive and f.floor == floor)
 
+    def stirred(self):
+        """CrowdService.Stirred (fix round R7): floors with an unheld group in rise, fight or home
+        that has a living member."""
+        return {g["def"]["floor"]: True for g in self.groups
+                if g["state"] != "rest" and not g["held"] and any(b.alive for b in g["members"])}
+
     def awake_count(self):
         """CrowdService.Awake: groups in rise, fight or home with a living member."""
         return sum(1 for g in self.groups if g["state"] in ("rise", "fight", "home") and not g["held"]
@@ -6883,9 +7005,10 @@ class LevelRun(ThreatRun):
 
     def safe_threats(self):
         """WaveService's threats for StageFlow.SafePoint (fix round, data Minor 1): every living
-        member of a group in rise or fight, where it stands, with StageFlow.LongestReach."""
+        member of a group StageFlow.Threatening names (rise, fight and, since Wave 4's R10, home),
+        where it stands, with StageFlow.LongestReach."""
         return [{"at": (b.x, g["def"]["floorY"], b.z), "reach": longest_reach(b.kind)} for g in self.groups
-                if g["state"] in ("rise", "fight") for b in g["members"] if b.alive]
+                if threatening(g["state"]) for b in g["members"] if b.alive]
 
     def stood_down(self, group, b):
         """CrowdService.integrate's resting clause for a stood-down rusher (L1b-W4-22): it walks to
@@ -6966,12 +7089,16 @@ class LevelRun(ThreatRun):
                     self.first_windup[index] = b.started
             y = defn["floorY"]
             members = [{"at": (b.x, y, b.z), "post": b.resident["post"]} for b in alive]
-            if not group["held"] and (group["state"] == "home" or group["state"] == "fight" and group["standDown"]):
-                # L1b-8 and L1b-W4-22: at its post on the way home, or a stood-down rusher at its post.
-                for b, member in zip(alive, members):
-                    rusher = b.kind.get("brain") != "keepAway"
-                    if (group["state"] == "home" or rusher) and cb_at_post(member["post"], member["at"], rules):
-                        self.heal(b)
+            # L1b-8 and L1b-W4-22: at its post on the way home, or a stood-down rusher at its post,
+            # once on arriving (fix round R4: the latch clears when it no longer stands down).
+            homeward = group["state"] == "home" and not group["held"]
+            for b, member in zip(alive, members):
+                rusher_down = cb_stands_down(group, b.kind.get("brain") != "keepAway")
+                if not rusher_down:
+                    b.healed = False
+                if (homeward or (rusher_down and not b.healed)) and cb_at_post(member["post"], member["at"], rules):
+                    self.heal(b)
+                    b.healed = rusher_down
             shooters = [{"at": (b.x, y, b.z), "reach": max(a["reach"] for a in b.attacks)}
                         for b in alive if b.kind.get("brain") == "keepAway"]
             striking = any(b.state in ("windup", "attack") for b in alive)
@@ -7635,7 +7762,8 @@ class LevelRun(ThreatRun):
             self.bonuses[zone["id"]] = (0, 0)
             return
         tent = next((x for x in self.tents if x["floor"] == floor), None)
-        stock = fielded(zone, tent, tent["sent"] if tent is not None else 0)
+        stock = fielded(zone, tent, tent["sent"] if tent is not None else 0,
+                        tent["refusedAt"] if tent is not None else None)
         if zone["locks"]:
             for kind, count in self.wave_stock.items():
                 stock[kind] = stock.get(kind, 0) + count
@@ -8028,7 +8156,8 @@ class LevelRun(ThreatRun):
 
     def safe_point(self, busy=None, threats=None):
         """StageFlow.SafePoint (L1b-18; the fix round skips a checkpoint a threat reaches on the
-        flat): (x, y, z)."""
+        flat; Wave 4's R10: a zone with a region is judged by the threats' positions alone, never
+        by `busy`): (x, y, z)."""
         if self.flow in ("gate", "fight", "breather"):
             zone = self.live_zone()
             if zone is not None:
@@ -8036,7 +8165,7 @@ class LevelRun(ThreatRun):
         for index in range(len(self.zones), 0, -1):
             zone = self.zones[index - 1]
             mark = zone["checkpoint"]
-            quiet = not (busy or {}).get(index)
+            quiet = zone.get("region") is not None or not (busy or {}).get(index)
             if mark is not None and any(math.sqrt((mark[0] - th["at"][0]) ** 2 + (mark[1] - th["at"][2]) ** 2)
                                         <= th["reach"] for th in threats or []):
                 quiet = False
@@ -8189,6 +8318,7 @@ class LevelRun(ThreatRun):
                 "lastDeath": {self.zones[f - 1]["id"]: at for f, at in self.last_death.items() if f is not None},
                 "lastResident": {self.zones[f - 1]["id"]: at for f, at in self.last_resident.items() if f is not None},
                 "scene": dict(self.scene), "fielded": {x["camp"]: x["sent"] for x in self.tents},
+                "refusedTent": {x["camp"]: sorted(x["refusedAt"]) for x in self.tents},
                 "wakes": sum(1 for e in self.events if e[2] == "rest" and e[3] == "rise"),
                 "leashes": sum(1 for e in self.events if e[2] == "fight" and e[3] == "home"),
                 "rests": sum(1 for e in self.events if e[2] == "home" and e[3] == "rest")}
@@ -9225,7 +9355,8 @@ def check_forest(cfg, report, expect):
                     if zone["locks"]:
                         continue
                     tent = next((t for t in plan["tents"] if t["zone"] == zone["floor"]), None)
-                    want = report["sc"].clear_bonus(fielded(zone, tent, r["fielded"].get(zone["id"], 0)),
+                    want = report["sc"].clear_bonus(fielded(zone, tent, r["fielded"].get(zone["id"], 0),
+                                                            set(r["refusedTent"].get(zone["id"]) or ())),
                                                     level["crowd"]["rewards"], row["scales"]["rewardMult"], share)
                     got = r["bonuses"].get(zone["id"])
                     good = good and got == tuple(want)

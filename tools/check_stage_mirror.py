@@ -131,7 +131,7 @@ NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "Burs
                      "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve",
-                        "TentOwesRouse", "Fielded"),
+                        "TentOwesRouse", "Fielded", "Threatening"),
           "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
                         "Struck", "Goal", "Shows", "Engaged", "Dormant", "Gap", "JoinIn", "Rouse", "TentRouse", "NewTent",
                         "TentActive", "TentDue", "TentSent", "Melee", "Reachable", "StandsDown", "Forget", "TentClock",
@@ -951,6 +951,12 @@ def tent_owes_cases(data, expected):
     data["tentOwesCases"].append({"id": case, "rows": rows})
     expected[case] = ("StageFlow.TentOwesRouse", f"all {len(rows)} combinations of owed, busy and awake",
                       [sr.tent_owes_rouse(*row) for row in rows])
+    # The Wave 4 fix round's R10: which group states are a threat for the safe point.
+    states = ["rest", "rise", "fight", "home"]  # Types.CampGroupState
+    case = "flow.threatening"
+    data["tentOwesCases"].append({"id": case, "op": "threatening", "rows": states})
+    expected[case] = ("StageFlow.Threatening", f"every group state: {', '.join(states)}",
+                      [sr.threatening(state) for state in states])
 
 
 def wave2_camp_cases(data, expected, rules, plans):
@@ -1060,37 +1066,49 @@ def wave2_camp_cases(data, expected, rules, plans):
     every = 6.0
     # L1b-W4-28: the pace clock (busy time only, a gap not counted), Ahead at its edge, and
     # TentActive's truth table, with the clock and the stock carried through.
+    # The fix round's R7: a clock call names `rested` and the residents alive; while rested the
+    # measure starts afresh (busy 0, counted from those alive), and `aheadTent` is WaveService's
+    # call, Ahead(tent.residents - alive, tent.residents, busySeconds, pace).
     pace = {"seconds": 20.0, "lead": 0.25}
-    ops = [("clock", False, 0.0), ("clock", True, 1.0), ("clock", True, 3.5), ("ahead", 3, 10, pace),
-           ("ahead", 4, 10, pace), ("clock", False, 4.0), ("clock", False, 30.0), ("clock", True, 31.0),
-           ("clock", True, 32.0), ("ahead", 4, 10, pace), ("ahead", 4, 10, {"seconds": 0, "lead": 0.1}),
+    ops = [("clock", False, 0.0, False, 10), ("clock", True, 1.0, False, 10), ("clock", True, 3.5, False, 10),
+           ("ahead", 3, 10, pace),
+           ("ahead", 4, 10, pace), ("clock", False, 4.0, False, 10), ("clock", False, 30.0, False, 10),
+           ("clock", True, 31.0, False, 10),
+           ("clock", True, 32.0, False, 9), ("ahead", 4, 10, pace), ("aheadTent", 6, pace), ("aheadTent", 7, pace),
+           ("clock", True, 40.0, False, 8), ("clock", False, 41.0, True, 6), ("aheadTent", 6, pace),
+           ("clock", True, 42.0, False, 6), ("clock", True, 45.0, False, 4), ("aheadTent", 4, pace),
+           ("aheadTent", 3, pace), ("clock", True, 46.0, True, 3), ("aheadTent", 2, pace),
+           ("clock", True, 47.0, False, 2), ("clock", True, 47.5, False, 2), ("aheadTent", 0, pace), ("ahead", 4, 10, {"seconds": 0, "lead": 0.1}),
            ("ahead", 0, 0, pace), ("ahead", 5, 10, {"seconds": 14.0, "lead": 0.25}),
            ("ahead", 5, 10, {"seconds": 14.0 + 1e-3, "lead": 0.25}),
            ("active", True, 5, True), ("due", True, 0.0), ("sent", 0.0), ("due", True, 3.0), ("due", True, 6.0 - 1e-7),
            ("sent", 6.0), ("active", True, 5, False), ("active", False, 5, True), ("active", True, 0, True),
            ("active", True, -1, True), ("active", False, 0, False), ("due", False, 12.0), ("due", True, 12.0),
            ("sent", 12.0), ("sent", 18.0), ("sent", 24.0), ("sent", 30.0), ("sent", 36.0), ("sent", 42.0), ("due", True, 48.0),
-           ("sent", 48.0), ("due", True, 1e6), ("clock", True, 50.0), ("clock", True, 49.0)]
+           ("sent", 48.0), ("due", True, 1e6), ("clock", True, 50.0, False, 2), ("clock", True, 49.0, False, 2)]
     rows = []
-    tent = sr.cb_new_tent(8)
+    tent = sr.cb_new_tent(8, 10)
     for op in ops:
         if op[0] == "active":
             ret = sr.cb_tent_active(op[1], op[2], op[3])
         elif op[0] == "due":
             ret = sr.cb_tent_due(tent, op[1], op[2])
         elif op[0] == "clock":
-            sr.cb_tent_clock(tent, op[1], op[2])
+            sr.cb_tent_clock(tent, op[1], op[2], op[3], op[4])
             ret = "nil"
         elif op[0] == "ahead":
             ret = sr.cb_ahead(op[1], op[2], tent["busySeconds"], op[3])
+        elif op[0] == "aheadTent":
+            ret = sr.cb_ahead(tent["residents"] - op[1], tent["residents"], tent["busySeconds"], op[2])
         else:
             sr.cb_tent_sent(tent, op[1], every)
             ret = "nil"
         rows.append({"ret": ret, "left": tent["left"], "nextAt": wire(tent["nextAt"]), "busySeconds": tent["busySeconds"],
-                     "lastAt": "nil" if tent["lastAt"] is None else tent["lastAt"]})
+                     "lastAt": "nil" if tent["lastAt"] is None else tent["lastAt"], "residents": tent["residents"]})
     case = "camp.tent.timeline"
-    data["campCases"].append({"id": case, "op": "tent", "stock": 8, "every": every, "ops": [list(op) for op in ops]})
-    expected[case] = ("CampBrain: the pace tent on a timeline (L1b-W4-28)", f"a stock of 8 every {every:g} s, "
+    data["campCases"].append({"id": case, "op": "tent", "stock": 8, "residents": 10, "every": every,
+                              "ops": [list(op) for op in ops]})
+    expected[case] = ("CampBrain: the pace tent on a timeline (L1b-W4-28, R7's restart at rest)", f"a stock of 8 every {every:g} s, "
                       f"{len(ops)} calls", rows)
 
 
@@ -1399,7 +1417,12 @@ def grid_camp_cases(data, expected, rules):
               ("no chaseSight", lambda r: r.pop("chaseSight")), ("a chaseSight of 0", lambda r: r.__setitem__("chaseSight", 0)),
               ("a hitMemorySeconds of -1", lambda r: r.__setitem__("hitMemorySeconds", -1)),
               ("a hitMemorySeconds of 0", lambda r: r.__setitem__("hitMemorySeconds", 0)),
-              ("a meleeAbove of 0", lambda r: r.__setitem__("meleeAbove", 0)), ("no meleeAbove", lambda r: r.pop("meleeAbove"))]
+              ("a meleeAbove of 0", lambda r: r.__setitem__("meleeAbove", 0)), ("no meleeAbove", lambda r: r.pop("meleeAbove")),
+              # The fix round's R14: meleeBelow must be a finite number, not negative; 0 is allowed.
+              ("no meleeBelow", lambda r: r.pop("meleeBelow")),
+              ("a meleeBelow that is text", lambda r: r.__setitem__("meleeBelow", "1.5")),
+              ("a meleeBelow of -0.5", lambda r: r.__setitem__("meleeBelow", -0.5)),
+              ("a meleeBelow of 0", lambda r: r.__setitem__("meleeBelow", 0))]
     for label, change in broken:
         changed = copy.deepcopy(rules)
         change(changed)
@@ -1534,7 +1557,9 @@ def wave4_camp_cases(data, expected, rules, raw_layouts):
     defn = region_def()
     row = def_row(defn)
     margin, above = rules["chaseMargin"], rules["meleeAbove"]
-    heights = [8.0 - rules["sightBelow"] - EDGE, 8.0 - rules["sightBelow"], 11.0, 8.0 + above - EDGE, 8.0 + above,
+    below = rules["meleeBelow"]  # the fix round's R14: Melee's lower bound, either side of its edge
+    heights = [8.0 - rules["sightBelow"] - EDGE, 8.0 - rules["sightBelow"], 8.0 - below - EDGE, 8.0 - below,
+               8.0 - below + EDGE, 8.0, 11.0, 8.0 + above - EDGE, 8.0 + above,
                8.0 + above + EDGE, 8.0 + rules["sightAbove"], 8.0 + rules["sightAbove"] + EDGE]
     xs = [-margin - EDGE, -margin, 0.0, 12.0, 24.0, 32.0, 40.0, 40.0 + margin, 40.0 + margin + EDGE]
     zs = [-margin - EDGE, -margin, 8.0, 16.0, 16.0 + margin, 16.0 + margin + EDGE, 30.0, 50.0 + margin, 50.0 + margin + EDGE]
@@ -1646,6 +1671,12 @@ def wave4_camp_cases(data, expected, rules, raw_layouts):
             {"kind": "forget", "now": t + 1.2 + 3 * leash}, step(t + 1.3 + 3 * leash, [], [])]
     timeline(data, expected, "region guard: known by sight and by memory, the leash held by closing, home's "
              "turn-back, the stand-down, a lever's hit, Forget", defn, rules, ops)
+    # The fix round's R2: sent home by Forget with a blow in the air, all at their posts, the group
+    # rests only once no member strikes.
+    ops = [step(0.0, home, [at(10.0, 11.0, 8.0)]), step(rise + 0.05, home, [at(10.0, 11.0, 8.0)]),
+           {"kind": "forget", "now": 1.0}, step(1.1, home, [], striking=True), step(1.2, out_east, [], striking=True),
+           step(1.3, home, [], striking=True), step(1.4, home, [])]
+    timeline(data, expected, "region guard: home rests only when no member strikes (R2)", defn, rules, ops)
 
 
 def fielded_cases(data, expected, files, rules, ranks, crowd_kinds, below):
@@ -1662,15 +1693,18 @@ def fielded_cases(data, expected, files, rules, ranks, crowd_kinds, below):
                 continue
             for zone in plan["zones"]:
                 t = next((k for k, tent in enumerate(plan["tents"], 1) if tent["zone"] == zone["floor"]), None)
+                # The fix round's R12: `refused` (stock indices the crowd refused) is never priced.
                 for sent in (0, 3, 99, -1):
                     for with_tent in ((True, False) if t is not None else (False,)):
-                        tent = plan["tents"][t - 1] if with_tent else None
-                        case = f"flow.fielded.{len(data['fieldedCases'])}"
-                        data["fieldedCases"].append({"id": case, "level": number, "difficulty": difficulty,
-                                                     "zone": zone["floor"], "tent": t if with_tent else 0, "sent": sent})
-                        expected[case] = ("StageFlow.Fielded", f"{file['id']} {difficulty} {zone['id']}"
-                                          f"{' with its tent' if with_tent else ''}, sent {sent}",
-                                          sr.fielded(zone, tent, sent))
+                        for refused in (None, [1], [2, 3], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [99]):
+                            tent = plan["tents"][t - 1] if with_tent else None
+                            case = f"flow.fielded.{len(data['fieldedCases'])}"
+                            data["fieldedCases"].append({"id": case, "level": number, "difficulty": difficulty,
+                                                         "zone": zone["floor"], "tent": t if with_tent else 0,
+                                                         "sent": sent, "refused": refused})
+                            expected[case] = ("StageFlow.Fielded", f"{file['id']} {difficulty} {zone['id']}"
+                                              f"{' with its tent' if with_tent else ''}, sent {sent}, refused {refused}",
+                                              sr.fielded(zone, tent, sent, set(refused) if refused else None))
 
 
 def split_cases(data, expected):

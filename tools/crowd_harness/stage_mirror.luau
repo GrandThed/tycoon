@@ -764,7 +764,7 @@ for _, case in data.campCases do
 			local ret = Brain.TentRouse(group, 4.5, case.reachable == true)
 			return { ret = ret, group = C.snapshot(group) }
 		elseif op == "tent" then
-			local tent = Brain.NewTent(case.stock)
+			local tent = Brain.NewTent(case.stock, case.residents)
 			local rows = {}
 			for index, step in case.ops do
 				local ret: any = "nil"
@@ -773,9 +773,12 @@ for _, case in data.campCases do
 				elseif step[1] == "due" then
 					ret = Brain.TentDue(tent, step[2], step[3])
 				elseif step[1] == "clock" then
-					Brain.TentClock(tent, step[2], step[3])
+					Brain.TentClock(tent, step[2], step[3], step[4], step[5])
 				elseif step[1] == "ahead" then
 					ret = Brain.Ahead(step[2], step[3], tent.busySeconds, step[4])
+				elseif step[1] == "aheadTent" then
+					-- R7: WaveService's call, counted from the tent's own residents.
+					ret = Brain.Ahead(tent.residents - step[2], tent.residents, tent.busySeconds, step[3])
 				else
 					Brain.TentSent(tent, step[2], case.every)
 				end
@@ -785,6 +788,7 @@ for _, case in data.campCases do
 					nextAt = tent.nextAt,
 					busySeconds = tent.busySeconds,
 					lastAt = if tent.lastAt ~= nil then tent.lastAt else "nil",
+					residents = tent.residents,
 				}
 			end
 			return rows
@@ -944,7 +948,9 @@ for _, case in data.tentOwesCases do
 	J.try(case.id, function()
 		local found = {}
 		for index, row in case.rows do
-			found[index] = Flow.TentOwesRouse(row[1], row[2], row[3])
+			found[index] = if case.op == "threatening"
+				then Flow.Threatening(row)
+				else Flow.TentOwesRouse(row[1], row[2], row[3])
 		end
 		return found
 	end)
@@ -1007,7 +1013,15 @@ for _, case in data.fieldedCases do
 			return { refused = true }
 		end
 		local tent = if case.tent ~= 0 then plan.tents[case.tent] else nil
-		return Flow.Fielded(plan.zones[case.zone], tent, case.sent)
+		-- The fix round's R12: the stock indices the crowd refused.
+		local refused: { [number]: boolean }? = nil
+		if case.refused ~= nil then
+			refused = {}
+			for _, index in case.refused do
+				(refused :: any)[index] = true
+			end
+		end
+		return Flow.Fielded(plan.zones[case.zone], tent, case.sent, refused)
 	end)
 end
 

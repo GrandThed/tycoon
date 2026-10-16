@@ -133,7 +133,8 @@ MUTANTS = [
     ("Region.Inside without its edge", "Region", "return math.abs(x - cell.x) <= limitX + EPS",
      "return math.abs(x - cell.x) < limitX - EPS"),
     # L1b Wave 4: CampBrain (known, reachable, the leash, the stand-down, home, Forget, the pace).
-    ("Melee ignores meleeAbove", "CampBrain", "and root.Y - def.floorY <= rules.meleeAbove", "and true"),
+    # Re-aimed at the fix round's text (R14: Melee names `above`).
+    ("Melee ignores meleeAbove", "CampBrain", "and above <= rules.meleeAbove", "and true"),
     ("Known ignores the hit memory", "CampBrain", "if group.hitAt[target.userId] ~= nil then", "if false then"),
     ("Known by sight past chaseSight", "CampBrain", "if flatDistance(member.at, root) <= sight then",
      "if flatDistance(member.at, root) <= sight + 1 then"),
@@ -169,6 +170,29 @@ MUTANTS = [
     ("Plan: a zone's region dropped", "StageFlow", "region = graphs[camp.id],", "region = nil,"),
     ("Validate: the lock clearance skipped", "StageFlow", "if gap < needed - 1e-6 then", "if false then"),
     ("Validate: a tent without pace passes", "StageFlow", "problem(`{here}: its tent has no pace`)", "local _ = here"),
+    # L1b Wave 4 fix round (docs/prompts/l1b-w4-fix-round.md): one per rule the mirror copies from a
+    # module check_stage_mirror runs. R1, R4, R5, R6 and R15 live in CrowdService, CrowdBrain,
+    # VitalsService and ThreatField, which it does not run: mutate.py holds those.
+    ("R2: home rests with a blow in the air", "CampBrain", "\t\telseif not input.striking then\n\t\t\t-- R2:",
+     "\t\telse\n\t\t\t-- R2:"),
+    ("R7: the pace measure never starts again at rest", "CampBrain", "\tif rested then\n\t\ttent.busySeconds = 0",
+     "\tif false then\n\t\ttent.busySeconds = 0"),
+    ("R7: a restart at rest keeps the busy time", "CampBrain", "\tif rested then\n\t\ttent.busySeconds = 0\n",
+     "\tif rested then\n"),
+    ("R7: a restart at rest keeps the old resident count", "CampBrain", "\t\ttent.residents = residentsAlive\n", ""),
+    ("R7: NewTent counts from no resident", "CampBrain", "\t\tresidents = residents,\n", "\t\tresidents = 0,\n"),
+    ("R14: Melee has no lower bound", "CampBrain", "\t\tand above >= -rules.meleeBelow\n", ""),
+    ("R14: Melee's lower bound is meleeAbove", "CampBrain", "and above >= -rules.meleeBelow",
+     "and above >= -rules.meleeAbove"),
+    ("R14: Problems does not ask for meleeBelow", "CampBrain", '\t"meleeAbove",\n\t"meleeBelow",\n}',
+     '\t"meleeAbove",\n}'),
+    ("R12: Fielded prices a refused spawn", "StageFlow", "if refused ~= nil and refused[index] then",
+     "if false then"),
+    ("R10: SafePoint judges a region zone by busy", "StageFlow",
+     "local quiet = zone.region ~= nil or busy == nil or busy[index] ~= true",
+     "local quiet = busy == nil or busy[index] ~= true"),
+    ("R10: Threatening leaves home out", "StageFlow",
+     'return state == "rise" or state == "fight" or state == "home"', 'return state == "rise" or state == "fight"'),
 ]
 
 
