@@ -186,6 +186,8 @@ MUTANTS = [
      "and above >= -rules.meleeAbove"),
     ("R14: Problems does not ask for meleeBelow", "CampBrain", '\t"meleeAbove",\n\t"meleeBelow",\n}',
      '\t"meleeAbove",\n}'),
+    ("R16: Melee judges on the live root", "CampBrain", "local above = target.rest - def.floorY",
+     "local above = root.Y - def.floorY"),
     ("R12: Fielded prices a refused spawn", "StageFlow", "if refused ~= nil and refused[index] then",
      "if false then"),
     ("R10: SafePoint judges a region zone by busy", "StageFlow",

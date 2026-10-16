@@ -1311,7 +1311,8 @@ def timeline(data, expected, label, defn, rules, ops):
         if op["kind"] == "step":
             step = {"now": op["now"], "members": [{"at": tuple(m["at"]), "post": dict(m["post"], at=tuple(m["post"]["at"]))}
                                                   for m in op["members"]],
-                    "targets": [{"userId": t["userId"], "root": tuple(t["root"])} for t in op["targets"]],
+                    "targets": [{"userId": t["userId"], "root": tuple(t["root"]), "rest": t["rest"]}
+                                for t in op["targets"]],
                     "shooters": [{"at": tuple(s["at"]), "reach": s["reach"]} for s in op["shooters"]],
                     "striking": op["striking"], "closing": op.get("closing") is True}
             ret = sr.cb_step(group, step, rules)
@@ -1350,9 +1351,9 @@ def grid_camp_cases(data, expected, rules):
     sight = sr.cb_posture(fire, rules)["sight"]
     rise = sr.cb_posture(fire, rules)["rise"]
     leash = rules["leashSeconds"]
-    far = {"userId": 1, "root": [5.0, 11.0, -5.0 - 4.0 - sight - 1.0]}
-    near = {"userId": 1, "root": [5.0, 11.0, -5.0 - 4.0 - sight + 1.0]}
-    out = {"userId": 1, "root": [0.0, 11.0, -30.0 - rules["chaseMargin"] - 5.0]}
+    far = {"userId": 1, "root": [5.0, 11.0, -5.0 - 4.0 - sight - 1.0], "rest": 11.0}
+    near = {"userId": 1, "root": [5.0, 11.0, -5.0 - 4.0 - sight + 1.0], "rest": 11.0}
+    out = {"userId": 1, "root": [0.0, 11.0, -30.0 - rules["chaseMargin"] - 5.0], "rest": 11.0}
 
     def step(now, members, targets, striking=False):
         return {"kind": "step", "now": now, "members": members, "targets": targets, "shooters": [],
@@ -1374,7 +1375,7 @@ def grid_camp_cases(data, expected, rules):
     held = grids[4]
     hposts = sr.cb_posts(held, 1)
     hmembers = [{"at": list(p["at"]), "post": post_row(p)} for p in hposts]
-    hnear = {"userId": 1, "root": [0.0, 11.0, 24.0]}
+    hnear = {"userId": 1, "root": [0.0, 11.0, 24.0], "rest": 11.0}
     ops = [step(0.0, hmembers, [hnear]), {"kind": "struck", "by": 1, "now": 0.25}, step(0.5, hmembers, [hnear]),
            {"kind": "release", "now": 0.75}, step(0.75, hmembers, [hnear]), step(1.0, hmembers, [hnear]),
            {"kind": "release", "now": 1.25}, step(1.25, hmembers, [hnear])]
@@ -1382,7 +1383,7 @@ def grid_camp_cases(data, expected, rules):
     patrol = grids[0]
     pposts = sr.cb_posts(patrol, 3)
     pmembers = [{"at": list(p["at"]), "post": post_row(p)} for p in pposts]
-    sights = [{"userId": 2, "root": [0.0, 11.0, 0.0]}, {"userId": 5, "root": [0.0, 11.0, 90.0]}]
+    sights = [{"userId": 2, "root": [0.0, 11.0, 0.0], "rest": 11.0}, {"userId": 5, "root": [0.0, 11.0, 90.0], "rest": 11.0}]
     ops = [step(0.0, pmembers, [sights[1]]), step(0.5, pmembers, sights), step(0.5, pmembers, sights),
            step(1.0, pmembers, [sights[1]]), step(1.0 + leash, pmembers, [sights[1]]),
            step(1.0 + leash, pmembers, [sights[1]])]
@@ -1570,6 +1571,15 @@ def wave4_camp_cases(data, expected, rules, raw_layouts):
             targets.append({"userId": 1, "root": [cx + sx * d / math.sqrt(2), 11.0, cz + sz * d / math.sqrt(2)]})
     shooter = {"at": [30.0, 8.0, 30.0], "reach": 32.0}
     targets += ring((30.0, 8.0, 30.0), 0.0, [32.0 - EDGE, 32.0, 32.0 + EDGE], list(CB_ANGLES), [11.0, 8.0 + above + 5])
+    for t in targets:  # R16: a standing player rests where his root is
+        t["rest"] = t["root"][1]
+    # R16: Melee judges height on the surface last stood on, not the live root: mid-hop from 5
+    # under the floor (root 10, rest 3) is not melee; mid-jump from the floor (root 21, rest 11)
+    # is; and the reverse of each, on the same spots.
+    targets += [{"userId": 1, "root": [12.0, 10.0, 8.0], "rest": 3.0},
+                {"userId": 1, "root": [12.0, 21.0, 8.0], "rest": 11.0},
+                {"userId": 1, "root": [12.0, 3.0, 8.0], "rest": 10.0},
+                {"userId": 1, "root": [12.0, 11.0, 8.0], "rest": 21.0}]
     for op in ("melee", "reachable"):
         for shooters in ([], [shooter]):
             if op == "melee" and shooters:
@@ -1577,8 +1587,10 @@ def wave4_camp_cases(data, expected, rules, raw_layouts):
             case = f"camp.{op}.{len(data['campCases'])}"
             data["campCases"].append({"id": case, "op": op, "def": row, "targets": targets, "shooters": shooters})
             theirs = [{"at": tuple(s["at"]), "reach": s["reach"]} for s in shooters]
-            answer = [sr.cb_melee(defn, {"userId": 1, "root": tuple(t["root"])}, rules) if op == "melee" else
-                      sr.cb_reachable(defn, {"userId": 1, "root": tuple(t["root"])}, theirs, rules) for t in targets]
+            answer = [sr.cb_melee(defn, {"userId": 1, "root": tuple(t["root"]), "rest": t["rest"]}, rules)
+                      if op == "melee" else
+                      sr.cb_reachable(defn, {"userId": 1, "root": tuple(t["root"]), "rest": t["rest"]}, theirs, rules)
+                      for t in targets]
             expected[case] = (f"CampBrain.{op.capitalize()}", f"the L's guard, {len(shooters)} shooter(s), "
                               f"{len(targets)} targets", answer)
     # Melee and Reachable on a shipped region group too (the plateau), at the perches' heights.
@@ -1589,11 +1601,11 @@ def wave4_camp_cases(data, expected, rules, raw_layouts):
             spots = [(-283.0, 37.0, -59.0), (-283.0, 11.0, -44.0), (-324.0, 3.0, -44.0), (100.0, 21.0, -4.0),
                      (200.0, 11.0, -44.0), (200.5 + margin, 11.0, -44.0), (-130.0, 11.0, -22.0), (-119.0, 11.0, -22.0)]
             case = f"camp.melee.{name}.{len(data['campCases'])}"
-            tg = [{"userId": 1, "root": list(p)} for p in spots]
+            tg = [{"userId": 1, "root": list(p), "rest": p[1]} for p in spots]
             data["campCases"].append({"id": case, "op": "melee", "def": def_row(shipped), "targets": tg, "shooters": []})
             expected[case] = ("CampBrain.Melee", f"{name} {region['id']}: the ledge, the road, below the drop, the "
                               f"cache, the east end, the U-bend's void",
-                              [sr.cb_melee(shipped, {"userId": 1, "root": p}, rules) for p in spots])
+                              [sr.cb_melee(shipped, {"userId": 1, "root": p, "rest": p[1]}, rules) for p in spots])
     # StandsDown's truth table.
     rows = []
     found = []
@@ -1631,8 +1643,8 @@ def wave4_camp_cases(data, expected, rules, raw_layouts):
         return {"kind": "step", "now": now, "members": members, "targets": targets, "shooters": list(shooters),
                 "striking": striking, "closing": closing}
 
-    def at(x, y, z, user=1):
-        return {"userId": user, "root": [x, y, z]}
+    def at(x, y, z, user=1, rest=None):
+        return {"userId": user, "root": [x, y, z], "rest": y if rest is None else rest}
 
     edge = posts[3]["at"][0] + sight  # the last post's chaseSight, east along z 8
     t = 0.0
@@ -1677,6 +1689,14 @@ def wave4_camp_cases(data, expected, rules, raw_layouts):
            {"kind": "forget", "now": 1.0}, step(1.1, home, [], striking=True), step(1.2, out_east, [], striking=True),
            step(1.3, home, [], striking=True), step(1.4, home, [])]
     timeline(data, expected, "region guard: home rests only when no member strikes (R2)", defn, rules, ops)
+    # The fix round's R16: Melee and Reachable on the rest sample in a step: mid-jump from the floor
+    # (root 21, rest 11) and mid-hop from under it (root 10, rest 3), on the same spot.
+    ops = [step(0.0, home, [at(10.0, 11.0, 8.0)]), step(rise + 0.05, home, [at(10.0, 11.0, 8.0)]),
+           step(rise + 0.1, home, [at(12.0, 21.0, 8.0, rest=11.0)]), step(rise + 0.2, home, [at(12.0, 10.0, 8.0, rest=3.0)]),
+           {"kind": "struck", "by": 1, "now": rise + 0.3}, step(rise + 0.3, out_east, [at(12.0, 10.0, 8.0, rest=3.0)]),
+           step(rise + 0.4, out_east, [at(12.0, 21.0, 8.0, rest=11.0)]),
+           step(rise + 0.5, out_east, [at(12.0, 10.0, 8.0, rest=3.0)], shooters=gun)]
+    timeline(data, expected, "region guard: Melee on the surface last stood on (R16)", defn, rules, ops)
 
 
 def fielded_cases(data, expected, files, rules, ranks, crowd_kinds, below):

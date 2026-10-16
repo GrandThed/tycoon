@@ -585,7 +585,11 @@ end
 function C.targets(rows: any): any
 	local found = {}
 	for index, row in rows do
-		found[index] = { userId = row.userId, root = C.v(row.root) }
+		found[index] = {
+			userId = row.userId,
+			root = C.v(row.root),
+			rest = if row.rest ~= nil then row.rest else row.root[2],
+		}
 	end
 	return found
 end

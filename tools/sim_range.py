@@ -6167,14 +6167,14 @@ def cb_at_post(post, at, rules):
 
 def cb_melee(defn, target, rules):
     """CampBrain.Melee (L1b-W4-19, fix round R14): a region group's rushers can reach him: in the
-    band, at most camps.meleeAbove over the floor and at most camps.meleeBelow under it (the root
-    against the floor), and within chaseMargin (flat, rounded) of the region. A group with no
-    region: InPlay with no shooter."""
+    band, at most camps.meleeAbove over the floor and at most camps.meleeBelow under it (the rest
+    sample, restY, the surface he last stood on, not the live root: R16), and within chaseMargin
+    (flat, rounded) of the region. A group with no region: InPlay with no shooter."""
     region = defn.get("region")
     if region is None:
         return cb_in_play(defn, target, [], rules)
     root = target["root"]
-    above = root[1] - defn["floorY"]
+    above = target["rest"] - defn["floorY"]
     return (cb_in_band(defn, root, rules) and above <= rules["meleeAbove"] and above >= -rules["meleeBelow"]
             and rg_distance(region, root[0], root[2]) <= rules["chaseMargin"])
 
@@ -7087,7 +7087,11 @@ class LevelRun(ThreatRun):
         rules = self.camp_rules
         if rules is None or not self.groups:
             return
-        targets = [{"userId": LEVEL_USER, "root": self.world_root(now)}] if self.down_until is None else []
+        # R16: CrowdBrain.AddTarget's restY, read after this step's track update; the track is
+        # kept over his own ground (stand_y), so the world height adds it back.
+        here = self.world_root(now)
+        rest = self.stand_y() + self.track["restY"] if self.track is not None else here[1]
+        targets = [{"userId": LEVEL_USER, "root": here, "rest": rest}] if self.down_until is None else []
         roots = [self.world_root(now)]  # L1b-W2-10: every player's root, down or not
         engaged = False
         woke = []  # the groups that went rest -> rise by Step this step (sight or a hit)

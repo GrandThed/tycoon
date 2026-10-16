@@ -4906,6 +4906,7 @@ The resident posts tried for R8 below were scratch experiments and are not shipp
   - a home group all at its posts that rests only once nobody strikes;
   - `Fielded` with `refused` (300 compared) and `Threatening`.
 - `mirror_mutants.py` gains 11 mutants: R2, four R7, three R14, R12, two R10. The stale "Melee ignores meleeAbove" mutant is re-aimed at `above <= rules.meleeAbove`. R1, R4, R5, R6 and R15 live in modules that `check_stage_mirror` does not run, so `mutate.py` holds their mutants (A's texts).
+- **R16** (Melee on the surface last stood on): `cb_melee` reads the target's `rest` (CrowdBrain's `restY`; `LevelRun` passes its ground plus the track's `restY`), the band and the region distance still read the live root. `check_stage_mirror` adds the mid-hop and mid-jump rows (floor 8: root 10 / rest 3 not melee, root 21 / rest 11 melee) and an R16 Step timeline; `mirror_mutants.py` catches 91 of 91. `sim_range.py --check` output is identical line for line to the run before R16: no band moved.
 
 ### L1b W4 fix round: the first clear
 

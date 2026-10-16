@@ -1414,7 +1414,8 @@ def sniper_spots(level, layout, ctx, solids):
                 gap = sr.rg_distance(rects, x, z)
                 if gap > reach + EPS:
                     continue
-                if sr.cb_melee(defn, {"userId": 1, "root": (x, solid.top + sr.ROOT_HEIGHT, z)}, rules):
+                stood = solid.top + sr.ROOT_HEIGHT  # standing on it: rests where his root is (R16)
+                if sr.cb_melee(defn, {"userId": 1, "root": (x, stood, z), "rest": stood}, rules):
                     continue
                 found.append((gap, x, z))
             if not found:
