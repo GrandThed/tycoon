@@ -213,3 +213,7 @@ height-8 region on the plateau (`Region.luau`, doors routing the U-bends), `know
   checkout) read the source while fixes waited; a second worktree (`tycoon-p5b`, branch `l1b-wave4-fix`) let the
   fixers, the docs and the run go at once. After the full run, a stale-text check over all entries plus filtered
   runs of the new ones is enough. Ben found the waits too long: offered to shard `mutate.py` (pending his word).
+**L1 closed 2026-10-16 on Ben's "okey, lets close L1"**, right after the Wave 4 merge and with no Studio session
+on that build: Wave 4 and the Chief's Clearing are unplayed by him; PLAYTEST "L1b Wave 4" opens his first L2
+look. Worktree `tycoon-p5` is parked on a detached `main` (branches `l1b-wave3`, `l1b-wave4`, `l1b-wave4-fix`
+deleted, all merged). Next: L2 only on his word; the `mutate.py` sharding offer is unanswered.

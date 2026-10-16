@@ -3632,7 +3632,9 @@ PASS.
 - [x] Fix-diff review fixes R16–R18 (`l1b-wave4-fix`)
 - [x] Wave 4 QA green (qa-runner at `f45e093`; mutate.py 724 / 0; final-tree gates by the lead)
 - [x] Wave 4 merged to `main`, six place files rebuilt (lead, 2026-10-16)
-- [ ] Ben's Studio look at L1b Wave 4 (PLAYTEST "L1b Wave 4 — no waits, no walls")
+- [x] **L1 closed on Ben's word, 2026-10-16 ("okey, lets close L1").** Studio's log shows no session on the
+  Wave 4 build (his last run, 2026-10-15 20:43, was the Wave 3 bow look), so PLAYTEST "L1b Wave 4 — no waits,
+  no walls" is **unplayed**; it, and the Chief's Clearing he has never reached, open his first L2 look.
 
 ## M12 — Growing city
 

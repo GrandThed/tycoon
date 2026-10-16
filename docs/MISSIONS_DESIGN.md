@@ -453,3 +453,13 @@ home to heal, their shooters still shoot back. **[Ben]**
 on Normal pays 1.0–1.7× the fighting player's cash per minute (no data lever fixed it; camps never refill,
 so only the pace changes). Ben: **accept for L1, fix in L4** when the real forest re-places the perches;
 the simulator gate must pass on every spot before L4 ships. **[Ben]**
+
+## 20. L1 closed (2026-10-16)
+
+After the Wave 4 merge Ben said *"okey, lets close L1"*. **L1 (Forest Road in grey, with L1b's living road) is
+closed on his word.** **[Ben]** Studio's log shows no session on the Wave 4 build, so Wave 4 (raiders following
+out of the camps, the tent as a pace reserve, N through every camp) and the Chief's Clearing (the Colossus with
+headshots), never reached in any of his runs, are unplayed by him. PLAYTEST "L1b Wave 4" opens his first L2
+look. Carried to L4: the three Normal perch snipers, the phone auto-fire check in Studio, the per-camp bonus on
+screen, RunState's resent cells, natural barriers instead of fenced squares. Next: L2 (secrets, keys, the bought
+double jump), only on his word.
