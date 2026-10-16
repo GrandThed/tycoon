@@ -1,7 +1,7 @@
 -- The Luau half of tools/check_stage_mirror.py (never shipped). That tool prepends `DATA` (the
 -- shipped files and the cases it wants answered) and `SOURCES.<name>(game, script, require,
 -- Vector3, ...)`, the real module bodies wrapped the way tools/crowd_harness/run_harness.py wraps
--- them. This file runs the real Combat, StageFlow, CampBrain and LevelGeometry on them and prints
+-- them. This file runs the real Combat, StageFlow, CampBrain, Region and LevelGeometry on them and prints
 -- one line an answer: `OUT<tab>id<tab>json`. It decides nothing: every comparison is the Python's.
 
 -- Vector3, as much of it as StageFlow uses -----------------------------------------------------
@@ -144,6 +144,7 @@ local Flow = M.load("StageFlow")
 local Geo = M.load("LevelGeometry")
 local Shapes = M.load("HitShapes")
 local Gate = M.load("SwingGate")
+local Region = M.load("Region")
 local data: any = DATA
 local rules = data.combat.levels
 local director = data.combat.director
@@ -151,7 +152,7 @@ local director = data.combat.director
 -- What the module exports: the Python lists a comparison whose function is not there.
 do
 	local names: { [string]: { string } } =
-		{ Combat = {}, StageFlow = {}, CampBrain = {}, HitShapes = {}, SwingGate = {} }
+		{ Combat = {}, StageFlow = {}, CampBrain = {}, HitShapes = {}, SwingGate = {}, Region = {} }
 	for module, value in
 		{
 			Combat = Combat,
@@ -159,6 +160,7 @@ do
 			CampBrain = Brain,
 			HitShapes = Shapes,
 			SwingGate = Gate,
+			Region = Region,
 		}
 	do
 		for name, item in value do
@@ -210,6 +212,27 @@ function L.keys(set: any): any
 	table.sort(found)
 	return found
 end
+-- A RegionGraph as plain values: cells as { x, z, hx, hz }, next and hops as rows, the doors as a
+-- sorted list of { i, j, x, z } (a sparse table of tables reads ambiguously as JSON).
+function L.graph(graph: any): any
+	local cells = {}
+	for index, cell in graph.cells do
+		cells[index] = { cell.x, cell.z, cell.hx, cell.hz }
+	end
+	local doors = {}
+	for i = 1, #graph.cells do
+		local row = graph.doors[i] or {}
+		local js = {}
+		for j in row do
+			table.insert(js, j)
+		end
+		table.sort(js)
+		for _, j in js do
+			table.insert(doors, { i, j, row[j].x, row[j].z })
+		end
+	end
+	return { cells = cells, next = graph.next, hops = graph.hops, doors = doors }
+end
 -- A Plan zone as plain values.
 function L.zone(zone: any): any
 	return {
@@ -228,6 +251,8 @@ function L.zone(zone: any): any
 		entry = zone.entry,
 		exit = zone.exit,
 		spawns = zone.spawns,
+		region = if zone.region ~= nil then L.graph(zone.region) else nil,
+		approach = zone.approach,
 	}
 end
 -- A Plan as plain values: a zone's rectangles as { x, z, hx, hz }, its boss waves as a list.
@@ -473,7 +498,6 @@ for _, trace in data.traces do
 				breatherSeconds = tick.breatherSeconds,
 				fallen = tick.fallen,
 				runCap = tick.runCap,
-				tentLeft = tick.tentLeft,
 			}
 			local clear = Flow.FieldClear(plan, state, input)
 			local standsUp = Flow.StandsUp(plan, state, input)
@@ -572,14 +596,37 @@ function C.group(row: any, state: string, held: boolean): any
 	return group
 end
 function C.snapshot(group: any): any
+	local hitAt = {}
+	for _, user in L.keys(group.hitAt) do
+		table.insert(hitAt, { user, group.hitAt[user] })
+	end
 	return {
 		state = group.state,
 		held = group.held,
 		since = group.since,
 		quietSince = group.quietSince,
 		hit = group.hit,
-		inPlay = L.keys(group.inPlay),
+		known = L.keys(group.known),
+		reachable = L.keys(group.reachable),
+		hitAt = hitAt,
+		struckBy = L.keys(group.struckBy),
+		meleeQuietSince = group.meleeQuietSince,
+		standDown = group.standDown,
 	}
+end
+function C.shooters(rows: any): any
+	local shooters = {}
+	for index, shooter in rows do
+		shooters[index] = { at = C.v(shooter.at), reach = shooter.reach }
+	end
+	return shooters
+end
+function C.cells(rows: any): any
+	local cells = {}
+	for index, row in rows do
+		cells[index] = { x = row[1], z = row[2], hx = row[3], hz = row[4] }
+	end
+	return cells
 end
 local campRules = data.campRules
 for _, case in data.campCases do
@@ -615,19 +662,51 @@ for _, case in data.campCases do
 			return found
 		elseif op == "goal" then
 			local group = C.group(case.def, case.state, case.held)
+			group.standDown = case.standDown == true
 			local resident = { group = 1, post = C.post(case.post), leg = case.leg }
 			local goal, pace = Brain.Goal(group, resident, C.v(case.at), campRules)
 			return { if goal ~= nil then goal else "nil", pace, resident.leg }
 		elseif op == "struck" then
 			local group = C.group(case.def, case.state, case.held)
-			for _, user in case.inPlay do
-				group.inPlay[user] = true
+			group.standDown = case.standDown == true
+			local rows = {}
+			for index, now in { 4.25, 7.5 } do
+				local landed = Brain.Struck(group, case.by, now)
+				rows[index] = { landed, group.hit, Brain.Evades(group), C.snapshot(group) }
 			end
-			local landed = Brain.Struck(group, case.by)
-			return { landed, group.hit, Brain.Evades(group) }
+			return rows
 		elseif op == "shows" then
-			local shown = Brain.Shows(C.group(case.def, case.state, case.held), case.moving)
+			local group = C.group(case.def, case.state, case.held)
+			group.standDown = case.standDown == true
+			local shown = Brain.Shows(group, case.moving)
 			return if shown ~= nil then shown else "nil"
+		elseif op == "melee" or op == "reachable" then
+			local def = C.def(case.def)
+			local shooters = C.shooters(case.shooters)
+			local found = {}
+			for index, target in C.targets(case.targets) do
+				found[index] = if op == "melee"
+					then Brain.Melee(def, target, campRules)
+					else Brain.Reachable(def, target, shooters, campRules)
+			end
+			return found
+		elseif op == "standsDown" then
+			local found = {}
+			for index, row in case.rows do
+				local group = C.group(case.def, row[1], row[2])
+				group.standDown = row[3]
+				found[index] = Brain.StandsDown(group, row[4])
+			end
+			return found
+		elseif op == "forget" then
+			local group = C.group(case.def, case.state, case.held)
+			group.standDown = true
+			group.known[1] = true
+			group.reachable[1] = true
+			group.struckBy[2] = true
+			group.hitAt[2] = 1.5
+			local ret = Brain.Forget(group, 3.25)
+			return { ret = if ret ~= nil then ret else "nil", group = C.snapshot(group) }
 		elseif op == "problems" then
 			return #Brain.Problems(case.rules)
 		elseif op == "dormant" then
@@ -677,12 +756,12 @@ for _, case in data.campCases do
 		elseif op == "rouse" then
 			local group = C.group(case.def, case.state, case.held)
 			group.hit = true
-			local ret = Brain.Rouse(group, 4.5, case.playerInPlay == true)
+			local ret = Brain.Rouse(group, 4.5, case.reachable == true)
 			return { ret = ret, group = C.snapshot(group) }
 		elseif op == "tentRouse" then
 			local group = C.group(case.def, case.state, case.held)
 			group.hit = true
-			local ret = Brain.TentRouse(group, 4.5, case.playerInPlay == true)
+			local ret = Brain.TentRouse(group, 4.5, case.reachable == true)
 			return { ret = ret, group = C.snapshot(group) }
 		elseif op == "tent" then
 			local tent = Brain.NewTent(case.stock)
@@ -690,13 +769,23 @@ for _, case in data.campCases do
 			for index, step in case.ops do
 				local ret: any = "nil"
 				if step[1] == "active" then
-					ret = Brain.TentActive(step[2], step[3])
+					ret = Brain.TentActive(step[2], step[3], step[4])
 				elseif step[1] == "due" then
 					ret = Brain.TentDue(tent, step[2], step[3])
+				elseif step[1] == "clock" then
+					Brain.TentClock(tent, step[2], step[3])
+				elseif step[1] == "ahead" then
+					ret = Brain.Ahead(step[2], step[3], tent.busySeconds, step[4])
 				else
 					Brain.TentSent(tent, step[2], case.every)
 				end
-				rows[index] = { ret = ret, left = tent.left, nextAt = tent.nextAt }
+				rows[index] = {
+					ret = ret,
+					left = tent.left,
+					nextAt = tent.nextAt,
+					busySeconds = tent.busySeconds,
+					lastAt = if tent.lastAt ~= nil then tent.lastAt else "nil",
+				}
 			end
 			return rows
 		elseif op == "engaged" then
@@ -729,11 +818,14 @@ for _, case in data.campCases do
 						targets = C.targets(step.targets),
 						shooters = shooters,
 						striking = step.striking,
+						closing = step.closing == true,
 					}, campRules)
 				elseif step.kind == "release" then
 					Brain.Release(group, step.now)
+				elseif step.kind == "forget" then
+					ret = Brain.Forget(group, step.now)
 				else
-					ret = Brain.Struck(group, step.by)
+					ret = Brain.Struck(group, step.by, step.now)
 				end
 				rows[index] = { ret = if ret ~= nil then ret else "nil", group = C.snapshot(group) }
 			end
@@ -855,6 +947,67 @@ for _, case in data.tentOwesCases do
 			found[index] = Flow.TentOwesRouse(row[1], row[2], row[3])
 		end
 		return found
+	end)
+end
+
+-- L1b Wave 4: Region on the Python's grids, and StageFlow.Fielded on the shipped plans ----------------
+for _, case in data.regionCases do
+	J.try(case.id, function()
+		local cells = C.cells(case.cells)
+		local op = case.op
+		if op == "build" then
+			return L.graph(Region.Build(cells))
+		elseif op == "problems" then
+			return #Region.Problems(cells, case.minDoor)
+		end
+		local found = {}
+		if op == "distance" then
+			for index, point in case.points do
+				found[index] = Region.Distance(cells, point[1], point[2])
+			end
+		elseif op == "inside" or op == "clamp" then
+			for index, row in case.rows do
+				local point = V.new(row[1], row[2], row[3])
+				found[index] = if op == "inside"
+					then Region.Inside(cells, point, row[4])
+					else Region.Clamp(cells, point, row[4])
+			end
+		elseif op == "runway" then
+			for index, row in case.rows do
+				found[index] = Region.Runway(
+					cells,
+					V.new(row[1], row[2], row[3]),
+					V.new(row[4], 0, row[5]),
+					row[6]
+				)
+			end
+		elseif op == "toward" then
+			local graph = Region.Build(cells)
+			for index, row in case.rows do
+				local point, through = Region.Toward(
+					graph,
+					V.new(row[1], row[2], row[3]),
+					V.new(row[4], row[5], row[6]),
+					row[7]
+				)
+				found[index] = { point, through }
+			end
+		else
+			error("unknown region op " .. tostring(op))
+		end
+		return found
+	end)
+end
+for _, case in data.fieldedCases do
+	J.try(case.id, function()
+		local file = data.levels[case.level]
+		local level = L.resolve(file)
+		local plan = L.planned(level, L.layout(file.layout), case.difficulty)
+		if plan == nil then
+			return { refused = true }
+		end
+		local tent = if case.tent ~= 0 then plan.tents[case.tent] else nil
+		return Flow.Fielded(plan.zones[case.zone], tent, case.sent)
 	end)
 end
 

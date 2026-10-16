@@ -5,6 +5,10 @@ off the open camps' floors and out of every resting member's sight; L1b Wave 2, 
 the winding road's sizes, tents and their rings, the sneak path, post spacing, the population
 rule with tents and the boss reserve, dormancy and the join-in's chain table).
 
+L1b Wave 4, "no waits, no walls": the chase regions (their data, standable cells, doors and tree,
+fences crossed only at gates, the lock clearance), camps.meleeAbove's range, the sniper perches,
+N's approaches and the tents' pace keys.
+
 A level is built in Studio from `src/shared/Layouts/Levels/<Name>.json`, and nobody sees it there
 before the owner does. This tool proves the layout on paper instead: it walks the level's `route`
 over the layout's boxes the way a player with one jump would, checks every gate of the constraint
@@ -81,6 +85,9 @@ EXPECTED = {
         "residents": {"A": (30, 36), "B": (40, 50)},
         "lockedResidentsMin": 4,
         "sneak": True,
+        # L1b Wave 4: one chase region on the plateau (ruling 1), an approach before each open camp.
+        "regions": 1,
+        "approaches": 2,
     },
 }
 # What a sign must say for each key, so a player knows what to bring.
@@ -131,7 +138,11 @@ ENGINE_MATERIALS = frozenset((
     "Ground", "Asphalt", "Salt", "Ice", "Glacier", "Glass", "ForceField", "Cardboard", "Carpet", "CeramicTiles",
     "ClayRoofTiles", "RoofShingles", "Leather", "Plaster", "Rubber"))
 # The `levels` numbers of L1b, held by their own gate in check_rules.
-L1B_RULES = ("checkpointReach", "walletSendSeconds")
+L1B_RULES = ("checkpointReach", "walletSendSeconds", "regionLockMargin", "doorSpare")
+REGION_LOCK_MARGIN = 8.0  # L1b-W4-16 (ruling 1), fixed: Combat.json levels.regionLockMargin
+DOOR_SPARE = 0.5  # L1b-W4-15, fixed: Combat.json levels.doorSpare
+CELL_STEP = 2.0  # L1b-W4-15: a cell is proved standable on this grid and at its corners
+PERCH_STEP = 1.0  # a perch's top is sampled this often for its distance to the region
 # The `levels` numbers this tool itself reads to measure a layout.
 READ_RULES = ("fenceThickness", "floorThickness", "triggerHeight", "crowdCeiling", "startSpacing", "maxParts")
 GEAR_PRESETS = ((2, 2), (4, 4), (6, 6))  # L1b-W2-20: the Studio gear presets (melee, ranged)
@@ -1249,9 +1260,10 @@ def check_residents(name, level, layout, ctx, expect):
     # Perches by an open camp: a standable top (a block, a fence, an obstacle, a secret, another
     # floor) within chaseMargin of the floor on the flat whose standing root is in the height
     # band is in play, so the camp's rushers' ground shapes must reach feet on it.
+    in_region = {cid for region in layout.get("regions") or [] for cid in region.get("camps") or []}
     for camp in camps:
-        if camp.get("locks") is True:
-            continue
+        if camp.get("locks") is True or camp["id"] in in_region:
+            continue  # L1b-W4-19: a region camp has the meleeAbove and sniper-perch gates instead
         cx0, cx1, cz0, cz1 = camp_rect(camp)
         names = sorted({u["kind"] for difficulty in difficulties
                         for d in all_defs(level, layout, ranks.get(difficulty, 0), ranks)[0]
@@ -1314,6 +1326,244 @@ def check_residents(name, level, layout, ctx, expect):
            f"residents, the boss reserve {reserve} = 1 + its largest summon) is at most crowd.maxAlive "
            f"{ctx['crowdMaxAlive']} at every difficulty (L1b-W2-5): " + "; ".join(over or rows))
     check_wave2(name, level, layout, ctx, expect, caps, solids)
+    check_wave4(name, level, layout, ctx, expect, solids)
+
+
+def rect_gap(a, b):
+    """The flat distance between two rectangles (x0, x1, z0, z1): 0 when they touch or overlap."""
+    return math.hypot(max(a[0] - b[1], b[0] - a[1], 0.0), max(a[2] - b[3], b[2] - a[3], 0.0))
+
+
+def cell_box(cell):
+    return cell["x"] - cell["hx"], cell["x"] + cell["hx"], cell["z"] - cell["hz"], cell["z"] + cell["hz"]
+
+
+def check_wave4(name, level, layout, ctx, expect, solids):
+    """The L1b Wave 4 gates (INTERFACES "L1b Wave 4" -> "Config", the gates table): the regions'
+    data as StageFlow.Validate reads it, standable cells, doors and the tree, fences crossed only at
+    a gate, the lock clearance, camps.meleeAbove's range, the region's corners, the sniper perches,
+    N's approaches and the tents' pace keys."""
+    kinds, ranks, rules = ctx["kinds"], ctx["ranks"], ctx["camps"]
+    levels = ctx["levels"]
+    facts = ctx["gate16"].setdefault(level["layout"], {})
+    difficulties = list(level["difficulties"])
+    camps = {c["id"]: c for c in layout["camps"]}
+    locking = [c for c in layout["camps"] if c.get("locks") is True]
+    regions = layout.get("regions") or []
+    spec = EXPECTED.get(level["layout"]) or {}
+    lines = []
+    sr.region_problems(level, layout, levels, kinds, lines.append)
+    expect(not lines, f"{name}: the regions and approaches as StageFlow.Validate reads them (L1b-W4-14 to -16, -31; "
+           f"sim_range.region_problems)" + (": " + "; ".join(lines[:4]) if lines else f" ({len(regions)} region(s))"))
+    if spec.get("regions") and len(regions) != spec["regions"]:
+        expect(False, f"{name}: {spec['regions']} chase region(s) (ruling 1): {len(regions)}")
+    rows = facts.setdefault("regions", [])
+    for region in regions:
+        rid = region.get("id")
+        y = region["y"]
+        rects = sr.region_cells(layout, region)
+        ids = [f"{cid} floor" for cid in [c["id"] for c in layout["camps"] if c["id"] in (region.get("camps") or [])]]
+        ids += [cell["id"] for cell in region.get("cells") or []]
+        widest = sr.region_widest(level, region, kinds)
+        min_door = 2 * widest + levels["doorSpare"]
+        # Standable: every point of every cell on a ground or path block or a camp floor whose top is
+        # the region's height (and nothing standable over it at that height).
+        bad = []
+        for cid, cell in zip(ids, rects):
+            x0, x1, z0, z1 = cell_box(cell)
+            xs = [x0 + CELL_STEP * k for k in range(int((x1 - x0) / CELL_STEP) + 1)] + [x1]
+            zs = [z0 + CELL_STEP * k for k in range(int((z1 - z0) / CELL_STEP) + 1)] + [z1]
+            for x in xs:
+                for z in zs:
+                    top, under = ground(solids, x, z, y + EPS, kinds=("block", "floor"))
+                    if top is None or abs(top - y) > EPS or (under.kind == "block" and under.look not in ("ground", "path")):
+                        bad.append(f"{cid} at ({x:g}, {z:g}): ground {top}")
+                        break
+                else:
+                    continue
+                break
+        rows.append(f"{rid}: y {y:g}, {len(rects)} cells: " + ", ".join(
+            f"{cid} x {c['x'] - c['hx']:g}..{c['x'] + c['hx']:g} z {c['z'] - c['hz']:g}..{c['z'] + c['hz']:g}"
+            for cid, c in zip(ids, rects)))
+        expect(not bad, f"{name} region {rid}: every point of every cell (a {CELL_STEP:g}-stud grid and the corners) "
+               f"lies on a ground or path block or a camp floor whose top is the region's {y:g}"
+               + (": " + "; ".join(bad[:4]) if bad else f" ({len(rects)} cells)"))
+        # Doors and the tree.
+        doors, odd = [], []
+        pairs = 0
+        for i in range(len(rects)):
+            for j in range(i + 1, len(rects)):
+                wx, wz, _c = sr.rg_overlap(rects[i], rects[j])
+                touch = abs(wx) <= EPS or abs(wz) <= EPS
+                if wx > EPS and wz > EPS:
+                    pairs += 1
+                    doors.append(f"{ids[i]}/{ids[j]} {wx:g} x {wz:g}")
+                    if wx < min_door - EPS or wz < min_door - EPS:
+                        odd.append(f"{ids[i]}/{ids[j]} {wx:g} x {wz:g}")
+                elif touch and wx >= -EPS and wz >= -EPS:
+                    doors.append(f"{ids[i]}/{ids[j]} touch (no door)")
+        graph = sr.rg_build(rects)
+        loose = [ids[j - 1] for j in range(1, len(rects) + 1) if graph["hops"][1][j] == math.inf]
+        tree = not loose and pairs == len(rects) - 1
+        rows.append(f"{rid} doors (at least {min_door:g} on both axes = 2 x {widest:g} + {levels['doorSpare']:g}): "
+                    + ", ".join(doors))
+        expect(tree and not odd, f"{name} region {rid}: neighbours by positive overlap form a tree ({pairs} doors for "
+               f"{len(rects)} cells) and every door is at least 2 x the widest body {widest:g} + doorSpare "
+               f"{levels['doorSpare']:g} = {min_door:g} on both axes (L1b-W4-15)"
+               + (f": not connected {', '.join(loose)}" if loose else "")
+               + (f": a cycle ({pairs} doors)" if not loose and not tree else "")
+               + (f": narrow {'; '.join(odd)}" if odd else ""))
+        # Fences: a cell crosses a camp's fence line only within one of its gate spans.
+        crossings, bad = [], []
+        thickness = levels["fenceThickness"]
+        for cid, cell in zip(ids, rects):
+            box = cell_box(cell)
+            for camp in layout["camps"]:
+                if not camp.get("fence"):
+                    continue
+                for side, strip in fence_strips(camp, thickness).items():
+                    ox0, ox1 = max(box[0], strip[0]), min(box[1], strip[1])
+                    oz0, oz1 = max(box[2], strip[2]), min(box[3], strip[3])
+                    if ox1 - ox0 <= EPS or oz1 - oz0 <= EPS:
+                        continue
+                    lo, hi = (oz0, oz1) if side in ("west", "east") else (ox0, ox1)
+                    spans = [gate_rect(camp, g, thickness) for g in camp.get("gates") or [] if g["side"] == side]
+                    spans = [(g[2], g[3]) if side in ("west", "east") else (g[0], g[1]) for g in spans]
+                    ok = any(g0 - EPS <= lo and hi <= g1 + EPS for g0, g1 in spans)
+                    crossings.append(f"{cid} through camp {camp['id']}'s {side} gate {lo:g}..{hi:g}")
+                    if not ok:
+                        bad.append(f"{cid} crosses camp {camp['id']}'s {side} fence at {lo:g}..{hi:g}, outside every "
+                                   f"gate ({', '.join(f'{a:g}..{b:g}' for a, b in spans) or 'none'})")
+        expect(not bad, f"{name} region {rid}: a cell crosses a camp's fence line only within one of its gate spans, so "
+               f"a body of radius up to {widest:g} walks a gate, never the palisade (ruling 3)"
+               + (": " + "; ".join(bad[:3]) if bad else f": {'; '.join(crossings)}"))
+        # The lock clearance (L1b-W4-16).
+        reach = sr.region_reach(level, region, kinds)
+        least = reach + levels["regionLockMargin"]
+        tightest, bad = None, []
+        for cid, cell in zip(ids, rects):
+            for camp in locking:
+                gap = rect_gap(cell_box(cell), camp_rect(camp))
+                if tightest is None or gap < tightest[0]:
+                    tightest = (gap, cid, camp["id"])
+                if gap < least - EPS:
+                    bad.append(f"{cid} {gap:g} from camp {camp['id']}")
+        if tightest is not None:
+            rows.append(f"{rid} lock clearance: the tightest {tightest[1]} {tightest[0]:g} studs from camp {tightest[2]}'s "
+                        f"floor (needs {least:g} = the longest reach {reach:g} + {levels['regionLockMargin']:g})")
+        expect(not bad, f"{name} region {rid}: every cell is at least the region's longest reach {reach:g} + "
+               f"regionLockMargin {levels['regionLockMargin']:g} = {least:g} from every locking camp's floor (L1b-W4-16)"
+               + (": " + "; ".join(bad[:3]) if bad else
+                  f" (the tightest: {tightest[1]}, {tightest[0]:g} from camp {tightest[2]})" if tightest else " (none locks)"))
+        # camps.meleeAbove in its range (L1b-W4-19).
+        names = sorted({u for u in sr.region_units(level, region)
+                        if u in kinds and kinds[u].get("brain") != "keepAway"})
+        low = ground_reach(names, kinds)
+        fences = [(camps[cid].get("fence") or {}).get("height") or 0 for cid in region.get("camps") or [] if cid in camps]
+        lo = max([COVER_MAX] + fences) + sr.ROOT_HEIGHT
+        hi = (low[0] - COVER_MARGIN + sr.ROOT_HEIGHT) if low is not None else math.inf
+        melee = rules["meleeAbove"]
+        expect(lo - EPS <= melee <= hi + EPS,
+               f"{name} region {rid}: camps.meleeAbove {melee:g} lies in [max(COVER_MAX {COVER_MAX:g}, fence "
+               f"{max(fences, default=0):g}) + ROOT_HEIGHT {sr.ROOT_HEIGHT:g}, the lowest rusher ground height "
+               + (f"({low[1]}'s {low[2]} {low[0]:g})" if low else "(none)")
+               + f" - COVER_MARGIN {COVER_MARGIN:g} + ROOT_HEIGHT] = [{lo:g}, {hi:g}]: a melee-reachable player can be hit")
+        # The sniper perches (L1b-W4-19): every standable top near the region, in the band and over
+        # meleeAbove, lies within the shortest keepAway reach of some region point.
+        shooters = [longest for longest in (min((a["reach"] for a in kinds[u].get("attacks") or []
+                                                 if a.get("reach") is not None), default=None)
+                                            for u in set(sr.region_units(level, region))
+                                            if u in kinds and kinds[u].get("brain") == "keepAway") if longest is not None]
+        shortest = min(shooters) if shooters else None
+        found, bad, boss = [], [], []
+        boxes = [cell_box(c) for c in rects]
+        # A locking camp's own floor, fence and cover are the boss room: the lock clearance keeps
+        # the region out of its residents' reach, and a player standing in it (or on its fence)
+        # shooting out is INTERFACES "Open for later" ("Shooting out of the boss room"), listed
+        # below, not gated here.
+        rooms = tuple(f"Camp_{c['id']}_" for c in locking)
+        for solid in solids:
+            if solid.kind not in ("block", "fence", "obstacle", "secret", "floor"):
+                continue
+            mine = (solid.x0, solid.x1, solid.z0, solid.z1)
+            gap = min(rect_gap(mine, b) for b in boxes)
+            if gap > rules["dormantRadius"] + EPS:
+                continue
+            if solid.name.startswith(rooms):
+                root = solid.top - y + sr.ROOT_HEIGHT
+                if -rules["sightBelow"] - EPS <= root <= rules["sightAbove"] + EPS and root > melee + EPS:
+                    boss.append(f"{solid.name} {gap:.0f} off")
+                continue
+            root = solid.top - y + sr.ROOT_HEIGHT
+            if not (-rules["sightBelow"] - EPS <= root <= rules["sightAbove"] + EPS) or root <= melee + EPS:
+                continue
+            xs = [solid.x0 + PERCH_STEP * k for k in range(int((solid.x1 - solid.x0) / PERCH_STEP) + 1)] + [solid.x1]
+            zs = [solid.z0 + PERCH_STEP * k for k in range(int((solid.z1 - solid.z0) / PERCH_STEP) + 1)] + [solid.z1]
+            far = max(sr.rg_distance(rects, x, z) for x in xs for z in zs)
+            found.append(f"{solid.name} (top {solid.top:g}, root {root:g} over the floor, {gap:g} off the region, its "
+                         f"farthest point {far:.1f} from it)")
+            if shortest is None or far > shortest + EPS:
+                bad.append(f"{solid.name}: {far:.1f} > {shortest}")
+        rows.append(f"{rid} sniper perches (in the band, over meleeAbove {melee:g}, within dormantRadius "
+                    f"{rules['dormantRadius']:g}): " + ("; ".join(found) or "none")
+                    + (f"; in the boss room, not gated: {', '.join(boss)}" if boss else ""))
+        expect(not bad, f"{name} region {rid}: every standable top within dormantRadius {rules['dormantRadius']:g} of the "
+               f"region whose standing root is in the band and over meleeAbove lies within the shortest keepAway reach "
+               f"{shortest} of the region's kinds of some region point (shooters answer high ground)"
+               + (": " + "; ".join(bad[:3]) if bad else f": {'; '.join(found) or 'none'}"))
+    # N's approaches (L1b-W4-31): only on open camps; standable at their y; farther than sight
+    # from every resting place of every open-camp group at every difficulty (cones ignored).
+    stops, bad = [], []
+    for camp in layout["camps"]:
+        approach = camp.get("approach")
+        if approach is None:
+            continue
+        if camp.get("locks") is True:
+            bad.append(f"camp {camp['id']} locks and has an approach")
+            continue
+        top, _under = ground(solids, approach["x"], approach["z"], approach["y"] + EPS, kinds=("block", "floor"))
+        if top is None or abs(top - approach["y"]) > EPS:
+            bad.append(f"camp {camp['id']}'s approach ({approach['x']:g}, {approach['y']:g}, {approach['z']:g}) stands "
+                       f"on ground {top}")
+        tightest = None
+        for difficulty in difficulties:
+            defs, _tents = all_defs(level, layout, ranks.get(difficulty, 0), ranks)
+            for defn in defs:
+                if defn["held"]:
+                    continue
+                sight = sr.cb_posture(defn, rules)["sight"]
+                for member in resting_eyes(defn):
+                    d = math.hypot(member["at"][0] - approach["x"], member["at"][2] - approach["z"]) - sight
+                    if tightest is None or d < tightest[0]:
+                        tightest = (d, f"{difficulty} {defn['id']}")
+                    if d <= EPS:
+                        bad.append(f"camp {camp['id']}'s approach is {d + sight:.1f} from {difficulty} {defn['id']} "
+                                   f"(sight {sight:g})")
+        stops.append(f"{camp['id']} ({approach['x']:g}, {approach['y']:g}, {approach['z']:g})"
+                     + (f", {tightest[0]:+.1f} past {tightest[1]}'s sight" if tightest else ""))
+    stops += [f"{c['id']} (the countdown)" for c in locking]
+    facts["approaches"] = ["N steps to " + ", then ".join(stops)]
+    spec_stops = spec.get("approaches")
+    expect(not bad and (spec_stops is None or len(stops) - len(locking) == spec_stops),
+           f"{name}: N's approaches stand only before open camps, on ground at their height, farther than every "
+           f"open-camp group's sight from all its resting places, every difficulty, cones ignored (L1b-W4-31); N steps "
+           f"to " + ", then ".join(stops) + (": " + "; ".join(bad[:3]) if bad else ""))
+    # The tents' pace (L1b-W4-28).
+    bad = []
+    told = []
+    for config in level.get("camps") or []:
+        tent = config.get("tent")
+        camp = camps.get(config.get("id"))
+        if tent is None or camp is None or camp.get("locks") is True:
+            continue
+        pace = tent.get("pace")
+        if not (isinstance(pace, dict) and sr.finite(pace.get("seconds")) and pace["seconds"] > 0
+                and sr.finite(pace.get("lead")) and 0 <= pace["lead"] <= 1):
+            bad.append(f"camp {config['id']}: pace {pace}")
+        else:
+            told.append(f"{config['id']} {pace['seconds']:g} s, lead {pace['lead']:g}")
+    expect(not bad, f"{name}: every open camp's tent has a pace with seconds over 0 and lead in [0, 1] (L1b-W4-28)"
+           + (": " + "; ".join(bad) if bad else f" ({'; '.join(told) or 'no tent'})"))
 
 
 def member_kinds(defn):
@@ -1844,13 +2094,19 @@ def check_rules(combat, level_files, ctx, expect):
            and three_positive(fire),
            f"Combat.json levels (L1b): checkpointReach over 0 ({reach}), walletSendSeconds exactly "
            f"{WALLET_SEND_SECONDS:g} ({wallet}), fireMarkerSize three positive numbers ({fire})")
+    lock, spare = levels.get("regionLockMargin"), levels.get("doorSpare")
+    expect(lock == REGION_LOCK_MARGIN and spare == DOOR_SPARE,
+           f"Combat.json levels (L1b Wave 4): regionLockMargin exactly {REGION_LOCK_MARGIN:g} ({lock}) and doorSpare "
+           f"exactly {DOOR_SPARE:g} ({spare}), both fixed by the contract")
     camps = combat.get("camps")
     problems = sr.cb_problems(camps)
     expect(not problems, "Combat.json camps: every key CampBrain.Problems reads is there, finite and in range"
            + (": " + "; ".join(problems) if problems else
               f" (sight guard {camps['guard']['sight']:g}/{camps['guard']['cone']:g} deg, patrol "
               f"{camps['patrol']['sight']:g}, fire {camps['fire']['sight']:g}; rise fire {camps['fire']['rise']:g} s; "
-              f"leash {camps['leashSeconds']:g} s; chaseMargin {camps['chaseMargin']:g})"))
+              f"leash {camps['leashSeconds']:g} s; chaseMargin {camps['chaseMargin']:g}; chaseSight "
+              f"{camps['chaseSight']:g}, hitMemorySeconds {camps['hitMemorySeconds']:g}, meleeAbove "
+              f"{camps['meleeAbove']:g})"))
     if not problems:
         # L1b-W2-10: a group sleeps only where no member could see a player, nor see one arrive
         # within one snapshot of the fastest legal move.
@@ -1948,6 +2204,10 @@ def main():
                 print(f"    sneak       {line}")
             for line in found.get("chain") or []:
                 print(f"    chain       {line}")
+            for line in found.get("regions") or []:
+                print(f"    region      {line}")
+            for line in found.get("approaches") or []:
+                print(f"    N           {line}")
     if not args.no_plan:
         scale_x, scale_z = args.scale
         for name, layout in layouts.items():

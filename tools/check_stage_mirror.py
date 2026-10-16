@@ -72,8 +72,18 @@ and compares what they answer, value by value:
     scripted timelines), the tent posture's `Posts` and `Shows`, and `Problems`' new lines;
     `Combat.ClearBonus`, `DeadFraction` and `WaveStock`; `StageFlow.StandsUp` on every tick of
     the scripted runs, `BossReserve`, `Plan`'s tents, stocks and population, the new `Validate`
-    refusals, and scripted runs whose `tentLeft` holds a `campClear`. The Luau mutants that prove
-    each comparison are in docs/BALANCE.md "L1b Wave 2".
+    refusals. The Luau mutants that prove each comparison are in docs/BALANCE.md "L1b Wave 2".
+  * L1b Wave 4 ("L1b Wave 4 — no waits, no walls", gate 10): `Region.Build`, `Problems`, `Distance`,
+    `Inside`, `Clamp`, `Runway` and `Toward` against sim_range's rg_* on the shipped plateau and on
+    hand-built grids (an L, the U-bend of RoadAB1-5, a single cell, a cycle, a gap, narrow doors, a
+    bad cell); `CampBrain.Melee`, `Reachable`, `Struck` (every state, by a player and by a lever),
+    `StandsDown`, `Forget`, `Goal` and `Shows` while stood down, the pace tent (`NewTent`,
+    `TentClock`, `Ahead`, `TentActive`, `TentDue`, `TentSent` on a timeline) and scripted `Step`
+    timelines on a region group (known by sight and by the hit memory, the leash held by
+    `closing`, the stand-down, home's turn-back); `StageFlow.Plan`'s regions, residents-only
+    stocks, approaches and paces, `Fielded`, Validate's Wave 4 refusals, the scripted runs (an
+    open camp clears the tick its floor is empty, whatever its tent has not sent), and `Skip` runs
+    through both approaches. The Luau mutants are in tools/crowd_harness/mirror_mutants.py.
 
 It fails when either side changes alone. A function of the Luau that the simulators do not
 mirror (the rescue, the skips, the map) is listed, not compared: tools/crowd_harness tests those.
@@ -114,17 +124,19 @@ import sim_range as sr  # noqa: E402
 
 HARNESS = ROOT / "tools" / "crowd_harness"
 DRIVER = HARNESS / "stage_mirror.luau"
-MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Combat", "LevelGeometry", "CampBrain",
+MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "LevelGeometry", "CampBrain",
            "StageFlow")  # in load order
 # The functions each comparison needs; one that is missing fails the run by name.
 NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
                      "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve",
-                        "TentOwesRouse"),
+                        "TentOwesRouse", "Fielded"),
           "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
                         "Struck", "Goal", "Shows", "Engaged", "Dormant", "Gap", "JoinIn", "Rouse", "TentRouse", "NewTent",
-                        "TentActive", "TentDue", "TentSent"),
+                        "TentActive", "TentDue", "TentSent", "Melee", "Reachable", "StandsDown", "Forget", "TentClock",
+                        "Ahead"),
+          "Region": ("Build", "Problems", "Distance", "Inside", "Clamp", "Runway", "Toward"),
           "HitShapes": ("RayUpright", "CrowdRay", "FlatToRect", "Ray"),
           "SwingGate": ("New", "IsAir", "Allows", "Took", "Landed")}
 # L1b Wave 2's grids.
@@ -143,9 +155,19 @@ BURST_SIZES = (1, 2, 3, 9, 16)
 REWARD_GRID = tuple((cash, materials, mult) for cash in (1, 3, 5, 7, 100) for materials in (0, 1, 3)
                     for mult in (0.5, 1.5, 2.5, 1 / 3, 4))
 STATE_FIELDS = ("stage", "step", "wave", "firstWave", "gateAt", "breatherUntil", "cleared", "lastCleared", "settled",
+                "approached",
                 "reached", "done", "closedAt", "fought", "ended")
 ACTION_FIELDS = ("kind", "stage", "wave", "at", "merged", "count", "zone", "reason", "skipped")
-VARIANTS = ("clear", "down", "roadDown", "cap", "standing", "reset", "skipStage", "skipBoss", "force")
+VARIANTS = ("clear", "down", "roadDown", "cap", "standing", "reset", "skipStage", "skipBoss", "force", "approach",
+            "approachPast")
+APPROACH_PRESSES = 4  # the `approach` run presses N this often on the road (each open camp, then the countdown)
+# L1b Wave 4's Region grids.
+REGION_RADII = (0.0, 1.3, 2.2, 9.0)  # 9: wider than a 16-stud road cell
+REGION_STEP = 6.0  # studs between two grid points round a region
+REGION_HEADINGS = 16
+REGION_SEED = 4417
+REGION_TOWARD = 240  # seeded (from, goal) pairs per region
+MIN_DOOR = 4.9
 # CampBrain's grids (L1b).
 CB_ANGLES = tuple(range(0, 360, 10))
 CB_SPLIT_SEED = 1407
@@ -254,7 +276,33 @@ L1B_REFUSALS = (
         "x", layout_camp(l, "A")["x"] + layout_camp(l, "A")["sx"] / 2 - 0.5)),
     ("levels.checkpointReach 0", lambda f, l, r: r.__setitem__("checkpointReach", 0)),
     ("levels.walletSendSeconds 0", lambda f, l, r: r.__setitem__("walletSendSeconds", 0)),
+    # L1b Wave 4 (L1b-W4-14 to -16, -28, -31): each line broken once, on a level that has them.
+    ("a tent with no pace", lambda f, l, r: level_camp(f, "A")["tent"].pop("pace")),
+    ("a tent pace.seconds of 0", lambda f, l, r: level_camp(f, "A")["tent"]["pace"].__setitem__("seconds", 0)),
+    ("a tent pace.lead of 1.5", lambda f, l, r: level_camp(f, "B")["tent"]["pace"].__setitem__("lead", 1.5)),
+    ("an approach on the boss room", lambda f, l, r: layout_camp(l, "C").__setitem__("approach", {"x": 240, "y": 8, "z": -44})),
+    ("an approach with no y", lambda f, l, r: layout_camp(l, "A")["approach"].pop("y")),
+    ("regions not a list", lambda f, l, r: l.__setitem__("regions", {"id": "plateau"})),
+    ("a region with no id", lambda f, l, r: l["regions"][0].pop("id")),
+    ("a region with no camps", lambda f, l, r: l["regions"][0].__setitem__("camps", [])),
+    ("a region naming an unknown camp", lambda f, l, r: l["regions"][0]["camps"].append("Z")),
+    ("a region holding the boss room", lambda f, l, r: l["regions"][0]["camps"].append("C")),
+    ("a camp in two regions", lambda f, l, r: l["regions"].append({"id": "again", "y": 8, "camps": ["B"], "cells": []})),
+    ("a region at another height", lambda f, l, r: l["regions"][0].__setitem__("y", 9)),
+    ("a road cell of size 0", lambda f, l, r: l["regions"][0]["cells"][0].__setitem__("sx", 0)),
+    ("a road cell with no id", lambda f, l, r: l["regions"][0]["cells"][0].pop("id")),
+    ("a road cell 1 stud too close to the boss room", lambda f, l, r: region_cell(l, "RoadBC4").__setitem__("x", 193)),
+    ("a door of 4.8", lambda f, l, r: region_cell(l, "Road5").update({"x": -280.6, "sx": 42.8})),
+    ("a cycle", lambda f, l, r: l["regions"][0]["cells"].append({"id": "Loop", "x": -119, "z": -44, "sx": 38, "sz": 16})),
+    ("a road cell joined to nothing", lambda f, l, r: l["regions"][0]["cells"].append({"id": "Far", "x": 0, "z": 300,
+                                                                                         "sx": 10, "sz": 10})),
+    ("levels.doorSpare missing", lambda f, l, r: r.pop("doorSpare")),
+    ("levels.regionLockMargin missing", lambda f, l, r: r.pop("regionLockMargin")),
 )
+
+
+def region_cell(layout, cid):
+    return next(cell for region in layout["regions"] for cell in region["cells"] if cell["id"] == cid)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -441,8 +489,7 @@ class Scripted(sr.LevelRun):
         return {"roots": [tuple(root) for root in g["roots"]], "standing": g.get("standing"),
                 "fighters": list(g["fighters"]) if g.get("fighters") is not None else [],
                 "spawningDone": g["spawningDone"], "alive": g["alive"], "awake": g["awake"],
-                "aliveByFloor": list(g["aliveByFloor"]), "fallen": g["fallen"],
-                "tentLeft": list(g.get("tentLeft") or [])}
+                "aliveByFloor": list(g["aliveByFloor"]), "fallen": g["fallen"]}
 
     def on_gate(self, index, t):
         pass
@@ -472,6 +519,9 @@ class Scripted(sr.LevelRun):
         pass
 
     def on_move(self, index, t):
+        pass
+
+    def on_approach(self, floor, t):
         pass
 
     def stand_up(self, t):
@@ -510,7 +560,7 @@ class Scripted(sr.LevelRun):
                  "lastCleared": self.last_cleared, "settled": self.settled,
                  "reached": sorted(k for k, v in self.reached.items() if v),
                  "done": sorted(k for k, v in self.done.items() if v), "closedAt": self.closed_at,
-                 "fought": list(self.fought), "ended": self.end_reason}
+                 "fought": list(self.fought), "ended": self.end_reason, "approached": self.approached}
         safe = [list(self.safe_point(busy_of(case, len(self.zones)), threats_of(case, self.zones))) for case in BUSY_CASES]
         return actions, state, self.directs(), self.still_closing(tick["now"]), clear, safe, up
 
@@ -555,7 +605,6 @@ def script_run(run, variant, rules, start_y):
     # Living bodies per floor: the open camps' residents, and nothing on a locking camp's floor
     # (so a locking camp would clear as an open one if a side forgot `locks`).
     by_floor = [0 if zone["locks"] else zone["residents"] for zone in zones]
-    tent_left = [0 for _zone in zones]  # L1b-W2-8: a tent's stock not sent yet, per zone
     walked = set()
 
     def tick(root=None, at=None, fieldClear=True, **given):
@@ -564,7 +613,7 @@ def script_run(run, variant, rules, start_y):
             spot[0] = root
         entry = {"op": "tick", "now": clock[0], "roots": [list(spot[0])], "fighters": [1], "spawningDone": True,
                  "alive": 0 if fieldClear else 1, "awake": 0, "aliveByFloor": list(by_floor), "mergeOk": False,
-                 "breatherSeconds": BREATHER_INPUT, "fallen": None, "runCap": False, "tentLeft": list(tent_left)}
+                 "breatherSeconds": BREATHER_INPUT, "fallen": None, "runCap": False}
         entry.update(given)
         ticks.append((entry,) + run.play(entry))
 
@@ -592,28 +641,30 @@ def script_run(run, variant, rules, start_y):
                 return True
             if variant == "standing":
                 continue  # the open camps are left standing
+            by_floor[index - 1] = 2
+            tick(awake=1)  # two left: its last resident and a body its tent sent, out on the road
             by_floor[index - 1] = 1
-            tick(awake=1)  # one resident left
-            if zone["tentStock"] > 0:
-                # L1b-W2-8: the last resident falls with the tent's stock still to come out: no
-                # clear while any is left, a down on the quiet floor stands up, then the last.
-                tent_left[index - 1] = zone["tentStock"]
-                by_floor[index - 1] = 0
-                tick()  # every body dead, the whole stock left: not cleared
-                tick(standing=[False], fallen="down")  # a downed root on a quiet road
-                tent_left[index - 1] = 1
-                by_floor[index - 1] = 1
-                tick(awake=1)  # a tent body out and awake
-                by_floor[index - 1] = 0
-                tick()  # it falls, one left: still not cleared
-                tent_left[index - 1] = 0
+            tick(awake=1)  # one left: not cleared
             by_floor[index - 1] = 0
-            tick()  # the last falls: the camp is cleared
+            tick()  # the last falls (L1b-W4-29: whatever its tent has not sent, the camp is cleared)
             tick()  # once
         return False
 
     def lever(where):
-        """Presses this run's lever the first time it stands `where`; True when it did."""
+        """Presses this run's lever the first time it stands `where`; True when it did. The
+        `approach` run presses N on the road APPROACH_PRESSES times (L1b-W4-31)."""
+        if variant in ("approach", "approachPast") and where == "road":
+            presses = sum(1 for p in pressed if isinstance(p, int))
+            if presses >= APPROACH_PRESSES:
+                return False
+            pressed.add(presses)
+            first = next((z for z in zones if not z["locks"] and z.get("approach") and z["checkpoint"]), None)
+            if variant == "approachPast" and presses == 0 and first is not None:
+                # The first open camp's checkpoint reached first: N passes over that camp.
+                mark = first["checkpoint"]
+                tick((mark[0], first["floorY"] + sr.ROOT_HEIGHT, mark[1]))
+            tick(op="skip", which="stage", fighters=[1])
+            return True
         if variant not in ("skipStage", "skipBoss", "force") or where in pressed:
             return False
         pressed.add(where)
@@ -746,7 +797,20 @@ def zone_row(zone):
             "stock": dict(zone["stock"]), "tentStock": zone["tentStock"],
             "floorY": floor, "rect": list(zone["rect"]), "inner": list(zone["inner"]), "trigger": list(zone["trigger"]),
             "entry": [zone["entry"][0], floor, zone["entry"][1]], "exit": [zone["exit"][0], floor, zone["exit"][1]],
-            "spawns": [[x, floor, z] for x, z in zone["spawns"]]}
+            "spawns": [[x, floor, z] for x, z in zone["spawns"]],
+            "region": graph_row(zone["region"]) if zone.get("region") is not None else None,
+            "approach": list(zone["approach"]) if zone.get("approach") is not None else None}
+
+
+def graph_row(graph):
+    """A RegionGraph as plain values, as stage_mirror.luau's L.graph prints it: cells as
+    [x, z, hx, hz], next and hops as rows (inf as "inf"), doors as sorted [i, j, x, z]."""
+    n = len(graph["cells"])
+    return {"cells": [[c["x"], c["z"], c["hx"], c["hz"]] for c in graph["cells"]],
+            "next": [[graph["next"][i][j] for j in range(1, n + 1)] for i in range(1, n + 1)],
+            "hops": [[wire(graph["hops"][i][j]) for j in range(1, n + 1)] for i in range(1, n + 1)],
+            "doors": [[i, j, graph["doors"][i][j][0], graph["doors"][i][j][1]]
+                      for i in range(1, n + 1) for j in sorted(graph["doors"][i])]}
 
 
 def def_row(defn):
@@ -754,7 +818,8 @@ def def_row(defn):
     return plain({"id": defn["id"], "camp": defn["camp"], "floor": defn["floor"], "floorY": defn["floorY"],
                   "rect": dict(defn["rect"]), "posture": defn["posture"], "points": [list(p) for p in defn["points"]],
                   "yaw": defn["yaw"], "radius": defn["radius"], "held": defn["held"],
-                  "units": [{"kind": u["kind"], "count": u["count"]} for u in defn["units"]]})
+                  "units": [{"kind": u["kind"], "count": u["count"]} for u in defn["units"]],
+                  "region": [dict(c) for c in defn["region"]] if defn.get("region") is not None else None})
 
 
 def as_def(row):
@@ -771,9 +836,9 @@ def post_row(post):
 
 def tent_row(tent):
     """A PlanTent as plain values."""
-    return {"zone": tent["zone"], "def": def_row(tent["def"]), "kinds": list(tent["kinds"]),
-            "posts": [post_row(p) for p in tent["posts"]], "doors": [list(d) for d in tent["doors"]],
-            "every": tent["every"]}
+    return plain({"zone": tent["zone"], "def": def_row(tent["def"]), "kinds": list(tent["kinds"]),
+                  "posts": [post_row(p) for p in tent["posts"]], "doors": [list(d) for d in tent["doors"]],
+                  "every": tent["every"], "pace": tent.get("pace")})
 
 
 def wire(value):
@@ -978,7 +1043,7 @@ def wave2_camp_cases(data, expected, rules, plans):
             ret = sr.cb_rouse(group, 4.5, in_play)
             case = f"camp.rouse.{state}.{held}.{in_play}"
             data["campCases"].append({"id": case, "op": "rouse", "def": def_row(guard), "state": state, "held": held,
-                                      "playerInPlay": in_play})
+                                      "reachable": in_play})
             expected[case] = ("CampBrain.Rouse", f"{state}{' held' if held else ''}{' in play' if in_play else ''}",
                               {"ret": ret, "group": group_row(group)})
             # A tent's rouse (the lead's ruling (i)): only with a player in play, then as Rouse.
@@ -987,31 +1052,46 @@ def wave2_camp_cases(data, expected, rules, plans):
             ret = sr.cb_tent_rouse(group, 4.5, in_play)
             case = f"camp.tentRouse.{state}.{held}.{in_play}"
             data["campCases"].append({"id": case, "op": "tentRouse", "def": def_row(guard), "state": state,
-                                      "held": held, "playerInPlay": in_play})
+                                      "held": held, "reachable": in_play})
             expected[case] = ("CampBrain.TentRouse", f"{state}{' held' if held else ''}{' in play' if in_play else ''}",
                               {"ret": ret, "group": group_row(group)})
     # The tent rule on timelines: wake at 0 (0, 6, 12), a pause from 13 to 40 (the next at 40),
     # the residents dead with the camp at rest (it keeps sending), the stock spent (never).
     every = 6.0
-    ops = [("active", True, 5), ("due", True, 0.0), ("sent", 0.0), ("due", True, 3.0), ("due", True, 6.0 - 1e-7),
-           ("sent", 6.0), ("due", True, 12.0), ("sent", 12.0), ("active", False, 5), ("due", False, 18.0),
-           ("due", False, 39.0), ("active", True, 5), ("due", True, 40.0), ("sent", 40.0), ("active", False, 0),
-           ("active", False, -1), ("due", True, 46.0), ("sent", 46.0), ("sent", 52.0), ("sent", 58.0), ("due", True, 64.0),
-           ("sent", 64.0), ("sent", 70.0), ("due", True, 76.0), ("due", True, 1e6)]
+    # L1b-W4-28: the pace clock (busy time only, a gap not counted), Ahead at its edge, and
+    # TentActive's truth table, with the clock and the stock carried through.
+    pace = {"seconds": 20.0, "lead": 0.25}
+    ops = [("clock", False, 0.0), ("clock", True, 1.0), ("clock", True, 3.5), ("ahead", 3, 10, pace),
+           ("ahead", 4, 10, pace), ("clock", False, 4.0), ("clock", False, 30.0), ("clock", True, 31.0),
+           ("clock", True, 32.0), ("ahead", 4, 10, pace), ("ahead", 4, 10, {"seconds": 0, "lead": 0.1}),
+           ("ahead", 0, 0, pace), ("ahead", 5, 10, {"seconds": 14.0, "lead": 0.25}),
+           ("ahead", 5, 10, {"seconds": 14.0 + 1e-3, "lead": 0.25}),
+           ("active", True, 5, True), ("due", True, 0.0), ("sent", 0.0), ("due", True, 3.0), ("due", True, 6.0 - 1e-7),
+           ("sent", 6.0), ("active", True, 5, False), ("active", False, 5, True), ("active", True, 0, True),
+           ("active", True, -1, True), ("active", False, 0, False), ("due", False, 12.0), ("due", True, 12.0),
+           ("sent", 12.0), ("sent", 18.0), ("sent", 24.0), ("sent", 30.0), ("sent", 36.0), ("sent", 42.0), ("due", True, 48.0),
+           ("sent", 48.0), ("due", True, 1e6), ("clock", True, 50.0), ("clock", True, 49.0)]
     rows = []
     tent = sr.cb_new_tent(8)
     for op in ops:
         if op[0] == "active":
-            ret = sr.cb_tent_active(op[1], op[2])
+            ret = sr.cb_tent_active(op[1], op[2], op[3])
         elif op[0] == "due":
             ret = sr.cb_tent_due(tent, op[1], op[2])
+        elif op[0] == "clock":
+            sr.cb_tent_clock(tent, op[1], op[2])
+            ret = "nil"
+        elif op[0] == "ahead":
+            ret = sr.cb_ahead(op[1], op[2], tent["busySeconds"], op[3])
         else:
             sr.cb_tent_sent(tent, op[1], every)
             ret = "nil"
-        rows.append({"ret": ret, "left": tent["left"], "nextAt": wire(tent["nextAt"])})
+        rows.append({"ret": ret, "left": tent["left"], "nextAt": wire(tent["nextAt"]), "busySeconds": tent["busySeconds"],
+                     "lastAt": "nil" if tent["lastAt"] is None else tent["lastAt"]})
     case = "camp.tent.timeline"
     data["campCases"].append({"id": case, "op": "tent", "stock": 8, "every": every, "ops": [list(op) for op in ops]})
-    expected[case] = ("CampBrain: the tent rule on a timeline", f"a stock of 8 every {every:g} s, {len(ops)} calls", rows)
+    expected[case] = ("CampBrain: the pace tent on a timeline (L1b-W4-28)", f"a stock of 8 every {every:g} s, "
+                      f"{len(ops)} calls", rows)
 
 
 def combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds, below):
@@ -1072,7 +1152,11 @@ def combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds, 
 def group_row(group):
     """A CampBrain Group after a call: its state, as both sides print it."""
     return {"state": group["state"], "held": group["held"], "since": group["since"], "quietSince": group["quietSince"],
-            "hit": group["hit"], "inPlay": sorted(k for k, v in group["inPlay"].items() if v)}
+            "hit": group["hit"], "known": sorted(k for k, v in group["known"].items() if v),
+            "reachable": sorted(k for k, v in group["reachable"].items() if v),
+            "hitAt": [[u, at] for u, at in sorted(group["hitAt"].items())],
+            "struckBy": sorted(k for k, v in group["struckBy"].items() if v),
+            "meleeQuietSince": group["meleeQuietSince"], "standDown": group["standDown"]}
 
 
 def ring(centre, yaw, distances, angles, heights):
@@ -1148,7 +1232,9 @@ def camp_cases(data, expected, label, defn, rules):
     # Goal, Struck and Shows on every state.
     points = defn["points"]
     states = (("rest", False), ("rest", True), ("rise", False), ("fight", False), ("home", False))
-    for state, held in states:
+    for state, held in states + (("fight", "down"),):
+        down = held == "down"
+        held = False if down else held
         for k, post in enumerate(posts[:3], 1):
             legs = range(0, len(points) + 2) if defn["posture"] == "patrol" else [post["leg"]]
             places = [post["at"], (post["at"][0] + 30.0, floor, post["at"][2])]
@@ -1157,36 +1243,38 @@ def camp_cases(data, expected, label, defn, rules):
             for leg in legs:
                 for at in places:
                     group = sr.cb_new_group(defn, 0.0)
-                    group["state"], group["held"] = state, held
+                    group["state"], group["held"], group["standDown"] = state, held, down
                     resident = {"group": 1, "post": post, "leg": leg}
                     goal, pace = sr.cb_goal(group, resident, at, rules)
                     case = f"camp.goal.{len(data['campCases'])}"
                     data["campCases"].append({"id": case, "op": "goal", "def": row, "state": state, "held": held,
-                                              "post": post_row(post), "leg": leg, "at": list(at)})
-                    expected[case] = ("CampBrain.Goal", f"{label} {state}{' held' if held else ''}, post {k}, leg {leg}, "
+                                              "standDown": down, "post": post_row(post), "leg": leg, "at": list(at)})
+                    expected[case] = ("CampBrain.Goal", f"{label} {state}{' held' if held else ''}"
+                                      f"{' stood down' if down else ''}, post {k}, leg {leg}, "
                                       f"at ({at[0]:g}, {at[2]:g})",
                                       plain([list(goal) if goal is not None else "nil", pace, resident["leg"]]))
-        for in_play in ([], [1]):
-            for by in (0, 1, 2):
-                group = sr.cb_new_group(defn, 0.0)
-                group["state"], group["held"] = state, held
-                for user in in_play:
-                    group["inPlay"][user] = True
-                landed = sr.cb_struck(group, by)
-                case = f"camp.struck.{len(data['campCases'])}"
-                data["campCases"].append({"id": case, "op": "struck", "def": row, "state": state, "held": held,
-                                          "inPlay": in_play, "by": by})
-                expected[case] = ("CampBrain.Struck", f"{label} {state}{' held' if held else ''}, in play {in_play}, by {by}",
-                                  [landed, group["hit"], sr.cb_evades(group)])
+        for by in (0, 1, 2):
+            # L1b-W4-25: a player's hit (1, 2) and a lever's (0), twice, the second later.
+            group = sr.cb_new_group(defn, 0.0)
+            group["state"], group["held"], group["standDown"] = state, held, down
+            rows = []
+            for now in (4.25, 7.5):
+                landed = sr.cb_struck(group, by, now)
+                rows.append([landed, group["hit"], sr.cb_evades(group), group_row(group)])
+            case = f"camp.struck.{len(data['campCases'])}"
+            data["campCases"].append({"id": case, "op": "struck", "def": row, "state": state, "held": held,
+                                      "standDown": down, "by": by})
+            expected[case] = ("CampBrain.Struck", f"{label} {state}{' held' if held else ''}{' stood down' if down else ''}"
+                              f", by {by}", rows)
         for moving in (False, True):
             group = sr.cb_new_group(defn, 0.0)
-            group["state"], group["held"] = state, held
+            group["state"], group["held"], group["standDown"] = state, held, down
             case = f"camp.shows.{len(data['campCases'])}"
             data["campCases"].append({"id": case, "op": "shows", "def": row, "state": state, "held": held,
-                                      "moving": moving})
+                                      "standDown": down, "moving": moving})
             shown = sr.cb_shows(group, moving)
-            expected[case] = ("CampBrain.Shows", f"{label} {state}{' held' if held else ''}, moving {moving}",
-                              shown if shown is not None else "nil")
+            expected[case] = ("CampBrain.Shows", f"{label} {state}{' held' if held else ''}{' stood down' if down else ''}"
+                              f", moving {moving}", shown if shown is not None else "nil")
 
 
 def grid_def(posture, points, *, yaw=0.0, radius=0.0, held=False, units=(("fodder", 3),)):
@@ -1207,13 +1295,15 @@ def timeline(data, expected, label, defn, rules, ops):
                                                   for m in op["members"]],
                     "targets": [{"userId": t["userId"], "root": tuple(t["root"])} for t in op["targets"]],
                     "shooters": [{"at": tuple(s["at"]), "reach": s["reach"]} for s in op["shooters"]],
-                    "striking": op["striking"]}
+                    "striking": op["striking"], "closing": op.get("closing") is True}
             ret = sr.cb_step(group, step, rules)
         elif op["kind"] == "release":
             sr.cb_release(group, op["now"])
             ret = None
+        elif op["kind"] == "forget":
+            ret = sr.cb_forget(group, op["now"])
         else:
-            ret = sr.cb_struck(group, op["by"])
+            ret = sr.cb_struck(group, op["by"], op["now"])
         rows.append({"ret": ret if ret is not None else "nil", "group": group_row(group)})
     case = f"camp.timeline.{len(data['campCases'])}"
     data["campCases"].append({"id": case, "op": "timeline", "def": def_row(defn), "ops": ops})
@@ -1258,13 +1348,16 @@ def grid_camp_cases(data, expected, rules):
            {"kind": "struck", "by": 1}, step(3.0 + rise + leash, away, [near]), step(3.5 + rise + leash, home, [near]),
            step(4.0 + rise + leash, home, [far]), {"kind": "struck", "by": 2}, step(4.5 + rise + leash, home, [far]),
            step(4.5 + rise + leash, [], [near])]
+    for op in ops:
+        if op["kind"] == "struck":
+            op["now"] = ops[ops.index(op) - 1]["now"]
     timeline(data, expected, "fire: sight, rise, fight, the leash held while striking, home, rest, a hit wakes", fire,
              rules, ops)
     held = grids[4]
     hposts = sr.cb_posts(held, 1)
     hmembers = [{"at": list(p["at"]), "post": post_row(p)} for p in hposts]
     hnear = {"userId": 1, "root": [0.0, 11.0, 24.0]}
-    ops = [step(0.0, hmembers, [hnear]), {"kind": "struck", "by": 1}, step(0.5, hmembers, [hnear]),
+    ops = [step(0.0, hmembers, [hnear]), {"kind": "struck", "by": 1, "now": 0.25}, step(0.5, hmembers, [hnear]),
            {"kind": "release", "now": 0.75}, step(0.75, hmembers, [hnear]), step(1.0, hmembers, [hnear]),
            {"kind": "release", "now": 1.25}, step(1.25, hmembers, [hnear])]
     timeline(data, expected, "guard held: ignores sight and hits, released, rise 0", held, rules, ops)
@@ -1302,13 +1395,282 @@ def grid_camp_cases(data, expected, rules):
               ("a dormantRadius at the guard's sight", lambda r: r.__setitem__("dormantRadius", r["guard"]["sight"])),
               ("a dormantRadius just above every sight",
                lambda r: r.__setitem__("dormantRadius", max(r[p]["sight"] for p in sr.CB_POSTURES) + 1e-6)),
-              ("a dormantRadius under the fire's sight", lambda r: r.__setitem__("dormantRadius", r["fire"]["sight"] - 1))]
+              ("a dormantRadius under the fire's sight", lambda r: r.__setitem__("dormantRadius", r["fire"]["sight"] - 1)),
+              ("no chaseSight", lambda r: r.pop("chaseSight")), ("a chaseSight of 0", lambda r: r.__setitem__("chaseSight", 0)),
+              ("a hitMemorySeconds of -1", lambda r: r.__setitem__("hitMemorySeconds", -1)),
+              ("a hitMemorySeconds of 0", lambda r: r.__setitem__("hitMemorySeconds", 0)),
+              ("a meleeAbove of 0", lambda r: r.__setitem__("meleeAbove", 0)), ("no meleeAbove", lambda r: r.pop("meleeAbove"))]
     for label, change in broken:
         changed = copy.deepcopy(rules)
         change(changed)
         case = f"camp.problems.{len(data['campCases'])}"
         data["campCases"].append({"id": case, "op": "problems", "rules": changed})
         expected[case] = ("CampBrain.Problems: how many lines", label, len(sr.cb_problems(changed)))
+
+
+# ---------------------------------------------------------------------------------------------
+# L1b Wave 4: Region, the region group's rules, Fielded
+# ---------------------------------------------------------------------------------------------
+
+
+def rect(x0, x1, z0, z1):
+    return {"x": (x0 + x1) / 2, "z": (z0 + z1) / 2, "hx": (x1 - x0) / 2, "hz": (z1 - z0) / 2}
+
+
+def region_sets(raw_layouts):
+    """The shipped regions and the hand-built grids: [(label, cells, well formed?)]."""
+    found = []
+    for name, layout in sorted(raw_layouts.items()):
+        for region in layout.get("regions") or []:
+            found.append((f"{name} {region['id']}", sr.region_cells(layout, region), True))
+    u_bend = [rect(-179, -122, -52, -36), rect(-138, -122, -52, 8), rect(-138, -100, -8, 8), rect(-116, -100, -52, 8),
+              rect(-116, -70, -52, -36)]
+    found += [("an L of two cells", [rect(0, 40, 0, 16), rect(24, 40, 0, 50)], True),
+              ("the U-bend of RoadAB1-5 (as the blocks stand)", u_bend, True),
+              ("a single cell", [rect(-20, 30, -8, 8)], True),
+              ("a cycle of three", [rect(0, 30, 0, 10), rect(20, 30, 0, 30), rect(0, 30, 20, 30)], False),
+              ("a gap", [rect(0, 20, 0, 10), rect(25, 45, 0, 10)], False),
+              ("a door 4.8 on x", [rect(0, 20, 0, 16), rect(15.2, 40, 0, 16)], False),
+              ("a door 4.8 on z", [rect(0, 20, 0, 16), rect(0, 20, 11.2, 30)], False),
+              ("touching cells", [rect(0, 20, 0, 16), rect(20, 40, 0, 16)], False),
+              ("a bad cell", [rect(0, 20, 0, 16), {"x": 30.0, "z": 8.0, "hx": 0.0, "hz": 8.0}, rect(10, 30, 0, 16)], False),
+              ("no cells", [], False)]
+    return found
+
+
+def region_points(cells, step=REGION_STEP, margin=12.0):
+    if not cells:
+        return [(0.0, 0.0)]
+    good = [c for c in cells if sr.rg_cell_ok(c)]
+    x0 = min(c["x"] - c["hx"] for c in good) - margin
+    x1 = max(c["x"] + c["hx"] for c in good) + margin
+    z0 = min(c["z"] - c["hz"] for c in good) - margin
+    z1 = max(c["z"] + c["hz"] for c in good) + margin
+    points = [(x0 + step * i, z0 + step * k) for i in range(int((x1 - x0) / step) + 1)
+              for k in range(int((z1 - z0) / step) + 1)]
+    # Every cell's corners and edges, a hair either side, and every door's centre.
+    for c in good:
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                for d in (-1e-7, 0.0, 1e-7):
+                    points.append((c["x"] + sx * (c["hx"] + d), c["z"] + sz * (c["hz"] + d)))
+    return points
+
+
+def region_cases(data, expected, raw_layouts):
+    """Region (L1b-W4-14 to -17) on the shipped regions and the grids: Build, Problems, and on the
+    well-formed ones Distance, Inside and Clamp on a point grid at several radii, Runway on rays
+    from inside in REGION_HEADINGS directions, Toward on seeded pairs and every door."""
+    import random
+
+    rng = random.Random(REGION_SEED)
+    for label, cells, good in region_sets(raw_layouts):
+        rows = [[c.get("x"), c.get("z"), c.get("hx"), c.get("hz")] for c in cells]
+        case = f"region.build.{len(data['regionCases'])}"
+        data["regionCases"].append({"id": case, "op": "build", "cells": rows})
+        expected[case] = ("Region.Build", label, graph_row(sr.rg_build(cells)))
+        case = f"region.problems.{len(data['regionCases'])}"
+        data["regionCases"].append({"id": case, "op": "problems", "cells": rows, "minDoor": MIN_DOOR})
+        expected[case] = ("Region.Problems: how many lines", f"{label} (door {MIN_DOOR:g})",
+                          len(sr.rg_problems(cells, MIN_DOOR)))
+        if not good:
+            continue
+        points = region_points(cells)
+        case = f"region.distance.{len(data['regionCases'])}"
+        data["regionCases"].append({"id": case, "op": "distance", "cells": rows, "points": [list(p) for p in points]})
+        expected[case] = ("Region.Distance", f"{label}, {len(points)} points", [sr.rg_distance(cells, x, z) for x, z in points])
+        triples = [[x, 8.0, z, r] for x, z in points for r in REGION_RADII]
+        case = f"region.inside.{len(data['regionCases'])}"
+        data["regionCases"].append({"id": case, "op": "inside", "cells": rows, "rows": triples})
+        expected[case] = ("Region.Inside", f"{label}, {len(triples)} points and radii",
+                          [sr.rg_inside(cells, (x, y, z), r) for x, y, z, r in triples])
+        case = f"region.clamp.{len(data['regionCases'])}"
+        data["regionCases"].append({"id": case, "op": "clamp", "cells": rows, "rows": triples})
+        expected[case] = ("Region.Clamp", f"{label}, {len(triples)} points and radii",
+                          [list(sr.rg_clamp(cells, (x, y, z), r)) for x, y, z, r in triples])
+        rays = []
+        inside = [p for p in points if sr.rg_inside(cells, (p[0], 0.0, p[1]), 0.0)][::3] + [(c["x"], c["z"]) for c in cells]
+        for x, z in inside:
+            for k in range(REGION_HEADINGS):
+                a = 2 * math.pi * k / REGION_HEADINGS
+                for r in (0.0, 1.3, 2.2):
+                    rays.append([x, 8.0, z, math.cos(a), math.sin(a), r])
+            rays.append([x, 8.0, z, 0.0, 0.0, 1.3])
+        case = f"region.runway.{len(data['regionCases'])}"
+        data["regionCases"].append({"id": case, "op": "runway", "cells": rows, "rows": rays})
+        expected[case] = ("Region.Runway", f"{label}, {len(rays)} rays",
+                          [sr.rg_runway(cells, (x, y, z), (hx, hz), r) for x, y, z, hx, hz, r in rays])
+        graph = sr.rg_build(cells)
+        pairs = []
+        for _ in range(REGION_TOWARD):
+            f, g = rng.choice(points), rng.choice(points)
+            pairs.append([f[0], 8.0, f[1], g[0], 3.0, g[1], rng.choice((0.0, 1.3, 2.2))])
+        for i, row in graph["doors"].items():
+            for j, (dx, dz) in row.items():
+                c = cells[j - 1]
+                pairs.append([dx, 8.0, dz, c["x"], 8.0, c["z"], 1.3])  # standing in a door: on to the next
+        case = f"region.toward.{len(data['regionCases'])}"
+        data["regionCases"].append({"id": case, "op": "toward", "cells": rows, "rows": pairs})
+        found = []
+        for fx, fy, fz, gx, gy, gz, r in pairs:
+            point, through = sr.rg_toward(graph, (fx, fy, fz), (gx, gy, gz), r)
+            found.append([list(point), through])
+        expected[case] = ("Region.Toward", f"{label}, {len(pairs)} (from, goal) pairs", found)
+
+
+def region_def(units=(("fodder", 3), ("slinger", 1))):
+    """A guard group on the L's first cell (y 8), its region the L."""
+    cells = [rect(0, 40, 0, 16), rect(24, 40, 0, 50)]
+    defn = {"id": "grid.region", "camp": "G", "floor": 1, "floorY": 8.0, "rect": dict(cells[0]), "posture": "guard",
+            "points": [(10.0, 8.0, 8.0), (14.0, 8.0, 8.0), (18.0, 8.0, 8.0), (22.0, 8.0, 8.0)], "yaw": 0.0,
+            "radius": 0.0, "held": False, "units": [{"kind": k, "count": n} for k, n in units], "region": cells}
+    return defn
+
+
+def wave4_camp_cases(data, expected, rules, raw_layouts):
+    """CampBrain's Wave 4 rules (L1b-W4-18 to -28) on a region group (the L) and on the shipped
+    groups: Melee and Reachable on grids round the region's edges, corners and the height band,
+    StandsDown's truth table, Forget in every state, and Step timelines."""
+    defn = region_def()
+    row = def_row(defn)
+    margin, above = rules["chaseMargin"], rules["meleeAbove"]
+    heights = [8.0 - rules["sightBelow"] - EDGE, 8.0 - rules["sightBelow"], 11.0, 8.0 + above - EDGE, 8.0 + above,
+               8.0 + above + EDGE, 8.0 + rules["sightAbove"], 8.0 + rules["sightAbove"] + EDGE]
+    xs = [-margin - EDGE, -margin, 0.0, 12.0, 24.0, 32.0, 40.0, 40.0 + margin, 40.0 + margin + EDGE]
+    zs = [-margin - EDGE, -margin, 8.0, 16.0, 16.0 + margin, 16.0 + margin + EDGE, 30.0, 50.0 + margin, 50.0 + margin + EDGE]
+    targets = [{"userId": 1, "root": [x, y, z]} for x in xs for z in zs for y in heights]
+    # The rounded corner off the L's inner and outer corners, either side of chaseMargin.
+    for cx, cz, sx, sz in ((40.0, 0.0, 1, -1), (0.0, 16.0, -1, 1), (24.0, 50.0, -1, 1), (40.0, 50.0, 1, 1)):
+        for d in (margin - EDGE, margin + EDGE):
+            targets.append({"userId": 1, "root": [cx + sx * d / math.sqrt(2), 11.0, cz + sz * d / math.sqrt(2)]})
+    shooter = {"at": [30.0, 8.0, 30.0], "reach": 32.0}
+    targets += ring((30.0, 8.0, 30.0), 0.0, [32.0 - EDGE, 32.0, 32.0 + EDGE], list(CB_ANGLES), [11.0, 8.0 + above + 5])
+    for op in ("melee", "reachable"):
+        for shooters in ([], [shooter]):
+            if op == "melee" and shooters:
+                continue
+            case = f"camp.{op}.{len(data['campCases'])}"
+            data["campCases"].append({"id": case, "op": op, "def": row, "targets": targets, "shooters": shooters})
+            theirs = [{"at": tuple(s["at"]), "reach": s["reach"]} for s in shooters]
+            answer = [sr.cb_melee(defn, {"userId": 1, "root": tuple(t["root"])}, rules) if op == "melee" else
+                      sr.cb_reachable(defn, {"userId": 1, "root": tuple(t["root"])}, theirs, rules) for t in targets]
+            expected[case] = (f"CampBrain.{op.capitalize()}", f"the L's guard, {len(shooters)} shooter(s), "
+                              f"{len(targets)} targets", answer)
+    # Melee and Reachable on a shipped region group too (the plateau), at the perches' heights.
+    for name, layout in sorted(raw_layouts.items()):
+        for region in layout.get("regions") or []:
+            cells = sr.region_cells(layout, region)
+            shipped = dict(region_def(), region=cells, floorY=region["y"])
+            spots = [(-283.0, 37.0, -59.0), (-283.0, 11.0, -44.0), (-324.0, 3.0, -44.0), (100.0, 21.0, -4.0),
+                     (200.0, 11.0, -44.0), (200.5 + margin, 11.0, -44.0), (-130.0, 11.0, -22.0), (-119.0, 11.0, -22.0)]
+            case = f"camp.melee.{name}.{len(data['campCases'])}"
+            tg = [{"userId": 1, "root": list(p)} for p in spots]
+            data["campCases"].append({"id": case, "op": "melee", "def": def_row(shipped), "targets": tg, "shooters": []})
+            expected[case] = ("CampBrain.Melee", f"{name} {region['id']}: the ledge, the road, below the drop, the "
+                              f"cache, the east end, the U-bend's void",
+                              [sr.cb_melee(shipped, {"userId": 1, "root": p}, rules) for p in spots])
+    # StandsDown's truth table.
+    rows = []
+    found = []
+    for state in ("rest", "rise", "fight", "home"):
+        for held in (False, True):
+            for down in (False, True):
+                for rusher in (False, True):
+                    group = sr.cb_new_group(defn, 0.0)
+                    group["state"], group["held"], group["standDown"] = state, held, down
+                    rows.append([state, held, down, rusher])
+                    found.append(sr.cb_stands_down(group, rusher))
+    case = f"camp.standsDown.{len(data['campCases'])}"
+    data["campCases"].append({"id": case, "op": "standsDown", "def": row, "rows": rows})
+    expected[case] = ("CampBrain.StandsDown", f"{len(rows)} combinations", found)
+    # Forget in every state, its sets full.
+    for state, held in (("rest", False), ("rest", True), ("rise", False), ("fight", False), ("home", False),
+                        ("fight", True)):
+        group = sr.cb_new_group(defn, 0.0)
+        group["state"], group["held"], group["standDown"] = state, held, True
+        group["known"][1] = group["reachable"][1] = group["struckBy"][2] = True
+        group["hitAt"][2] = 1.5
+        ret = sr.cb_forget(group, 3.25)
+        case = f"camp.forget.{len(data['campCases'])}"
+        data["campCases"].append({"id": case, "op": "forget", "def": row, "state": state, "held": held})
+        expected[case] = ("CampBrain.Forget", f"{state}{' held' if held else ''}",
+                          {"ret": ret if ret is not None else "nil", "group": group_row(group)})
+    # Step timelines on the region group.
+    posts = sr.cb_posts(defn, 4)
+    home = [{"at": list(p["at"]), "post": post_row(p)} for p in posts]
+    out_east = [{"at": [p["at"][0] + 18.0, 8.0, p["at"][2]], "post": post_row(p)} for p in posts]
+    sight, leash, memory = rules["chaseSight"], rules["leashSeconds"], rules["hitMemorySeconds"]
+    rise = sr.cb_posture(defn, rules)["rise"]
+
+    def step(now, members, targets, striking=False, closing=False, shooters=()):
+        return {"kind": "step", "now": now, "members": members, "targets": targets, "shooters": list(shooters),
+                "striking": striking, "closing": closing}
+
+    def at(x, y, z, user=1):
+        return {"userId": user, "root": [x, y, z]}
+
+    edge = posts[3]["at"][0] + sight  # the last post's chaseSight, east along z 8
+    t = 0.0
+    ops = [step(t, home, [at(10.0, 11.0, 8.0)]), step(t + rise + 0.05, home, [at(10.0, 11.0, 8.0)])]
+    # Known by sight to the edge and past it; the leash held by closing, then let go; home.
+    t = 2.0
+    ops += [step(t, home, [at(edge, 11.0, 8.0)]), step(t + 0.5, home, [at(edge + EDGE, 11.0, 8.0)], closing=True),
+            step(t + 0.5 + leash, home, [at(edge + EDGE, 11.0, 8.0)], closing=True),
+            step(t + 1.0 + leash, home, [at(edge + EDGE, 11.0, 8.0)]),
+            step(t + 1.0 + 2 * leash - 1e-3, out_east, [at(edge + EDGE, 11.0, 8.0)]),
+            step(t + 1.0 + 2 * leash, out_east, [at(edge + EDGE, 11.0, 8.0)], striking=True),
+            step(t + 1.1 + 2 * leash, out_east, [at(edge + EDGE, 11.0, 8.0)])]
+    # Home, away from its posts: a hit from an unreachable player (below the drop) lands and does not
+    # turn it back; a reachable one does; then known by the hit memory to its edge and past it.
+    t = t + 2.0 + 2 * leash
+    ops += [{"kind": "struck", "by": 3, "now": t}, step(t, out_east, [at(-10.0, 3.0, 8.0, 3)]),
+            step(t + 0.1, out_east, [at(-10.0, 3.0, 8.0, 3), at(44.0, 11.0, 47.0, 2)]),
+            {"kind": "struck", "by": 1, "now": t + 0.25}, step(t + 0.25, out_east, [at(30.0, 11.0, 40.0)]),
+            step(t + 0.25 + memory, home, [at(30.0, 11.0, 70.0)]),
+            step(t + 0.25 + memory + 2e-6, home, [at(30.0, 11.0, 70.0)])]
+    # The stand-down: a player on a perch only the slinger reaches; closing holds it, then leashSeconds.
+    t = t + 1.0 + memory
+    perch = at(30.0, 8.0 + above + 6.0, 20.0)
+    gun = [{"at": [30.0, 8.0, 14.0], "reach": 32.0}]
+    ops += [{"kind": "struck", "by": 1, "now": t}, step(t, out_east, [perch], shooters=gun),
+            step(t + 0.5, out_east, [perch], closing=True, shooters=gun),
+            step(t + 0.5 + leash - 1e-3, out_east, [perch], shooters=gun),
+            step(t + 0.5 + leash, out_east, [perch], shooters=gun), step(t + 0.6 + leash, out_east, [perch], shooters=gun),
+            step(t + 0.7 + leash, out_east, [at(30.0, 11.0, 14.0)], shooters=gun),
+            step(t + 0.8 + leash, out_east, [perch], shooters=gun),
+            step(t + 0.8 + 2 * leash, out_east, [perch], shooters=gun),
+            step(t + 0.9 + 2 * leash, out_east, [perch]),
+            step(t + 0.9 + 3 * leash, out_east, [perch]),
+            step(t + 1.0 + 3 * leash, home, [at(30.0, 11.0, 70.0)]),
+            {"kind": "struck", "by": 0, "now": t + 1.1 + 3 * leash}, step(t + 1.1 + 3 * leash, home, [at(30.0, 11.0, 70.0)]),
+            {"kind": "forget", "now": t + 1.2 + 3 * leash}, step(t + 1.3 + 3 * leash, [], [])]
+    timeline(data, expected, "region guard: known by sight and by memory, the leash held by closing, home's "
+             "turn-back, the stand-down, a lever's hit, Forget", defn, rules, ops)
+
+
+def fielded_cases(data, expected, files, rules, ranks, crowd_kinds, below):
+    """StageFlow.Fielded (L1b-W4-30) on every open camp of the shipped plans: no tent, nothing sent,
+    some, the whole stock and past it."""
+    for number, file in enumerate(files, 1):
+        level = sr.resolve_level(file, None, 0, "normal") if not file.get("mission") else None
+        if level is None or not level.get("camps"):
+            continue
+        layout = sr.load_level_layout(file["layout"], below)
+        for difficulty in level["difficulties"]:
+            plan = sr.plan_level(level, layout, difficulty, rules, ranks, crowd_kinds)
+            if plan is None:
+                continue
+            for zone in plan["zones"]:
+                t = next((k for k, tent in enumerate(plan["tents"], 1) if tent["zone"] == zone["floor"]), None)
+                for sent in (0, 3, 99, -1):
+                    for with_tent in ((True, False) if t is not None else (False,)):
+                        tent = plan["tents"][t - 1] if with_tent else None
+                        case = f"flow.fielded.{len(data['fieldedCases'])}"
+                        data["fieldedCases"].append({"id": case, "level": number, "difficulty": difficulty,
+                                                     "zone": zone["floor"], "tent": t if with_tent else 0, "sent": sent})
+                        expected[case] = ("StageFlow.Fielded", f"{file['id']} {difficulty} {zone['id']}"
+                                          f"{' with its tent' if with_tent else ''}, sent {sent}",
+                                          sr.fielded(zone, tent, sent))
 
 
 def split_cases(data, expected):
@@ -1385,7 +1747,7 @@ def main():
             "layouts": raw_layouts, "ranks": ranks, "planDifficulties": plan_difficulties, "pointCases": [],
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
             "campRules": combat["camps"], "campCases": [], "splitCases": [], "rayCases": [], "swingCases": [],
-            "combatCases": [], "reserveCases": [], "tentOwesCases": []}
+            "combatCases": [], "reserveCases": [], "tentOwesCases": [], "regionCases": [], "fieldedCases": []}
     shipped_plans = []  # (label, plan) of every level with residents at every difficulty: Wave 2's camp cases
     bursts, tempos = {}, {}
     scripted = {}  # trace id -> (label, the Python's ticks)
@@ -1549,6 +1911,9 @@ def main():
     swing_cases(data, expected)
     tent_owes_cases(data, expected)
     combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds, below)
+    region_cases(data, expected, raw_layouts)
+    wave4_camp_cases(data, expected, combat["camps"], raw_layouts)
+    fielded_cases(data, expected, files, rules, ranks, crowd_kinds, below)
     data["burstCases"] = [list(key) for key in bursts]
     data["tempoCases"] = [list(key) for key in tempos]
     data["mergeCases"] = [list(key) for key in merges]
@@ -1648,7 +2013,8 @@ def main():
     # The scripted runs: the first tick at which the two sides part, per run.
     extra_state = set()
     kinds = {"reset": "StageFlow.Advance: nobody on his feet as a countdown ends", "skipStage": "StageFlow.Skip",
-             "skipBoss": "StageFlow.Skip", "force": "StageFlow.Force"}
+             "skipBoss": "StageFlow.Skip", "force": "StageFlow.Force", "approach": "StageFlow.Skip: N through the approaches",
+             "approachPast": "StageFlow.Skip: N through the approaches"}
     for trace, (label, ticks) in scripted.items():
         kind = kinds.get(trace.rsplit(".", 1)[1], "StageFlow.Advance: scripted runs")
         got = answers.get(trace)

@@ -65,8 +65,13 @@ L1b ("the living road", Wave 1) puts residents in every camp: groups at posts, o
 fires, on each camp's own floor, under a mirror of CampBrain (cb_*: they rest, wake on sight or a
 hit, rise, fight only a player in play, leash, walk home, heal). Only the boss room is a stage and
 locks; every kill is paid as it falls (SplitCarry). New players: `still` (stands where a group
-first wakes), `kite` (runs out and comes back), `edge` (stands just past chaseMargin and hits),
-and the first-strike approach on every fire group. The run is `LevelRun`, which mirrors StageFlow.Advance row for row and
+first wakes), `kite` (runs out and comes back), and the first-strike approach on every fire
+group. L1b Wave 4 ("no waits, no walls") mirrors Region (rg_*: the open camps' raiders chase over
+the plateau region, clamped into it and routed through its doors), the chase rules (known, the
+hit memory, reachable, the leash held by `closing`, the stand-down, home's turn-back, Forget at
+the close), the pace tent and the clear on an empty floor; its players are `archer`, `walkout`,
+`lose` and `sniper` (the bow scenes see through gates and over the drop's lip only: the
+simulator's one line of sight). The run is `LevelRun`, which mirrors StageFlow.Advance row for row and
 fights each camp on that camp's own floor. The ten-wave Village arena is the level "Raider
 Arena", read through mirrors of the two adapters (StageFlow.Resolve and
 LevelGeometry.FromArena), and keeps its P5 bands. Forest Road is read from
@@ -321,16 +326,13 @@ PLATE_GIVE_UP_SECONDS = 30.0  # a weapon that has not broken a plate by then nev
 STILL_SPEED = 2.0  # CrowdBrain.STILL_SPEED: a root slower than this, up or down, is still
 TRACK_GAP_SECONDS = 0.25  # CrowdBrain.TRACK_GAP_SECONDS: unseen this long, no motion to lead
 REACH_EPSILON = 1e-3  # CrowdBrain.REACH_EPSILON
+MOVE_THRESHOLD = 0.2  # CrowdService.MOVE_THRESHOLD: a desired flat speed over this is walking
 SHOT_AIM_PASSES = 6  # CrowdBrain.ledAim: the flight time is refined this many times
 # P4 Stop 2: the player of a boss fight.
 BOSS_SECONDS = 240.0  # a boss fight is watched until the boss falls, and no longer than this
 CHASE_MARGIN = 1.5  # he closes to this far inside his weapon's reach of the boss
 RANGED_STAND = 24.0  # with a ranged weapon he stands no further from the boss than this
 ADDS_RANGE = 20.0  # with a ranged weapon he turns to what the boss called once it is this near
-# A ranged player clearing an open camp walks this far inside its floor rectangle before he shoots.
-# A simplification of CampBrain.InPlay (within camps.chaseMargin OUTSIDE the floor rect, or in reach
-# of a living keepAway member): he stands up to chaseMargin + 1 studs closer than the game needs.
-IN_PLAY_STEP = 1.0
 HOLD_STEP_SECONDS = 0.45  # holding his ground, he tries steps up to this long before a jump
 PLAN_DELAYS = tuple(k / 10 for k in range(1, 16))  # a jump he times: seconds he waits first
 MELEE_CAST_FRONT = 10.0  # a melee ability is measured on a boss this far ahead
@@ -1826,6 +1828,7 @@ class Fighter(Enemy):
         self.floor = None
         self.resident = None
         self.idle = None
+        self.closing = False  # L1b-W4-23: a thinking rusher walked under its brain this step
         # L1b-W2-10: a dormant body (its resting group far from every player) is not integrated,
         # not separated and not clamped; it stays where it stood.
         self.dormant = False
@@ -2232,6 +2235,27 @@ class ThreatRun:
     def may_target(self, e):
         """Has this body the player for a target this step? Always, but in a level run."""
         return True
+
+    def clamp_body(self, x, z, radius, floor):
+        """Where a body's centre ends up: inside body_box (a level run: its floor's region)."""
+        x0, x1, z0, z1 = self.body_box(radius, floor)
+        return clamp(x, x0, x1), clamp(z, z0, z1)
+
+    def route_goal(self, e, gx, gz, stop):
+        """The point a body walks to for the goal (gx, gz) and how far short of it it stops (a
+        level run routes a region's bodies through its doors)."""
+        return gx, gz, stop
+
+    def seek(self, e, gx, gz, speed, stop, dt):
+        """CrowdService.seek after the route: the step's velocity toward the goal, stopping
+        `stop` short of it."""
+        gx, gz, stop = self.route_goal(e, gx, gz, stop)
+        ox, oz = gx - e.x, gz - e.z
+        away = math.sqrt(ox * ox + oz * oz)
+        if away > stop and speed > 0 and away > EPSILON:
+            travel = min(speed, (away - stop) / dt)
+            return ox / away * travel, oz / away * travel
+        return 0.0, 0.0
 
     def before_think(self, now, dt):
         """Once per crowd step, after the player is tracked and before any body thinks (a level
@@ -3227,6 +3251,7 @@ class ThreatRun:
                 e.rage(now)
             grounded = now >= e.air_until
             vx = vz = 0.0
+            e.closing = False
             state = e.state
             if state == "windup":
                 if shape == "line" and standing and self.may_target(e):
@@ -3238,11 +3263,7 @@ class ThreatRun:
                 # (CrowdService's seek, stopping at the goal's distance), and thinks of nothing.
                 if grounded and now >= e.stagger_until:
                     gx, gz, pace, stop = e.idle
-                    ox, oz = gx - e.x, gz - e.z
-                    away = math.sqrt(ox * ox + oz * oz)
-                    if away > stop and pace > 0:
-                        travel = min(pace, (away - stop) / dt)
-                        vx, vz = ox / away * travel, oz / away * travel
+                    vx, vz = self.seek(e, gx, gz, pace, stop, dt)
             elif (standing and grounded and now >= e.stagger_until and (state == "approach" or e.brain == "keepAway")
                   and self.may_target(e)):
                 # A free body faces its target. A rusher stands exposed through its recover; a
@@ -3269,19 +3290,19 @@ class ThreatRun:
                     pass  # nothing left it may use: it stands
                 elif e.brain == "rush":
                     if gap > e.reach:  # [rush] CrowdService.seek
-                        travel = min(e.speed, (gap - e.reach) / dt)
-                        vx, vz = dx / gap * travel, dz / gap * travel
+                        vx, vz = self.seek(e, self.x, self.z, e.speed, e.reach, dt)
                 elif gap > e.band_max:  # [keepAway] in, as far as the band
-                    travel = min(e.speed, (gap - e.band_max) / dt)
-                    vx, vz = dx / gap * travel, dz / gap * travel
+                    vx, vz = self.seek(e, self.x, self.z, e.speed, e.band_max, dt)
                 elif gap < e.band_min:  # ...and straight back, no further than the arena's edge
-                    x0, x1, z0, z1 = self.body_box(e.r, e.floor)
-                    gx = clamp(e.x - e.face[0] * (e.band_min - gap), x0, x1) - e.x
-                    gz = clamp(e.z - e.face[1] * (e.band_min - gap), z0, z1) - e.z
+                    cx, cz = self.clamp_body(e.x - e.face[0] * (e.band_min - gap),
+                                             e.z - e.face[1] * (e.band_min - gap), e.r, e.floor)
+                    gx, gz = cx - e.x, cz - e.z
                     far = math.hypot(gx, gz)
                     if far > EPSILON:
                         travel = min(e.speed, far / dt)
                         vx, vz = gx / far * travel, gz / far * travel
+                if e.resident is not None and e.brain == "rush":
+                    e.closing = math.hypot(vx, vz) > MOVE_THRESHOLD
             if e.charge is not None and state == "attack":
                 # [lane] CrowdBrain.Carried: the brain carries the body down its lane.
                 c = e.charge
@@ -3338,8 +3359,7 @@ class ThreatRun:
                 b.z += nz * overlap * (1 - share_a)
                 ax, az = a.x, a.z
         for e in live:
-            x0, x1, z0, z1 = self.body_box(e.r, e.floor)
-            e.x, e.z = clamp(e.x, x0, x1), clamp(e.z, z0, z1)
+            e.x, e.z = self.clamp_body(e.x, e.z, e.r, e.floor)
             e.place()
         for e, impact in landed:
             self.land(e, impact, now)
@@ -4887,7 +4907,7 @@ FOREST_BOSS = "colossus"
 # not the contract's 7-8, because Ben's tent pace (one body every 6 s, his own pick) stands and
 # no camp mix lifts the clear past 7 on every seed without breaking the Timber band (Ben about
 # x1.36 of it: 8.8-10.9 min).
-FOREST_CLEAR_SECONDS = (390.0, 480.0)
+FOREST_CLEAR_SECONDS = (345.0, 420.0)
 # L1b-W2-22: what a Normal clear pays a minute, every seed: Timber within 10% of Wave 1's 42;
 # cash is reported against Wave 1's 19,800.
 FOREST_TIMBER_PER_MINUTE = (37.8, 46.2)
@@ -4896,7 +4916,8 @@ FOREST_CASH_PER_MINUTE_WAVE1 = 19800
 # these kinds, at the boss's spot in the boss room, aiming at the body and at the head.
 BOW_KINDS = ("brute", "armoured", "colossus")
 BOW_SECONDS = 240.0
-TENT_ALONE_SECONDS = 20.0  # a tent with no resident to wait for is watched its stock x every, and this long more
+TENT_AT_PACE = 1  # L1b-W4-28: at the recommended gear a tent sends at most this many bodies
+TENT_FAST = {"A": 2, "B": 4}  # ... and on Normal one gear preset up at least this many
 # L1b: standing still in the group of camp A that wakes first, down this long after its wake.
 FOREST_STILL_DOWN = (6.0, 12.0)
 FOREST_BOSS_SECONDS = {"normal": (64.0, 90.0), "hard": (64.0, 100.0), "brutal": (64.0, 100.0)}
@@ -5077,7 +5098,8 @@ def is_num(value):
 # missing, and the start then answers "unavailable". L1b adds three.
 LEVEL_RULES_NEEDED = ("gateSeconds", "triggerBelow", "triggerHeight", "closeInset", "closeGraceSeconds",
                       "crowdCeiling", "fenceThickness", "startSpacing", "boxMargin", "checkpointReach",
-                      "walletSendSeconds")
+                      "walletSendSeconds", "regionLockMargin", "doorSpare")
+WIRE_REACH = 1000  # StageFlow.WIRE_REACH: ruling 12, every camp within this of the world origin
 TENT_KEYS = ("x", "y", "z", "sx", "sy", "sz", "radius")  # StageFlow's NEEDED.tent
 POSTURES = ("guard", "patrol", "fire")  # a layout spot's postures (a tent's group is made, never placed)
 CB_POSTURES = ("guard", "patrol", "fire", "tent")  # CampBrain's POSTURES (L1b-W2-6)
@@ -5225,7 +5247,7 @@ def tents_of(level, layout, rank, ranks, crowd_kinds=None):
             x, z = tent_door(block, post["at"][0], post["at"][2], body["radius"] if body is not None else 0)
             doors.append((x, post["at"][1], z))
         tents.append({"zone": floor, "def": defn, "kinds": kinds, "posts": posts, "doors": doors,
-                      "every": tent["every"]})
+                      "every": tent["every"], "pace": tent.get("pace")})
         stocks[camp["id"]] = len(kinds)
     return tents, stocks
 
@@ -5254,6 +5276,92 @@ def population_of(residents, tents, caps, reserve):
     for camp_id, cap in caps.items():
         room = max(room, cap - residents.get(camp_id, 0))
     return sum(residents.values()) + tents + room + reserve
+
+
+def region_problems(level, layout, rules, kinds, problem):
+    """StageFlow.Validate's Wave 4 lines on layout.regions and the camps' approaches (L1b-W4-14
+    to -16, -31)."""
+    regions = layout.get("regions")
+    camps = {camp["id"]: camp for camp in layout["camps"]}
+    for camp in layout["camps"]:
+        approach = camp.get("approach")
+        if approach is None:
+            continue
+        if not isinstance(approach, dict) or not all(finite(approach.get(k)) for k in ("x", "y", "z")):
+            problem(f"camp {camp['id']}: its approach needs a finite x, y and z")
+        elif camp.get("locks") is True:
+            problem(f"camp {camp['id']} locks and has an approach")
+        elif max(abs(approach["x"]), abs(approach["y"]), abs(approach["z"])) > WIRE_REACH:
+            problem(f"camp {camp['id']}: its approach lies beyond {WIRE_REACH} studs of the world origin")
+    if regions is None:
+        return
+    if not isinstance(regions, list):
+        problem("layout.regions is not a list")
+        return
+    seen, owner = set(), {}
+    spare = rules.get("doorSpare")
+    margin = rules.get("regionLockMargin")
+    locking = [camp for camp in layout["camps"] if camp.get("locks") is True]
+    for index, region in enumerate(regions, 1):
+        here = f"region {index}"
+        if not isinstance(region, dict):
+            problem(f"{here} is not a table")
+            continue
+        rid = region.get("id")
+        if not isinstance(rid, str) or rid == "":
+            problem(f"{here} has no id")
+        elif rid in seen:
+            problem(f"the region id {rid} is used twice")
+        else:
+            seen.add(rid)
+        if not finite(region.get("y")):
+            problem(f"{here}: its y is not a finite number")
+        names = region.get("camps")
+        if not isinstance(names, list) or not names:
+            problem(f"{here} has no camps")
+            names = []
+        for cid in names:
+            camp = camps.get(cid)
+            if camp is None:
+                problem(f"{here} names the camp {cid}, which the layout lacks")
+            elif camp.get("locks") is True:
+                problem(f"{here} names camp {cid}, which locks")
+            elif cid in owner:
+                problem(f"camp {cid} is in two regions")
+            elif finite(region.get("y")) and abs(camp["y"] - region["y"]) > RG_EPS:
+                problem(f"{here}: camp {cid} stands at y {camp['y']}, not the region's {region['y']}")
+            owner.setdefault(cid, index)
+        cells = region.get("cells")
+        if not isinstance(cells, list):
+            problem(f"{here}: its cells are not a list")
+            cells = []
+        bad = False
+        for cindex, cell in enumerate(cells, 1):
+            at = f"{here} cell {cindex}"
+            if not isinstance(cell, dict) or not isinstance(cell.get("id"), str) or cell["id"] == "":
+                problem(f"{at} has no id")
+                bad = True
+                continue
+            if not all(finite(cell.get(k)) for k in ("x", "z", "sx", "sz")) or not (cell["sx"] > 0 and cell["sz"] > 0):
+                problem(f"{at} ({cell['id']}) needs a finite x, z and sx, sz above 0")
+                bad = True
+                continue
+            if abs(cell["x"]) + cell["sx"] / 2 > WIRE_REACH or abs(cell["z"]) + cell["sz"] / 2 > WIRE_REACH:
+                problem(f"{at} ({cell['id']}) lies beyond {WIRE_REACH} studs of the world origin")
+        if bad or any(camps.get(cid) is None for cid in names):
+            continue
+        rects = region_cells(layout, region)
+        if is_num(spare) and kinds is not None:
+            for line in rg_problems(rects, 2 * region_widest(level, region, kinds) + spare):
+                problem(f"{here}: {line}")
+        if is_num(margin) and kinds is not None:
+            least = region_reach(level, region, kinds) + margin
+            for cindex, rect in enumerate(rects, 1):
+                for camp in locking:
+                    gap = math.hypot(max(abs(rect["x"] - camp["x"]) - rect["hx"] - camp["sx"] / 2, 0),
+                                     max(abs(rect["z"] - camp["z"]) - rect["hz"] - camp["sz"] / 2, 0))
+                    if gap < least - RG_EPS:
+                        problem(f"{here} cell {cindex} lies {gap:g} from camp {camp['id']}'s floor, under {least:g}")
 
 
 def camp_level_problems(level, layout, rules, kinds, ranks, crowd_max, problems):
@@ -5383,6 +5491,15 @@ def camp_level_problems(level, layout, rules, kinds, ranks, crowd_max, problems)
             if camp is not None and spot_of(camp, group.get("spot")) is None:
                 problem(f"{at} names the spot {group.get('spot')}, which camp {camp['id']} lacks")
             unit_problems(at, group.get("units"))
+        if isinstance(tent, dict) and camp is not None and camp.get("locks") is not True:
+            pace = tent.get("pace")
+            if not isinstance(pace, dict):
+                problem(f"{here}: its tent has no pace")
+            elif not (finite(pace.get("seconds")) and pace["seconds"] > 0):
+                problem(f"{here}: its tent's pace.seconds is {pace.get('seconds')}, not a time above 0")
+            elif not (finite(pace.get("lead")) and 0 <= pace["lead"] <= 1):
+                problem(f"{here}: its tent's pace.lead is {pace.get('lead')}, not in [0, 1]")
+    region_problems(level, layout, rules, kinds, problem)
     if problems:
         return
     # The posts at every difficulty the level offers, the highest first (the fix round's B-2: a
@@ -5445,6 +5562,54 @@ def camp_level_problems(level, layout, rules, kinds, ranks, crowd_max, problems)
             problem(f"on {name} the population is {population}, over crowd.maxAlive ({crowd_max})")
 
 
+def camp_rect_of(camp):
+    """A layout camp's floor as a CampRect."""
+    return {"x": camp["x"], "z": camp["z"], "hx": camp["sx"] / 2, "hz": camp["sz"] / 2}
+
+
+def region_cells(layout, region):
+    """L1b-W4-14: a region's cells, its camps' floors in the layout's camp order, then its road
+    cells in file order (hx = sx / 2, hz = sz / 2)."""
+    names = set(region.get("camps") or [])
+    cells = [camp_rect_of(camp) for camp in layout["camps"] if camp["id"] in names]
+    for cell in region.get("cells") or []:
+        cells.append({"x": cell["x"], "z": cell["z"], "hx": cell["sx"] / 2, "hz": cell["sz"] / 2})
+    return cells
+
+
+def region_units(level, region):
+    """Every kind a region's camps field as a resident or a tent unit, at any difficulty."""
+    names = set(region.get("camps") or [])
+    found = []
+    for config in level.get("camps") or []:
+        if config.get("id") not in names:
+            continue
+        units = [u for g in config.get("residents") or [] for u in g.get("units") or []]
+        units += list((config.get("tent") or {}).get("units") or [])
+        found += [u.get("kind") for u in units]
+    return found
+
+
+def region_widest(level, region, kinds):
+    """L1b-W4-15: the widest body of a region (its camps' residents and tent units)."""
+    return max([0] + [kinds[k]["radius"] for k in region_units(level, region) if k in kinds])
+
+
+def region_reach(level, region, kinds):
+    """L1b-W4-16: the longest reach of a region's camps' kinds (StageFlow.LongestReach)."""
+    return max([0] + [longest_reach(kinds.get(k)) for k in region_units(level, region) if k in kinds])
+
+
+def fielded(zone, tent, sent):
+    """StageFlow.Fielded (L1b-W4-30): a new table, the zone's residents by kind plus the first
+    `sent` kinds of its tent's stock (no tent, or nothing sent: the residents alone)."""
+    stock = dict(zone["stock"])
+    if tent is not None and sent > 0:
+        for kind in tent["kinds"][:min(sent, len(tent["kinds"]))]:
+            stock[kind] = stock.get(kind, 0) + 1
+    return stock
+
+
 def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
     """StageFlow.Plan: the level as the run walks it, at one difficulty (L1b). A zone for every
     camp of the layout, in its order (its floor index); the stages (a camp stage names a locking
@@ -5459,15 +5624,25 @@ def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
     rank = (ranks.get(difficulty) or 0) if ranks is not None else 0
     groups, residents = groups_of(level, layout, rank, ranks)
     tents, tent_stocks = tents_of(level, layout, rank, ranks, kinds)
-    by_kind = {}  # each camp's stock by kind (L1b-W2-21): its residents, then its tent's
+    by_kind = {}  # each camp's residents by kind (L1b-W4-30: the tent's stock is not in it)
     for defn in groups:
         stock = by_kind.setdefault(defn["camp"], {})
         for unit in defn["units"]:
             stock[unit["kind"]] = stock.get(unit["kind"], 0) + unit["count"]
-    for tent in tents:
-        stock = by_kind.setdefault(tent["def"]["camp"], {})
-        for kind in tent["kinds"]:
-            stock[kind] = stock.get(kind, 0) + 1
+    # L1b-W4-14: one graph per region, shared by its camps' zones; each region camp's defs carry
+    # its cells.
+    graphs = {}
+    for region in layout.get("regions") or []:
+        cells = region_cells(layout, region)
+        if rg_problems(cells, 2 * (region_widest(level, region, kinds) if kinds is not None else 0)
+                       + (rules.get("doorSpare") or 0)):
+            return None  # Validate names it first
+        graph = rg_build(cells)
+        for cid in region.get("camps") or []:
+            graphs[cid] = graph
+    for defn in groups + [tent["def"] for tent in tents]:
+        if defn["camp"] in graphs:
+            defn["region"] = graphs[defn["camp"]]["cells"]
     names = {}
     for stage in level["stages"]:
         zid = stage.get("zone")
@@ -5494,7 +5669,10 @@ def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
                 "inner": (camp["x"], camp["z"], max(hx - keep, 0), max(hz - keep, 0)),
                 "trigger": (camp["x"], camp["z"], max(hx + grow, 0), max(hz + grow, 0)),
                 "entry": (entry["x"], entry["z"]), "exit": (leave["x"], leave["z"]),
-                "spawns": [(p["x"], p["z"]) for p in camp.get("spawns") or []]}
+                "spawns": [(p["x"], p["z"]) for p in camp.get("spawns") or []],
+                "region": graphs.get(camp["id"]),
+                "approach": ((camp["approach"]["x"], camp["approach"]["y"], camp["approach"]["z"])
+                             if camp.get("approach") is not None and camp.get("locks") is not True else None)}
         zones.append(zone)
         by_id[camp["id"]] = zone
     stages = []
@@ -5544,6 +5722,180 @@ def burst_point(at, size, index, spacing):
 
 
 # ---------------------------------------------------------------------------------------------
+# Region (L1b Wave 4, L1b-W4-14 to -17): the mirror, rule for rule, of src/shared/Region.luau.
+# tools/check_stage_mirror.py holds every function here to the Luau on the shipped plateau and on
+# hand-built grids. A cell is a CampRect dict {x, z, hx, hz}; a graph is {cells, next, hops, doors}
+# with 1-based indices as the Luau's (next[i][j], hops[i][j], doors[i][j] = (x, z)); points are
+# (x, y, z) tuples.
+# ---------------------------------------------------------------------------------------------
+
+RG_EPS = 1e-6  # Region.EPS
+
+
+def rg_overlap(a, b):
+    """The overlap of two cells on each axis: (width on x, width on z, its centre (x, z))."""
+    x0, x1 = max(a["x"] - a["hx"], b["x"] - b["hx"]), min(a["x"] + a["hx"], b["x"] + b["hx"])
+    z0, z1 = max(a["z"] - a["hz"], b["z"] - b["hz"]), min(a["z"] + a["hz"], b["z"] + b["hz"])
+    return x1 - x0, z1 - z0, ((x0 + x1) / 2, (z0 + z1) / 2)
+
+
+def rg_neighbours(a, b):
+    wx, wz, _centre = rg_overlap(a, b)
+    return wx > RG_EPS and wz > RG_EPS
+
+
+def rg_cell_ok(cell):
+    return (isinstance(cell, dict) and all(finite(cell.get(k)) for k in ("x", "z", "hx", "hz"))
+            and cell["hx"] > 0 and cell["hz"] > 0)
+
+
+def rg_build(cells):
+    """Region.Build: neighbours by positive overlap on both axes, doors at the overlaps' centres,
+    and next / hops by a breadth-first search from each cell, neighbours in index order (next[i][i]
+    = i, hops 0; unreachable: next 0, hops inf). 1-based dicts, as the Luau's tables."""
+    n = len(cells)
+    ok = [rg_cell_ok(c) for c in cells]
+    doors = {i: {} for i in range(1, n + 1)}
+    adjacent = {i: [] for i in range(1, n + 1)}
+    for i in range(1, n + 1):
+        for j in range(1, n + 1):
+            if i != j and ok[i - 1] and ok[j - 1] and rg_neighbours(cells[i - 1], cells[j - 1]):
+                doors[i][j] = rg_overlap(cells[i - 1], cells[j - 1])[2]
+                adjacent[i].append(j)
+    nxt, hops = {}, {}
+    for i in range(1, n + 1):
+        row_next = {j: 0 for j in range(1, n + 1)}
+        row_hops = {j: math.inf for j in range(1, n + 1)}
+        row_next[i], row_hops[i] = i, 0
+        queue = [i]
+        head = 0
+        while head < len(queue):
+            k = queue[head]
+            head += 1
+            for j in adjacent[k]:
+                if row_hops[j] == math.inf:
+                    row_hops[j] = row_hops[k] + 1
+                    row_next[j] = j if k == i else row_next[k]
+                    queue.append(j)
+        nxt[i], hops[i] = row_next, row_hops
+    return {"cells": list(cells), "next": nxt, "hops": hops, "doors": doors}
+
+
+def rg_problems(cells, min_door):
+    """Region.Problems: one line each for no cells; a bad cell; a neighbour pair whose overlap is
+    under min_door on either axis; a cell not connected to cell 1; a cycle."""
+    if not cells:
+        return ["a region has no cells"]
+    problems = []
+    for i, cell in enumerate(cells, 1):
+        if not rg_cell_ok(cell):
+            problems.append(f"cell {i} is not a rectangle with finite values and half sizes above 0")
+    pairs = 0
+    for i in range(1, len(cells) + 1):
+        for j in range(i + 1, len(cells) + 1):
+            if not (rg_cell_ok(cells[i - 1]) and rg_cell_ok(cells[j - 1]) and rg_neighbours(cells[i - 1], cells[j - 1])):
+                continue
+            pairs += 1
+            wx, wz, _centre = rg_overlap(cells[i - 1], cells[j - 1])
+            if wx < min_door - RG_EPS or wz < min_door - RG_EPS:
+                problems.append(f"cells {i} and {j} share a door of {wx:g} x {wz:g}, under {min_door:g}")
+    graph = rg_build(cells)
+    loose = [j for j in range(2, len(cells) + 1) if graph["hops"][1][j] == math.inf]
+    for j in loose:
+        problems.append(f"cell {j} is not connected to cell 1")
+    if not loose and pairs != len(cells) - 1:
+        problems.append(f"the cells hold a cycle ({pairs} neighbour pairs for {len(cells)} cells)")
+    return problems
+
+
+def rg_distance(cells, x, z):
+    """Region.Distance: the least HitShapes.FlatToRect over the cells; inf for none."""
+    return min((hs_flat_to_rect(x, z, c["x"], c["z"], c["hx"], c["hz"]) for c in cells), default=math.inf)
+
+
+def rg_inside_cell(cell, x, z, radius):
+    limit_x, limit_z = max(cell["hx"] - radius, 0), max(cell["hz"] - radius, 0)
+    return abs(x - cell["x"]) <= limit_x + RG_EPS and abs(z - cell["z"]) <= limit_z + RG_EPS
+
+
+def rg_inside(cells, point, radius):
+    """Region.Inside: inside some cell inset by `radius` (an edge plus EPS included)."""
+    return any(rg_inside_cell(c, point[0], point[2], radius) for c in cells)
+
+
+def rg_clamp(cells, point, radius):
+    """Region.Clamp: the point when Inside; else the nearest flat point of the inset cells (the
+    first strictly nearer wins); its Y kept. No cells: the point."""
+    if not cells or rg_inside(cells, point, radius):
+        return point
+    best, found = math.inf, point
+    for c in cells:
+        limit_x, limit_z = max(c["hx"] - radius, 0), max(c["hz"] - radius, 0)
+        x = min(max(point[0], c["x"] - limit_x), c["x"] + limit_x)
+        z = min(max(point[2], c["z"] - limit_z), c["z"] + limit_z)
+        d = (x - point[0]) ** 2 + (z - point[2]) ** 2
+        if d < best:
+            best, found = d, (x, point[1], z)
+    return found
+
+
+def rg_slab(cell, origin, heading, radius):
+    """One inset cell's interval [t0, t1] along the ray (None when the ray misses it)."""
+    t0, t1 = -math.inf, math.inf
+    for p, h, c, half in ((origin[0], heading[0], cell["x"], cell["hx"]), (origin[2], heading[1], cell["z"], cell["hz"])):
+        limit = max(half - radius, 0)
+        lo, hi = c - limit, c + limit
+        if h == 0:
+            if p < lo - RG_EPS or p > hi + RG_EPS:
+                return None
+            continue
+        a, b = (lo - p) / h, (hi - p) / h
+        t0, t1 = max(t0, min(a, b)), min(t1, max(a, b))
+    return (t0, t1) if t0 <= t1 else None
+
+
+def rg_runway(cells, origin, heading, radius):
+    """Region.Runway: how far a body runs from `origin` along the flat unit `heading` (x, z) and
+    stays in the union of the inset cells. 0 when it is not Inside or the heading is zero."""
+    if (heading[0] == 0 and heading[1] == 0) or not rg_inside(cells, origin, radius):
+        return 0.0
+    slabs = [s for s in (rg_slab(c, origin, heading, radius) for c in cells) if s is not None]
+    reach = 0.0
+    moved = True
+    while moved:
+        moved = False
+        for t0, t1 in slabs:
+            if t0 <= reach + RG_EPS and t1 > reach:
+                reach = t1
+                moved = True
+    return reach
+
+
+def rg_toward(graph, origin, goal, radius):
+    """Region.Toward: (the point to seek, through a door?). The goal and the origin are clamped
+    into the region; over every cell pair (i holding the origin, j the goal) the fewest hops win
+    (ties: lowest i, then j); i == j, no pair or no path answers the clamped goal."""
+    cells = graph["cells"]
+    g = rg_clamp(cells, goal, radius)
+    f = rg_clamp(cells, origin, radius)
+    best = None
+    for i, a in enumerate(cells, 1):
+        if not rg_inside_cell(a, f[0], f[2], radius):
+            continue
+        for j, b in enumerate(cells, 1):
+            if not rg_inside_cell(b, g[0], g[2], radius):
+                continue
+            hops = graph["hops"][i][j]
+            if best is None or hops < best[0]:
+                best = (hops, i, j)
+    if best is None or best[1] == best[2] or best[0] == math.inf:
+        return g, False
+    _hops, i, j = best
+    door = graph["doors"][i][graph["next"][i][j]]
+    return (door[0], origin[1], door[1]), True
+
+
+# ---------------------------------------------------------------------------------------------
 # CampBrain (L1b): the mirror, rule for rule, of src/combat/server/Services/CampBrain.luau.
 # tools/check_stage_mirror.py holds every function here to the Luau on grids and on the shipped
 # files. Points are (x, y, z) tuples; a group, a post and a resident are dicts with the Luau's keys.
@@ -5555,7 +5907,7 @@ CB_CONE_EPSILON_DEGREES = 1e-6  # CampBrain.CONE_EPSILON_DEGREES
 CB_ARC_EPSILON = 1e-9  # CampBrain.ARC_EPSILON
 CB_POSTURE_KEYS = ("sight", "cone", "rise")
 CB_RULE_KEYS = ("sightBelow", "sightAbove", "chaseMargin", "leashSeconds", "homePace", "patrolPace", "homeTolerance",
-                "engagedHoldSeconds", "joinFactor", "dormantRadius")
+                "engagedHoldSeconds", "joinFactor", "dormantRadius", "chaseSight", "hitMemorySeconds", "meleeAbove")
 
 
 def finite(value):
@@ -5595,7 +5947,7 @@ def cb_problems(rules):
             problems.append(f"camps.{key}: missing or not a finite number")
         elif value < 0:
             problems.append(f"camps.{key}: negative ({value})")
-        elif key in ("homeTolerance", "joinFactor") and value <= 0:
+        elif key in ("homeTolerance", "joinFactor", "chaseSight", "meleeAbove") and value <= 0:
             problems.append(f"camps.{key}: must be above 0 ({value})")
     radius = rules.get("dormantRadius")
     if finite(radius):
@@ -5609,7 +5961,8 @@ def cb_problems(rules):
 
 def cb_new_group(defn, now):
     return {"def": defn, "state": "rest", "held": defn.get("held") is True, "since": now, "quietSince": now,
-            "hit": False, "inPlay": {}}
+            "hit": False, "known": {}, "reachable": {}, "hitAt": {}, "struckBy": {}, "meleeQuietSince": now,
+            "standDown": False}
 
 
 def cb_posture(defn, rules):
@@ -5728,43 +6081,121 @@ def cb_at_post(post, at, rules):
     return flat_distance(post["at"], at) <= rules["homeTolerance"]
 
 
+def cb_melee(defn, target, rules):
+    """CampBrain.Melee (L1b-W4-19): a region group's rushers can reach him: in the band, at most
+    camps.meleeAbove over the floor, and within chaseMargin (flat, rounded) of the region. A group
+    with no region: InPlay with no shooter."""
+    region = defn.get("region")
+    if region is None:
+        return cb_in_play(defn, target, [], rules)
+    root = target["root"]
+    return (cb_in_band(defn, root, rules) and root[1] - defn["floorY"] <= rules["meleeAbove"]
+            and rg_distance(region, root[0], root[2]) <= rules["chaseMargin"])
+
+
+def cb_reachable(defn, target, shooters, rules):
+    """CampBrain.Reachable (L1b-W4-19): Melee, or in the band and within a living keepAway
+    member's reach (flat). A group with no region: InPlay."""
+    if defn.get("region") is None:
+        return cb_in_play(defn, target, shooters, rules)
+    if cb_melee(defn, target, rules):
+        return True
+    root = target["root"]
+    return cb_in_band(defn, root, rules) and any(flat_distance(s["at"], root) <= s["reach"] for s in shooters)
+
+
+def cb_known(group, step, target, rules):
+    """L1b-W4-18: a region group knows a target a living member sees within chaseSight (flat, all
+    round, in the band), or one whose hit landed within hitMemorySeconds (hitAt, pruned already).
+    A group with no region: InPlay."""
+    defn = group["def"]
+    if defn.get("region") is None:
+        return cb_in_play(defn, target, step["shooters"], rules)
+    if target["userId"] in group["hitAt"]:
+        return True
+    root = target["root"]
+    if not cb_in_band(defn, root, rules):
+        return False
+    return any(flat_distance(m["at"], root) <= rules["chaseSight"] for m in step["members"])
+
+
 def cb_step(group, step, rules):
-    """CampBrain.Step: at most one transition; the new state, or None. `hit` is cleared."""
+    """CampBrain.Step (L1b Wave 4): at most one transition; the new state, or None. The known and
+    reachable sets are rebuilt in place; `hit` and `struckBy` are cleared."""
     if not step["members"]:
         return None
     now = step["now"]
-    in_play = group["inPlay"]
-    in_play.clear()
-    any_in_play = False
-    for target in step["targets"]:
-        if cb_in_play(group["def"], target, step["shooters"], rules):
-            in_play[target["userId"]] = True
-            any_in_play = True
+    known, reachable = group["known"], group["reachable"]
+    known.clear()
+    reachable.clear()
+    memory = rules["hitMemorySeconds"]
+    for user in [u for u, at in group["hitAt"].items() if now - at > memory + CB_TIME_EPSILON]:
+        del group["hitAt"][user]
+    defn = group["def"]
     if group["held"]:
+        for target in step["targets"]:
+            if cb_in_play(defn, target, step["shooters"], rules):
+                known[target["userId"]] = True
+                reachable[target["userId"]] = True
         group["hit"] = False
+        group["struckBy"].clear()
         return None
+    any_reach = any_melee = False
+    for target in step["targets"]:
+        if not cb_known(group, step, target, rules):
+            continue
+        known[target["userId"]] = True
+        if cb_reachable(defn, target, step["shooters"], rules):
+            reachable[target["userId"]] = True
+            any_reach = True
+        if cb_melee(defn, target, rules):
+            any_melee = True
     changed = None
     state = group["state"]
+    leash = rules["leashSeconds"] - CB_TIME_EPSILON
     if state == "rest":
-        if group["hit"] or any(cb_sees(group["def"], member, target, rules)
+        if group["hit"] or any(cb_sees(defn, member, target, rules)
                                for member in step["members"] for target in step["targets"]):
             changed = "rise"
     elif state == "rise":
-        if now - group["since"] >= cb_posture(group["def"], rules)["rise"] - CB_TIME_EPSILON:
+        if now - group["since"] >= cb_posture(defn, rules)["rise"] - CB_TIME_EPSILON:
             changed = "fight"
-            group["quietSince"] = now
+            group["quietSince"] = group["meleeQuietSince"] = now
+            group["standDown"] = False
     elif state == "fight":
-        if any_in_play:
+        closing = step.get("closing") is True
+        if any_reach or closing:
             group["quietSince"] = now
-        elif now - group["quietSince"] >= rules["leashSeconds"] - CB_TIME_EPSILON and not step["striking"]:
+        elif now - group["quietSince"] >= leash and not step["striking"]:
             changed = "home"
+            group["standDown"] = False
+        if changed is None:
+            if any_melee:
+                group["meleeQuietSince"] = now
+                group["standDown"] = False
+            elif not group["standDown"] and closing:
+                group["meleeQuietSince"] = now
+            elif not group["standDown"] and now - group["meleeQuietSince"] >= leash:
+                group["standDown"] = True
     elif state == "home":
-        if all(cb_at_post(member["post"], member["at"], rules) for member in step["members"]):
+        back = False
+        for target in step["targets"]:
+            user = target["userId"]
+            if reachable.get(user) and (group["struckBy"].get(user)
+                                        or any(cb_sees(defn, member, target, rules) for member in step["members"])):
+                back = True
+                break
+        if back:
+            changed = "fight"
+            group["quietSince"] = group["meleeQuietSince"] = now
+            group["standDown"] = False
+        elif all(cb_at_post(member["post"], member["at"], rules) for member in step["members"]):
             changed = "rest"
     if changed is not None:
         group["state"] = changed
         group["since"] = now
     group["hit"] = False
+    group["struckBy"].clear()
     return changed
 
 
@@ -5777,21 +6208,46 @@ def cb_release(group, now):
 
 
 def cb_evades(group):
-    return group["held"] or group["state"] == "home"
+    """CampBrain.Evades (L1b-W4-24): only a held group."""
+    return group["held"]
 
 
-def cb_struck(group, by_user_id):
-    """CampBrain.Struck (L1b-7): an evading group records nothing; otherwise it is woken, and the
-    damage lands only from a player in play at the last step, or from nobody (user 0)."""
-    if cb_evades(group):
+def cb_struck(group, by_user_id, now):
+    """CampBrain.Struck (L1b-W4-25): a held group answers False and records nothing; every other
+    group is woken and records the hitter (not user 0, a Studio lever): its clock in hitAt and his
+    id in struckBy. The damage lands."""
+    if group["held"]:
         return False
     group["hit"] = True
-    return by_user_id == 0 or group["inPlay"].get(by_user_id) is True
+    if by_user_id != 0:
+        group["hitAt"][by_user_id] = now
+        group["struckBy"][by_user_id] = True
+    return True
+
+
+def cb_stands_down(group, rusher):
+    """CampBrain.StandsDown (L1b-W4-22)."""
+    return rusher and not group["held"] and group["state"] == "fight" and group["standDown"]
+
+
+def cb_forget(group, now):
+    """CampBrain.Forget (L1b-W4-26): the sets and the memory cleared; a rising or fighting group
+    (not held) goes home and answers "home"; otherwise None."""
+    group["known"].clear()
+    group["reachable"].clear()
+    group["hitAt"].clear()
+    group["struckBy"].clear()
+    if group["held"] or group["state"] not in ("rise", "fight"):
+        return None
+    group["state"] = "home"
+    group["since"] = now
+    group["standDown"] = False
+    return "home"
 
 
 def cb_goal(group, resident, at, rules):
     """CampBrain.Goal: where a member that is not fighting walks, and its pace; (None, 0) = it
-    stands (rise and fight)."""
+    stands (rise, and fight unless stood down)."""
     post = resident["post"]
     state = group["state"]
     if group["held"] or state == "rest":
@@ -5809,7 +6265,7 @@ def cb_goal(group, resident, at, rules):
             point = points[resident["leg"] - 1]
             goal = (point[0], defn["floorY"], point[2])
         return goal, rules["patrolPace"]
-    if state == "home":
+    if state == "home" or (state == "fight" and group["standDown"]):
         if cb_at_post(post, at, rules):
             resident["leg"] = post["leg"]
         return post["at"], rules["homePace"]
@@ -5822,7 +6278,7 @@ def cb_shows(group, moving):
         if moving:
             return "move"
         return "rest" if group["def"]["posture"] == "fire" else "idle"
-    if state == "home":
+    if state == "home" or (state == "fight" and group["standDown"]):
         return "move" if moving else "idle"
     if state == "rise":
         return "rise"
@@ -5905,13 +6361,12 @@ def cb_join_in(groups, living, gaps, woke, rules):
     return answer
 
 
-def cb_rouse(group, now, in_play):
-    """CampBrain.Rouse: a resting, unheld group rises; a homeward one only while a player is in play
-    for its camp (`in_play`, the caller's answer from the group's in-play set; the fix round's B-3
-    as the lead ruled it). True when it did."""
+def cb_rouse(group, now, reachable):
+    """CampBrain.Rouse: a resting, unheld group rises; a homeward one only while a player is
+    reachable for it (`reachable`, the caller's answer from the group's reachable set)."""
     if group["held"]:
         return False
-    if group["state"] != "rest" and not (group["state"] == "home" and in_play):
+    if group["state"] != "rest" and not (group["state"] == "home" and reachable):
         return False
     group["state"] = "rise"
     group["since"] = now
@@ -5919,12 +6374,12 @@ def cb_rouse(group, now, in_play):
     return True
 
 
-def cb_tent_rouse(group, now, in_play):
-    """CampBrain.TentRouse (the lead's ruling (i) on B-3): a tent's rouse acts only while a player
-    is in play for the group, then as cb_rouse."""
-    if not in_play:
+def cb_tent_rouse(group, now, reachable):
+    """CampBrain.TentRouse: a tent's rouse acts only while a player is reachable for the group,
+    then as cb_rouse."""
+    if not reachable:
         return False
-    return cb_rouse(group, now, in_play)
+    return cb_rouse(group, now, reachable)
 
 
 def tent_owes_rouse(owed, camp_busy, group_awake):
@@ -5933,12 +6388,25 @@ def tent_owes_rouse(owed, camp_busy, group_awake):
 
 
 def cb_new_tent(stock):
-    return {"left": stock, "nextAt": -math.inf}
+    return {"left": stock, "nextAt": -math.inf, "busySeconds": 0.0, "lastAt": None}
 
 
-def cb_tent_active(busy, residents_alive):
-    """CampBrain.TentActive (L1b-W2-7): while its camp is busy, or once no resident is alive."""
-    return busy or residents_alive <= 0
+def cb_tent_clock(tent, busy, now):
+    """CampBrain.TentClock (L1b-W4-28): the camp's pace clock runs only while it is busy."""
+    if busy and tent["lastAt"] is not None:
+        tent["busySeconds"] += max(now - tent["lastAt"], 0)
+    tent["lastAt"] = now if busy else None
+
+
+def cb_ahead(killed, residents, busy_seconds, pace):
+    """CampBrain.Ahead (L1b-W4-28): the camp is ahead of its own clock."""
+    return (residents > 0 and pace["seconds"] > 0
+            and killed / residents - busy_seconds / pace["seconds"] >= pace["lead"] - CB_TIME_EPSILON)
+
+
+def cb_tent_active(busy, residents_alive, ahead):
+    """CampBrain.TentActive (L1b-W4-28): busy, a resident alive, and ahead of the pace."""
+    return busy and residents_alive > 0 and ahead
 
 
 def cb_tent_due(tent, active, now):
@@ -6046,8 +6514,20 @@ def hit_rows(cfg, view, hp, names):
 
 LEVEL_USER = 1  # the simulator plays solo, as user 1
 KITE_KILLS = 2  # the kiting player runs out of the first camp after this many kills in it
-EDGE_SECONDS = 30.0  # the edge player is watched this long
-EDGE_SPARE = 0.1  # he stands this far past camps.chaseMargin
+# L1b Wave 4's scenes.
+ARCHER_SECONDS = 60.0  # the road archer is watched this long
+SCENE_OUT_STUDS = 9.0  # the walk-out stops this far past the camp's far edge, along the road
+SCENE_SHORT = 4.0  # the lose runs on until this far short of the next camp's floor
+WALKOUT_SECONDS = 5.0  # the walk-out band: the woken rushers on the road this soon after he is out
+LOSE_SECONDS = 60.0  # the lose is watched at most this long after he starts to run
+LOSE_FAR = (60.0, 110.0)  # the lose band: a group's farthest body when it turns home, studs past the edge
+LOSE_REST_SECONDS = 25.0  # ... and back at rest, healed, within this of its turn
+SNIPER_BACK = 2.0  # the sniper stands this far west of A's approach, below the drop
+SNIPER_PULL_SECONDS = 5.0  # his first arrow from the gate lands within this, or he drops anyway
+SNIPER_BELOW_SECONDS = 90.0  # he shoots from below the drop at most this long ...
+SNIPER_LEDGE_SECONDS = 120.0  # ... then from the lookout ledge at most this long
+SNIPER_IDLE_SECONDS = 10.0  # he moves on (and at last stops) once no hit of his has landed for this long
+SNIPER_LEDGE = "LookoutLedge"  # the layout block he stands on
 STRIKE_SECONDS = 30.0  # a first-strike approach is watched this long at most
 # CrowdService.HOME_STOP_SHARE: a body walking home or on patrol stops at this share of
 # camps.homeTolerance, so rounding never leaves it a hair outside AtPost for good (A's item 2).
@@ -6055,9 +6535,10 @@ HOME_STOP_SHARE = 0.5
 
 
 class LevelWorld(ThreatWorld):
-    """ThreatWorld with CrowdService.Damage's L1b gate: a hit on a resident asks CampBrain.Struck
-    first, after the dead check. A group that evades (held, or walking home) and a hit from a
-    player out of play answer "blocked": no damage, no knock, no stagger, no damage book."""
+    """ThreatWorld with CrowdService.Damage's camp gate: a hit on a resident asks CampBrain.Struck
+    first, after the dead check. Only a held group (the boss room's residents before the close)
+    answers "blocked": no damage, no knock, no stagger, no damage book (L1b-W4-25). Every other
+    hit lands and is remembered."""
 
     def __init__(self, run, cfg, fighters):
         super().__init__(cfg, fighters)
@@ -6067,13 +6548,14 @@ class LevelWorld(ThreatWorld):
     def damage(self, enemy, amount):
         if enemy.alive and amount > 0 and enemy.resident is not None:
             group = self.run.groups[enemy.resident["group"] - 1]
-            if not cb_struck(group, LEVEL_USER):
+            if not cb_struck(group, LEVEL_USER, self.now):
                 self.evaded += 1
                 self.run.blocked[enemy.resident["group"]] = self.run.blocked.get(enemy.resident["group"], 0) + 1
                 return 0.0, False
         dealt, killed = super().damage(enemy, amount)
         if dealt > 0 and enemy.resident is not None:
             self.run.first_hit.setdefault(enemy.resident["group"], self.now)
+            self.run.last_landed = self.now
         return dealt, killed
 
 
@@ -6215,6 +6697,12 @@ class LevelRun(ThreatRun):
         # L1b-W2-6: each tent's stock is a group of its own, after the residents' (AddGroup answers
         # #plan.groups + t), with nobody out at the start. `only` places a tent only by its id.
         self.tents = []
+        self.forget_floor = None  # CrowdService.ForgetOthers: the floor to keep at the next step
+        self.approached = 0  # StageFlow.State.approached (L1b-W4-31)
+        self.last_death = {}  # zone index -> when the last body of its floor fell
+        self.last_resident = {}  # zone index -> when the last of its residents fell
+        self.last_landed = None  # when a hit of his last landed on a resident
+        self.scene = {}  # what a Wave 4 scenario measured (archer, walkout, lose, sniper)
         for tent in plan["tents"]:
             group = cb_new_group(tent["def"], 0.0)
             group["members"] = []
@@ -6223,8 +6711,8 @@ class LevelRun(ThreatRun):
                 continue
             self.tents.append({"group": len(self.groups), "id": tent["def"]["id"], "camp": tent["def"]["camp"],
                                "floor": tent["zone"], "kinds": tent["kinds"], "posts": tent["posts"],
-                               "doors": tent["doors"], "every": tent["every"], "sent": 0, "state": cb_new_tent(len(tent["kinds"])),
-                               "sentAt": [], "refused": 0, "owed": False})
+                               "doors": tent["doors"], "every": tent["every"], "pace": tent.get("pace"), "sent": 0,
+                               "state": cb_new_tent(len(tent["kinds"])), "sentAt": [], "refused": 0, "owed": False})
         # L1b-W2-12: CrowdService.AddGroup's posts and the gap between every two groups of one camp,
         # post to post, worked out once (posts never move).
         posts_of = [cb_posts(g["def"], sum(u["count"] for u in g["def"]["units"])) for g in self.groups]
@@ -6245,9 +6733,11 @@ class LevelRun(ThreatRun):
         self.ground = start[2] if start is not None else plan["startY"]
         self.order = self.route_order()
         self.target = 0
-        self.mode = ("edge" if policy.get("edge") else "sneak" if policy.get("sneak")
-                     else "stopped" if policy.get("parked") else "road")
+        self.mode = ("sneak" if policy.get("sneak") else "stopped" if policy.get("parked")
+                     else "scene" if policy.get("scene") else "road")
         self.path = self.path_to(self.order[0], None) if self.order and self.mode == "road" else []
+        if self.mode == "scene":
+            self.start_scene(policy["scene"])
         if self.mode == "sneak":
             # The sneak (L1b-W2-3): along layout.sneak, every point at the ground's height there.
             self.path = [(p["x"], p["z"], self.sneak_ground(p["x"], p["z"])) for p in (layout.get("sneak") or [])[1:]]
@@ -6260,6 +6750,38 @@ class LevelRun(ThreatRun):
         cx, cz, hx, hz = self.zones[floor - 1]["rect"]
         limit_x, limit_z = max(hx - radius, 0), max(hz - radius, 0)
         return cx - limit_x, cx + limit_x, cz - limit_z, cz + limit_z
+
+    def region_of(self, floor):
+        """The chase region of a floor (L1b-W4-14), or None."""
+        return self.zones[floor - 1].get("region") if floor is not None else None
+
+    def clamp_body(self, x, z, radius, floor):
+        """CrowdService.clampToBounds: a region floor's body into the union of its inset cells
+        (Region.Clamp), any other into its rectangle."""
+        graph = self.region_of(floor)
+        if graph is None:
+            return super().clamp_body(x, z, radius, floor)
+        point = rg_clamp(graph["cells"], (x, 0.0, z), radius)
+        return point[0], point[2]
+
+    def runway(self, x, z, face, radius, floor=None):
+        """CrowdBrain.runway on a region: Region.Runway over its cells."""
+        graph = self.region_of(floor)
+        if graph is None:
+            return super().runway(x, z, face, radius, floor)
+        return rg_runway(graph["cells"], (x, 0.0, z), face, radius)
+
+    def route_goal(self, e, gx, gz, stop):
+        """CrowdService.integrate's routing (L1b-W4-17): a region body's goal through the doors
+        (Region.Toward); a door is walked onto (stop 0), a goal off the region to its edge, still
+        stopping short of the goal itself by the distance asked."""
+        graph = self.region_of(e.floor)
+        if graph is None:
+            return gx, gz, stop
+        point, through = rg_toward(graph, (e.x, 0.0, e.z), (gx, 0.0, gz), e.r)
+        if through:
+            return point[0], point[2], 0.0
+        return point[0], point[2], max(stop - math.hypot(gx - point[0], gz - point[2]), 0.0)
 
     def player_box(self):
         if self.live is None:
@@ -6293,19 +6815,20 @@ class LevelRun(ThreatRun):
         """CrowdService.GroupedOn: the living bodies of a floor that belong to a group."""
         return sum(1 for f in self.fighters if f.alive and f.floor == floor and f.resident is not None)
 
-    def tent_left(self, floor):
-        """StageFlow's Input.tentLeft for a zone index: its tent's stock not sent yet (0 for none)."""
+    def tent_stock(self, floor):
+        """A zone's tent stock not sent yet (information: since L1b-W4-29 nothing waits for it)."""
         return sum(t["state"]["left"] for t in self.tents if t["floor"] == floor)
 
     def send_tents(self, t):
-        """WaveService.tick's tents (L1b-W2-7), before Advance: Busy once; for each tent, active
-        while its camp is busy or once none of its camp's residents lives (its own bodies not
-        counted); a due body comes out at its door (B-4) and walks to its ring post, its group is
-        roused at the next camp step, and the clock moves on. A refused spawn (the cap) counts as
-        sent. A body sent while its camp is busy and its group is not up (run.awakeGroups as last
-        drained, a crowd step behind) leaves a debt (B-3, StageFlow.TentOwesRouse) that rouses
-        the group every tick until it is up or the camp is quiet. Every rouse a tent asks for acts only while the player is in play for the group,
-        from rest or home (cb_tent_rouse, the lead's ruling (i))."""
+        """WaveService.tick's tents (L1b-W4-28), before Advance: Busy once; for each tent, its pace
+        clock (CampBrain.TentClock), its camp's residents alive (its own bodies not counted) and
+        whether the camp is ahead of its clock (CampBrain.Ahead); active while busy, a resident
+        alive and ahead. A due body comes out at its door (B-4) and walks to its ring post, its
+        group is roused at the next camp step, and the clock moves on. A refused spawn (the cap)
+        counts as sent. A body sent while its camp is busy and its group is not up (run.awakeGroups
+        as last drained, a crowd step behind) leaves a debt (B-3, StageFlow.TentOwesRouse) that
+        rouses the group every tick until it is up or the camp is quiet. Every rouse a tent asks
+        for acts only while a player is reachable for the group (cb_tent_rouse)."""
         if not self.tents:
             return
         busy = self.busy()
@@ -6318,7 +6841,12 @@ class LevelRun(ThreatRun):
             tent["owed"] = tent_owes_rouse(tent["owed"], camp_busy, tent["group"] in self.awake_groups)
             if tent["owed"]:
                 self.rouse_pending.add(tent["group"])
-            active = cb_tent_active(camp_busy, self.alive_on(floor) - own)
+            cb_tent_clock(tent["state"], camp_busy, t)
+            residents = self.zones[floor - 1]["residents"]
+            alive = self.alive_on(floor) - own
+            ahead = tent["pace"] is not None and cb_ahead(residents - alive, residents, tent["state"]["busySeconds"],
+                                                          tent["pace"])
+            active = cb_tent_active(camp_busy, alive, ahead)
             if not cb_tent_due(tent["state"], active, t):
                 continue
             k = tent["sent"]
@@ -6359,13 +6887,19 @@ class LevelRun(ThreatRun):
         return [{"at": (b.x, g["def"]["floorY"], b.z), "reach": longest_reach(b.kind)} for g in self.groups
                 if g["state"] in ("rise", "fight") for b in g["members"] if b.alive]
 
+    def stood_down(self, group, b):
+        """CrowdService.integrate's resting clause for a stood-down rusher (L1b-W4-22): it walks to
+        its post unless an attack of its own is under way."""
+        return cb_stands_down(group, b.kind.get("brain") != "keepAway") and b.state not in ("windup", "attack")
+
     def may_target(self, e):
-        """L1b-6: a resident in fight goes only for a target in play for its group; one that is
-        not fighting thinks of nothing. Every other body has the player."""
+        """L1b-W4-21: a resident in fight goes only for a player its group knows; one that is not
+        fighting (or a rusher stood down) thinks of nothing. Every other body has the player."""
         if e.resident is None:
             return True
         group = self.groups[e.resident["group"] - 1]
-        return group["state"] == "fight" and not group["held"] and group["inPlay"].get(LEVEL_USER) is True
+        return (group["state"] == "fight" and not group["held"] and group["known"].get(LEVEL_USER) is True
+                and not self.stood_down(group, e))
 
     def heal(self, body):
         """L1b-8: at its post on the way home: HP, plate, stagger (the damage book is emptied)."""
@@ -6385,12 +6919,14 @@ class LevelRun(ThreatRun):
 
     def note(self, now, index, before, after, held, cause=None):
         self.events.append((now, index, before, after, held))
+        if self.scene:
+            self.scene_note(now, index, before, after)
         if before == "rest" and after == "rise":
             self.woke.setdefault(index, (now, cause or ("close" if held else "sight")))
             kite = self.kite
             if (kite is not None and kite.get("rested") is not None and kite.get("tentBack") is None
                     and self.groups[index - 1]["def"]["floor"] == kite["floor"]):
-                kite["tentBack"] = self.tent_left(kite["floor"])  # before this tick's tent can send
+                kite["tentBack"] = self.tent_stock(kite["floor"])  # before this tick's tent can send
             if self.still and self.mode == "road" and self.policy.get("stop") and self.stood_at is None:
                 self.mode = "stopped"
                 self.stood_at = now
@@ -6410,6 +6946,15 @@ class LevelRun(ThreatRun):
         roots = [self.world_root(now)]  # L1b-W2-10: every player's root, down or not
         engaged = False
         woke = []  # the groups that went rest -> rise by Step this step (sight or a hit)
+        if self.forget_floor is not None:
+            # CrowdService.ForgetOthers (L1b-W4-26): every other floor's groups forget the road.
+            for index, group in enumerate(self.groups, 1):
+                if group["def"]["floor"] == self.forget_floor:
+                    continue
+                before = group["state"]
+                if cb_forget(group, now) is not None:
+                    self.note(now, index, before, "home", False, "forget")
+            self.forget_floor = None
         for index, group in enumerate(self.groups, 1):
             defn = group["def"]
             alive = [b for b in group["members"] if b.alive]
@@ -6421,15 +6966,19 @@ class LevelRun(ThreatRun):
                     self.first_windup[index] = b.started
             y = defn["floorY"]
             members = [{"at": (b.x, y, b.z), "post": b.resident["post"]} for b in alive]
-            if group["state"] == "home" and not group["held"]:
+            if not group["held"] and (group["state"] == "home" or group["state"] == "fight" and group["standDown"]):
+                # L1b-8 and L1b-W4-22: at its post on the way home, or a stood-down rusher at its post.
                 for b, member in zip(alive, members):
-                    if cb_at_post(member["post"], member["at"], rules):
+                    rusher = b.kind.get("brain") != "keepAway"
+                    if (group["state"] == "home" or rusher) and cb_at_post(member["post"], member["at"], rules):
                         self.heal(b)
             shooters = [{"at": (b.x, y, b.z), "reach": max(a["reach"] for a in b.attacks)}
                         for b in alive if b.kind.get("brain") == "keepAway"]
             striking = any(b.state in ("windup", "attack") for b in alive)
+            closing = any(b.closing for b in alive)
             before, hit = group["state"], group["hit"]
-            step = {"now": now, "members": members, "targets": targets, "shooters": shooters, "striking": striking}
+            step = {"now": now, "members": members, "targets": targets, "shooters": shooters, "striking": striking,
+                    "closing": closing}
             if defn["floor"] in self.wake_floors and group["held"]:
                 # The release step (CrowdService, A's report item 3): the held group is stepped
                 # first, which only refreshes its in-play set, then released, and makes no other
@@ -6448,7 +6997,7 @@ class LevelRun(ThreatRun):
                 # names the state it left (the fix round's B-3: a group walking home rises too).
                 self.rouse_pending.discard(index)
                 left = group["state"]
-                if cb_tent_rouse(group, now, any(group["inPlay"].values())):
+                if cb_tent_rouse(group, now, any(group["reachable"].values())):
                     self.note(now, index, left, "rise", False, "tent")
         self.wake_floors = set()
         if woke:
@@ -6457,7 +7006,7 @@ class LevelRun(ThreatRun):
             joined = cb_join_in(self.groups, living, self.gaps, woke, rules)
             for index in joined:
                 joining = self.groups[index - 1]
-                if cb_rouse(joining, now, any(joining["inPlay"].values())):
+                if cb_rouse(joining, now, any(joining["reachable"].values())):
                     self.note(now, index, "rest", "rise", False, "join")
             self.joined.append((now, list(woke), joined))
         for group in self.groups:
@@ -6467,7 +7016,7 @@ class LevelRun(ThreatRun):
                 b.dormant = dormant and b.alive
                 if b.dormant:
                     self.dormant_steps += 1
-            if group["state"] in ("rise", "fight") and not group["held"] and group["inPlay"].get(LEVEL_USER) \
+            if group["state"] in ("rise", "fight") and not group["held"] and group["reachable"].get(LEVEL_USER) \
                     and any(b.alive for b in group["members"]):
                 engaged = True
         if engaged:
@@ -6481,7 +7030,7 @@ class LevelRun(ThreatRun):
             for b in group["members"]:
                 if not b.alive:
                     continue
-                if not resting:
+                if not resting and not self.stood_down(group, b):
                     b.idle = None
                     continue
                 goal, pace = cb_goal(group, b.resident, (b.x, y, b.z), rules)
@@ -6541,11 +7090,14 @@ class LevelRun(ThreatRun):
 
     def steer(self, t):
         """The simulator's course (not a rule): what he does next."""
+        if self.mode == "scene":
+            self.scene_step(t)
+            return
         if self.mode == "sneak":
             if not self.path and self.end_reason is None:
                 self.end("stopped", t)  # at the boss room's entry, the way he came unseen
             return
-        if self.mode in ("stopped", "edge", "lock") or self.end_reason is not None:
+        if self.mode in ("stopped", "lock") or self.end_reason is not None:
             return
         if self.mode in ("flee", "wait"):
             self.kite_step(t)
@@ -6571,7 +7123,7 @@ class LevelRun(ThreatRun):
                     else:
                         self.leave_zone(floor)
                 return
-            if not self.residents_left(floor) and self.tent_left(floor) == 0:
+            if not self.residents_left(floor):
                 if self.path and self.near(zone):
                     return  # walking through a camp that is empty: on to its entry, then on
                 self.leave_zone(floor)
@@ -6583,9 +7135,9 @@ class LevelRun(ThreatRun):
                 if self.kite is not None and self.kite.get("back") is None and self.kite.get("rested") is not None:
                     self.kite_back(t, floor)
             return
-        # mode == "clear": until its residents are dead and its tent is empty (he waits out the
-        # tent's last bodies where he stands, so the camp clears and pays its bonus)
-        if not self.residents_left(floor) and self.tent_left(floor) == 0:
+        # mode == "clear": until every body the camp fielded is dead, wherever it stands (L1b-W4-29:
+        # the tent's stock not sent is forfeit, nothing waits for it)
+        if not self.residents_left(floor):
             self.leave_zone(floor)
             return
         if (self.policy.get("kite") and self.kite is None and floor == self.order[0]
@@ -6603,6 +7155,11 @@ class LevelRun(ThreatRun):
             self.path = [(zone["entry"][0], zone["entry"][1], zone["floorY"])]
             if back is not None:
                 self.path.append((back[0], back[1], back[2]))
+            if zone.get("approach") is not None:
+                # L1b Wave 4: the road beside a camp is its region, so he runs on to where they
+                # cannot follow (A's approach, below the climb) before he waits.
+                ax, ay, az = zone["approach"]
+                self.path.append((ax, az, ay))
 
     def kite_step(self, t):
         """The kiting player: out to the road beyond the camp, then he waits until every group of
@@ -6614,10 +7171,12 @@ class LevelRun(ThreatRun):
             groups = [g for g in self.groups if g["def"]["floor"] == floor and any(b.alive for b in g["members"])]
             if all(g["state"] == "rest" for g in groups):
                 self.kite["rested"] = t
-                self.kite["tentRested"] = self.tent_left(floor)
                 self.mode = "road"
                 zone = self.zones[floor - 1]
-                self.path = [(zone["entry"][0], zone["entry"][1], zone["floorY"])]
+                entry = self.route_index(zone["entry"])
+                back = self.route[entry - 1] if entry else None
+                self.path = ([(back[0], back[1], back[2])] if back is not None else []) + [
+                    (zone["entry"][0], zone["entry"][1], zone["floorY"])]
 
     def kite_back(self, t, floor):
         """He is in play for the camp again: what he finds."""
@@ -6634,33 +7193,244 @@ class LevelRun(ThreatRun):
         self.kite["leashes"] = sum(1 for e in self.events if e[0] >= self.kite["at"] and e[2] == "fight" and e[3] == "home"
                                    and self.groups[e[1] - 1]["def"]["floor"] == floor)
 
-    def wanted(self, target):
-        """A ranged weapon reaches a camp's bodies from farther than its in-play band, where every
-        hit is blocked (L1b-7: damage only from a player in play), and the group leashes home.
-        Clearing an open camp with one, he first walks IN_PLAY_STEP inside its floor rectangle: a
-        simplification of CampBrain.InPlay, which already counts him within camps.chaseMargin
-        outside it (L1b Wave 3: before this, the Longbow alone stood off camp B forever)."""
-        want = super().wanted(target)
-        if self.melee or self.mode != "clear":
-            return want
-        cx, cz, hx, hz = self.zones[self.order[self.target] - 1]["rect"]
-        out = hs_flat_to_rect(self.x, self.z, cx, cz, hx, hz)
-        if out > 0:
-            want = min(want, max(math.hypot(target.x - self.x, target.z - self.z) - out - IN_PLAY_STEP, 0.0))
-        return want
+    # -- the Wave 4 scenes (archer, walkout, lose, sniper): the simulator's own courses ------------
+
+    def scene_zone(self):
+        """The first open camp the route meets that has residents and an approach (camp A)."""
+        for floor in self.order:
+            zone = self.zones[floor - 1]
+            if not zone["locks"] and zone["residents"] > 0 and zone.get("approach") is not None:
+                return zone
+        return None
+
+    def road_after(self, zone):
+        """The road past a camp's far edge: (x, z, y) points from the floor's edge, in line with its
+        exit, along the route to the next camp's approach (or the route point before its entry)."""
+        cx, cz, hx, hz = zone["rect"]
+        ex, ez = zone["exit"]
+        gaps = {(cx - hx, ez): ex - (cx - hx), (cx + hx, ez): (cx + hx) - ex,
+                (ex, cz - hz): ez - (cz - hz), (ex, cz + hz): (cz + hz) - ez}
+        edge = min(gaps, key=gaps.get)
+        begin = self.route_index(zone["exit"])
+        points = [(edge[0], edge[1], zone["floorY"])]
+        for p in self.route[(begin + 1 if begin is not None else len(self.route)):]:
+            ahead = next((z for z in self.zones if math.hypot(p[0] - z["entry"][0], p[1] - z["entry"][1]) < 0.01), None)
+            if ahead is not None:
+                # Up to SCENE_SHORT studs short of the next camp's floor, in line with its entry.
+                last = points[-1]
+                ax, az, ahx, ahz = ahead["rect"]
+                run = math.hypot(p[0] - last[0], p[1] - last[1])
+                if run > EPSILON:
+                    ux, uz = (p[0] - last[0]) / run, (p[1] - last[1]) / run
+                    into = max(hs_flat_to_rect(last[0], last[1], ax, az, ahx, ahz) - SCENE_SHORT, 0.0)
+                    points.append((last[0] + ux * into, last[1] + uz * into, last[2]))
+                break
+            points.append((p[0], p[1], p[2]))
+        return points
+
+    def road_arc(self, x, z):
+        """How far along `scene['road']` (past the camp's far edge) the point (x, z) projects."""
+        best, arc, walked = math.inf, 0.0, 0.0
+        road = self.scene["road"]
+        for a, b in zip(road, road[1:]):
+            dx, dz = b[0] - a[0], b[1] - a[1]
+            run = math.hypot(dx, dz)
+            f = 0.0 if run <= EPSILON else clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (run * run), 0.0, 1.0)
+            gap = math.hypot(a[0] + dx * f - x, a[1] + dz * f - z)
+            if gap < best:
+                best, arc = gap, walked + run * f
+            walked += run
+        return arc
+
+    def start_scene(self, kind):
+        zone = self.scene_zone()
+        entry = self.route_index(zone["entry"])
+        before = self.route[entry - 1]
+        self.scene.update({"kind": kind, "zone": zone["id"], "floor": zone["floor"], "road": self.road_after(zone),
+                           "phase": None, "homes": {}, "rests": {}, "out": None, "exited": None, "reached": None})
+        self.anchor = None
+        if kind == "archer":
+            # Road5, half way from the climb's top to the west gate, facing the camp.
+            self.place_scene((before[0] + zone["entry"][0]) / 2, (before[1] + zone["entry"][1]) / 2, before[2])
+            self.scene["phase"] = "hold"
+        elif kind in ("walkout", "lose"):
+            self.place_scene(before[0], before[1], before[2])
+            out = self.scene["road"][0]
+            ahead = self.scene["road"][1]
+            run = math.hypot(ahead[0] - out[0], ahead[1] - out[1])
+            step = min(SCENE_OUT_STUDS, run)
+            self.path = [(zone["entry"][0], zone["entry"][1], zone["floorY"]), (zone["exit"][0], zone["exit"][1], zone["floorY"]),
+                         (out[0] + (ahead[0] - out[0]) / run * step, out[1] + (ahead[1] - out[1]) / run * step, out[2])]
+            self.scene["phase"] = "in"
+        elif kind == "sniper":
+            # Ben's step 2: one arrow through the west gate from the road wakes them (from below the
+            # drop nothing in the camp can be seen), then at once down the climb.
+            self.place_scene((before[0] + zone["entry"][0]) / 2, (before[1] + zone["entry"][1]) / 2, before[2])
+            self.scene["phase"] = "pull"
+
+    def place_scene(self, x, z, y):
+        self.x, self.z, self.ground = x + self.jitter[0], z + self.jitter[1], y
+        self.anchor = (self.x, self.z)
+
+    def scene_targets(self):
+        """What a scene's bow may shoot: camp A's bodies he can see (scene_sees), worked out once a
+        crowd step."""
+        if self.scene.get("kind") not in ("archer", "sniper") or self.scene.get("phase") == "gone":
+            return []
+        step = self.world.now // self.interval
+        if self.scene.get("seenAt") != step:
+            self.scene["seenAt"] = step
+            self.scene["seen"] = [e for e in self.fighters if e.alive and e.floor == self.scene["floor"]
+                                  and self.scene_sees(e)]
+        return [e for e in self.scene["seen"] if e.alive]
+
+    def scene_walls(self):
+        """The level's sight blockers for a scene, once: [(x0, x1, z0, z1, top)]. Every plateau
+        surface (a region's cells and every camp floor) blocks a line under its top; every open
+        camp's fence (its strips outside the floor, less its gates) under the fence's top."""
+        walls = self.scene.get("walls")
+        if walls is not None:
+            return walls
+        walls = []
+        for region in self.layout.get("regions") or []:
+            for c in region_cells(self.layout, region):
+                walls.append((c["x"] - c["hx"], c["x"] + c["hx"], c["z"] - c["hz"], c["z"] + c["hz"], region["y"]))
+        t = self.rules["fenceThickness"]
+        for camp in self.layout["camps"]:
+            x0, x1 = camp["x"] - camp["sx"] / 2, camp["x"] + camp["sx"] / 2
+            z0, z1 = camp["z"] - camp["sz"] / 2, camp["z"] + camp["sz"] / 2
+            walls.append((x0, x1, z0, z1, camp["y"]))
+            top = camp["y"] + ((camp.get("fence") or {}).get("height") or 0)
+            strips = {"north": (x0 - t, x1 + t, z0 - t, z0), "south": (x0 - t, x1 + t, z1, z1 + t),
+                      "west": (x0 - t, x0, z0, z1), "east": (x1, x1 + t, z0, z1)}
+            for side, (a0, a1, b0, b1) in strips.items():
+                cuts = sorted((camp["z"] + g["at"] - g["width"] / 2, camp["z"] + g["at"] + g["width"] / 2)
+                              if side in ("west", "east") else
+                              (camp["x"] + g["at"] - g["width"] / 2, camp["x"] + g["at"] + g["width"] / 2)
+                              for g in camp.get("gates") or [] if g["side"] == side)
+                lo, hi = (b0, b1) if side in ("west", "east") else (a0, a1)
+                pieces, at = [], lo
+                for c0, c1 in cuts:
+                    pieces.append((at, c0))
+                    at = c1
+                pieces.append((at, hi))
+                for u0, u1 in pieces:
+                    if u1 > u0:
+                        walls.append((a0, a1, u0, u1, top) if side in ("west", "east") else (u0, u1, b0, b1, top))
+        self.scene["walls"] = walls
+        return walls
+
+    def scene_sees(self, b):
+        """A straight line from his chest to the body's head that no wall of scene_walls rises
+        over: the drop's lip, a camp's fence (a gate is open). The simulator's only line of sight,
+        and only in the scenes: the game's raiders and players are not ray-blocked by it."""
+        floor_y = self.zones[b.floor - 1]["floorY"]
+        ex, ey, ez = self.x, self.ground + chest_height(self.cfg), self.z
+        hx, hy, hz = b.x, floor_y + b.kind["height"], b.z
+        dx, dz = hx - ex, hz - ez
+        for x0, x1, z0, z1, top in self.scene_walls():
+            f0, f1 = 0.0, 1.0
+            for p, d, lo, hi in ((ex, dx, x0, x1), (ez, dz, z0, z1)):
+                if abs(d) < EPSILON:
+                    if p < lo or p > hi:
+                        f0, f1 = 1.0, 0.0
+                        break
+                    continue
+                a, c = (lo - p) / d, (hi - p) / d
+                f0, f1 = max(f0, min(a, c)), min(f1, max(a, c))
+            if f0 > f1:
+                continue
+            low = min(ey + (hy - ey) * f0, ey + (hy - ey) * f1)
+            if low < top - EPSILON:
+                return False
+        return True
+
+    def scene_step(self, t):
+        sc = self.scene
+        zone = self.zones[sc["floor"] - 1]
+        cx, cz, hx, hz = zone["rect"]
+        bodies = [b for g in self.groups if g["def"]["floor"] == sc["floor"] for b in g["members"] if b.alive]
+        outside = [b for b in bodies if abs(b.x - cx) > hx + EPSILON or abs(b.z - cz) > hz + EPSILON]
+        if sc["out"] is None and outside and (sc["kind"] != "walkout" and sc["kind"] != "lose" or sc["exited"] is not None):
+            if sc["kind"] in ("walkout", "lose"):
+                rushers = [b for b in outside if b.kind.get("brain") != "keepAway"
+                           and self.groups[b.resident["group"] - 1]["state"] == "fight"]
+                if rushers:
+                    sc["out"] = t
+            else:
+                sc["out"] = t
+        if sc["reached"] is None and any(shape in ("lunge", "arc", "lane") for _w, _d, _k, shape in self.log):
+            sc["reached"] = t
+        if sc["kind"] == "sniper":
+            if sc["phase"] == "pull" and (self.first_hit or t >= SNIPER_PULL_SECONDS):
+                ax, ay, az = zone["approach"]
+                self.place_scene(ax - SNIPER_BACK, az, ay)
+                sc["phase"] = "below"
+                sc["pulled"] = t
+            elif sc["phase"] == "below" and (t >= SNIPER_BELOW_SECONDS or t - max(self.last_landed or 0.0, sc["pulled"])
+                                              >= SNIPER_IDLE_SECONDS):
+                ledge = next(b for b in self.layout["blocks"] if b["name"] == SNIPER_LEDGE)
+                self.place_scene(ledge["x"], ledge["z"], ledge["y"] + ledge["sy"] / 2)
+                sc["phase"] = "ledge"
+                sc["ledgeAt"] = t
+                sc["paidBelow"] = dict(self.wallet)
+            elif sc["phase"] == "ledge" and (t >= sc["ledgeAt"] + SNIPER_LEDGE_SECONDS or not self.residents_left(sc["floor"])
+                                             or t - max(self.last_landed or 0.0, sc["ledgeAt"]) >= SNIPER_IDLE_SECONDS):
+                self.end("stopped", t)
+            if sc["phase"] == "ledge":
+                for group in self.groups:
+                    if group["def"]["floor"] == sc["floor"] and group["standDown"] and group["state"] == "fight":
+                        sc.setdefault("stoodDown", t)
+            return
+        if sc["kind"] in ("walkout", "lose"):
+            if sc["exited"] is None and self.x > cx + hx:
+                sc["exited"] = t
+            if sc["kind"] == "lose" and sc["phase"] == "in" and sc["exited"] is not None and (
+                    sc["out"] is not None or t >= sc["exited"] + WALKOUT_SECONDS):
+                sc["phase"] = "run"
+                sc["ran"] = t
+                self.path = [(p[0], p[1], p[2]) for p in sc["road"][1:]]
+            if sc["kind"] == "walkout" and sc["exited"] is not None and t >= sc["exited"] + WALKOUT_SECONDS + 1:
+                self.end("stopped", t)
+            if sc["kind"] == "lose" and sc["phase"] == "run":
+                awake = [i for i, g in enumerate(self.groups, 1) if g["def"]["floor"] == sc["floor"] and i in self.woke]
+                if awake and all(i in sc["rests"] for i in awake) or t >= sc["ran"] + LOSE_SECONDS:
+                    self.end("stopped", t)
+
+    def scene_note(self, now, index, before, after):
+        """What the lose measures at a group's turn home and its rest (note())."""
+        sc = self.scene
+        group = self.groups[index - 1]
+        if sc.get("kind") != "lose" or group["def"]["floor"] != sc["floor"]:
+            return
+        alive = [b for b in group["members"] if b.alive]
+        if after == "home" and index not in sc["homes"] and sc.get("exited") is not None:
+            far = max((self.road_arc(b.x, b.z) for b in alive), default=0.0)
+            sc["homes"][index] = (now, far)
+        elif before == "home" and after == "rest" and index in sc["homes"] and index not in sc["rests"]:
+            sc["rests"][index] = (now, all(b.hp >= b.max_hp and b.plate >= b.max_plate for b in alive))
 
     def swingable(self):
         if self.mode == "clear":
+            # The camp he clears, and whatever of another camp is fighting him (a chase on the
+            # road, L1b Wave 4).
             floor = self.order[self.target]
-            return [e for e in self.fighters if e.alive and e.floor == floor]
+            return [e for e in self.fighters if e.alive and (e.floor == floor or self.fighting_me(e))]
+        if self.mode == "scene":
+            return self.scene_targets()
         if self.mode == "lock" and self.live is not None:
             return [e for e in self.fighters if e.alive and e.floor == self.live["floor"]]
-        if self.mode == "edge":
-            return [e for e in self.fighters if e.alive]
         return []
 
+    def fighting_me(self, e):
+        """A resident whose group is fighting and knows him."""
+        if e.resident is None:
+            return False
+        group = self.groups[e.resident["group"] - 1]
+        return group["state"] == "fight" and not group["held"] and group["known"].get(LEVEL_USER) is True
+
     def walking(self):
-        return (self.mode in ("road", "flee", "sneak") and self.down_until is None
+        return (self.mode in ("road", "flee", "sneak", "scene") and self.down_until is None
                 and (self.flow != "gate" or not self.still))
 
     def emit(self, kind, **fields):
@@ -6694,6 +7464,7 @@ class LevelRun(ThreatRun):
         kind = self.cfg["crowd"]["kinds"][name]
         x0, x1, z0, z1 = self.body_box(kind["radius"], floor)
         body = Fighter(self.new_id(), name, kind, clamp(x, x0, x1), clamp(z, z0, z1), math.inf)
+        body.x, body.z = self.clamp_body(x, z, kind["radius"], floor)
         body.floor = floor
         body.spawned_at = t
         self.fighters.append(body)
@@ -6798,6 +7569,7 @@ class LevelRun(ThreatRun):
         self.stamps = []
         self.wave_stock = {}  # a new locking camp's waves begin
         self.wake_floors.add(zone["floor"])
+        self.forget_floor = zone["floor"]  # WaveService.close: CrowdService.ForgetOthers (L1b-W4-26)
         self.camp["closedAt"] = t
 
     def on_wave(self, wave, merged, t):
@@ -6851,17 +7623,19 @@ class LevelRun(ThreatRun):
             self.cleared_at[self.camp["floor"]] = t
 
     def pay_clear_bonus(self, floor):
-        """WaveService's clear bonus (L1b-W2-21): Combat.ClearBonus over the camp's whole stock at the
-        difficulty's price (an open camp: its residents and its tent's stock; the boss room: its
-        residents and every body its waves queued, the boss not), split evenly among the fighting
-        humans and kept at once; nothing for no clearBonus or a share of 0."""
+        """WaveService's clear bonus (L1b-W4-30): Combat.ClearBonus over what the camp fielded at
+        the difficulty's price (an open camp: its residents and the bodies its tent sent,
+        StageFlow.Fielded; the boss room: its residents and every body its waves queued, the boss
+        not), split evenly among the fighting humans and kept at once; nothing for no clearBonus
+        or a share of 0."""
         bonus = self.crowd.get("clearBonus")
         share = bonus.get("share") if isinstance(bonus, dict) else None
         zone = self.zones[floor - 1]
         if not share:
             self.bonuses[zone["id"]] = (0, 0)
             return
-        stock = dict(zone["stock"])
+        tent = next((x for x in self.tents if x["floor"] == floor), None)
+        stock = fielded(zone, tent, tent["sent"] if tent is not None else 0)
         if zone["locks"]:
             for kind, count in self.wave_stock.items():
                 stock[kind] = stock.get(kind, 0) + count
@@ -6899,6 +7673,14 @@ class LevelRun(ThreatRun):
 
     def on_reach(self, floor, t):
         self.reached_at[floor] = t
+
+    def on_approach(self, floor, t):
+        """`approach` (WaveService, L1b-W4-31): every fighting member to the zone's approach."""
+        x, y, z = self.zones[floor - 1]["approach"]
+        self.live = None
+        self.x, self.z, self.ground = x, z, y
+        self.anchor = (self.x, self.z)
+        self.path = []
 
     def on_camp_clear(self, floor, t):
         """`campClear` (L1b-17): the bonus x rewardMult, split evenly among the fighting humans."""
@@ -6942,8 +7724,7 @@ class LevelRun(ThreatRun):
         return {"roots": [self.world_root(t)], "standing": [standing], "fighters": list(self.fighters_now),
                 "spawningDone": not self.queue and self.boss_pending is None,
                 "alive": by_floor[zone["floor"] - 1] if zone is not None else 0, "awake": self.awake_count(),
-                "aliveByFloor": by_floor, "fallen": None if standing else "down",
-                "tentLeft": [self.tent_left(z["floor"]) for z in self.zones]}
+                "aliveByFloor": by_floor, "fallen": None if standing else "down"}
 
     def stands_up(self, given):
         """StageFlow.StandsUp (the fix round): in travel, armed or gate, with the road's field
@@ -7036,13 +7817,11 @@ class LevelRun(ThreatRun):
                     self.on_reach(index, t)
                     break
         by_floor = given.get("aliveByFloor") or []
-        left = given.get("tentLeft") or []
         for index, zone in enumerate(self.zones, 1):
             alive = by_floor[index - 1] if index <= len(by_floor) else None
+            # L1b-W4-29: cleared when no body of its floor lives, wherever its raiders stand.
             if zone["locks"] or zone["residents"] <= 0 or self.done.get(index) or alive != 0:
                 continue
-            if (left[index - 1] if index <= len(left) else 0) != 0:
-                continue  # L1b-W2-8: its tent's stock is still to come out
             self.done[index] = True
             self.cleared += 1
             self.emit("campClear", stage=self.stage, zone=index)
@@ -7146,6 +7925,17 @@ class LevelRun(ThreatRun):
         if which == "stage":
             if self.flow in ("travel", "armed"):
                 index = self.armed_index()
+                # L1b-W4-31: N first steps through the open camps before the armed one that have an
+                # approach, are not done and whose checkpoint is not reached.
+                locking = stages[index - 1]["zone"]["floor"] if index != 0 else 0
+                for zone in self.zones:
+                    i = zone["floor"]
+                    if (i > self.approached and i < locking and not zone["locks"] and zone.get("approach") is not None
+                            and not self.done.get(i) and not self.reached.get(i)):
+                        self.approached = i
+                        self.emit("approach", stage=self.stage, zone=i)
+                        self.on_approach(i, t)
+                        return
                 if index != 0:
                     self.emit("move", stage=index)
                     self.on_move(index, t)
@@ -7315,6 +8105,9 @@ class LevelRun(ThreatRun):
         self.killed[enemy.name] = self.killed.get(enemy.name, 0) + 1
         mine = self.killed_in.setdefault(enemy.floor, {})
         mine[enemy.name] = mine.get(enemy.name, 0) + 1
+        self.last_death[enemy.floor] = now
+        if enemy.resident is not None and enemy.resident["group"] <= len(self.plan["groups"]):
+            self.last_resident[enemy.floor] = now
         if self.camp is not None and enemy.floor == self.camp["floor"]:
             self.camp["killed"][enemy.name] = self.camp["killed"].get(enemy.name, 0) + 1
         self.stamps.append(now)
@@ -7391,6 +8184,9 @@ class LevelRun(ThreatRun):
                            "left": x["state"]["left"], "sentAt": list(x["sentAt"]), "refused": x["refused"]}
                           for x in self.tents],
                 "joined": list(self.joined), "bonuses": dict(self.bonuses), "dormantSteps": self.dormant_steps,
+                "lastDeath": {self.zones[f - 1]["id"]: at for f, at in self.last_death.items() if f is not None},
+                "lastResident": {self.zones[f - 1]["id"]: at for f, at in self.last_resident.items() if f is not None},
+                "scene": dict(self.scene), "fielded": {x["camp"]: x["sent"] for x in self.tents},
                 "wakes": sum(1 for e in self.events if e[2] == "rest" and e[3] == "rise"),
                 "leashes": sum(1 for e in self.events if e[2] == "fight" and e[3] == "home"),
                 "rests": sum(1 for e in self.events if e[2] == "home" and e[3] == "rest")}
@@ -7404,17 +8200,25 @@ THREAT_POLICIES["human"] = dict(THREAT_POLICIES["mission"], label="a human's rea
                                 reaction=HUMAN_REACTION_SECONDS)
 # L1b: the still player walks the route and stops for good where a group first wakes; the
 # kiting player wakes a group, runs out past its reach, waits for it to go home and heal and
-# comes back; the edge player stands just past chaseMargin of a group with no shooter and hits
-# whatever is in his reach.
+# comes back.
 THREAT_POLICIES["still"] = {"label": "walks in, stands where a group wakes", "stop": True}
 THREAT_POLICIES["kite"] = dict(THREAT_POLICIES["mission"], label="wakes a group, runs out, comes back", kite=True)
-THREAT_POLICIES["edge"] = {"label": "stands just past chaseMargin, hits the edge", "fight": True, "edge": True}
 # L1b Wave 2: the sneak walks layout.sneak to the boss room's entry and never attacks; the
 # careless road walks the route across every open camp, entry to exit, never fighting, to the
 # boss room's countdown.
 THREAT_POLICIES["sneak"] = {"label": "keeps to the sneak path, never attacks", "sneak": True}
 THREAT_POLICIES["cross"] = {"label": "walks the road through every camp, never fights", "cross": True}
 THREAT_POLICIES["parked"] = {"label": "stands at the start point, never moves", "parked": True}
+# L1b Wave 4 (the run's `weapon` is given by forest_report): the road archer shoots camp A from
+# Road5 outside its west gate and holds the road; the walk-out walks into A until a group wakes and
+# out of its east gate; the lose does that, then runs on along the road; the sniper shoots from
+# below A's west drop, then from the lookout ledge, never on the plateau.
+THREAT_POLICIES["archer"] = {"label": "the bow from Road5 outside A's west gate, holds the road", "fight": True,
+                             "react": True, "hold": True, "hunt": True, "scene": "archer"}
+THREAT_POLICIES["walkout"] = {"label": "walks into A, out of its east gate once a group wakes", "scene": "walkout"}
+THREAT_POLICIES["lose"] = {"label": "the walk-out, then runs east along the road", "scene": "lose"}
+THREAT_POLICIES["sniper"] = {"label": "the bow from below A's west drop, then from the lookout ledge", "fight": True,
+                             "hunt": True, "scene": "sniper"}
 
 
 def preset_gears(combat_cfg):
@@ -7512,47 +8316,6 @@ def strike_runs(view, hp, ctx, level, layout, difficulty):
     return found
 
 
-def edge_group(plan, layout, cfg):
-    """The group of the edge band: the first group with no keepAway kind in the first open camp
-    the route meets, and where the player stands: just past chaseMargin of the floor's edge
-    nearest its posts, in line with their middle. (group index, def, (x, z))."""
-    kinds = cfg["crowd"]["kinds"]
-    camps = open_zones(plan, layout)
-    margin = load_config(COMBAT_PATH)["camps"]["chaseMargin"]
-    for zone in camps:
-        for index, defn in enumerate(plan["groups"], 1):
-            if defn["floor"] != zone["floor"] or any(kinds[u["kind"]].get("brain") == "keepAway" for u in defn["units"]):
-                continue
-            posts = cb_posts(defn, sum(u["count"] for u in defn["units"]))
-            px = sum(p["at"][0] for p in posts) / len(posts)
-            pz = sum(p["at"][2] for p in posts) / len(posts)
-            cx, cz, hx, hz = zone["rect"]
-            out = margin + EDGE_SPARE
-            sides = {(cx - hx - out, pz): px - (cx - hx), (cx + hx + out, pz): (cx + hx) - px,
-                     (px, cz - hz - out): pz - (cz - hz), (px, cz + hz + out): (cz + hz) - pz}
-            return index, defn, min(sides, key=sides.get)
-    return None
-
-
-def edge_runs(view, hp, ctx, level, layout, difficulty, cfg):
-    plan = plan_level(level, layout, difficulty, ctx["combat"]["levels"], ctx["ranks"], view["crowd"]["kinds"])
-    found = edge_group(plan, layout, cfg)
-    if found is None:
-        return []
-    index, defn, (sx, sz) = found
-    runs = []
-    for seed in MISSION_SEEDS:
-        run = LevelRun(view, hp, ctx, level, layout, difficulty, THREAT_POLICIES["edge"], seed, only={defn["id"]},
-                       start=(sx, sz, defn["floorY"]), seconds=EDGE_SECONDS)
-        run.x, run.z = sx, sz  # exactly there: no seed's offset
-        run.anchor = (sx, sz)
-        r = run.run()
-        r["edge"] = {"group": defn["id"], "at": (sx, sz), "kills": sum(r["killedIn"].get(defn["camp"], {}).values()),
-                     "blocked": r["blocked"].get(index, 0), "wakes": r["wakes"]}
-        runs.append(r)
-    return runs
-
-
 def chain_of(defs, rules, living, wakers):
     """CampBrain.JoinIn from rest: the def ids a wake of `wakers` (def ids) brings in, every
     other group at rest, `living` {def id: members}."""
@@ -7584,18 +8347,6 @@ def first_joins(run, plan, rules):
         seen.add(camp)
         wakers = [ids[i - 1] for i in woke]
         found.append((camp, wakers, [ids[i - 1] for i in joined], chain_of(defs, rules, living, wakers)))
-    return found
-
-
-def tent_alone_runs(view, hp, ctx, level, layout, difficulty, plan):
-    """A tent with no resident to wait for (L1b-W2-7's second clause): each tent's group alone,
-    the player far away at the start, watched TENT_ALONE_SECONDS. {tent id: [run per seed]}."""
-    found = {}
-    for tent in plan["tents"]:
-        found[tent["def"]["id"]] = [
-            LevelRun(view, hp, ctx, level, layout, difficulty, THREAT_POLICIES["parked"], seed, only={tent["def"]["id"]},
-                     seconds=tent["every"] * len(tent["kinds"]) + TENT_ALONE_SECONDS).run()
-            for seed in MISSION_SEEDS[:1]]
     return found
 
 
@@ -7843,9 +8594,10 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
     report = {"level": level, "layout": layout, "ctx": ctx, "sc": sc, "proving": proving, "presets": presets,
               "bow": bow, "difficulties": {}}
 
-    def runs_of(view, hp, difficulty, key, weapon=None, stop_zone=None):
+    def runs_of(view, hp, difficulty, key, weapon=None, stop_zone=None, seconds=None):
         policy = THREAT_POLICIES[key] if weapon is None else dict(THREAT_POLICIES[key], weapon=(weapon, None))
-        return [LevelRun(view, hp, ctx, level, layout, difficulty, policy, seed, stop_zone=stop_zone).run()
+        return [LevelRun(view, hp, ctx, level, layout, difficulty, policy, seed, stop_zone=stop_zone,
+                         seconds=seconds).run()
                 for seed in MISSION_SEEDS]
 
     for difficulty in ctx["expeditions"]["difficulties"]:
@@ -7863,7 +8615,8 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                "runs": runs_of(view, hp, difficulty, "mission"),
                "human": runs_of(view, hp, difficulty, "human") if human else [],
                "careless": runs_of(view, hp, difficulty, "rampage") if careless else [],
-               "stand": [], "strikes": {}, "kite": [], "edge": [], "under": None, "below": None, "ranged": None}
+               "stand": [], "strikes": {}, "kite": [], "under": None, "below": None, "ranged": None,
+               "fast": None, "archer": [], "walkout": [], "lose": [], "sniper": []}
         if ranged and first_open is not None:
             # On the first difficulty the bow goes on through the second open camp (L1b Wave 3: the
             # pin on the in-play step, which a bow standing off camp B forever would fail).
@@ -7872,16 +8625,23 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
             row["ranged"] = {"camp": runs_of(view, hp, difficulty, "mission", bow, stop["floor"]),
                              "zone": stop["id"],
                              "boss": boss_alone(view, plan, hp, level, FOREST_BOSS, seeds=BOSS_RANGED_SEEDS, weapon=bow)}
-        row.update({"sneak": [], "road": [], "tentAlone": {}, "bow": []})
+        row.update({"sneak": [], "road": [], "bow": []})
         if rank == 1:
             if scenarios:
                 row["stand"] = runs_of(view, hp, difficulty, "still")
                 row["strikes"] = strike_runs(view, hp, ctx, level, layout, difficulty)
                 row["kite"] = runs_of(view, hp, difficulty, "kite")
-                row["edge"] = edge_runs(view, hp, ctx, level, layout, difficulty, cfg)
                 row["sneak"] = runs_of(view, hp, difficulty, "sneak")
                 row["road"] = runs_of(view, hp, difficulty, "cross")
-                row["tentAlone"] = tent_alone_runs(view, hp, ctx, level, layout, difficulty, plan)
+                # L1b Wave 4: the chase off the floor and the pace tent.
+                row["archer"] = runs_of(view, hp, difficulty, "archer", bow, seconds=ARCHER_SECONDS)
+                row["walkout"] = runs_of(view, hp, difficulty, "walkout")
+                row["lose"] = runs_of(view, hp, difficulty, "lose")
+                row["sniper"] = runs_of(view, hp, difficulty, "sniper", bow)
+                above = next((g for g in presets if (g["melee"], g["ranged"]) > (gear["melee"], gear["ranged"])), None)
+                if above is not None:
+                    fast_view, fast_hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], above)
+                    row["fast"] = {"gear": above, "hp": fast_hp, "runs": runs_of(fast_view, fast_hp, difficulty, "mission")}
             if ranged:
                 row["bow"] = bow_rows(view, plan, hp, level, bow)
         else:
@@ -8125,10 +8885,7 @@ def print_forest(cfg, report):
                   f"{fmt(k.get('rested'), 0, 1).strip()} s, back in {fmt(k.get('back'), 0, 1).strip()} s: all whole "
                   f"{k.get('full')}, the dead still dead {k.get('same')}, {k.get('leashes', 0)} leash(es); then "
                   f"{r['end']} at {r['at'] / 60:.2f} min, paid {wallet_text(r)}")
-        for seed, r in zip(MISSION_SEEDS, row["edge"]):
-            e = r["edge"]
-            print(f"    the edge (seed {seed}): {e['group']} from ({e['at'][0]:g}, {e['at'][1]:g}), {EDGE_SECONDS:.0f} s: "
-                  f"{e['blocked']} hits blocked, {e['wakes']} wakes, {e['kills']} kills, paid {wallet_text(r)}")
+        print_scenes(row)
         below = row["below"]
         if below is not None:
             slowest = max((r["at"] for r in row["human"] if r["end"] == "cleared"), default=None)
@@ -8167,9 +8924,15 @@ def print_forest(cfg, report):
             print("    each camp's first wake brought in (seed 11): " + "; ".join(
                 f"{camp}: {', '.join(w)} -> {', '.join(j) or 'nobody'} (the chain from rest: {', '.join(e) or 'nobody'})"
                 for camp, w, j, e in first_joins(r, plan, ctx["combat"]["camps"])))
-            print("    tents (seed 11): " + "; ".join(
-                f"{t['id']} sent {t['sent']} of {t['stock']} at " + ", ".join(f"{x:.1f}" for x in t["sentAt"]) + " s"
-                for t in r["tents"]) + f"; dormant body-steps {r['dormantSteps']:,}")
+            print(f"    tents at gear {gear_text(row['gear'])}: " + "; ".join(
+                f"seed {seed} " + ", ".join(f"{t['id']} {t['sent']} of {t['stock']}" for t in x["tents"])
+                for seed, x in zip(MISSION_SEEDS, row["runs"])) + f"; dormant body-steps (seed 11) {r['dormantSteps']:,}")
+            print("    nobody waits (the last resident's fall to the camp's clear; the last body's fall to it): " + "; ".join(
+                f"seed {seed} " + ", ".join(waits_text(x, zone) for zone in plan["zones"] if not zone["locks"])
+                for seed, x in zip(MISSION_SEEDS, row["runs"])))
+            print("    the clear bonus on what each camp fielded: " + "; ".join(
+                f"seed {seed} " + ", ".join(f"{k} {c:,}" for k, (c, _m) in x["bonuses"].items())
+                + f" = {bonus_share(x):.1%} of the run's cash" for seed, x in zip(MISSION_SEEDS, row["runs"])))
         for seed, r in zip(MISSION_SEEDS, row["sneak"]):
             woke = sorted({r["groups"][i - 1] for i in r["woke"]})
             print(f"    the sneak (seed {seed}): {r['end']} at {r['at']:.0f} s, {r['walked']:.0f} studs walked, woke "
@@ -8178,17 +8941,62 @@ def print_forest(cfg, report):
             woke = ", ".join(f"{r['groups'][i - 1]} ({w[1]})" for i, w in sorted(r["woke"].items()))
             print(f"    the careless road (seed {seed}): {r['end']} at {r['at']:.0f} s, {r['downs']} down(s), woke "
                   + (woke or "nobody"))
-        for tid, runs in row["tentAlone"].items():
-            for r in runs:
-                t = next(x for x in r["tents"] if x["id"] == tid)
-                print(f"    {tid} with no resident alive, its camp at rest: sent {t['sent']} of {t['stock']} at "
-                      + ", ".join(f"{x:.1f}" for x in t["sentAt"]) + f" s; {t['left']} left after {r['at']:.0f} s")
+        fast = row["fast"]
+        if fast is not None:
+            print(f"    fast, gear {gear_text(fast['gear'])} (health {fast['hp']:.0f}): " + "; ".join(
+                f"seed {seed} {r['end']} at {r['at'] / 60:.2f} min, tents " + ", ".join(
+                    f"{t['id']} {t['sent']} of {t['stock']} at " + ", ".join(f"{x:.0f}" for x in t["sentAt"]) + " s"
+                    for t in r["tents"]) for seed, r in zip(MISSION_SEEDS, fast["runs"])))
         for kind, aim, rule, b in row["bow"]:
             print(f"    the bow at {gear_text(row['gear'])}: {b['weapon']} alone against a {kind}, {aim} aim, {rule} rule: "
                   + boss_text(b) + f"; hits taken {b['solid']}")
     walk = report["difficulties"][ctx["expeditions"]["difficulties"][0]]["runs"][0]
     print(f"  the road: {walk['walked']:.0f} studs walked outside the fights = "
           f"{walk['walked'] / cfg['movement']['walkSpeed']:.1f} s at walk speed")
+
+
+def waits_text(r, zone):
+    cleared = r["clearedAt"].get(zone["id"])
+    last = r["lastResident"].get(zone["id"])
+    death = r["lastDeath"].get(zone["id"])
+    if cleared is None:
+        return f"{zone['id']} not cleared"
+    return f"{zone['id']} {cleared - last:.1f} / {cleared - death:.2f} s" if last is not None and death is not None else zone["id"]
+
+
+def bonus_share(r):
+    """The clear bonuses' share of what a run paid in cash."""
+    paid = r["wallet"]["cash"]
+    return sum(c for c, _m in r["bonuses"].values()) / paid if paid else 0.0
+
+
+def print_scenes(row):
+    """L1b Wave 4's scenes: the road archer, the walk-out, the lose and the sniper."""
+    for seed, r in zip(MISSION_SEEDS, row["archer"]):
+        sc = r["scene"]
+        print(f"    the road archer (seed {seed}): {r['end']} at {r['at']:.0f} s, {r['evaded']} hits blocked, "
+              f"{sum(r['killed'].values())} kills; A's bodies off its floor at {fmt(sc['out'], 0, 1).strip()} s, a melee "
+              f"hit on him at {fmt(sc['reached'], 0, 1).strip()} s, {r['leashes']} group(s) home; paid {wallet_text(r)}")
+    for seed, r in zip(MISSION_SEEDS, row["walkout"]):
+        sc = r["scene"]
+        late = sc["out"] - sc["exited"] if sc["out"] is not None and sc["exited"] is not None else None
+        print(f"    the walk-out (seed {seed}): out of the east gate at {fmt(sc['exited'], 0, 1).strip()} s, a woken rusher "
+              f"on the road {fmt(late, 0, 2).strip()} s later")
+    for seed, r in zip(MISSION_SEEDS, row["lose"]):
+        sc = r["scene"]
+        turns = "; ".join(f"{r['groups'][i - 1]} home at {at:.1f} s, farthest {far:.0f} studs past the edge, "
+                          + (f"rest {sc['rests'][i][0] - at:.1f} s later, healed {sc['rests'][i][1]}"
+                             if i in sc["rests"] else "never at rest")
+                          for i, (at, far) in sorted(sc["homes"].items()))
+        print(f"    the lose (seed {seed}): ran at {fmt(sc.get('ran'), 0, 1).strip()} s; {turns or 'no group turned home'}")
+    for seed, r, m in zip(MISSION_SEEDS, row["sniper"], row["runs"]):
+        sc = r["scene"]
+        cash, timber = pay_rate(r)
+        mine = pay_rate(m)
+        print(f"    the sniper (seed {seed}): {r['end']} at {r['at']:.0f} s, {sum(r['killed'].values())} kills, "
+              f"{cash:,.0f} cash and {timber:.1f} a minute (the mission's {mine[0]:,.0f} and {mine[1]:.1f}); below the "
+              f"drop {sc.get('paidBelow', {}).get('cash', 0):,} cash, hits on him {r['hits']} ({r['downs']} down), "
+              f"rushers stood down at {fmt(sc.get('stoodDown'), 0, 1).strip()} s, {r['leashes']} leash(es)")
 
 
 def pay_rate(r):
@@ -8216,8 +9024,8 @@ def check_forest(cfg, report, expect):
     if shots is not None:
         name = cfg["weapons"][report["bow"]]["name"]
         expect(all(r["end"] == "stopped" for r in shots["camp"]),
-               f"forest, {names.get(first, first)}: the {name} alone clears camp {shots['zone']} on every seed (the "
-               f"in-play step, L1b Wave 3): " + ", ".join(f"{r['end']} at {r['at']:.0f} s" for r in shots["camp"]))
+               f"forest, {names.get(first, first)}: the {name} alone clears camp {shots['zone']} on every seed (L1b "
+               f"Wave 3's pin, now with every hit landing from anywhere): " + ", ".join(f"{r['end']} at {r['at']:.0f} s" for r in shots["camp"]))
     for difficulty, row in report["difficulties"].items():
         tag = f"forest, {names.get(difficulty, difficulty)}"
         gear = gear_text(row["gear"])
@@ -8260,9 +9068,24 @@ def check_forest(cfg, report, expect):
             else:
                 print(f"  note  {tag} at gear {gear}: seed {seed}, the reacting player's clear (reported): {r['end']} at "
                       f"{r['at'] / 60:.2f} min, {r['downs']} down(s), paid {wallet_text(r)}")
+        # The tent as a pace reserve (L1b-W4-28): at the recommended gear each tent sends at most
+        # TENT_AT_PACE; on Normal one preset up, A's at least TENT_FAST["A"] and B's TENT_FAST["B"].
+        sent = [(seed, t["camp"], t["sent"]) for seed, r in zip(MISSION_SEEDS, row["runs"]) for t in r["tents"]]
+        expect(bool(sent) and all(n <= TENT_AT_PACE for _seed, _camp, n in sent),
+               f"{tag} at gear {gear}: the tent at pace: each tent sends at most {TENT_AT_PACE}, every seed: "
+               + ", ".join(f"seed {seed} {camp} {n}" for seed, camp, n in sent))
+        fast = row["fast"]
+        if fast is not None:
+            sent = [(seed, t["camp"], t["sent"]) for seed, r in zip(MISSION_SEEDS, fast["runs"]) for t in r["tents"]]
+            expect(all(n >= TENT_FAST.get(camp, 0) for _seed, camp, n in sent) and all(r["end"] == "cleared"
+                                                                                       for r in fast["runs"]),
+                   f"{tag} at gear {gear_text(fast['gear'])}: the tent when fast: "
+                   + ", ".join(f"{c} at least {n}" for c, n in TENT_FAST.items()) + ", every seed: "
+                   + ", ".join(f"seed {seed} {camp} {n}" for seed, camp, n in sent))
         # Every kill is paid once, at once (L1b-15): every run of the row, the lost ones above all.
         under, below = row["under"], row["below"]
-        every = (row["runs"] + row["human"] + row["careless"] + row["stand"] + row["kite"] + row["edge"]
+        every = (row["runs"] + row["human"] + row["careless"] + row["stand"] + row["kite"] + row["archer"]
+                 + row["sniper"] + (row["fast"]["runs"] if row["fast"] is not None else [])
                  + [r for runs in row["strikes"].values() for r in runs]
                  + (under["careless"] if under is not None else [])
                  + (below["human"] + below["runs"] if below is not None else []))
@@ -8312,23 +9135,13 @@ def check_forest(cfg, report, expect):
                 k = r["kite"] or {}
                 ok = (k.get("back") is not None and k.get("full") is True and k.get("same") is True
                       and k.get("leashes", 0) > 0 and paid_exactly(r))
-                paused = k.get("tentRested") is not None and k.get("tentRested") == k.get("tentBack")
-                ok = ok and paused
                 good = good and ok
-                told.append(f"seed {seed}: " + (f"whole, the dead still dead, the tent paused at {k.get('tentBack')} left"
-                                                if ok else str({key: k.get(key) for key in ('back', 'full', 'same',
-                                                                                            'leashes', 'tentRested',
-                                                                                            'tentBack')})))
-            expect(good, f"{tag}: the leash (kite): out of play, the group goes home and heals; back in, every survivor "
-                   f"is at full health, no body killed before is back, he was paid only what his kills pay, and the "
-                   f"tent's stock left is what it was when the camp went home: " + "; ".join(told))
-        if row["edge"]:
-            ok = all(r["edge"]["kills"] == 0 and r["wallet"] == {"cash": 0, "materials": 0, "valor": 0}
-                     and r["edge"]["blocked"] > 0 for r in row["edge"])
-            expect(ok, f"{tag}: the edge: standing just past chaseMargin of {row['edge'][0]['edge']['group']} (no "
-                   f"shooter) and hitting it earns 0 from it, every seed: "
-                   + ", ".join(f"{r['edge']['blocked']} hits blocked, {r['edge']['kills']} kills, "
-                               f"{r['wallet']['cash']} cash" for r in row["edge"]))
+                told.append(f"seed {seed}: " + ("whole, the dead still dead" if ok else
+                                                str({key: k.get(key) for key in ('back', 'full', 'same', 'leashes')})))
+            expect(good, f"{tag}: the leash (kite): out of reach, the group goes home and heals; back in, every "
+                   f"survivor is at full health, no body killed before is back, and he was paid only what his kills "
+                   f"pay: " + "; ".join(told))
+        check_scenes(cfg, row, tag, expect)
         # L1's gates back (L1b-W2-22): skill beats gear. At the recommended gear the human clears
         # without going down and the player who never dodges does not clear, every difficulty.
         human = row["human"]
@@ -8388,27 +9201,93 @@ def check_forest(cfg, report, expect):
                                     + ("" if ok else f" (the chain from rest: {', '.join(wanted) or 'nobody'})"))
             expect(good, f"{tag}: the join-in: each open camp's first wake brings in the groups the chain from rest "
                    f"names (check_levels.py's table), every seed: " + "; ".join(told))
-            # The tents: `every` apart from the wake while the camp is busy, the whole stock, never more.
+            # Nobody waits (L1b-W4-29): a camp clears on the tick its last fielded body falls.
             told = []
             good = True
             for seed, r in zip(MISSION_SEEDS, row["runs"]):
-                for t in r["tents"]:
-                    gaps = [b - a for a, b in zip(t["sentAt"], t["sentAt"][1:])]
-                    every = next(x["every"] for x in plan["tents"] if x["def"]["id"] == t["id"])
-                    ok = t["sent"] == t["stock"] and t["left"] == 0 and all(g >= every - THREAT_EPS for g in gaps)
+                for zone in plan["zones"]:
+                    if zone["locks"]:
+                        continue
+                    cleared, death = r["clearedAt"].get(zone["id"]), r["lastDeath"].get(zone["id"])
+                    ok = cleared is not None and death is not None and 0 <= cleared - death <= FRAME + THREAT_EPS
                     good = good and ok
-                    if seed == MISSION_SEEDS[0] or not ok:
-                        told.append(f"seed {seed} {t['id']} {t['sent']} of {t['stock']} out in "
-                                    f"{(t['sentAt'][-1] - t['sentAt'][0]) if t['sentAt'] else 0:.1f} s"
-                                    + (f" (the shortest gap {min(gaps):.2f} s)" if gaps else ""))
-            for tid, runs in row["tentAlone"].items():
-                for r in runs:
-                    t = next(x for x in r["tents"] if x["id"] == tid)
-                    ok = t["sent"] == t["stock"] and t["left"] == 0
-                    good = good and ok
-                    told.append(f"{tid} with no resident alive and its camp at rest sends its {t['sent']} of {t['stock']}")
-            expect(good, f"{tag}: a tent sends its whole stock `every` seconds apart, never more, and empties once no "
-                   f"resident of its camp lives even with the camp at rest: " + "; ".join(told))
+                    told.append(f"seed {seed} " + waits_text(r, zone))
+            expect(good, f"{tag}: nobody waits: each open camp clears on the tick its last fielded body falls (the "
+                   f"last resident's fall to the clear / the last body's fall to it): " + "; ".join(told))
+            # The clear bonus on what each camp fielded (L1b-W4-30), by hand.
+            told = []
+            good = True
+            share = level["crowd"]["clearBonus"]["share"]
+            for seed, r in zip(MISSION_SEEDS, row["runs"]):
+                for zone in plan["zones"]:
+                    if zone["locks"]:
+                        continue
+                    tent = next((t for t in plan["tents"] if t["zone"] == zone["floor"]), None)
+                    want = report["sc"].clear_bonus(fielded(zone, tent, r["fielded"].get(zone["id"], 0)),
+                                                    level["crowd"]["rewards"], row["scales"]["rewardMult"], share)
+                    got = r["bonuses"].get(zone["id"])
+                    good = good and got == tuple(want)
+                told.append(f"seed {seed} {bonus_share(r):.1%}")
+            expect(good, f"{tag}: each open camp's clear bonus is Combat.ClearBonus on what it fielded (its residents "
+                   f"and its tent's bodies sent); the bonuses' share of the run's cash (reported against Wave 2's "
+                   f"5-10%): " + ", ".join(told))
+
+
+def check_scenes(cfg, row, tag, expect):
+    """L1b Wave 4's scene bands (INTERFACES "Balance bands")."""
+    if row["archer"]:
+        # Gated: every hit lands. Reported (the band's "reported, every seed"): whether the woken
+        # groups came out of the gate, or the bow felled them in its funnel first, and whether
+        # they reached him or went home.
+        ok = all(r["evaded"] == 0 for r in row["archer"])
+        expect(ok, f"{tag}: the road archer: every hit lands (no BLOCKED), every seed; reported: " + "; ".join(
+            f"{r['evaded']} blocked, A's bodies off its floor at {fmt(r['scene']['out'], 0, 1).strip()} s"
+            + (" (A fell in the gate's funnel first)" if r["scene"]["out"] is None and r["clearedAt"].get(r["scene"]["zone"])
+               is not None else "")
+            + f", reached at {fmt(r['scene']['reached'], 0, 1).strip()} s, {r['leashes']} group(s) home, "
+            f"{sum(r['killed'].values())} kills" for r in row["archer"]))
+    if row["walkout"]:
+        lates = [(r["scene"]["out"] - r["scene"]["exited"]) if r["scene"]["out"] is not None and r["scene"]["exited"]
+                 is not None else None for r in row["walkout"]]
+        expect(all(late is not None and late <= WALKOUT_SECONDS for late in lates),
+               f"{tag}: the walk-out: the woken rushers stand on the road outside A's floor within {WALKOUT_SECONDS:g} s "
+               f"of his walking out, every seed: " + ", ".join(fmt(late, 0, 2).strip() + " s" for late in lates))
+    if row["lose"]:
+        lo, hi = LOSE_FAR
+        told = []
+        good = True
+        for seed, r in zip(MISSION_SEEDS, row["lose"]):
+            sc = r["scene"]
+            # The groups that followed him onto the road (a body past the edge when they turned).
+            awake = sorted(i for i, (_at, far) in sc["homes"].items() if far > 0)
+            far = max((sc["homes"][i][1] for i in awake if i in sc["homes"]), default=None)
+            ok = (bool(awake) and all(i in sc["homes"] for i in awake) and far is not None and lo <= far <= hi
+                  and all(i in sc["rests"] and sc["rests"][i][0] - sc["homes"][i][0] <= LOSE_REST_SECONDS
+                          and sc["rests"][i][1] for i in awake))
+            good = good and ok
+            slowest = max((sc["rests"][i][0] - sc["homes"][i][0] for i in awake if i in sc["rests"] and i in sc["homes"]),
+                          default=None)
+            told.append(f"seed {seed}: {len(awake)} followed, the farthest {fmt(far, 0, 0).strip()} studs, at rest within "
+                        f"{fmt(slowest, 0, 1).strip()} s")
+        expect(good, f"{tag}: the lose: every group of A that followed him onto the road turns home with its farthest body {lo:g}-{hi:g} studs past "
+               f"A's east edge along the road, and is back at rest, healed, within {LOSE_REST_SECONDS:g} s: "
+               + "; ".join(told))
+    if row["sniper"]:
+        told = []
+        good = True
+        for seed, r, m in zip(MISSION_SEEDS, row["sniper"], row["runs"]):
+            cash, timber = pay_rate(r)
+            mine_cash, mine_timber = pay_rate(m)
+            sc = r["scene"]
+            ok = cash < mine_cash and timber < mine_timber and r["evaded"] == 0
+            good = good and ok
+            told.append(f"seed {seed} {cash:,.0f} / {timber:.1f} against {mine_cash:,.0f} / {mine_timber:.1f}; "
+                        f"below the drop {r['leashes']} leash(es), on the ledge "
+                        + (f"the rushers stood down at {sc['stoodDown']:.1f} s" if sc.get("stoodDown") is not None
+                           else "no rusher lived to stand down") + f", {r['hits']} hit(s) on him")
+        expect(good, f"{tag}: the sniper earns less cash and less Timber a minute than the mission player on the same "
+               f"seeds (his minutes: to his last landed hit, + {SNIPER_IDLE_SECONDS:g} s), and every hit lands; the "
+               f"rest reported: " + "; ".join(told))
 
 
 def plan_floor(plan, group_id):

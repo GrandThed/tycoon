@@ -4718,3 +4718,152 @@ melee:
   271 s). Without the step it stood off camp B until the run cap.
 - What made the bow feel stronger was mostly safety. Ruling 9: if Ben still finds it stronger, the
   next lever is its range or how far off it lets him stand, which is a question for Ben.
+
+## L1b Wave 4: no waits, no walls (2026-10-15)
+
+Contract: `docs/INTERFACES.md` "L1b Wave 4 — no waits, no walls". Measured with the gate's Python
+(64-bit 3.12, `py tools/sim_range.py --check`), Normal at gear 2 / 2 (Broadsword, the reacting
+`mission` player, solo) unless a row says otherwise. Seeds 11 / 23 / 37.
+
+### L1b W4: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Combat.json camps.chaseSight` | — | 40 | The study's value held. 36 and 32 lose the walk-out at once (the fodder never leave the gate); 38 and 40 both turn the group at the U-bend. See "the lose" below. |
+| `camps.hitMemorySeconds` | — | 8 | The study's value; no band moved it. It is what pulls a group after an archer it cannot see. |
+| `camps.meleeAbove` | — | 7.5 | The top of its gate's range [7, 7.5]: max(cover 3.5, fence 4) + root 3, and the rushers' lowest ground height 5 − 0.5 + 3. |
+| `levels.regionLockMargin`, `levels.doorSpare` | — | 8, 0.5 | Fixed by the contract. |
+| `1_ForestRoad.json` A `tent.pace` | — | 15 s, lead 0.2 | Chosen from the residents' own kill curve (tents silenced, scratch probe): at 2 / 2 the Pickets are never 0.2 ahead of a 15-s clock (worst 0.09–0.17), at 4 / 4 they are (0.29–0.32) for long enough to send 2. |
+| B `tent.pace` | — | 90 s, lead 0.15 | Main Camp is busy 100–135 s at 2 / 2 (never ahead of 90 s) and 50–55 s at 4 / 4 (ahead from about 1 min in: 7, 7, 8 sent). The study's 130 s would send at 2 / 2 on a fast seed. |
+| `targetMinutes` | 7 | 6 | Wave 1's rule: the mean first Normal clear, 6.26 min, rounded. |
+
+`runCapSeconds` 1,500 holds: the human's slowest Normal clear is 6.04 min (724 s doubled), and 1,500 ≥ 1,260.
+No resident, stock, `every`, reward, weapon, kind or `ProvingGrounds.json` number moved.
+
+### L1b W4: the region
+
+One region, `plateau`, y 8, camps A and B; 15 cells (floors first, then the road cells in file order):
+
+| Cell | x | z | Door(s) |
+|---|---|---|---|
+| A floor | −264 … −179 | −58.5 … 26.5 | Road5 8 × 16, RoadAB1 8 × 16 |
+| B floor | −70 … 71 | −64.5 … 68.5 | RoadAB5 8 × 16, RoadBC1 8 × 16 |
+| Road5 | −302 … −256 | −52 … −36 | LookoutSignPad 6 × 6 |
+| LookoutSignPad | −302 … −296 | −62 … −46 | |
+| RoadAB1 | −187 … −122 | −52 … −36 | RoadAB2 16 × 16 |
+| RoadAB2 | −138 … −122 | −52 … 8 | RoadAB3 16 × 16 |
+| RoadAB3 | −138 … −100 | −8 … 8 | RoadAB4 16 × 16 |
+| RoadAB4 | −116 … −100 | −52 … 8 | RoadAB5 16 × 16 |
+| RoadAB5 | −116 … −62 | −52 … −36 | |
+| RoadBC1 | 63 … 128 | −52 … −36 | CacheSpur 12 × 6, RoadBC2 16 × 16 |
+| CacheSpur | 94 … 106 | −42 … −10 | CacheSignPad 6 × 8 |
+| CacheSignPad | 100 … 112 | −34 … −26 | touches RoadBC2 (no door) |
+| RoadBC2 | 112 … 128 | −52 … 8 | RoadBC3 16 × 16 |
+| RoadBC3 | 112 … 198 | −8 … 8 | RoadBC4 16 × 16 |
+| RoadBC4 | 182 … 198 | −52 … 8 | |
+
+- The tree has 14 doors for 15 cells; the narrowest is 6 (the minimum is 2 × 2.2 + 0.5 = 4.9).
+- Every crossing of a fence line is inside a gate span (z −52 … −36 at all four gates).
+- The lock clearance: the tightest is RoadBC3 and RoadBC4, 58 studs from the Chief's Clearing (needs
+  the marksman's 48 + 8 = 56). RoadBC5 (x 198 … 230) is outside the region.
+- Sniper perches (in the band, over `meleeAbove`, within `dormantRadius`): the lookout ledge (its
+  farthest point 14 studs from the region) and the cache block (12), both inside the slinger's 32.
+  The Chief's Clearing's fence tops and its cover block are listed but not gated: see the flags.
+- N's stops: A (−322, 0, −44), 55.8 studs past the nearest resting sight; B (−108, 8, −44), 39.7
+  past it (Hard's B.fire1); then the Chief's countdown.
+
+### L1b W4: the first clear
+
+| Seed | Clear | A cleared | B cleared | C closed | the Colossus | Timber / min | cash / min |
+|---|---|---|---|---|---|---|---|
+| 11 | 6.37 min | 35.6 s | 182.2 s | 202.9 s | 73.2 s | 40.5 | 24,337 |
+| 23 | 6.42 min | 34.4 s | 188.9 s | 210.2 s | 74.2 s | 40.2 | 24,134 |
+| 37 | 5.99 min | 33.1 s | 154.2 s | 175.4 s | 75.9 s | 43.1 | 25,891 |
+
+- Mean 375.6 s, inside the stop rule's 360–405 s and the band 345–420 s. About 45 s of it is walking
+  (908 studs). Every run took 0 hits and paid 155,020 cash, 258 Timber, 10 Valor (229 kills; the
+  tents send nobody at this pace).
+- The human's reaction (0.55 s) clears in 5.46 / 6.04 / 5.62 min with no down.
+
+### L1b W4: the tents
+
+| Run | A sent | B sent |
+|---|---|---|
+| Normal 2 / 2 (band: at most 1) | 0, 0, 0 | 0, 0, 0 |
+| Normal 4 / 4 (band: A ≥ 2, B ≥ 4) | 2, 2, 2 (at 16 and 22 s) | 7, 7, 8 (from 62–69 s, 6 s apart) |
+| Hard 4 / 4 (at most 1) | 0, 0, 0 | 0, 0, 0 |
+| Brutal 6 / 6 (at most 1) | 0, 0, 0 | 0, 0, 0 |
+
+Nobody waits: in every `mission` run each open camp clears on the tick its last body falls (0.00 s
+from the last body's fall; the last resident was the last body in every run at pace).
+
+### L1b W4: the chase scenes (Normal, 2 / 2)
+
+- **The walk-out**: out of A's east gate at 6.1 s; a woken rusher stands on RoadAB1 2.40–2.70 s later
+  (band ≤ 5 s).
+- **The lose** [draft band 60–110 studs, back home healed within 25 s]: A.fireN follows him out and
+  turns home with its farthest body 109 / 108 / 108 studs past A's east edge, at rest 12.1 s later,
+  healed. A.fireW (woken by the join-in) never knew him and went home at once, from inside A. The
+  turn always falls at the U-bend (RoadAB3): sight is flat and all round, so a fodder on RoadAB2 sees
+  him on RoadAB4 across the 22-stud void and keeps the chase alive until he leaves the bend.
+- **The road archer** (Longbow from Road5, sees only through the west gate): every hit lands. The
+  Pickets fall in 60 s with no hit on him (30–32 kills, 6,600–7,480 cash); on two seeds bodies came
+  out of the gate first (7.3 s, 4.7 s), on the third the bow felled them in the gate's funnel.
+- **The sniper** (one arrow through the gate, then below the drop, then the lookout ledge): every hit
+  lands; he clears the Pickets in 25–27 s and earns 16,183–17,565 cash and 22.3–24.2 Timber a minute
+  of his own time, against the mission's 24,134–25,891 and 40.2–43.1 (band: less of both, every
+  seed). Below the drop he takes 1,500–1,600 cash before nothing is in sight; the rushers come to the
+  lip and leash (2–3 leashes). On the ledge the Longbow kills A's rushers (Normal's are fodder) before
+  any could stand down, so the stand-down is not seen in this run (the mirror's Step timeline proves
+  the rule).
+- **The kite**: out with 27 alive, at rest again 17 s later, all whole, the dead still dead.
+- The sneak wakes nobody; the still player is down 6.9–7.2 s after the wake; every first strike lands
+  first; the join-in matches the chain table.
+
+### L1b W4: pay
+
+- The clear bonus on what each camp fielded: Normal A 660, B 5,700, C 4,660 cash = 7.1% of the run's
+  cash (Wave 2's band 5–10%); Hard 7.3%, Brutal 7.4%. `sim_combat.py --check` 21: Normal 155,287
+  cash, 258 Timber, 10 Valor; Hard x2.25 / x2.21, Brutal x4.63 / x4.53 (bands x2–x3, x4–x6); the
+  bonuses 11,020 cash = 7.1%.
+- Hard 4 / 4 and Brutal 6 / 6: every band holds (no hit over 30%; the Colossus alone 83.2 s and
+  86.1 s; the human clears with no down; the never-dodger does not; one preset below is clearly
+  beyond; under-gearing pays less a minute).
+- The Raider Arena: unchanged (Colossus 75.4–77.7 s, Warlord 96.9–98.4 s, clears 10.14 / 10.44 /
+  11.84 min, the worst hit 23.2%).
+
+### L1b W4: how the simulator models it
+
+- `LevelRun` clamps a region body into the union of its inset cells (`rg_clamp`), routes every goal
+  through `rg_toward` (a door at stop 0; a goal clamped to the edge keeps
+  `max(stop − |goal − clamped|, 0)`), cuts a lane by `rg_runway`, stamps `closing` for a thinking
+  rusher that walked, lets a stood-down rusher finish an attack it began, and runs the forget before
+  the camp step's `Step` at the close (A's notes 1–4).
+- The scenes use the simulator's only line of sight: a camp's fence (less its gates) and the
+  plateau's lip block a straight line from his chest to a body's head. Nothing else in the
+  simulator, and nothing in the game's crowd, is ray-blocked.
+- `check_stage_mirror.py` compares `Region`, the Wave 4 `CampBrain` and `StageFlow.Fielded`, Plan's
+  regions and approaches, Validate's 20 new refusals (and the two new `levels` keys) and N through both approaches;
+  `mirror_mutants.py` catches 78 of 78 Luau mutants (30 new for Wave 4, 8 re-aimed).
+
+### L1b W4: flags for the lead
+
+- **The lookout ledge sniper is fast.** From the ledge the Longbow (pierce 5, range 110) clears the
+  Pickets in about 25 s with no hit taken, at about 70% of the mission's cash a minute and 57% of its
+  Timber. It passes ruling 10's band, but by less than the old blocks did. Normal's A has only fodder
+  rushers, so nothing stands down on the ledge before it dies. Levers, if Ben finds it cheap: more
+  shooters in A, a slinger reach that covers the ledge from further, or the bow's pierce. None is
+  mine to move.
+- **RoadBC5 and the step to C stand outside the region** (the lock clearance stops it at x 198). From
+  RoadBC6 (y 12, 32 studs past the region) no raider of B can reach him and no slinger can answer;
+  bounded by no refills, as the study says. Not gated: the sniper-perch gate covers tops over
+  `meleeAbove` only.
+- **The perch gate skips the boss room's own pieces.** C's fence tops (16) and a cover block (15.5)
+  stand 57–86 studs from the region, in the band and over `meleeAbove`, and are out of every slinger's
+  reach. Read literally the gate fails on them; they are the "Shooting out of the boss room" item of
+  "Open for later", so `check_levels.py` lists them and does not gate them. The lead's ruling.
+- **The lose band is tight at its top** (108–109 against 110), because the turn happens at the
+  U-bend whatever `chaseSight` is (see above). A wall-aware sight (A, L4) would end it earlier.
+- **The archer and the sniper's stand-down are reported, not gated**: the Longbow kills Normal's A
+  before the rushers can reach the gate or stand down on two of the three counts. Every hit landing
+  (the gated part) holds in every run.
