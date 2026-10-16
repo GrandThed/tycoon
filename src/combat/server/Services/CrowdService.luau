@@ -123,9 +123,14 @@ type Enemy = {
 	shooter: CampBrain.Shooter?,
 	-- L1b-W2-10: its group is dormant; set at every camp step, false for every other body.
 	dormant: boolean,
-	-- L1b-W4-23: a resident rusher that thought and walked at its last integrate; false for every
-	-- other body.
+	-- L1b-W4-23 (fix round R1): a resident rusher that thought and got nearer its routed goal at
+	-- its last integrate; false for every other body.
 	closing: boolean,
+	-- R1: its flat distance to its routed goal at the last step that gave it one (math.huge until
+	-- then): closing is progress against it, not a wish to move.
+	goalGap: number,
+	-- R4: a stood-down rusher already healed at its post (cleared once it no longer stands down).
+	healed: boolean,
 }
 
 -- One resident group: CampBrain's state, the floor it lives on, its living members, and the
@@ -719,6 +724,10 @@ local function integrate(
 	elseif free then
 		desired = steer(enemy, def, crowd.behaviour, target, dt)
 	end
+	-- R1: did this step start nearer the routed goal than the last one did? Measured from where
+	-- separation left the body, so bodies pressed against one clamped point, which seek it at full
+	-- speed and are pushed back every step, make no progress and stop closing.
+	local progressed = false
 	if goal ~= nil then
 		if region ~= nil then
 			-- L1b-W4-17: through the region's doors. A door is walked onto (stop 0). A goal off
@@ -734,6 +743,11 @@ local function integrate(
 			end
 			goal = routed
 		end
+		local gx = goal.X - position.X
+		local gz = goal.Z - position.Z
+		local gap = math.sqrt(gx * gx + gz * gz)
+		progressed = gap < enemy.goalGap - MOVE_THRESHOLD * dt
+		enemy.goalGap = gap
 		desired = seek(position, goal, speed, stop, dt)
 	end
 
@@ -762,8 +776,9 @@ local function integrate(
 
 	local moving = desired.Magnitude > MOVE_THRESHOLD
 	if resident ~= nil and not resting and mind ~= nil and rusher then
-		-- L1b-W4-23: a rusher still walking under its brain holds its group's leash and stand-down.
-		enemy.closing = moving
+		-- L1b-W4-23, R1: a rusher still getting nearer under its brain holds its group's leash and
+		-- stand-down; one that only presses against the region's edge does not.
+		enemy.closing = progressed
 	end
 	if alive then
 		if resting then
@@ -1740,6 +1755,8 @@ function CrowdService.Spawn(
 		shooter = nil,
 		dormant = false,
 		closing = false,
+		goalGap = math.huge,
+		healed = false,
 	}
 	clampToBounds(enemy, def.radius)
 	enemies[id] = enemy

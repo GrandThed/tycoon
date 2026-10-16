@@ -676,4 +676,93 @@ function W4C.forgetTests(): ()
 end
 L1BC.crowdGroup("forget, floors, lane", W4C.forgetTests)
 
+-- The fix round (docs/prompts/l1b-w4-fix-round.md) -----------------------------------------------
+-- Four fodder at their posts, two each side of the floor's centre line, facing the road east.
+function W4C.fourPosts(): { any }
+	return { vec(-6, 8, -6), vec(-6, 8, 6), vec(6, 8, -6), vec(6, 8, 6) }
+end
+
+-- Steps until `group` sends an event to `to` (the step count) or `limit` steps pass (nil); every
+-- `every` steps the player hits `id` for 1 (by userId 7), as a sniper keeping himself known.
+function W4C.hittingUntil(group: number, to: string, limit: number, id: number, every: number): number?
+	for count = 1, limit do
+		if count % every == 0 and Crowd.Get(id) ~= nil then
+			Crowd.Damage(id, 1, 7, nil, nil)
+		end
+		step2()
+		for _, event in L1BC.events() do
+			if event.group == group and event.to == to then
+				return count
+			end
+		end
+	end
+	return nil
+end
+
+-- R1: closing is progress. Four rushers pressed on one clamped point at the road's end seek it at
+-- full speed for ever; only progress, not the wish to move, holds the leash and the stand-down.
+function W4C.closingTests(): ()
+	print(" fix round R1: closing means progress")
+	W4C.enter()
+	-- (a) A hitter below the road's end: 5 under the floor (out of the band), 11.3 flat past the
+	-- inset end (28.7), past a fodder's reach. Known by his hits alone, every 4 s.
+	root.Position = vec(40, 3, 0)
+	local group, ids = W4C.place("guard", W4C.fourPosts(), { "fodder", "fodder", "fodder", "fodder" }, { yaw = -math.pi / 2 })
+	step2(2)
+	Crowd.Damage(ids[1], 1, 7, nil, nil)
+	check(W4C.untilEvent(group, "fight", 10) ~= nil, "(R1 a: four fodder woken by the hitter's hit)")
+	local home = W4C.hittingUntil(group, "home", 225, ids[1], 60)
+	-- About 2.9 s to walk the 35 studs to the road's end, then leashSeconds (3) without progress.
+	check(home ~= nil and home >= 75 and home <= 120, `R1 a: four rushers pressed at the road's end above a hitter they cannot reach go home within leash + a margin (step {home or "never"}, 75 to 120)`)
+	local packed = 0
+	for _, id in ids do
+		if W4C.flat(id, 28.7, 0) <= 4 then
+			packed += 1
+		end
+	end
+	check(home == nil or packed == 4, `(they had all reached the road's end first: {packed} of 4)`)
+	check(W4C.hittingUntil(group, "fight", 45, ids[1], 15) == nil, "and his hits do not turn the homeward group back")
+
+	-- (b) A player 12 over the floor (meleeAbove 7.5), 5.6 flat past the inset end, whom the slinger
+	-- reaches: the group fights on, and the rushers stand down and walk to their posts.
+	fresh()
+	W4C.enter()
+	root.Position = vec(34.3, 20, 0)
+	local points = W4C.fourPosts()
+	table.insert(points, vec(0, 8, 0))
+	local mixed, mixedIds = W4C.place("guard", points, { "fodder", "fodder", "fodder", "fodder", "slinger" }, { yaw = -math.pi / 2 })
+	step2(2)
+	Crowd.Damage(mixedIds[1], 1, 7, nil, nil)
+	check(W4C.untilEvent(mixed, "fight", 10) ~= nil, "(R1 b: the group woken)")
+	local posts = L1BC.CB.Posts(L1BC.def("guard", points, { yaw = -math.pi / 2 }), 5)
+	local reachedEdge = false
+	local backAt: number? = nil
+	local left = false
+	for count = 1, 240 do
+		step2()
+		for _, event in L1BC.events() do
+			left = left or (event.group == mixed and event.to == "home")
+		end
+		local atEdge = 0
+		local atPost = 0
+		for k = 1, 4 do
+			if W4C.flat(mixedIds[k], 28.7, 0) <= 4 then
+				atEdge += 1
+			end
+			if W4C.flat(mixedIds[k], posts[k].at.X, posts[k].at.Z) <= 1 then
+				atPost += 1
+			end
+		end
+		reachedEdge = reachedEdge or atEdge == 4
+		if reachedEdge and atPost == 4 then
+			backAt = count
+			break
+		end
+	end
+	-- About 2.9 s out, 3 s without progress, 2.9 s back at homePace 1.
+	check(reachedEdge and backAt ~= nil and backAt <= 165, `R1 b: four rushers pressed at the edge under a player they cannot reach stand down and are back at their posts within leash + a margin (step {backAt or "never"}, at most 165)`)
+	check(not left, "while the slinger reaches him the group stays in fight")
+end
+L1BC.crowdGroup("fix round: closing", W4C.closingTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)
