@@ -750,6 +750,13 @@ function L1BC.leashTests(): ()
 	step2()
 	check(Crowd.Get(ids[1]).velocity.Y > 0, "and launched")
 	check(#L1BC.events() == 0, "and a hit from a player it cannot reach turns nobody back")
+	-- Wave 4 fix round R3: a player in play for the homeward group (on its floor) but outside every
+	-- member's cone (behind the posts, which face -Z) is reachable, does not turn it back, and is
+	-- not engaged: engagement counts rise and fight only.
+	root.Position = vec(0, 11, 15)
+	step2()
+	check(#L1BC.events() == 0 and not Crowd.Engaged(7), "R3: a reachable player no member sees is not engaged with a group walking home")
+	root.Position = vec(0, 11, -60)
 	local rested = false
 	for _ = 1, 120 do
 		step2()
