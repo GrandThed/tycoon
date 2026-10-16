@@ -900,13 +900,13 @@ local function lobTests(): ()
 	health2, told2 = beside(false)
 	check(humanoid.Health == 112 and health2 == 112 and told2 == 1, "a lob on the open floor is unchanged: both players in its circle are hit")
 
-	-- Only the lob changed: the other ground shapes lie on the crowd's floor, upper bound alone.
+	-- L1b Wave 4 fix round R6: every ground shape has the lob's lower bound (a region floor ends at a drop).
 	fresh()
 	root.Position = vec(0, 3 - 8, 0)
 	hooks.impact(arc(fakeNow))
 	advance(0.25)
 	gather()
-	check(humanoid.Health == 100, "an arc still measures from the crowd's floor with its upper bound alone (feet 8 under it: hit)")
+	check(humanoid.Health == 130, "R6: an arc measures from the crowd's floor with both bounds (feet 8 under it: missed)")
 
 	-- A set load.
 	lands = throw()
