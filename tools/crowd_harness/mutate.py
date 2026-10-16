@@ -3803,6 +3803,46 @@ L1B_W4_FIX_CROWD_REPLACED = {
 }
 MUTATIONS.update(L1B_W4_FIX_CROWD_MUTATIONS)
 MUTATIONS.update(L1B_W4_FIX_CROWD_REPLACED)
+# A's R14 (the same file, texts verbatim).
+# R14 (added during the round): the foot of the climb. Each proved caught on a scratch copy.
+L1B_W4_FIX_CROWD_R14_MUTATIONS = {
+    "l1b w4 fix crowd: Melee has no lower bound (R14)": (
+        CAMP,
+        "\t\tand above >= -rules.meleeBelow\n",
+        "",
+    ),
+    "l1b w4 fix crowd: Problems does not ask for meleeBelow (R14)": (
+        CAMP,
+        '\t"meleeAbove",\n\t"meleeBelow",\n}',
+        '\t"meleeAbove",\n}',
+    ),
+    "l1b w4 fix crowd: begin starts a blow it cannot land (R14)": (
+        BRAIN,
+        "\t\t\treaches(body, attack, target)\n\t\t\tand laneRuns(",
+        "\t\t\ttrue\n\t\t\tand laneRuns(",
+    ),
+    "l1b w4 fix crowd: a blow's band has no under side (R14)": (
+        BRAIN,
+        "\treturn above <= height and above >= -height\n",
+        "\treturn above <= height\n",
+    ),
+    "l1b w4 fix crowd: a blow's band is judged at the root's height, not the surface stood on (R14)": (
+        BRAIN,
+        "local above = target.restY - target.lift - floorOf(body).centre.Y",
+        "local above = target.position.Y - target.lift - floorOf(body).centre.Y",
+    ),
+}
+
+# R14 made this mutate.py entry stale (Melee now names `above`): same label, the new text.
+L1B_W4_FIX_CROWD_R14_REPLACED = {
+    "l1b w4 crowd: Melee ignores meleeAbove": (
+        CAMP,
+        "\t\tand above <= rules.meleeAbove\n",
+        "\t\tand true\n",
+    ),
+}
+MUTATIONS.update(L1B_W4_FIX_CROWD_R14_MUTATIONS)
+MUTATIONS.update(L1B_W4_FIX_CROWD_R14_REPLACED)
 
 
 def harness(root: Path) -> tuple:
