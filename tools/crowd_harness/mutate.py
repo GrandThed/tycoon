@@ -81,7 +81,6 @@ BRAIN_OF = "if mind.enraged and phaseDef ~= nil and phaseDef.brain ~= nil then"
 SCALE = "local scale = if recover then phase.recoverScale else phase.windupScale"
 CHAINED = "or mind.chained >= math.floor(phase.chain)"
 RING_SWEEP = "local to = math.min(now - who.lag, endAt)\n\t\tlocal from = math.max(before - who.lag, leftAt)"
-RING_HEIGHT = "if to < from or (height ~= nil and who.feetY - strike.floorY > height) then\n\t\t\tcontinue\n\t\tend\n\t\tlocal dx"
 GIANTS = "\t\t\t\ttable.insert(giants, enemy)\n\t\t\telse\n\t\t\t\twidest = math.max(widest, radius)\n\t\t\tend\n"
 MUTATIONS = {
     # Wave 1 and its review round.
@@ -524,7 +523,12 @@ MUTATIONS = {
     ),
     # Stop 2. The ring.
     "ring: judged with no lag": (FIELD, RING_SWEEP, "local to = math.min(now, endAt)\n\t\tlocal from = math.max(before - who.lag, leftAt)"),
-    "ring: it has no height": (FIELD, RING_HEIGHT, "if to < from then\n\t\t\tcontinue\n\t\tend\n\t\tlocal dx"),
+    # Its text follows R15 (the L1b Wave 4 fix round: the ring has the lower bound too).
+    "ring: it has no height": (
+        FIELD,
+        "if to < from or (height ~= nil and (rise > height or rise < -height)) then",
+        "if to < from then",
+    ),
     "ring: it hits again every step": (FIELD, "ring.done[who.userId] = true", "ring.done[who.userId] = nil"),
     "ring: it reaches past its radius": (FIELD, "if distance > ring.radius then", "if false then"),
     "ring: its front has no leading half": (
@@ -3843,6 +3847,37 @@ L1B_W4_FIX_CROWD_R14_REPLACED = {
 }
 MUTATIONS.update(L1B_W4_FIX_CROWD_R14_MUTATIONS)
 MUTATIONS.update(L1B_W4_FIX_CROWD_R14_REPLACED)
+# A's R15 (the same file, texts verbatim; its FIELD line is mutate.py's own).
+# R15 (added during the round): the travelling ground shapes' under side. Each proved caught.
+L1B_W4_FIX_CROWD_R15_MUTATIONS = {
+    "l1b w4 fix crowd: a charge has no under side (R15)": (
+        FIELD,
+        "(over > height or over < -height)",
+        "(over > height)",
+    ),
+    "l1b w4 fix crowd: a ring has no under side (R15)": (
+        FIELD,
+        "(rise > height or rise < -height)",
+        "(rise > height)",
+    ),
+}
+
+# R15 made these mutate.py entries stale (the RING_HEIGHT constant and the lane's inline text):
+# same label, same rule, the new text. RING_HEIGHT can then go.
+L1B_W4_FIX_CROWD_R15_REPLACED = {
+    "lane: it has no height": (
+        FIELD,
+        "if to < from or (height ~= nil and (over > height or over < -height)) then",
+        "if to < from then",
+    ),
+    "ring: it has no height": (
+        FIELD,
+        "if to < from or (height ~= nil and (rise > height or rise < -height)) then",
+        "if to < from then",
+    ),
+}
+MUTATIONS.update(L1B_W4_FIX_CROWD_R15_MUTATIONS)
+MUTATIONS.update(L1B_W4_FIX_CROWD_R15_REPLACED)
 
 
 def harness(root: Path) -> tuple:
