@@ -480,4 +480,115 @@ function W4B.realTests(): ()
 end
 L1.group("l1b w4 realTests", W4B.realTests)
 
+-- The fix round (docs/prompts/l1b-w4-fix-round.md) -------------------------------------------
+
+-- R10: the safe point judges a region's zones by where bodies stand. A region's groups chase off
+-- their floor and walk home over the road, so their busy flag says nothing about a checkpoint.
+function W4B.safeTests(): ()
+	print(" SafePoint on a region (R10): by position, home groups included")
+	local Flow = W4B.Flow
+	local plan = W4B.plan()
+	local a = plan.zones[1]
+	local function threat(x: number, y: number, z: number, reach: number): any
+		return { at = vec(x, y, z), reach = reach }
+	end
+	local state = Flow.Begin(plan)
+	state.reached[1] = true
+	-- (a) A's group chases a player 116 studs off A's checkpoint (0, 140), out on R2: its floor is
+	-- busy, but nobody stands near the checkpoint.
+	local chasing = { threat(100, 8, 200, 32) }
+	check(L1.same(Flow.SafePoint(plan, state, { [1] = true }, chasing), a.checkpoint), "(a) A's group chasing far off on the road (A busy): A's checkpoint, not the trailhead")
+	check(L1.same(Flow.SafePoint(plan, state, { [1] = true, [2] = true }, {}), a.checkpoint), "(a) a region zone's busy flag alone never refuses its checkpoint")
+	local plain = W2B.plan()
+	local plainState = Flow.Begin(plain)
+	plainState.reached[1] = true
+	check(L1.same(Flow.SafePoint(plain, plainState, { [1] = true }, chasing), plain.start), "(a zone with no region keeps the busy rule: A busy, the start)")
+	-- (b) A's group walks home over its checkpoint: not busy (home is neither rise nor fight), but a
+	-- threat by position, because home is a state SafePoint's threats list.
+	check(Flow.Threatening("home") and Flow.Threatening("rise") and Flow.Threatening("fight") and not Flow.Threatening("rest"), "(b) the threats are every group in rise, fight or home (home turns back on sight), never rest")
+	local homeward = { threat(2, 8, 143, 6), threat(-3, 8, 150, 6) }
+	check(L1.same(Flow.SafePoint(plan, state, {}, homeward), plan.start), "(b) A's group walking home through A's checkpoint: not among them (the start)")
+	local beyond = Flow.Begin(plan)
+	beyond.reached[1] = true
+	beyond.reached[2] = true
+	check(L1.same(Flow.SafePoint(plan, beyond, { [2] = true }, homeward), plan.zones[2].checkpoint), "(and with B's checkpoint reached and B's group fighting far from it: B's)")
+end
+L1.group("l1b w4 safeTests", W4B.safeTests)
+
+-- R11: the region's door and lock clearance count a kind only its tent fields; N stops before the
+-- armed locking camp even when an open camp follows it.
+function W4B.untestedTests(): ()
+	print(" a region's reach from its tent alone, and N before a later camp (R11)")
+	local has = L1.has
+	-- Only A's tent fields the brute (2.2): B's resident brute goes. The door 0.2 short (4.8) is
+	-- under 2 x 2.2 + 0.5 = 4.9 only if the tent counts (else 2 x 1.7 + 0.5 = 3.9).
+	local level, layout = W2B.level(), W4B.layout()
+	level.camps[2].residents[1].units = { { kind = "fodder", count = 6 } }
+	layout.regions[1].cells[1].z = 150.2
+	local list = W4B.problems(level, layout)
+	check(has(list, "a door of") and has(list, "under 4.9"), `the widest body from A's tent alone sets the door: refused under 4.9 ({list[1] or "no problem"})`)
+	level.camps[1].tent.units = { { kind = "fodder", count = 3 } }
+	local without = W4B.problems(level, layout)
+	check(not has(without, "a door of"), `(with no brute anywhere, the same door passes: 3.9) ({without[1] or "no problem"})`)
+	-- Only A's tent fields the armoured (48 on Hard): B's post keeps its slingers (32). C's floor
+	-- 50 studs from B's is under 48 + 8 = 56 only if the tent counts (else 32 + 8 = 40).
+	local far, farLayout = W2B.level(), W4B.layout()
+	far.camps[2].residents[2].units = { { kind = "slinger", count = 2 } }
+	table.insert(far.camps[1].tent.units, { kind = "armoured", count = 1, minDifficulty = "hard" })
+	farLayout.camps[3].x = 100
+	farLayout.camps[3].z = 347 + 50 + 40
+	local farList = W4B.problems(far, farLayout)
+	check(has(farList, "under its longest reach 48 + regionLockMargin 8 = 56"), `the longest reach from A's tent alone sets the lock clearance: 56 ({farList[1] or "no problem"})`)
+
+	-- A fourth camp D, open and with an approach, after the boss room C.
+	local dLevel, dLayout = W2B.level(), W4B.layout()
+	local d = L1B.camp("D", 0, 4, 640, 60, 60)
+	d.approach = { x = 0, y = 4, z = 600 }
+	d.spots = { { id = "d1", posture = "fire", points = { { x = 0, z = 640 } }, radius = 4 } }
+	table.insert(dLayout.camps, d)
+	table.insert(dLevel.camps, { id = "D", name = "Far Camp", residents = { { spot = "d1", units = { { kind = "fodder", count = 3 } } } } })
+	local bounds = L1.copy(L1B.bounds)
+	bounds.maxZ = 700
+	local plan, why = W4B.Flow.Plan(dLevel, dLayout, "normal", L1B.rules, bounds, L1B.ranks, W4B.kinds())
+	if plan == nil then
+		check(false, `the four-camp fixture plans ({tostring(why)})`)
+		return
+	end
+	local fourth = plan.zones[4]
+	check(#plan.zones == 4 and fourth ~= nil and not fourth.locks and fourth.approach ~= nil and plan.zones[3].locks, "(the fixture: D is a fourth zone, open, with an approach, after the locking C)")
+	local state = W4B.Flow.Begin(plan)
+	local steps = {}
+	for now = 0, 2 do
+		local actions = W4B.Flow.Skip(plan, state, "stage", now, L1B.rules, { 1 })
+		local first = actions[1]
+		table.insert(steps, L1.names(actions) .. (if first ~= nil and first.zone ~= nil then ` {first.zone}` else ""))
+	end
+	local line = table.concat(steps, "; ")
+	check(line == "approach 1; approach 2; move gate" and state.step == "gate", `N stops before the armed locking camp: approach A, approach B, then C's gate, never D's approach ({line})`)
+	local past = W4B.Flow.Begin(plan)
+	past.approached = 2
+	local toC = W4B.Flow.Skip(plan, past, "stage", 0, L1B.rules, { 1 })
+	check(L1.names(toC) == "move gate" and L1.at(toC, 1).stage == 2, `from the road past B: move and gate to C ({L1.names(toC)})`)
+end
+L1.group("l1b w4 untestedTests", W4B.untestedTests)
+
+-- R12: a tent body the crowd refused was never fielded, so the clear bonus never prices it.
+function W4B.refusedTests(): ()
+	print(" Fielded skips a refused tent spawn (R12)")
+	local Flow = W4B.Flow
+	local plan = W4B.plan()
+	local a = plan.zones[1]
+	local tent = plan.tents[1]
+	local second = Flow.Fielded(a, tent, 3, { [2] = true })
+	check(W2B.stock(second) == "brute 1, fodder 10", `sent 3, the second refused: its two others ({W2B.stock(second)})`)
+	local last = Flow.Fielded(a, tent, 3, { [3] = true })
+	check(W2B.stock(last) == "fodder 11", `sent 3, the brute refused: no brute priced ({W2B.stock(last)})`)
+	check(W2B.stock(Flow.Fielded(a, tent, 3, {})) == "brute 1, fodder 11" and W2B.stock(Flow.Fielded(a, tent, 3, nil)) == "brute 1, fodder 11", "nothing refused (an empty set or nil): the whole of what was sent")
+	check(W2B.stock(Flow.Fielded(a, tent, 1, { [2] = true })) == "fodder 10", "a refusal past what was sent changes nothing")
+	local rewards = W2B.level().crowd.rewards
+	local bonus = W4B.Combat.ClearBonus(Flow.Fielded(a, tent, 3, { [3] = true }), rewards, 1, 0.1)
+	check(bonus == 110, `the bonus by hand: 11 fodder x 100 x 0.1 = 110, the refused brute's 2,000 not in it ({bonus})`)
+end
+L1.group("l1b w4 refusedTests", W4B.refusedTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

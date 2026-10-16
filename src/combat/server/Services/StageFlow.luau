@@ -2215,14 +2215,24 @@ function StageFlow.TentOwesRouse(owed: boolean, campBusy: boolean, groupAwake: b
 end
 
 -- L1b-W4-30: what an open camp fielded, by kind, for its clear bonus: its residents (zone.stock)
--- and the first `sent` bodies of its tent's stock, in the order the tent sends them. A new table.
--- What the tent never sent is forfeit, so it is never priced.
-function StageFlow.Fielded(zone: Zone, tent: PlanTent?, sent: number): { [string]: number }
+-- and the first `sent` bodies of its tent's stock, in the order the tent sends them, less every
+-- one the crowd refused (`refused`, by stock index; nil = none): a body that never spawned was
+-- never fielded (the fix round's R12). A new table. What the tent never sent is forfeit, so it is
+-- never priced.
+function StageFlow.Fielded(
+	zone: Zone,
+	tent: PlanTent?,
+	sent: number,
+	refused: { [number]: boolean }?
+): { [string]: number }
 	local fielded = table.clone(zone.stock)
 	if tent == nil then
 		return fielded
 	end
 	for index = 1, math.min(sent, #tent.kinds) do
+		if refused ~= nil and refused[index] then
+			continue
+		end
 		local kind = tent.kinds[index]
 		fielded[kind] = (fielded[kind] or 0) + 1
 	end
@@ -2243,14 +2253,24 @@ function StageFlow.LongestReach(def: Types.CrowdKindDef?): number
 	return longest
 end
 
+-- The L1b Wave 4 fix round (R10): a group whose state makes its living members a threat for the
+-- safe point. Home counts since L1b-W4-24: a homeward group that sees a reachable player turns
+-- straight back to fight, so a body put among it lands in the fight it escaped.
+function StageFlow.Threatening(state: Types.CampGroupState): boolean
+	return state == "rise" or state == "fight" or state == "home"
+end
+
 -- Ruling 18 and L1b-18: the entry of the locking camp that is counting down, live or between
 -- waves. Otherwise, from the furthest camp down, the checkpoint of the first one that has been
--- reached, whose floor is not `busy` (a group there is rising or fighting, so a body put there
--- would land in that fight) and that no threat reaches (the fix round: a shooter clamped at the
--- edge of its own floor still reaches a checkpoint on the road beside it); else the exit of the
--- last cleared locking camp; else the level's start. `busy` is CrowdService.Busy(), by floor
--- index (nil = no floor is); `threats` is every living member of a group in rise or fight, at
--- its position, with its kind's LongestReach (nil = none).
+-- reached, that no threat reaches (the fix round: a shooter clamped at the edge of its own floor
+-- still reaches a checkpoint on the road beside it) and, for a zone with no region, whose floor
+-- is not `busy` (a group there is rising or fighting, so a body put there would land in that
+-- fight); else the exit of the last cleared locking camp; else the level's start. A region's
+-- groups chase off their floor and walk home over the road (L1b Wave 4), so a busy flag says
+-- nothing about where they stand: a region zone is judged by the threats' positions alone (R10).
+-- `busy` is CrowdService.Busy(), by floor index (nil = no floor is); `threats` is every living
+-- member of a group StageFlow.Threatening names, at its position, with its kind's LongestReach
+-- (nil = none).
 function StageFlow.SafePoint(
 	plan: Plan,
 	state: State,
@@ -2266,8 +2286,9 @@ function StageFlow.SafePoint(
 		end
 	end
 	for index = #plan.zones, 1, -1 do
-		local mark = plan.zones[index].checkpoint
-		local quiet = busy == nil or busy[index] ~= true
+		local zone = plan.zones[index]
+		local mark = zone.checkpoint
+		local quiet = zone.region ~= nil or busy == nil or busy[index] ~= true
 		if mark ~= nil and threatened(mark, threats) then
 			quiet = false
 		end

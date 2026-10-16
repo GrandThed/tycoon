@@ -3609,6 +3609,47 @@ MUTATIONS.update(L1B_W4_CROWD_MUTATIONS)
 # After every table that defines those labels: same labels, the new texts.
 MUTATIONS.update(L1B_W4_CROWD_REPLACED)
 
+# L1b Wave 4 fix round (docs/prompts/l1b-w4-fix-round.md), luau-engineer B (the run): R10's safe
+# point by position, R11's two untested rules, R12's refused tent spawn.
+L1B_W4_FIX_RUN_MUTATIONS = {
+    "l1b w4 fix: a region floor judged by its busy flag": (
+        FLOW,
+        "local quiet = zone.region ~= nil or busy == nil or busy[index] ~= true",
+        "local quiet = busy == nil or busy[index] ~= true",
+    ),
+    "l1b w4 fix: a homeward group is no threat": (
+        FLOW,
+        'return state == "rise" or state == "fight" or state == "home"',
+        'return state == "rise" or state == "fight"',
+    ),
+    "l1b w4 fix: regionReach ignores the tent": (
+        FLOW,
+        '\t\tif type(config.tent) == "table" then\n\t\t\ttake(config.tent.units)\n\t\tend\n',
+        "",
+    ),
+    "l1b w4 fix: N carries the party past the locking camp": (
+        FLOW,
+        "for index = from + 1, lock.floor - 1 do",
+        "for index = from + 1, #plan.zones do",
+    ),
+    "l1b w4 fix: Fielded prices a refused tent spawn": (
+        FLOW,
+        "if refused ~= nil and refused[index] then",
+        "if false then",
+    ),
+}
+# R10 rewrote the line this earlier entry undid (the busy clause now sits behind the region test):
+# same label, same rule (a busy floor's checkpoint taken), the new text.
+L1B_W4_FIX_RUN_REPLACED = {
+    "l1b: SafePoint returns a busy floor's checkpoint": (
+        FLOW,
+        "busy == nil or busy[index] ~= true",
+        "true",
+    ),
+}
+MUTATIONS.update(L1B_W4_FIX_RUN_MUTATIONS)
+MUTATIONS.update(L1B_W4_FIX_RUN_REPLACED)
+
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

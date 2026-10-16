@@ -122,13 +122,26 @@ type Run = {
 	-- Who the live camp's close has brought to its entry, by userId: once each (the close is
 	-- judged again for levels.closeGraceSeconds, and a body just moved still reads as outside).
 	entered: { [number]: boolean },
-	-- The resident groups in rise or fight, by group index: their members' crowd ids at the
-	-- change (DrainGroupEvents). SafePoint keeps out of their reach.
-	awakeGroups: { [number]: { number } },
+	-- The resident groups in rise or fight, by group index (DrainGroupEvents): a tent's rouse is
+	-- owed until its group is among them (StageFlow.TentOwesRouse).
+	awakeGroups: { [number]: boolean },
+	-- The groups StageFlow.Threatening names (rise, fight or home), by group index: their members'
+	-- crowd ids at the change, and every tent body sent into them since. SafePoint keeps out of
+	-- their reach (R10).
+	threatGroups: { [number]: { number } },
 	-- L1b-W2-7: one per Plan.tents entry, in its order: its crowd group, the bodies it has sent
-	-- (a refused spawn counts) and CampBrain's clock; `owed` = its group still owes the rouse of a
-	-- body sent while the camp fought (StageFlow.TentOwesRouse, the fix round's B-3).
-	tents: { { group: number, sent: number, state: CampBrain.TentState, owed: boolean } },
+	-- (a refused spawn counts, so the next body is the next in its stock), the stock indexes the
+	-- crowd refused (never fielded, so never priced: R12) and CampBrain's clock; `owed` = its group
+	-- still owes the rouse of a body sent while the camp fought (StageFlow.TentOwesRouse, B-3).
+	tents: {
+		{
+			group: number,
+			sent: number,
+			refused: { [number]: boolean },
+			state: CampBrain.TentState,
+			owed: boolean,
+		}
+	},
 	-- A tent's refused spawn: warned once per run.
 	warnedTent: boolean,
 	-- L1b-W2-21: what the live locking camp's waves queued in this run, by kind (the director's
@@ -172,6 +185,7 @@ local function freshRun(): Run
 		warnedResident = false,
 		entered = {},
 		awakeGroups = {},
+		threatGroups = {},
 		tents = {},
 		warnedTent = false,
 		waveStock = {},
@@ -814,9 +828,14 @@ end
 -- puts a "!" over each of its living bodies on every member's screen (L1b-21).
 local function onGroupEvent(event: CrowdService.GroupEvent): ()
 	if event.to == "rise" or event.to == "fight" then
-		run.awakeGroups[event.group] = table.clone(event.ids)
+		run.awakeGroups[event.group] = true
 	else
 		run.awakeGroups[event.group] = nil
+	end
+	if StageFlow.Threatening(event.to) then
+		run.threatGroups[event.group] = table.clone(event.ids)
+	else
+		run.threatGroups[event.group] = nil
 	end
 	local plan = run.plan
 	if plan == nil or not isLive(run.phase) then
@@ -989,13 +1008,14 @@ local function humanCounts(): (number, number)
 	return fighters, waitingAlive
 end
 
--- Every living member of a resident group in rise or fight, where it stands, with its kind's
--- longest reach: SafePoint keeps a body out of them (the fix round's ruling on the data slice's
--- Minor 1). Asked only when a body is put into the level, so CrowdService.Get's table is fine.
+-- Every living member of a resident group in rise, fight or home (StageFlow.Threatening), where it
+-- stands, with its kind's longest reach: SafePoint keeps a body out of them (the fix round's ruling
+-- on the data slice's Minor 1; L1b Wave 4's R10 adds home, which turns back on sight). Asked only
+-- when a body is put into the level, so CrowdService.Get's table is fine.
 local function threats(): { CampBrain.Shooter }
 	local list: { CampBrain.Shooter } = {}
 	local kinds = Tuning.Get().crowd.kinds
-	for _, ids in run.awakeGroups do
+	for _, ids in run.threatGroups do
 		for _, id in ids do
 			local view = CrowdService.Get(id)
 			if view ~= nil and view.state ~= "dead" and view.hp > 0 then
@@ -1331,17 +1351,21 @@ local function execute(actions: { StageFlow.Action }): ()
 		elseif kind == "campClear" then
 			local cleared = plan.zones[action.zone or 0]
 			if cleared ~= nil then
-				-- L1b-W4-30: priced on what it fielded, its residents and what its tent sent.
+				-- L1b-W4-30: priced on what it fielded, its residents and what its tent sent
+				-- and the crowd took (R12).
 				local tent: StageFlow.PlanTent? = nil
 				local sent = 0
+				local refused: { [number]: boolean }? = nil
 				for index, planned in plan.tents do
 					if planned.zone == cleared.floor then
+						local record = run.tents[index]
 						tent = planned
-						sent = if run.tents[index] ~= nil then run.tents[index].sent else 0
+						sent = if record ~= nil then record.sent else 0
+						refused = if record ~= nil then record.refused else nil
 						break
 					end
 				end
-				campCleared(cleared, false, StageFlow.Fielded(cleared, tent, sent))
+				campCleared(cleared, false, StageFlow.Fielded(cleared, tent, sent, refused))
 			end
 		elseif kind == "reach" then
 			local reached = plan.zones[action.zone or 0]
@@ -1589,10 +1613,13 @@ local function placeTents(plan: StageFlow.Plan): ()
 			warn(`[WaveService] the crowd took group {tent.def.id} as {group}, not {wanted}`)
 		end
 		local stock = if group ~= 0 then #tent.kinds else 0
-		table.insert(
-			run.tents,
-			{ group = group, sent = 0, state = CampBrain.NewTent(stock), owed = false }
-		)
+		table.insert(run.tents, {
+			group = group,
+			sent = 0,
+			refused = {},
+			state = CampBrain.NewTent(stock),
+			owed = false,
+		})
 	end
 end
 
@@ -1602,7 +1629,8 @@ end
 -- residents less busy time over pace.seconds, at least pace.lead). An active tent sends its next
 -- body when CampBrain says it is due, rising at its door (B-4) and walking to its own ring post,
 -- and rouses its group so the body joins the fight. One body per tent per tick. A refused spawn
--- warns once per run and counts as sent: the population rule makes it a bug. Never yields.
+-- warns once per run and counts as sent, so the tent moves on, but is booked as refused and never
+-- priced in the clear bonus (R12): the population rule makes it a bug. Never yields.
 -- The fix round: a body that joins a group already up is a threat for the safe point at once
 -- (B-1: its group's state does not change, so no event lists it), and a body sent while its camp
 -- fights keeps its group roused until the group is up (B-3). Every rouse a tent asks for acts only
@@ -1622,7 +1650,8 @@ local function tickTents(): ()
 		end
 		local floor = planned.zone
 		local campBusy = busy[floor] == true
-		tent.owed = StageFlow.TentOwesRouse(tent.owed, campBusy, run.awakeGroups[tent.group] ~= nil)
+		tent.owed =
+			StageFlow.TentOwesRouse(tent.owed, campBusy, run.awakeGroups[tent.group] == true)
 		if tent.owed then
 			CrowdService.RouseGroup(tent.group)
 		end
@@ -1648,16 +1677,20 @@ local function tickTents(): ()
 			else 0
 		if id ~= 0 then
 			CrowdService.RouseGroup(tent.group)
-			local awake = run.awakeGroups[tent.group]
-			if awake ~= nil then
-				table.insert(awake, id)
+			local listed = run.threatGroups[tent.group]
+			if listed ~= nil then
+				table.insert(listed, id)
 			end
-			tent.owed = StageFlow.TentOwesRouse(true, campBusy, awake ~= nil)
-		elseif not run.warnedTent then
-			run.warnedTent = true
-			warn(
-				`[WaveService] a body of {planned.def.id} was not placed; counted as sent (more refusals stay quiet)`
-			)
+			tent.owed = StageFlow.TentOwesRouse(true, campBusy, run.awakeGroups[tent.group] == true)
+		else
+			-- Sent, so the tent moves on to its next body, but never fielded, so never priced.
+			tent.refused[following] = true
+			if not run.warnedTent then
+				run.warnedTent = true
+				warn(
+					`[WaveService] a body of {planned.def.id} was not placed; skipped and not priced (more refusals stay quiet)`
+				)
+			end
 		end
 		CampBrain.TentSent(tent.state, now, planned.every)
 		tent.sent = following
