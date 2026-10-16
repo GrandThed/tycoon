@@ -136,3 +136,75 @@ Nothing on screen changed, so the 375 × 667 phone and 1920 × 1080 layouts are 
 ## For other owners
 
 - luau-engineer B: the ten cases and six mutations above.
+
+# Fix-diff round — ui-engineer (R17, R18)
+
+Worktree `tycoon-p5b`, branch `l1b-wave4-fix`.
+
+## R17 — a shot that bursts is held near a refused body
+
+| Rule | Code |
+|---|---|
+| Launcher A (`splashRadius`) and Longbow A (`blastRadius`) are held when a refused body sphere lies within burst + sphere radius + variant `pad` + `assistLagPad` of the predicted stop span. | `InputController.luau` `enemyInSights`, via the new pure `CampAim.StopSpan` and `CampAim.BurstSpares` |
+| The stop span. With enough takeable bodies on the line, it is the entry of the body that spends the hits, nearest first. With fewer bodies than hits, it runs from the last body passed (or the muzzle) to `variant.range`. The client knows neither the ground nor walls, so it assumes the shot may stop anywhere in that span. | `CampAim.StopSpan(takenEntries, pierce, range)`. It sorts `takenEntries` in place. |
+| The distance test: a body is spared only beyond `reach` from every point of the span. A tie holds the shot, matching the server's `HitShapes.Sphere` `<=`. | `CampAim.BurstSpares(from, to, along, off, reach)` |
+
+- **Which spheres are tested.** Both spheres of each refused body (body at height/2, head) go in as flat triples (along, off, reach). The nearer one decides.
+- **The Longbow's blast always counts.** Auto-fire releases a bow at a full draw while the target holds, so the full-draw blast applies.
+- **One shared expression.** `hitsOf(pierce)` is now one local helper used by `ShotSpares` and `StopSpan`, so each mutation text stays unique.
+- **Added beyond the ruling (my own R13 gap; the lead may rule).** A hold used to read as "the target left".
+  - A bow mid-draw then released its under-charged arrow at `>= minChargeFraction`, straight through the refused body the hold was guarding.
+  - A held beam rode its `beamHoldUntil` buffer into the refused body.
+  - **Fix:** `enemyInSights` and `enemyInReach` now set `rangeState.aimHeld`, meaning a takeable target was found but a refused body held the shot.
+  - In `stepCharge`, an `aimHeld` draw does not release. It waits `tapBufferSeconds`, then drops.
+  - In `wantsRangeAttack`, the beam buffer stops on `aimHeld`.
+
+## R18 — no per-frame table
+
+`enemyInSights` refills `rangeState.aimTaken` and `rangeState.aimRefused` (`table.clear`) instead of building a table each call. These are new fields in the `RangeState` type, not new top-level locals.
+
+## Cases (`tools/crowd_harness/tests_l1b_w2.luau`, inside the CampAim block, after R13)
+
+There are 15 cases labelled "CampAim R17: …":
+- 6 for `StopSpan`: none on the line, one-hit shell, pierce sorted, pierce left over, zero pierce, fractional pierce.
+- 9 for `BurstSpares`: beside the stop, on the line before it, beyond the burst, a tie at reach, a diagonal just outside, the middle of a passing span, behind the span's start, past the range beyond reach, past the range within reach.
+
+## Mutations (`tools/crowd_harness/mutate.py`)
+
+- **Re-aimed:** "l1b w4 fix ui: the shot ignores its pierce" now targets `"local hits = hitsOf(pierce)"` → `"local hits = 1"`, with the same label and rule.
+- **New table:** `W4_FIX_UI_R17_MUTATIONS`, with 10 entries labelled "l1b w4 fix ui r17: …":
+  - the stop ignores its pierce
+  - the stop span is read unsorted
+  - a shot with exactly its hits on the line flies on
+  - a passing shot's span stops short of its range
+  - a passing shot's span starts at the muzzle
+  - a tie at the burst's reach favours the shot
+  - the burst ignores the distance off the line
+  - a body behind the span's start counts as inside it
+  - a body past the span's end counts as inside it
+  - a burst never holds the shot
+- **Commit note:** luau-engineer A's commit 8341f8b committed the whole `mutate.py`, so these entries landed in A's commit. The `CampAim` texts they target land in mine.
+
+## Verify
+
+- `stylua --check src/combat/client`: clean.
+- `selene src/combat/client`: 0 errors, 0 warnings, 0 parse errors.
+- `py tools/check_compile.py --counts`: `CHECK: PASS -- 157 files compile with Studio settings (-O1 -g2)`. InputController is still at 149.
+- `luau-lsp analyze --definitions=tools/types/globalTypes.d.luau --sourcemap=sourcemap.combat.json src/combat/client`: exit 0, no diagnostics.
+- Harness: `HARNESS: PASS (2,361 checks, C:\Users\benja\Desktop\tycoon-p5b\tools\crowd_harness)`. This includes A's R16 work.
+- Filtered `mutate.py … "l1b w4 fix ui"`: `MUTATIONS: 16 run, 0 not caught`. That is the 6 R13 entries, one of them re-aimed, plus the 10 new R17 entries.
+
+## Known limits (unchanged from R13)
+
+- **Straight line only.** The test uses the straight crosshair line: no arrow drop and no Splitbow fan.
+- **No world geometry.** The client ignores walls and terrain. For a shot that does not stop in a body, it therefore holds over the whole rest of its line. This errs toward holding.
+- **Gate coverage.** The `InputController` wiring (`aimTaken`, `aimRefused`, `aimHeld`) is not covered by any gate. The touch emulator is the test.
+
+## Layout
+
+Nothing on screen changed, so the 375 × 667 and 1920 × 1080 layouts are unaffected.
+
+## In Studio (mobile emulator, touch auto-fire)
+
+1. **Launcher A:** an awake raider stands within about 10 studs of a resting group member. Auto-fire holds and the camp stays asleep. Step away until the raider is clear of the member by more than about 12 studs: auto-fire resumes.
+2. **Longbow A:** the same setup at 5 studs. The draw starts and is dropped after the tap buffer. No under-charged arrow flies.

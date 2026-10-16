@@ -670,6 +670,30 @@ do
 		not Aim.ShotSpares(10, {}, nil) and not Aim.ShotSpares(10, {}, 0),
 		"CampAim R13: a missing or zero pierce still hits the refused body first in line"
 	)
+	-- The fix-diff round's R17 (the ui-engineer's cases): a shot that bursts where it stops is held
+	-- while a refused body lies within the burst of the predicted stop span (CampAim.StopSpan,
+	-- CampAim.BurstSpares).
+	local f1, t1 = Aim.StopSpan({}, nil, 100)
+	check(f1 == 0 and t1 == 100, "CampAim R17: no takeable body on the line, the shot may stop anywhere to its range")
+	local f2, t2 = Aim.StopSpan({ 10 }, nil, 100)
+	check(f2 == 10 and t2 == 10, "CampAim R17: a one-hit shell stops in the first takeable body")
+	local f3, t3 = Aim.StopSpan({ 30, 10, 20 }, 2, 100)
+	check(f3 == 20 and t3 == 20, "CampAim R17: a pierce stops in the body that spends it, nearest first")
+	local f4, t4 = Aim.StopSpan({ 10, 20 }, 5, 110)
+	check(f4 == 20 and t4 == 110, "CampAim R17: a pierce left over flies on from the last body it passes to its range")
+	local f5, t5 = Aim.StopSpan({ 10 }, 0, 100)
+	check(f5 == 10 and t5 == 10, "CampAim R17: a zero pierce stops in the first body")
+	local f6, t6 = Aim.StopSpan({ 10, 20 }, 1.9, 100)
+	check(f6 == 10 and t6 == 10, "CampAim R17: a fractional pierce is floored for the stop too")
+	check(not Aim.BurstSpares(20, 20, 20, 5, 10), "CampAim R17: a refused body beside the stop point holds the shot (Launcher A)")
+	check(not Aim.BurstSpares(20, 20, 12, 0, 10), "CampAim R17: a refused body on the line just before the stop is inside the burst")
+	check(Aim.BurstSpares(20, 20, 35, 0, 10), "CampAim R17: a refused body beyond the burst does not hold the shot")
+	check(not Aim.BurstSpares(20, 20, 28, 6, 10), "CampAim R17: a refused body exactly at the burst's reach holds the shot (a tie)")
+	check(Aim.BurstSpares(20, 20, 28, 6, 9.99), "CampAim R17: just outside the reach, diagonally, the shot fires")
+	check(not Aim.BurstSpares(20, 110, 60, 8, 10), "CampAim R17: a passing shot's burst may land anywhere on its span: a body beside the middle holds it")
+	check(Aim.BurstSpares(20, 110, 5, 0, 10), "CampAim R17: a body behind the span's start, past the reach, is spared")
+	check(Aim.BurstSpares(20, 110, 125, 0, 10), "CampAim R17: a body past the range, beyond the reach, is spared")
+	check(not Aim.BurstSpares(20, 110, 115, 0, 10), "CampAim R17: a body past the range but within the reach of its end holds the shot")
 end
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

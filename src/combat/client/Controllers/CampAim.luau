@@ -17,6 +17,11 @@
 
 local CampAim = {}
 
+-- The total enemies one shot hits, at least 1, as WeaponService's pierceOf.
+local function hitsOf(pierce: number?): number
+	return math.max(1, math.floor(pierce or 0))
+end
+
 -- onCampFloor = the body stands on a level camp's floor (CrowdRenderer.CampFloor answered one);
 -- resting = its group is at rest; phase = the run phase.
 function CampAim.Takes(onCampFloor: boolean, resting: boolean, phase: string): boolean
@@ -41,7 +46,7 @@ function CampAim.ShotSpares(
 	if refusedEntry == nil then
 		return true
 	end
-	local hits = math.max(1, math.floor(pierce or 0))
+	local hits = hitsOf(pierce)
 	local before = 0
 	for _, entry in takenEntries do
 		if entry < refusedEntry then
@@ -49,6 +54,41 @@ function CampAim.ShotSpares(
 		end
 	end
 	return before >= hits
+end
+
+-- R17 (L1b Wave 4 fix-diff round): a shot that bursts where it stops (Launcher A's splashRadius,
+-- a full-draw Longbow A's blastRadius) wakes a refused body near that point even when nothing
+-- refused is on its line. Where it stops, as a span of entry distances along the crosshair line:
+-- in the takeable body that spends its hits; with fewer takeable bodies on the line than hits,
+-- anywhere from the last one it passes to its range, since the client knows neither the ground
+-- nor a wall the shot may meet first. Sorts takenEntries in place (the caller reuses the table).
+function CampAim.StopSpan(
+	takenEntries: { number },
+	pierce: number?,
+	range: number
+): (number, number)
+	local spent = hitsOf(pierce)
+	table.sort(takenEntries)
+	local count = #takenEntries
+	if count >= spent then
+		local stop = takenEntries[spent]
+		return stop, stop
+	end
+	return if count > 0 then takenEntries[count] else 0, range
+end
+
+-- R17: true when a refused body's sphere, `along` the line and `off` it, lies farther than `reach`
+-- (the burst radius + the sphere's radius + the variant's pad + the lag pad) from every point of
+-- the stop span from..to. A tie counts against the shot, as the server's sphere test includes it.
+function CampAim.BurstSpares(
+	from: number,
+	to: number,
+	along: number,
+	off: number,
+	reach: number
+): boolean
+	local gap = math.max(0, from - along, along - to)
+	return gap * gap + off * off > reach * reach
 end
 
 return CampAim

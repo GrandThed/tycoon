@@ -304,6 +304,14 @@ type RangeState = {
 	firingStream: boolean,
 	-- Touch auto-fire: a held beam keeps firing until then after its target leaves the cone.
 	beamHoldUntil: number,
+	-- Touch auto-fire's line test (R13, R17), refilled every frame so it allocates nothing: the
+	-- entries of the takeable bodies on the crosshair line, and (for a shot that bursts) every
+	-- refused body sphere as flat triples (along the line, off it, burst reach).
+	aimTaken: { number },
+	aimRefused: { number },
+	-- The last auto test found a takeable target but a refused body held the shot: a bow keeps
+	-- its draw and a held beam stops, instead of firing as if the target had left.
+	aimHeld: boolean,
 }
 local rangeState: RangeState = {
 	rangeStarted = false,
@@ -330,6 +338,9 @@ local rangeState: RangeState = {
 	scheduledInterval = 0,
 	firingStream = false,
 	beamHoldUntil = 0,
+	aimTaken = {},
+	aimRefused = {},
+	aimHeld = false,
 }
 
 -- P3 ability state. Every time here is workspace:GetServerTimeNow() unless named "clock".
@@ -1099,6 +1110,10 @@ end
 -- itself and pierces, so it is held while a refused body lies on that line within the shot's hits
 -- (HitShapes.CrowdRay, the server's ray shape; CampAim.ShotSpares). A refused body gets the lag
 -- pad on top of the variant's: a hold costs a frame, a wrong shot wakes a camp.
+-- R17: a shot that bursts where it stops (splashRadius, blastRadius) is also held while a refused
+-- body sphere lies within the burst (+ its radius, the variant's pad and the lag pad) of the
+-- predicted stop span (CampAim.StopSpan, CampAim.BurstSpares). Auto-fire releases a bow only at a
+-- full draw, so a Longbow's full-draw blast always counts.
 local function enemyInSights(
 	variant: Types.RangeWeaponVariant,
 	origin: Vector3,
@@ -1111,7 +1126,11 @@ local function enemyInSights(
 	local limit = math.rad(degrees)
 	local found = false
 	local refusedEntry: number? = nil
-	local takenEntries: { number } = {}
+	local burst = variant.splashRadius or variant.blastRadius or 0
+	local takenEntries = rangeState.aimTaken
+	local refusedSpheres = rangeState.aimRefused
+	table.clear(takenEntries)
+	table.clear(refusedSpheres)
 	CrowdRenderer.ForEach(
 		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
 			local taken = autoMayTake(id)
@@ -1131,6 +1150,18 @@ local function enemyInSights(
 				if entry ~= nil and (refusedEntry == nil or entry < refusedEntry) then
 					refusedEntry = entry
 				end
+				if burst > 0 then
+					-- Both spheres, as the line test reads both: the nearer one decides.
+					for sphere = 1, 2 do
+						local r = if sphere == 1 then radius else headRadius
+						local lift = if sphere == 1 then height * HALF else height - headRadius
+						local offset = position + Vector3.new(0, lift, 0) - origin
+						local along = offset:Dot(look)
+						table.insert(refusedSpheres, along)
+						table.insert(refusedSpheres, (offset - look * along).Magnitude)
+						table.insert(refusedSpheres, burst + r + variant.pad + lagPad)
+					end
+				end
 				return
 			end
 			if entry ~= nil then
@@ -1145,7 +1176,20 @@ local function enemyInSights(
 				or sphereInSights(origin, look, range, limit, head, headRadius + lagPad)
 		end
 	)
-	return found and CampAim.ShotSpares(refusedEntry, takenEntries, variant.pierce)
+	local spares = found and CampAim.ShotSpares(refusedEntry, takenEntries, variant.pierce)
+	if spares and burst > 0 then
+		local from, to = CampAim.StopSpan(takenEntries, variant.pierce, range)
+		for index = 1, #refusedSpheres, 3 do
+			local along, off, reach =
+				refusedSpheres[index], refusedSpheres[index + 1], refusedSpheres[index + 2]
+			if not CampAim.BurstSpares(from, to, along, off, reach) then
+				spares = false
+				break
+			end
+		end
+	end
+	rangeState.aimHeld = found and not spares
+	return spares
 end
 
 -- The same shape the server builds for this variant, via the shared HitShapes geometry. A
@@ -1209,6 +1253,7 @@ local function enemyInReach(
 			end
 		end
 	)
+	rangeState.aimHeld = found and refused
 	return found and not refused
 end
 
@@ -1292,8 +1337,9 @@ local function wantsRangeAttack(
 		rangeState.beamHoldUntil = os.clock() + cfg.controls.tapBufferSeconds
 		return true
 	end
-	-- A held beam rides out a target flickering on the cone's edge instead of stuttering.
-	return continuous and os.clock() < rangeState.beamHoldUntil
+	-- A held beam rides out a target flickering on the cone's edge instead of stuttering, but
+	-- never through a refused body that held it (R13, R17).
+	return continuous and not rangeState.aimHeld and os.clock() < rangeState.beamHoldUntil
 end
 
 -- How many sustained-fire shots are due this frame. A true accumulator: a shot is due once
@@ -1510,8 +1556,8 @@ end
 -- previous one (it keeps drawing meanwhile), which is the server's rate rule.
 --  * Mouse / R2 / a stray HUD press: hold draws, letting go releases.
 --  * Touch autoFire: draws while a target is in the assist cone, releases at a full charge;
---    if the target leaves, releases at >= minChargeFraction; below it the draw waits
---    controls.tapBufferSeconds for the target to come back before it is dropped.
+--    if the target leaves, releases at >= minChargeFraction; below it, or while a refused
+--    body holds the shot, the draw waits controls.tapBufferSeconds before it is dropped.
 --  * Touch tapFire: a short tap is a minimum-charge arrow; a still hold draws until lifted.
 local function stepCharge(
 	cfg: Types.ProvingGroundsConfig,
@@ -1538,7 +1584,9 @@ local function stepCharge(
 		if targetOnAuto(cfg, variant, rig) then
 			rangeState.targetLostAt = nil
 			release = chargeOf(variant) >= 1
-		elseif chargeOf(variant) >= (variant.minChargeFraction or 0) then
+		elseif not rangeState.aimHeld and chargeOf(variant) >= (variant.minChargeFraction or 0) then
+			-- A target that left releases an under-charged arrow; one a refused body holds does
+			-- not, or the hold would loose the very arrow it held (R13, R17).
 			release = true
 		else
 			local now = os.clock()
