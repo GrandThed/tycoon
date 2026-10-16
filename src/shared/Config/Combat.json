@@ -166,7 +166,8 @@
 		"dormantRadius": 120,
 		"chaseSight": 40,
 		"hitMemorySeconds": 8,
-		"meleeAbove": 7.5
+		"meleeAbove": 7.5,
+		"meleeBelow": 1.5
 	},
 	"crowdSkeleton": [
 		{ "introduces": ["fodder"] },
