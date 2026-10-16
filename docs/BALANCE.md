@@ -4733,8 +4733,8 @@ Contract: `docs/INTERFACES.md` "L1b Wave 4 — no waits, no walls". Measured wit
 | `camps.hitMemorySeconds` | — | 8 | The study's value; no band moved it. It is what pulls a group after an archer it cannot see. |
 | `camps.meleeAbove` | — | 7.5 | The top of its gate's range [7, 7.5]: max(cover 3.5, fence 4) + root 3, and the rushers' lowest ground height 5 − 0.5 + 3. |
 | `levels.regionLockMargin`, `levels.doorSpare` | — | 8, 0.5 | Fixed by the contract. |
-| `1_ForestRoad.json` A `tent.pace` | — | 15 s, lead 0.2 | Chosen from the residents' own kill curve (tents silenced, scratch probe): at 2 / 2 the Pickets are never 0.2 ahead of a 15-s clock (worst 0.09–0.17), at 4 / 4 they are (0.29–0.32) for long enough to send 2. |
-| B `tent.pace` | — | 90 s, lead 0.15 | Main Camp is busy 100–135 s at 2 / 2 (never ahead of 90 s) and 50–55 s at 4 / 4 (ahead from about 1 min in: 7, 7, 8 sent). The study's 130 s would send at 2 / 2 on a fast seed. |
+| `1_ForestRoad.json` A `tent.pace` | — | 15 s, lead 0.2 (fix round: 12 s, 0.2) | Chosen from the residents' own kill curve (tents silenced, scratch probe): at 2 / 2 the Pickets are never 0.2 ahead of a 15-s clock (worst 0.09–0.17), at 4 / 4 they are (0.29–0.32) for long enough to send 2. |
+| B `tent.pace` | — | 90 s, lead 0.15 (fix round: 35 s, 0.2) | Main Camp is busy 100–135 s at 2 / 2 (never ahead of 90 s) and 50–55 s at 4 / 4 (ahead from about 1 min in: 7, 7, 8 sent). The study's 130 s would send at 2 / 2 on a fast seed. |
 | `targetMinutes` | 7 | 6 | Wave 1's rule: the mean first Normal clear, 6.26 min, rounded. |
 
 `runCapSeconds` 1,500 holds: the human's slowest Normal clear is 6.04 min (724 s doubled), and 1,500 ≥ 1,260.
@@ -4812,7 +4812,9 @@ from the last body's fall; the last resident was the last body in every run at p
 - **The sniper** (one arrow through the gate, then below the drop, then the lookout ledge): every hit
   lands; he clears the Pickets in 25–27 s and earns 16,183–17,565 cash and 22.3–24.2 Timber a minute
   of his own time, against the mission's 24,134–25,891 and 40.2–43.1 (band: less of both, every
-  seed). Below the drop he takes 1,500–1,600 cash before nothing is in sight; the rushers come to the
+  seed). **Corrected in the fix round:** that "about 70%" came from a script that idled 10 s below
+  the drop before it climbed. A straight course to the ledge earns about 1.4 times the mission's cash
+  a minute (see "L1b W4 fix round: the sniper"). Below the drop he takes 1,500–1,600 cash before nothing is in sight; the rushers come to the
   lip and leash (2–3 leashes). On the ledge the Longbow kills A's rushers (Normal's are fodder) before
   any could stand down, so the stand-down is not seen in this run (the mirror's Step timeline proves
   the rule).
@@ -4850,7 +4852,8 @@ from the last body's fall; the last resident was the last body in every run at p
 
 - **The lookout ledge sniper is fast.** From the ledge the Longbow (pierce 5, range 110) clears the
   Pickets in about 25 s with no hit taken, at about 70% of the mission's cash a minute and 57% of its
-  Timber. It passes ruling 10's band, but by less than the old blocks did. Normal's A has only fodder
+  Timber (**wrong, corrected in the fix round:** the course idled below the drop; straight, it is
+  about 1.4 times the mission's cash a minute). It passes ruling 10's band, but by less than the old blocks did. Normal's A has only fodder
   rushers, so nothing stands down on the ledge before it dies. Levers, if Ben finds it cheap: more
   shooters in A, a slinger reach that covers the ledge from further, or the bow's pierce. None is
   mine to move.
@@ -4867,3 +4870,120 @@ from the last body's fall; the last resident was the last body in every run at p
 - **The archer and the sniper's stand-down are reported, not gated**: the Longbow kills Normal's A
   before the rushers can reach the gate or stand down on two of the three counts. Every hit landing
   (the gated part) holds in every run.
+
+## L1b W4 fix round (2026-10-16)
+
+Rulings: `docs/prompts/l1b-w4-fix-round.md`. Same gate, Normal at gear 2 / 2, seeds 11 / 23 / 37.
+
+### L1b W4 fix round: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Combat.json camps.meleeBelow` | — | 1.5 | R14 (A's value). It must lie in [0, min(`sightBelow` 4, the lowest rusher ground height 5 − root 3 − cover margin 0.5)] = [0, 1.5]. That is a new `check_levels` gate. A step down of up to 4.5 studs (feet) stays melee-reachable. The foot of the climb (feet 8 under) does not. |
+| A `tent.pace` | 15 s, lead 0.2 | 12 s, 0.2 | R7 restarts the measure whenever the whole camp is at rest. A player who wipes one group before waking the next restarts it once per group, so every later group looks like a fresh, small camp that is easy to be "ahead" of. Under 15 / 0.2, at 2 / 2 the tent sent 1–2 (band ≤ 1). Under 12 / 0.2 it sends 1, 1, 1; at 4 / 4 it sends 2, 2, 2. |
+| B `tent.pace` | 90 s, 0.15 | 35 s, 0.2 | Under R7, 90 / 0.15 sent 4–8 at 2 / 2 and 0–8 on Hard (band ≤ 1). A grid of 27 settings (seconds 15–90, lead 0.05–0.4) never made B send 4 at 4 / 4 without also sending 2 or more at pace. 35 / 0.2 sends 0 at pace on every difficulty and 3 at 4 / 4. |
+| `sim_range.py TENT_FAST["B"]` (contract band "B at least 4") | 4 | 3 | Follows from the line above. **For the lead:** this band is in the contract, so the change needs a ruling. The other option is a per-difficulty or per-camp pace key (A's rule, not data). |
+
+No resident, post, stock, `every`, reward, weapon, kind or `ProvingGrounds.json` number moved.
+The resident posts tried for R8 below were scratch experiments and are not shipped.
+
+### L1b W4 fix round: the mirrors
+
+- `sim_range.py` mirrors the round's rules:
+  - **R1:** `closing` is progress against `goal_gap`, kept by every seek. A rusher seeks inside its reach too, as `Think` gives it.
+  - **R2:** home rests only when no member strikes.
+  - **R4:** the heal latch.
+  - **R5:** `lane_runs`.
+  - **R6 and R15:** `in_band` with both bounds, from the strike's floor, for queued shapes, charges and rings.
+  - **R7:** `TentClock` with `rested` (`stirred()`, once per tick) and `NewTent` counting residents.
+  - **R9:** heights are measured from the crowd's floor: `stand_y + feet − floor_y`, the planner included. A keepAway retreat is routed through `rg_toward`.
+  - **R10:** `SafePoint` ignores `busy` for a region zone, and `Threatening` counts home.
+  - **R12:** `fielded(…, refused)`. The tent books refused stock indices and never prices them. `sim_combat.level_pay` takes `refused` too.
+  - **R14:** `Melee`'s `meleeBelow`, and `reaches` in `begin`. `begin` now walks the next choice when an attack is turned down, as the Luau's loop does, chained attacks included.
+- `check_stage_mirror.py` adds four cases:
+  - the tent timeline with R7's restart and WaveService's `Ahead` call;
+  - `meleeBelow` at both edges, plus four `Problems` lines;
+  - a home group all at its posts that rests only once nobody strikes;
+  - `Fielded` with `refused` (300 compared) and `Threatening`.
+- `mirror_mutants.py` gains 11 mutants: R2, four R7, three R14, R12, two R10. The stale "Melee ignores meleeAbove" mutant is re-aimed at `above <= rules.meleeAbove`. R1, R4, R5, R6 and R15 live in modules that `check_stage_mirror` does not run, so `mutate.py` holds their mutants (A's texts).
+
+### L1b W4 fix round: the first clear
+
+| Seed | Clear | Cash / min | Timber / min | Kills | Paid |
+|---|---|---|---|---|---|
+| 11 | 6.51 min | 23,835 | 39.6 | 230 | 155,130 cash, 258 Timber, 10 Valor |
+| 23 | 5.98 min | 25,946 | 43.2 | 230 | same |
+| 37 | 6.49 min | 23,891 | 39.7 | 230 | same |
+
+- The mean is 6.33 min, inside the band of 5.75–7 min.
+- With a human's reaction, the clears take 5.43 / 5.59 / 5.61 min, with no down.
+- The Colossus falls in the run in 72.5–74.8 s.
+- Hard 4 / 4 clears in 6.36–6.78 min. Brutal 6 / 6 clears in 6.44–6.89 min.
+- The clear bonuses are 7.1% of the run's cash on Normal, 7.3% on Hard and 7.4% on Brutal.
+- `sim_combat.py --check` passes all 23 assertions.
+
+### L1b W4 fix round: the tents
+
+| Run | A sent | B sent |
+|---|---|---|
+| Normal 2 / 2 (band: at most 1) | 1, 1, 1 | 0, 0, 0 |
+| Normal 4 / 4 (band: A ≥ 2, B ≥ 3) | 2, 2, 2 | 3, 3, 3 |
+| Hard 4 / 4 (at most 1) | 0, 0, 1 | 0, 0, 0 |
+| Brutal 6 / 6 (at most 1) | 0, 0, 1 | 0, 0, 0 |
+| **R7, the checklist's order at 4 / 4** (band: A sends in the clear) | 1, 1, 1 | — |
+
+The checklist's order means the walk-out, the lose, every group home and at rest by 31.6–32.3 s, then back in through the east gate and a clear of the Pickets, which stops at 51–53 s. With R7 switched off in a scratch run (`rested` always false), A sends 0, 0, 0 in that clear, so the band fails without the rule. A fresh 4 / 4 clear without R7 sends A 1 (band ≥ 2).
+
+### L1b W4 fix round: the cliff and the foot of the climb
+
+- **R6's `check_levels` gate.** A rusher's ground shape can reach a cell's edge by its flat reach less the body's radius: fodder lunge 3.9, armoured arc 5.8, brute lane 0.3. The gate asks that no standable ground below the region lie within that distance where the shape's height rule still holds while the player there is out of melee reach.
+  - It passes on Forest Road.
+  - With the under side switched off (`UNDER_SIDE = False`), it fails at Road4 (x −307 and −305): the foot of the climb.
+- **The foot of the climb (Road4) as a sniper spot.** He earns 1,067–1,601 cash a minute and takes 2–3 hits from the lip's shooters. No lunge lands through the cliff.
+- **The bosses (R14's `reaches`).** Every Colossus and Warlord band holds.
+  - The reacting Broadsword kills the Colossus in 76.3 s (Warhammer 83.0, Spinblade 71.0, Greataxe 75.3, Spear 63.8), with no hit taken.
+  - It kills the Warlord in 97.7 s (95.1 / 89.8 / 92.9 / 79.1).
+  - Standing still, the player is down in 8.6 s (Colossus) and 9.0 s (Warlord).
+
+### L1b W4 fix round: the sniper (R8)
+
+`check_levels` lists every standable top where no rusher can reach a player (`CampBrain.Melee` is false) and that lies within the Longbow's 110 studs of the plateau region. The list is pinned (11 spots), and boss-room pieces are left out as before.
+
+`sim_range` runs a straight course from each spot:
+- He starts on the road by the camp's gate nearer the spot.
+- If a resident can be seen from the spot, he goes straight there. Otherwise one arrow wakes them first.
+- He crosses to the spot in a straight line at walk speed 20. A climb or a double jump costs no extra time.
+- He then shoots until no hit has landed for 10 s.
+- His minutes run to his last landed hit, and never less than his arrival plus 10 s. A course that ends in a down is timed to the down.
+
+Cash and Timber a minute, seeds 11 / 23 / 37, against the `mission` player on the same seed, both at 2 / 2:
+
+| Spot | Normal cash / min | Normal Timber / min | Hard cash / min | Hard Timber / min | Verdict |
+|---|---|---|---|---|---|
+| `mission` | 23,835 / 25,946 / 23,891 | 39.6 / 43.2 / 39.7 | 19,646 / 20,835 / 20,229 | 30.0 / 32.1 / 30.8 | — |
+| Road2 | 17,286 / 6,649 / 6,649 | 26.6 / 8.9 / 8.9 | 17,730 ×3 | 26.6 ×3 | pass |
+| Creek | 0 | 0 | 0 | 0 | pass |
+| ShrineSignPad | 0 | 0 | 0 | 0 | pass |
+| Road3 | 22,957 / 11,938 / 11,938 | 32.1 / 13.8 / 13.8 | 13,535 / 18,365 / 18,365 | 17.5 / 27.5 / 27.5 | pass (seed 11 at 96%) |
+| Road4 (the foot of the climb) | 1,601 / 1,067 / 1,067 | 0 | 0 | 0 | pass |
+| **LookoutLedge** | **33,664 ×3** | **44.1 ×3** | 18,313 / 17,756 / 15,846 | 9.6 / 17.8 / 9.9 | **Normal red: R8's stop** |
+| LookoutSignPad (the strip) | 13,494 ×3 | 15.6 ×3 | 7,306 / 10,025 / 12,457 | 0 / 9.1 / 8.3 | pass |
+| RoadBC5 | 0 | 0 | 0 | 0 | pass |
+| RoadBC6 | 0 | 0 | 0 | 0 | pass |
+| **Secret_lookout** (top 38) | **39,541 / 41,395 / 41,395** | **53.7 / 56.2 / 56.2** | 11,218 / 11,412 / 5,397 | 10.2 / 10.4 / 0 | **Normal red: R8's stop** |
+| **Secret_cache** (top 18) | **27,153 / 23,702 / 24,236** | **42.7 / 36.9 / 40.5** | 0 | 0 | **Normal red on seeds 11 and 37: R8's stop** |
+
+- **The ledge and the lookout on Normal.** He kills 29–31 of the Pickets' residents within 11 s of arriving and takes no hit. Normal's slingers die in the first volleys: the Longbow's pierce 5 and blast go through fire circles and the watch line.
+  - Tried: the watch group (4 slingers) moved to stand within 13 studs of the ledge (shift −40, −70). The ledge then earned 28,145 / 38,266 / 35,566, the lookout 38,951–41,395, with 0–2 hits on him.
+  - The other data levers in R8 do not touch this spot. `sightAbove` only lets shooters answer once they are within reach. The cells cannot bring a rusher 26 studs up.
+  - On Hard the residents live long enough to shoot. He is down within 12–14 s and earns less than the mission.
+- **The cache on Normal.** From the cache top (one jump up from CacheSpur) he shoots B's east side at rest. B's shooters answer: 8–10 hits, and he is down by 20–23 s on two seeds. Brutes and armoured are worth so much that 6–7 kills before the down beat the mission's minute.
+  - Tried: the eastWatch line moved back 25 or 40 studs, and eastFire moved to the east gate (dx +10, dz −50).
+  - Results: 15,828–38,486, 24,359–38,033 and 29,039–46,317 a minute. The noise was larger than the effect, and the band was never green on every seed.
+  - On Hard he is down in 12–14 s with no kill.
+- **The other spots never pay.** Road2 and Road3 sit 38–47 studs below and off the region. Their pay is the opening arrow into a sleeping fire circle (14 kills) and the rushers he can see at the lip. Nothing can be seen from the Creek, ShrineSignPad, RoadBC5 and RoadBC6. RoadBC6's lure (the review's Minor 1) did not bring B's group into his sight within the course.
+- **The levers left are not data.**
+  - The Longbow's pierce or blast is a weapon number, and every boss is tuned on it.
+  - Moving the ledge would move the double-jump secret.
+  - A sight rule that blocks the lip and fences for the crowd and the bow is L4's wall-aware sight.
+  - The lead asks Ben.
