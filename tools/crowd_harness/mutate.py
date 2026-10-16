@@ -3650,6 +3650,41 @@ L1B_W4_FIX_RUN_REPLACED = {
 MUTATIONS.update(L1B_W4_FIX_RUN_MUTATIONS)
 MUTATIONS.update(L1B_W4_FIX_RUN_REPLACED)
 
+# The ui-engineer's R13 (docs/prompts/l1b-w4-fix-reports/client.md, texts verbatim): CampAim.ShotSpares.
+W4_FIX_UI_MUTATIONS = {
+    "l1b w4 fix ui: a refused body on the line is ignored": (
+        CAMP_AIM,
+        "if refusedEntry == nil then\n\t\treturn true",
+        "if true then\n\t\treturn true",
+    ),
+    "l1b w4 fix ui: the shot ignores its pierce": (
+        CAMP_AIM,
+        "local hits = math.max(1, math.floor(pierce or 0))",
+        "local hits = 1",
+    ),
+    "l1b w4 fix ui: a tie favours the shot": (
+        CAMP_AIM,
+        "if entry < refusedEntry then",
+        "if entry <= refusedEntry then",
+    ),
+    "l1b w4 fix ui: awake bodies behind the refused one count": (
+        CAMP_AIM,
+        "if entry < refusedEntry then",
+        "if true then",
+    ),
+    "l1b w4 fix ui: pierce is not floored": (
+        CAMP_AIM,
+        "math.max(1, math.floor(pierce or 0))",
+        "math.max(1, pierce or 0)",
+    ),
+    "l1b w4 fix ui: a zero pierce hits nothing": (
+        CAMP_AIM,
+        "math.max(1, math.floor(pierce or 0))",
+        "math.floor(pierce or 0)",
+    ),
+}
+MUTATIONS.update(W4_FIX_UI_MUTATIONS)
+
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

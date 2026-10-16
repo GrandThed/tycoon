@@ -631,6 +631,45 @@ do
 		not Aim.Takes(true, true, "gate"),
 		"CampAim: in the gate a resting camp body is not taken either"
 	)
+	-- The fix round's R13 (the ui-engineer's cases): touch auto-fire holds while a refused body is
+	-- on the shot's line within its hits (CampAim.ShotSpares).
+	check(Aim.ShotSpares(nil, {}, 1), "CampAim R13: no refused body on the line, the shot fires")
+	check(
+		not Aim.ShotSpares(10, {}, 5),
+		"CampAim R13: the first body on the line is refused, the shot holds"
+	)
+	check(
+		Aim.ShotSpares(20, { 10 }, 1),
+		"CampAim R13: a one-hit shot stops in the awake body before the refused one"
+	)
+	check(
+		not Aim.ShotSpares(20, { 10 }, 5),
+		"CampAim R13: a pierce through the awake raider into a resting member holds the shot"
+	)
+	check(
+		Aim.ShotSpares(20, { 10, 12 }, 2),
+		"CampAim R13: the shot spends its pierce on awake bodies before the refused one"
+	)
+	check(
+		not Aim.ShotSpares(20, { 10, 30 }, 2),
+		"CampAim R13: an awake body behind the refused one does not stop the shot"
+	)
+	check(
+		not Aim.ShotSpares(10, { 10 }, 1),
+		"CampAim R13: a tie between an awake and a refused body holds the shot"
+	)
+	check(
+		Aim.ShotSpares(20, { 10 }, nil) and Aim.ShotSpares(20, { 10 }, 0),
+		"CampAim R13: a missing or zero pierce is one hit"
+	)
+	check(
+		Aim.ShotSpares(20, { 10, 12 }, 2.9),
+		"CampAim R13: a fractional pierce is floored, as WeaponService's pierceOf"
+	)
+	check(
+		not Aim.ShotSpares(10, {}, nil) and not Aim.ShotSpares(10, {}, 0),
+		"CampAim R13: a missing or zero pierce still hits the refused body first in line"
+	)
 end
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)
