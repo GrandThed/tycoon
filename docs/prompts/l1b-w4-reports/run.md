@@ -153,6 +153,15 @@ The lines the contract asks to be quoted:
    is sent back to the Pickets' approach by its first N, because `approached` is still 0. Implemented as
    written (the case "with A passed and B's checkpoint reached" sets `approached = 1`). If that reads wrong in
    Ben's look, the fix is one clause: skip zones before the furthest reached checkpoint.
+   **Resolved by the lead (L1b-W4-31 amended): N never moves a party backwards.** `nextApproach` now starts
+   after the larger of `approached` and the furthest reached checkpoint's zone; the per-zone "not reached"
+   test became dead code (every later zone has none reached) and is gone. Cases: the fixture (walked to B's
+   checkpoint without N → move + gate, never A; also with A lacking a checkpoint) and the shipped Forest Road
+   (past the Pickets' checkpoint → Main Camp's approach; past Main Camp's → the Chief's gate). Mutations: the
+   new "l1b w4: N moves a party back past a reached checkpoint" (removes the clause) replaces "l1b w4: Skip
+   takes a camp whose checkpoint was reached" (its clause no longer exists); "Skip takes a done camp" and
+   "Skip ignores approached" re-aimed at the new text. Harness `PASS (2,252 checks)`; filtered mutate.py:
+   1 + 4 run, 0 not caught; 691 mutations, 0 out of date.
 2. **"comes before the armed locking camp's zone" with no armed camp:** taken as "no approach" (N then does
    nothing, as Wave 2 did there). It cannot happen on a validated level.
 3. **The widest body and longest reach "at the highest difficulty"** are taken over the units fielded at the

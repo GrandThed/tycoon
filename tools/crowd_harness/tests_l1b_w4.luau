@@ -369,6 +369,19 @@ function W4B.skipTests(): ()
 	passed.reached[1] = true
 	local skipReached = n(passed, 0)
 	check(L1.names(skipReached) == "approach" and L1.at(skipReached, 1).zone == 2, "a camp whose checkpoint was reached is passed over")
+	-- The lead's amendment: N never moves a party backwards. A party that walked on to B's
+	-- checkpoint without pressing N (approached still 0, A neither cleared nor approached) goes on
+	-- to the boss room, never back to A's approach.
+	local walked = Flow.Begin(plan)
+	walked.reached[2] = true
+	local onward = n(walked, 0)
+	check(L1.names(onward) == "move gate" and L1.at(onward, 1).stage == 2 and walked.approached == 0, `walked to B's checkpoint without N: N goes on to the boss room, never back to A ({L1.names(onward)})`)
+	local hidden = W4B.layout()
+	hidden.camps[1].checkpoint = nil
+	local hiddenPlan = W4B.plan(nil, hidden)
+	local walkedB = Flow.Begin(hiddenPlan)
+	walkedB.reached[2] = true
+	check(L1.names(Flow.Skip(hiddenPlan, walkedB, "stage", 0, rules, { 1 })) == "move gate", "(the same where A has no checkpoint of its own)")
 	local back = Flow.Begin(plan)
 	back.approached = 2
 	check(L1.names(n(back, 0)) == "move gate", "N never goes back before its last stop (approached 2: A is not offered again)")
@@ -453,6 +466,16 @@ function W4B.realTests(): ()
 		done.done[1] = true
 		local skipped = W4B.Flow.Skip(plan, done, "stage", 0, L1.real.rules, { 1 })
 		check(L1.names(skipped) == "approach" and L1.at(skipped, 1).zone == 2, "with the Pickets cleared: Main Camp's approach first")
+		-- N never moves a party backwards: walked on without N past the Pickets' checkpoint (on the
+		-- road before Main Camp), N goes to Main Camp's approach; past Main Camp's, to the Chief's gate.
+		local pastA = W4B.Flow.Begin(plan)
+		pastA.reached[1] = true
+		local toB = W4B.Flow.Skip(plan, pastA, "stage", 0, L1.real.rules, { 1 })
+		check(L1.names(toB) == "approach" and L1.at(toB, 1).zone == 2, `walked past the Pickets' checkpoint without N: Main Camp's approach, not the Pickets' ({L1.names(toB)})`)
+		local pastB = W4B.Flow.Begin(plan)
+		pastB.reached[2] = true
+		local toC = W4B.Flow.Skip(plan, pastB, "stage", 0, L1.real.rules, { 1 })
+		check(L1.names(toC) == "move gate" and pastB.step == "gate", `walked to Main Camp's checkpoint without N: the Chief's gate, never the Pickets' approach ({L1.names(toC)})`)
 	end
 end
 L1.group("l1b w4 realTests", W4B.realTests)

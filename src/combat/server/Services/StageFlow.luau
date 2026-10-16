@@ -2002,24 +2002,25 @@ local function bossWaveAfter(stage: Stage?, after: number): number
 	return 0
 end
 
--- L1b-W4-31: the zone N stops at next on the road, or 0: the first in layout order after the last
--- one it stopped at, that is open, has an approach, is not cleared, whose checkpoint nobody has
--- reached, and that lies before the armed locking camp (stage `armed`; none when 0).
+-- L1b-W4-31 (amended by the lead): the zone N stops at next on the road, or 0: the first in layout
+-- order after both the last one it stopped at and the furthest camp whose checkpoint was reached
+-- (N never moves a party backwards, even one that walked on without it), that is open, has an
+-- approach, is not cleared, whose checkpoint nobody has reached, and that lies before the armed
+-- locking camp (stage `armed`; none when 0).
 local function nextApproach(plan: Plan, state: State, armed: number): number
 	local stage = plan.stages[armed]
 	local lock = if stage ~= nil then stage.zone else nil
 	if lock == nil then
 		return 0
 	end
-	for index = state.approached + 1, lock.floor - 1 do
+	local from = state.approached
+	for index in state.reached do
+		from = math.max(from, index)
+	end
+	-- Every zone from here on lies past each reached checkpoint, so none of them has one reached.
+	for index = from + 1, lock.floor - 1 do
 		local zone = plan.zones[index]
-		if
-			zone ~= nil
-			and not zone.locks
-			and zone.approach ~= nil
-			and not state.done[index]
-			and not state.reached[index]
-		then
+		if zone ~= nil and not zone.locks and zone.approach ~= nil and not state.done[index] then
 			return index
 		end
 	end

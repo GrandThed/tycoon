@@ -3218,12 +3218,24 @@ L1B_W4_RUN_MUTATIONS = {
         "local stop = nextApproach(plan, state, index)",
         "local stop = 0",
     ),
-    "l1b w4: Skip takes a done camp": (FLOW, "and not state.done[index]\n", "\n"),
-    "l1b w4: Skip takes a camp whose checkpoint was reached": (FLOW, "and not state.reached[index]\n", "\n"),
+    "l1b w4: Skip takes a done camp": (
+        FLOW,
+        "zone.approach ~= nil and not state.done[index] then",
+        "zone.approach ~= nil then",
+    ),
+    # The lead's amendment of L1b-W4-31: N never moves a party backwards. This clause also holds
+    # the rule "a camp whose checkpoint was reached is passed over" (its old per-zone test is gone:
+    # every zone after the furthest reached checkpoint has none reached), so it replaces the entry
+    # "l1b w4: Skip takes a camp whose checkpoint was reached".
+    "l1b w4: N moves a party back past a reached checkpoint": (
+        FLOW,
+        "\tfor index in state.reached do\n\t\tfrom = math.max(from, index)\n\tend\n",
+        "",
+    ),
     "l1b w4: Skip ignores approached": (
         FLOW,
-        "for index = state.approached + 1, lock.floor - 1 do",
-        "for index = 1, lock.floor - 1 do",
+        "local from = state.approached",
+        "local from = 0",
     ),
     "l1b w4: Skip forgets where it stopped": (FLOW, "state.approached = stop", "state.approached = state.approached"),
 }
