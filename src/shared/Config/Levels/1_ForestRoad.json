@@ -126,7 +126,7 @@
 					{ "kind": "slinger", "count": 2 },
 					{ "kind": "brute", "count": 2 }
 				],
-				"pace": { "seconds": 15, "lead": 0.2 }
+				"pace": { "seconds": 12, "lead": 0.2 }
 			}
 		},
 		{
@@ -197,7 +197,7 @@
 					{ "kind": "slinger", "count": 2 },
 					{ "kind": "brute", "count": 4 }
 				],
-				"pace": { "seconds": 90, "lead": 0.15 }
+				"pace": { "seconds": 35, "lead": 0.2 }
 			}
 		},
 		{
