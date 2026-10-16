@@ -125,7 +125,8 @@
 					{ "kind": "fodder", "count": 4 },
 					{ "kind": "slinger", "count": 2 },
 					{ "kind": "brute", "count": 2 }
-				]
+				],
+				"pace": { "seconds": 25, "lead": 0.15 }
 			}
 		},
 		{
@@ -195,7 +196,8 @@
 					{ "kind": "fodder", "count": 2 },
 					{ "kind": "slinger", "count": 2 },
 					{ "kind": "brute", "count": 4 }
-				]
+				],
+				"pace": { "seconds": 130, "lead": 0.15 }
 			}
 		},
 		{
