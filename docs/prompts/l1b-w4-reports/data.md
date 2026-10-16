@@ -36,7 +36,7 @@
   grids), Melee, Reachable, Struck, StandsDown, Forget, Goal/Shows stood down, the pace tent timeline, a
   region Step timeline, Plan's regions/approach/pace, Fielded, 20 new Validate refusals, N through both
   approaches (`approach`, `approachPast`); the tentLeft runs are gone.
-- `tools/crowd_harness/mirror_mutants.py`: Region path; 30 new mutants, 8 re-aimed (none deleted).
+- `tools/crowd_harness/mirror_mutants.py`: Region path; 31 new mutants (one is B's "the clear waits for the tent again", replacing Wave 2's tent-stock mutant), 8 re-aimed, none deleted. N's two mutants follow B's amended L1b-W4-31 (99d2dd6), mirrored in `LevelRun.skip`.
 - `docs/BALANCE.md` "L1b Wave 4".
 
 ## Verify
@@ -45,7 +45,7 @@
 - `py tools/sim_combat.py --check`: `CHECK: PASS -- all twenty-three assertions hold`.
 - `py tools/check_levels.py`: `CHECK: PASS`.
 - `py tools/check_stage_mirror.py --luau C:\Users\benja\Desktop\tycoon\tools\bin\luau.exe`: `CHECK: PASS`.
-- `py tools/crowd_harness/mirror_mutants.py`: 78 of 78 caught (see the final message for the last run).
+- `py tools/crowd_harness/mirror_mutants.py`: 79 of 79 caught (a full run of 78, then the three changed ones alone after B's 99d2dd6 and the tent replacement).
 - Harness (not mine, run as a smoke test): `HARNESS: PASS (2,248 checks)`.
 
 ## Numbers

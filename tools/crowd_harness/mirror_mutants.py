@@ -162,9 +162,10 @@ MUTANTS = [
      "return busy and residentsAlive > 0"),
     # L1b Wave 4: StageFlow.
     ("Fielded ignores sent", "StageFlow", "for index = 1, math.min(sent, #tent.kinds) do", "for index = 1, #tent.kinds do"),
-    ("Skip: N takes a camp whose checkpoint is reached", "StageFlow", "and not state.reached[index]", "and true"),
-    ("Skip: N ignores approached", "StageFlow", "for index = state.approached + 1, lock.floor - 1 do",
-     "for index = 1, lock.floor - 1 do"),
+    ("Skip: N ignores a reached checkpoint", "StageFlow",
+     "for index in state.reached do\n\t\tfrom = math.max(from, index)\n\tend",
+     "for index in state.reached do\n\t\tlocal _ = index\n\tend"),
+    ("Skip: N ignores approached", "StageFlow", "local from = state.approached", "local from = 0"),
     ("Plan: a zone's region dropped", "StageFlow", "region = graphs[camp.id],", "region = nil,"),
     ("Validate: the lock clearance skipped", "StageFlow", "if gap < needed - 1e-6 then", "if false then"),
     ("Validate: a tent without pace passes", "StageFlow", "problem(`{here}: its tent has no pace`)", "local _ = here"),

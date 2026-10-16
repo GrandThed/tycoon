@@ -7928,10 +7928,12 @@ class LevelRun(ThreatRun):
                 # L1b-W4-31: N first steps through the open camps before the armed one that have an
                 # approach, are not done and whose checkpoint is not reached.
                 locking = stages[index - 1]["zone"]["floor"] if index != 0 else 0
+                # (amended: never backwards, so from past the furthest reached checkpoint too)
+                start = max([self.approached] + [i for i, v in self.reached.items() if v])
                 for zone in self.zones:
                     i = zone["floor"]
-                    if (i > self.approached and i < locking and not zone["locks"] and zone.get("approach") is not None
-                            and not self.done.get(i) and not self.reached.get(i)):
+                    if (i > start and i < locking and not zone["locks"] and zone.get("approach") is not None
+                            and not self.done.get(i)):
                         self.approached = i
                         self.emit("approach", stage=self.stage, zone=i)
                         self.on_approach(i, t)

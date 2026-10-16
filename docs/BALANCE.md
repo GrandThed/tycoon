@@ -4844,7 +4844,7 @@ from the last body's fall; the last resident was the last body in every run at p
   simulator, and nothing in the game's crowd, is ray-blocked.
 - `check_stage_mirror.py` compares `Region`, the Wave 4 `CampBrain` and `StageFlow.Fielded`, Plan's
   regions and approaches, Validate's 20 new refusals (and the two new `levels` keys) and N through both approaches;
-  `mirror_mutants.py` catches 78 of 78 Luau mutants (30 new for Wave 4, 8 re-aimed).
+  `mirror_mutants.py` catches 79 of 79 Luau mutants (31 new for Wave 4, 8 re-aimed).
 
 ### L1b W4: flags for the lead
 
