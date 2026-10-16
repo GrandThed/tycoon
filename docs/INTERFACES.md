@@ -14259,3 +14259,1330 @@ This section starts with the lead's rulings; the full contract follows them.
 12. **Ben's look: N steps through every camp** (Depart → A → N to B's approach for the sneak → N to the
     Chief's Clearing), no panel (study §8).
 13. Everything else in study §11 is taken as written.
+
+## The contract (draft for the lead, 2026-10-15)
+
+**Status: [draft] for the lead, not yet confirmed.** Branch `l1b-wave4`, worktree
+`C:\Users\benja\Desktop\tycoon-p5`, written from the code at 3c2ff93 the same day.
+
+Plan of record, in the order that wins:
+1. The lead's rulings L1b-W4-1 to 13 above.
+2. `docs/MISSIONS_DESIGN.md` §19 and its last paragraph (Ben's words).
+3. `docs/prompts/l1b-w4-study-report.md`, except where a ruling differs (ruling 1 drops the
+   per-camp territories and their "never overlap" gate; ruling 8 makes the clear "every raider it
+   fielded is dead", not "its floor is empty").
+4. The Wave 2 contract above, its amendments, and Wave 3. Every earlier ruling stands where this
+   section does not replace it.
+
+A ruling marked **[draft]** is this draft's answer where the rulings left a choice. Every one is
+listed again in "Draft points for the lead" at the end. The study's line numbers drift by a few;
+the ones below were read on 3c2ff93.
+
+**Gate protocol** (the L1b merge rule): once Wave 4 has passed review and QA it is merged to `main`
+and the six place files are rebuilt. **Publish freeze:** the Expeditions place is not published
+from `main` until L4 (unchanged).
+
+**What Ben gets in Wave 4.** Play opens the map on Forest Road, Normal, at gear 2 / 2, as before.
+- **N** on the road steps through every camp: first the foot of the climb below the Pickets, then
+  the road before Main Camp's west gate, then the Chief's countdown.
+- A hit from anywhere lands. Nothing reads "BLOCKED" any more, except a plate and the Chief's
+  sleeping raiders before the gates close.
+- An awake group follows its player out of its camp, through the gates and along the road, as far
+  as the plateau the two open camps stand on. A's raiders may follow him into Main Camp.
+- They give up when they lose him: out of sight (and not hit by him) for about 3 s, they walk home
+  and heal. Shooting from the lookout ledge or from below the drop, the rushers come to the edge,
+  wait about 3 s and walk home to heal, while their slingers keep shooting.
+- At a normal pace the tents send nobody. A tent sends one raider every 6 s only while he clears
+  its camp faster than the camp's own pace.
+- A camp clears the moment every raider it fielded is dead, wherever that raider stands. Its bonus
+  is 10% of what it fielded.
+
+### Map of the rulings this wave replaces
+
+| Ruling | Fate in Wave 4 |
+|---|---|
+| L1b-1 (one floor per camp) | kept; an open camp's floor joins a chase region at its own height (L1b-W4-14) |
+| L1b-6 (the chase stops at the floor's edge) | replaced by the region (L1b-W4-17) |
+| L1b-7 (damage only from a player in play) | gone (ruling 6); `Struck` blocks only a held group (L1b-W4-25) |
+| L1b-8 (home evades) | amended: home takes hits, turns back for a reachable player, still heals (L1b-W4-24) |
+| L1b-13 (held residents) | kept |
+| L1b-20 (engaged) | kept, fed by "known and reachable" (L1b-W4-27) |
+| L1b-22 (N) | N steps through every camp with an `approach` (L1b-W4-31) |
+| L1b-W2-7 (when a tent sends) | busy, ahead of its pace and with residents alive (L1b-W4-28) |
+| L1b-W2-8 (the clear waits for the tent) | gone: the clear is "every raider fielded is dead" (L1b-W4-29) |
+| L1b-W2-21 (bonus on the whole stock) | the bonus is on the fielded stock (L1b-W4-30) |
+| L1b-W2-25 (no auto-target in the countdown) | kept |
+| Wave 1 Major 1, the rounded in-play corners | kept as the region's rounded margin |
+| Wave 1 Major 1, the gate `chaseMargin ≤ reach − √2 · radius` | **kept [draft]**, now about the region's edge (the study drops it: L1b-W4-19) |
+| Wave 1 Major 3 (CampAim clause 4) | gone (ruling 11) |
+| Wave 1 data Minor 1 (checkpoints out of resting shooters' reach) | kept |
+| Wave 3 (`IN_PLAY_STEP` in `sim_range`) | gone |
+| check_levels' perch gate round an open floor | **replaced [draft]** by the `meleeAbove` gates (L1b-W4-19) |
+
+### Contract rulings (L1b-W4-14 onward)
+
+**The region**
+
+- **L1b-W4-14. Data.** A layout carries `regions: { LevelRegion }` (Types). A region names its
+  height `y`, its open camps and its road cells. Its **cells** are, in this order:
+  1. the floor rectangles of its camps, in the layout's camp order (each exactly its camp's floor);
+  2. its road cells, in file order. Each is `{ id, x, z, sx, sz }`: a flat rectangle, centre and
+     size, like a block's footprint.
+
+  Forest Road has one region, `"plateau"`, `y` 8, camps `["A", "B"]` (ruling 1). The
+  economy-designer authors its road cells over Road5, RoadAB1–5, RoadBC1–4, CacheSpur, and
+  LookoutSignPad and CacheSignPad if they fit the door rule. No cell lies east of the lock
+  clearance (L1b-W4-16). A camp belongs to at most one region. A locking camp belongs to none.
+  The game builds no Part for a region.
+- **L1b-W4-15. Doors and the tree.**
+  - Two cells are **neighbours** when their rectangles overlap with positive width on both axes. A
+    shared edge alone does not make them neighbours.
+  - Their **door** is the overlap. Every door is at least
+    `minDoor = 2 × the widest body of the region + levels.doorSpare` on **both** axes. The widest
+    body is the largest kind radius among the residents and tent units of the region's camps at
+    the highest difficulty: the brute's 2.2, so the door is 4.9.
+  - The neighbour graph is **a tree** (connected, `#cells − 1` neighbour pairs).
+  - Road5 and RoadAB5 only touch their floors today (Road5 ends at x −264, where A begins). So the
+    cell over each one reaches into its floor by at least `minDoor` (study §1, "a door").
+  - A cell crosses a camp's fence line only within one of that camp's gate spans (z −52 … −36 for
+    A and B), so no body ever walks through the palisade (ruling 3).
+  - Standability is a `check_levels.py` gate: every point of every cell lies on a standable top at
+    `y` (a ground or path block, or a camp floor).
+- **L1b-W4-16. The lock clearance.** Every cell's flat rectangle-to-rectangle distance to every
+  locking camp's floor is at least `L + levels.regionLockMargin` (8). L is the largest
+  `StageFlow.LongestReach` over every kind that is a resident or tent unit of the region's camps
+  at any difficulty. On Forest Road that is the marksman's 48 (Hard), so 56: C's floor begins at
+  x 256, and no cell reaches past x 200. `StageFlow.Validate` refuses the level otherwise, and
+  `check_levels.py` reports the tightest clearance.
+- **L1b-W4-17. A region's bodies.** Every body whose floor has a region (its camp's residents,
+  its tent's bodies, anything summoned on that floor):
+  - **is clamped** into the union of the region's cells, each inset by the body's radius
+    (`Region.Clamp`), in place of its floor's rectangle;
+  - **has its goals routed through the doors** (`Region.Toward`). A goal routed through a door is
+    sought with stop distance 0, and a goal outside the region is first clamped into it, so a body
+    walks to the region's edge nearest its target and stands there;
+  - **has its charge and its retreat cut at the union's edge** (`Region.Runway`, `Region.Clamp`).
+  - It keeps one height and its floor index for life (ruling 1): ground shapes, the wire, tells
+    and `AliveOn` are unchanged. A body of a floor with no region (the Chief's Clearing, the range,
+    the arena) is clamped to its rectangle as today.
+
+**The chase** (ruling 4, 5, 6, 7; study §3)
+
+- **L1b-W4-18. Known.** For a group whose def has a region, at each `Step`, a target (a living
+  player who is not down) is **known** when either:
+  - a living member stands within `camps.chaseSight` of its root (flat, all round, no cone) and
+    the root is in the height band (`sightBelow`, `sightAbove`); or
+  - it struck a member within `camps.hitMemorySeconds` (edge included). `hitAt[userId]` holds the
+    clock of the last landed hit, and entries older than that are dropped in `Step`.
+  - Known is worked out in every state but held, at rest too: `Rouse` and `TentRouse` read it
+    (L1b-W4-28).
+- **L1b-W4-19. Reachable, and melee-reachable.** For a region group:
+  - **melee-reachable**: the root is in the band, at most `camps.meleeAbove` over the floor, and
+    within `chaseMargin` (flat, rounded corners) of the region (`Region.Distance`);
+  - **reachable**: melee-reachable, **or** in the band and within a living keepAway member's
+    longest reach (flat), the clause `InPlay` has today.
+  - **Why the height cap [draft]:** the lookout ledge (its top 26 over Road5, in the band) and
+    the cache block (10 over CacheSpur) both touch a road cell. Without the cap, a player on
+    either would count as reachable by the rushers, and they would stand under him for good.
+  - Two check_levels gates keep this honest:
+    - `meleeAbove − ROOT_HEIGHT` is at most the lowest ground-shape `height` of every rusher kind
+      of the region's camps, less `COVER_MARGIN` (5 − 0.5 = 4.5, so `meleeAbove` ≤ 7.5). A
+      melee-reachable player can always be hit.
+    - The Wave 1 gate `chaseMargin ≤ reach − √2 · radius` stays, against the region's edge.
+  - **The sniper perches:** every standable top within `camps.dormantRadius` of the region whose
+    standing root is in the band and over `meleeAbove` lies within the shortest keepAway reach of
+    the region's camps' kinds (the slinger's 32) of some region point (flat). Shooters answer high
+    ground. The ledge and the cache block pass, both at 0.
+- **L1b-W4-20. A group with no region** (the locking camp's, held or released) keeps Wave 2's rule
+  for everything **[draft]**: known = reachable = melee-reachable = `CampBrain.InPlay` on its floor
+  rectangle. After the close, the Chief's raiders fight every player in the room, as before. The
+  study left "after the release" open, and a 40-stud `chaseSight` in a 115-stud room would leave
+  far groups idle. A held group computes those sets and changes nothing (Wave 1's rule, so
+  `Engaged` is current at the release).
+- **L1b-W4-21. Fight and the leash.**
+  - A fighting member goes for the nearest **known** player: `Think`'s `allowed` is the known set.
+  - `quietSince` resets while a known player is reachable, **or** while the group is `closing`
+    (L1b-W4-23).
+  - After `leashSeconds` without either, and not striking, the group goes `home`.
+  - So a player who runs is lost `leashSeconds` after the last step a member saw him within
+    `chaseSight` (or after his hit memory ran out). A player below the drop is lost
+    `leashSeconds` after the rushers stopped at its top.
+- **L1b-W4-22. The stand-down** (ruling 5: "melee walks to the region's edge, stands
+  `leashSeconds`, goes home and heals; shooters keep shooting while he is within their reach")
+  **[draft]**.
+  - In `fight`, `meleeQuietSince` resets while a known player is melee-reachable. That also clears
+    `standDown`.
+  - While not stood down, `closing` also resets `meleeQuietSince`.
+  - After `leashSeconds` without either, `standDown` is set.
+  - While it is set, the group's **rushers** (members whose kind's brain is not `keepAway`):
+    - stop thinking and walk to their posts at `homePace` (`CampBrain.Goal`, routed);
+    - are healed at their posts as a homeward member is;
+    - show `move` or `idle`.
+  - Its shooters keep fighting. The group's state stays `fight`, so no event is sent.
+  - A known player who becomes melee-reachable clears `standDown` at once, and the rushers come
+    back. When the shooters lose him too, the leash sends the whole group home.
+  - Per member, not per group, only in this one respect: the state machine stays per group.
+- **L1b-W4-23. `closing`.** `StepInput.closing` is true when a living rush-brain member of the
+  group is fighting, not stood down, and walked under its brain at the last integrate (its desired
+  flat speed over `MOVE_THRESHOLD`). The executor stamps it per body in `integrate` and reads it in
+  the next camp step. It is what lets the rushers reach the edge before the 3 s are counted. With
+  no known target `Think` gives no goal, so `closing` is false, and a lost player is lost after
+  `leashSeconds`.
+- **L1b-W4-24. Home** (L1b-8 amended).
+  - A homeward group takes hits (no evade, no BLOCKED) and walks home along the doors.
+  - It turns back **straight to `fight`** **[draft]** (`quietSince = meleeQuietSince = now`,
+    `standDown = false`) when either:
+    - a reachable player is seen by a member (`CampBrain.Sees`: the posture's sight, cone and
+      band); or
+    - a reachable player struck a member since the last step (`struckBy`).
+  - Going straight to `fight` replaces the study's "rise, 0 s": a rise always takes the posture's
+    `rise` (a fire's 1.5 s), so there is no rise of 0 s.
+  - Otherwise, once every member is at its post, it rests (as today).
+  - An unreachable player's hits land, and the hitter is remembered, but they do not turn it back.
+- **L1b-W4-25. `Struck`.**
+  - A held group answers false and records nothing, and `Damage` says "blocked" (L1b-13).
+  - Every other group answers true and records the hit:
+    - `hit = true` (a wake from rest);
+    - `hitAt[byUserId] = now` and `struckBy[byUserId] = true`, when `byUserId ≠ 0`.
+  - A Studio lever's hit (`byUserId` 0) still lands and wakes, and remembers nobody.
+- **L1b-W4-26. The close forgets the road** (ruling 7). At the close, `WaveService` calls
+  `CrowdService.ForgetOthers(zone.floor)` beside `WakeFloor`. At the next camp step, every group of
+  every other floor:
+  - clears `hitAt`, `known`, `reachable` and `struckBy`;
+  - a group in `rise` or `fight` goes `home` (`standDown = false`), one `GroupEvent` each
+    (`CampBrain.Forget`);
+  - a resting or homeward group only forgets.
+- **L1b-W4-27. Engaged** (L1b-20): the players in the `reachable` set of a group in `rise` or
+  `fight`, held `engagedHoldSeconds`, as before. A player below the drop (out of the band) is not
+  engaged. A player on the ledge whom the slingers reach is.
+
+**The tent and the clear** (ruling 8, 9)
+
+- **L1b-W4-28. The tent as a pace reserve.**
+  - The camp's pace clock (`TentState.busySeconds`) runs only while the camp is busy: while
+    `CrowdService.Busy()[floor]` holds, each tick adds the time since the last tick.
+  - The camp is **ahead** when
+    `killed / residents − busySeconds / pace.seconds ≥ pace.lead`, where
+    `residents` is the zone's resident count at the played difficulty and
+    `killed = residents − residentsAlive`. Tent bodies are never counted.
+  - A tent is **active** when its camp is busy, at least one resident lives, and the camp is
+    ahead.
+  - `TentDue`, `TentSent`, `TentOwesRouse`, the door, the ring and `TentRouse` are unchanged.
+    `TentRouse` and `Rouse` read "a player known and reachable" for the group (L1b-W4-18): a tent
+    still never wakes a group to fight nobody.
+  - The stock is the most a tent ever sends. What it has not sent when the camp clears is
+    forfeit.
+- **L1b-W4-29. The clear.** An open camp with residents is cleared when no body of its floor lives
+  (`aliveByFloor[i] == 0`), wherever its raiders stand.
+  - A body's floor is its camp's for life, so this counts the residents and the tent bodies sent,
+    on the road or in another camp.
+  - `Input.tentLeft` and its clause go (`StageFlow.luau:1547-1555`). Before the tent has sent
+    anything, a camp whose residents are all dead clears at once.
+- **L1b-W4-30. The bonus on what the camp fielded.** At `campClear`, the bonus is
+  `Combat.ClearBonus(StageFlow.Fielded(zone, tent, sent), …)`: the camp's residents by kind, plus
+  the first `sent` kinds of its tent's stock. The locking camp is unchanged: its residents plus
+  `run.waveStock`. `Zone.stock` now holds the residents only. `Combat.ClearBonus` is unchanged.
+
+**N** (ruling 12, study §8)
+
+- **L1b-W4-31. N steps through every camp.**
+  - A layout camp may carry `approach: { x, y, z }`, the feet where N puts the party before an open
+    camp. A locking camp never has one.
+  - On the road (`travel` or `armed`), `StageFlow.Skip(…, "stage", …)` takes the first zone `i` in
+    layout order such that all of these hold:
+    - `i > state.approached`;
+    - the zone is open and has an `approach`;
+    - it is not `done`, and its checkpoint is not `reached`;
+    - it comes before the armed locking camp's zone.
+  - If there is one, it answers `{ kind = "approach", stage = state.stage, zone = i }` and sets
+    `state.approached = i`. `WaveService` moves every fighting member there (`moveFighters`, as
+    `move`). Nothing else happens: no clear, no pay, no countdown.
+  - With none left, N does as today: `move` and `gate` to the locking camp.
+  - Countdown, fight and breather are unchanged, and so are B and G.
+  - Forest Road: A's approach on Road4 at the foot of the climb (about (−322, 0, −44)), B's on the
+    road before its west gate (about (−108, 8, −44)). Each lies outside every resting sight of
+    every open-camp group at every difficulty (a `check_levels.py` gate, cones ignored, as for the
+    sneak path).
+
+**The phone and the client** (ruling 11)
+
+- **L1b-W4-32. `CampAim.Takes`** never takes a body in the countdown (`gate`) or a body of a
+  resting group, and takes every other body. Clause 3 (engaged) and clause 4 (in play) go, with the
+  `engaged` and `camps` arguments. A phone still never wakes a camp by itself.
+- **L1b-W4-33. The drawn charge** (`CrowdRenderer.laneReach`) is cut with `Region.Runway` over
+  `RunFloor.cells` when the floor has them, and by its rectangle as today when it has none.
+
+**Kept unchanged:** every Wave 1, 2 and 3 ruling this list does not replace. That includes:
+- resting sight, cones, rise and the join-in (`Sees`, `JoinIn`), and dormancy (only at rest,
+  against the floor's rectangle);
+- `fieldClear`, the stand-up and the safe point with its threats;
+- the population rule, spawn infos and the snapshot;
+- the boss room's close, waves and held residents;
+- one swing per jump, the ray rule and the bow's numbers;
+- per-kill pay, no refills, no sound and no attack button.
+
+### What the code says (checked 2026-10-15, on `l1b-wave4` at 3c2ff93)
+
+Read, not assumed.
+- **CampBrain** (`src/combat/server/Services/CampBrain.luau`):
+  - `Group.inPlay` (:57) is the one set the leash, `Engaged`, `Rouse` and `TentRouse` read.
+  - `InPlay` (:317-339) is the band plus `FlatToRect ≤ chaseMargin` on `def.rect`, or a shooter's
+    reach.
+  - `Step` (:368-429) fills `inPlay` for every target in every state, held too, before the held
+    early-out. The fight leash is at :403-410, home's arrival at :411-421.
+  - `Evades` (:443-445) is held or home. `Struck` (:450-456) blocks out-of-play hits (L1b-7).
+  - `Goal` (:460-493) walks home only in `home`. `Shows` (:498-511) answers nil in `fight`.
+  - `Rouse` and `TentRouse` (:601-624) take an `inPlay` boolean.
+  - `TentActive(busy, residentsAlive)` (:633-635) is `busy or residentsAlive <= 0`.
+  - `RULE_KEYS` (:74-85) lists the `camps` keys `Problems` reads.
+- **CrowdService:**
+  - `clampToBounds` (:353-376) clamps to `floorOf(enemy)`'s rectangle. It is called in
+    `integrate` (:661 for a charge, :696) and after separation (:1156-1160).
+  - `integrate` (:612-747):
+    - a resident is `resting` unless its group fights (:631);
+    - `CampBrain.Goal` is sought at `homeTolerance × HOME_STOP_SHARE` (:635-647);
+    - `Think` gets `allowed = brain.inPlay` (:652-653);
+    - `moving` is `desired.Magnitude > MOVE_THRESHOLD` (:699).
+  - `campStep` (:986-1109):
+    - heals a member at its post while its group is homeward (:1020-1022);
+    - rouses with `next(brain.inPlay)` (:1062, :1080);
+    - stamps `engaged` from `inPlay` for rise and fight (:1098-1102).
+  - `setFloors` (:1409-1452) keeps only `centre` and `half`, then calls `CrowdBrain.SetFloors`.
+  - `Damage` asks `CampBrain.Struck` first and answers "blocked" (:1894-1903).
+  - `Busy()` builds a new table per call (:2206-2215).
+- **CrowdBrain:**
+  - `inArena` (:301-310) and `runway` (:314-335) cut at `floor.half`. `land` cuts a lane with
+    `runway` (:653), and the keepAway retreat uses `inArena` (:953-957).
+  - `Think(…, allowed)` (:847-853) picks `nearest(position, allowed)` (:909).
+- **StageFlow:**
+  - `Zone.stock` is residents plus the tent's stock (:44-46, built at :1260-1267).
+  - `Input.tentLeft` (:149-150) holds a `campClear` in `progress` (:1546-1562).
+  - `Skip "stage"` on the road answers `move` + `gate` to the armed locking camp (:1721-1727).
+  - `LongestReach(def)` (:1883) exists, for the lock clearance.
+  - `NEEDED.rules` (:193-205) lists the `levels` keys `Validate` requires.
+- **WaveService:**
+  - `tickTents` (:1599-1644) reads `CampBrain.TentActive(campBusy, residentsAlive)` on `os.clock()`.
+  - `advance` fills `tentLeft` (:1395-1406).
+  - `execute`'s `campClear` pays on `cleared.stock` (:1320-1324); `close` calls `WakeFloor`
+    (:1283-1301); `move` calls `moveFighters(zone.entry, nil)` (:1346-1349).
+  - The floors are built at :1722-1734. `onGroupEvent` (:810-829) alerts only on `rest → rise`, and
+    keeps `awakeGroups` for `rise`/`fight`.
+  - `ArenaService` passes `RunState.floors` through untouched (it stores the table it is given), so
+    `RunFloor.cells` needs no change there.
+- **Client:**
+  - `CampAim.Takes` (:30-53) has clauses 1–4. `InputController.campInPlay` (:1090-1102) calls it.
+  - `CrowdRenderer.laneReach` (:2174-2201, the smaller of the reach and the rectangle's room) cuts at the floor's rectangle. `SetFloors` (:2643-2661)
+    reads `x y z hx hz` and stops at a malformed entry. `CampFloor` (:2795-2806).
+  - `CombatUIController`'s N key sends `skip`/`stage` (:155-160). `DebugService` (:254-255) passes
+    it to `WaveService.Skip` unchanged: no `DebugService` change is needed (the study listed one).
+- **Geometry** (from `Layouts/Levels/ForestRoad.json`):
+  - The plateau (top 8) runs from x −306 to 230.
+  - A's gates and B's gates both span z −52 … −36.
+  - Road5 abuts A's floor at x −264, and RoadAB5 abuts B's at x −70.
+  - The lookout ledge (x −295 … −271, z −66 … −52, top 34) abuts Road5. The cache block (x 94 … 106,
+    z −10 … 2, top 18) abuts CacheSpur.
+  - Fences are 4 high. The rushers' lowest ground-shape `height` is 5 (fodder lunge, brute lane).
+  - The longest resident reach is the marksman's line, 48, on Hard only.
+- **Wire:** the plateau's furthest point is x −306, inside `CrowdCodec`'s ±1,024 (:10-17). The codec
+  needs nothing.
+- **Top-level locals** (`py tools/check_compile.py --counts`):
+  - `FeedbackController` 159, `CrowdRenderer` 153, `InputController` 149;
+  - every other file this wave touches is under 99 (the tool lists only the top ten, which ends at
+    99).
+  - `CrowdRenderer` may take one new top-level local (the `Region` require). `InputController` takes
+    none.
+- **Harness:**
+  - `run_harness.py` bundles `SOURCES` (:51-72), then `TESTS` (:75-87), as one chunk of at most 200
+    locals.
+  - `mutate.py` takes over an hour (Wave 2). `CampAim`'s cases live in `tests_l1b_w2.luau` (B's) and
+    its mutations in `mutate.py` (:2679-2680).
+  - The worktree has `tools/bin/luau-compile.exe` but no `luau.exe`.
+- **Tools:**
+  - `sim_range.py` has `IN_PLAY_STEP` (:333), `cb_in_play` (:5704), `cb_step` (:5731),
+    `cb_struck` (:5783), `cb_tent_active` (:5939), `LevelRun.tent_left` / `send_tents`
+    (:6296-6300), `wanted` (:6637), `FOREST_CLEAR_SECONDS` (:4890) and `edge_runs` (:7537).
+  - `check_levels.py` has the chaseMargin gate at :1226-1247 and the perch gate at :1249-1279.
+  - `check_stage_mirror.py` has its `InPlay` and `Struck` grids at :1113-1180, and its `tentLeft`
+    runs at :445 and :567.
+
+### Flow (what changes in Wave 2's "Flow")
+
+**Start** (`WaveService.startLevel`):
+- `StageFlow.Plan` builds one `RegionGraph` per layout region (`Region.Build`) and hangs it on each
+  of its camps' zones (`zone.region`, the same table for A and B). Each region camp's resident and
+  tent `CampGroupDef` carries `region = graph.cells`.
+- The crowd floors (:1722-1734) carry `region = zone.region`. Each `RunFloor` carries
+  `cells = zone.region.cells`. A floor with no region carries neither.
+- `run.tents[t].state` is `CampBrain.NewTent(stock)`, which now has a pace clock.
+
+**A run** (`WaveService.tick`), Wave 2's order with:
+- **Tents, before `advance`:** `busy = CrowdService.Busy()` once. Then for each tent:
+  `CampBrain.TentClock(state, busy[floor] == true, now)`, then
+  `residentsAlive = AliveOn(floor) − GroupAlive(group)`, then
+  `ahead = CampBrain.Ahead(zone.residents − residentsAlive, zone.residents, state.busySeconds, planned.pace)`,
+  then `active = CampBrain.TentActive(busy[floor] == true, residentsAlive, ahead)`. The rest is
+  Wave 2's executor (owed rouse, `TentDue`, spawn at the door, `RouseGroup`, `TentSent`).
+- **`advance`'s input** loses `tentLeft`.
+- **`campClear`** pays `ClearBonus` on `StageFlow.Fielded(zone, plan.tents[t], run.tents[t].sent)`
+  for that zone's tent `t` (none: residents only).
+- **`close`** also calls `CrowdService.ForgetOthers(zone.floor)`.
+- **`approach`** moves every fighting member to `zone.approach`.
+
+**The camp step** (`CrowdService.campStep`), Wave 2's order with:
+1. First, a pending `ForgetOthers`: `CampBrain.Forget` on every group of another floor, and an
+   event for each change.
+2. Each group's input gains `closing`, the OR of its members' `closing` stamps from the last
+   `integrate`.
+3. The heal at the post runs for a homeward group **and** for a stood-down group's rushers
+   (`CampBrain.StandsDown`).
+4. `Rouse` and `TentRouse` read `next(brain.reachable) ~= nil`. Engagement reads `brain.reachable`.
+
+**The body step** (`CrowdService.integrate`):
+- A resident is `resting` when its group is held, or not in `fight`, or
+  `CampBrain.StandsDown(brain, def.brain ~= "keepAway")`.
+- `Think`'s `allowed` is `brain.known`.
+- Every goal of a body whose floor has a region, the brain's and `CampBrain.Goal`'s, passes
+  `Region.Toward(graph, position, goal, def.radius)`. A door answer is sought with stop
+  distance 0.
+- `clampToBounds` uses `Region.Clamp(graph.cells, position, radius)` for X and Z on a region
+  floor. Y and the knock rules are as today.
+- A thinking rush-brain member's `closing` stamp is `moving` (else false).
+
+### Server modules
+
+Two luau-engineer instances, **A (the crowd, `Types.luau` first, `Region.luau`)** and **B (the
+run)**, with the disjoint files of "Ownership". **A lands the whole "Types" block below as its
+first edit, and `Region.luau` plus the new and changed `CampBrain` exports (signatures with bodies,
+cases to follow) as its second, then tells the lead.** B and the economy-designer's mirrors code
+against those. An owner who needs a change in a file it does not own lists it "for the other
+owner", and the lead routes it.
+
+#### A — `src/shared/Region.luau` (new, pure)
+
+Pure as `CampBrain` is: tables, numbers and `Vector3` within the harness shim. There is no
+Instance and no clock, and it never yields. It requires `Types` (for annotations) and `HitShapes`
+(`FlatToRect`). The server, the client and `stage_mirror.luau` load it. `EPS` is 1e-6. Ties go
+to the lowest index. Bounds use `math.min(math.max(…))`, never `math.clamp` (a P5 lesson).
+
+```luau
+Region.Build(cells: { Types.CampRect }): Types.RegionGraph
+	-- neighbours: i ~= j whose rectangles overlap by more than EPS on both axes; doors[i][j] =
+	-- doors[j][i] = the overlap's centre { x, z }. next and hops by breadth-first search from each
+	-- cell, neighbours visited in index order: next[i][i] = i, hops[i][i] = 0; an unreachable j
+	-- has next 0 and hops math.huge. Never throws on a bad list (Problems names it).
+Region.Problems(cells: { Types.CampRect }, minDoor: number): { string }
+	-- one line each: no cells; a cell with a non-finite value or hx/hz <= 0; a neighbour pair whose
+	-- overlap is under minDoor on either axis (names both cells and both widths); a cell not
+	-- connected to cell 1; a cycle (neighbour pairs ~= #cells - 1 once connected)
+Region.Distance(cells: { Types.CampRect }, x: number, z: number): number
+	-- min over the cells of HitShapes.FlatToRect; 0 inside or on an edge; math.huge for no cells
+Region.Inside(cells: { Types.CampRect }, point: Vector3, radius: number): boolean
+	-- inside some cell inset by radius (per axis limit max(h - radius, 0)), edge + EPS included
+Region.Clamp(cells: { Types.CampRect }, point: Vector3, radius: number): Vector3
+	-- point itself when Inside; else, over the cells inset by radius, the nearest flat point
+	-- (squared distance, the first strictly smaller wins); Y is point.Y. No cells: point.
+Region.Runway(cells: { Types.CampRect }, from: Vector3, heading: Vector3, radius: number): number
+	-- how far a body of `radius` runs from `from` along the flat unit `heading` and stays in the
+	-- union of the inset cells: 0 when from is not Inside or heading is zero; else, from each
+	-- inset cell's slab interval [t0, t1] along the ray, reach starts at 0 and repeatedly takes t1
+	-- from any interval with t0 <= reach + EPS and t1 > reach. With one cell it equals
+	-- CrowdBrain's old `runway` exactly.
+Region.Toward(graph: Types.RegionGraph, from: Vector3, goal: Vector3, radius: number): (Vector3, boolean)
+	-- g = Clamp(cells, goal, radius), f = Clamp(cells, from, radius); over every cell i with
+	-- Inside(i, f) and j with Inside(j, g), the pair with the fewest hops (ties: lowest i, then j).
+	-- i == j, no pair, or no path: (g, false). Else: (Vector3(door.x, from.Y, door.z), true) for
+	-- door = doors[i][next[i][j]].
+```
+
+Notes:
+- A body standing in a door is inside both cells, so `Toward` takes the cell nearer the goal and
+  heads for the next door. That is the progress rule.
+- The door rule (L1b-W4-15) puts every door centre inside both inset cells.
+- `Toward` costs one `Inside` per cell for each of the two points, plus a table lookup. It runs
+  only for a body that has a goal this step.
+
+#### A — `src/combat/server/Services/CampBrain.luau` (pure, existing)
+
+```luau
+export type Group = {
+	def: Types.CampGroupDef,
+	state: Types.CampGroupState,
+	held: boolean,
+	since: number,
+	quietSince: number,
+	hit: boolean,
+	-- L1b-W4-18/19: this step's sets, rebuilt in place by Step ("inPlay" is gone)
+	known: { [number]: boolean },
+	reachable: { [number]: boolean },
+	-- userId -> the clock of its last landed hit on a member (Struck); pruned past hitMemorySeconds
+	hitAt: { [number]: number },
+	-- userIds whose hit landed since the last Step (cleared by Step)
+	struckBy: { [number]: boolean },
+	-- L1b-W4-22
+	meleeQuietSince: number,
+	standDown: boolean,
+}
+export type StepInput = { now, members, targets, shooters, striking, closing: boolean }  -- + closing
+export type TentState = { left: number, nextAt: number, busySeconds: number, lastAt: number? }
+
+-- Changed:
+CampBrain.Problems(rules)            -- also: chaseSight, hitMemorySeconds, meleeAbove finite and not
+                                     -- negative; chaseSight and meleeAbove above 0
+CampBrain.NewGroup(def, now)         -- the new fields empty / now / false
+CampBrain.Step(group, input, rules)  -- L1b-W4-18 to -24 (below); at most one transition
+CampBrain.Evades(group): boolean     -- group.held only
+CampBrain.Struck(group: Group, byUserId: number, now: number): boolean   -- L1b-W4-25
+CampBrain.Goal(group, resident, at, rules)   -- walks to its post in "home" and in "fight" while
+                                             -- standDown (the caller asks it only for a resting body)
+CampBrain.Shows(group, moving)       -- "fight" with standDown: "move" when moving, else "idle"
+CampBrain.Rouse(group, now, reachable: boolean)        -- the argument is renamed, the rule unchanged
+CampBrain.TentRouse(group, now, reachable: boolean)    -- the argument is renamed, the rule unchanged
+CampBrain.NewTent(stock): TentState  -- busySeconds = 0, lastAt = nil
+CampBrain.TentActive(busy: boolean, residentsAlive: number, ahead: boolean): boolean
+	-- busy and residentsAlive > 0 and ahead
+
+-- Kept as it is: InPlay (the rule of a group with no region, L1b-W4-20), Sees, AtPost, Engaged,
+-- Posts, Release, Dormant, Gap, JoinIn, TentDue, TentSent.
+
+-- New:
+CampBrain.Melee(def: Types.CampGroupDef, target: Seen, rules: Types.CampRulesConfig): boolean
+	-- def.region: band, root.Y - def.floorY <= meleeAbove, Region.Distance(def.region, X, Z) <=
+	-- chaseMargin. No region: InPlay(def, target, {}, rules).
+CampBrain.Reachable(def, target: Seen, shooters: { Shooter }, rules): boolean
+	-- def.region: Melee, or band and some shooter within its reach (flat). No region: InPlay.
+CampBrain.StandsDown(group: Group, rusher: boolean): boolean
+	-- rusher and not held and state == "fight" and standDown
+CampBrain.Forget(group: Group, now: number): Types.CampGroupState?
+	-- clears known, reachable, hitAt, struckBy; rise or fight (not held) -> "home", since = now,
+	-- standDown = false, answers "home"; otherwise nil
+CampBrain.TentClock(tent: TentState, busy: boolean, now: number): ()
+	-- busy and lastAt ~= nil: busySeconds += max(now - lastAt, 0); then lastAt = if busy then now else nil
+CampBrain.Ahead(killed: number, residents: number, busySeconds: number, pace: Types.LevelTentPace): boolean
+	-- residents > 0 and pace.seconds > 0 and
+	-- killed / residents - busySeconds / pace.seconds >= pace.lead - TIME_EPSILON
+```
+
+**`Step`, in order** (`#members == 0` still changes nothing):
+1. `table.clear(known)`, `table.clear(reachable)`. Prune `hitAt` entries older than
+   `hitMemorySeconds` (edge kept).
+2. **Held:** for each target, `InPlay` → both sets. Clear `hit` and `struckBy`. Return nil.
+3. For each target: known by L1b-W4-18 (or by `InPlay` for a group with no region). If known,
+   `Reachable` → `reachable[u]`, `anyReach`; `Melee` → `anyMelee`.
+4. The state:
+   - **rest:** as today (`hit` or `Sees` → `rise`).
+   - **rise:** as today. On the change to `fight`, `quietSince = meleeQuietSince = now` and
+     `standDown = false`.
+   - **fight:**
+     - The leash first: if `anyReach or input.closing`, then `quietSince = now`; else after
+       `leashSeconds`, if not striking, → `home` (`standDown = false`).
+     - If it did not leave: `anyMelee` → `meleeQuietSince = now` and `standDown = false`;
+       else, if not `standDown` and `input.closing` → `meleeQuietSince = now`;
+       else, if not `standDown` and `leashSeconds` have passed since `meleeQuietSince` →
+       `standDown = true`.
+   - **home:** a `u` in `reachable` with (`struckBy[u]` or `Sees` by any member) → `fight`
+     (`quietSince = meleeQuietSince = now`, `standDown = false`). Else all at their posts → `rest`.
+5. Clear `hit` and `struckBy`. Return the change.
+
+Each rule above has a harness case and a mutation (below). Nothing in `Step` allocates per call
+(the sets are cleared in place, the prune walks the map).
+
+#### A — `src/combat/server/Services/CrowdBrain.luau` (executor, harness-loaded)
+
+- `SetFloors(list)` is unchanged in signature. A floor may carry `region` (`Types.RegionGraph`).
+- `inArena(point, radius, floor)`: with a region, `Region.Clamp(floor.region.cells, point, radius)`;
+  else today's.
+- `runway(from, heading, radius, floor)`: with a region,
+  `Region.Runway(floor.region.cells, from, heading, radius)`; else today's.
+- `Think`'s `allowed` is documented as "the group's known set" (the caller passes `brain.known`).
+  Nothing else changes.
+
+#### A — `src/combat/server/Services/CrowdService.luau` (executor, harness-loaded)
+
+```luau
+CrowdService.SetFloors(list: { Types.CrowdFloor }): boolean
+	-- as today, and each kept floor keeps `region` when it is a table whose `cells` is a non-empty
+	-- list of finite rects (else nil, one warn); floors sharing one RegionGraph keep sharing it
+CrowdService.ForgetOthers(floor: number): ()
+	-- L1b-W4-26: at the next camp step, CampBrain.Forget on every group whose floor ~= `floor`
+```
+
+What the executor does:
+- **Enemy** gains `closing: boolean`, false at spawn. `integrate` writes it (L1b-W4-23) for every
+  resident; any other body keeps false.
+- **`integrate`**, **`clampToBounds`** and **`campStep`** follow "Flow". The routing applies to every
+  body of a region floor, a summon included.
+- **`Damage`**: `CampBrain.Struck(group.brain, byUserId, simTime)` and false → "blocked" (held only).
+- **`Engaged`** is unchanged in signature.
+- **`AddGroup`** checks `def.region` when present (a list of finite rects; else refused, as a
+  non-finite def is).
+- No yield, no raycast and no per-body allocation in `integrate`'s routing, the camp step or
+  `ForgetOthers`. `Toward` and `Clamp` return `Vector3` values.
+
+#### A — `tools/crowd_harness/tests_l1b_w4_crowd.luau` (new; B registers it)
+
+At least:
+- **`Region`** on hand-built cells: an L of two cells, the U-bend of five (RoadAB1–5's footprints)
+  and a single cell.
+  - `Build`: neighbours, doors' centres, `next` and `hops` by hand; touching cells are not
+    neighbours.
+  - `Problems`: a cycle of three, a gap, a door under `minDoor` on x and on z, a bad cell; none on
+    the shipped plateau.
+  - `Distance`: inside, an edge, a 3-4-5 corner.
+  - `Inside` at the inset edge ± EPS.
+  - `Clamp`: inside unchanged (Y kept), outside to the nearest inset point, the tie to the lowest
+    index, a radius wider than a cell.
+  - `Runway`: one cell equals the old `runway` on 200 seeded rays; through a door; stopped at the
+    U-bend's void; from outside 0.
+  - `Toward`: same cell; AB2 → AB4 answers the AB2/AB3 door; inside the door, the next door; a goal
+    below the drop → the clamped edge point; disconnected → the clamped goal.
+- **`CampBrain`:**
+  - `Problems` for each new key.
+  - `Struck` in rest, rise, fight and home (true, recorded) and held (false, nothing).
+  - Known: `chaseSight` at the edge and past it; out of the band; a hit at `hitMemorySeconds`
+    exactly (known) and past it (not known, pruned); a lever hit remembers nobody.
+  - `Melee`: `meleeAbove` at the edge and past it; `chaseMargin` off a region corner (rounded).
+  - `Reachable`: the shooter clause; out of the band.
+  - A group with no region: known equals `InPlay` (a player 60 studs from every member in the room
+    stays known).
+  - The leash: reachable resets; known but unreachable times out; `closing` holds it; striking
+    holds it.
+  - The stand-down: closing, then `leashSeconds` → `standDown`; a melee-reachable known player
+    clears it; `StandsDown` false for a shooter. `Goal` and `Shows` while stood down.
+  - Home: turns straight to fight on a reachable hit and on a reachable sighting; stays home on an
+    unreachable hit; rests at the posts.
+  - `Forget` from rise, fight, home, rest and held.
+  - `TentClock`: only busy time counts, a gap is not counted. `Ahead` at `lead` exactly, residents
+    0, and `pace.seconds` 0. `TentActive`'s truth table.
+  - `Rouse` and `TentRouse` with the `reachable` argument.
+- **`CrowdService`** (two floors, the first with a two-cell region, as the Wave 1 fixtures):
+  - a fighting fodder follows a target off its floor onto the road cell and is not pulled back;
+  - one whose target is across a void walks through the door and arrives (positions over N
+    steps);
+  - a body of the floor with no region is clamped to its rectangle as before;
+  - `Damage` from a player out of play lands (no "blocked") and wakes; a held group still says
+    "blocked";
+  - while stood down, the rushers walk to their posts and are healed while a slinger fights;
+  - `ForgetOthers` sends the other floor's fighting group home at the next step with one event,
+    and leaves its own floor alone;
+  - the `closing` stamp is set by a walking rusher and not by a shooter;
+  - `SetFloors` keeps a region and refuses a malformed one with a warn;
+  - a brute's lane `runway` in a region crosses a door.
+
+**Mutations (A hands them to B for `mutate.py`), at least:**
+- `Region.Clamp` ignores the radius;
+- `Region.Runway` stops at the first cell's edge;
+- `Region.Toward` always answers the goal;
+- `Region.Problems` accepts a cycle; a door is checked on one axis only;
+- `Region.Distance` takes the farthest cell;
+- `Struck` blocks a homeward group; `Struck` ignores `now` (hitAt not set);
+- known ignores the hit memory; known ignores the band; the prune keeps old hits;
+- `Melee` ignores `meleeAbove`; `Reachable` drops the shooter clause;
+- the leash ignores `closing`; the stand-down never sets; `StandsDown` ignores `rusher`;
+- home turns back on an unreachable hit; home goes through `rise`;
+- `Forget` leaves a fighting group fighting;
+- a group with no region uses `chaseSight`;
+- `TentActive` ignores `ahead`; `Ahead` ignores `lead`; `TentClock` counts idle time;
+- `CrowdService`: a region body is clamped to its floor rectangle; goals are not routed;
+  `allowed` is `reachable` instead of `known`; `ForgetOthers` forgets its own floor too.
+
+A also lists every existing mutation whose text its edits change (`mutate.py` refuses a stale
+one), with the new text, for B. That covers at least the `InPlay`/`Struck` ones the study names
+(`mutate.py` :1896 and :2887 for in play, :2058 for `Damage` asking `Struck`) and every
+`TentActive` one. A replacement goes in a `…_REPLACED` table as `L1B_W2_CROWD_REPLACED` does
+(:2886-2907). A updates the cases in
+`tests_l1b_crowd.luau` and `tests_l1b_w2_crowd.luau` that pinned "blocked" from out of play or from
+home (the study names `tests_l1b_crowd.luau` :298, :680-681, :744), the two-argument `TentActive`,
+and `group.inPlay`. Each change is listed with its old and new expectation.
+
+#### B — `src/combat/server/Services/StageFlow.luau` (pure, existing)
+
+```luau
+-- Zone gains / changes:
+	stock: { [string]: number },   -- CHANGED: its residents by kind at the played difficulty (no tent stock)
+	region: Types.RegionGraph?,    -- its region's graph, shared by every zone of that region; nil = none
+	approach: Vector3?,            -- N's stop (L1b-W4-31); nil = none (always nil on a locking camp)
+-- PlanTent gains:
+	pace: Types.LevelTentPace,
+-- State gains:
+	approached: number,            -- the last zone N moved the party to (0 = none)
+-- Input loses: tentLeft
+-- Action.kind gains "approach" (with `zone`)
+
+StageFlow.Fielded(zone: Zone, tent: PlanTent?, sent: number): { [string]: number }
+	-- a new table: zone.stock plus tent.kinds[1 .. min(sent, #tent.kinds)] (tent nil or sent <= 0:
+	-- zone.stock's copy)
+StageFlow.Plan(...)       -- signature unchanged; builds the regions (Region.Build) and answers
+                          -- (nil, message) when Region.Problems has a line (Validate's job; defensive)
+StageFlow.Validate(...)   -- signature unchanged; the new lines below
+StageFlow.Skip(...)       -- signature unchanged; L1b-W4-31 on the road
+```
+
+- **`Plan`**:
+  - each region's cells: its camps' floors (layout order), then its road cells as `CampRect`s
+    (`hx = sx / 2`, `hz = sz / 2`), then `Region.Build`;
+  - `groupsOf` and `tentsOf` put `region = graph.cells` on the defs of a region camp;
+  - `zone.approach` from the layout (feet as given);
+  - `PlanTent.pace` from the config.
+  - The population is unchanged (the tent stock is still counted as an upper bound).
+- **`Validate`** keeps every Wave 2 refusal except the ones `tentLeft` needed, and adds one line for
+  each of:
+  - `regions` present and not a list; a region with no `id`, a duplicate `id`, a non-finite `y`, or
+    no camps;
+  - a region camp unknown to the layout, a locking one, one in two regions, or one whose `y` is
+    not the region's (`EPS`);
+  - a road cell with no `id`, a non-finite value, or `sx`/`sz` ≤ 0; a cell outside the wire's
+    `WIRE_REACH`;
+  - every line of `Region.Problems(cells, minDoor)`, with `minDoor` by L1b-W4-15
+    (`levels.doorSpare`);
+  - the lock clearance (L1b-W4-16) under `levels.regionLockMargin`, naming the cell, the locking
+    camp and both numbers;
+  - an `approach` with a non-finite value, on a locking camp, or outside the wire;
+  - a tent with no `pace`, a `pace.seconds` not finite or ≤ 0, a `pace.lead` not finite or outside
+    [0, 1];
+  - `levels.regionLockMargin` and `levels.doorSpare` added to `NEEDED.rules`.
+- **`Advance`**: `progress` clears an open camp with residents when `aliveByFloor[i] == 0`
+  (L1b-W4-29). Nothing else in `Advance`, `FieldClear`, `SafePoint` or `StandsUp` changes.
+- **`Begin`** sets `approached = 0`.
+- **`Skip`**: L1b-W4-31; the rest unchanged.
+
+#### B — `src/combat/server/Services/WaveService.luau` (executor, read by review)
+
+- **Start, the tick, `campClear`, `close`, `approach`** as "Flow". The run's
+  `tents[t].state` is the new `TentState`.
+- `tickTents` keeps its order and its one body per tent per tick. It never yields.
+- The `approach` action: `moveFighters(zone.approach, nil)` for the zone named. A missing approach
+  does nothing.
+- No other change. `onGroupEvent` already handles `home → fight` (no alert) and `→ home`.
+
+#### B — not changed
+
+`Combat.luau` (`ClearBonus` is unchanged), `LevelGeometry.luau` (a region builds no Part),
+`LevelService.luau`, `DebugService.luau` (N already sends `skip`/`stage`), `ArenaService.luau`.
+
+#### B — `tools/crowd_harness/`
+
+- `run_harness.py`: `"Region": "src/shared/Region.luau"` in `SOURCES` right after `HitShapes`
+  (before `CrowdBrain`, which requires it). Append `tests_l1b_w4_crowd.luau` (A's) and
+  `tests_l1b_w4.luau` (B's) to `TESTS`. B checks the bundle stays one chunk of at most 200 locals
+  and gives the count.
+- `mutate.py`:
+  - `src/shared/Region.luau` added to `FILES`;
+  - A's mutations, the ui-engineer's `CampAim` mutations and B's own;
+  - each stale Wave 1–3 mutation (in play, `Struck`, `TentActive`, `tentLeft`, `CampAim` clauses 3
+    and 4) **replaced** by the new rule's own, never deleted silently, with a list of each in B's
+    report.
+- `tests_l1.luau`, `tests_l1_world.luau`, `tests_l1b.luau`, `tests_l1b_w2.luau`: updated where this
+  wave changed a case:
+  - `tentLeft` and the clear with stock left;
+  - `Zone.stock` without the tent;
+  - the real Forest Road's N (now an `approach` first);
+  - `CampAim`'s cases, from the ui-engineer's list.
+  B's report lists each one.
+
+#### B — `tools/crowd_harness/tests_l1b_w4.luau` (new, B's), at least
+
+- **`Validate`:** every new refusal fires on a level broken for it, and none fires on the shipped
+  files. That includes a cell 1 stud too close to C, a door of 4.8, a cycle, a locking camp in a
+  region, and a tent without `pace`.
+- **`Plan`:**
+  - A's and B's zones share one `RegionGraph` table, and C's has none;
+  - every A and B def (residents and tents) carries the region's cells;
+  - the cells' order;
+  - `zone.stock` holds residents only;
+  - `zone.approach`;
+  - `PlanTent.pace`.
+- **`Fielded`:** `sent` 0, 3 and past the stock; no tent.
+- **`Advance`:**
+  - `campClear` once `aliveByFloor` reaches 0 with tent stock unsent;
+  - never twice;
+  - a camp with no residents never clears;
+  - a skip still pays nothing.
+- **`Skip`** on the real Forest Road:
+  - from the trailhead: approach A, then approach B, then `move` + `gate` to C;
+  - with A `done`: approach B first;
+  - with B's checkpoint reached: straight to C;
+  - in `gate`, `fight` and `breather`: as before.
+
+**Mutations (B), at least:**
+- `progress` waits for tent stock again;
+- `Fielded` counts the whole stock; `Fielded` ignores `sent`;
+- `Plan` gives B's zone its own copy of the graph (the shared table is what lets A's raiders into
+  B: the identity case catches it);
+- a locking camp is allowed in a region;
+- the lock clearance is skipped, or measured from the floor's centre;
+- `doorSpare` is ignored;
+- a tent without `pace` passes;
+- `Skip` passes over the open camps (Wave 2's N);
+- `Skip` takes a `done` camp; `Skip` ignores `approached`.
+
+### Client (ui-engineer)
+
+Every client file is an executor, read by review, and `py tools/check_compile.py` is in every
+verify. `CrowdRenderer` (153) may take one new top-level local, the `Region` require.
+`InputController` (149) takes none.
+
+- **`CrowdRenderer`:**
+  - `SetFloors` also reads `cells` when it is a list of whole `CampRect`s, kept on the floor
+    record. A malformed `cells` is ignored (the floor keeps its rectangle), not the end of the
+    list.
+  - `laneReach` uses `Region.Runway(cells, from, heading, radius)` when the floor has cells, else
+    today's rectangle cut (L1b-W4-33).
+  - `CampFloor(id)` keeps its answers.
+- **`CampAim`** (L1b-W4-32):
+  `CampAim.Takes(onCampFloor: boolean, resting: boolean, phase: string): boolean`:
+  - true when not on a camp floor;
+  - false in `gate`, or for a resting group's body;
+  - true otherwise.
+  The header comment is rewritten. Its cases live in B's `tests_l1b_w2.luau`, so the ui-engineer
+  hands B the new expectations (and the mutations: clause 1 dropped, clause 2 dropped) through the
+  lead.
+- **`InputController`:** `campInPlay` becomes the new `Takes` call
+  (`CrowdRenderer.CampFloor(id) ~= nil`, its `resting`, the phase). The root, `engaged` and `camps`
+  are no longer read there. No new top-level local.
+- **`CombatUIController`:** `DEBUG_HINT` becomes `"N next camp · B boss · G gear"`. The keys are
+  unchanged.
+- **Not changed:** `FeedbackController` (the server simply stops sending "blocked" for residents),
+  `CombatFxController`, `CampFx`, `CombatHud`, `SummaryCard`, `MapScreen`, `MovementController`,
+  `CameraController`, `ThreatFx/*`, `SpawnSeed`, `Theme.luau`.
+
+### Types (applied verbatim by luau-engineer A in `src/shared/Types.luau`, as its first edit)
+
+No required field is added to a type the hub builds. `CombatLevelsConfig` and `CampRulesConfig`
+gain required fields that only `Combat.json` fills. `LevelTentConfig.pace` is required: only the
+level files fill it, and `Validate` names a missing one.
+
+```luau
+-- L1b Wave 4 (docs/INTERFACES.md "L1b Wave 4 — no waits, no walls")
+
+-- A chase region as Region.Build makes it (L1b-W4-14, -15): its cells (the region's open camps'
+-- floors in layout order, then its road cells in file order), all at one height, and the routes
+-- between them. Built once per run by StageFlow.Plan and shared by every floor of the region.
+export type RegionGraph = {
+	cells: { CampRect },
+	-- next[i][j]: the neighbour of cell i on the path to cell j; i when j == i; 0 = no path
+	next: { { number } },
+	-- hops[i][j]: neighbours crossed from i to j; 0 when j == i; math.huge = no path
+	hops: { { number } },
+	-- doors[i][j] (= doors[j][i]): the centre of cells i and j's overlap; neighbours only
+	doors: { [number]: { [number]: ArenaPoint } },
+}
+
+-- CrowdFloor, replacing the type. region: the chase region its bodies are clamped into and routed
+-- through (L1b-W4-17); nil = its rectangle, as before (a locking camp, the range, the arena).
+export type CrowdFloor = { centre: Vector3, half: Vector3, region: RegionGraph? }
+
+-- RunFloor, replacing the type. cells: its region's cells (RegionGraph.cells), the same list on
+-- every floor of that region; nil = the rectangle alone.
+export type RunFloor = { x: number, y: number, z: number, hx: number, hz: number, cells: { CampRect }? }
+
+-- CampRulesConfig, replacing the type.
+export type CampRulesConfig = {
+	guard: CampPostureRules,
+	patrol: CampPostureRules,
+	fire: CampPostureRules,
+	tent: CampPostureRules,
+	sightBelow: number, -- studs a root may be under the camp's floor and still be seen, known or reachable
+	sightAbove: number, -- studs a root may be over it
+	chaseMargin: number, -- studs (flat, to the region or, with none, the floor rectangle) a root may be past its edge and reachable
+	leashSeconds: number,
+	homePace: number, -- x the kind's speed: walking home, and a resting body drifting back
+	patrolPace: number, -- x the kind's speed: a patrol at rest
+	homeTolerance: number, -- studs from its post that count as at its post
+	engagedHoldSeconds: number, -- seconds a player stays engaged after last reachable for a group in rise or fight
+	joinFactor: number, -- x the waking group's sight: a resting group of its camp this near (post to post) wakes too
+	dormantRadius: number, -- studs (flat) from a camp's floor rectangle: no player root nearer = its resting groups are dormant
+	chaseSight: number, -- L1b-W4-18: studs (flat, all round, in the band) from any living member: that player is known
+	hitMemorySeconds: number, -- L1b-W4-18: seconds a group keeps knowing a player whose hit landed on a member
+	meleeAbove: number, -- L1b-W4-19: studs a root may be over the floor and still be reachable by the rushers
+}
+
+-- CampGroupDef, replacing the type.
+export type CampGroupDef = {
+	id: string, -- "<camp>.<spot>" | "<camp>.tent"
+	camp: string,
+	floor: number, -- index into the run's floor list
+	floorY: number,
+	rect: CampRect, -- the camp's floor
+	posture: CampPosture,
+	points: { Vector3 }, -- feet at floorY: the guard posts | the patrol loop | the fire's (or tent's) centre
+	yaw: number, -- guard: the posts' facing, radians (0 faces -Z)
+	radius: number, -- fire and tent: the circle, studs; 0 otherwise
+	held: boolean, -- a locking camp's group: sleeps and evades until the close
+	units: { CampUnit }, -- filtered by minDifficulty; members are spawned in this order
+	-- L1b-W4-14: its camp's region's cells; nil = the floor rectangle and Wave 2's in-play rule
+	-- for knowing and reaching (a locking camp's group, L1b-W4-20)
+	region: { CampRect }?,
+}
+
+-- Combat.json `levels`: CombatLevelsConfig gains
+--   regionLockMargin: number, -- L1b-W4-16: studs a region keeps beyond its camps' longest reach from every locking floor
+--   doorSpare: number,        -- L1b-W4-15: a door is at least 2 x the region's widest body plus this, on both axes
+
+-- Layouts/Levels/<Name>.json.
+-- A road cell of a chase region: a flat rectangle at the region's height, centre and size.
+export type LevelRegionCell = { id: string, x: number, z: number, sx: number, sz: number }
+-- A chase region (L1b-W4-14): its open camps' floors plus its road cells, all at height y.
+export type LevelRegion = { id: string, y: number, camps: { string }, cells: { LevelRegionCell } }
+-- LevelLayout gains:  regions: { LevelRegion }?
+-- LevelCamp gains:    approach: { x: number, y: number, z: number }?  -- N's stop before an open camp (L1b-W4-31)
+
+-- Config/Levels/<n>_<Name>.json.
+-- L1b-W4-28: a tent sends only while killed / residents - busySeconds / seconds >= lead.
+export type LevelTentPace = { seconds: number, lead: number }
+-- LevelTentConfig, replacing the type.
+export type LevelTentConfig = { every: number, units: { MissionCrowdGroup }, pace: LevelTentPace }
+```
+
+`Group`, `StepInput` and `TentState` are exported from `CampBrain`. `Zone`, `PlanTent`, `State`,
+`Input` and `Action` are exported from `StageFlow`. The `RegionGraph` alias may be used before its
+line (Luau type aliases are module-wide), so `CrowdFloor` and `RunFloor` are replaced where they
+stand.
+
+### Config (economy-designer owns the files; the shapes are fixed here)
+
+Every number below is a starting value for the designer, unless marked fixed. **The designer's
+first edit is `Combat.json`** (the new keys), so A's `Problems` and B's `Validate` read real keys
+from the start. The level and the layout follow.
+
+**`Combat.json`:**
+
+```json
+"camps": {
+	"...": "as Wave 2, and:",
+	"chaseSight": 40,
+	"hitMemorySeconds": 8,
+	"meleeAbove": 7.5
+},
+"levels": {
+	"...": "as Wave 2, and:",
+	"regionLockMargin": 8,
+	"doorSpare": 0.5
+}
+```
+
+- Fixed: `regionLockMargin` 8 (ruling 1). `doorSpare` 0.5 (the study's door rule).
+- `chaseSight` and `hitMemorySeconds` are the study's guesses: tune them so a running player is
+  usually lost within about 90 studs of the gate (ruling 4).
+- `meleeAbove` must lie in `[max(COVER_MAX, fence height) + ROOT_HEIGHT, lowest rusher ground
+  height − COVER_MARGIN + ROOT_HEIGHT]` = [7, 7.5] (a `check_levels.py` gate).
+- `leashSeconds` stays 3 (Ben's "a few seconds"). Every other `camps` number is unchanged.
+
+**`ProvingGrounds.json`, `Expeditions.json`:** unchanged (gate 13).
+
+**`Levels/1_ForestRoad.json`:** each open camp's `tent` gains `pace`:
+
+```json
+{ "id": "A", "...": "...", "tent": { "every": 6, "units": [ "...as Wave 2..." ], "pace": { "seconds": 25, "lead": 0.15 } } },
+{ "id": "B", "...": "...", "tent": { "every": 6, "units": [ "...as Wave 2..." ], "pace": { "seconds": 130, "lead": 0.15 } } }
+```
+
+- `every` stays 6 and the stocks stay as Wave 2 (Ben's "about right"). `pace` is the designer's.
+- `targetMinutes` is the measured mean first Normal clear, rounded (Wave 1's rule; the study
+  expects 6). `runCapSeconds` 1,500 holds while it is at least twice the human's slowest Normal
+  clear and at least 1,260.
+- No resident, reward, difficulty or stage moves.
+
+**`Layouts/Levels/ForestRoad.json`:**
+
+```json
+"regions": [
+	{ "id": "plateau", "y": 8, "camps": [ "A", "B" ],
+	  "cells": [
+		{ "id": "Road5", "x": -281, "z": -44, "sx": 50, "sz": 16 },
+		{ "id": "RoadAB1", "...": "one cell per road block, reaching into a floor where it meets one" }
+	  ] }
+],
+"camps": [
+	{ "id": "A", "...": "...", "approach": { "x": -322, "y": 0, "z": -44 } },
+	{ "id": "B", "...": "...", "approach": { "x": -108, "y": 8, "z": -44 } },
+	{ "id": "C", "...": "unchanged, no approach" }
+]
+```
+
+- The cell numbers above are illustrative. Road5's cell, for example, runs from x −306 into A's
+  floor to x −256 over the gate span.
+- The designer authors every cell so that every `check_levels.py` gate below passes.
+- No block, camp, spot, gate, checkpoint, secret, the sneak, `killY` or `barrier` moves.
+
+**Gates of `tools/check_levels.py` for Wave 4** (new or changed; every Wave 2 gate not named stays):
+
+| Constraint | Number |
+|---|---|
+| Region data | `StageFlow.Validate`'s region lines, mirrored (`level_problems`) |
+| Cells standable | every point of every cell (2-stud grid and the corners) lies on a standable top at the region's `y` (a ground or path block, or a camp floor); the cell table printed |
+| Doors and tree | L1b-W4-15: neighbours by positive overlap, a tree, every door ≥ `2 × widest + doorSpare` on both axes; each door's size printed |
+| Fences | a cell crosses a camp's fence line (its floor's edge grown by `fenceThickness`) only within one of that camp's gate spans, inset by the widest radius |
+| Lock clearance | L1b-W4-16: every cell ≥ longest reach + `regionLockMargin` from every locking floor; the tightest printed |
+| `meleeAbove` | in [max(`COVER_MAX`, fence heights) + `ROOT_HEIGHT`, lowest rusher ground height of the region's camps − `COVER_MARGIN` + `ROOT_HEIGHT`] |
+| The region's corners | Wave 1's `chaseMargin ≤ reach − √2 · radius` for every rusher of a region camp (kept) |
+| Sniper perches | every standable top within `dormantRadius` of the region whose standing root is in the band and over `meleeAbove` lies within the shortest keepAway reach of the region's camps' kinds of some region point; each one found printed (the ledge, the cache block) |
+| Perches round an open floor | **dropped** for region camps: the two gates above replace it |
+| Approaches | only on open camps; standable at their `y`; farther than `sight` from every resting place of every open-camp group at every difficulty (cones ignored, as the sneak); N's stops printed in order |
+| Tent pace | every open camp's tent has `pace` with `seconds` > 0 and `lead` in [0, 1] |
+
+### Balance bands (economy-designer; checked by the simulators, written up in `docs/BALANCE.md` "L1b Wave 4")
+
+Measured as in Wave 2, at gear 2 / 2: no Ascension, Broadsword + Longbow, solo, the reacting
+player of `sim_range.py` (policy `mission`), unless a band names another. The region, the chase,
+the stand-down, the pace tent and the fielded bonus are mirrored before any band is read.
+
+| Band | Where | Value |
+|---|---|---|
+| **Normal: the first clear, every seed** | sim_range | **345–420 s** (5.75–7 min), start point to the Colossus's fall (ruling 10; study §5 measured 370–385 s with no tents and the old chase). If the measured mean with the new chase falls outside 360–405 s, the designer stops and reports; no layout, resident or pace number moves to meet it |
+| **The tent at pace** | sim_range | the `mission` player at 2 / 2 on Normal: each tent sends at most 1 body, every seed |
+| **The tent when fast** | sim_range | the same player at 4 / 4 on Normal: A's tent sends at least 2, B's at least 4, every seed |
+| **The tent on Hard and Brutal** | sim_range | the `mission` player at 4 / 4 (Hard) and 6 / 6 (Brutal): each tent sends at most 1 (a per-difficulty pace key only if this fails, a question for the lead) |
+| **Nobody waits** (new) | sim_range | in every `mission` run, the camp clears on the tick its last fielded body dies; the time from the last resident's death to the clear is reported (it is a tent body still walking, never a wait) |
+| **The road archer** (new policy `archer`: Longbow from Road5 outside A's west gate, then holds the road) | sim_range | every hit lands (no "blocked"); the woken groups leave A's floor through the gate; he is reached (a melee hit on him) or they go home; reported, every seed |
+| **The walk-out** (new policy `walkout`: walks into A, waits for a wake, walks out of the east gate) | sim_range | the woken rushers stand on road cells outside A's floor within 5 s, every seed |
+| **The lose** (new policy `lose`: as `walkout`, then runs east at walk speed) | sim_range | every awake group of A turns `home` with its farthest body 60–110 studs past A's east edge along the road; every group back at rest, healed, within 25 s of the turn; every seed **[draft band]** |
+| **The sniper** (new policy `sniper`: Longbow from below A's west drop, then from the lookout ledge, never on the plateau) | sim_range | earns less cash a minute **and** less Timber a minute than `mission` on the same seeds; below the drop the rushers stop at its top and go home after `leashSeconds`; on the ledge the slingers shoot him and the rushers stand down; every seed (ruling 10) |
+| Still in a woken group of camp A | sim_range | down in 6–12 s from the wake (unchanged band) |
+| A first strike on every fire group | sim_range | unchanged |
+| The leash (`kite`) | sim_range | whole on return, the dead dead, paid only for kills (the "tent paused" clause goes) |
+| The edge (`edge`) | sim_range | **dropped** (it measured L1b-7's "0 paid") |
+| The sneak (`sneak`) | sim_range | wakes no group of A or B, every seed (unchanged) |
+| The careless road, the join-in | sim_range | as Wave 2 |
+| A tent's timeline, `tentAlone` | sim_range | **replaced** by the three tent bands above |
+| Every kill paid once, at once; Valor exact | sim_range, sim_combat 21 | as Wave 2 |
+| **The clear bonus** | sim_combat 21, sim_range | each camp's bonus equals `Combat.ClearBonus` on its fielded stock by hand; never on a skip; its share of a Normal clear reported against Wave 2's 5–10% (a break is reported, not tuned) |
+| Normal pays a minute | sim_range | Timber 37.8–46.2 a minute (unchanged); cash reported |
+| Hard and Brutal pay | sim_combat 21 | ×2–×3 and ×4–×6 of Normal (unchanged) |
+| Hard 4 / 4, Brutal 6 / 6: no hit over; the Colossus alone; the human clears; the never-dodger does not; clearly beyond the gear below; under-gearing never pays better | sim_range | unchanged bands, re-run with the new chase |
+| The Colossus alone and in the run | sim_range | 64–90 s (unchanged) |
+| The Raider Arena | sim_range | every L1 band re-run; its files frozen; a break is reported |
+
+**The levers, in order:** `chaseSight`, `hitMemorySeconds`, the tents' `pace`, the road cells' east
+end (within the lock gate), and `meleeAbove` (within its gate). No resident, stock, `every`, reward,
+weapon, kind or `ProvingGrounds.json` number moves.
+
+BALANCE "L1b Wave 4" records:
+- the region's cells and doors; the lock clearance;
+- the first clear and its split (walk, A, B, C, the Colossus);
+- each tent's bodies sent per seed and preset;
+- the lose distances and times;
+- the sniper's pay a minute against `mission`'s;
+- the bonus by camp;
+- the pay a minute; Hard and Brutal; the Raider Arena's re-run.
+
+**Simulators and mirrors:**
+- **`tools/sim_range.py`:**
+  - `LevelRun` mirrors `Region` (`Clamp` in `body_box`, `Toward` for every goal, `Runway` for
+    lanes);
+  - known, the hit memory, `Melee`, `Reachable`, the leash with `closing`, the stand-down, home's
+    turn-back, `Forget` at the close;
+  - the pace tent (`TentClock`, `Ahead`, `TentActive`), the clear on `aliveByFloor` and the fielded
+    bonus.
+  - `IN_PLAY_STEP`, `wanted`'s step inside the fence, the `cb_struck` gate and `edge_runs` go.
+    `steer`'s `near` and `awake_in` accept a fight on the road.
+  - New policies: `archer`, `walkout`, `lose`, `sniper`. `FOREST_CLEAR_SECONDS` becomes
+    (345.0, 420.0).
+- **`tools/sim_combat.py`:** `level_pay` pays the bonus on the fielded stock; 21 as amended.
+- **`tools/check_stage_mirror.py`** (with `stage_mirror.luau`) compares, on the shipped files and on
+  grids, against the Python mirrors:
+  - `Region.Build`, `Problems`, `Distance`, `Inside`, `Clamp`, `Runway` and `Toward` (the shipped
+    plateau and hand-built L, U and single-cell grids);
+  - `CampBrain.Melee`, `Reachable`, `Struck`, `Step` (scripted timelines: known by sight and by
+    memory, the leash with `closing`, the stand-down, home's turn-back), `Forget`, `StandsDown`,
+    `Goal` and `Shows` while stood down, `TentClock`, `Ahead` and `TentActive`;
+  - `StageFlow.Plan`'s regions, `zone.stock`, `approach` and `pace`;
+  - `StageFlow.Fielded`;
+  - the new `Validate` refusals;
+  - scripted `Advance` runs that clear with tent stock unsent, and `Skip` runs through both
+    approaches.
+  - The old `InPlay` grid stays (the rule of a group with no region). The `Struck` grid is redone.
+    The `tentLeft` runs go.
+- **`tools/crowd_harness/mirror_mutants.py`:** gains Luau mutants for `Region` (`Clamp`'s radius,
+  `Runway`'s doors, `Toward`'s hops), the stand-down, the hit memory and the pace (`Ahead`'s
+  `lead`). Each one must make `check_stage_mirror.py` fail.
+
+### Remotes
+
+No new remote. No intent carries an amount, a position or a reward.
+
+| Remote | Change |
+|---|---|
+| `RunState` | `floors[i].cells` (optional): the region's cells, for the drawn charge |
+| `CrowdSnapshot`, `CrowdSpawn` | unchanged shape. Bodies of A and B may now be anywhere on the plateau (inside the wire) |
+| `CombatFx` | a strike on a resident no longer says "blocked" except on a held one (and on a plate, as before). `camp` `cleared` may come while the party is elsewhere (the last raider died on the road). No `alert` for `home → fight` |
+| `RequestDebug` `skip`/`stage` (N) | unchanged payload; on the road it now moves the party to the next camp's `approach` first (Studio only, as before) |
+
+Everything else (`RequestAttack`, `RequestStartLevel`, `RequestAbandon`, `RequestLeave`,
+`MapState`, `CrowdRemove`, the wallet send) is unchanged.
+
+### Ownership (L1b Wave 4, disjoint)
+
+| Owner | Files |
+|---|---|
+| luau-engineer **A** (the crowd) | `src/shared/Types.luau` (**first**, the whole "Types" block); new `src/shared/Region.luau`; `src/combat/server/Services/` `CampBrain.luau`, `CrowdService.luau`, `CrowdBrain.luau`; new `tools/crowd_harness/tests_l1b_w4_crowd.luau`; in `tools/crowd_harness/` `tests_l1b_crowd.luau` and `tests_l1b_w2_crowd.luau`, only the cases this wave changes |
+| luau-engineer **B** (the run) | `src/combat/server/Services/` `StageFlow.luau`, `WaveService.luau`; `tools/crowd_harness/` `run_harness.py`, `mutate.py`, `tests_l1.luau`, `tests_l1_world.luau`, `tests_l1b.luau`, `tests_l1b_w2.luau`, new `tests_l1b_w4.luau` |
+| ui-engineer | `src/combat/client/Controllers/` `CrowdRenderer.luau`, `CampAim.luau`, `InputController.luau`, `CombatUIController.luau` |
+| economy-designer | `src/shared/Config/Combat.json` (**first**, the new keys), `src/shared/Config/Levels/1_ForestRoad.json`, `src/shared/Layouts/Levels/ForestRoad.json`; `tools/sim_range.py`, `tools/sim_combat.py`, `tools/check_levels.py`, `tools/check_stage_mirror.py`, `tools/crowd_harness/stage_mirror.luau`, `tools/crowd_harness/mirror_mutants.py`; `docs/BALANCE.md` "L1b Wave 4" |
+| lead | this section; `docs/MISSIONS_DESIGN.md`; the brief files; the questions to Ben; merges |
+| untouched | everything under `src/server` and `src/client`; `src/combat/server/Main.server.luau`; `Combat.luau`, `HitShapes.luau`, `SwingGate.luau`, `CrowdCodec.luau`, `Tuning`, `Armory`, `Economy`, `Catalog`; `LevelGeometry`, `LevelService`, `DebugService`, `ArenaService`, `WeaponService`, `VitalsService`, `ThreatField`, `RangeService`, `AbilityService`, `PositionRing`, `StrikeTally`, `RunRegistry`, `RunFx`, `EnemyService`, `CombatService`, `ReturnService`, `CombatRemotes`; every client controller not named above; `Config/ProvingGrounds.json`, `Config/Expeditions.json`, `Config/Armory.json`, `Config/Missions/*`, `Config/Levels/0_RaiderArena.json`, `Layouts/Levels/RaiderArena.json`, `Layouts/Levels/Lobby.json`, `Layouts/Arenas/*`; `tools/crowd_harness/` `tests.luau`, `tests_w2.luau`, `tests_s2.luau`, `tests_s3.luau`, `tests_p5.luau`; `combat.project.json`; `tools/sim_economy.py`, `tools/proving_project.py` |
+
+**Who registers what:**
+- **B** registers `Region` in `run_harness.py`'s `SOURCES` and `mutate.py`'s `FILES`, and adds A's
+  test file, B's test file and every mutation to them: A's, the ui-engineer's `CampAim` ones, B's
+  own, and the replacements of the stale ones.
+- **The economy-designer** registers the `Region` and pace mutants in `mirror_mutants.py`, and the
+  new comparisons in `check_stage_mirror.py` and `stage_mirror.luau`.
+- `CampAim`'s cases stay in B's `tests_l1b_w2.luau`. The ui-engineer writes the new expectations
+  and mutation texts in its report; the lead routes them to B.
+
+**Who goes first:**
+1. **A lands `Types.luau`** and tells the lead. In parallel, **the economy-designer lands the
+   `Combat.json` keys.**
+2. **A lands `Region.luau` and the `CampBrain` exports** with bodies. B, the ui-engineer and the
+   economy-designer's mirrors start from those.
+3. B registers A's test file and mutations as they come.
+4. The economy-designer lands the level and the layout (pace, regions, approaches) before B's
+   real-file cases (`Validate` clean, `Plan`'s region, the real `Skip`) run. Until then B runs them
+   on a copy in a scratch folder of its own.
+
+Rules for every owner:
+- **Cross-owner requests go through the lead.** An owner lists them "for the other owner", and
+  nobody edits another owner's file.
+- No agent writes git or kills a process by image name (kill only your own PIDs). Each agent keeps
+  its scratch in a subfolder of its own.
+- **Big modules:** `CrowdService` (2,242 lines), `StageFlow` (2,179), `WaveService` (2,068) and
+  `CrowdRenderer` (3,012) are near their size. New pure logic goes in `Region.luau` or
+  `CampBrain.luau`, never as new top-level locals in the big executors.
+  `py tools/check_compile.py` (about 180 top-level locals) is in every owner's verify.
+
+### Gates (every QA pass; PATH line `export PATH="$HOME/.rokit/bin:$PATH"`, Python is `py`)
+
+Wave 2's list, with these changes:
+- **4.** `py tools/check_compile.py`: CHECK PASS, with `--counts` in the report.
+  `CrowdRenderer` ≤ 154 and `InputController` ≤ 149.
+- **7.** `py tools/sim_combat.py --check`: assertions 1–23, with 21 paying the bonus on the fielded
+  stock.
+- **8.** `py tools/sim_range.py --check`:
+  - the range's passes are green;
+  - the Raider Arena at 2 / 2;
+  - every Wave 4 band, including **the sniper band** (pay a minute under `mission`'s, every seed),
+    the lose band and the three tent bands.
+- **9.** `py tools/check_levels.py`: Wave 2's gates as amended, plus the Wave 4 table. That includes
+  **the lock clearance** (every cell ≥ longest reach + `regionLockMargin` from the locking floor).
+- **10.** `py tools/check_stage_mirror.py`: every comparison equal, **the `Region` mirror
+  included**. Then `py tools/crowd_harness/mirror_mutants.py`: every mutant caught, the new
+  `Region` and pace mutants included. Never run it beside `mutate.py`.
+- **11.** `py tools/crowd_harness/run_harness.py`, **then** `py tools/crowd_harness/mutate.py`, one
+  after the other, never in parallel. Pass the worktree's root and
+  `C:\Users\benja\Desktop\tycoon\tools\bin\luau.exe`. `mutate.py` takes over an hour: run it in
+  the background, and expect qa-runner's turn limit (resume it by id for the report). Both verdicts
+  and their counts go in the report.
+- **12.** `git diff --stat main -- src/server src/client` is empty.
+- **13.** `git diff main -- src/shared/Config/ProvingGrounds.json src/shared/Config/Expeditions.json
+  src/shared/Config/Missions src/shared/Layouts/Arenas src/shared/Config/Levels/0_RaiderArena.json
+  src/shared/Layouts/Levels/RaiderArena.json` is empty. `tests.luau`, `tests_w2`, `tests_s2`,
+  `tests_s3` and `tests_p5` do not differ from `main`, and pass.
+- **16.** `py tools/check_levels.py` prints, and QA copies into its report:
+  - Wave 2's items (population, Part count, route length, the sneak's tightest margins, the
+    join-in chain table);
+  - **the region's cell and door table, the tightest lock clearance, the sniper perches found,
+    and N's stops in order**.
+
+New:
+- **17.** `rg -n "tentLeft|IN_PLAY_STEP|tent_left" src tools` finds nothing.
+- **18.** `rg -n "\.inPlay\b" src/combat` finds nothing (the field is `reachable` now).
+
+Unchanged: 1–3, 5, 6, 14 and 15. `streetplan.py` and `check_mirror.py` are skipped, as in Wave 1.
+qa-runner must end with its report even when every command passes.
+
+### Definition of done (Wave 4)
+
+**luau-engineer A:**
+- The Types block is in `Types.luau`, first, verbatim; the lead was told.
+- `Region` implements every function above with the signatures given.
+- `CampBrain` implements L1b-W4-18 to -28 (`Step`, `Struck`, `Melee`, `Reachable`, `StandsDown`,
+  `Forget`, `Goal`, `Shows`, `TentClock`, `Ahead`, `TentActive`, `Problems`).
+- `CrowdBrain` cuts retreats and charges by the region. `CrowdService` clamps and routes region
+  bodies, stamps `closing`, heals stood-down rushers, reads `known`/`reachable`, and carries
+  `ForgetOthers`.
+- `tests_l1b_w4_crowd.luau` holds every case listed and passes under B's harness. The mutations,
+  the stale-mutation list and every changed old case are handed to B with their texts.
+- Gates 1–4, 11 and 13 green on A's files. Nothing in the camp step, the routing or the clamp
+  yields, raycasts or allocates per body.
+- The report lists anything "for the other owner".
+
+**luau-engineer B:**
+- `StageFlow` covers the regions in `Plan`, `zone.stock`, `approach`, `pace`, the new `Validate`
+  lines, the clear without `tentLeft`, `Fielded` and `Skip`'s approaches.
+- `WaveService` covers the floors' regions and cells, the pace tent, the fielded bonus,
+  `ForgetOthers` at the close and the `approach` action, as "B" and "Flow" say.
+- `tests_l1b_w4.luau` holds every case listed. `run_harness.py` and `mutate.py` register every
+  file and mutation, and every mutation is caught.
+- The report lists each changed or replaced case and mutation. It quotes the lines where a tent
+  decides to send, where a camp clears and where the bonus is priced.
+- Gates 1–5, 11–13, 15, 17 and 18 green.
+
+**ui-engineer:**
+- Every point of "Client" is done.
+- One screenshot each in the report (PC and the 667 × 375 emulator):
+  - a brute's charge telegraph drawn along RoadAB1 into the bend, cut where the road ends;
+  - a phone auto-firing at an awake raider on the road outside its camp.
+- The new `CampAim` expectations and mutations are written for B.
+- Gates 1–5 and 12 green on the client files; gate 4's counts as stated.
+
+**economy-designer:**
+- The config, the level file and the layout as "Config" says, every number set, every gate of the
+  Wave 4 table green.
+- `check_levels.py`, `sim_range.py`, `sim_combat.py`, `check_stage_mirror.py`,
+  `stage_mirror.luau` and `mirror_mutants.py` learn what "Balance bands" and the table say. Every
+  band passes, or is reported where this contract says so.
+- `docs/BALANCE.md` "L1b Wave 4" records what "Balance bands" lists.
+- Gates 6–10 and 16 green.
+
+**The wave as a whole:**
+- Every gate above is green. With `debug.provingBoots` `"range"`, every P1–P4 set behaves as at
+  Wave 3: the range has no region.
+- **`build/proving.rbxl`, Play:** the checklist below plays as written. Beyond it:
+  - no raider walks through a fence, off the plateau or into the void;
+  - no raider stands frozen at a door;
+  - nothing reads "BLOCKED" on an awake or resting resident of A or B;
+  - no group of A or B is awake after the Chief's gates close;
+  - a camp clears once, the moment its last fielded raider dies.
+- The `[Perf]` lines with A's and B's groups out on the road together have a p95 under 2 ms. The
+  lead reads them from Studio's log.
+- docs-keeper writes `docs/PLAYTEST.md` "L1b Wave 4", `docs/MANUAL_STEPS.md` "L1b Wave 4" (the
+  publish freeze until L4), and `docs/PLAN.md` "L1b" (Wave 4's row, the carried list).
+
+### Playtest checklist (Ben; about 10 minutes; docs-keeper copies it into PLAYTEST "L1b Wave 4")
+
+File: `tycoon\build\proving.rbxl`, after "Build all". Press **Play**: the map is open on Forest
+Road, Normal, and your gear is **2 / 2**. Keys:
+- **Enter** = Depart / Back to camp; **arrows** = level and difficulty;
+- **1** / **2** = sword / bow; **Space** jump (twice = double jump); **C** in the air = slam;
+  **Left Shift** dash;
+- **N** = next camp; **B** = jump to the boss; **G** = stronger gear;
+- **Backspace** twice = Abandon.
+
+**Good to know:**
+- Raiders now follow you out of their camp. Nothing says "BLOCKED" any more, except a plated
+  raider's armour.
+- Raiders still see through fences.
+
+1. **Enter** (Depart), then **N**. You stand on the road at the foot of the climb, below the first
+   camp (the Pickets). *Bug: N puts you anywhere else; at the Chief's Clearing.*
+2. **From below:** **2** for the bow. Jump up the climb onto the road, walk to the camp's west gate
+   and shoot the nearest raider through it, then at once drop back down the climb and stand below.
+   - Every arrow hurts.
+   - The group (and the one beside it) run out of the gate to the top of the drop, stand there a
+     few seconds, and walk home. A slinger may get a shot off.
+   - Shoot them as they walk home: it still hurts.
+   *Bug: "BLOCKED" on a raider; they jump down to you; they stand at the drop for good.*
+3. **The walk-out:** go in by the west gate until a group wakes, then walk out of the far (east)
+   gate and keep running along the road round the bend.
+   - They follow you out of the camp and down the road.
+   - Within about 90 studs they lose you and walk home. Back at their places, the ones you hurt
+     are whole again.
+   *Bug: they stop at the gate; they never give up; they walk through the fence or off the road.*
+4. **Clear the Pickets** at your own pace (**1** sword, **2** bow).
+   - Nobody steps out of the tent unless you are fast. Press **G** for 4 / 4 and you will be:
+     then a raider comes out every 6 s.
+   - "Pickets cleared" shows the moment the last raider falls, even one that chased you onto the
+     road.
+   *Bug: you wait for the tent; the banner never shows; it shows with a raider still standing.*
+5. **N**: you stand on the road before the Main Camp's west gate. **The sneak:** go in by the gate,
+   turn left (north) at once to the fence, walk east along the inside of it, close to it, to the
+   far gate, and step back onto the road. Nobody wakes. *Bug: a "!" while you hug the fence.*
+6. **N**: the Chief's Clearing's countdown starts, and the gates close as before. Its raiders fight
+   you anywhere in the room. **B** brings the **Colossus**.
+   - **2** for the bow: shoot its head. The numbers are yellow.
+   - While it is up, look at the grey **Server** number for a few seconds.
+   *Bug: a head shot shows white; raiders of the Chief stand idle; Main Camp's raiders waiting at
+   the gate.*
+7. Kill it (**G** if you need it). The summary lists your kills and a bonus for the Pickets only
+   (Main Camp was sneaked). **Enter**. *Bug: a bonus for Main Camp; an empty summary.*
+
+Asked afterwards, as click questions:
+- When you ran out of the Pickets, did they follow you far enough? Not far enough / about right /
+  too far.
+- Did you ever wait for raiders to come out of a tent? Never / once or twice / often.
+- What did the grey Server number read with the Colossus up, most of the time? Under 1 ms / 1–2 /
+  2–4 / over 4 / did not see it.
+
+### Open for later
+
+- **Natural barriers instead of fenced squares**, with the real forest (Ben §19): L4.
+- **Per-body floors** (study §1 option b), for a level whose road changes height beside a camp:
+  not needed on Forest Road (one plateau). Decided when L2 or L4 needs it (lead + A).
+- **The stand-down is per role, not per member:** a rusher that could reach a player another
+  cannot still waits with the group. Revisit only if Ben's look asks (A).
+- **Shooting out of the boss room:** a player inside the Chief's Clearing can still hit a raider at
+  the region's east end (56 studs and more away). It comes to the region's edge and gives up.
+  Bounded by no refills; reported, not ruled (lead).
+- **Sight through walls** (L4 or later, A); the seated head (L4, ui + A); `OnDash` before any
+  publish (A); parties and residents, revive (L5); the end screen (L4); Brutal's own units (lead):
+  all as carried in Wave 2.
+- **Never measured, said plainly:**
+  - the crowd step with two camps' groups routed along the road (`[Perf]` with A and B out);
+  - snapshot bytes with both camps awake at once;
+  - the phone's frame with raiders on the road.
+
+### Draft points for the lead (decisions this draft took that the rulings did not cover)
+
+1. **L1b-W4-14, the region's data:** `layout.regions` lists its camps and its road cells; the
+   camps' floors are its first cells, implicitly; a cell is `{ id, x, z, sx, sz }`; a region names
+   its `y`. A, B and the plateau are one region named `"plateau"`.
+2. **L1b-W4-15, doors on both axes and a tree**, with `levels.doorSpare` (0.5) as a config key.
+   Touching cells are not neighbours, so the road cells reach into the floors.
+3. **L1b-W4-16, `levels.regionLockMargin` (8) is a config key.** The reach is
+   `StageFlow.LongestReach` over every resident and tent kind of the region's camps at any
+   difficulty (the marksman's 48).
+4. **L1b-W4-18, known is computed in every state but held** (at rest it only feeds `Rouse` and
+   `TentRouse`). The hit memory is per player, in `hitAt`.
+5. **L1b-W4-19, a height cap on melee-reachable (`camps.meleeAbove`, 7.5)**, with its two gates.
+   check_levels' perch gate round an open floor is replaced by it and by the "sniper perches"
+   gate. The study's "extend the perch gate to the region" fails on the lookout ledge and the
+   cache block.
+6. **L1b-W4-19, the Wave 1 gate `chaseMargin ≤ reach − √2 · radius` stays** (the study drops
+   it). It now guarantees that a melee-reachable player can be hit, else the rushers would stand
+   beside him and never give up.
+7. **L1b-W4-20, a group with no region (the locking camp) keeps Wave 2's in-play rule for
+   everything**, so the boss room plays exactly as before.
+8. **L1b-W4-21 and -23, `closing` (a thinking rusher walked) holds the leash and the stand-down
+   clock**, so the rushers reach the edge before the 3 s are counted.
+9. **L1b-W4-22, the stand-down:** the rushers walk home and heal while their group's shooters keep
+   fighting, without a new group state. This reads ruling 5 (and Ben's "the melee raiders wait 3 s
+   at the edge and walk home to heal, their shooters still shoot back") per role inside a group.
+10. **L1b-W4-24, home turns back straight to `fight`**, not through a rise (no 0-s rise exists).
+11. **L1b-W4-25, a Studio lever's hit (`byUserId` 0) lands and remembers nobody.**
+12. **L1b-W4-26, `ForgetOthers` runs at the next camp step** and sends rise and fight groups home
+    with an event; resting and homeward groups only forget.
+13. **L1b-W4-28, the pace clock runs on `WaveService`'s tick clock while `Busy()`**; tent bodies'
+    deaths do not count as kills. The study's A 25 s, B 130 s and lead 0.15 are the starting
+    values.
+14. **L1b-W4-30, `Zone.stock` becomes the residents only**, and `StageFlow.Fielded` adds what the
+    tent sent.
+15. **L1b-W4-31, N's stops are layout `approach` points, optional per open camp.** A gets one too
+    (the foot of the climb), so step 1 needs no minute's walk. N skips a camp that is done or whose
+    checkpoint was reached, and never goes back before the last stop. With no approaches, N is
+    Wave 2's.
+16. **L1b-W4-32, `CampAim.Takes` takes `(onCampFloor, resting, phase)`.** Its cases stay in B's
+    file, and the ui-engineer writes the expectations.
+17. **`Group.inPlay` is renamed `reachable`, beside a new `known`** (gate 18). Every case and
+    mutation that read `inPlay` changes.
+18. **`RunFloor.cells` carries the region to the client** (no `ArenaService` change), and the
+    client uses it only for the drawn charge.
+19. **The bands:** the lose band (60–110 studs, home within 25 s), the walk-out within 5 s, the
+    "nobody waits" report, the stop rule at 360–405 s, and the Hard/Brutal tent band at the
+    recommended gear. The `edge` scenario and `tentAlone` go.
+20. **The playtest** fights the Pickets (from below, the walk-out, the clear) and sneaks Main Camp.
+    The study's "G to 4 / 4 for a fast clear with the tent" is folded into step 4 as an option,
+    because a second fought camp would undo the sneak. The Server number is asked again.
+21. **Ownership:** `DebugService`, `LevelGeometry` and `Combat.luau` are untouched (the study gave
+    B `DebugService` and `LevelGeometry`). `CampAim`'s harness cases stay in B's file.
+
+### Lead's answers to the draft points (2026-10-15; these win over the body)
+
+All 21 draft points are taken as written. Notes:
+- Point 9 (rushers stand down and walk home while the group's shooters keep fighting) is Ben's "they
+  give up" with "their shooters still shoot back": correct.
+- Point 13: the pace numbers are starting values; the designer owns them, measured against the bands.
+- Point 6 (the `chaseMargin ≤ reach − √2·radius` gate stays) and the drafter's corrections 1–8 of the
+  study are rulings.
+- Build order: A lands the Types block first and says so; the designer lands `Combat.json` first.
+  All four owners share one worktree: commit only your own paths (`git commit -- <paths>`), and retry
+  if `index.lock` is held. Never `git add -A`, never stash, never reset.
