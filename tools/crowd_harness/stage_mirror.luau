@@ -782,7 +782,12 @@ for _, case in data.campCases do
 					ret = Brain.Ahead(step[2], step[3], tent.busySeconds, step[4])
 				elseif step[1] == "aheadTent" then
 					-- R7: WaveService's call, counted from the tent's own residents.
-					ret = Brain.Ahead(tent.residents - step[2], tent.residents, tent.busySeconds, step[3])
+					ret = Brain.Ahead(
+						tent.residents - step[2],
+						tent.residents,
+						tent.busySeconds,
+						step[3]
+					)
 				else
 					Brain.TentSent(tent, step[2], case.every)
 				end
