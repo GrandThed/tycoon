@@ -6,6 +6,12 @@
 -- wakes" means. CrowdService keeps the groups and executes what this module decides.
 -- L1b Wave 2 ("Wave 2 — the long road", L1b-W2-6, -7, -10, -12) adds a tent's own group and its
 -- sending rule, dormancy far from every player, and the join-in of nearby resting groups.
+-- L1b Wave 4 ("L1b Wave 4 — no waits, no walls", L1b-W4-18 to -28): an open camp's group chases
+-- through its region (Region.luau), not only its floor. It goes for the players it knows (seen
+-- within chaseSight, or who hit it within hitMemorySeconds), leashes when none of them is
+-- reachable, and its rushers stand down and walk home while its shooters still answer a player
+-- they cannot reach. Every hit lands but on a held group. A tent sends only while its camp is
+-- ahead of its own pace. A group with no region (the boss room's) keeps Wave 2's in-play rule.
 --
 -- Pure on purpose, as StageFlow is: tables, numbers and Vector3 values within the harness shim
 -- (X Y Z, + - * /, unary minus, Magnitude, Unit, Dot); no service, no Instance, no clock of its
@@ -17,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
+local Region = require(sharedFolder:WaitForChild("Region"))
 local Types = require(sharedFolder:WaitForChild("Types"))
 
 export type Post = {
@@ -42,6 +49,9 @@ export type StepInput = {
 	shooters: { Shooter },
 	-- a member is between a windup's start and its attack's end, a charge included
 	striking: boolean,
+	-- L1b-W4-23: a rusher of the group, fighting and not stood down, walked under its brain at the
+	-- last integrate (the executor's stamp): it is still closing on the region's edge
+	closing: boolean,
 }
 export type Group = {
 	def: Types.CampGroupDef,
@@ -49,15 +59,25 @@ export type Group = {
 	held: boolean,
 	-- the clock the state began
 	since: number,
-	-- fight: no target has been in play since this clock
+	-- fight: no known player has been reachable (and no rusher closing) since this clock
 	quietSince: number,
 	-- a member was struck since the last Step (Struck sets it)
 	hit: boolean,
-	-- the userIds in play at the last Step
-	inPlay: { [number]: boolean },
+	-- L1b-W4-18/19: this step's sets, rebuilt in place by Step
+	known: { [number]: boolean },
+	reachable: { [number]: boolean },
+	-- userId -> the clock of its last landed hit on a member (Struck); pruned past hitMemorySeconds
+	hitAt: { [number]: number },
+	-- userIds whose hit landed since the last Step (cleared by Step)
+	struckBy: { [number]: boolean },
+	-- L1b-W4-22: fight: no known player has been melee-reachable (and no rusher closing) since
+	-- this clock; once leashSeconds pass, the rushers stand down
+	meleeQuietSince: number,
+	standDown: boolean,
 }
--- A tent's stock not sent yet, and the clock its next body is due (L1b-W2-7).
-export type TentState = { left: number, nextAt: number }
+-- A tent's stock not sent yet, the clock its next body is due (L1b-W2-7), and its camp's pace
+-- clock (L1b-W4-28): the busy time summed, and the tick it was last busy at (nil = not busy then).
+export type TentState = { left: number, nextAt: number, busySeconds: number, lastAt: number? }
 
 -- A rise or a leash that ends exactly on a step must not wait one more because the summed step
 -- times came out a hair short (CrowdBrain's TIME_EPSILON).
@@ -82,6 +102,16 @@ local RULE_KEYS = {
 	"engagedHoldSeconds",
 	"joinFactor",
 	"dormantRadius",
+	"chaseSight",
+	"hitMemorySeconds",
+	"meleeAbove",
+}
+-- Keys that must be above 0, not only not negative.
+local POSITIVE_KEYS: { [string]: boolean } = {
+	homeTolerance = true,
+	joinFactor = true,
+	chaseSight = true,
+	meleeAbove = true,
 }
 
 local CampBrain = {}
@@ -129,8 +159,8 @@ local function inBand(def: Types.CampGroupDef, root: Vector3, rules: Types.CampR
 end
 
 -- One line per key of Combat.json `camps` that is missing, not a number, not finite or negative;
--- a `sight` of 0 or less; a `cone` outside (0, 360]; a `homeTolerance` or `joinFactor` of 0 or
--- less; a `dormantRadius` not above every posture's sight (a group must never sleep where one of
+-- a `sight` of 0 or less; a `cone` outside (0, 360]; a `homeTolerance`, `joinFactor`, `chaseSight`
+-- or `meleeAbove` of 0 or less; a `dormantRadius` not above every posture's sight (a group must never sleep where one of
 -- its members could see a player). nil = one line.
 function CampBrain.Problems(rules: Types.CampRulesConfig?): { string }
 	local problems: { string } = {}
@@ -164,7 +194,7 @@ function CampBrain.Problems(rules: Types.CampRulesConfig?): { string }
 			table.insert(problems, `camps.{key}: missing or not a finite number`)
 		elseif value < 0 then
 			table.insert(problems, `camps.{key}: negative ({value})`)
-		elseif (key == "homeTolerance" or key == "joinFactor") and value <= 0 then
+		elseif POSITIVE_KEYS[key] and value <= 0 then
 			table.insert(problems, `camps.{key}: must be above 0 ({value})`)
 		end
 	end
@@ -192,7 +222,12 @@ function CampBrain.NewGroup(def: Types.CampGroupDef, now: number): Group
 		since = now,
 		quietSince = now,
 		hit = false,
-		inPlay = {},
+		known = {},
+		reachable = {},
+		hitAt = {},
+		struckBy = {},
+		meleeQuietSince = now,
+		standDown = false,
 	}
 end
 
@@ -310,7 +345,8 @@ function CampBrain.Sees(
 end
 
 -- Is this target in play for the group: in the height band, and within chaseMargin (flat) of the
--- camp's floor rectangle, or within reach of one of its living keepAway members?
+-- camp's floor rectangle, or within reach of one of its living keepAway members? From Wave 4 the
+-- rule of a group with no region (the boss room's, L1b-W4-20) for knowing, reaching and melee.
 -- The margin is a distance to the rectangle, so its corners are round: a rusher clamped in a
 -- floor's corner stands √2 × its radius from it, and a square corner would leave a player who can
 -- hit it out of its reach (L1b-7; the gate is chaseMargin ≤ reach − √2 × radius).
@@ -339,7 +375,7 @@ function CampBrain.InPlay(
 end
 
 -- Is a player still engaged (L1b-20) at `now`, the crowd's step clock, when `lastAt` is the last
--- step that found them in play for a group in rise or fight (nil = never)? True for
+-- step that found them reachable for a group in rise or fight (nil = never)? True for
 -- engagedHoldSeconds after it, edge included: a fall out of a fight leaves the height band a few
 -- steps before it reaches killY and must still get no get-up i-frames, and a player on a camp's
 -- edge must not flicker in and out (the phone's Abandon button reads it).
@@ -363,8 +399,105 @@ local function anySeen(group: Group, input: StepInput, rules: Types.CampRulesCon
 	return false
 end
 
+-- L1b-W4-19: may the group's rushers reach this target? With a region: in the height band, at most
+-- meleeAbove over the floor (a ledge or a block over the road is the shooters' business, else the
+-- rushers would stand under it for good), and within chaseMargin (flat, rounded corners) of the
+-- region. With none: the in-play rule.
+function CampBrain.Melee(
+	def: Types.CampGroupDef,
+	target: Seen,
+	rules: Types.CampRulesConfig
+): boolean
+	local region = def.region
+	if region == nil then
+		return CampBrain.InPlay(def, target, {}, rules)
+	end
+	local root = target.root
+	return inBand(def, root, rules)
+		and root.Y - def.floorY <= rules.meleeAbove
+		and Region.Distance(region, root.X, root.Z) <= rules.chaseMargin
+end
+
+-- L1b-W4-19: may the group reach this target at all: its rushers can, or (in the band) one of its
+-- living keepAway members has it within its longest reach. With no region: the in-play rule.
+function CampBrain.Reachable(
+	def: Types.CampGroupDef,
+	target: Seen,
+	shooters: { Shooter },
+	rules: Types.CampRulesConfig
+): boolean
+	if def.region == nil then
+		return CampBrain.InPlay(def, target, shooters, rules)
+	end
+	if CampBrain.Melee(def, target, rules) then
+		return true
+	end
+	local root = target.root
+	if not inBand(def, root, rules) then
+		return false
+	end
+	for _, shooter in shooters do
+		if flatDistance(shooter.at, root) <= shooter.reach then
+			return true
+		end
+	end
+	return false
+end
+
+-- L1b-W4-18: a group with a region knows a target a living member stands within chaseSight of (on
+-- the flat, all round, the root in the band), or one whose hit landed within hitMemorySeconds
+-- (hitAt is pruned before this is asked). A group with none knows whoever is in play.
+local function knows(
+	group: Group,
+	input: StepInput,
+	target: Seen,
+	rules: Types.CampRulesConfig
+): boolean
+	local def = group.def
+	if def.region == nil then
+		return CampBrain.InPlay(def, target, input.shooters, rules)
+	end
+	if group.hitAt[target.userId] ~= nil then
+		return true
+	end
+	local root = target.root
+	if not inBand(def, root, rules) then
+		return false
+	end
+	local sight = rules.chaseSight
+	for _, member in input.members do
+		if flatDistance(member.at, root) <= sight then
+			return true
+		end
+	end
+	return false
+end
+
+-- Home turns back for a reachable player who struck a member since the last step, or whom a
+-- member sees by its posture's rule (L1b-W4-24). An unreachable hitter is remembered, not chased.
+local function turnsBack(group: Group, input: StepInput, rules: Types.CampRulesConfig): boolean
+	local reachable = group.reachable
+	local def = group.def
+	for _, target in input.targets do
+		local userId = target.userId
+		if not reachable[userId] then
+			continue
+		end
+		if group.struckBy[userId] then
+			return true
+		end
+		for _, member in input.members do
+			if CampBrain.Sees(def, member, target, rules) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- One step of a group: at most one transition. Returns the new state (already written into the
--- group), or nil when it did not change. `hit` is cleared at the end of every call.
+-- group), or nil when it did not change. `hit` and `struckBy` are cleared at the end of every
+-- call. The sets are rebuilt in place and the hit memory pruned in place: nothing is allocated.
 function CampBrain.Step(
 	group: Group,
 	input: StepInput,
@@ -375,20 +508,48 @@ function CampBrain.Step(
 		return nil
 	end
 	local now = input.now
-	local inPlay = group.inPlay
-	table.clear(inPlay)
-	local anyInPlay = false
-	for _, target in input.targets do
-		if CampBrain.InPlay(group.def, target, input.shooters, rules) then
-			inPlay[target.userId] = true
-			anyInPlay = true
+	local known = group.known
+	local reachable = group.reachable
+	table.clear(known)
+	table.clear(reachable)
+	local hitAt = group.hitAt
+	local memory = rules.hitMemorySeconds
+	for userId, at in hitAt do
+		if now - at > memory + TIME_EPSILON then
+			hitAt[userId] = nil
 		end
 	end
+	local def = group.def
 	if group.held then
-		-- Held until the close: neither sight nor a hit wakes it (ruling L1b-13).
+		-- Held until the close: neither sight nor a hit wakes it (ruling L1b-13). Its sets are
+		-- still current, so Engaged is right at the release.
+		for _, target in input.targets do
+			if CampBrain.InPlay(def, target, input.shooters, rules) then
+				known[target.userId] = true
+				reachable[target.userId] = true
+			end
+		end
 		group.hit = false
+		table.clear(group.struckBy)
 		return nil
 	end
+	local anyReach = false
+	local anyMelee = false
+	for _, target in input.targets do
+		if not knows(group, input, target, rules) then
+			continue
+		end
+		local userId = target.userId
+		known[userId] = true
+		if CampBrain.Reachable(def, target, input.shooters, rules) then
+			reachable[userId] = true
+			anyReach = true
+			if CampBrain.Melee(def, target, rules) then
+				anyMelee = true
+			end
+		end
+	end
+	local leash = rules.leashSeconds - TIME_EPSILON
 	local changed: Types.CampGroupState? = nil
 	local state = group.state
 	if state == "rest" then
@@ -396,28 +557,49 @@ function CampBrain.Step(
 			changed = "rise"
 		end
 	elseif state == "rise" then
-		if now - group.since >= postureRules(group.def, rules).rise - TIME_EPSILON then
+		if now - group.since >= postureRules(def, rules).rise - TIME_EPSILON then
 			changed = "fight"
 			group.quietSince = now
+			group.meleeQuietSince = now
+			group.standDown = false
 		end
 	elseif state == "fight" then
-		if anyInPlay then
+		-- The leash first: a group that leaves stands nobody down.
+		if anyReach or input.closing then
 			group.quietSince = now
-		elseif
-			now - group.quietSince >= rules.leashSeconds - TIME_EPSILON and not input.striking
-		then
+		elseif now - group.quietSince >= leash and not input.striking then
 			changed = "home"
+			group.standDown = false
 		end
-	elseif state == "home" then
-		local home = true
-		for _, member in input.members do
-			if not CampBrain.AtPost(member.post, member.at, rules) then
-				home = false
-				break
+		if changed == nil then
+			if anyMelee then
+				group.meleeQuietSince = now
+				group.standDown = false
+			elseif not group.standDown and input.closing then
+				group.meleeQuietSince = now
+			elseif not group.standDown and now - group.meleeQuietSince >= leash then
+				group.standDown = true
 			end
 		end
-		if home then
-			changed = "rest"
+	elseif state == "home" then
+		if turnsBack(group, input, rules) then
+			-- Straight back to the fight: a rise always takes its posture's time, and a group
+			-- that was just fighting has nothing to rise from.
+			changed = "fight"
+			group.quietSince = now
+			group.meleeQuietSince = now
+			group.standDown = false
+		else
+			local home = true
+			for _, member in input.members do
+				if not CampBrain.AtPost(member.post, member.at, rules) then
+					home = false
+					break
+				end
+			end
+			if home then
+				changed = "rest"
+			end
 		end
 	end
 	if changed ~= nil then
@@ -425,6 +607,7 @@ function CampBrain.Step(
 		group.since = now
 	end
 	group.hit = false
+	table.clear(group.struckBy)
 	return changed
 end
 
@@ -438,25 +621,53 @@ function CampBrain.Release(group: Group, now: number): ()
 	group.since = now
 end
 
--- A held group, or one walking home: it takes no damage, no knock and no stagger, and ignores
--- sight and hits.
+-- A held group takes no damage, no knock and no stagger, and ignores sight and hits (L1b-13). A
+-- homeward one no longer evades (L1b-W4-24).
 function CampBrain.Evades(group: Group): boolean
-	return group.held or group.state == "home"
+	return group.held
 end
 
--- A hit on a member. An evading group records nothing (false). Otherwise the group is woken by
--- it, and the damage lands only from a player in play at the last step, or from nobody (a Studio
--- lever): ruling L1b-7.
-function CampBrain.Struck(group: Group, byUserId: number): boolean
+-- A hit on a member (L1b-W4-25). A held group answers false and records nothing. Every other hit
+-- lands and is recorded: it wakes a resting group, and a player's (byUserId ~= 0) is remembered
+-- for hitMemorySeconds and for the next Step's turn-back. A Studio lever's (0) remembers nobody.
+function CampBrain.Struck(group: Group, byUserId: number, now: number): boolean
 	if CampBrain.Evades(group) then
 		return false
 	end
 	group.hit = true
-	return byUserId == 0 or group.inPlay[byUserId] == true
+	if byUserId ~= 0 then
+		group.hitAt[byUserId] = now
+		group.struckBy[byUserId] = true
+	end
+	return true
+end
+
+-- L1b-W4-22: does this member of the group stand down: a rusher (its kind's brain is not keepAway)
+-- of an unheld fighting group whose rushers have lost every melee-reachable player.
+function CampBrain.StandsDown(group: Group, rusher: boolean): boolean
+	return rusher and not group.held and group.state == "fight" and group.standDown
+end
+
+-- L1b-W4-26, the close forgets the road: the group forgets every player; one in rise or fight
+-- goes home (the change is answered, so the executor sends its event). Resting, homeward and held
+-- groups only forget (nil).
+function CampBrain.Forget(group: Group, now: number): Types.CampGroupState?
+	table.clear(group.known)
+	table.clear(group.reachable)
+	table.clear(group.hitAt)
+	table.clear(group.struckBy)
+	if group.held or (group.state ~= "rise" and group.state ~= "fight") then
+		return nil
+	end
+	group.state = "home"
+	group.since = now
+	group.standDown = false
+	return "home"
 end
 
 -- Where a member that is not fighting walks, and its pace (x its kind's speed); nil = it stands.
--- The executor seeks the goal with a stop distance of rules.homeTolerance.
+-- The executor seeks the goal with a stop distance of rules.homeTolerance. A stood-down rusher
+-- (L1b-W4-22) walks to its post as a homeward member does; the executor asks only for those.
 function CampBrain.Goal(
 	group: Group,
 	resident: Resident,
@@ -482,7 +693,7 @@ function CampBrain.Goal(
 			goal = onFloor(points[resident.leg], def.floorY)
 		end
 		return goal, rules.patrolPace
-	elseif state == "home" then
+	elseif state == "home" or (state == "fight" and group.standDown) then
 		if CampBrain.AtPost(post, at, rules) then
 			-- Back on its loop where it was put.
 			resident.leg = post.leg
@@ -494,7 +705,8 @@ end
 
 -- The wire state of a member that is not fighting; nil = the brain's (fight). `moving` is the
 -- executor's: a flat speed over its move threshold this step. Only a fire sits: a tent's group
--- stands round its tent.
+-- stands round its tent. A stood-down rusher shows as a homeward one (the executor asks only for
+-- those; its group's shooters fight on and show the brain's state).
 function CampBrain.Shows(group: Group, moving: boolean): Types.CrowdState?
 	local state = group.state
 	if group.held or state == "rest" then
@@ -502,7 +714,7 @@ function CampBrain.Shows(group: Group, moving: boolean): Types.CrowdState?
 			return "move"
 		end
 		return if group.def.posture == "fire" then "rest" else "idle"
-	elseif state == "home" then
+	elseif state == "home" or (state == "fight" and group.standDown) then
 		return if moving then "move" else "idle"
 	elseif state == "rise" then
 		return "rise"
@@ -593,16 +805,16 @@ function CampBrain.JoinIn(
 end
 
 -- A wake from outside Step and Release (a tent's rouse, a join-in): a resting, unheld group rises.
--- One walking home rises only while a player is in play for its camp (`inPlay`: the caller's
--- answer from the group's in-play set at this step's Step, the set engagement reads). The fix
--- round's B-3 as the lead ruled it: roused with nobody to fight, a group would only leash again,
--- evading every hit on its way home, and stall the clear. JoinIn skips homeward groups itself.
--- True when it did; anything else is left as it is.
-function CampBrain.Rouse(group: Group, now: number, inPlay: boolean): boolean
+-- One walking home rises only while a player is reachable for it (`reachable`: the caller's
+-- answer from the group's reachable set at this step's Step, the set engagement reads; L1b-W4-28).
+-- The fix round's B-3 as the lead ruled it: roused with nobody to fight, a group would only leash
+-- again and stall the clear. JoinIn skips homeward groups itself. True when it did; anything else
+-- is left as it is.
+function CampBrain.Rouse(group: Group, now: number, reachable: boolean): boolean
 	if group.held then
 		return false
 	end
-	if group.state ~= "rest" and not (group.state == "home" and inPlay) then
+	if group.state ~= "rest" and not (group.state == "home" and reachable) then
 		return false
 	end
 	group.state = "rise"
@@ -612,26 +824,53 @@ function CampBrain.Rouse(group: Group, now: number, inPlay: boolean): boolean
 end
 
 -- A tent's rouse (CrowdService.RouseGroup: the body it has just sent, or a rouse it still owes,
--- StageFlow.TentOwesRouse): only while a player is in play for its camp (`inPlay`, as for Rouse),
--- from rest or from the walk home. The lead's ruling (i) on the fix round's B-3: a tent never
--- wakes a group to fight nobody, which would only leash again. Sight, hits and the join-in chain
--- wake through Step and Rouse, untouched.
-function CampBrain.TentRouse(group: Group, now: number, inPlay: boolean): boolean
-	if not inPlay then
+-- StageFlow.TentOwesRouse): only while a player is known and reachable for its group
+-- (`reachable`, as for Rouse), from rest or from the walk home. The lead's ruling (i) on the fix
+-- round's B-3: a tent never wakes a group to fight nobody, which would only leash again. Sight,
+-- hits and the join-in chain wake through Step and Rouse, untouched.
+function CampBrain.TentRouse(group: Group, now: number, reachable: boolean): boolean
+	if not reachable then
 		return false
 	end
-	return CampBrain.Rouse(group, now, inPlay)
+	return CampBrain.Rouse(group, now, reachable)
 end
 
--- L1b-W2-7: a tent's stock, its first body due at once.
+-- L1b-W2-7: a tent's stock, its first body due at once; its camp's pace clock at 0, not running.
 function CampBrain.NewTent(stock: number): TentState
-	return { left = stock, nextAt = -math.huge }
+	return { left = stock, nextAt = -math.huge, busySeconds = 0, lastAt = nil }
 end
 
--- A tent sends while its camp is busy, or once its camp has no resident left alive (its own
--- bodies not counted), so a camp can always be cleared.
-function CampBrain.TentActive(busy: boolean, residentsAlive: number): boolean
-	return busy or residentsAlive <= 0
+-- L1b-W4-28: the camp's pace clock, once per run tick. Only busy time counts: the time since the
+-- last tick is added only when this tick and the one before were both busy, so a gap with the camp
+-- at rest is never counted.
+function CampBrain.TentClock(tent: TentState, busy: boolean, now: number): ()
+	local lastAt = tent.lastAt
+	if busy and lastAt ~= nil then
+		tent.busySeconds += math.max(now - lastAt, 0)
+	end
+	tent.lastAt = if busy then now else nil
+end
+
+-- L1b-W4-28: is the camp ahead of its own clock: the share of its residents killed, less the busy
+-- time over pace.seconds, at least pace.lead (edge included). Never with no resident or no pace.
+-- Tent bodies are never counted as kills (the caller's `killed` is residents only).
+function CampBrain.Ahead(
+	killed: number,
+	residents: number,
+	busySeconds: number,
+	pace: Types.LevelTentPace
+): boolean
+	if residents <= 0 or pace.seconds <= 0 then
+		return false
+	end
+	return killed / residents - busySeconds / pace.seconds >= pace.lead - TIME_EPSILON
+end
+
+-- L1b-W4-28: a tent sends only while its camp is busy, ahead of its pace and with a resident of
+-- its own still alive. It is a pace reserve, never what a clear waits for: once the residents are
+-- dead it stops, and what it has not sent is forfeit.
+function CampBrain.TentActive(busy: boolean, residentsAlive: number, ahead: boolean): boolean
+	return busy and residentsAlive > 0 and ahead
 end
 
 -- A pause keeps both the stock and nextAt, so after a long rest the next body comes at once.
