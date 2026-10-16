@@ -442,3 +442,9 @@ After his look at Wave 3: *"it feels right"*, *"the bow feels right"*, *"everyth
 reach what he has never seen in Studio: the Chief's Clearing (the Colossus, the headshots) and the sneak
 past Main Camp. Everything else carried (the dash check before any publish, phones, two players, the
 end screen) belongs to L4 and L5. Brief: `docs/prompts/l1b-wave4.md`.
+
+**Wave 4, after the study (2026-10-15, click questions with sketches):** the raiders may follow the player
+**anywhere on the road** (A's raiders may follow him to B's gate and fight beside B's; the lead's "halfway
+to the next camp" was not taken); a player shooting from a spot they cannot reach (the lookout ledge,
+below the drop) **makes them give up**: every hit lands, the melee raiders wait 3 s at the edge and walk
+home to heal, their shooters still shoot back. **[Ben]**

@@ -14217,3 +14217,45 @@ moves (the tents set camp A, a head crit still one-shots fodder), so the band wa
 11. Minors 1, 3, 4, 5 (simulator comments and tidying, BALANCE corrections) are fixed by the
     designer. The in-play step stays "1 stud inside the floor" as a stated simplification of the
     game's `chaseMargin` rule (a little less safe than the game for a bow), with a correct comment.
+
+# L1b Wave 4 — no waits, no walls (2026-10-15)
+
+Ben's decisions: `docs/MISSIONS_DESIGN.md` §19 and its last paragraph. The study:
+`docs/prompts/l1b-w4-study-report.md` (§11 lists the decisions, and the rulings this wave overturns).
+This section starts with the lead's rulings; the full contract follows them.
+
+## Lead's rulings (L1b-W4-n; they win over the study where they differ)
+
+1. **One shared chase region on the plateau.** Ben chose "anywhere on the road": the region is the
+   whole height-8 plateau that holds the open camps (A and B floors, Road5, LookoutSignPad,
+   RoadAB1–5, RoadBC1–5, CacheSpur, CacheSignPad), cut back on the east so that no point of it is
+   closer to a locking camp's floor rectangle than the longest resident reach on any difficulty + 8
+   (study §4). One height, one floor index per body as today, no road reshaping, no per-body floor.
+   Raiders of one camp may enter another open camp's floor. The study's per-camp territories and its
+   "territories never overlap" gate are dropped.
+2. **The pure `src/shared/Region.luau`** (study §1): clamp to the region, cut a charge at its edge,
+   route through the doors (the overlaps of the cells) for the U-bends. Server, client and the
+   simulator mirror use the same rules; `check_stage_mirror.py` proves it.
+3. **Fences stay**; bodies leave and enter camps through the gates (the doors) (study §2).
+4. **The chase** (study §3): a group *knows* a player it saw within `camps.chaseSight` or who hit it
+   within `camps.hitMemorySeconds`; it goes for the nearest known player; after `camps.leashSeconds`
+   (3) with no known and reachable player, and not striking, it goes home. Numbers are the designer's,
+   tuned so a running player is usually lost within about 90 studs of the gate.
+5. **Unreachable shooter: they give up** (Ben). Every hit lands; melee walks to the region's edge,
+   stands `leashSeconds`, goes home and heals; shooters keep shooting while he is within their reach.
+   `home` takes hits and turns back only for a reachable player (L1b-8 amended).
+6. **No BLOCKED from camp rules** (L1b-7 goes), except the Chief's held residents before the close
+   (L1b-13 kept) and plates (not a camp rule).
+7. **At the Chief's close** every other camp's groups forget every player and go home.
+8. **The tent is a pace reserve** (Ben): it sends one raider every `tent.every` only while the camp is
+   ahead of its own clock (`pace` per camp, the study's model, numbers the designer's) and while any of
+   the camp's residents lives. **A camp is cleared when every raider it fielded is dead, wherever it
+   stands** (not "its floor is empty": raiders now leave the floor). Stock not sent is forfeit.
+9. **The clear bonus** is `clearBonus` × what the camp fielded (residents plus tent raiders sent).
+10. **Bands:** the Normal first clear at 2 / 2 is re-banded from the measured no-tent clear (study §5:
+    6.17–6.41 min) with the new chase in; `targetMinutes` follows. A new `sim_range` "sniper" policy
+    (bow from the lookout ledge and below the drop) must earn less cash per minute than `mission`.
+11. **CampAim** loses its in-play clause; never in the countdown, never a resting body stay.
+12. **Ben's look: N steps through every camp** (Depart → A → N to B's approach for the sneak → N to the
+    Chief's Clearing), no panel (study §8).
+13. Everything else in study §11 is taken as written.
