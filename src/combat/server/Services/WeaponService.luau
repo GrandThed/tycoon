@@ -41,6 +41,7 @@ local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local SwingGate = require(sharedFolder:WaitForChild("SwingGate"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local WallClip = require(sharedFolder:WaitForChild("WallClip"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
@@ -2493,7 +2494,9 @@ function WeaponService.CheckAim(player: Player, origin: Vector3): boolean
 	return root ~= nil and aimAllowed(shooter, root, origin, Tuning.Get())
 end
 
--- Ruling 4, which InputController mirrors on the client: where an aimed ability lands.
+-- Ruling 4, which InputController mirrors on the client: where an aimed ability lands. nil =
+-- refused, and (L1c §8) so is ground more than a jump and a double jump above the caster's floor
+-- (WallClip.TooHigh): a leap aimed over a tall wall would otherwise land on its top.
 function WeaponService.GroundPoint(
 	player: Player,
 	origin: Vector3,
@@ -2521,10 +2524,13 @@ function WeaponService.GroundPoint(
 		local pulled = flat.Unit * range
 		point = Vector3.new(rootPosition.X + pulled.X, point.Y, rootPosition.Z + pulled.Z)
 	end
-	-- 4: dropped onto the floor there, else level with the floor under the caster.
-	local floorY = floorUnder(point, params)
-		or floorBelow(root, params)
-		or rootPosition.Y - standingOffset(root, humanoid)
+	-- 4: dropped onto the floor there, else level with the floor under the caster (else the
+	-- caster's feet, over a void).
+	local casterFloor = floorBelow(root, params) or rootPosition.Y - standingOffset(root, humanoid)
+	local floorY = floorUnder(point, params) or casterFloor
+	if WallClip.TooHigh(casterFloor, floorY, WallClip.Rise(Tuning.Get().movement)) then
+		return nil
+	end
 	return Vector3.new(point.X, floorY, point.Z)
 end
 

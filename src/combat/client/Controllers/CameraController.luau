@@ -66,6 +66,15 @@
 -- the same clamped lag the height uses, so a 60-100 stud/s burst reads as speed instead of
 -- the world snapping past a locked camera; afterwards the gap closes on its own in a fraction
 -- of a second. A leap adds a short field-of-view kick. Neither is shake: shake is Feedback's.
+--
+-- L1c-5a (docs/prompts/l1c-contract.md): a locking camp is walled so nothing inside shows from
+-- outside, but an open gate does not stop the spherecast (open gates are CanQuery false), so a
+-- camera swung near the gate looked in along the inner wall. The boom, from the pivot through
+-- the shoulder to the camera, never enters the fenced rectangle (floor + levels.fenceThickness)
+-- of a locking camp unless the local root stands inside it; it stops COMBAT_CAMERA_COLLISION_PAD
+-- short of the edge (WallClip.Reach, pure and tested in the harness). The floors are
+-- RunState.floors, handed on by CombatUIController (SetFloors). Walls outside a camp keep doing
+-- their job through the spherecast.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -78,6 +87,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
+local WallClip = require(sharedFolder:WaitForChild("WallClip"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 
@@ -155,6 +165,9 @@ local placement = {
 	rootSeen = nil :: Vector3?,
 	jumpedAt = -math.huge,
 }
+-- L1c-5a: the run's locking camps as fenced rectangles (each floor grown by `fence`, read from
+-- Combat.json levels.fenceThickness), which the boom stays out of. Empty outside a level.
+local wallClip = { rects = {} :: { WallClip.Rect }, fence = 0 }
 local fovKick = 0
 local fovKickShown = 0
 local boundHumanoid: Humanoid? = nil
@@ -389,6 +402,26 @@ local function clearDistance(params: RaycastParams, from: Vector3, offset: Vecto
 		return length
 	end
 	return math.max(result.Distance - Theme.COMBAT_CAMERA_COLLISION_PAD, 0)
+end
+
+-- L1c-5a: how far along `offset` from `from` the camera may go before entering a locking camp
+-- whose rectangle does not hold `root`; the full length when no camp is in the way.
+local function campReach(from: Vector3, offset: Vector3, root: Vector3): number
+	local length = offset.Magnitude
+	if length <= 0 or #wallClip.rects == 0 then
+		return length
+	end
+	local share = WallClip.Reach(
+		from.X,
+		from.Z,
+		offset.X,
+		offset.Z,
+		wallClip.rects,
+		root.X,
+		root.Z,
+		Theme.COMBAT_CAMERA_COLLISION_PAD
+	)
+	return length * math.min(math.max(share, 0), 1)
 end
 
 local function consumeLookInput(deltaTime: number): ()
@@ -712,12 +745,16 @@ local function update(deltaTime: number): ()
 	-- The shoulder offset is pulled in against a wall first, so the camera never starts
 	-- its boom from inside the wall the player is hugging.
 	local shoulder = yawFrame:VectorToWorldSpace(shoulderOffset)
-	local shoulderReach = clearDistance(params, pivot, shoulder)
+	local shoulderReach =
+		math.min(clearDistance(params, pivot, shoulder), campReach(pivot, shoulder, rootPosition))
 	local shoulderPoint = if shoulder.Magnitude > 0
 		then pivot + shoulder.Unit * shoulderReach
 		else pivot
 	local boom = rotation:VectorToWorldSpace(Vector3.new(0, 0, zoom))
-	local boomReach = clearDistance(params, shoulderPoint, boom)
+	local boomReach = math.min(
+		clearDistance(params, shoulderPoint, boom),
+		campReach(shoulderPoint, boom, rootPosition)
+	)
 	local position = shoulderPoint + boom.Unit * boomReach
 
 	local frame = CFrame.new(position) * rotation
@@ -804,6 +841,10 @@ function CameraController.Init(): ()
 	targetZoom = cameraConfig.defaultZoom
 	zoom = targetZoom
 	fieldOfView = cameraConfig.fieldOfView
+	local levels = if cfg ~= nil then (cfg :: any).levels else nil
+	if typeof(levels) == "table" and typeof(levels.fenceThickness) == "number" then
+		wallClip.fence = math.max(levels.fenceThickness, 0)
+	end
 	-- On a Studio client this waits for game.Loaded (the Workspace lever replicates with it).
 	rangeMode = CombatMode.Get() == "range"
 	crowdCombat = Tuning.IsAvailable()
@@ -846,6 +887,22 @@ function CameraController.Start(): ()
 	)
 	watchPlacement(localPlayer.Character)
 	RunService:BindToRenderStep(BIND_NAME, Enum.RenderPriority.Camera.Value, update)
+end
+
+-- L1c-5a: the run's floors (RunState.floors, `{}` in the lobby). Only a locking camp's floor
+-- keeps the boom out; it is grown by levels.fenceThickness, as the server's trigger is.
+function CameraController.SetFloors(floors: { Types.RunFloor }): ()
+	table.clear(wallClip.rects)
+	for _, floor in floors do
+		if floor.locks == true then
+			table.insert(wallClip.rects, {
+				x = floor.x,
+				z = floor.z,
+				hx = floor.hx + wallClip.fence,
+				hz = floor.hz + wallClip.fence,
+			})
+		end
+	end
 end
 
 -- Pushed from every RunState. A new phase re-locks a cursor the player freed with Alt, so
@@ -1048,6 +1105,7 @@ function CameraController.Destroy(): ()
 	table.clear(characterConnections)
 	watchPlacement(nil)
 	collisionParams = nil
+	table.clear(wallClip.rects)
 	deactivate()
 end
 

@@ -4291,6 +4291,8 @@ the ray rule, the tents, the join-in, dormancy, the clear bonus, `DeadFraction` 
 No `ProvingGrounds.json` number moved (gate 13). C's stage, the difficulties and every other reward
 are unchanged too.
 
+> **Superseded for camp C by L1c** (below): C's tent marker is gone, C moved south behind a gatehouse, and the sneak path now ends at C's new entry (313.5, −16).
+
 ### L1b W2: the Normal clear band (the lead's ruling)
 
 - The contract's band for the reacting player was 7–8 min.
@@ -4327,8 +4329,11 @@ are unchanged too.
 | **Population (L1b-W2-5)** | **147** = 112 + 16 + room 6 + boss 13 | **157** = 124 + 16 + 4 + 13 | **157** |
 | Brutes in the level (residents, tents, C's waves) | 42 (draft 38) | | |
 
+> **Superseded for camp C by L1c** (below): C's residents, the population rows and the parts and route figures above describe the old clearing; L1c has 10 / 12 / 12 ambushers, 86 Parts and a 1,079-stud route.
+
 - **Parts 82** (79 + 3 tent markers). The route is 1,055 studs (750 outside the camps), and every
   camp lies within 379 studs of the origin.
+
 - **Post spacing** (new gate, L1b-W2-4): the tightest pair is inside B.fire1's ring on Hard, with
   +0.07 to spare (the fire rule's own case).
 - **The sneak path** is 979 studs, with its gap jumped and two climbs. The tightest margins against
@@ -4409,6 +4414,8 @@ The spread from mix to mix is seed chaos in the Main Camp, not the slingers them
   by hand (sim_combat 21: 9 cleared runs exact). No bonus is paid on a skip.
 - The boss's calls pay 67 cash/s against the clear's 399 on Normal (17%; the gate is under 50%).
 
+> **Superseded for camp C by L1c** (below): C's bonus and the pay rows above are the old clearing's.
+
 ### L1b W2: the bow at 2 / 2 (reported for Ben's question)
 
 The Longbow alone against one body at the boss's spot in C, the reacting player, two seeds:
@@ -4474,6 +4481,8 @@ by its body's radius at every difficulty. The old line "every tent marker is wal
 tested a `collide` key no layout has and could not fail, so it is gone: the marker is built
 walk-through by `LevelGeometry`, and the harness's mutation "l1b w2: the tent marker built
 colliding" is the guard.
+
+> **Superseded for camp C by L1c** (below): C has no tent marker any more; the marker rules now hold on A's and B's only.
 
 **The Luau mutants.** Each is one text change, run through `check_stage_mirror.py --module`. The
 driver is `tools/crowd_harness/mirror_mutants.py` (`--list`, `--only <label>`); a mutant whose
@@ -4772,6 +4781,8 @@ One region, `plateau`, y 8, camps A and B; 15 cells (floors first, then the road
 - N's stops: A (−322, 0, −44), 55.8 studs past the nearest resting sight; B (−108, 8, −44), 39.7
   past it (Hard's B.fire1); then the Chief's countdown.
 
+> **Superseded for camp C by L1c** (below): C's fence tops and cover are no longer perches: the fence is a 64-stud unclimbable wall (L1c-3), and C's cover is inside it.
+
 ### L1b W4: the first clear
 
 | Seed | Clear | A cleared | B cleared | C closed | the Colossus | Timber / min | cash / min |
@@ -4834,6 +4845,8 @@ from the last body's fall; the last resident was the last body in every run at p
 - The Raider Arena: unchanged (Colossus 75.4–77.7 s, Warlord 96.9–98.4 s, clears 10.14 / 10.44 /
   11.84 min, the worst hit 23.2%).
 
+> **Superseded for camp C by L1c** (below): the pay and bonus figures above are the old clearing's.
+
 ### L1b W4: how the simulator models it
 
 - `LevelRun` clamps a region body into the union of its inset cells (`rg_clamp`), routes every goal
@@ -4865,6 +4878,8 @@ from the last body's fall; the last resident was the last body in every run at p
   stand 57–86 studs from the region, in the band and over `meleeAbove`, and are out of every slinger's
   reach. Read literally the gate fails on them; they are the "Shooting out of the boss room" item of
   "Open for later", so `check_levels.py` lists them and does not gate them. The lead's ruling.
+> **Superseded for camp C by L1c** (below): C's fence is now an unclimbable wall, so it is no longer standable; the boss-room list in the perch row is empty.
+
 - **The lose band is tight at its top** (108–109 against 110), because the turn happens at the
   U-bend whatever `chaseSight` is (see above). A wall-aware sight (A, L4) would end it earlier.
 - **The archer and the sniper's stand-down are reported, not gated**: the Longbow kills Normal's A
@@ -4994,3 +5009,152 @@ Cash and Timber a minute, seeds 11 / 23 / 37, against the `mission` player on th
 - Camps never refill, so a sniper's total pay is bounded by what the camp fields. The spot only clears a camp faster; it does not farm it.
 - `sim_range.py` reports those three Normal rows as "known limit, L4" (`SNIPER_KNOWN_LIMIT_L4`) and gates only that every hit of his lands. Every other spot, and every Hard row, stays gated. `check_levels`' spot list stays pinned.
 - L4 re-places the perches. The gate must pass on every spot, with `SNIPER_KNOWN_LIMIT_L4` empty, before L4 ships.
+
+## L1c: the Chief's Clearing redone (2026-10-16)
+
+Contract: `docs/prompts/l1c-contract.md` (its §8 holds the lead's rulings); Ben's decisions:
+`docs/MISSIONS_DESIGN.md` §21. Same gate as L1b: Normal at gear 2 / 2, Hard 4 / 4, Brutal 6 / 6,
+seeds 11 / 23 / 37.
+
+### L1c: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| Layout: camp C | (313.5, 12, −44), gates west / east, fence 4 | (313.5, 12, 31.5), gates **north** (at 0) / **east** (at −41.5), **fence 64** | L1c-1 / L1c-2. The wall's top (y 76) is 3.5 over the highest camera (60.49 over the floor, below). C's west edge stays at x 256, which keeps the region's lock clearance (RoadBC3 58 from C, needs 56). |
+| Layout: the gatehouse | — | `GatehouseWalk` (x 256…321.5, z −52…−36), `GatehouseTurn` (x 305.5…321.5, z −36…−26), four `wall` blocks (N, S, E, W) | L1c-2. One turn, 16 wide. The walls run from y 0 to 76 (the contract's y 12…76, taken down to the road blocks' foot so no wall floats over the drop; the tools read only the top). |
+| Layout: C's residents' spots | gate, chiefFire, north, south; a tent marker | **ambushW**, **ambushE** (guard, one row at z −22.5, facing the entry, ∓98°); no tent marker | L1c-2 / L1c-4. The innermost post stands 32 studs off the gate's centreline (contract: at least 30). The brutes stand outside the fodder: the sight margin is set by the body nearest the centreline, and a brute is the wider body. |
+| Layout: C's spawns, checkpoint, cover | — | spawns (313.5, 75), (265, 75), (362, 75), (362, 40); checkpoint (313.5, −6); cover 18 × 12 at (340.5, 20) and 12 × 8 at (285.5, 34) | L1c-2. Spawns 74+ studs from the entry, cover out of the flank lanes, 3.5 high. |
+| Layout: route and sneak tails | …(262, −44) → (365, −44) camp | …(313.5, −44) → (313.5, −16) → camp → (361, −10) | Through the gatehouse. The route is 1,079 studs (band 900–1,100); the sneak ends at the new entry. `TrailEnd` moved to (379, −10), on the east gate's lane. Parts 82 → 86. |
+| Level: C's residents | 36 / 38 / 38 (gate, chiefFire, north, south) | **ambushW, ambushE: 2 fodder + 3 brutes each, + 1 brute each from Hard** = 10 / 12 / 12 | L1c-4 and its band (below). |
+| Level: C's stage | 3 waves (about 35, about 35, the Colossus at [14, 0]) | `[{groups: []}, {groups: [], boss: colossus at [0, 30]}]` | L1c-4: the empty wave 1 clears when the last ambusher falls, then `breatherSeconds` 3 and the Colossus, 78 studs from the entry. |
+| `crowd.rewards.colossus.cash` | 29,000 | **41,000** | L1c-7 and the lead's ruling: keep cash a minute. |
+| `targetMinutes` | 6 | **5** | L1c-7. `sim_combat` 21: the mean clear is 5.1 min. |
+| `check_levels.py` | — | the unclimbable-wall rule, the reach-based beside rule, the walled-camp gate, `lockedResidents` (8, 12) at every difficulty, the two gatehouse floors in the pinned sniper list | L1c-3, L1c-6 (below). |
+| `sim_range.py` | clear band 345–420 s | **270–345 s**; the ambush band (`FOREST_AMBUSH_SECONDS`); colliding `wall` blocks cut scene sight lines; the sniper list reads the unclimbable rule | L1c-7, contract §5. |
+
+**The one departure from the contract's mix.** The contract's Normal ambush (4 fodder + 1 brute a
+side) is killed in 12.0–12.7 s, under the lead's band of 15–35 s. Moving two fodder to brutes on
+Normal (2 + 3 a side) gives 20.4–22.2 s. The Hard-only unit stays the contract's brute, so Hard and
+Brutal field 4 fodder + 8 brutes. The ambush then pays 7,600 more cash a Normal clear than the
+contract's mix, so Normal's cash a minute ends 4% over L1b's. Measured before settling:
+
+| Variant (each side; Hard adds) | Normal ambush | Hard 4 / 4 ambush | Hard at 2 / 2: mission cash a minute, seed 11 | Normal cash a minute |
+|---|---|---|---|---|
+| The contract: 4 F + 1 B, + 1 B; Colossus 41,000 | 12.0–12.7 s: **fails** | 17.1–19.7 s | — | 23.6–26.1k |
+| 3 F + 2 B, + 1 F; Colossus 41,000 | 15.2–18.0 s (15.2 at the floor) | 15.4–17.6 s | — | 23.9–26.9k |
+| 2 F + 3 B, + 1 F; Colossus 37,000 (cash a minute held to L1b's) | 19.6–20.6 s | — | **17,921** (16.51 min) against the LookoutLedge sniper's 18,313: **fails** | 23.8–26.5k |
+| **2 F + 3 B, + 1 B; Colossus 41,000 (shipped)** | **20.4–22.2 s** | **26.4–26.7 s** | **19,063** (16.18 min): +4.1% | **24.6–26.7k** |
+
+- Why the Hard-at-proving-gear row binds: at 2 / 2 on Hard the Colossus takes about five minutes
+  and pays 2 × its cash, the slowest money in the run; L1b's two big waves paid faster. The R8 gate
+  compares that player with the LookoutLedge sniper on Hard (18,313 cash a minute: a burst of 12–15
+  kills in 12 s before he is stood down). The shipped mix holds it by 4.1%.
+- That row is noisy: the same data gives seed 11 14.6 or 16.5 minutes depending on which runs went
+  before it in the process, because the long 2 / 2 Colossus fight swings by about ±10%. The numbers
+  here are the gate's own run (`sim_range.py --levels-only --level forest --check`).
+
+### L1c: the walled camp (`check_levels.py`)
+
+- **The highest camera** (L1c-1), read from the files: feet at the double jump's peak 30 + root 3 +
+  Leap Smash's lift 10 + pivot 1.5 + shoulder 0.6 + the boom at `maxZoom` 16 and pitch −70°
+  (15.04) + shake 0.35 = **60.49** studs over the surface it took off from. Theme's three numbers
+  are parsed from `src/client/UI/Theme.luau`; a missing one fails the gate.
+- **Unclimbable** (L1c-3): a `wall` block or a camp fence whose top stands at least jump + double
+  jump + the highest ability lift + `STEP_UP` = **43** over every standable surface within
+  `stray_reach` (46.6) of it. C's four fence strips and the four gatehouse walls are; A's and B's
+  4-stud fences are not. An unclimbable wall is not ground for the fence-height rule (C's fence is
+  exempt from "at most triggerHeight − 3"), the band, the beside rule, the sniper spots and the perch gate.
+- **Beside** now counts only solids within `stray_reach` of the fenced rectangle, and skips the
+  path blocks that run through the camp's own gates (`TrailEnd`, `GatehouseTurn`).
+- **The walled gate** (`EXPECTED.ForestRoad.walled = ["C"]`):
+
+| Rule | Shipped |
+|---|---|
+| Height: fence ≥ the highest camera + 3 | 64 ≥ 63.49 |
+| Every wall block within 46.6 of the fenced rectangle is as tall as the fence | 4 of 4 at y 76 |
+| No plated resident at any difficulty (L1c-6) | 12 posts, none plated |
+| Floors: from every outside surface the highest camera stays under the wall's top, or its line over the top passes over the tallest body (the Colossus, 14) across the whole floor | under the top: the highest is RoadBC6, 3.51 under; over it: Secret_lookout (camera 98.5, 536 off), whose line meets a head 1,191 studs past the wall |
+| Sight in plan: eye points every 2 studs on every outside top a player reaches without entering C; camera points within `maxZoom` + 2 of one, outside every wall and locking camp, whose boom no wall cuts; targets the bodies (centre ± radius) at every post, every difficulty | 6,207 eye and 6,499 camera points, 12 posts. **Tightest margin +1.31 studs**: the camera at (306, −30), 3 studs short of the north fence in leg 2, to Brutal's innermost east fodder |
+| The doorway (within 2.5 of the fence in a gate's lane) is exempt | the glimpse there: −1.64 at (306, −28) to a Brutal east brute (accepted by the contract) |
+
+- "Floors" departs from the contract's literal "every standable surface within 200 studs at or
+  under the floor's y": the cache secret (top 18, 149 studs off) would fail it, while its line over
+  the wall cannot fall to a head for 1,000+ studs. The shadow form above is what the literal rule was
+  for, and it still fails a 40-high tower 53 studs off (the mutant below).
+- Reach for the eye points is a graph over standable tops (a jump, double jump and dash between them,
+  at most 43 up, walls ignored): `TrailEnd`, behind the exit, is not reached (50.1 from the turn).
+- Sight is exact in plan because every wall is over every camera; each point's view through a gate is
+  the angular window of the gate's two faces less every wall's shadow, and a body's margin is its
+  perpendicular distance to the nearest visible ray less its radius.
+
+**Every new rule red on a mutated copy** (in memory; 0 failures on the shipped data):
+
+| Mutation | Rule that fails |
+|---|---|
+| C's fence 40 (climbable) | the fence-height rule (no longer exempt) |
+| GatehouseWallW top 50 (climbable) | the band |
+| GatehouseWallN top 50 (climbable) | the pinned sniper list (it becomes a spot) |
+| a ledge 9 studs east of the floor, off the gates | beside (a ledge 58 off stays green: the reach filter) |
+| `TrailEnd` moved off the east gate's lane | beside |
+| C's fence 60 (still unclimbable) | walled: height (60 < 63.49) |
+| GatehouseWallS top 70 (still unclimbable) | walled: the gatehouse |
+| a 40-high tower 53 studs north of the fence | walled: floors |
+| GatehouseWallE removed | walled: sight (the boom reaches past leg 2 and sees through the north gate) |
+| the innermost east fodder moved to 16 off the centreline | walled: sight |
+| an armoured added to ambushW on Hard | walled: plates |
+| 3 more fodder in ambushW on Hard (15) | `lockedResidents` (8–12 at every difficulty) |
+
+### L1c: the first clear (Normal, 2 / 2)
+
+| Seed | Clear | The ambush | The Colossus | Cash / min | Timber / min | Paid |
+|---|---|---|---|---|---|---|
+| 11 | 5.27 min | 20.4 s | 77.1 s | 24,578 | 38.9 | 129,510 cash, 205 Timber, 10 Valor |
+| 23 | 4.86 min | 22.2 s | 80.5 s | 26,666 | 42.2 | same |
+| 37 | 5.12 min | 21.7 s | 77.7 s | 25,285 | 40.0 | same |
+
+- Mean clear **5.08 min** (L1b: 6.33). Band 4.5–5.75 min (270–345 s), re-measured: 15 s under the
+  fastest seed and 28 s over the slowest, the same shape as L1b's band.
+- Cash a minute 24.6–26.7k (L1b 23.8–25.9k, +4%); Timber a minute 38.9–42.2 (band 37.8–46.2).
+- With a human's reaction: 4.24–4.35 min, no down. The sneak still wakes nobody (1,047 studs to the
+  entry). The tents, the kite, the lose, the walk-out and the first strikes are unchanged.
+- The clear bonuses are 5.9% of the run's cash (C's is now 1,240); `sim_combat` 21: 5.8% (band 5–10%).
+- `sim_combat.py --check`: Normal 130,133 cash, 205 Timber, 10 Valor; Hard 289,360 (×2.22), 455
+  Timber; Brutal 578,720 (×4.45), 909 Timber; `targetMinutes` 5 against a mean clear of 5.1 min; all
+  23 assertions hold.
+
+### L1c: Hard and Brutal
+
+| | Clear | The ambush (band ≤ 60 s) | The Colossus | Cash / min |
+|---|---|---|---|---|
+| Hard 4 / 4 | 5.22 / 5.54 / 5.32 min | 26.5 / 26.7 / 26.4 s | 78.9–80.4 s | 51.8–55.1k |
+| Brutal 6 / 6 | 5.27 / 5.57 / 5.30 min | 26.4 / 26.6 / 26.7 s | 80.8–84.5 s | 103.1–109.8k |
+| Hard at 2 / 2 (one preset below) | 16.18 / 15.07 / 15.86 min | — | — | 19,063 / 20,549 / 19,586 |
+| Brutal at 4 / 4 (one preset below) | 9.85 / 10.22 / 10.70 min | — | — | — |
+
+- The human clears Hard in 4.83–5.02 min and Brutal in 4.80–5.07 min, no down. One preset below he
+  still goes down or takes ×2.77 (Hard) and goes down (Brutal); the Colossus alone one preset below
+  is not killed inside 240 s (Hard) and takes 215.4 s (Brutal). Every L1b band holds.
+
+### L1c: the sniper (R8)
+
+The gatehouse adds two spots to the pinned list, `GatehouseWalk` and `GatehouseTurn` (13 spots).
+Both pay 0–1,648 cash a minute on Normal and 0 on Hard: the gatehouse walls cut every line to B
+(`sim_range` now counts colliding `wall` blocks as scene walls). Neither needs `SNIPER_KNOWN_LIMIT_L4`.
+Every other row is as in the L1b W4 fix round, against the new mission rates: Normal 24,578 /
+26,666 / 25,285 cash and 38.9 / 42.2 / 40.0 Timber; Hard at 2 / 2 19,063 / 20,549 / 19,586 cash and
+28.1 / 30.2 / 28.7 Timber. The tightest gated rows: Hard LookoutLedge cash 18,313 against 19,063
+(+4.1%), Hard Road2 Timber 26.6 against 28.1 (+5.6%). The three Normal known limits stand
+(LookoutLedge up to ×1.37 the mission's cash a minute, Secret_lookout, Secret_cache).
+
+### L1c: flags for the lead
+
+- **The Normal mix and the cash a minute** (above): 2 fodder + 3 brutes a side instead of 4 + 1,
+  for the 15–35 s band; Normal pays 4% more a minute than L1b. The lead's Colossus 41,000 is what
+  keeps the Hard-at-2/2 sniper row green; 37,000 would hold Normal's minute exactly and fail that row.
+- **The Hard-at-2/2 R8 rows are the thinnest gate here** (+4.1%), and they move with the
+  simulator's run order (about ±10% on the 2 / 2 Colossus). Judge any later change to C's pay on the
+  gate's own run.
+- **Leap Smash onto a wall top** (contract §7, ruled in §8): not a data matter; the tools already
+  count the 10-stud lift in the camera's height and in "unclimbable".
+- **Not gated:** the Colossus is not a resident, so the sight gate does not see it; it rises after
+  the close, when nobody fighting is outside.

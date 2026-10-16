@@ -121,6 +121,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
+local WallClip = require(sharedFolder:WaitForChild("WallClip"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -198,6 +199,10 @@ local MAX_SHOTS_PER_FRAME = 2
 -- Ruling 4's floor probe, shared with RangeService so both sides land on the same floor.
 local GROUND_PROBE_LIFT = HitShapes.GROUND_PROBE_LIFT
 local GROUND_PROBE_DEPTH = HitShapes.GROUND_PROBE_DEPTH
+-- The abilities the server aims at WeaponService.GroundPoint (AbilityService's `target =
+-- "ground"`): L1c §8 refuses each of them on ground too high above the caster's floor.
+local GROUND_AIMED: { [string]: true } =
+	{ leapSmash = true, bladeStorm = true, arrowRain = true, stormCoil = true }
 -- A cast still unanswered after two pings plus this was refused or dropped by the server.
 local CAST_ACK_SLACK_SECONDS = 0.3
 
@@ -1828,14 +1833,19 @@ local function floorHit(from: Vector3, params: RaycastParams): number?
 end
 
 -- The client mirror of RangeService.GroundPoint (P3 ruling 4), step for step, on the RAW
--- camera ray: where an aimed ability lands. The server resolves its own point; this one only
--- steers the leap, so the two agree wherever both see the same arena.
+-- camera ray: where an aimed ability lands. The server resolves its own point; this one steers
+-- the leap and refuses a ground-aimed cast early, so the two agree wherever both see the same
+-- arena.
+-- L1c §8: nil = refused, as WeaponService.GroundPoint refuses it, with the same shared rule
+-- (WallClip.TooHigh): ground more than movement.jumpHeight + doubleJumpHeight above the
+-- caster's floor. Without it a leap aimed over a tall wall lands its probe on the wall's top, a
+-- perch that sees into a walled camp.
 local function groundPoint(
 	rig: LocalRig,
 	origin: Vector3,
 	direction: Vector3,
 	castRange: number
-): Vector3
+): Vector3?
 	local params = worldParams()
 	local root = rig.root.Position
 	local range = math.max(castRange, 0)
@@ -1852,28 +1862,32 @@ local function groundPoint(
 	end
 	-- 4: onto the floor under it (probed from GROUND_PROBE_LIFT above), else level with the
 	-- floor under the caster, else the caster's own feet.
-	local floorY = floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params)
-		or floorHit(root, params)
+	local casterFloor = floorHit(root, params)
 		or root.Y - rig.root.Size.Y * HALF - rig.humanoid.HipHeight
+	local floorY = floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params) or casterFloor
+	if WallClip.TooHigh(casterFloor, floorY, WallClip.Rise(Tuning.Get().movement)) then
+		return nil
+	end
 	return Vector3.new(point.X, floorY, point.Z)
 end
 
 -- What the caster's own client does at the cast (every visual is AbilityFx's, from the
--- server's CombatFxCast). Zones, Volley and Cluster Shell need nothing here.
+-- server's CombatFxCast). Zones, Volley and Cluster Shell need nothing here. `groundTarget`
+-- is a ground-aimed ability's point, resolved before the cast was sent.
 local function applyCast(
 	family: string,
 	ability: Types.RangeAbilityDef,
-	rig: LocalRig,
-	origin: Vector3,
 	direction: Vector3,
-	castAt: number
+	castAt: number,
+	groundTarget: Vector3?
 ): ()
 	local id = ability.id
 	if id == "whirlwind" then
 		MovementController.Channel(ability.durationSeconds or 0, ability.moveSpeedMult or 1)
 	elseif id == "leapSmash" then
-		local target = groundPoint(rig, origin, direction, ability.castRange or 0)
-		MovementController.Leap(target, ability.delaySeconds or 0, ability.height or 0)
+		if groundTarget ~= nil then
+			MovementController.Leap(groundTarget, ability.delaySeconds or 0, ability.height or 0)
+		end
 	elseif id == "impaleDash" then
 		-- The lunge flattens the aim itself; the server's capsule uses the same flat line.
 		MovementController.Lunge(direction, ability.range or 0, ability.delaySeconds or 0)
@@ -1921,14 +1935,24 @@ local function castAbility(slot: Stance): ()
 	if isBusy() or not slotReady(cfg, slot) then
 		return
 	end
+	-- Ruling 4: the camera ray exactly as a shot sends it, without spread.
+	local origin, direction = shotRay(rig)
+	-- L1c §8 (lead's ruling: every ground-aimed ability): a cast the server would refuse
+	-- (ground too high above the caster's floor) is not sent, so it costs no cooldown, no token
+	-- and no predicted leap.
+	local groundTarget: Vector3? = nil
+	if GROUND_AIMED[ability.id] then
+		groundTarget = groundPoint(rig, origin, direction, ability.castRange or 0)
+		if groundTarget == nil then
+			return
+		end
+	end
 	if not takeCastToken() then
 		return
 	end
 	local clock = os.clock()
 	-- Ruling 1: the weapon you see matches the ability.
 	setActiveSlot(slot)
-	-- Ruling 4: the camera ray exactly as a shot sends it, without spread.
-	local origin, direction = shotRay(rig)
 	castState.abilitySeq += 1
 	remote:FireServer(slot, castState.abilitySeq, origin, direction)
 	local castAt = serverNow()
@@ -1946,7 +1970,7 @@ local function castAbility(slot: Stance): ()
 		cancelDraw()
 		rangeState.tapQueuedAt = nil
 	end
-	applyCast(family, ability, rig, origin, direction, castAt)
+	applyCast(family, ability, direction, castAt, groundTarget)
 end
 
 -- A player's slot change (1 / 2, gamepad Y, the touch slot button): refused while busy (P3

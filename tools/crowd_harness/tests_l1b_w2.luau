@@ -387,7 +387,7 @@ function W2B.worldTests(): ()
 	local count = if shipped ~= nil then #shipped else -1
 	local gate = if L1.real.gate.parts ~= nil then L1.real.gate.parts.ForestRoad else nil
 	print(`   Forest Road: {count} Parts, {markers} tent markers`)
-	check(shipped ~= nil and markers == blocks and markers == 3, `one marker per tent block (A, B and C's) ({markers})`)
+	check(shipped ~= nil and markers == blocks and markers == 2, `one marker per tent block (A's and B's; L1c took C's) ({markers})`)
 	check(count > 0 and count <= L1.real.rules.maxParts and count == gate, `its Part count is Pieces', at most levels.maxParts, and check_levels.py's ({count}, {tostring(gate)})`)
 end
 L1.group("l1b w2 worldTests", W2B.worldTests)

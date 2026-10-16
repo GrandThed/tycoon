@@ -2700,6 +2700,10 @@ export type RunFloor = {
 	hx: number,
 	hz: number,
 	cells: { CampRect }?,
+	-- L1c-5a: the zone's `locks` (the boss room). The client keeps its camera boom out of a
+	-- locking floor's fenced rectangle (the floor grown by levels.fenceThickness) until the local
+	-- root is inside it (WallClip.Reach); nil = an open camp, as false.
+	locks: boolean?,
 }
 export type RunResult = {
 	levelId: string,

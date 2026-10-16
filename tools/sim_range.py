@@ -4982,12 +4982,12 @@ MISSION_SEEDS = (11, 23, 37)
 GATE_PYTHON = (3, 12)  # the interpreter the bands are measured on: see interpreter_note
 FOREST_LEVEL = "forestRoad"
 FOREST_BOSS = "colossus"
-# L1b Wave 2: Normal's first clear at the proving gear 2 / 2, from the start point to the
-# Colossus's fall, walking included, every seed. The lead's ruling after the build: 6.5-8 min,
-# not the contract's 7-8, because Ben's tent pace (one body every 6 s, his own pick) stands and
-# no camp mix lifts the clear past 7 on every seed without breaking the Timber band (Ben about
-# x1.36 of it: 8.8-10.9 min).
-FOREST_CLEAR_SECONDS = (345.0, 420.0)
+# Normal's first clear at the proving gear 2 / 2, from the start point to the Colossus's fall,
+# walking included, every seed. L1b Wave 2 banded it 5.75-7 min; L1c (the Chief's Clearing redone:
+# an ambush of 10, then the Colossus, in place of 36 residents and two waves of about 35) takes
+# about 1.4 minutes out of it, so it is re-measured at 4.75-5.3 min and banded 4.5-5.75
+# (docs/BALANCE.md "L1c").
+FOREST_CLEAR_SECONDS = (270.0, 345.0)
 # L1b-W2-22: what a Normal clear pays a minute, every seed: Timber within 10% of Wave 1's 42;
 # cash is reported against Wave 1's 19,800.
 FOREST_TIMBER_PER_MINUTE = (37.8, 46.2)
@@ -5001,6 +5001,9 @@ TENT_FAST = {"A": 2, "B": 3}  # ... and on Normal one gear preset up at least th
 # L1b: standing still in the group of camp A that wakes first, down this long after its wake.
 FOREST_STILL_DOWN = (6.0, 12.0)
 FOREST_BOSS_SECONDS = {"normal": (64.0, 90.0), "hard": (64.0, 100.0), "brutal": (64.0, 100.0)}
+# L1c-7: the Chief's Clearing's ambush, from the gates' closing to the last ambusher's fall (its
+# wave 1, which holds no group, clears then), every seed, at each difficulty's recommended gear.
+FOREST_AMBUSH_SECONDS = {"normal": (15.0, 35.0), "hard": (0.0, 60.0), "brutal": (0.0, 60.0)}
 FOREST_HIT_SHARE = {"normal": 0.25, "hard": 0.30, "brutal": 0.30}
 
 # The ideal player takes no hit, so no band on his runs can see damageScale: skill beats gear.
@@ -6650,7 +6653,8 @@ def sniper_spots_of(level, layout, combat_cfg, cfg):
 
     levels = combat_cfg["levels"]
     solids = cl.solids_of(layout, levels["fenceThickness"], levels["floorThickness"])
-    return cl.sniper_spots(level, layout, {"camps": combat_cfg["camps"], "longbow": cl.longbow_range(cfg)}, solids)
+    return cl.sniper_spots(level, layout, {"camps": combat_cfg["camps"], "longbow": cl.longbow_range(cfg),
+                                           "move": cfg["movement"], "abilityHeight": cl.ability_height(cfg)}, solids)
 STRIKE_SECONDS = 30.0  # a first-strike approach is watched this long at most
 # CrowdService.HOME_STOP_SHARE: a body walking home or on patrol stops at this share of
 # camps.homeTolerance, so rounding never leaves it a hair outside AtPost for good (A's item 2).
@@ -7462,8 +7466,9 @@ class LevelRun(ThreatRun):
 
     def scene_walls(self):
         """The level's sight blockers for a scene, once: [(x0, x1, z0, z1, top)]. Every plateau
-        surface (a region's cells and every camp floor) blocks a line under its top; every open
-        camp's fence (its strips outside the floor, less its gates) under the fence's top."""
+        surface (a region's cells and every camp floor) blocks a line under its top; every camp's
+        fence (its strips outside the floor, less its gates) under the fence's top; every colliding
+        `wall` block under its top (L1c)."""
         walls = self.scene.get("walls")
         if walls is not None:
             return walls
@@ -7493,6 +7498,12 @@ class LevelRun(ThreatRun):
                 for u0, u1 in pieces:
                     if u1 > u0:
                         walls.append((a0, a1, u0, u1, top) if side in ("west", "east") else (u0, u1, b0, b1, top))
+        # L1c: every colliding `wall` block (the boss room's gatehouse) cuts a line under its top.
+        for block in self.layout.get("blocks") or []:
+            if block.get("look") == "wall" and block.get("collide") is not False:
+                hx, hz = block["sx"] / 2, block["sz"] / 2
+                walls.append((block["x"] - hx, block["x"] + hx, block["z"] - hz, block["z"] + hz,
+                              block["y"] + block["sy"] / 2))
         self.scene["walls"] = walls
         return walls
 
@@ -9067,7 +9078,7 @@ def print_forest(cfg, report):
                   f"({r['damage']:.0f}), peak alive {r['peakAlive']}, {sum(r['killed'].values())} kills, "
                   f"{r['walked']:.0f} studs walked, {r['wakes']} wakes, {r['leashes']} leashes, the {FOREST_BOSS} "
                   f"{fight}; paid {wallet_text(r)}")
-            print(f"        {camp_times(r)}")
+            print(f"        {camp_times(r)}; the ambush {fmt(ambush_seconds(r), 0, 1).strip()} s")
         if row["human"]:
             print(f"    the same player with a human's reaction ({HUMAN_REACTION_SECONDS:g} s, not "
                   f"{REACTION_SECONDS:g}): " + "; ".join(run_text(seed, r) for seed, r in zip(MISSION_SEEDS, row["human"])))
@@ -9226,6 +9237,16 @@ def print_snipers(snipers, mission, tag):
                   f"stood down {fmt(sc.get('stoodDown'), 0, 1).strip()} s)")
 
 
+def ambush_seconds(r):
+    """L1c-7: the boss room's first wave, from the gates' closing to its clear (the ambush, held
+    residents released at the close; its wave holds no group); None when not cleared."""
+    camp = r["camps"][0] if r["camps"] else None
+    first = r["waves"].get(1)
+    if camp is None or camp["closedAt"] is None or first is None or first["clear"] is None:
+        return None
+    return first["clear"] - camp["closedAt"]
+
+
 def pay_rate(r):
     """What a run paid a minute: (cash, materials)."""
     minutes = r["at"] / 60 if r["at"] else math.inf
@@ -9274,6 +9295,12 @@ def check_forest(cfg, report, expect):
         expect(boss is not None and boss["solid"] == 0 and boss["lunges"] == 0,
                f"{tag}: the {FOREST_BOSS} alone: the reacting player takes no hit"
                + (f" ({boss['solid']} of the boss, {boss['lunges']} lunges)" if boss is not None else ""))
+        lo_a, hi_a = FOREST_AMBUSH_SECONDS[difficulty]
+        times = [ambush_seconds(r) for r in row["runs"]]
+        expect(all(a is not None and lo_a <= a <= hi_a for a in times),
+               f"{tag} at gear {gear}: the Chief's Clearing's ambush, from the gates' closing to the last ambusher's "
+               f"fall, takes {lo_a:.0f}-{hi_a:.0f} s, every seed (L1c-7): "
+               + ", ".join(fmt(a, 0, 1).strip() + " s" for a in times))
         for seed, r in zip(MISSION_SEEDS, row["runs"]):
             rose = r["bosses"].get(FOREST_BOSS)
             fight = rose[1] - rose[0] if rose and rose[1] is not None else None

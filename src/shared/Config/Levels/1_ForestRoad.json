@@ -4,7 +4,7 @@
 	"name": "Forest Road",
 	"layout": "ForestRoad",
 	"material": "Timber",
-	"targetMinutes": 6,
+	"targetMinutes": 5,
 	"runCapSeconds": 1500,
 	"difficulties": {
 		"normal": {
@@ -45,7 +45,7 @@
 			"lobber": { "cash": 700, "materials": 4 },
 			"marksman": { "cash": 600, "materials": 1 },
 			"armoured": { "cash": 1200, "materials": 2 },
-			"colossus": { "cash": 29000, "materials": 70 }
+			"colossus": { "cash": 41000, "materials": 70 }
 		}
 	},
 	"stages": [
@@ -58,24 +58,8 @@
 			"breatherSeconds": 3,
 			"maxAlive": 42,
 			"waves": [
-				{
-					"groups": [
-						{ "kind": "fodder", "count": 16 },
-						{ "kind": "brute", "count": 2 },
-						{ "kind": "armoured", "count": 2, "minDifficulty": "hard" },
-						{ "kind": "fodder", "count": 16 },
-						{ "kind": "brute", "count": 1 }
-					]
-				},
-				{
-					"groups": [
-						{ "kind": "fodder", "count": 14 },
-						{ "kind": "slinger", "count": 2 },
-						{ "kind": "brute", "count": 3 },
-						{ "kind": "fodder", "count": 14 }
-					]
-				},
-				{ "groups": [], "boss": { "kind": "colossus", "at": [14, 0], "valor": 10 } }
+				{ "groups": [] },
+				{ "groups": [], "boss": { "kind": "colossus", "at": [0, 30], "valor": 10 } }
 			]
 		}
 	],
@@ -204,32 +188,20 @@
 			"id": "C",
 			"name": "The Chief's Clearing",
 			"residents": [
-				{ "spot": "gate", "units": [{ "kind": "fodder", "count": 6 }, { "kind": "brute", "count": 3 }] },
 				{
-					"spot": "chiefFire",
+					"spot": "ambushW",
 					"units": [
+						{ "kind": "fodder", "count": 2 },
 						{ "kind": "brute", "count": 3 },
-						{ "kind": "fodder", "count": 4 },
-						{ "kind": "armoured", "count": 2 }
+						{ "kind": "brute", "count": 1, "minDifficulty": "hard" }
 					]
 				},
 				{
-					"spot": "north",
+					"spot": "ambushE",
 					"units": [
-						{ "kind": "fodder", "count": 4 },
-						{ "kind": "brute", "count": 2 },
-						{ "kind": "slinger", "count": 2 },
-						{ "kind": "armoured", "count": 1, "minDifficulty": "hard" }
-					]
-				},
-				{
-					"spot": "south",
-					"units": [
-						{ "kind": "fodder", "count": 4 },
-						{ "kind": "brute", "count": 2 },
-						{ "kind": "slinger", "count": 2 },
-						{ "kind": "lobber", "count": 2 },
-						{ "kind": "armoured", "count": 1, "minDifficulty": "hard" }
+						{ "kind": "fodder", "count": 2 },
+						{ "kind": "brute", "count": 3 },
+						{ "kind": "brute", "count": 1, "minDifficulty": "hard" }
 					]
 				}
 			]

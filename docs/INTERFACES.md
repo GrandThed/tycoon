@@ -15607,3 +15607,10 @@ All 21 draft points are taken as written. Notes:
 
 Decisions: `docs/MISSIONS_DESIGN.md` §21. The contract of record is `docs/prompts/l1c-contract.md`
 (§1–§7 drafted by the study agent, §8 the lead's rulings), on branch `l1c-chief-clearing`.
+
+As built (lead, 2026-10-16): the server's ground point is `WeaponService.GroundPoint` (there is no
+`RangeService.GroundPoint` since the P5 split). The height rule applies to **every ground-aimed ability**
+(Leap Smash, Blade Storm, Arrow Rain, Storm Coil), mirrored in `InputController.castAbility`, where a
+refused press spends nothing. `src/shared/WallClip.luau` exports `Reach` (camera clip), `Rise`
+(`jumpHeight + doubleJumpHeight` from ProvingGrounds `movement`) and `TooHigh(floorY, targetY, rise)`.
+`RunFloor.locks` carries the camp's locking flag to the client.

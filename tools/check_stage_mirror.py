@@ -199,6 +199,16 @@ def level_camp(file, cid):
     return next(camp for camp in file["camps"] if camp["id"] == cid)
 
 
+def boss_room_full(file):
+    """L1c: the walled boss room's ambush (`ambushW`) raised until camp C holds exactly its stage's
+    maxAlive on Normal, the least that Validate's "not fewer than its stage's maxAlive" refuses."""
+    stage = next(stage for stage in file["stages"] if stage.get("zone") == "C")
+    camp = level_camp(file, "C")
+    held = sum(unit["count"] for group in camp["residents"] for unit in group["units"] if "minDifficulty" not in unit)
+    group = next(group for group in camp["residents"] if group["spot"] == "ambushW")
+    group["units"].append({"kind": "fodder", "count": max(stage["maxAlive"] - held, 1)})
+
+
 def ring_only_normal_breaks(file, layout):
     """The fix round's B-2: A's tent fields 2 fodder on Normal (posts north and south of the
     marker) and a third from Hard (north, and 120 degrees either side), and the marker sits 10
@@ -226,8 +236,7 @@ L1B_REFUSALS = (
     ("a resident group on a spot its camp lacks", lambda f, l, r: level_camp(f, "A")["residents"][0]
      .__setitem__("spot", "nowhere")),
     ("a resident group with no units", lambda f, l, r: level_camp(f, "A")["residents"][0].__setitem__("units", [])),
-    ("the boss room's residents at its maxAlive", lambda f, l, r: next(
-        g for g in level_camp(f, "C")["residents"] if g["spot"] == "chiefFire")["units"].append({"kind": "fodder", "count": 40})),
+    ("the boss room's residents at its maxAlive", lambda f, l, r: boss_room_full(f)),
     ("a population over crowd.maxAlive", lambda f, l, r: level_camp(f, "B")["residents"][0]["units"].append(
         {"kind": "fodder", "count": 200})),
     ("a negative clearBonus share", lambda f, l, r: f["crowd"].__setitem__("clearBonus", {"share": -0.1})),

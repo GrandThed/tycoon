@@ -3947,6 +3947,97 @@ L1B_W4_FIX_CROWD_R16_MUTATIONS = {
 MUTATIONS.update(L1B_W4_FIX_CROWD_R16_MUTATIONS)
 
 
+# ------------------------------------------------------------------------------------------------
+# L1c, the Chief's Clearing redone (docs/prompts/l1c-contract.md). From the luau-engineer: the pure
+# WallClip (L1c-5a's camera clip, §8's ground point height rule) and the walled camp the shipped
+# data builds and plans (tests_l1c.luau). WeaponService.GroundPoint and WaveService cannot be loaded
+# here: the rule they call is WallClip's, mutated below.
+WALL_CLIP = "src/shared/WallClip.luau"
+FILES.append(WALL_CLIP)
+L1C_MUTATIONS = {
+    "l1c: Reach cuts a box that holds the root": (
+        WALL_CLIP,
+        "if usable(rect) and not holds(rect, rootX, rootZ) then",
+        "if usable(rect) then",
+    ),
+    "l1c: a root on the box's edge is outside it (open)": (
+        WALL_CLIP,
+        "return math.abs(x - rect.x) <= rect.hx and math.abs(z - rect.z) <= rect.hz",
+        "return math.abs(x - rect.x) < rect.hx and math.abs(z - rect.z) < rect.hz",
+    ),
+    "l1c: Reach ignores the pad": (
+        WALL_CLIP,
+        "math.max(at - back / length, 0)",
+        "math.max(at, 0)",
+    ),
+    "l1c: Reach lets the pad go negative": (
+        WALL_CLIP,
+        "math.max(at - back / length, 0)",
+        "at - back / length",
+    ),
+    "l1c: a boom that starts inside a box is whole": (
+        WALL_CLIP,
+        "if at <= 0 then 0 else",
+        "if at <= 0 then 1 else",
+    ),
+    "l1c: a negative or NaN pad is taken as it is": (
+        WALL_CLIP,
+        "local back = if pad > 0 and pad ~= math.huge then pad else 0",
+        "local back = pad",
+    ),
+    "l1c: a slab that ends before the other starts still enters": (
+        WALL_CLIP,
+        "\t\t\tif first > last then\n\t\t\t\treturn nil\n\t\t\tend\n",
+        "",
+    ),
+    "l1c: a boom parallel to a slab and outside it still enters": (
+        WALL_CLIP,
+        "\t\t\tif start < low or start > high then\n\t\t\t\treturn nil\n\t\t\tend\n",
+        "",
+    ),
+    "l1c: only the x slab's entry counts": (
+        WALL_CLIP,
+        "first = math.max(first, a)",
+        "first = if axis == 1 then math.max(first, a) else first",
+    ),
+    "l1c: a boom that is not a number is measured": (
+        WALL_CLIP,
+        "\tif not (finite(fromX) and finite(fromZ) and finite(dx) and finite(dz)) then\n\t\treturn 1\n\tend\n",
+        "",
+    ),
+    "l1c: a broken box is judged": (
+        WALL_CLIP,
+        "\t\tand rect.hx >= 0\n\t\tand rect.hz >= 0\n",
+        "\t\tand true\n",
+    ),
+    "l1c: TooHigh refuses exactly the limit": (
+        WALL_CLIP,
+        "return targetY - floorY > rise",
+        "return targetY - floorY >= rise",
+    ),
+    "l1c: TooHigh measured from the world's zero": (
+        WALL_CLIP,
+        "return targetY - floorY > rise",
+        "return targetY > rise",
+    ),
+    "l1c: Rise is the first jump alone": (
+        WALL_CLIP,
+        "return movement.jumpHeight + movement.doubleJumpHeight",
+        "return movement.jumpHeight",
+    ),
+    "l1c: a locking camp's groups are not held": (
+        FLOW,
+        "held = camp.locks == true,",
+        "held = false,",
+    ),
+    "l1c: a closed gate stops short of a tall wall": (
+        GEOMETRY,
+        "table.insert(boxes, sideBox(camp, side, from, to, thickness, height))",
+        "table.insert(boxes, sideBox(camp, side, from, to, thickness, math.min(height, 6)))",
+    ),
+}
+MUTATIONS.update(L1C_MUTATIONS)
+
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
     it printed none: run_harness.py prints one whenever a case ran)."""

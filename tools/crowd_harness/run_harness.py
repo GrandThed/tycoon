@@ -14,6 +14,8 @@ L1b adds the pure CampBrain (how a camp's resident groups rest, wake, chase and 
 case files: tests_l1b_crowd.luau (CampBrain and CrowdService's floors and groups) and
 tests_l1b.luau (StageFlow's open camps, checkpoints and clear field, Combat's per-kill split with
 its carry, LevelGeometry's open camps and fire markers).
+L1c adds the pure WallClip (the camera boom kept out of a locking camp, the ground point's height
+rule) and tests_l1c.luau (it, and the walled Chief's Clearing as it ships).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -71,6 +73,8 @@ SOURCES = {
     "SpawnSeed": "src/combat/client/Controllers/SpawnSeed.luau",
     # The L1b Wave 2 fix round, ui-2: touch auto-target's camp rule (the ui-engineer's).
     "CampAim": "src/combat/client/Controllers/CampAim.luau",
+    # L1c: the camera boom's clip and the ground point's height rule (tests_l1c.luau).
+    "WallClip": "src/shared/WallClip.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -90,6 +94,8 @@ TESTS = [
     # regions, pace, Fielded and N (B's).
     "tests_l1b_w4_crowd.luau",
     "tests_l1b_w4.luau",
+    # L1c: WallClip, then the walled Chief's Clearing as built and planned.
+    "tests_l1c.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"

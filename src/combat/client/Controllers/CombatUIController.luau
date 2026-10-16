@@ -1610,7 +1610,8 @@ local function bootMission(): ()
 	-- every time). The lobby's `{}` empties them. A malformed entry ends the list there, as
 	-- CrowdRenderer.SetFloors reads it. L1b Wave 4: a floor's chase-region `cells` travel with
 	-- it (read by CrowdRenderer.ReadCells, so a malformed list is dropped the same way) and are
-	-- compared by value too: they bound the drawn charge (L1b-W4-33).
+	-- compared by value too: they bound the drawn charge (L1b-W4-33). L1c-5a: so does `locks`,
+	-- and the same list goes to the camera, which keeps its boom out of a locking camp.
 	local function sameCells(a: { Types.CampRect }?, b: { Types.CampRect }?): boolean
 		if a == nil or b == nil then
 			return a == b
@@ -1653,6 +1654,7 @@ local function bootMission(): ()
 				hx = entry.hx,
 				hz = entry.hz,
 				cells = CrowdRenderer.ReadCells(entry.cells),
+				locks = if entry.locks == true then true else nil,
 			})
 		end
 		local same = #fresh == #held
@@ -1665,6 +1667,7 @@ local function bootMission(): ()
 					or floor.z ~= old.z
 					or floor.hx ~= old.hx
 					or floor.hz ~= old.hz
+					or floor.locks ~= old.locks
 					or not sameCells(floor.cells, old.cells)
 				then
 					same = false
@@ -1677,6 +1680,7 @@ local function bootMission(): ()
 		end
 		st.floors = fresh
 		CrowdRenderer.SetFloors(fresh)
+		CameraController.SetFloors(fresh)
 	end
 
 	local function onRunState(payload: any): ()

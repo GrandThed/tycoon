@@ -906,7 +906,8 @@ function L1.campNumberTests(): ()
 		fodder = { cash = 100, materials = 0 }, slinger = { cash = 500, materials = 1 }, brute = { cash = 2000, materials = 6 }, lobber = { cash = 700, materials = 4 },
 		marksman = { cash = 600, materials = 1 }, armoured = { cash = 1200, materials = 2 }, colossus = { cash = 29000, materials = 70 },
 	}
-	-- Main Camp, wave 4, and The Chief's Clearing, wave 2.
+	-- Main Camp, wave 4, and The Chief's Clearing's boss wave, as they stood on 2026-10-13 (L1c
+	-- moved the Colossus to `at` [0, 30] and raised his cash; the arithmetic is the same).
 	local waveDef = { groups = { { kind = "fodder", count = 16 }, { kind = "brute", count = 3 }, { kind = "slinger", count = 4 }, { kind = "armoured", count = 3, minDifficulty = "hard" }, { kind = "marksman", count = 2, minDifficulty = "hard" }, { kind = "fodder", count = 16 } } }
 	local bossDef = { groups = {}, boss = { kind = "colossus", at = { 14, 0 }, valor = 10 } }
 	local function spec(def: any, difficulty: string, party: number): any
@@ -936,7 +937,7 @@ function L1.campNumberTests(): ()
 	end
 	local alone = spec(bossDef, "brutal", 1)
 	local four = spec(bossDef, "brutal", 4)
-	check(alone.total == 0 and #alone.groups == 0 and alone.boss == bossDef.boss and alone.bossHpMult == 1, "the Chief's wave fields nobody but the boss; solo, his body has its own health")
+	check(alone.total == 0 and #alone.groups == 0 and alone.boss == bossDef.boss and alone.bossHpMult == 1, "the Chief's boss wave fields nobody but the boss; solo, his body has its own health")
 	check(four.boss == bossDef.boss and four.bossHpMult == 3.25 and spec(waveDef, "normal", 4).bossHpMult == 3.25 and spec(waveDef, "hard", 2).bossHpMult == 1.75, `for a party of four it is x3.25 (1 + 0.75 x 3), whatever the difficulty ({four.bossHpMult})`)
 
 	local function pay(kind: string, mult: number): string
@@ -947,7 +948,7 @@ function L1.campNumberTests(): ()
 		local cash, materials = Combat.CampReward(rewards, kind, spec(waveDef, difficulty, party))
 		return `{cash}/{materials}`
 	end
-	check(paid("brute", "normal", 1) == "2000/6" and paid("colossus", "normal", 1) == "29000/70" and paid("fodder", "normal", 1) == "100/0", `a kill on Normal pays its kind's price: a brute 2000 and 6, the Colossus 29000 and 70 ({paid("brute", "normal", 1)})`)
+	check(paid("brute", "normal", 1) == "2000/6" and paid("colossus", "normal", 1) == "29000/70" and paid("fodder", "normal", 1) == "100/0", `a kill on Normal pays its kind's price: a brute 2000 and 6, the Colossus 29000 and 70 (2026-10-13's price) ({paid("brute", "normal", 1)})`)
 	check(paid("brute", "hard", 1) == "4000/12" and paid("slinger", "hard", 1) == "1000/2" and paid("colossus", "hard", 1) == "58000/140", `on Hard twice that: a brute 4000 and 12, the Colossus 58000 and 140 ({paid("brute", "hard", 1)})`)
 	check(paid("brute", "brutal", 1) == "8000/24" and paid("marksman", "brutal", 1) == "2400/4" and paid("colossus", "brutal", 1) == "116000/280", `on Brutal four times: a brute 8000 and 24, the Colossus 116000 and 280 ({paid("brute", "brutal", 1)})`)
 	check(paid("brute", "hard", 4) == "4000/12" and paid("colossus", "brutal", 4) == "116000/280", "a kill pays the same in a party of four: the pool is split, not the price")
@@ -2038,7 +2039,11 @@ function L1.real.planChecks(tag: string, level: any, layout: any, plan: any, pie
 		local waveDefs = stageDef.waves or {}
 		for waveIndex, waveDef in waveDefs do
 			local spec = L1.Combat.CampWave(waveDef, level.crowd.regenShare, scales, ranks[plan.difficulty] or 0, ranks, 1, L1.combat)
-			if spec.total <= 0 and spec.boss == nil then
+			-- L1c-4: an empty wave is a walled camp's ambush (it clears when the residents the
+			-- close released are dead), so it is allowed only as the first wave of a locking camp
+			-- that has residents at this difficulty.
+			local ambush = waveIndex == 1 and zone.locks and zone.residents > 0
+			if spec.total <= 0 and spec.boss == nil and not ambush then
 				table.insert(empty, `wave {waveIndex}`)
 			end
 			local boss = waveDef.boss
@@ -2055,7 +2060,7 @@ function L1.real.planChecks(tag: string, level: any, layout: any, plan: any, pie
 				end
 			end
 		end
-		check(#empty == 0 and #waveDefs > 0, `{where}: each of its {#waveDefs} waves fields a body or a boss at this difficulty{real.list(empty)}`)
+		check(#empty == 0 and #waveDefs > 0, `{where}: each of its {#waveDefs} waves fields a body or a boss at this difficulty, but an ambush (wave 1 of a locking camp with residents, L1c-4){real.list(empty)}`)
 		check(#wrong == 0, `{where}: a wave's boss is a boss kind (only that kill pays the Valor) and what it calls is a priced kind{real.list(wrong)}`)
 		check(stage.waves == #waveDefs and stage.maxAlive >= 1 and stage.maxAlive <= FIXTURES.proving.crowd.maxAlive, `{where}: the plan has its {#waveDefs} waves and a cap the crowd can hold ({stage.maxAlive} of {FIXTURES.proving.crowd.maxAlive})`)
 	end

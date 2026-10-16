@@ -83,14 +83,19 @@ EXPECTED = {
         # under its stage's maxAlive), and a sneak path past the open camps (L1b-W2-3).
         "locks": ["C"],
         "residents": {"A": (30, 36), "B": (40, 50)},
-        "lockedResidentsMin": 4,
+        # L1c-4: the boss room's ambush, at every difficulty (8 to 10 on Normal by Ben's word, 12 on
+        # Hard and Brutal), under its stage's maxAlive.
+        "lockedResidents": (8, 12),
+        # L1c-3: the camps that are walled: nothing inside is seen from outside before the close.
+        "walled": ["C"],
         "sneak": True,
         # L1b Wave 4: one chase region on the plateau (ruling 1), an approach before each open camp.
         "regions": 1,
         "approaches": 2,
         # The fix round's R8: the spots no rusher reaches within the Longbow's range of the region.
-        "sniperSpots": ["Creek", "LookoutLedge", "LookoutSignPad", "Road2", "Road3", "Road4", "RoadBC5", "RoadBC6",
-                        "Secret_cache", "Secret_lookout", "ShrineSignPad"],
+        # L1c: the gatehouse's two floors are new tops by the region (sim_range rates them).
+        "sniperSpots": ["Creek", "GatehouseTurn", "GatehouseWalk", "LookoutLedge", "LookoutSignPad", "Road2", "Road3",
+                        "Road4", "RoadBC5", "RoadBC6", "Secret_cache", "Secret_lookout", "ShrineSignPad"],
     },
 }
 # What a sign must say for each key, so a player knows what to bring.
@@ -168,6 +173,14 @@ JOIN_FACTOR_FIXED = 2  # L1b-W2-12 / Ben's "at least double": Combat.json camps.
 BODY_HEIGHT = 6.0  # a character, feet to head: what stands this far under a barrier's foot is in it
 CLOSE_SPARE = 1.0  # a camp's entry point lies this far inside the close rule's inset rectangle
 SAMPLE = 0.25  # studs between two samples of a walked leg
+# L1c (docs/prompts/l1c-contract.md, L1c-1 and L1c-3): the walled boss room.
+WALL_SPARE = 3.0  # a walled camp's fence stands this much over the highest camera (L1c-1)
+SIGHT_STEP = 2.0  # eye and camera points are sampled on this grid
+CAMERA_SPARE = 2.0  # camera points lie within camera.maxZoom + this of an eye point
+DOORWAY = 2.5  # the doorway exemption: this close to the fenced rectangle, inside a gate's lane
+THEME_PATH = REPO_ROOT / "src" / "client" / "UI" / "Theme.luau"
+# The Theme numbers the highest camera is built from (the client's; read from the file, never copied).
+THEME_KEYS = ("COMBAT_CAMERA_PIVOT_HEIGHT", "COMBAT_CAMERA_MIN_PITCH_DEGREES", "COMBAT_SHAKE_MAX_STUDS")
 EPS = 1e-6
 SIDES = ("north", "south", "west", "east")
 
@@ -354,6 +367,81 @@ def stray_reach(move, drop):
     return move["walkSpeed"] * (up + down) + move["dashDistance"]
 
 
+def ability_height(proving):
+    """The most any weapon ability lifts its caster (Leap Smash's `height`): L1c-1."""
+    return max([0.0] + [float(((w.get("ability") or {}).get("height")) or 0) for w in proving["weapons"].values()])
+
+
+def climb_max(move, ability):
+    """L1c-3: the highest top a player gets onto from a surface: jump, double jump, the highest
+    ability lift and a step up."""
+    return move["jumpHeight"] + move["doubleJumpHeight"] + ability + STEP_UP
+
+
+def is_tall(solid):
+    """What may be an unclimbable wall: a block of look `wall`, or a camp's fence."""
+    return solid.kind == "fence" or (solid.kind == "block" and solid.look == "wall")
+
+
+def unclimbable(solids, move, ability):
+    """L1c-3: the names of the walls nobody stands on. A `wall` block or a camp fence is
+    unclimbable when its top stands at least climb_max over every standable surface within
+    stray_reach of it (that is, nobody lands within reach of its foot high enough to get on it);
+    another unclimbable wall is not such a surface. The largest set that holds: start from every
+    candidate and drop the ones a standable surface beats until nothing changes."""
+    reach = stray_reach(move, 0)
+    climb = climb_max(move, ability)
+    standable = ("block", "floor", "secret", "fence", "obstacle")
+    found = {s.name for s in solids if is_tall(s)}
+    changed = True
+    while changed:
+        changed = False
+        for wall in solids:
+            if wall.name not in found:
+                continue
+            for other in solids:
+                if other is wall or other.name in found or other.kind not in standable:
+                    continue
+                if wall.gap_to(other) <= reach + EPS and wall.top - other.top < climb - EPS:
+                    found.discard(wall.name)
+                    changed = True
+                    break
+    return found
+
+
+def theme_numbers():
+    """THEME_KEYS as Theme.luau sets them: {key: number}; a key it lacks is left out."""
+    import re
+
+    text = THEME_PATH.read_text(encoding="utf-8") if THEME_PATH.exists() else ""
+    found = {}
+    for key in THEME_KEYS:
+        match = re.search(rf"^\s*{key}\s*=\s*(-?[0-9.]+)\s*,", text, re.MULTILINE)
+        if match:
+            found[key] = float(match.group(1))
+    return found
+
+
+def camera_top(ctx):
+    """L1c-1: the highest a camera stands over the surface its player took off from: the double
+    jump's peak, the root, the highest ability lift cast there, the pivot and shoulder, the boom
+    at camera.maxZoom and the lowest pitch, and the shake. (number, the parts as text), or
+    (None, what is missing)."""
+    move, camera, theme = ctx["move"], ctx.get("camera") or {}, ctx.get("theme") or {}
+    lost = [key for key in THEME_KEYS if key not in theme]
+    shoulder = camera.get("shoulderOffset")
+    if lost or not is_number(camera.get("maxZoom")) or not (isinstance(shoulder, list) and len(shoulder) == 3):
+        return None, "Theme.luau lacks " + ", ".join(lost) if lost else "Combat.json camera lacks maxZoom or shoulderOffset"
+    boom = camera["maxZoom"] * math.sin(math.radians(-theme["COMBAT_CAMERA_MIN_PITCH_DEGREES"]))
+    parts = [("feet at the double jump's peak", move["jumpHeight"] + move["doubleJumpHeight"]),
+             ("root", sr.ROOT_HEIGHT), ("ability lift", ctx["abilityHeight"]),
+             ("pivot", theme["COMBAT_CAMERA_PIVOT_HEIGHT"]), ("shoulder", shoulder[1]),
+             (f"boom {camera['maxZoom']:g} at {theme['COMBAT_CAMERA_MIN_PITCH_DEGREES']:g} deg", boom),
+             ("shake", theme["COMBAT_SHAKE_MAX_STUDS"])]
+    return sum(v for _k, v in parts), " + ".join(f"{k} {v:g}" if v == round(v, 2) else f"{k} {v:.2f}"
+                                                 for k, v in parts)
+
+
 # ---------------------------------------------------------------------------------------------
 # The route
 # ---------------------------------------------------------------------------------------------
@@ -494,6 +582,28 @@ def route_height_near(layout, x, z):
 # ---------------------------------------------------------------------------------------------
 
 
+def gate_road(camp, solid, thickness):
+    """L1c-3: a path block that runs through one of the camp's own gates: it meets the floor's
+    edge on the gate's side and its footprint across that side lies within the gate's opening."""
+    if solid.kind != "block" or solid.look != "path":
+        return False
+    x0, x1, z0, z1 = camp_rect(camp)
+    for gate in camp.get("gates") or []:
+        gx0, gx1, gz0, gz1 = gate_rect(camp, gate, thickness)
+        side = gate["side"]
+        if side in ("west", "east"):
+            meets = solid.x1 >= x0 - EPS and solid.x0 <= x0 + EPS if side == "west" else (
+                solid.x0 <= x1 + EPS and solid.x1 >= x1 - EPS)
+            if meets and solid.z0 >= gz0 - EPS and solid.z1 <= gz1 + EPS:
+                return True
+        else:
+            meets = solid.z1 >= z0 - EPS and solid.z0 <= z0 + EPS if side == "north" else (
+                solid.z0 <= z1 + EPS and solid.z1 >= z1 - EPS)
+            if meets and solid.x0 >= gx0 - EPS and solid.x1 <= gx1 + EPS:
+                return True
+    return False
+
+
 def camp_axis(camp):
     """The axis the route crosses a camp on, from its entry gate's side: 'x' or 'z'."""
     gates = camp.get("gates") or []
@@ -511,6 +621,8 @@ def check_layout(name, layout, ctx, expect):
     solids = solids_of(layout, thickness, levels["floorThickness"])
     jump = jump_facts(move)
     tag = f"{name}:"
+    # L1c-3: walls nobody gets on are not standable ground (the fence rule, the band, beside).
+    tall = unclimbable(solids, move, ctx["abilityHeight"])
 
     # Ruling 6 of the fix round: a size of 0 or less is no Part (LevelGeometry.Pieces refuses it).
     flat = [b.get("name") or b["look"] for b in layout["blocks"] if min(b["sx"], b["sy"], b["sz"]) <= 0]
@@ -574,9 +686,13 @@ def check_layout(name, layout, ctx, expect):
         gates = camp.get("gates") or []
         fence = camp.get("fence")
         entry, leave = camp["entry"], camp["exit"]
-        expect(bool(fence) and 0 < fence["height"] <= levels["triggerHeight"] - sr.ROOT_HEIGHT,
+        # L1c-3: a fence nobody gets on (every strip unclimbable) is exempt: no root stands on it.
+        walled = bool(fence) and all(f"Camp_{cid}_Fence_{side}" in tall for side in SIDES)
+        expect(bool(fence) and 0 < fence["height"] and (walled or fence["height"] <= levels["triggerHeight"] - sr.ROOT_HEIGHT),
                f"{tag} camp {cid} has a fence, and a root on its top is inside the trigger's height "
-               f"(levels.triggerHeight {levels['triggerHeight']:g})" + (f": {fence['height']:g} high" if fence else ""))
+               f"(levels.triggerHeight {levels['triggerHeight']:g})" + (f": {fence['height']:g} high" if fence else "")
+               + (f" (an unclimbable wall: its top is at least {climb_max(move, ctx['abilityHeight']):g} over every "
+                  f"standable surface within {stray_reach(move, 0):.1f}, so nobody stands on it; L1c-3)" if walled else ""))
         wide = len(gates) == 2 and all(g["width"] >= GATE_MIN_WIDTH - EPS and g["side"] in SIDES for g in gates)
         expect(wide, f"{tag} camp {cid} has two gates (entry, exit) at least {GATE_MIN_WIDTH:g} wide: "
                + ", ".join(f"{g['side']} {g['width']:g}" for g in gates))
@@ -641,14 +757,20 @@ def check_layout(name, layout, ctx, expect):
             # An open camp builds no gate and no barrier box (L1b-12), and sneaking past it is
             # allowed: the ground beside it and the wall's band are a locking camp's gates only.
             continue
-        # Nothing beside it: along the axis the route crosses it on, the only thing in its span is itself.
+        # Nothing beside it: along the axis the route crosses it on, the only thing in its span is
+        # itself. L1c-3: what counts is within a jump, a double jump and a dash of its fenced
+        # rectangle (what this rule measures), less unclimbable walls and the roads through its own
+        # gates (as the band rule below).
         axis = camp_axis(camp)
         lo, hi = (x0 - thickness, x1 + thickness) if axis == "x" else (z0 - thickness, z1 + thickness)
         drop = camp["y"] + (fence["height"] if fence else 0) - layout["killY"]
         clear = stray_reach(move, 0)
+        fenced = (x0 - thickness, x1 + thickness, z0 - thickness, z1 + thickness)
         beside = []
         for s in solids:
-            if s.name.startswith(f"Camp_{cid}_"):
+            if s.name.startswith(f"Camp_{cid}_") or s.name in tall:
+                continue
+            if rect_gap((s.x0, s.x1, s.z0, s.z1), fenced) > clear + EPS or gate_road(camp, s, thickness):
                 continue
             a0, a1 = (s.x0, s.x1) if axis == "x" else (s.z0, s.z1)
             b0, b1 = (s.z0, s.z1) if axis == "x" else (s.x0, s.x1)
@@ -668,8 +790,8 @@ def check_layout(name, layout, ctx, expect):
         in_band = []
         nearest_ground = (math.inf, None)
         for s in solids:
-            if s.name.startswith(f"Camp_{cid}_") or s.kind not in ("block", "secret"):
-                continue
+            if s.name.startswith(f"Camp_{cid}_") or s.kind not in ("block", "secret") or s.name in tall:
+                continue  # L1c-3: an unclimbable wall is not ground
             if s.top <= camp["y"] - BODY_HEIGHT or s.bottom >= camp["y"] + (barrier.get("height") or 0):
                 continue
             ix0, ix1 = max(s.x0, x0 - reach), min(s.x1, x1 + reach)
@@ -1085,17 +1207,19 @@ def check_residents(name, level, layout, ctx, expect):
     def widest(defn):
         return max((kinds[u["kind"]]["radius"] for u in defn["units"] if u["kind"] in kinds), default=ctx["widest"])
 
-    # Residents per camp, at the highest difficulty.
+    # Residents per camp, at the highest difficulty; a camp that locks at every difficulty (L1c-4).
     for camp in camps:
         cid = camp["id"]
         n = residents.get(cid, 0)
         area = camp["sx"] * camp["sz"]
         dense = n <= area / DENSITY_AREA + EPS
         if camp.get("locks") is True:
-            least = spec.get("lockedResidentsMin", 0)
+            lo, hi = spec.get("lockedResidents", (0, math.inf))
             cap = caps.get(cid)
-            ok = dense and n >= least and cap is not None and n < cap
-            band = f"at least {least} and under its stage's maxAlive {cap}"
+            each = {d: sr.groups_of(level, layout, ranks.get(d, 0), ranks)[1].get(cid, 0) for d in difficulties}
+            ok = dense and cap is not None and all(lo <= m <= hi and m < cap for m in each.values())
+            band = (f"{lo}-{hi} at every difficulty and under its stage's maxAlive {cap}: "
+                    + ", ".join(f"{d} {m}" for d, m in each.items()))
         elif cid in (spec.get("residents") or {}):
             lo, hi = spec["residents"][cid]
             ok = dense and lo <= n <= hi
@@ -1335,6 +1459,7 @@ def check_residents(name, level, layout, ctx, expect):
            f"{ctx['crowdMaxAlive']} at every difficulty (L1b-W2-5): " + "; ".join(over or rows))
     check_wave2(name, level, layout, ctx, expect, caps, solids)
     check_wave4(name, level, layout, ctx, expect, solids)
+    check_walled(name, level, layout, ctx, expect, solids)
 
 
 def rect_gap(a, b):
@@ -1396,6 +1521,10 @@ def sniper_spots(level, layout, ctx, solids):
     reach = ctx["longbow"]
     rooms = tuple(f"Camp_{c['id']}_" for c in layout["camps"] if c.get("locks") is True)
     camps = {c["id"]: c for c in layout["camps"]}
+    if "move" not in ctx or "abilityHeight" not in ctx:
+        proving = sr.load_config(sr.CONFIG_PATH)
+        ctx = dict(ctx, move=proving["movement"], abilityHeight=ability_height(proving))
+    tall = unclimbable(solids, ctx["move"], ctx["abilityHeight"])  # L1c-3: nobody stands on these
     spots = []
     for region in layout.get("regions") or []:
         defn = region_defn(region, layout)
@@ -1404,7 +1533,8 @@ def sniper_spots(level, layout, ctx, solids):
         if not open_camps:
             continue
         for solid in solids:
-            if solid.kind not in ("block", "floor", "secret", "fence", "obstacle") or solid.name.startswith(rooms):
+            if (solid.kind not in ("block", "floor", "secret", "fence", "obstacle") or solid.name.startswith(rooms)
+                    or solid.name in tall):
                 continue
             box = (solid.x0, solid.x1, solid.z0, solid.z1)
             if min(rect_gap(box, cell_box(c)) for c in rects) > reach + EPS:
@@ -1612,8 +1742,9 @@ def check_wave4(name, level, layout, ctx, expect, solids):
         # shooting out is INTERFACES "Open for later" ("Shooting out of the boss room"), listed
         # below, not gated here.
         rooms = tuple(f"Camp_{c['id']}_" for c in locking)
+        tall = unclimbable(solids, ctx["move"], ctx["abilityHeight"])  # L1c-3: nobody perches on these
         for solid in solids:
-            if solid.kind not in ("block", "fence", "obstacle", "secret", "floor"):
+            if solid.kind not in ("block", "fence", "obstacle", "secret", "floor") or solid.name in tall:
                 continue
             mine = (solid.x0, solid.x1, solid.z0, solid.z1)
             gap = min(rect_gap(mine, b) for b in boxes)
@@ -1706,6 +1837,343 @@ def check_wave4(name, level, layout, ctx, expect, solids):
             told.append(f"{config['id']} {pace['seconds']:g} s, lead {pace['lead']:g}")
     expect(not bad, f"{name}: every open camp's tent has a pace with seconds over 0 and lead in [0, 1] (L1b-W4-28)"
            + (": " + "; ".join(bad) if bad else f" ({'; '.join(told) or 'no tent'})"))
+
+
+# ---------------------------------------------------------------------------------------------
+# L1c: the walled boss room (docs/prompts/l1c-contract.md, L1c-1, L1c-3, L1c-6)
+# ---------------------------------------------------------------------------------------------
+
+
+def seg_hits_rect(ax, az, bx, bz, rect):
+    """Does the segment a-b pass through the open rectangle (x0, x1, z0, z1)? (Liang-Barsky; a
+    segment that only grazes an edge does not.)"""
+    x0, x1, z0, z1 = rect
+    f0, f1 = 0.0, 1.0
+    for p, d, lo, hi in ((ax, bx - ax, x0, x1), (az, bz - az, z0, z1)):
+        if abs(d) < EPS:
+            if p <= lo + EPS or p >= hi - EPS:
+                return False
+            continue
+        a, c = (lo - p) / d, (hi - p) / d
+        f0, f1 = max(f0, min(a, c)), min(f1, max(a, c))
+        if f1 - f0 <= EPS:
+            return False
+    return f1 - f0 > EPS
+
+
+def wrap(angle):
+    """An angle in (-pi, pi]."""
+    while angle > math.pi:
+        angle -= 2 * math.pi
+    while angle <= -math.pi:
+        angle += 2 * math.pi
+    return angle
+
+
+def hull_arc(px, pz, corners, ref):
+    """The directions from (px, pz) that meet a convex polygon (its corners), as angles relative
+    to `ref`: [(lo, hi)] within (-pi, pi], one arc split where it crosses the cut."""
+    angles = sorted(wrap(math.atan2(z - pz, x - px) - ref) for x, z in corners)
+    gaps = [(angles[(k + 1) % len(angles)] - angles[k]) % (2 * math.pi) for k in range(len(angles))]
+    widest = max(range(len(gaps)), key=lambda k: gaps[k])
+    lo = angles[(widest + 1) % len(angles)]
+    hi = lo + 2 * math.pi - gaps[widest]
+    return [(lo, hi)] if hi <= math.pi else [(lo, math.pi), (-math.pi, hi - 2 * math.pi)]
+
+
+def cut_arcs(arcs, gone):
+    """`arcs` less every arc of `gone` (both lists of (lo, hi))."""
+    for g0, g1 in gone:
+        left = []
+        for a0, a1 in arcs:
+            if g1 <= a0 or g0 >= a1:
+                left.append((a0, a1))
+                continue
+            if g0 > a0:
+                left.append((a0, g0))
+            if g1 < a1:
+                left.append((g1, a1))
+        arcs = left
+    return arcs
+
+
+def gate_faces(camp, gate, thickness):
+    """A gate's opening as a sight line crosses it: its outer face, its inner face (segments) and
+    the test for a point on the outer side of that face."""
+    gx0, gx1, gz0, gz1 = gate_rect(camp, gate, thickness)
+    side = gate["side"]
+    if side == "north":
+        return ((gx0, gz0), (gx1, gz0)), ((gx0, gz1), (gx1, gz1)), (lambda x, z: z < gz0 - EPS)
+    if side == "south":
+        return ((gx0, gz1), (gx1, gz1)), ((gx0, gz0), (gx1, gz0)), (lambda x, z: z > gz1 + EPS)
+    if side == "west":
+        return ((gx0, gz0), (gx0, gz1)), ((gx1, gz0), (gx1, gz1)), (lambda x, z: x < gx0 - EPS)
+    return ((gx1, gz0), (gx1, gz1)), ((gx0, gz0), (gx0, gz1)), (lambda x, z: x > gx1 + EPS)
+
+
+def clip_outward(rect, side, face):
+    """A wall's footprint less what lies inward of a gate's outer face (a sight line through that
+    gate is inside the fenced rectangle past the face): None when nothing is left."""
+    x0, x1, z0, z1 = rect
+    if side == "north":
+        z1 = min(z1, face)
+    elif side == "south":
+        z0 = max(z0, face)
+    elif side == "west":
+        x1 = min(x1, face)
+    else:
+        x0 = max(x0, face)
+    return (x0, x1, z0, z1) if x1 - x0 > EPS and z1 - z0 > EPS else None
+
+
+def visible_arcs(px, pz, camp, gate, thickness, walls):
+    """The directions from (px, pz) a sight line takes through a gate's opening into the camp
+    without meeting a wall: ([(lo, hi)], ref), angles relative to ref (the direction to the
+    opening's middle). The walls are taller than any camera (L1c-1), so this is exact in plan: a
+    line into the camp crosses the opening's outer and inner face within the gate; before the
+    outer face it must miss every wall's footprint; past it, it is inside the fenced rectangle,
+    where no wall stands."""
+    outer, inner, outside = gate_faces(camp, gate, thickness)
+    if not outside(px, pz):
+        return [], 0.0
+    mx, mz = (outer[0][0] + outer[1][0]) / 2, (outer[0][1] + outer[1][1]) / 2
+    ref = math.atan2(mz - pz, mx - px)
+    a = [wrap(math.atan2(z - pz, x - px) - ref) for x, z in outer]
+    b = [wrap(math.atan2(z - pz, x - px) - ref) for x, z in inner]
+    lo, hi = max(min(a), min(b)), min(max(a), max(b))
+    if hi <= lo:
+        return [], ref
+    face = outer[0][1] if gate["side"] in ("north", "south") else outer[0][0]
+    gone = []
+    for rect in walls:
+        part = clip_outward(rect, gate["side"], face)
+        if part is None:
+            continue
+        corners = ((part[0], part[2]), (part[1], part[2]), (part[1], part[3]), (part[0], part[3]))
+        gone += hull_arc(px, pz, corners, ref)
+    return cut_arcs([(lo, hi)], gone), ref
+
+
+def reachable_solids(layout, solids, move, ability, skip, tall):
+    """The standable solids a player reaches from the start without entering the camp whose
+    pieces start with `skip`: from one to another that lies within stray_reach (falling the drop
+    between them) and at most climb_max over it. Walls do not stop a jump here (conservative)."""
+    standable = [s for s in solids if s.kind in ("block", "floor", "secret", "fence", "obstacle")
+                 and not s.name.startswith(skip) and s.name not in tall]
+    start = layout["start"]
+    _top, first = ground(solids, start["x"], start["z"], start["y"] + EPS)
+    if first is None or first not in standable:
+        return []
+    climb = climb_max(move, ability)
+    seen = {first.name}
+    queue = [first]
+    while queue:
+        here = queue.pop()
+        for other in standable:
+            if other.name in seen or other.top - here.top > climb + EPS:
+                continue
+            if here.gap_to(other) <= stray_reach(move, here.top - other.top) + EPS:
+                seen.add(other.name)
+                queue.append(other)
+    return [s for s in standable if s.name in seen]
+
+
+def walled_bodies(level, layout, ctx, cid):
+    """Every resident post of a camp at every difficulty: ({(x, z): (radius, label)}, the plated
+    residents, the tallest body of the camp, its boss included)."""
+    kinds, ranks = ctx["kinds"], ctx["ranks"]
+    bodies, plated, tallest = {}, [], 0.0
+    for difficulty in level["difficulties"]:
+        defs, _res = sr.groups_of(level, layout, ranks.get(difficulty, 0), ranks)
+        for defn in defs:
+            if defn["camp"] != cid:
+                continue
+            for post, kind in zip(sr.group_posts(defn), member_kinds(defn)):
+                body = kinds.get(kind) or {}
+                key = (round(post["at"][0], 3), round(post["at"][2], 3))
+                radius = body.get("radius") or ctx["widest"]
+                if radius >= bodies.get(key, (0.0, ""))[0]:
+                    bodies[key] = (radius, f"{difficulty} {defn['id']} {kind}")
+                tallest = max(tallest, body.get("height") or 0)
+                if (body.get("plate") or 0) > 0:
+                    plated.append(f"{difficulty} {defn['id']} {kind}")
+    for stage in level["stages"]:
+        if stage["kind"] == "camp" and stage.get("zone") == cid:
+            for wave in stage.get("waves") or []:
+                if wave.get("boss") and wave["boss"]["kind"] in kinds:
+                    tallest = max(tallest, kinds[wave["boss"]["kind"]].get("height") or 0)
+    return bodies, sorted(set(plated)), tallest
+
+
+def sight_points(layout, solids, ctx, camp, gates, walls, lockers, tall):
+    """The plan-view points a walled camp is looked at from: eye points on every outside top a
+    player reaches (SIGHT_STEP grid), and camera points within camera.maxZoom + CAMERA_SPARE of
+    one, outside every wall and locking camp, whose boom from that eye no wall or locking camp
+    cuts (the spherecast, and the clip of L1c-5a). Only points that could look through a gate:
+    (eyes, cameras)."""
+    thickness = ctx["levels"]["fenceThickness"]
+    boom = (ctx.get("camera") or {}).get("maxZoom", 0) + CAMERA_SPARE
+    outsides = [gate_faces(camp, g, thickness)[2] for g in gates]
+    rects = [gate_rect(camp, g, thickness) for g in gates]
+
+    def near_outside(x, z):
+        for g, (gx0, gx1, gz0, gz1) in zip(gates, rects):
+            side = g["side"]
+            if ((side == "north" and z < gz0 + boom) or (side == "south" and z > gz1 - boom)
+                    or (side == "west" and x < gx0 + boom) or (side == "east" and x > gx1 - boom)):
+                return True
+        return False
+
+    eyes = set()
+    for s in reachable_solids(layout, solids, ctx["move"], ctx["abilityHeight"], f"Camp_{camp['id']}_", tall):
+        for x, z in standable_points(solids, s, SIGHT_STEP):
+            if near_outside(x, z):
+                eyes.add((round(x, 3), round(z, 3)))
+    blocked = walls + lockers
+
+    def inside_any(x, z):
+        return any(r[0] + EPS < x < r[1] - EPS and r[2] + EPS < z < r[3] - EPS for r in blocked)
+
+    cams = set()
+    for ex, ez in eyes:
+        for i in range(int(math.floor((ex - boom) / SIGHT_STEP)), int(math.ceil((ex + boom) / SIGHT_STEP)) + 1):
+            for k in range(int(math.floor((ez - boom) / SIGHT_STEP)), int(math.ceil((ez + boom) / SIGHT_STEP)) + 1):
+                cx, cz = i * SIGHT_STEP, k * SIGHT_STEP
+                if (cx, cz) in cams or math.hypot(cx - ex, cz - ez) > boom + EPS:
+                    continue
+                if not any(out(cx, cz) for out in outsides) or inside_any(cx, cz):
+                    continue
+                if any(seg_hits_rect(ex, ez, cx, cz, r) for r in blocked):
+                    continue
+                cams.add((cx, cz))
+    return eyes, cams - eyes
+
+
+def check_walled(name, level, layout, ctx, expect, solids):
+    """L1c-1, L1c-3 and L1c-6: a walled camp hides everything inside it from every place a player
+    reaches outside it, at the top of any jump, with the camera at its highest and farthest."""
+    walled = (EXPECTED.get(level["layout"]) or {}).get("walled") or []
+    if not walled:
+        return
+    move, levels = ctx["move"], ctx["levels"]
+    thickness = levels["fenceThickness"]
+    rows = ctx["gate16"].setdefault(level["layout"], {}).setdefault("walled", [])
+    tall = unclimbable(solids, move, ctx["abilityHeight"])
+    top_cam, parts = camera_top(ctx)
+    reach = stray_reach(move, 0)
+    for cid in walled:
+        camp = next((c for c in layout["camps"] if c["id"] == cid), None)
+        tag = f"{name} camp {cid} (walled):"
+        if camp is None or camp.get("locks") is not True:
+            expect(False, f"{tag} it is a camp of the layout that locks")
+            continue
+        fence = camp.get("fence") or {}
+        wall_top = camp["y"] + (fence.get("height") or 0)
+        x0, x1, z0, z1 = camp_rect(camp)
+        fenced = (x0 - thickness, x1 + thickness, z0 - thickness, z1 + thickness)
+        # Height (L1c-1): over the highest camera, WALL_SPARE to spare.
+        expect(top_cam is not None and (fence.get("height") or 0) >= top_cam + WALL_SPARE - EPS,
+               f"{tag} its fence ({fence.get('height')}) stands at least the highest camera + {WALL_SPARE:g} over its "
+               f"floor: " + (f"{top_cam:.2f} + {WALL_SPARE:g} = {top_cam + WALL_SPARE:.2f} ({parts})"
+                             if top_cam is not None else parts))
+        if top_cam is None:
+            continue
+        # The gatehouse: every wall block within stray_reach of the fenced rectangle is as tall.
+        near = [s for s in solids if s.kind == "block" and s.look == "wall"
+                and rect_gap((s.x0, s.x1, s.z0, s.z1), fenced) <= reach + EPS]
+        low = [f"{s.name} top {s.top:g}" for s in near if s.top < wall_top - EPS]
+        expect(not low, f"{tag} every wall block within {reach:.1f} of its fenced rectangle stands at least as high as "
+               f"its fence's top {wall_top:g}" + (": " + ", ".join(low) if low else
+                                                  f" ({len(near)}: {', '.join(s.name for s in near) or 'none'})"))
+        # Plates (L1c-6).
+        bodies, plated, tallest = walled_bodies(level, layout, ctx, cid)
+        expect(not plated, f"{tag} no resident carries a plate at any difficulty (L1c-6: the plate bar is drawn "
+               f"through walls)" + (": " + ", ".join(plated) if plated else f" ({len(bodies)} posts)"))
+        # Floors: a camera that tops the wall from an outside surface sees nothing: past the
+        # wall's top its line stays over the tallest body's head across the whole floor (its
+        # diagonal). At or under the wall's top the plan view below decides.
+        diagonal = math.hypot(camp["sx"], camp["sz"])
+        head = camp["y"] + tallest
+        under, topped, over = None, None, []
+        for s in solids:
+            if (s.kind not in ("block", "floor", "secret", "fence", "obstacle") or s.name.startswith(f"Camp_{cid}_")
+                    or s.name in tall):
+                continue
+            cam = s.top + top_cam
+            if cam <= wall_top + EPS:
+                if under is None or wall_top - cam < under[0]:
+                    under = (wall_top - cam, s.name)
+                continue
+            d = rect_gap((s.x0, s.x1, s.z0, s.z1), fenced)
+            inward = (wall_top - head) * d / (cam - wall_top)
+            if topped is None or inward - diagonal < topped[0]:
+                topped = (inward - diagonal, s.name, d, cam)
+            if inward < diagonal - EPS:
+                over.append(f"{s.name} (top {s.top:g}, camera {cam:.1f}, {d:.1f} off: its line falls to a "
+                            f"{tallest:g}-stud head {inward:.1f} studs in; the floor is {diagonal:.0f} across)")
+        told = []
+        if under is not None:
+            told.append(f"the highest camera under the top: {under[1]}, {under[0]:.2f} under")
+        if topped is not None:
+            told.append(f"the tightest over it: {topped[1]} (camera {topped[3]:.1f}, {topped[2]:.0f} off), its line "
+                        f"meets a head {topped[0] + diagonal:.0f} studs past the wall, {topped[0]:+.0f} past the floor")
+        expect(not over, f"{tag} from every outside surface the highest camera ({top_cam:.2f} over it) stays under the "
+               f"wall's top {wall_top:g}, or its line over the top passes over the tallest body ({tallest:g}) across "
+               f"the whole floor" + (": " + "; ".join(over[:3]) if over else f" ({'; '.join(told)})"))
+        # Sight in plan (the walls are over every camera, so plan is exact).
+        gates = camp.get("gates") or []
+        walls = [(s.x0, s.x1, s.z0, s.z1) for s in solids
+                 if s.kind == "block" and s.look == "wall" and s.top >= wall_top - EPS]
+        lockers = [(c["x"] - c["sx"] / 2 - thickness, c["x"] + c["sx"] / 2 + thickness,
+                    c["z"] - c["sz"] / 2 - thickness, c["z"] + c["sz"] / 2 + thickness)
+                   for c in layout["camps"] if c.get("locks") is True]
+        eyes, cams = sight_points(layout, solids, ctx, camp, gates, walls, lockers, tall)
+
+        def doorway(x, z):
+            for g in gates:
+                gx0, gx1, gz0, gz1 = gate_rect(camp, g, thickness)
+                lane = gx0 - EPS <= x <= gx1 + EPS if g["side"] in ("north", "south") else gz0 - EPS <= z <= gz1 + EPS
+                if lane and rect_gap((x, x, z, z), fenced) <= DOORWAY + EPS:
+                    return True
+            return False
+
+        tightest, seen, glimpse = None, [], None
+        for (px, pz), what in [(p, "eye") for p in sorted(eyes)] + [(p, "camera") for p in sorted(cams)]:
+            exempt = doorway(px, pz)
+            for gate in gates:
+                arcs, ref = visible_arcs(px, pz, camp, gate, thickness, walls)
+                if not arcs:
+                    continue
+                for (bx, bz), (radius, label) in bodies.items():
+                    d = math.hypot(bx - px, bz - pz)
+                    theta = wrap(math.atan2(bz - pz, bx - px) - ref)
+                    gap = min(0.0 if a0 <= theta <= a1 else min(abs(theta - a0), abs(theta - a1)) for a0, a1 in arcs)
+                    margin = d * math.sin(min(gap, math.pi / 2)) - radius
+                    if exempt:
+                        if glimpse is None or margin < glimpse[0]:
+                            glimpse = (margin, px, pz, label)
+                        continue
+                    if tightest is None or margin < tightest[0]:
+                        tightest = (margin, what, px, pz, label, gate["side"])
+                    if margin < -EPS:
+                        seen.append(f"{what} ({px:g}, {pz:g}) sees {label} at ({bx:g}, {bz:g}) through the "
+                                    f"{gate['side']} gate ({margin:+.2f})")
+        rows.append(f"{cid}: wall top {wall_top:g} (fence {fence.get('height')}, the highest camera {top_cam:.2f} over its "
+                    f"surface); {len(eyes)} eye points, {len(cams)} camera points, {len(bodies)} posts")
+        if tightest is not None:
+            rows.append(f"{cid} sight margin {tightest[0]:+.2f} studs: {tightest[1]} ({tightest[2]:g}, {tightest[3]:g}) "
+                        f"to {tightest[4]} through the {tightest[5]} gate")
+        if glimpse is not None:
+            rows.append(f"{cid} doorway (exempt: within {DOORWAY:g} of the fence in a gate's lane): {glimpse[0]:+.2f} "
+                        f"at ({glimpse[1]:g}, {glimpse[2]:g}) to {glimpse[3]}")
+        expect(not seen and bool(eyes), f"{tag} from no eye point on an outside top a player reaches, and no camera "
+               f"point within camera.maxZoom + {CAMERA_SPARE:g} of one whose boom no wall cuts, is any part of a "
+               f"resident seen through a gate, every difficulty (in plan: the walls are over every camera; the doorway, "
+               f"{DOORWAY:g} from the fence in a gate's lane, is exempt)"
+               + (": " + "; ".join(seen[:3]) if seen else
+                  f" ({len(eyes)} eye and {len(cams)} camera points, {len(bodies)} posts; the tightest "
+                  + (f"{tightest[0]:+.2f} studs, {tightest[1]} ({tightest[2]:g}, {tightest[3]:g}) to {tightest[4]})"
+                     if tightest else "none: no line reaches a gate)")))
 
 
 def member_kinds(defn):
@@ -2065,7 +2533,7 @@ def check_map(expeditions, level_files, layouts, expect):
 # ---------------------------------------------------------------------------------------------
 
 LOOK_CHARS = {"path": "=", "ground": "%", "water": "~", "lobby": ":", "wall": "#", "sign": "i"}
-LEGEND = ("= road   % ledge or ground   ~ water   . camp floor   # fence or wall   | gate   x spawn point   "
+LEGEND = ("= road   % ledge or ground   ~ water   . camp floor   # fence or wall   | - gate   x spawn point   "
           "o obstacle   c checkpoint   ? secret site   i sign   S start   B boss   A B C the camp's middle")
 
 
@@ -2194,7 +2662,8 @@ def load_all():
            "missions": {m["id"]: m for m in (sr.load_config(path) for path in sorted(sr.MISSIONS_DIR.glob("*.json")))},
            "runCap": combat["director"]["runCapSeconds"], "camps": combat.get("camps"),
            "ranks": sr.difficulty_ranks(expeditions), "snapshotHz": proving["crowd"]["snapshotHz"],
-           "gate16": {}, "chains": {}, "longbow": longbow_range(proving)}
+           "gate16": {}, "chains": {}, "longbow": longbow_range(proving),
+           "abilityHeight": ability_height(proving), "camera": combat.get("camera"), "theme": theme_numbers()}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 
@@ -2358,6 +2827,8 @@ def main():
                 print(f"    N           {line}")
             for line in found.get("spots") or []:
                 print(f"    sniper      {line}")
+            for line in found.get("walled") or []:
+                print(f"    walled      {line}")
     if not args.no_plan:
         scale_x, scale_z = args.scale
         for name, layout in layouts.items():
