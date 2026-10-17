@@ -3777,8 +3777,170 @@ root in the fenced rectangle is now nudged onto the floor).
 - [x] Fix-diff review 0 / 2 / 2, fixed (`71fba13`)
 - [x] Second fix-diff review 0 / 0 / 3, fixed (`35a1f21`)
 - [x] QA green (full mutate.py 788 / 0 at `4825316`; fix 3 filtered 236 / 0, 0 stale)
+- [x] Merged to `main`, six place files rebuilt (lead; `1fc7d91`, 2026-10-16)
+- [ ] L1c playtest (Ben; step 1 of the L2 Wave 1 playtest)
+
+## L2 — secrets and keys
+
+**Goal:** Forest Road hides a chain of secrets, and each key opens the next.
+- Clear Forest Road, buy **Double Jump** with the boss's Valor, reach the **lookout**.
+- The lookout's chest holds the **Flamethrower**, which burns the bramble mouth of the **cave**.
+- The cave becomes a shortcut to Main Camp on later runs. A frost hammer freezes the creek.
+- Three waves, each playable alone. **No sound. Phones must work.**
+
+**Documents:**
+- Ben's decisions (2026-10-17, click questions): `docs/MISSIONS_DESIGN.md` §22.
+- Study: `docs/prompts/l2-study-report.md`.
+
+### Wave 1 — the bought double jump and the lookout (2026-10-17)
+
+**Documents:**
+- Contract: `docs/prompts/l2-w1-contract.md` (rulings L2-1 to L2-28; lead's rulings §10 and §11).
+- Fix rounds: `docs/prompts/l2-w1-fix-round.md`, `l2-w1-fix2.md`.
+- Reports: `docs/prompts/l2-w1-reports/`. Findings: `docs/prompts/l2-w1-review/` (`server.md`,
+  `client.md`, `data-tools.md`, `fix-diff.md`).
+- Values: `docs/BALANCE.md` "L2 W1" and "L2 W1 fix round".
+- Branch `l2-secrets` (worktree `tycoon-p5`); fix 2 on `l2-w1-fix2` (worktree `tycoon-p5b`).
+
+**What shipped:**
+- **Saving: profile v7** (add-only). Four maps under `combat`: `abilities`, `secrets`, `families`,
+  `shortcuts`. Stars stay in session memory.
+  - Checked before writing: v6 code loading a v7 profile keeps every key and plays (ProfileStore
+    Reconcile only adds; `DataService.runMigrations` warns "ahead of" and leaves it).
+  - Publishing the hub from `main` gives live players four empty maps; nothing is lost either way.
+- **Double Jump is owned.** The server sets the Player attribute `Ability_doubleJump`. Without it the
+  client refuses the air jump; the first refused press of a session toasts "Double Jump: buy it in
+  the lobby (K)". The range keeps every ability on.
+- **Walk-off grace.** A jump pressed within `movement.coyoteSeconds` (0.12) of walking off an edge
+  is the ground jump, with no hint. An enemy launch is never a walk-off.
+- **Abilities panel** (lobby only): **K**, the **Abilities** button, or gamepad **Y**.
+  - Double Jump costs **10 Valor** (one solo Normal clear). Buy → "Double Jump learned!"; again →
+    "Already yours". Esc, K, its X or gamepad **B** close it.
+  - Remote `RequestBuyAbility(abilityId)`: an id, never an amount; pure `Unlocks.Apply`, no yield
+    between check and write.
+- **The lookout chest.** A light column marks it. Standing on the ledge beside it, or on it, opens it
+  once: **+3 Valor, +50 Timber**, Flamethrower recorded (usable in W2). It turns gold and the column
+  goes. Card "THE LOOKOUT FOUND"; others get a toast.
+  - The key is read from the saved profile where the reward is paid (a client double-jump cheat
+    gains nothing). Chests pay flat at any difficulty; Abandon keeps the pay.
+  - The trigger measures to the chest's footprint (`levels.secretReach` 2.5, band −1 / +9).
+  - The cache and the shrine have names only: no reward until W2 / W3.
+- **Map card secrets row:** one icon per secret (found = gold with a check, not found = "?"), the key
+  under it: "2× JUMP", "FIRE", "ICE".
+- **The lookout needs Double Jump, by every means.**
+  - Ground-aim rise is per player: 18 without, 30 with (`WallClip.Rise`).
+  - Leap rule F1 + F2 (pure `WallClip.CasterFloor`, `LeapApex`): over a void the caster's floor is
+    feet less his rise; a leap cast at a jump's top no longer stacks on the jump. 0 Leap Smash routes
+    to the ledge without Double Jump (937 before).
+  - One shared ground rule for client and server: `src/shared/GroundRule.luau` →
+    `WallClip.GroundFloor`.
+  - Players no longer collide with players in the dungeon place (`BarrierGroups`): no head stand up
+    the ledge. Range players and debug bots are unchanged.
+  - The contract's three-wall notch was not built: it could not close the leap route; F1 + F2 do.
+- **Lobby HUD rows** (pure `ActionRows`): on phones Map sits above Abilities and Return, clear of the
+  health bar and Dash. The found card measures its text and sits above the crosshair.
+- **Studio levers** (both entry points; inert outside Studio and in the range): **J** toggles Double
+  Jump, **H** resets secrets, **V** +10 Valor; DebugPanel buttons; attributes `DebugGrantAbility`,
+  `DebugRemoveAbility`, `DebugResetSecrets`.
+- **Gates:** `check_levels.py` L2-18 (a)–(e) (a secret is out of reach without its key, within reach
+  with it; every lifting ability worst case; rewards follow keys); `check_levels_mutants.py`;
+  `sim_range.py` one-jump first-run gate; new harness suite `tests_l2.luau`; `check_stage_mirror`.
+- **Moved to W2 (lead, L2-22):** the lobby loadout picker, with the Flamethrower, since W1 has no
+  second family to offer.
+
+**Commits:**
+- Decisions and study: `92d1fc7`. Contract: `5621df2`, `0178fac`. Build: `bf9cd47`.
+- Leap ruling `a8ae967`; F1 + F2 `e39215b`.
+- Review: `6feb088` brief, `a21f153` findings and rulings. Fix round: `d6b3777`.
+- Fix-diff review: `613e736`, `b32c92a`. Fix 2: `b056843`.
+- Plus this docs commit.
+
+**First review: three Opus slices, 0 Critical, 0 Major, 15 Minor** (server 4, client 7, data and
+tools 4). All fixed:
+- The cache could never trigger (centre rule) → footprint trigger; rule (a) runs for every secret.
+- Duplicated id and family caps → one home in `Unlocks`; lengths in bytes both sides.
+- Pure `Unlocks.Apply` / `SecretFlow.Open`; one rule for a repeated id.
+- One shared ground rule; the lobby HUD row covered the health bar and Dash → rows.
+- Gamepad could not use the panel → Y / B bindings and a selected Buy.
+- A late jump after walking off read as an air jump → walk-off grace.
+- Map key words 11 px; found card above the crosshair.
+- Players stacking on a partner's head reached the ledge → players pass through players.
+- The one-jump gate could not fail → it counts every dropped air press, with a red mutant.
+
+**Fix-diff review: 0 Critical, 1 Major, 3 Minor.** All fixed in fix 2:
+- **Major 1:** the HUD rows were measured from `screenGui.AbsolutePosition` (0, 0), so Return still
+  covered the health bar on phones → the GUI inset. Return now clears it by 51 px (667×375), 37 px
+  (640×360); in portrait it is 55 px clear of the slot button.
+- **Minor 1:** client and server built the ground rule's inputs separately → `GroundRule`.
+- **Minor 2:** the found card guessed its height → it measures its text; the note is one line
+  ("Flamethrower is yours (usable soon)").
+- **Minor 3:** an enemy launch counted as a walk-off → `ApplyKnock` clears it.
+
+**Balance (BALANCE "L2 W1"), Normal at 2 / 2:**
+- First run, one jump: **4.23 / 4.25 / 4.31 min**, 0 downs, 0 air presses in 114 forest runs.
+  Band 4.0–5.75 (the contract's 4.5 was out of reach without a camp or weapon change).
+- A clear pays 211 Timber and 10 Valor: **one solo Normal clear = Double Jump.**
+- Chest: 50 Timber = 24% of a clear (band 15–30%), plus 3 Valor.
+- Sniper R8 unchanged (no layout change); LookoutLedge and Secret_lookout rows labelled "owners of
+  doubleJump only". LookoutLedge on Hard +1.6%, still the thinnest gate.
+
+**QA:**
+- full mutate on 613e736: <to be filled by lead>
+- Fix 2 (`b056843`): harness PASS (2,630 checks); filtered `mutate.py` 46 run, 0 not caught;
+  stale-text count 879 entries, 0 stale.
+- Fix round (`d6b3777`): filtered `mutate.py` 301 run, 0 not caught; `check_levels` and
+  `check_levels_mutants --luau` PASS (73 data, 4 mirror, 1 sim case); `sim_range --check` (64-bit)
+  PASS; `sim_combat` 23 / 23; `check_stage_mirror` PASS.
+- `check_compile` (166 files), stylua, selene, luau-lsp (both sourcemaps), rojo build: green.
+- `gen_asset_manifest.py --check`: PASS (no asset change).
+
+**Carried (owners):**
+- **lead + luau-engineer (L5):** a party splits the boss's 10 Valor by damage share, so a duo needs
+  about two clears each for Double Jump. Worth one line to Ben.
+- **economy-designer + luau-engineer (W3):** the Island Shrine opens from the solid Pond today. It
+  needs a pond that is not solid and a "without ice" reach rule.
+- **economy-designer:** `stray_reach` does not model the walk-off grace (2.4 studs further, 1.4
+  lower). Model it if a layout comes within about 3 studs of a `stray_reach` line.
+- **economy-designer (W2):** `check_levels.fielded_lifts` reads only `ProvingGrounds.json loadout`.
+  Once the W2 picker lets families in through the profile, it must read them too, or the
+  `LIFT_KNOWN_LIMIT_W2` guard goes blind.
+- **luau-engineer (W2):** honour `combat.families.flamethrower` recorded in W1 (L2-27).
+- **lead → Ben:** the L1c Chief's Clearing is merged but still unplayed. Step 1 of the W1 playtest.
+- **ui-engineer, Studio only:** gamepad A on a selected Buy must not also jump; B must close the
+  panel on the first press. Unverified.
+- **lead, Studio only:** whether the floor sensor respects the players-pass-through rule (a head
+  stand at the ledge face must not lift); the found card on a 640×360 phone may still touch the
+  crosshair under a 58 px top bar.
+- Every L1c and L1b carried item above stands. **Publish freeze (lead):** no Expeditions publish
+  from `main` until L4.
+
+**Next:**
+1. The lead fills the full mutate line, merges to `main` and rebuilds the six place files.
+2. **Ben's look:** `docs/PLAYTEST.md` "L2 Wave 1 — Double Jump and the lookout" (it opens with
+   L1c's clearing); setup `docs/MANUAL_STEPS.md` "L2 Wave 1".
+3. Then Wave 2, only on Ben's word.
+
+- [x] W1 built (`bf9cd47`), leap F1 + F2 (`e39215b`)
+- [x] Reviewed: three slices, 0 / 0 / 15 (`a21f153`)
+- [x] Fix round (`d6b3777`)
+- [x] Fix-diff review 0 / 1 / 3, fixed (`b056843`)
+- [ ] QA: full mutate on `613e736` (lead)
 - [ ] Merged to `main`, six place files rebuilt (lead)
-- [ ] L1c playtest (Ben)
+- [ ] L2 Wave 1 playtest (Ben)
+
+### Wave 2 — fire, the cave and the shortcut (next, on Ben's word)
+
+- The **Flamethrower** as a weapon family (honours `families.flamethrower` from W1).
+- The cache becomes a roofed **cave** behind a bramble mouth that fire burns.
+- A hidden path through the cave skips ahead to Main Camp; once found it stays open on later runs
+  (`combat.shortcuts`).
+- The **lobby loadout picker** (moved from W1).
+
+### Wave 3 — ice, the frost hammer and the creek (after W2)
+
+- The **frost hammer**, a melee family whose swings freeze the water in front of you.
+- Deep water (a fall gets the free rescue); the pond grows so the Island Shrine needs ice.
+- Built now, found later: locked in the game until the Castle, testable in Studio through a lever.
 
 ## M12 — Growing city
 

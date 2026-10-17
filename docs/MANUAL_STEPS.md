@@ -1949,8 +1949,8 @@ feels right").
 
 **Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
 
-**Status 2026-10-16:** built, reviewed, three fix rounds, QA green on `l1c-chief-clearing`.
-**Not merged yet.** Wait for the lead's word (step 0) before step 1.
+**Status 2026-10-16:** built, reviewed, three fix rounds, QA green; merged to `main` (`1fc7d91`).
+**Unplayed.** Run it as step 1 of "L2 Wave 1" below.
 
 <!-- FILE TO OPEN: start. Lead: if L1c is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -1962,9 +1962,9 @@ feels right").
 
 **Steps:**
 
-- [ ] 0. (Lead) Merge, rebuild, tell Ben.
-      - [ ] `l1c-chief-clearing` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L1c is merged, Build all".
+- [x] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] `l1c-chief-clearing` merged to `main`; the six place files rebuilt (`1fc7d91`).
+      - [ ] Ben told: "L1c is merged, Build all" (folded into L2 Wave 1's step 0).
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
 - [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
@@ -1972,6 +1972,51 @@ feels right").
       and two-player check, then two click questions).
 - [ ] 5. Optional, same file: "L1b Wave 4 — no waits, no walls" steps 1–7 and 10 (still unplayed).
 - [ ] 6. Close Studio without saving `proving.rbxl`. Tell Claude when you are done.
+
+## L2 Wave 1
+
+**Studio only. Nothing to set up beyond opening the rebuilt file.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setup.
+- No game pass or developer product: Double Jump is bought with Valor in the game.
+- The light columns and the gold chest are built by the game; nothing to place.
+- Still silent (no audio step).
+
+**Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
+- Profile v7 is safe to publish with the hub later: live players gain four empty maps, nothing is
+  lost (PLAN "L2", Wave 1). Not a step now.
+
+**Status 2026-10-17:** built, reviewed, two fix rounds, QA green on `l2-secrets` + `l2-w1-fix2`.
+**Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L2 Wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Wait for the lead's word first.** Before the merge, "Build all" gives L1c (double jump free,
+  no chest).
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the key hint ends **"J double jump · H reset secrets · V +10
+  Valor"**.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [ ] Full `mutate.py` verdict in (PLAN "L2", Wave 1, QA).
+      - [ ] `l2-w1-fix2` and `l2-secrets` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L2 Wave 1 is merged, Build all. Start with the L1c clearing."
+- [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
+- [ ] 4. Run `docs/PLAYTEST.md` "L2 Wave 1 — Double Jump and the lookout" (nine steps; step 1 is
+      the L1c clearing; then an optional phone, two-player and gamepad check, then two click
+      questions).
+- [ ] 5. Close Studio without saving `proving.rbxl`. Tell Claude when you are done.
+
+**Notes:**
+- **Every Play starts a fresh save** (Studio's mock store): no Double Jump, no secrets, no Valor.
+  Use **J** (Double Jump on / off), **H** (reset secrets) and **V** (+10 Valor).
+- The phone check of the **Return** button needs `C:\Users\benja\Desktop\tycoon\build\combat.rbxl`
+  (same lobby; `proving.rbxl` hides Return). Do not tap Return there: it kicks you.
 
 ## M10 — Icon, store icons, thumbnails
 

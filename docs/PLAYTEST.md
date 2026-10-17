@@ -5060,7 +5060,9 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - **About 8 minutes. Keys only, no panel.** Grey blocks, no sound.
 
 **Status 2026-10-16:** built, reviewed (2 Critical, 3 Major, 9 Minor; then two checks of the fixes:
-0 / 2 / 2 and 0 / 0 / 3; all fixed), QA green. **Wait for the lead's merge word.**
+0 / 2 / 2 and 0 / 0 / 3; all fixed), QA green, merged to `main` (`1fc7d91`). **Unplayed.** It is
+step 1 of "L2 Wave 1" below. **From L2 Wave 1 on, press J first** (Double Jump is bought now; steps
+3 and 6 use it).
 
 Setup: `docs/MANUAL_STEPS.md` "L1c".
 
@@ -5135,6 +5137,136 @@ Asked afterwards, as click questions:
 - **Does the Chief's Clearing feel right now?** Yes / almost (say what) / no.
 - **The shorter run (about 5 min on Normal, was about 6) and the Colossus pay (42,900, was
   29,000):** too little / about right / too much.
+
+Also, if you have a view: anything wrong, by step number, PC or phone.
+
+## L2 Wave 1 — Double Jump and the lookout
+
+<!-- FILE TO OPEN: start. Lead: if L2 Wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Only after the lead says L2 Wave 1 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** the key hint on screen ends **"J double jump · H reset secrets ·
+  V +10 Valor"**.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** Double Jump is bought, and it opens the first secret.
+- Your first run has one jump.
+- A Normal clear pays 10 Valor; Double Jump costs 10 Valor in the lobby.
+- With it you reach the lookout. Its chest pays and gives you the Flamethrower (usable in Wave 2).
+- **About 20 minutes with the L1c look. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-17:** built, reviewed (three slices: 0 Critical, 0 Major, 15 Minor; fix-diff:
+0 / 1 / 3; all fixed), QA green. **Wait for the lead's merge word.**
+
+Setup: `docs/MANUAL_STEPS.md` "L2 Wave 1".
+
+**Keys:**
+- **Enter** = Depart; **arrows** = level and difficulty; **M** = map.
+- **K** = Abilities panel (lobby only; **Y** on a gamepad).
+- **1** / **2** = sword / bow; **Space** jump; **Left Shift** dash.
+- **N** = next camp; **G** = stronger gear; **Backspace** twice = Abandon.
+- Studio only: **J** = Double Jump on / off; **H** = reset secrets; **V** = +10 Valor.
+
+**Studio resets your save every session.** Each Play starts with no Double Jump, no secrets and
+no Valor. Nothing survives Stop. That is why J, H and V exist: you never need to clear the level
+twice to see the chest.
+
+### The run (no panel)
+
+- [ ] 1. **First, the L1c clearing** (never played). Run "L1c — the Chief's Clearing" above, its
+      steps 1–8, in this same file.
+      - **Press J first** (Double Jump on): L1c's steps 3 and 6 use the double jump.
+      - In short: **Enter**, **N twice**, sneak past Main Camp, walk the gatehouse, step through
+        the gate.
+      - **Use N, never B,** in the clearing.
+      - Then **Stop**. The next Play is a fresh save.
+- [ ] 2. **Play.** You are in the lobby, the map on Forest Road, **Normal**, gear **2 / 2**.
+      - Press **K**: the Abilities panel. Double Jump reads **"Need 10 more Valor"**. **K** closes
+        it.
+      - Bug: the panel shows Owned or Buy on a fresh save.
+- [ ] 3. **A first run with one jump.** **Enter** (Depart), walk the road and fight through the
+      first camp (the Pickets).
+      - Press **Space twice**: the second press does nothing.
+      - Once per session a toast says **"Double Jump: buy it in the lobby (K)"**.
+      - Play on to the end if you like: a Normal clear pays 10 Valor.
+      - **How does it feel with one jump?** (Question 1 below.)
+      - Bug: a second jump works without buying; the toast shows on every press.
+- [ ] 4. **Walk off an edge, then jump late.** On the road just before the first camp, turn back
+      and walk off the end of the raised road (it drops to the lower one). Press **Space** just
+      after your feet leave.
+      - You get a normal full jump. No toast.
+      - If an enemy knocks you into the air, a jump press there does nothing.
+      - Bug: the late press does nothing at the edge; the toast shows; a knock-up gives a jump.
+- [ ] 5. **The lookout, without Double Jump.** Just before the first camp, left of the road, a tall
+      grey ledge has a **light column** above it.
+      - Try to get up: jump at the face, jump and dash, jump from the **corner of the first camp's
+        fence** nearest the ledge, and a **wall hop** (jump into the face and flick the camera).
+      - You never stand on the ledge.
+      - Bug: you get onto the ledge without Double Jump. Tell Claude how.
+- [ ] 6. **Buy Double Jump.** **Backspace** twice (or finish the run), back to the lobby.
+      - If you cleared, you already have 10 Valor. If not, press **V** (+10 Valor).
+      - **K**, then **Buy**: toast **"Double Jump learned!"**, the row reads **Owned**, Valor drops
+        by 10.
+      - Click **Owned** again: nothing happens, Valor stays.
+      - Bug: Valor drops twice; Buy does nothing; the panel shows outside the lobby.
+- [ ] 7. **The chest.** **Enter**, walk (or **N** once) to the lookout. Double jump at the face:
+      the second press near the top of the first.
+      - Stand beside the chest (or on it). It opens **once**:
+        - a card above the crosshair: **"THE LOOKOUT FOUND"**, **"+3 Valor"**, **"+50 Timber"**,
+          **"Flamethrower is yours (usable soon)"**;
+        - the chest turns **gold** and the column goes.
+      - Stand there again: nothing more.
+      - Bug: no card; it pays twice; it opens from the road below; on PC the card covers the
+        crosshair.
+- [ ] 8. **The map card.** Back in the lobby (**Backspace** twice), the map on Forest Road.
+      - A **Secrets** row with three icons: The Lookout **filled, with a check**; the other two
+        "?". Under them: **"2× JUMP"**, **"FIRE"**, **"ICE"**.
+      - Bug: no row; the lookout still "?"; "2× JUMP" cut off.
+- [ ] 9. **Reset.** Press **H**, then **Enter** for a new run.
+      - The column is back over the lookout, the chest is grey, the map icon is "?" again.
+      - Reaching it pays again.
+      - **Backspace** twice. Close Studio without saving.
+
+**Optional, not one of the nine:**
+- **Phone.** Test (*Prueba*) → Device (*Dispositivo*) → a 375×667 phone. Play, both ways:
+  landscape (**667×375**) and portrait (**375×667**).
+  - In the lobby: **Map** above **Abilities** (stacked in portrait). Nothing covers the health bar
+    or the **Dash** button.
+  - Tap **Abilities**: the panel fits, Buy and X are big enough to tap.
+  - In a run: the stock jump button twice = double jump (after buying).
+  - **Return** only shows in a non-proving build: open
+    `C:\Users\benja\Desktop\tycoon\build\combat.rbxl`, same lobby. Landscape: Map on top,
+    Abilities and Return below, Return well short of the health bar. Portrait: three stacked, none
+    on Dash or the slot button. **Do not tap Return there**: it kicks you (the Studio bridge).
+  - Bug: a button on the health bar, Dash or the slot button; the panel cut off.
+- **Two players.** Test (*Prueba*) → **Local Server** (*Servidor local*), **2 players**
+  (*2 jugadores*) → **Start** (*Iniciar*), in `proving.rbxl`.
+  - Players now **pass through each other**: in the lobby, on the road, in camps.
+  - Player 2 stands at the ledge face. Player 1 (no Double Jump) jumps onto his head: he sinks
+    through, no lift.
+  - Player 2 presses **J** and opens the chest: he gets the card; player 1 gets a toast
+    "<Name> found The Lookout" and must open his own.
+  - Bug: player 1 reaches the ledge off a head; both get paid by one opening.
+- **Gamepad.** In the lobby **Y** opens the panel and selects Buy (when you have the Valor); **A**
+  buys and must **not** also jump; **B** closes it and must not dash. In a run **Y** swaps weapons
+  as before.
+
+### Not a bug (don't report these)
+
+- Two more light columns (the Raiders' Cache, the Island Shrine). Next to them a toast says
+  "Needs FIRE" or "Needs ICE". They open in Waves 2 and 3.
+- The Flamethrower cannot be equipped yet (Wave 2).
+- Every Play starts with no Double Jump and no Valor (Studio's save resets).
+- In two-player runs the boss's Valor is split, so each needs about two clears (parties are L5).
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- **How does one jump feel on a first run?** Fine / a little hard / too hard.
+- **The chest's pay (3 Valor, 50 Timber, the Flamethrower):** too little / about right / too much.
 
 Also, if you have a view: anything wrong, by step number, PC or phone.
 
