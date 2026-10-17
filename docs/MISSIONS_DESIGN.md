@@ -483,3 +483,31 @@ waves of about 35 and the Colossus. Settled by click questions the same day (the
 Lead's reading: nothing of the clearing (bodies, their markers, the Colossus) may be visible from the road or
 from any spot a player can reach outside it, including at the top of a double jump. This is a fix of L1, done
 before L2 on its own branch (`l1c-chief-clearing`), merged under the same rule once review and QA pass.
+
+## 22. L2 "secrets and keys": decisions (2026-10-17)
+
+Ben: *"just start L2"* (the L1c clearing is merged but unplayed; its playtest opens the first L2 look). Click
+questions the same day, after a groundwork study (`docs/prompts/l2-study-report.md`):
+
+- **A chain of secrets.** Clear Forest Road, buy **Double Jump** with the boss's Valor, reach the **lookout**:
+  its chest holds the **Flamethrower**, which burns the bramble mouth of the **cave**. Each key opens the next.
+  **[Ben]** (The study's "first Hard clear" was not taken.)
+- **The frost weapon: "one of any ice or frost weapon"**, the kind left to the lead. **Lead: melee**, a frost
+  hammer whose swings freeze the water in front of the player (freeze your way across). It takes the melee
+  slot, so it and the Flamethrower can be carried together.
+- **Built now, found later.** The frost weapon and the frozen creek are built and testable in Studio through a
+  lever; in the game the weapon stays locked until the Castle, so the creek is the first reason to come back.
+  **[Ben]**
+- **The cave is a shortcut on later runs.** A hidden path through the cave skips ahead to Main Camp; once the
+  player has found it, it stays open on their later runs. No new level. **[Ben]** (The study's "the cache opens
+  the Raider Arena" was not taken.)
+
+Lead rulings (from the study's §8): bought abilities, opened secrets, owned weapon families and found
+shortcuts are **saved** (one add-only profile step, v7); stars stay in session memory. Keys are checked on the
+server where a reward is given, per player (a cheater can double-jump on the client; he gains nothing). A
+per-player jump rise (18 without double jump, 30 with it) for the ground-aim height rule. No movement
+anti-cheat. The cache becomes a roofed cave behind a bramble mouth. Water becomes deep (a fall gets the free
+rescue) and the pond grows so the island shrine is out of reach without ice. Double Jump costs **10 Valor**
+(one Normal clear), bought from an **Abilities panel in the lobby** (later the Armory's second tab). Waves:
+W1 the bought double jump and the lookout (with the Flamethrower in its chest and the lobby loadout picker);
+W2 fire, the cave and the shortcut; W3 ice, the frost hammer and the creek. Each wave is playable alone.
