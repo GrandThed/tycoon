@@ -2064,23 +2064,23 @@ THREAT_POLICIES = {
     "turn": {"label": "stands to half health, then fights", "fight": True, "evade": True, "wake": 0.5},
     "hop": {"label": "hops on the spot", "hop": True},
     "strafe": {"label": "strafes one way", "strafe": True},
-    "react": {"label": "reacts to every tell", "react": True},
+    "react": {"label": "reacts to every tell", "react": True, "airJump": False},
     "brawl": {"label": "swings, never dodges", "fight": True},
-    "duel": {"label": "swings and reacts", "fight": True, "react": True},
+    "duel": {"label": "swings and reacts", "fight": True, "react": True, "airJump": False},
     # Stop 2, the boss fight. boss = he strikes what the boss called while it is on him, then
     # the boss; chase = he closes in when nothing threatens; hold = he holds his ground (a timed
     # jump before a long walk); heed = the only tells he answers; weapon and abilities are set
     # per row (boss_rows).
     "siege": {"label": "jumps the ring, sidesteps the charge", "fight": True, "react": True, "boss": True,
-              "chase": True, "hold": True, "heed": ("ring", "lane")},
+              "chase": True, "hold": True, "heed": ("ring", "lane"), "airJump": False},
     "slay": {"label": "reacts to every tell, attacks", "fight": True, "react": True, "boss": True, "chase": True,
-             "hold": True},
+             "hold": True, "airJump": False},
     # Stop 3. adds = "never": he strikes the boss and nothing else. (While a guard keeps a boss's
     # plate, every other boss-fight player goes for the guard first.)
     "storm": {"label": "ignores the guard, chases him", "fight": True, "boss": True, "chase": True,
               "adds": "never"},
     "stalk": {"label": "the same, and reacts to every tell", "fight": True, "react": True, "boss": True,
-              "chase": True, "hold": True, "adds": "never"},
+              "chase": True, "hold": True, "adds": "never", "airJump": False},
 }
 # The rows of the threat table: each set with the players sent into it.
 THREAT_PLAN = (
@@ -2148,6 +2148,13 @@ class ThreatRun:
         self.knock = None  # the slide a knock gave him: (unit x, unit z, speed, from)
         self.lift = None  # the launch that came with it: (from, until, apex)
         self.jump = None  # take-off time of the jump under way
+        # L2-20: the first run has one jump (Double Jump is bought). Every reacting policy says so
+        # (`airJump` False); the simulator models no double jump at all, and take_off counts any jump
+        # asked for in the air, which the forest gate holds at 0.
+        self.air_jump = bool(policy.get("airJump", False))
+        if self.air_jump:
+            raise ValueError("sim_range models one jump only: airJump True is not simulated")
+        self.air_asked = 0
         self.jump_speed = math.sqrt(2 * GRAVITY * self.move["jumpHeight"])
         self.jump_time = 2 * self.jump_speed / GRAVITY
         self.landed_at = -math.inf
@@ -2333,6 +2340,18 @@ class ThreatRun:
     def root(self, t):
         return (self.x, ROOT_HEIGHT + self.feet(t), self.z)
 
+    def lifted(self, t):
+        """In the air on a knock's launch."""
+        return self.lift is not None and t < self.lift[1]
+
+    def take_off(self, t):
+        """L2-20: a jump from the floor. One asked for in the air (a jump under way, a launch) is
+        an air jump: counted in air_asked and not taken, since no policy owns the double jump."""
+        if self.jump is not None or self.lifted(t):
+            self.air_asked += 1
+            return
+        self.jump = t
+
     def shielded(self, start, until, t):
         """Did an i-frame meet [start, until], or does the last knock still void hits at t?"""
         return t < self.knock_until or any(a <= until and b >= start for a, b in self.windows)
@@ -2372,11 +2391,12 @@ class ThreatRun:
                 self.dash = None
         policy = self.policy
         if self.jump_at is not None and t >= self.jump_at - THREAT_EPS:
-            if self.jump is None:
-                self.jump = t
+            # A timed jump a knock's launch overtook is lost: nobody jumps off the air (L2-20).
+            if self.jump is None and not self.lifted(t):
+                self.take_off(t)
             self.jump_at = None
-        if policy.get("hop") and self.jump is None and t - self.landed_at >= HOP_GROUND_SECONDS:
-            self.jump = t
+        if policy.get("hop") and self.jump is None and not self.lifted(t) and t - self.landed_at >= HOP_GROUND_SECONDS:
+            self.take_off(t)
         if policy.get("walk") and self.dash is None:
             self.walk_lap(dt)
         if policy.get("strafe") and self.dash is None:
@@ -2854,7 +2874,7 @@ class ThreatRun:
             if plan.get("delay"):
                 self.jump_at = t + plan["delay"]
             else:
-                self.jump = t
+                self.take_off(t)
         if plan["dur"] > 0:
             self.step = (plan["ux"], plan["uz"], t + plan["dur"])
 
@@ -3481,7 +3501,8 @@ class ThreatRun:
         by_kind = {}
         for _when, damage, kind, _shape in log:
             by_kind[kind] = by_kind.get(kind, 0) + damage
-        return {"firstHit": first_hit, "firstDown": first_down, "downs": len(self.downs),
+        return {"firstHit": first_hit, "firstDown": first_down, "downs": len(self.downs), "airJump": self.air_jump,
+                "airAsked": self.air_asked,
                 "damage": sum(d for _when, d, _k, _s in log), "hits": len(log), "dodged": self.dodged,
                 "whiffed": self.whiffed, "byKind": by_kind, "outcomes": self.outcomes,
                 "burst": burst, "rate": rate, "gap": gap, "kills": self.world.kills,
@@ -4988,6 +5009,16 @@ FOREST_BOSS = "colossus"
 # about 1.4 minutes out of it, so it is re-measured at 4.75-5.3 min and banded 4.5-5.75
 # (docs/BALANCE.md "L1c").
 FOREST_CLEAR_SECONDS = (270.0, 345.0)
+# L2-20, the first run: the player with a human's reaction, one jump (Double Jump is bought with
+# this clear's Valor), at the proving gear on Normal, clears without going down inside this. The
+# contract asked for the band above; measured, the human finishes 4.2-4.3 min, before the
+# reacting player's 4.7-5.3, because his slower reaction spends fewer steps dodging (same kills,
+# same pay). So the floor is 4 min, the ceiling the band's (docs/BALANCE.md "L2 W1").
+FOREST_FIRST_RUN_SECONDS = (240.0, 345.0)
+# L2-13: a paying chest gives this share of a Normal first clear's material (measured, every seed),
+# and Valor of at least 2 and under its key's price.
+CHEST_MATERIAL_SHARE = (0.15, 0.30)
+CHEST_VALOR_MIN = 2
 # L1b-W2-22: what a Normal clear pays a minute, every seed: Timber within 10% of Wave 1's 42;
 # cash is reported against Wave 1's 19,800.
 FOREST_TIMBER_PER_MINUTE = (37.8, 46.2)
@@ -5145,7 +5176,8 @@ def resolve_level(file, mission, run_cap, first_difficulty="normal"):
         return {"version": file["version"], "id": file["id"], "name": file["name"], "layout": file["layout"],
                 "mission": None, "material": file.get("material") or "", "targetMinutes": file.get("targetMinutes") or 0,
                 "runCapSeconds": own if own > 0 else run_cap, "difficulties": file["difficulties"],
-                "crowd": file["crowd"], "stages": file["stages"], "camps": file.get("camps") or []}
+                "crowd": file["crowd"], "stages": file["stages"], "camps": file.get("camps") or [],
+                "secrets": file.get("secrets")}
     block = mission.get("crowd") if mission is not None else None
     if block is None or first_difficulty is None:
         return None
@@ -5160,7 +5192,7 @@ def resolve_level(file, mission, run_cap, first_difficulty="normal"):
             "crowd": {"regenShare": block["regenShare"], "maxAlive": block["maxAlive"], "burst": block["burst"],
                       "burstSpacing": block["burstSpacing"], "eliteKind": block.get("eliteKind"),
                       "rewards": block["rewards"]},
-            "stages": [camp], "camps": []}
+            "stages": [camp], "camps": [], "secrets": file.get("secrets")}
 
 
 def whole(value):
@@ -5228,7 +5260,43 @@ def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=
             problems.append(f"{where}: gateSeconds {countdown} is not a time")
     if kinds is not None:
         camp_level_problems(level, layout, rules or {}, kinds, ranks or {}, crowd_max, problems)
+    if layout is not None:
+        secret_problems(level, layout, problems.append)
     return problems
+
+
+# L2-13: StageFlow.MAX_FAMILY_LENGTH, the longest weapon family id a secret may give.
+SECRET_FAMILY_MAX = 24
+
+
+def secret_problems(level, layout, problem):
+    """StageFlow.secretProblems (L2-13), the last of Validate's lines: every layout secret has an
+    entry in the level's `secrets` with a name; an entry's valor and materials, when given, are
+    whole numbers of at least 0, and its family a short string. Which secrets may pay at all is
+    tools/check_levels.py's rule (L2-18e), not a refusal."""
+    entries = level.get("secrets")
+    if entries is not None and not isinstance(entries, (dict, list)):
+        problem("secrets is not a table")
+        entries = None
+    listed = layout.get("secrets")
+    if not isinstance(listed, list):
+        return
+    for index, secret in enumerate(listed, 1):
+        sid = secret.get("id") if isinstance(secret, dict) else None
+        if not isinstance(sid, str):
+            problem(f"layout secret {index} has no id")
+            continue
+        entry = entries.get(sid) if isinstance(entries, dict) else None
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str) or entry["name"] == "":
+            problem(f'the secret "{sid}" has no secrets entry with a name')
+            continue
+        for key in ("valor", "materials"):
+            amount = entry.get(key)
+            if amount is not None and not (finite(amount) and amount >= 0 and float(amount).is_integer()):
+                problem(f"secrets.{sid}.{key} is {amount}, not a whole number of at least 0")
+        family = entry.get("family")
+        if family is not None and (not isinstance(family, str) or family == "" or len(family) > SECRET_FAMILY_MAX):
+            problem(f"secrets.{sid}.family is {family}, not a family id")
 
 
 def camp_index(layout, camp_id):
@@ -6665,7 +6733,9 @@ LOSE_REST_SECONDS = 25.0  # ... and back at rest, healed, within this of its tur
 # He starts on the road by the camp's gate nearer the spot, where the road brings every player. When
 # a resident can be seen from the spot he goes straight there; otherwise one arrow from where he
 # stands wakes them first. He then crosses to the spot in a straight line at walk speed (a climb or
-# a double jump costs nothing more: stronger than any real course) and shoots from it. He stops once
+# a double jump costs nothing more: stronger than any real course) and shoots from it. Since L2 the
+# double jump is bought: the course still plays its owner (the worst case, L2-5), and the spots
+# only an owner reaches are labelled "owners only" (SNIPER_SPOT_NEEDS). He stops once
 # no hit of his has landed for SNIPER_IDLE_SECONDS, or the camp's residents are dead, or
 # SNIPER_SPOT_SECONDS have passed. His minutes: from the start to his last landed hit, and never
 # under his arrival + SNIPER_IDLE_SECONDS (a spot where nothing lands costs the time it takes to
@@ -6681,14 +6751,33 @@ SNIPER_HARD = "hard"  # R8: rated on Normal and on this difficulty, both at the 
 SNIPER_KNOWN_LIMIT_L4 = {"normal": ("LookoutLedge", "Secret_lookout", "Secret_cache")}
 
 
+# L2-5: the spots only a player with a bought ability stands on (a ledge an ability-keyed secret
+# stands on, and its chest): {spot id: the ability}. The course keeps the owner as its worst case;
+# the table labels these rows "owners only". Filled by sniper_spots_of.
+SNIPER_SPOT_NEEDS = {}
+
+
 def sniper_spots_of(level, layout, combat_cfg, cfg):
-    """tools/check_levels.py's sniper_spots on this layout (R8): the spots a course is rated from."""
+    """tools/check_levels.py's sniper_spots on this layout (R8): the spots a course is rated from,
+    each with `needs`, the bought ability standing there takes (None for anyone)."""
     import check_levels as cl
 
     levels = combat_cfg["levels"]
     solids = cl.solids_of(layout, levels["fenceThickness"], levels["floorThickness"])
-    return cl.sniper_spots(level, layout, {"camps": combat_cfg["camps"], "longbow": cl.longbow_range(cfg),
-                                           "move": cfg["movement"], "abilityHeight": cl.ability_height(cfg)}, solids)
+    spots = cl.sniper_spots(level, layout, {"camps": combat_cfg["camps"], "longbow": cl.longbow_range(cfg),
+                                            "move": cfg["movement"], "abilityHeight": cl.ability_height(cfg)}, solids)
+    sold = set(cl.ability_ids(load_config(EXPEDITIONS_PATH)))
+    needs = {}
+    for secret in layout.get("secrets") or []:
+        if secret.get("needs") in sold:
+            base = cl.secret_base(solids, secret)
+            for name in ([base.name] if base is not None else []) + [f"Secret_{secret['id']}"]:
+                needs[name] = secret["needs"]
+    for spot in spots:
+        spot["needs"] = needs.get(spot["id"])
+        if spot["needs"]:
+            SNIPER_SPOT_NEEDS[spot["id"]] = spot["needs"]
+    return spots
 STRIKE_SECONDS = 30.0  # a first-strike approach is watched this long at most
 # CrowdService.HOME_STOP_SHARE: a body walking home or on patrol stops at this share of
 # camps.homeTolerance, so rounding never leaves it a hair outside AtPost for good (A's item 2).
@@ -8417,6 +8506,7 @@ class LevelRun(ThreatRun):
                 "waves": first["waves"] if first is not None else {}, "killed": self.killed,
                 "killedIn": {self.zones[f - 1]["id"]: k for f, k in self.killed_in.items() if f is not None},
                 "bosses": self.boss_fights, "downs": len(self.downs), "firstDown": self.downs[0] if self.downs else None,
+                "airJump": self.air_jump, "airAsked": self.air_asked,
                 "downAfterClose": (self.downs[0] - closed) if self.downs and closed is not None else None,
                 "hitAfterClose": (log[0][0] - closed) if log and closed is not None else None,
                 "downIn": down_in, "downInName": names.get(down_in, down_in),
@@ -8446,6 +8536,7 @@ class LevelRun(ThreatRun):
 
 
 THREAT_POLICIES["mission"] = {"label": "reacts to every tell, attacks the nearest", "fight": True, "react": True,
+                              "airJump": False,
                               "boss": True, "chase": True, "hold": True, "hunt": True}
 THREAT_POLICIES["rampage"] = {"label": "attacks the nearest, never dodges", "fight": True, "boss": True,
                               "chase": True, "hunt": True}
@@ -8467,7 +8558,7 @@ THREAT_POLICIES["parked"] = {"label": "stands at the start point, never moves", 
 # out of its east gate; the lose does that, then runs on along the road; the sniper shoots from
 # below A's west drop, then from the lookout ledge, never on the plateau.
 THREAT_POLICIES["archer"] = {"label": "the bow from Road5 outside A's west gate, holds the road", "fight": True,
-                             "react": True, "hold": True, "hunt": True, "scene": "archer"}
+                             "react": True, "hold": True, "hunt": True, "scene": "archer", "airJump": False}
 THREAT_POLICIES["walkout"] = {"label": "walks into A, out of its east gate once a group wakes", "scene": "walkout"}
 THREAT_POLICIES["lose"] = {"label": "the walk-out, then runs east along the road", "scene": "lose"}
 # Fix round R7: the lose, then back into the camp for a clear (the playtest checklist's order).
@@ -9285,11 +9376,12 @@ def print_snipers(snipers, mission, tag):
     print(f"    R8 snipers ({tag}, a straight course from every unreachable spot; cash / Timber a minute against the "
           f"mission's on the same seed):")
     for spot, runs in snipers.items():
+        owners = f" (owners of {SNIPER_SPOT_NEEDS[spot]} only)" if spot in SNIPER_SPOT_NEEDS else ""
         for seed, r, m in zip(MISSION_SEEDS, runs, mission):
             sc = r["scene"]
             cash, timber = sniper_rate(r)
             mine = pay_rate(m)
-            print(f"      {spot:<15} seed {seed:>2}: {cash:>8,.0f} / {timber:5.1f} against {mine[0]:>8,.0f} / {mine[1]:5.1f}"
+            print(f"      {spot:<15} seed {seed:>2}{owners}: {cash:>8,.0f} / {timber:5.1f} against {mine[0]:>8,.0f} / {mine[1]:5.1f}"
                   f"  ({sum(r['killed'].values())} kills, {(sc.get('minutes') or r['at'] / 60) * 60:.0f} s, "
                   f"{'from the spot' if sc.get('pulledFrom') is None else 'pulled first'}, hits on him {r['hits']}, "
                   f"stood down {fmt(sc.get('stoodDown'), 0, 1).strip()} s)")
@@ -9322,6 +9414,11 @@ def check_forest(cfg, report, expect):
         return
     level, ctx = report["level"], report["ctx"]
     names = ctx["expeditions"]["difficultyNames"]
+    # L2-20: every reacting policy says it has one jump, in so many words.
+    implicit = sorted(key for key, policy in THREAT_POLICIES.items() if policy.get("react") and policy.get("airJump") is not False)
+    expect(not implicit, "forest: every reacting policy names airJump False (L2-20): "
+           + (f"not {', '.join(implicit)}" if implicit else
+              ", ".join(sorted(key for key, policy in THREAT_POLICIES.items() if policy.get("react")))))
     regen = level["crowd"]["regenShare"]
     expect(abs(regen / MISSION_REGEN_SHARE - 1) <= MISSION_REGEN_TOLERANCE,
            f"forest: regenShare {regen:g} within {MISSION_REGEN_TOLERANCE:.0%} of the range's 10/130")
@@ -9402,6 +9499,12 @@ def check_forest(cfg, report, expect):
                  + [r for runs in row["strikes"].values() for r in runs]
                  + (under["careless"] if under is not None else [])
                  + (below["human"] + below["runs"] if below is not None else []))
+        # L2-20: one jump. Every run of the row was played without the double jump and asked for
+        # no jump in the air (the take_off count, not a reading of the planner).
+        asked = sum(r.get("airAsked", 0) for r in every)
+        owned = [r for r in every if r.get("airJump") is not False]
+        expect(asked == 0 and not owned, f"{tag}: one jump (L2-20): each of {len(every)} runs was played with airJump "
+               f"False and asked for {asked} jump(s) in the air")
         wrong = [f"{r['end']} in {r['downInName'] or r['stage']}: paid {wallet_text(r)}, its kills price "
                  f"{r['priced']}" for r in every if not paid_exactly(r)]
         lost = [r for r in every if r["end"] not in ("cleared", "stopped")]
@@ -9462,6 +9565,8 @@ def check_forest(cfg, report, expect):
             expect(all(r["end"] == "cleared" and r["downs"] == 0 for r in human),
                    f"{tag} at gear {gear}: the player with a human's reaction ({HUMAN_REACTION_SECONDS:g} s) clears "
                    f"without going down, every seed: " + "; ".join(run_text(seed, r) for seed, r in zip(MISSION_SEEDS, human)))
+        if human and difficulty == first:
+            check_first_run(ctx, level, row, tag, gear, expect)
         if row["careless"]:
             expect(all(r["end"] != "cleared" for r in row["careless"]),
                    f"{tag} at gear {gear}: the player who never dodges does not clear, every seed: "
@@ -9547,6 +9652,44 @@ def check_forest(cfg, report, expect):
                    f"5-10%): " + ", ".join(told))
 
 
+def check_first_run(ctx, level, row, tag, gear, expect):
+    """L2-20 and L2-13 on Normal at the proving gear: the first run (the human, one jump) clears
+    without going down inside FOREST_FIRST_RUN_SECONDS; its Valor buys Double Jump (one solo clear
+    = the price); and each paying chest gives CHEST_MATERIAL_SHARE of that clear's material and
+    CHEST_VALOR_MIN or more Valor, under its key's price."""
+    human = row["human"]
+    lo, hi = FOREST_FIRST_RUN_SECONDS
+    expect(all(r["end"] == "cleared" and r["downs"] == 0 and lo <= r["at"] <= hi and r["airJump"] is False
+               for r in human),
+           f"{tag} at gear {gear}: the first run (L2-20): the player with a human's reaction and one jump clears "
+           f"without going down in {lo / 60:g}-{hi / 60:g} min, every seed: "
+           + "; ".join(run_text(seed, r) for seed, r in zip(MISSION_SEEDS, human)))
+    sold = {a["id"]: a for a in (ctx["expeditions"].get("abilities") or {}).get("list") or []}
+    air = sold.get("doubleJump")
+    valor = [r["wallet"]["valor"] for r in human if r["end"] == "cleared"]
+    price = (air or {}).get("price", {}).get("valor")
+    expect(bool(valor) and price is not None and all(v >= price for v in valor),
+           f"{tag}: one solo first clear buys {(air or {}).get('name', 'Double Jump')} (L2-6): it pays "
+           + ", ".join(str(v) for v in valor) + f" Valor against a price of {price}")
+    keys = {s["id"]: s["needs"] for s in (load_level_layout(level["layout"], 0) or {}).get("secrets") or []}
+    told, good = [], True
+    for sid, entry in sorted((level.get("secrets") or {}).items()):
+        if not any(key in entry for key in ("valor", "materials", "family")):
+            continue
+        cost = (sold.get(keys.get(sid)) or {}).get("price", {}).get("valor")
+        shares = [entry.get("materials", 0) / max(r["wallet"]["materials"], 1) for r in human if r["end"] == "cleared"]
+        ok = (bool(shares) and all(CHEST_MATERIAL_SHARE[0] <= s <= CHEST_MATERIAL_SHARE[1] for s in shares)
+              and cost is not None and CHEST_VALOR_MIN <= entry.get("valor", 0) < cost)
+        good = good and ok
+        told.append(f"{entry.get('name', sid)}: {entry.get('materials', 0)} {level['material']} = "
+                    + "/".join(f"{s:.0%}" for s in shares) + f" of the clear's "
+                    + "/".join(str(r["wallet"]["materials"]) for r in human if r["end"] == "cleared")
+                    + f", {entry.get('valor', 0)} Valor (its key {keys.get(sid)} costs {cost})")
+    expect(good and bool(told), f"{tag}: a paying chest gives {CHEST_MATERIAL_SHARE[0]:.0%}-{CHEST_MATERIAL_SHARE[1]:.0%} of "
+           f"the first clear's {level['material']} and {CHEST_VALOR_MIN} Valor or more, under its key's price (L2-13): "
+           + ("; ".join(told) or "no paying chest"))
+
+
 def check_scenes(cfg, row, tag, expect):
     """L1b Wave 4's scene bands (INTERFACES "Balance bands")."""
     fast = row["fast"]
@@ -9622,8 +9765,9 @@ def check_scenes(cfg, row, tag, expect):
                         + ("" if r["evaded"] == 0 else f", {r['evaded']} hit(s) of his blocked"))
         if spot in known:
             ratio = max(sniper_rate(r)[0] / max(pay_rate(m)[0], 1) for r, m in zip(runs, mission))
-            print(f"  note  {tag} at the proving gear: the sniper from {spot}, known limit, L4 (Ben's ruling; reported, "
-                  f"not gated; up to x{ratio:.2f} the mission's cash a minute): " + "; ".join(told))
+            owners = f", owners of {SNIPER_SPOT_NEEDS[spot]} only (L2-5)" if spot in SNIPER_SPOT_NEEDS else ""
+            print(f"  note  {tag} at the proving gear: the sniper from {spot}{owners}, known limit, L4 (Ben's ruling; "
+                  f"reported, not gated; up to x{ratio:.2f} the mission's cash a minute): " + "; ".join(told))
             expect(landed, f"{tag} at the proving gear: the sniper from {spot} (known limit, L4): every hit lands")
             continue
         expect(good and landed, f"{tag} at the proving gear: the sniper from {spot} earns less cash and less Timber a minute than "

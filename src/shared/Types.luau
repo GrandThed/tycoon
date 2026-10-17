@@ -158,7 +158,8 @@ export type ActionResult = {
 		| "expedition"
 		| "joinRun"
 		| "party"
-		| "startLevel",
+		| "startLevel"
+		| "buyAbility",
 	slotId: string,
 	ok: boolean,
 	-- C0 adds `unavailable`: place id 0, Studio, a teleport that failed after its retries, or a
@@ -169,6 +170,9 @@ export type ActionResult = {
 	-- departing; expired = invite timed out or withdrawn; notLeader = only the leader may do that.
 	-- L1 "startLevel" (slotId = the level id): notLeader, busy (not the lobby, the cooldown, the
 	-- party not in, a body missing), locked (the node is not open), unavailable (no such level).
+	-- L2-9 "buyAbility" (slotId = the ability id): unavailable (no profile loaded), invalid (no
+	-- such ability, or its entry is malformed), owned, busy (fighting in a live run),
+	-- insufficientFunds (Valor short).
 	reason: (
 		"insufficientFunds"
 		| "locked"
@@ -179,6 +183,7 @@ export type ActionResult = {
 		| "busy"
 		| "expired"
 		| "notLeader"
+		| "owned"
 	)?,
 }
 
@@ -967,6 +972,16 @@ export type CombatProfile = {
 	expeditionSince: number,
 	expeditionSeconds: number,
 	stats: { kills: number, wavesCleared: number, expeditions: number, cashFromCombat: number },
+	-- L2-1 (schema v7): what the dungeon place has unlocked, keyed by id, every value true. Only
+	-- the combat place writes them; optional in the type because the hub copies the profile it
+	-- shows (EconomyService) without them, and a profile loaded by v6 code may lack them.
+	-- abilities: bought abilities ("doubleJump"); secrets: opened chests by level;
+	-- families: weapon families found (Broadsword and Longbow stay implicit, never written);
+	-- shortcuts: found shortcuts by level (W2's cave).
+	abilities: { [string]: boolean }?,
+	secrets: { [string]: { [string]: boolean } }?,
+	families: { [string]: boolean }?,
+	shortcuts: { [string]: { [string]: boolean } }?,
 }
 
 export type PlacesConfig = { version: number, hubPlaceId: number, combatPlaceId: number }
@@ -1268,6 +1283,11 @@ export type CombatDebugConfig = {
 	perfLogSeconds: number,
 	-- L1b-W2-23: Workspace number attribute set to each [Perf] line's p95 (Studio only)
 	perfAttribute: string,
+	-- L2-19: Studio levers. grant/remove: a string attribute naming an ability id (consumed);
+	-- resetSecrets: a number attribute > 0 (consumed). nil = that attribute lever is off.
+	grantAbilityAttribute: string?,
+	removeAbilityAttribute: string?,
+	resetSecretsAttribute: string?,
 }
 -- Enemy AI tunables (EnemyService) and client presentation tunables (CombatFxController).
 export type CombatEnemyConfig = {
@@ -1646,6 +1666,7 @@ export type CombatFx =
 	| CombatFxArea
 	| CombatFxCamp
 	| CombatFxNotice
+	| CombatFxSecret
 
 -- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub never sends
 -- an ActiveRun to a client (it sends RunListEntry), so a client can never teleport itself into a
@@ -2538,6 +2559,8 @@ export type LevelFile = {
 	stages: { LevelStage }?,
 	-- L1b: the camps' names and residents
 	camps: { LevelCampConfig }?,
+	-- L2-13: each layout secret's name and reward, by secret id
+	secrets: { [string]: LevelSecretConfig }?,
 }
 export type LevelConfig = {
 	version: number,
@@ -2553,7 +2576,13 @@ export type LevelConfig = {
 	stages: { LevelStage },
 	-- L1b: Resolve fills {} when the file has none
 	camps: { LevelCampConfig },
+	-- L2-13: Resolve copies the file's block (nil = none)
+	secrets: { [string]: LevelSecretConfig }?,
 }
+-- L2-13: Config/Levels/<n>_<Name>.json `secrets.<id>`. A chest pays only when its entry has
+-- valor, materials or family (a "reward entry"); a name alone pays nothing. Whole numbers >= 0.
+export type LevelSecretConfig =
+	{ name: string, valor: number?, materials: number?, family: string? }
 
 -- Layouts/Levels/<Name>.json. World coordinates, studs. A file with `arena` holds nothing else.
 export type LevelBlock = {
@@ -2654,6 +2683,17 @@ export type ExpeditionsConfig = {
 	looks: { [string]: LevelLook },
 	-- size = a secret sign's block, { x, y, z } studs (nil = no sign is built).
 	sign: { textColor: { number }, pixelsPerStud: number, size: { number }? },
+	-- L2-6: what the lobby's Abilities panel sells (nil = nothing)
+	abilities: { list: { UnlockAbilityDef } }?,
+}
+-- L2-6: one bought ability (named apart from the weapons' AbilityDef). price.valor is a whole
+-- number > 0; a bad entry is warned at Init and cannot be bought.
+export type UnlockAbilityDef = {
+	id: string,
+	name: string,
+	text: string,
+	price: { valor: number },
+	order: number,
 }
 
 -- Combat.json `levels`
@@ -2695,6 +2735,12 @@ export type CombatLevelsConfig = {
 	-- while the local root is not inside it (a brute's width, the camera shake and the pad), so
 	-- a boom swung back toward an open gate never ends in its mouth. Client only.
 	cameraClear: number,
+	-- L2-11: a chest's trigger. A root within secretReach (flat) of the chest's centre, from
+	-- secretBelow under to secretAbove over the chest's bottom, opens it. nil (or not a finite
+	-- number) = no chest ever opens.
+	secretReach: number?,
+	secretBelow: number?,
+	secretAbove: number?,
 }
 
 -- RunState (built only by ArenaService)
@@ -2736,7 +2782,11 @@ export type MapNodeState = {
 	reason: string?,
 	needs: string?,
 	stars: { string },
+	-- L2-15: the receiver's own row of the node's level's secrets, in layout order (nil = none)
+	secrets: { MapSecretState }?,
 }
+-- L2-15: needs = the layout's key ("doubleJump" | "fire" | "ice"); found = the receiver opened it.
+export type MapSecretState = { id: string, name: string, needs: string, found: boolean }
 export type MapState = { kind: "map", leaderUserId: number, nodes: { MapNodeState } }
 
 -- CombatFx gains two kinds. L1b: event: "closed" | "cleared" | "alert" | "checkpoint".
@@ -2744,6 +2794,22 @@ export type MapState = { kind: "map", leaderUserId: number, nodes: { MapNodeStat
 export type CombatFxCamp = { kind: "camp", event: string, name: string, ids: { number }? }
 -- Studio levers
 export type CombatFxNotice = { kind: "notice", text: string }
+-- L2-12: a chest. "found" goes to every member (userId = who opened it), "locked" to that player
+-- only. valor and materials are what it paid (0 on "locked"); family = a weapon family it gave.
+export type CombatFxSecret = {
+	kind: "secret",
+	-- "found" | "locked" (a string, as CombatFxCamp's event, so the CombatFx union still infers)
+	event: string,
+	userId: number,
+	levelId: string,
+	secretId: string,
+	name: string,
+	needs: string,
+	valor: number,
+	materials: number,
+	material: string,
+	family: string?,
+}
 
 -- L1b (docs/INTERFACES.md "L1b contracts — the living road", Wave 1)
 

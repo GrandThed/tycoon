@@ -41,6 +41,9 @@ local MAX_FAMILY_LENGTH = 24
 -- only: WaveService.OnStartLevel resolves both against the level files and the map.
 local MAX_LEVEL_ID_LENGTH = 32
 local MAX_DIFFICULTY_LENGTH = 12
+-- L2-7: an ability id ("doubleJump"). Shape only: UnlockService resolves it against
+-- Expeditions.json `abilities` and prices it from there.
+local MAX_ABILITY_ID_LENGTH = 32
 
 local combatConfig = Catalog.GetCombatConfig()
 local maxTargets = if combatConfig ~= nil
@@ -127,6 +130,13 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 				return args.n == 2
 					and isShortString(args[1], MAX_LEVEL_ID_LENGTH)
 					and isShortString(args[2], MAX_DIFFICULTY_LENGTH)
+			end,
+		},
+		-- L2-7: buy an ability in the lobby. An id, never an amount.
+		RequestBuyAbility = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 1 and isShortString(args[1], MAX_ABILITY_ID_LENGTH)
 			end,
 		},
 		-- L1 ruling 21: end the live run with what was banked, or cut the summary's wait short.

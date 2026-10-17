@@ -41,6 +41,7 @@ local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local SwingGate = require(sharedFolder:WaitForChild("SwingGate"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local WallClip = require(sharedFolder:WaitForChild("WallClip"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
@@ -2524,8 +2525,10 @@ function WeaponService.CheckAim(player: Player, origin: Vector3): boolean
 end
 
 -- Ruling 4, which InputController mirrors on the client: where an aimed ability lands. nil =
--- refused, and (L1c §8) so is ground more than a jump and a double jump above the caster's floor
--- (WallClip.TooHigh): a leap aimed over a tall wall would otherwise land on its top.
+-- refused, and (L1c §8) so is ground higher above the caster's floor than their own jumps reach
+-- (WallClip.TooHigh): a leap aimed over a tall wall would otherwise land on its top. L2-4: the
+-- double jump counts only for a player who owns it, read from the attribute UnlockService (this
+-- server) sets, never from the client.
 function WeaponService.GroundPoint(
 	player: Player,
 	origin: Vector3,
@@ -2557,7 +2560,8 @@ function WeaponService.GroundPoint(
 	-- caster's feet, over a void).
 	local casterFloor = floorBelow(root, params) or rootPosition.Y - standingOffset(root, humanoid)
 	local floorY = floorUnder(point, params) or casterFloor
-	if WallClip.TooHigh(casterFloor, floorY, WallClip.Rise(Tuning.Get().movement)) then
+	local airJump = player:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) == true
+	if WallClip.TooHigh(casterFloor, floorY, WallClip.Rise(Tuning.Get().movement, airJump)) then
 		return nil
 	end
 	return Vector3.new(point.X, floorY, point.Z)

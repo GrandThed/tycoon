@@ -24,6 +24,10 @@ type CombatProfile = {
 	expeditionSince: number,
 	expeditionSeconds: number,
 	stats: { kills: number, wavesCleared: number, expeditions: number, cashFromCombat: number },
+	abilities: { [string]: boolean }?,
+	secrets: { [string]: { [string]: boolean } }?,
+	families: { [string]: boolean }?,
+	shortcuts: { [string]: { [string]: boolean } }?,
 }
 
 type EnemyDef = {

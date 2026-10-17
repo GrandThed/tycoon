@@ -106,6 +106,10 @@ type CombatProfile = {
 	expeditionSince: number,
 	expeditionSeconds: number,
 	stats: { kills: number, wavesCleared: number, expeditions: number, cashFromCombat: number },
+	abilities: { [string]: boolean }?,
+	secrets: { [string]: { [string]: boolean } }?,
+	families: { [string]: boolean }?,
+	shortcuts: { [string]: { [string]: boolean } }?,
 }
 -- The slice of PlayerState the purchase checks read; callers pass the whole state.
 type ArmoryOwner = { rebirthCount: number, combat: CombatProfile }

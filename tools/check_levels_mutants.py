@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """The check_levels mutants, committed (the L1c fix round's m6): every rule L1c and its fix round
-added to tools/check_levels.py, shown red on a mutated copy of the shipped data, and green again
-on the data as it ships.
+added to tools/check_levels.py, and every rule of L2 Wave 1 (L2-6, L2-11, L2-13, L2-14, L2-18,
+L2-19), shown red on a mutated copy of the shipped data, and green again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
-FLOOR_WALLS, WALLED_CEILING), runs every gate (check_levels.run_gates) and expects the named rule red, or green
+FLOOR_WALLS, WALLED_CEILING, LIFT_MODEL, LIFT_KNOWN_LIMIT_W2), runs every gate (check_levels.run_gates) and expects the named rule red, or green
 for a control. A rule is named by text its line always carries. Nothing on disk is written,
 except for the stage-mirror cases (MIRROR_CASES), which run tools/check_stage_mirror.py with a line
 of StageFlow.luau and/or sim_range.py broken, from copies in a temporary folder, and expect it red:
@@ -56,6 +56,17 @@ COUNTDOWN = "(The Chief's Clearing): its own gateSeconds"
 PROBLEMS = "forestRoad: maxAlive is an integer of at least 1 wherever"
 CEILING = "camp C (walled): it triggers up to"
 NUDGE = "camp C: the close's nudge lands clear"
+# L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-6, L2-11, L2-13, L2-18, L2-19).
+REACH_A = "the lookout ledge's top is over"
+REACH_B = "the lookout needs the double jump: no surface"
+REACH_C = "the lookout needs the double jump against every lifting ability"
+REACH_D = "the lookout's trigger is met only on its ledge"
+REWARDS = "forestRoad: a secret pays only behind a sold key"
+ABILITIES = "Expeditions.json abilities.list: every entry"
+PRICE = "Expeditions.json: Double Jump costs"
+SECRET_NUMBERS = "Combat.json levels (L2-11)"
+LEVERS = "Combat.json debug (L2-19)"
+LOOKS = "map: the looks are greys, except"
 
 
 def layout(data):
@@ -108,6 +119,34 @@ def shift_east(data, by):
 
 def levels(data):
     return data["combat"]["levels"]
+
+
+def secret(data, sid):
+    return next(s for s in layout(data)["secrets"] if s["id"] == sid)
+
+
+def secret_entry(data, sid):
+    return level(data)["secrets"][sid]
+
+
+def air_jump(data):
+    return next(a for a in data["expeditions"]["abilities"]["list"] if a["id"] == "doubleJump")
+
+
+def lift_height(data, height):
+    """Every lifting ability's height set to `height` (ctx's copy of ProvingGrounds.json)."""
+    data["ctx"]["lifts"] = [(family, dict(ability, height=height)) for family, ability in data["ctx"]["lifts"]]
+
+
+def lift_fielded(data):
+    """The Greataxe (Leap Smash) in the loadout every mission plays with (W2's picker, early)."""
+    data["ctx"]["fieldedLifts"] = [family for family, _ability in data["ctx"]["lifts"]]
+    data["ctx"]["loadout"] = ["greataxe", "longbow"]
+
+
+def cliff(data, name, x0, x1, top):
+    """A wall block over the lookout ledge's whole depth (z -66..-52), foot -4: the notch's sides."""
+    add_block(data, name, "wall", x0, x1, -66, -52, top, -4)
 
 
 # (label, change(data), {switch: value}, the rule, red?). Controls (red False) show a rule's reach:
@@ -201,6 +240,58 @@ CASES = (
      lambda d: camp(d)["obstacles"][0].__setitem__("x", 358), {}, NUDGE, True),
     ("m3 control: C's first cover 3 off it (x 357)",
      lambda d: camp(d)["obstacles"][0].__setitem__("x", 357), {}, NUDGE, False),
+    # L2-18 (c): today's Leap Smash reaches the ledge from hundreds of take-offs (off a void edge,
+    # the caster's floor is his feet; at a jump's top the lift adds its height); the "floor" model
+    # (the formula change the designer's report asks for) closes every one, on the same layout.
+    ("L2-18c: today's Leap Smash, the known limit off", None, {"LIFT_MODEL": "today", "LIFT_KNOWN_LIMIT_W2": False},
+     REACH_C, True),
+    ("L2-18c: a Greataxe in the loadout (a lift enters a level)", lift_fielded, {"LIFT_MODEL": "today"}, REACH_C, True),
+    ("L2-18c control: the floor model, the known limit off", None, {"LIFT_MODEL": "floor", "LIFT_KNOWN_LIMIT_W2": False},
+     REACH_C, False),
+    ("L2-18c: Leap Smash height 24 under the floor model", lambda d: lift_height(d, 24),
+     {"LIFT_MODEL": "floor", "LIFT_KNOWN_LIMIT_W2": False}, REACH_C, True),
+    ("L2-18c control: Leap Smash height 18 under the floor model", lambda d: lift_height(d, 18),
+     {"LIFT_MODEL": "floor", "LIFT_KNOWN_LIMIT_W2": False}, REACH_C, False),
+    # At 20 a target on camp A's fence (top 12) lifts the arc to 12 + 20 = 32, over the 31 a step up
+    # needs: the floor model's margin is the fence, not the jump.
+    ("L2-18c: Leap Smash height 20 under the floor model (a target on A's fence)", lambda d: lift_height(d, 20),
+     {"LIFT_MODEL": "floor", "LIFT_KNOWN_LIMIT_W2": False}, REACH_C, True),
+    # L2-18 (b): one jump, a step up and a dash, unclimbable walls left out.
+    ("L2-18b: a ledge (top 14) west of the sign pad", lambda d: add_block(d, "MutantStep", "ground", -310, -306, -62, -56,
+                                                                           14, 8), {}, REACH_B, True),
+    ("L2-18b control: an unclimbable wall (top 84) on the ledge's east side",
+     lambda d: cliff(d, "LookoutCliffE", -275, -271, 84), {}, REACH_B, False),
+    ("L2-18b: the same wall 60 high (climbable)", lambda d: cliff(d, "LookoutCliffE", -275, -271, 60), {}, REACH_B, True),
+    # L2-18 (a): the owner's band.
+    ("L2-18a: the ledge 6 higher (over jump + double jump less 4)",
+     lambda d: (top_at(d, "LookoutLedge", 40), secret(d, "lookout").__setitem__("y", 42)), {}, REACH_A, True),
+    # L2-18 (d): the trigger met only on the ledge.
+    ("L2-18d: the chest at the ledge's front edge (z -54)", lambda d: secret(d, "lookout").__setitem__("z", -54), {},
+     REACH_D, True),
+    ("L2-18d: secretBelow 25 and secretReach 8 (a root on Road5)",
+     lambda d: (levels(d).__setitem__("secretBelow", 25), levels(d).__setitem__("secretReach", 8)), {}, REACH_D, True),
+    ("L2-18d control: the chest 2 further back (z -61)", lambda d: secret(d, "lookout").__setitem__("z", -61), {},
+     REACH_D, False),
+    # L2-18 (e) and L2-13: rewards follow keys.
+    ("L2-18e: the cache pays 1 Valor", lambda d: secret_entry(d, "cache").__setitem__("valor", 1), {}, REWARDS, True),
+    ("L2-18e: the shrine names a family", lambda d: secret_entry(d, "shrine").__setitem__("family", "frostHammer"), {},
+     REWARDS, True),
+    ("L2-13: the lookout pays 10 Valor (its key's price)", lambda d: secret_entry(d, "lookout").__setitem__("valor", 10),
+     {}, REWARDS, True),
+    ("L2-13 control: the lookout pays 2 Valor", lambda d: secret_entry(d, "lookout").__setitem__("valor", 2), {}, REWARDS,
+     False),
+    # L2-6, L2-11, L2-14, L2-19: the config.
+    ("L2-6: Double Jump's price 0", lambda d: air_jump(d)["price"].__setitem__("valor", 0), {}, ABILITIES, True),
+    ("L2-6: Double Jump's price 10.5", lambda d: air_jump(d)["price"].__setitem__("valor", 10.5), {}, ABILITIES, True),
+    ("L2-6: Double Jump's price 11 (over one Normal clear)", lambda d: air_jump(d)["price"].__setitem__("valor", 11), {},
+     PRICE, True),
+    ("L2-6: no doubleJump in the list", lambda d: air_jump(d).__setitem__("id", "glide"), {}, ABILITIES, True),
+    ("L2-11: levels.secretReach missing", lambda d: levels(d).pop("secretReach"), {}, SECRET_NUMBERS, True),
+    ("L2-11: levels.secretBelow -1", lambda d: levels(d).__setitem__("secretBelow", -1), {}, SECRET_NUMBERS, True),
+    ("L2-19: resetSecretsAttribute is GrantValor's name",
+     lambda d: d["combat"]["debug"].__setitem__("resetSecretsAttribute", "GrantValor"), {}, LEVERS, True),
+    ("L2-14: secretOpen grey", lambda d: d["expeditions"]["looks"]["secretOpen"].__setitem__("color", [150, 150, 150]),
+     {}, LOOKS, True),
 )
 
 

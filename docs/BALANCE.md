@@ -5446,3 +5446,103 @@ the fight.
 | C's first cover at x 358, 2 off the inset east edge | the nudge lands clear | red |
 | control: the same cover at x 357, 3 off | the nudge lands clear | green |
 | `sim_range.gate_nudge` without its fenced-rectangle test (Python alone) | `check_stage_mirror` "StageFlow.GateNudge" | red (392 of 2,700) |
+
+## L2 W1: the bought double jump and the lookout (2026-10-17)
+
+Contract: `docs/prompts/l2-w1-contract.md` (L2-6, L2-13, L2-17, L2-18, L2-20). Same gate as L1c fix 3:
+Normal 2 / 2, Hard 4 / 4, Brutal 6 / 6, seeds 11 / 23 / 37, `py tools/sim_range.py --check` judged on the
+gate's 64-bit Python 3.12 (the 32-bit run gives the same verdict).
+
+### L2 W1: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Expeditions.json abilities.list` | — | `doubleJump`, "Double Jump", **10 Valor**, order 1 | L2-6. One solo Normal clear pays exactly 10 (the Colossus's 10 × rewardMult 1): the first clear buys it. A duo splits the boss's Valor by damage share, so about two clears each (L2-24) |
+| `Expeditions.json looks.secretOpen` | — | SmoothPlastic (240, 190, 40) | L2-14: a found chest, gold. `check_levels` holds it to the colour looks |
+| `Combat.json levels.secretReach / secretBelow / secretAbove` | — | **5 / 1 / 9** | L2-11. Standing on the ledge the root is 3 over the chest's foot, on the chest 7; on Road5 it is −23, at the top of a jump from there −5 |
+| `Combat.json debug` | — | `DebugGrantAbility`, `DebugRemoveAbility`, `DebugResetSecrets` | L2-19, the three Workspace levers |
+| `1_ForestRoad.json secrets` | — | lookout: **3 Valor, 50 Timber, the Flamethrower**; cache and shrine: a name only | L2-13. 50 Timber is 24% of a first clear's 211 (band 15–30%); 3 Valor is at least 2 and under the price, so the chest never buys its own key |
+| `ForestRoad.json` (the lookout notch, L2-17) | — | **not built**; the ledge and the chest are as L1c left them (chest at z −59) | The notch does not close the Leap route, and the formula change that does close it makes the notch unneeded (below). Sniper pins, Parts (86) and the route are unchanged |
+| `check_levels.py` | the lookout band and one-jump test | L2-18 (a)–(e), abilities, secret numbers, levers, `secretOpen` | below |
+| `sim_range.py` | — | `airJump` on every reacting policy; `take_off`; the first-run gate; the chest gate; Resolve/Validate mirror of `secrets`; "owners only" sniper rows | L2-20, L2-13 |
+
+### L2 W1: the first run (Normal, 2 / 2, one jump)
+
+| Gate | Value |
+|---|---|
+| First run: the human (0.55 s reaction), one jump | **4.23 / 4.25 / 4.31 min**, 0 downs, 8 / 10 / 8 hits taken, 104–130 damage |
+| The reacting player (unchanged) | 5.26 / 4.69 / 5.04 min, 0 hits |
+| One jump (L2-20) | Normal 78 runs, Hard 18, Brutal 18: all `airJump` False, **0** jumps asked for in the air |
+| What a first clear pays | 131,300–131,410 cash, **211 Timber, 10 Valor** |
+| Double Jump | **10 Valor = one solo Normal clear** |
+| The lookout's chest | 50 Timber = **24%** of the clear, 3 Valor (30% of the price) |
+
+**The first-run band is 4.0–5.75 min, not the contract's 4.5–5.75.** The human clears 0.2–0.5 min sooner than the
+reacting player on every seed with the same kills and pay: his slower reaction leaves him standing and swinging
+where the ideal player steps aside. Nothing changed with the double jump: the simulator never modelled one, its
+dodges use `jumpHeight` alone, and the new `take_off` count proves it (0 in every run). Slowing the human into
+the old band would need a camp or weapon change, which the contract rules out.
+
+The simulator now refuses a timed jump that a knock's launch overtook (nobody jumps off the air without the
+double jump). No number moved: every Normal, Hard and Brutal line is identical to L1c fix 3.
+
+### L2 W1: the lookout and every lifting ability (L2-18 c)
+
+`check_levels.py` models every family's lifting ability worst case (today: the Greataxe's Leap Smash, height
+10, castRange 32), not today's loadout: take-offs on every standable top within reach, on the ground, at the
+top of one jump, and off each top's edge at a jump's top (with an air dash); targets as `GroundPoint` finds
+them; the arc as `MovementController.Leap` flies it. Take-offs from which some arc puts the feet within a step
+up (3) of the ledge's top, over it:
+
+| Lift model | The shipped ledge | With the contract's notch |
+|---|---|---|
+| **Today**: apex = height over the higher of the root and the target; over a void the caster's floor is his feet | **937** | **429** |
+| F1 alone: apex = height over the higher of the target and the caster's floor | 443 | 159 |
+| F2 alone: over a void the caster's floor is his feet less his jump rise (18) | 653 | 258 |
+| **F1 + F2** | **0** | **0** |
+
+Two holes, neither closed by geometry:
+- **Off a void.** Jump off Road4's or Road5's edge (an air dash carries him on), and at the jump's top
+  `GroundPoint` takes his feet (18 or 26) as his floor, so the ledge's top (34) is within 18 and a legal target.
+- **At a jump's top.** The leap adds its 10 over an airborne root: 26 + 10 = 36 feet, over the ledge. Aimed at the
+  sky over the notch's walls, the target is pulled back to castRange over the void behind them and sits level with
+  his floor (legal); the arc crosses the ledge's open face at feet 36 and drops onto the ledge. With the notch, 164
+  take-offs are at a jump's top over a standing surface (the sign pad among them), not off an edge.
+
+**Not a W1 risk:** every mission is played with Broadsword and Longbow (`ProvingGrounds.json loadout`), neither
+lifts, so `check_levels` reports the routes as a known limit until W2 (`LIFT_KNOWN_LIMIT_W2`) and goes red the
+moment a lifting family can enter a level. With F1 + F2 the margin is camp A's fence: a target on its top (12)
+lifts an arc to 12 + height, so the lookout holds up to a Leap height of 18 (mutants at 18 green, 20 red).
+
+### L2 W1: the sniper (R8)
+
+No layout change, so `sniperSpots` and the perches are as L1c left them. The Normal known limits stay: the
+LookoutLedge row (up to ×1.34 the mission's cash a minute) and Secret_lookout (×1.59) are now labelled "owners of
+doubleJump only", since nobody without it stands there. Hard at 2 / 2 is unchanged: LookoutLedge 18,313 / 17,756 /
+15,846 cash a minute against the mission's 18,614 / 20,512 / 19,397 (the thinnest, +1.6%); Road2 26.6 Timber
+against 27.4 (+3.0%). `sim_combat.py --check`: 23 of 23.
+
+**`check_levels_mutants.py`, new cases** (25, all as expected; 66 data cases and 4 stage-mirror cases in all):
+
+| Case | Rule | Expected |
+|---|---|---|
+| today's Leap Smash, the known limit off | L2-18c | red (40+ take-offs) |
+| a Greataxe in the loadout | L2-18c | red |
+| control: the floor model (F1 + F2), the known limit off | L2-18c | green |
+| Leap height 24 / 20 under the floor model | L2-18c | red / red (a target on A's fence) |
+| control: Leap height 18 under the floor model | L2-18c | green |
+| a ledge (top 14) west of the sign pad | L2-18b | red |
+| control: an unclimbable wall (84) on the ledge's east side | L2-18b | green |
+| the same wall 60 high | L2-18b | red |
+| the ledge 6 higher | L2-18a band | red |
+| the chest at the ledge's front edge (z −54) | L2-18d | red |
+| secretBelow 25 and secretReach 8 | L2-18d | red (a root on Road5) |
+| control: the chest at z −61 | L2-18d | green |
+| the cache pays 1 Valor; the shrine names a family | L2-18e | red; red |
+| the lookout pays 10 Valor | L2-13 | red |
+| control: the lookout pays 2 Valor | L2-13 | green |
+| Double Jump's price 0; 10.5; no doubleJump in the list | L2-6 | red ×3 |
+| Double Jump's price 11 | over one Normal clear | red |
+| levels.secretReach missing; secretBelow −1 | L2-11 | red; red |
+| resetSecretsAttribute named GrantValor | L2-19 | red |
+| secretOpen grey | the looks | red |

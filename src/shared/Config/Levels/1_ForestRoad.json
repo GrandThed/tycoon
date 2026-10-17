@@ -6,6 +6,11 @@
 	"material": "Timber",
 	"targetMinutes": 5,
 	"runCapSeconds": 1500,
+	"secrets": {
+		"lookout": { "name": "The Lookout", "valor": 3, "materials": 50, "family": "flamethrower" },
+		"cache": { "name": "Raiders' Cache" },
+		"shrine": { "name": "Island Shrine" }
+	},
 	"difficulties": {
 		"normal": {
 			"hpScale": 1.5,

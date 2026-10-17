@@ -52,6 +52,7 @@ local AbilityService = require(combatFolder:WaitForChild("AbilityService"))
 local CrowdService = require(combatFolder:WaitForChild("CrowdService"))
 local VitalsService = require(combatFolder:WaitForChild("VitalsService"))
 local LevelService = require(combatFolder:WaitForChild("LevelService"))
+local UnlockService = require(combatFolder:WaitForChild("UnlockService"))
 
 type Service = {
 	Init: () -> (),
@@ -188,6 +189,7 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 		-- sequence (the Snapshot) runs exactly as in a mission.
 		RangeService.AddPlayer(player)
 		AbilityService.AddPlayer(player)
+		UnlockService.AddPlayer(player)
 		sendSnapshot(player)
 		return
 	end
@@ -229,6 +231,8 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 	-- then); every later character goes through ArenaService's character hook.
 	WeaponService.AddPlayer(player)
 	AbilityService.AddPlayer(player)
+	-- L2: sets the owned-ability attributes the client reads before its first air jump.
+	UnlockService.AddPlayer(player)
 	sendSnapshot(player)
 	-- The map, after the snapshot: this player's own stars, and to everyone, since an arrival
 	-- may change who leads.
@@ -238,12 +242,15 @@ end
 -- Configure before Init: RemoteService refuses to create any remote without its definitions.
 RemoteService.Configure(CombatRemotes)
 WeaponService.Configure(mode)
+UnlockService.Configure(mode)
 RangeService.Configure(mode == "range")
 
 -- There is no Delta pipeline in this place (EconomyService is hub-only), so a fresh Snapshot is
 -- how a reward flush or a debug grant reaches the client. Main owns the Snapshot shape;
 -- WaveService and DebugService reach it through ArenaService.
 ArenaService.SetSnapshotSender(sendSnapshot)
+-- L2: a purchase is allowed only where leaving is (the lobby, the summary, waiting), never mid-fight.
+UnlockService.SetShopGate(WaveService.MayLeave)
 
 -- ReturnService needs the join sequence to re-admit a player whose teleport home failed, and
 -- only Main has it; handing it over as a hook keeps the service free of Main's requires.
@@ -282,7 +289,7 @@ local levelBoot: Service = {
 }
 
 -- Boot order per contract (L1): data, remotes, registry, arena, the lobby, weapons, range,
--- abilities, the run, debug, return. In mission mode ArenaService builds nothing (the fallback
+-- abilities, unlocks (L2), the run, debug, return. In mission mode ArenaService builds nothing (the fallback
 -- arena is the range's) and LevelService builds the lobby camp; WeaponService starts
 -- VitalsService (the body) in both modes; RangeService builds the range arena (range only);
 -- AbilityService needs WeaponService's hooks; WaveService wires the run's hooks and the placer
@@ -296,6 +303,7 @@ local orderedServices: { Service } = {
 	WeaponService,
 	RangeService,
 	AbilityService,
+	UnlockService,
 	waveBoot,
 	DebugService,
 	returnBoot,
@@ -411,6 +419,14 @@ RemoteService.SetHandler(
 	end
 )
 
+-- L2: buying a bought ability (Double Jump) with Valor; UnlockService validates and rate-limits.
+RemoteService.SetHandler("RequestBuyAbility", function(player: Player, abilityId: string)
+	if RangeService.IsActive() then
+		return
+	end
+	UnlockService.OnBuyAbility(player, abilityId)
+end)
+
 -- Studio levers, the remote half (the attribute half is DebugService's own 1 Hz poll). The
 -- handler itself refuses everything outside Studio.
 RemoteService.SetHandler("RequestDebug", function(player: Player, lever: string, value: any)
@@ -455,6 +471,7 @@ end
 -- final save. Both steps are idempotent, so PlayerRemoving and the shutdown flush may both run.
 local function releasePlayer(player: Player): ()
 	AbilityService.RemovePlayer(player)
+	UnlockService.RemovePlayer(player)
 	RangeService.RemovePlayer(player)
 	WeaponService.RemovePlayer(player)
 	ArenaService.Remove(player)

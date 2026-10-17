@@ -11,11 +11,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
 
-local SCHEMA_VERSION = 6
+local SCHEMA_VERSION = 7
 local STORE_NAME = "PlayerData"
 local PROFILE_KEY_PREFIX = "p_"
 
--- Template = schema v6, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
+-- Template = schema v7, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
 -- first-ever join (no offline grant, no welcome-back card).
 local PROFILE_TEMPLATE: Types.PlayerState = {
 	version = SCHEMA_VERSION,
@@ -42,6 +42,10 @@ local PROFILE_TEMPLATE: Types.PlayerState = {
 		expeditionSince = 0,
 		expeditionSeconds = 0,
 		stats = { kills = 0, wavesCleared = 0, expeditions = 0, cashFromCombat = 0 },
+		abilities = {},
+		secrets = {},
+		families = {},
+		shortcuts = {},
 	},
 }
 
@@ -96,6 +100,26 @@ local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
 	[5] = function(state: Types.PlayerState): ()
 		if state.settings.cityDetail == nil then
 			state.settings.cityDetail = true
+		end
+	end,
+	-- L2-1: the dungeon place's unlocks (bought abilities, opened secrets, found families and
+	-- shortcuts). Reconcile runs first and usually fills them already; each is added only when
+	-- still nil, always as a fresh table (a template table would be shared by every profile).
+	-- v6 code that loads a v7 profile keeps them: Reconcile only fills, and runMigrations leaves
+	-- a newer profile untouched.
+	[6] = function(state: Types.PlayerState): ()
+		local combat = state.combat
+		if combat.abilities == nil then
+			combat.abilities = {}
+		end
+		if combat.secrets == nil then
+			combat.secrets = {}
+		end
+		if combat.families == nil then
+			combat.families = {}
+		end
+		if combat.shortcuts == nil then
+			combat.shortcuts = {}
 		end
 	end,
 }

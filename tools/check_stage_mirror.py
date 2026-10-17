@@ -14,6 +14,8 @@ and compares what they answer, value by value:
     0, a camp with a targetWaveSeconds of 0 or none, a breatherSeconds or (the L1c fix round's M3)
     a gateSeconds under 0 or not a number, or no wave, and a
     Combat.json that lacks any one of the `levels` numbers a run reads, is refused on both;
+  * `StageFlow.Validate`'s secrets lines (L2-13), each broken once in a copy of Forest Road's file or
+    layout, refused alike.
   * `StageFlow.Validate`'s L1b lines: the residents, the spots, which camps lock, the population
     gate and the three new `levels` numbers, each broken once in a copy of the shipped level, its
     layout or Combat.json, refused alike; and (the L1c fix round's data m2) every broken copy of
@@ -321,6 +323,30 @@ L1B_REFUSALS = (
                                                                                          "sx": 10, "sz": 10})),
     ("levels.doorSpare missing", lambda f, l, r: r.pop("doorSpare")),
     ("levels.regionLockMargin missing", lambda f, l, r: r.pop("regionLockMargin")),
+)
+
+
+# L2-13: StageFlow.secretProblems' lines, each broken once, on a level whose layout has secrets and
+# whose file names them (Forest Road); refused alike on both sides.
+def secret_entry(file, sid):
+    return file["secrets"][sid]
+
+
+L2_REFUSALS = (
+    ("no secrets block", lambda f, l, r: f.pop("secrets")),
+    ("a secrets block that is a string", lambda f, l, r: f.__setitem__("secrets", "lookout")),
+    ("a secrets block that is a string, the layout without secrets",
+     lambda f, l, r: (f.__setitem__("secrets", "lookout"), l.__setitem__("secrets", []))),
+    ("a layout secret with no entry", lambda f, l, r: f["secrets"].pop(l["secrets"][0]["id"])),
+    ("a layout secret with no id", lambda f, l, r: l["secrets"][0].pop("id")),
+    ("an entry with no name", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).pop("name")),
+    ("an entry with an empty name", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("name", "")),
+    ("a valor of 2.5", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("valor", 2.5)),
+    ("a valor of -1", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("valor", -1)),
+    ("materials that are a string", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("materials", "50")),
+    ("a family that is a number", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("family", 5)),
+    ("an empty family", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("family", "")),
+    ("a family of 25 characters", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("family", "f" * 25)),
 )
 
 
@@ -2025,6 +2051,18 @@ def main():
                                                                               ranks, crowd_max))
                     expected[case] = ("L1b: Validate's new lines refuse alike", f"{name}, {label}", refused)
                     must_refuse.add(case)
+            # L2-13: each of Validate's secrets lines, broken once.
+            if file.get("secrets") and raw_layouts[file["layout"]].get("secrets"):
+                for label, change in L2_REFUSALS:
+                    changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
+                    change(changed, raw, short_rules)
+                    case = f"refusal.{number}.{len(data['refusalCases'])}"
+                    data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
+                    level_changed = resolved(changed)
+                    refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
+                                                                              ranks, crowd_max))
+                    expected[case] = ("L2: Validate's secrets lines refuse alike", f"{name}, {label}", refused)
+                    must_refuse.add(case)
     for target in sorted({key[0] for key in bursts}):
         for count in (0, -1):
             bursts[(target, count, 1.0)] = None
@@ -2109,7 +2147,7 @@ def main():
         if kind.startswith("StageFlow.Validate"):
             report.compare(kind, label, luau_answer if isinstance(luau_answer, dict) else list(luau_answer or []), python)
             continue
-        if kind.startswith("ruling 6") or kind.startswith("L1b: Validate"):
+        if kind.startswith("ruling 6") or kind.startswith("L1b: Validate") or kind.startswith("L2: Validate"):
             if key in must_refuse and not python and not luau_answer:
                 report.differ(kind, f"{label}: accepted on both sides (the rule it breaks is gone from both)")
                 continue

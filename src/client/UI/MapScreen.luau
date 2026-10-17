@@ -24,7 +24,13 @@
 -- and 58, and at 1280x720 and 1920x1080): the map on the left, the card on the right, both in
 -- one frame under one UIScale. Every node, difficulty button, Depart, Return and the close
 -- button is at least 48 design px, which is 44 physical px at Theme.MIN_SCALE. Portrait is not
--- laid out (carried from P5). Secrets and their icons are L2: the card has no row for them.
+-- laid out (carried from P5).
+--
+-- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-15): the card's secrets row. A MapNodeState may
+-- carry `secrets` (the receiver's own finds, by level): one icon per secret, filled with a
+-- check when found and an outline with "?" when not, and under each the key it needs ("2×
+-- JUMP", "FIRE", "ICE": Theme.MAP_SECRET_KEY_WORDS). It shows with the open node's rows, when
+-- the node has any. 30 design px tall: the open card still fits 667 x 375 (see Theme).
 --
 -- A node stands where the config puts it (x and y are 0..1 of the map), and then the nodes are
 -- SPREAD: a phone's map is small against a 48 px tap target, and positions that read well on a
@@ -85,6 +91,11 @@ export type MapScreenHandle = {
 -- One difficulty a level offers, as the card shows it.
 type Difficulty = { id: string, name: string, tier: number?, rewardMult: number }
 
+-- One secret on the card (MapSecretState), as checked off the network.
+type SecretMark = { id: string, name: string, needs: string, found: boolean }
+
+type SecretCell = { frame: Frame, icon: Frame, glyph: TextLabel, stroke: UIStroke, key: TextLabel }
+
 type NodeView = {
 	node: Types.MapNode,
 	size: number,
@@ -99,6 +110,7 @@ type NodeView = {
 	stars: { TextLabel },
 	difficulties: { Difficulty },
 	state: Types.MapNodeState?,
+	secrets: { SecretMark },
 	centre: Vector2,
 }
 
@@ -136,6 +148,9 @@ type CardView = {
 	partyRow: Frame,
 	partyCaption: TextLabel,
 	party: TextLabel,
+	secretsRow: Frame,
+	secretsList: Frame,
+	secretCells: { SecretCell },
 	depart: TextButton,
 	back: TextButton?,
 }
@@ -153,6 +168,8 @@ local NO_LEADER_TEXT = "the leader"
 local REASON_NOT_BUILT = "notBuilt"
 local REASON_NEEDS_NODE = "needsNode"
 local REASON_NEEDS_STARS = "needsStars"
+local SECRET_FOUND_GLYPH = "✓"
+local SECRET_UNFOUND_GLYPH = "?"
 -- Design px of overlap the spread takes for none.
 local SPREAD_EPSILON = 0.25
 
@@ -476,8 +493,71 @@ local function buildNode(
 		stars = stars,
 		difficulties = {},
 		state = nil,
+		secrets = {},
 		centre = Vector2.zero,
 	}
+end
+
+-- A MapNodeState's `secrets`, kept only where every field the card reads is there.
+local function readSecrets(list: any): { SecretMark }
+	local marks: { SecretMark } = {}
+	if typeof(list) ~= "table" then
+		return marks
+	end
+	for _, entry in list do
+		if
+			typeof(entry) == "table"
+			and typeof(entry.id) == "string"
+			and typeof(entry.name) == "string"
+			and typeof(entry.needs) == "string"
+			and typeof(entry.found) == "boolean"
+		then
+			table.insert(
+				marks,
+				{ id = entry.id, name = entry.name, needs = entry.needs, found = entry.found }
+			)
+		end
+	end
+	return marks
+end
+
+-- One secret's cell on the card: a round icon, its key under it.
+local function secretCell(parent: Instance, order: number): SecretCell
+	local size = Theme.MAP_SECRET_ICON_SIZE
+	local frame = Create("Frame", {
+		Name = "Secret" .. tostring(order),
+		Active = false,
+		LayoutOrder = order,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, Theme.MAP_SECRET_CELL_WIDTH, 1, 0),
+		Visible = false,
+		Parent = parent,
+	}) :: Frame
+	local icon = Create("Frame", {
+		Name = "Icon",
+		Active = false,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.fromOffset(size, size),
+		BackgroundColor3 = Theme.MAP_COLOR_GOLD,
+		BorderSizePixel = 0,
+		Parent = frame,
+	}) :: Frame
+	rounded(icon, UDim.new(0.5, 0))
+	local stroke = Create("UIStroke", {
+		Color = Theme.MAP_COLOR_GOLD,
+		Thickness = Theme.STROKE_THICKNESS / 2,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Parent = icon,
+	}) :: UIStroke
+	local glyph = label("Glyph", Theme.MAP_SECRET_ICON_TEXT, Theme.MAP_COLOR_INK, icon)
+	glyph.Size = UDim2.fromScale(1, 1)
+	local key = label("Key", Theme.MAP_SECRET_KEY_TEXT, Theme.MAP_COLOR_DIM, frame)
+	key.AnchorPoint = Vector2.new(0.5, 1)
+	key.Position = UDim2.fromScale(0.5, 1)
+	key.Size = UDim2.new(1, 0, 0, Theme.MAP_SECRET_ROW_HEIGHT - size)
+	key.TextTruncate = Enum.TextTruncate.AtEnd
+	return { frame = frame, icon = icon, glyph = glyph, stroke = stroke, key = key }
 end
 
 -- One line of the card: a dim caption and its value.
@@ -648,12 +728,42 @@ local function buildCard(parent: Instance, difficultyCount: number, deps: Deps):
 	rewardsCaption.Text = "Rewards"
 	local partyRow, partyCaption, party = infoRow(frame, "Party", 6)
 
-	local depart = cardButton(frame, "Depart", 7, Theme.MAP_DEPART_HEIGHT)
+	-- L2: the secrets row, the caption column like an info row and the icons beside it.
+	local secretsRow = Create("Frame", {
+		Name = "Secrets",
+		Active = false,
+		LayoutOrder = 7,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, Theme.MAP_SECRET_ROW_HEIGHT),
+		Visible = false,
+		Parent = frame,
+	}) :: Frame
+	local secretsCaption = label("Caption", Theme.TEXT_SMALL, Theme.MAP_COLOR_DIM, secretsRow)
+	secretsCaption.Font = Theme.FONT
+	secretsCaption.Size = UDim2.fromOffset(Theme.MAP_CARD_LABEL_WIDTH, Theme.MAP_SECRET_ICON_SIZE)
+	secretsCaption.TextXAlignment = Enum.TextXAlignment.Left
+	secretsCaption.Text = "Secrets"
+	local secretsList = Create("Frame", {
+		Name = "Icons",
+		Active = false,
+		Position = UDim2.fromOffset(Theme.MAP_CARD_LABEL_WIDTH, 0),
+		Size = UDim2.new(1, -Theme.MAP_CARD_LABEL_WIDTH, 1, 0),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		Parent = secretsRow,
+	}) :: Frame
+	Create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = secretsList,
+	})
+
+	local depart = cardButton(frame, "Depart", 8, Theme.MAP_DEPART_HEIGHT)
 	depart.TextSize = Theme.TEXT_HEADER
 
 	local back: TextButton? = nil
 	if deps.onReturn ~= nil then
-		local button = cardButton(frame, "Return", 8, Theme.MAP_RETURN_HEIGHT)
+		local button = cardButton(frame, "Return", 9, Theme.MAP_RETURN_HEIGHT)
 		button.Text = RETURN_TEXT
 		button.AutoButtonColor = true
 		back = button
@@ -662,7 +772,7 @@ local function buildCard(parent: Instance, difficultyCount: number, deps: Deps):
 	if keyHint ~= nil then
 		local hint = label("Keys", Theme.MAP_CARD_HINT_TEXT, Theme.MAP_COLOR_DIM, frame)
 		hint.Font = Theme.FONT
-		hint.LayoutOrder = 9
+		hint.LayoutOrder = 10
 		hint.Size = UDim2.new(1, 0, 0, Theme.MAP_CARD_HINT_HEIGHT)
 		hint.TextTruncate = Enum.TextTruncate.AtEnd
 		hint.Text = keyHint
@@ -681,6 +791,9 @@ local function buildCard(parent: Instance, difficultyCount: number, deps: Deps):
 		partyRow = partyRow,
 		partyCaption = partyCaption,
 		party = party,
+		secretsRow = secretsRow,
+		secretsList = secretsList,
+		secretCells = {},
 		depart = depart,
 		back = back,
 	}
@@ -871,6 +984,34 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 		end
 	end
 
+	-- L2: the selected node's secrets (none = no row). Cells are made as a level first needs
+	-- them and shared by every node; they split the row's width when there are more than fit.
+	local function paintSecrets(marks: { SecretMark }): ()
+		card.secretsRow.Visible = #marks > 0
+		local cells = card.secretCells
+		while #cells < #marks do
+			table.insert(cells, secretCell(card.secretsList, #cells + 1))
+		end
+		local room = Theme.MAP_CARD_WIDTH - Theme.MAP_CARD_PADDING * 2 - Theme.MAP_CARD_LABEL_WIDTH
+		local width = math.min(Theme.MAP_SECRET_CELL_WIDTH, room / math.max(#marks, 1))
+		for index, cell in cells do
+			local mark = marks[index]
+			cell.frame.Visible = mark ~= nil
+			if mark ~= nil then
+				cell.frame.Size = UDim2.new(0, width, 1, 0)
+				cell.icon.BackgroundTransparency = if mark.found then 0 else 1
+				cell.glyph.Text = if mark.found then SECRET_FOUND_GLYPH else SECRET_UNFOUND_GLYPH
+				cell.glyph.TextColor3 = if mark.found
+					then Theme.MAP_COLOR_INK
+					else Theme.MAP_COLOR_GOLD
+				cell.key.Text = Theme.MAP_SECRET_KEY_WORDS[mark.needs] or string.upper(mark.needs)
+				cell.key.TextColor3 = if mark.found
+					then Theme.MAP_COLOR_GOLD
+					else Theme.MAP_COLOR_DIM
+			end
+		end
+	end
+
 	local function paintCard(): ()
 		local current = selectedView()
 		if current == nil then
@@ -897,6 +1038,7 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 		card.rewardsRow.Visible = open
 		card.partyRow.Visible = open
 		card.depart.Visible = open
+		paintSecrets(if open then current.secrets else {})
 		if not open then
 			return
 		end
@@ -1139,6 +1281,8 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 					local nodeView = byId[entry.id]
 					if nodeView ~= nil then
 						nodeView.state = entry
+						-- L2: read loosely, so a server without the field shows no row.
+						nodeView.secrets = readSecrets((entry :: any).secrets)
 					end
 				end
 			end

@@ -122,6 +122,7 @@ local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local WallClip = require(sharedFolder:WaitForChild("WallClip"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -1837,9 +1838,10 @@ end
 -- the leap and refuses a ground-aimed cast early, so the two agree wherever both see the same
 -- arena.
 -- L1c §8: nil = refused, as WeaponService.GroundPoint refuses it, with the same shared rule
--- (WallClip.TooHigh): ground more than movement.jumpHeight + doubleJumpHeight above the
--- caster's floor. Without it a leap aimed over a tall wall lands its probe on the wall's top, a
--- perch that sees into a walled camp.
+-- (WallClip.TooHigh): ground more than the caster's own rise above the caster's floor. Without
+-- it a leap aimed over a tall wall lands its probe on the wall's top, a perch that sees into a
+-- walled camp. L2-4: the rise is per player, jumpHeight plus doubleJumpHeight only for one who
+-- owns the double jump (the Player attribute the server sets; the server reads the same one).
 local function groundPoint(
 	rig: LocalRig,
 	origin: Vector3,
@@ -1865,7 +1867,8 @@ local function groundPoint(
 	local casterFloor = floorHit(root, params)
 		or root.Y - rig.root.Size.Y * HALF - rig.humanoid.HipHeight
 	local floorY = floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params) or casterFloor
-	if WallClip.TooHigh(casterFloor, floorY, WallClip.Rise(Tuning.Get().movement)) then
+	local airJump = Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) == true
+	if WallClip.TooHigh(casterFloor, floorY, WallClip.Rise(Tuning.Get().movement, airJump)) then
 		return nil
 	end
 	return Vector3.new(point.X, floorY, point.Z)

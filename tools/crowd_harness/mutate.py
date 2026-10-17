@@ -4022,7 +4022,7 @@ L1C_MUTATIONS = {
     ),
     "l1c: Rise is the first jump alone": (
         WALL_CLIP,
-        "return movement.jumpHeight + movement.doubleJumpHeight",
+        "return movement.jumpHeight + (if airJump then movement.doubleJumpHeight else 0)",
         "return movement.jumpHeight",
     ),
     "l1c: a locking camp's groups are not held": (
@@ -4245,6 +4245,196 @@ L1C_FIX3_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L1C_FIX3_MUTATIONS)
+
+# L2 W1, the bought double jump and the lookout (docs/prompts/l2-w1-contract.md). From the
+# luau-engineer: the profile's v7 step (ProfileSchema), the pure Unlocks and SecretFlow, WallClip's
+# rise per player, and StageFlow's secrets lines and map rows (tests_l2.luau).
+SCHEMA = "src/server/Services/ProfileSchema.luau"
+UNLOCKS = "src/shared/Unlocks.luau"
+SECRET_FLOW = "src/combat/server/Services/SecretFlow.luau"
+FILES += [SCHEMA, UNLOCKS, SECRET_FLOW]
+L2_MUTATIONS = {
+    # WallClip.Rise (L2-4).
+    "l2: Rise always adds the double jump": (
+        WALL_CLIP,
+        "(if airJump then movement.doubleJumpHeight else 0)",
+        "movement.doubleJumpHeight",
+    ),
+    "l2: Rise never adds the double jump": (WALL_CLIP, "(if airJump then movement.doubleJumpHeight else 0)", "0"),
+    # ProfileSchema v7 (L2-1).
+    "l2: the schema stays at v6": (SCHEMA, "local SCHEMA_VERSION = 7", "local SCHEMA_VERSION = 6"),
+    "l2: the template lacks abilities": (SCHEMA, "\t\tabilities = {},\n", ""),
+    "l2: there is no step from v6": (
+        SCHEMA,
+        "[6] = function(state: Types.PlayerState): ()",
+        "[16] = function(state: Types.PlayerState): ()",
+    ),
+    "l2: the step shares the template's table": (
+        SCHEMA,
+        "\t\t\tcombat.abilities = {}\n",
+        "\t\t\tcombat.abilities = PROFILE_TEMPLATE.combat.abilities\n",
+    ),
+    "l2: the step replaces a map that is there": (
+        SCHEMA,
+        "\t\tif combat.abilities == nil then\n\t\t\tcombat.abilities = {}\n\t\tend\n",
+        "\t\tcombat.abilities = {}\n",
+    ),
+    "l2: the step forgets shortcuts": (
+        SCHEMA,
+        "\t\tif combat.shortcuts == nil then\n\t\t\tcombat.shortcuts = {}\n\t\tend\n",
+        "",
+    ),
+    # Unlocks (L2-2, L2-9).
+    "l2: the air jump keys on another id": (UNLOCKS, 'local AIR_JUMP = "doubleJump"', 'local AIR_JUMP = "double"'),
+    "l2: the attribute's prefix drifts": (
+        UNLOCKS,
+        'local ATTRIBUTE_PREFIX = "Ability_"',
+        'local ATTRIBUTE_PREFIX = "Ability"',
+    ),
+    "l2: any entry counts as owned": (
+        UNLOCKS,
+        "return abilities ~= nil and abilities[id] == true",
+        "return abilities ~= nil and abilities[id] ~= nil",
+    ),
+    "l2: a key need not be sold": (
+        UNLOCKS,
+        "return Unlocks.Find(config, needs) ~= nil and Unlocks.Owns(abilities, needs)",
+        "return Unlocks.Owns(abilities, needs)",
+    ),
+    "l2: a key need not be owned": (
+        UNLOCKS,
+        "return Unlocks.Find(config, needs) ~= nil and Unlocks.Owns(abilities, needs)",
+        "return Unlocks.Find(config, needs) ~= nil",
+    ),
+    "l2: a fractional price sells": (
+        UNLOCKS,
+        "or not (valor > 0 and valor < math.huge) or valor % 1 ~= 0 then",
+        "or not (valor > 0 and valor < math.huge) then",
+    ),
+    "l2: a price of 0 sells": (
+        UNLOCKS,
+        "or not (valor > 0 and valor < math.huge) or valor % 1 ~= 0 then",
+        "or not (valor >= 0 and valor < math.huge) or valor % 1 ~= 0 then",
+    ),
+    "l2: an entry with no name sells": (
+        UNLOCKS,
+        '\tif type(def.name) ~= "string" or def.name == "" then\n\t\treturn "has no name"\n\tend\n',
+        "",
+    ),
+    "l2: Find returns a malformed entry": (
+        UNLOCKS,
+        "return if Unlocks.DefProblem(def) == nil then def else nil",
+        "return def",
+    ),
+    "l2: no profile reads as invalid": (UNLOCKS, 'return "unavailable"', 'return "invalid"'),
+    "l2: a malformed entry may be bought": (
+        UNLOCKS,
+        "if def == nil or Unlocks.DefProblem(def) ~= nil then",
+        "if def == nil then",
+    ),
+    "l2: owned is not checked": (
+        UNLOCKS,
+        '\tif Unlocks.Owns(combat.abilities, def.id) then\n\t\treturn "owned"\n\tend\n',
+        "",
+    ),
+    "l2: the gate is not checked": (UNLOCKS, "\tif not gateOpen then\n", "\tif false then\n"),
+    "l2: the gate is judged after the funds": (
+        UNLOCKS,
+        '\tif not gateOpen then\n\t\treturn "busy"\n\tend\n'
+        '\tif not (combat.valor >= def.price.valor) then\n\t\treturn "insufficientFunds"\n\tend\n',
+        '\tif not (combat.valor >= def.price.valor) then\n\t\treturn "insufficientFunds"\n\tend\n'
+        '\tif not gateOpen then\n\t\treturn "busy"\n\tend\n',
+    ),
+    "l2: exactly the price is short": (
+        UNLOCKS,
+        "if not (combat.valor >= def.price.valor) then",
+        "if not (combat.valor > def.price.valor) then",
+    ),
+    "l2: a NaN Valor buys": (
+        UNLOCKS,
+        "if not (combat.valor >= def.price.valor) then",
+        "if combat.valor < def.price.valor then",
+    ),
+    # SecretFlow (L2-11, L2-15).
+    "l2: a site stands on the block's centre": (SECRET_FLOW, "floorY = secret.y - secret.sy / 2,", "floorY = secret.y,"),
+    "l2: a name alone is a reward entry": (
+        SECRET_FLOW,
+        "if entry == nil or (entry.valor == nil and entry.materials == nil and entry.family == nil) then",
+        "if entry == nil then",
+    ),
+    "l2: a fractional amount pays": (
+        SECRET_FLOW,
+        "if finite(value) and value >= 0 and value % 1 == 0 then value else 0",
+        "if finite(value) and value >= 0 then value else 0",
+    ),
+    "l2: a site with no key is kept": (SECRET_FLOW, '\t\t\tor type(secret.needs) ~= "string"\n', ""),
+    "l2: the reach is open": (
+        SECRET_FLOW,
+        "<= (reach :: number) * (reach :: number)",
+        "< (reach :: number) * (reach :: number)",
+    ),
+    "l2: the reach is measured in 3D": (
+        SECRET_FLOW,
+        "return dx * dx + dz * dz <= (reach :: number) * (reach :: number)",
+        "return dx * dx + dz * dz + rise * rise <= (reach :: number) * (reach :: number)",
+    ),
+    "l2: the band's bottom is open": (SECRET_FLOW, "and rise >= -(below :: number)", "and rise > -(below :: number)"),
+    "l2: the band has no bottom": (SECRET_FLOW, "\t\tand rise >= -(below :: number)\n", ""),
+    "l2: the band's top is open": (SECRET_FLOW, "and rise <= (above :: number)", "and rise < (above :: number)"),
+    "l2: the band has no top": (SECRET_FLOW, "\n\t\tand rise <= (above :: number)", ""),
+    "l2: unusable rules are used": (
+        SECRET_FLOW,
+        "\tif not (finite(reach) and finite(below) and finite(above)) then\n\t\treturn false\n\tend\n",
+        "",
+    ),
+    "l2: the key is asked before found": (
+        SECRET_FLOW,
+        'if found then\n\t\treturn "known"\n\telseif not hasKey then\n\t\treturn "locked"',
+        'if not hasKey then\n\t\treturn "locked"\n\telseif found then\n\t\treturn "known"',
+    ),
+    "l2: no key is asked": (SECRET_FLOW, "elseif not hasKey then", "elseif false then"),
+    "l2: the reward is asked before the key": (
+        SECRET_FLOW,
+        'elseif not hasKey then\n\t\treturn "locked"\n\telseif site.reward == nil then\n\t\treturn "nothing"',
+        'elseif site.reward == nil then\n\t\treturn "nothing"\n\telseif not hasKey then\n\t\treturn "locked"',
+    ),
+    "l2: a row is found on any entry": (
+        SECRET_FLOW,
+        "found = found ~= nil and found[site.id] == true,",
+        "found = found ~= nil and found[site.id] ~= nil,",
+    ),
+    # StageFlow's secrets lines and map rows (L2-13, L2-15).
+    "l2: Resolve drops the secrets": (FLOW, "\t\t\tsecrets = file.secrets,\n\t\t}\n\tend", "\t\t}\n\tend"),
+    "l2: Validate skips the secrets": (FLOW, "\tsecretProblems(level, layout, problem)\n", ""),
+    "l2: an entry needs no name": (
+        FLOW,
+        'if type(entry) ~= "table" or type(entry.name) ~= "string" or entry.name == "" then',
+        'if type(entry) ~= "table" then',
+    ),
+    "l2: a fractional amount is accepted": (
+        FLOW,
+        "amount ~= nil and not (isFinite(amount) and amount >= 0 and amount % 1 == 0)",
+        "amount ~= nil and not (isFinite(amount) and amount >= 0)",
+    ),
+    "l2: a negative amount is accepted": (
+        FLOW,
+        "amount ~= nil and not (isFinite(amount) and amount >= 0 and amount % 1 == 0)",
+        "amount ~= nil and not (isFinite(amount) and amount % 1 == 0)",
+    ),
+    "l2: a family of any length is accepted": (FLOW, " or #family > MAX_FAMILY_LENGTH", ""),
+    "l2: a block that is not a table is accepted": (FLOW, '\t\tproblem("secrets is not a table")\n', ""),
+    "l2: MapState passes no rows": (
+        FLOW,
+        "StageFlow.NodeState(map, built, leader, own, node.id, secrets)",
+        "StageFlow.NodeState(map, built, leader, own, node.id)",
+    ),
+    "l2: a node carries no row": (
+        FLOW,
+        "secrets = if secrets ~= nil and levelId ~= nil then secrets[levelId] else nil,",
+        "secrets = nil,",
+    ),
+}
+MUTATIONS.update(L2_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

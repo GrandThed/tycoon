@@ -11,8 +11,9 @@
 -- * TooHigh / Rise: an aimed ability's ground point. Leap Smash's target is a camera ray pulled
 --   back to castRange and dropped onto the floor there, so a player who aims over a tall wall can
 --   land the probe on the wall's top: a perch that sees everything. A ground point higher above
---   the caster's floor than a jump and a double jump reach is refused. WeaponService.GroundPoint
---   (server) and InputController.groundPoint (client) ask the same question with the same numbers.
+--   the caster's floor than the caster's own jumps reach is refused: a jump, plus the double jump
+--   for a player who owns it (L2-4). WeaponService.GroundPoint (server) and
+--   InputController.groundPoint (client) ask the same question with the same numbers.
 
 -- A locking camp's fenced rectangle: centre and half sizes on the flat, and `y` its floor's top
 -- (Types.RunFloor's numbers, the halves grown by the fence), studs. `ceiling`: how far above `y` a
@@ -138,10 +139,14 @@ function WallClip.Reach(
 	return share
 end
 
--- How far above the caster's floor a ground point may stand: a jump and a double jump (the
--- range's ProvingGrounds.json `movement`, never re-typed).
-function WallClip.Rise(movement: { jumpHeight: number, doubleJumpHeight: number }): number
-	return movement.jumpHeight + movement.doubleJumpHeight
+-- How far above the caster's floor a ground point may stand: a jump, and the double jump on top
+-- when the caster owns it (L2-4, `airJump`: the server reads its own Player attribute). The
+-- heights are the range's ProvingGrounds.json `movement`, never re-typed.
+function WallClip.Rise(
+	movement: { jumpHeight: number, doubleJumpHeight: number },
+	airJump: boolean
+): number
+	return movement.jumpHeight + (if airJump then movement.doubleJumpHeight else 0)
 end
 
 -- True when a ground point at targetY stands more than `rise` above the caster's floor at

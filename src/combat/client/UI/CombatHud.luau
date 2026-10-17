@@ -73,6 +73,10 @@
 -- bottom-left stack (the buttons, then the two key hints where a keyboard shows them), so it
 -- is clear of the header, the objective line, "Camps 1 / 3", the notice line and the boss bar
 -- at the top on a PC and on a 667 x 375 phone; it is a label, never a tap target.
+--
+-- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-10): "Abilities" between Map and Return, in the
+-- lobby only, like Map (`deps.onAbilities`; nil = no button). It is the phone's way to the
+-- Abilities panel; a keyboard also has K. The row is 280 design px with all three.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -94,6 +98,8 @@ local SoundController =
 export type Deps = {
 	-- L1: "Map" in the lobby; nil = no such button.
 	onMap: (() -> ())?,
+	-- L2: "Abilities" in the lobby, beside Map; nil = no such button.
+	onAbilities: (() -> ())?,
 	-- "Return to your city" (RequestLeave), offered in the lobby.
 	onLeave: () -> (),
 	-- L1: "Abandon", after its second press (RequestAbandon); nil = no such button.
@@ -176,6 +182,7 @@ local LOBBY_TEXT = "Camp"
 local RUN_OVER_TEXT = "Run over"
 local ROAD_TEXT = "Follow the road"
 local MAP_TEXT = "Map"
+local ABILITIES_TEXT = "Abilities"
 local RETURN_TEXT = "Return to your city"
 local ABANDON_TEXT = "Abandon"
 local ABANDON_CONFIRM_TEXT = "Press again to abandon"
@@ -490,7 +497,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		Name = "Actions",
 		AnchorPoint = Vector2.new(0, 1),
 		Size = UDim2.fromOffset(
-			Theme.COMBAT_MAP_BUTTON_WIDTH + Theme.ROW_SPACING + Theme.COMBAT_RUN_BUTTON_WIDTH,
+			Theme.COMBAT_MAP_BUTTON_WIDTH
+				+ Theme.COMBAT_ABILITIES_BUTTON_WIDTH
+				+ Theme.ROW_SPACING * 2
+				+ Theme.COMBAT_RUN_BUTTON_WIDTH,
 			Theme.ROW_BUTTON_HEIGHT
 		),
 		BackgroundTransparency = 1,
@@ -534,17 +544,19 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 
 	local mapButton = actionButton("Map", MAP_TEXT, 1, Theme.COMBAT_MAP_BUTTON_WIDTH, true)
 	mapButton.TextSize = Theme.TEXT_HEADER
+	local abilitiesButton =
+		actionButton("Abilities", ABILITIES_TEXT, 2, Theme.COMBAT_ABILITIES_BUTTON_WIDTH, true)
 	local returnButton =
-		actionButton("Return", RETURN_TEXT, 2, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
+		actionButton("Return", RETURN_TEXT, 3, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
 	local abandonButton =
-		actionButton("Abandon", ABANDON_TEXT, 3, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
+		actionButton("Abandon", ABANDON_TEXT, 4, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
 	-- Fix round: the armed line where the button itself is kept off the screen (a touch device
 	-- in a fight, armed by the key). A label, not a button: the thumb that lands there to move
 	-- must not be able to confirm with it, and it takes no touch from the thumbstick.
 	local abandonPrompt = Create("TextLabel", {
 		Name = "AbandonArmed",
 		Active = false,
-		LayoutOrder = 4,
+		LayoutOrder = 5,
 		Size = UDim2.fromOffset(Theme.COMBAT_RUN_BUTTON_WIDTH, Theme.ROW_BUTTON_HEIGHT),
 		BackgroundColor3 = Theme.COLOR_ERROR,
 		BorderSizePixel = 0,
@@ -1235,6 +1247,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		-- 21: the only human, else the leader). The summary card has its own buttons.
 		local inLobby = phase == "lobby"
 		mapButton.Visible = inLobby and deps.onMap ~= nil
+		abilitiesButton.Visible = inLobby and deps.onAbilities ~= nil
 		returnButton.Visible = inLobby and deps.runButtons ~= false
 		-- No Abandon under the left thumb of a player in the middle of a fight (see the
 		-- header). One who is waiting or down is not fighting, and may want to leave.
@@ -1314,6 +1327,14 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 				SoundController.Play("uiClick")
 				onMap()
 			end)
+		)
+	end
+	local onAbilities = deps.onAbilities
+	if onAbilities ~= nil then
+		table.insert(
+			connections,
+			-- No click sound: the Abilities panel makes none (L2-10, Ben's 2026-09-24 ruling).
+			abilitiesButton.Activated:Connect(onAbilities)
 		)
 	end
 	table.insert(

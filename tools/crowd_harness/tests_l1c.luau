@@ -139,12 +139,13 @@ end
 L1.group("l1c marginTests", L1C.marginTests)
 
 function L1C.riseTests(): ()
-	print(" WallClip.TooHigh and Rise: the ground point's height rule (L1c §8)")
+	print(" WallClip.TooHigh and Rise: the ground point's height rule (L1c §8; per player since L2-4)")
 	local Clip = L1C.Clip
 	local movement = FIXTURES.proving.movement
-	local rise = Clip.Rise(movement)
-	check(rise == movement.jumpHeight + movement.doubleJumpHeight and rise > 0, `the limit is ProvingGrounds.json movement.jumpHeight + doubleJumpHeight ({movement.jumpHeight} + {movement.doubleJumpHeight} = {rise})`)
-	check(Clip.Rise({ jumpHeight = 7, doubleJumpHeight = 5 }) == 12, "read from whatever movement it is given, never a typed number")
+	-- The owner of the double jump: the worst case every L1c rule was built for.
+	local rise = Clip.Rise(movement, true)
+	check(rise == movement.jumpHeight + movement.doubleJumpHeight and rise > 0, `for an owner of the double jump the limit is ProvingGrounds.json movement.jumpHeight + doubleJumpHeight ({movement.jumpHeight} + {movement.doubleJumpHeight} = {rise})`)
+	check(Clip.Rise({ jumpHeight = 7, doubleJumpHeight = 5 }, true) == 12 and Clip.Rise({ jumpHeight = 7, doubleJumpHeight = 5 }, false) == 7, "read from whatever movement it is given, never a typed number")
 	check(not Clip.TooHigh(12, 12 + rise, rise) and Clip.TooHigh(12, 12 + rise + 0.001, rise), "exactly a jump and a double jump above the caster's floor is allowed; a thousandth more is refused")
 	check(not Clip.TooHigh(12, 12, rise) and not Clip.TooHigh(38, 12, rise) and not Clip.TooHigh(12, -200, rise), "level, and any depth below, is allowed")
 	check(not Clip.TooHigh(-5, 20, 30) and Clip.TooHigh(-5, 25.5, 30), "measured from the caster's floor, wherever it is")
@@ -242,7 +243,8 @@ function L1C.wallTests(): ()
 		check(false, `Pieces builds Forest Road ({tostring(why)})`)
 		return
 	end
-	local rise = L1C.Clip.Rise(FIXTURES.proving.movement)
+	-- The worst case is the owner of the double jump (L2-5: camp barriers unchanged).
+	local rise = L1C.Clip.Rise(FIXTURES.proving.movement, true)
 	local top = camp.y + camp.fence.height
 	check(camp.locks == true and camp.tent == nil, "camp C locks and has no tent")
 	local gates, fences, tents, lows = 0, 0, 0, {}

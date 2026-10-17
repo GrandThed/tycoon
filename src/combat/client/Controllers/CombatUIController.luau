@@ -99,6 +99,19 @@
 --  * Nothing is banked any more: the server sends the wallet itself, at most once a second, as
 --    kills pay. Only the end of a run still asks for a fresh Snapshot.
 --  * CampFx's "Checkpoint" notice is the HUD's notice line under the wallet.
+--
+-- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-3, L2-10, L2-14, L2-19), in `bootMission`; the
+-- behaviour lives in UI/AbilitiesPanel and Controllers/SecretFx, this only wires them:
+--  * K, or the run layer's "Abilities" button, opens the Abilities panel in the lobby (closing
+--    the map: one sheet at a time; M closes the panel the same way). Buy sends
+--    RequestBuyAbility(id); the `buyAbility` ActionResult goes to the panel. The Snapshot's
+--    `combat.valor` and `combat.abilities` feed it, `combat.secrets` feeds SecretFx.
+--  * CombatFx of kind `secret` (a chest found by anyone, or locked for this player) go to
+--    SecretFx; RunState.levelId tells it which level's chests stand.
+--  * The first refused air jump of a session toasts where to buy it (MovementController).
+--  * Studio keys: J toggles the caller's Double Jump (grant or remove, from its own attribute),
+--    H resets the caller's secrets, V grants Theme.COMBAT_DEBUG_GRANT_VALOR. The strip has the
+--    first two as buttons ("+10 Valor" was there already).
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -114,6 +127,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -129,6 +143,7 @@ local AbilityBar = require(uiFolder:WaitForChild("AbilityBar"))
 local BossBar = require(uiFolder:WaitForChild("BossBar"))
 local VitalsHud = require(uiFolder:WaitForChild("VitalsHud"))
 local MapScreen = require(uiFolder:WaitForChild("MapScreen"))
+local AbilitiesPanel = require(uiFolder:WaitForChild("AbilitiesPanel"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -140,6 +155,7 @@ local VitalsController = require(script.Parent:WaitForChild("VitalsController"))
 local ThreatFx = require(script.Parent:WaitForChild("ThreatFx"))
 local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 local CampFx = require(script.Parent:WaitForChild("CampFx"))
+local SecretFx = require(script.Parent:WaitForChild("SecretFx"))
 local Haptics = require(script.Parent:WaitForChild("Haptics"))
 
 local HUMANOID_WAIT_SECONDS = 5
@@ -153,12 +169,24 @@ local RANGED_SLOT = "ranged"
 local ADMIT_CHECK_LEVER = "admitCheck"
 -- L1 ruling 33, Studio only: the keys, the lever each sends and the line that names them.
 -- L1b-W4-31: on the road N stops at the next open camp's approach before the boss room.
-local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: string } } = {
+-- L2-19: H resets the caller's secrets, V grants Valor; J (AIR_JUMP_KEY) toggles Double Jump.
+local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.N] = { lever = "skip", value = "stage" },
 	[Enum.KeyCode.B] = { lever = "skip", value = "boss" },
 	[Enum.KeyCode.G] = { lever = "gear", value = "next" },
+	[Enum.KeyCode.H] = { lever = "resetSecrets", value = true },
+	[Enum.KeyCode.V] = { lever = "grantValor", value = Theme.COMBAT_DEBUG_GRANT_VALOR },
 }
-local DEBUG_HINT = "N next camp · B boss · G gear"
+local AIR_JUMP_KEY = Enum.KeyCode.J
+local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · H reset secrets · V +"
+	.. tostring(Theme.COMBAT_DEBUG_GRANT_VALOR)
+	.. " Valor"
+-- L2-10: the Abilities panel's key, in the lobby, and what the first refused air jump says.
+local HOLD_ABILITIES = "abilities"
+local ABILITIES_KEY = Enum.KeyCode.K
+local ABILITIES_KEY_HINT = "K or Esc closes"
+local AIR_JUMP_HINT_KEYS = "Double Jump: buy it in the lobby (K)"
+local AIR_JUMP_HINT_TOUCH = "Double Jump: buy it in the lobby (Abilities)"
 -- Run phases with nothing left to fight: the summary card has the screen.
 local RUN_OVER_PHASES: { [string]: boolean } = { summary = true, ended = true }
 -- L1 ruling 8: the five phases in which a member may act.
@@ -203,6 +231,8 @@ local PAD_KEYS: { [Enum.KeyCode]: boolean } = {
 local ABANDON_KEY = Enum.KeyCode.Backspace
 -- What a refused RequestStartLevel tells the player (ActionResult.reason).
 local START_ACTION = "startLevel"
+-- L2-9: a purchase's answer, which the Abilities panel reads.
+local BUY_ABILITY_ACTION = "buyAbility"
 local START_REFUSALS: { [string]: string } = {
 	notLeader = "Only the leader can depart",
 	busy = "Not ready yet",
@@ -610,6 +640,13 @@ local function forwardPoint(
 		return nil
 	end
 	return if distance <= lobbyDistance then target else lobbyAt
+end
+
+-- L2-19: the lever J and the strip's button send for the caller: Double Jump off when the
+-- server's attribute says it is owned, on otherwise.
+local function airJumpLever(): string
+	local owned = Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) == true
+	return if owned then "removeAbility" else "grantAbility"
 end
 
 -- A boot's first layout pass. It must never take the boot down with it: the snapshot request
@@ -1168,6 +1205,8 @@ local function bootMission(): ()
 		requestStartLevel = remotesFolder:WaitForChild("RequestStartLevel", timeout) :: RemoteEvent?,
 		requestAbandon = remotesFolder:WaitForChild("RequestAbandon", timeout) :: RemoteEvent?,
 		requestDebug = remotesFolder:WaitForChild("RequestDebug", timeout) :: RemoteEvent?,
+		requestBuyAbility = remotesFolder:WaitForChild("RequestBuyAbility", timeout) :: RemoteEvent?,
+		combatFx = remotesFolder:WaitForChild("CombatFx", timeout) :: RemoteEvent?,
 	}
 
 	-- Above the range layer, so the run layer, the map, cards and toasts draw over the
@@ -1374,8 +1413,49 @@ local function bootMission(): ()
 			onToggle = function(open: boolean)
 				CameraController.SetCursorHold(HOLD_DEBUG, open)
 			end,
+			-- L2-19: the strip's Double Jump button asks which way to flip it when pressed.
+			airJump = { id = Unlocks.AIR_JUMP, lever = airJumpLever },
 		})
 		else nil
+	if debugPanel ~= nil then
+		local attribute = Unlocks.Attribute(Unlocks.AIR_JUMP)
+		local function paintAirJump(): ()
+			debugPanel.SetAirJump(player:GetAttribute(attribute) == true)
+		end
+		player:GetAttributeChangedSignal(attribute):Connect(paintAirJump)
+		paintAirJump()
+	end
+
+	-- L2-10: the lobby's Abilities panel (no offers in the config = no panel and no button).
+	local offers = AbilitiesPanel.Offers(expeditions)
+	local abilitiesPanel = if #offers > 0
+		then AbilitiesPanel.new(screenGui, offers, {
+			onBuy = function(abilityId: string): boolean
+				local remote = remotes.requestBuyAbility
+				if remote == nil then
+					return false
+				end
+				remote:FireServer(abilityId)
+				return true
+			end,
+			onOpenChanged = function(open: boolean)
+				CameraController.SetCursorHold(HOLD_ABILITIES, open)
+				if debugPanel ~= nil then
+					debugPanel.SetVisible(not open)
+				end
+			end,
+			toast = toast.Show,
+			keyHint = if UserInputService.KeyboardEnabled then ABILITIES_KEY_HINT else nil,
+		})
+		else nil
+	SecretFx.Mount(screenGui, toast.Show)
+	MovementController.SetAirJumpHintHandler(function()
+		toast.Show(
+			if UserInputService.KeyboardEnabled then AIR_JUMP_HINT_KEYS else AIR_JUMP_HINT_TOUCH,
+			Theme.AIR_JUMP_HINT_SECONDS,
+			false
+		)
+	end)
 
 	if expeditions ~= nil then
 		mapScreen = MapScreen.new(screenGui, expeditions, {
@@ -1411,14 +1491,30 @@ local function bootMission(): ()
 	local function openMap(): ()
 		local screen = mapScreen
 		if screen ~= nil and st.phase == "lobby" then
+			if abilitiesPanel ~= nil then
+				abilitiesPanel.Close() -- one sheet at a time
+			end
 			screen.Open()
 		end
+	end
+	-- L2-10: K and the HUD's button. The panel opens only in the lobby (SetLobby).
+	local function toggleAbilities(): ()
+		local panel = abilitiesPanel
+		if panel == nil or st.phase ~= "lobby" then
+			return
+		end
+		local screen = mapScreen
+		if not panel.IsOpen() and screen ~= nil and screen.IsOpen() then
+			screen.Close()
+		end
+		panel.Toggle()
 	end
 
 	-- The cluster's handlers are never pressed (it is not shown); they route to the range path
 	-- like every other entry point, so a stray call still does the right thing.
 	local hud = CombatHud.new(screenGui, {
 		onMap = if mapScreen ~= nil then openMap else nil,
+		onAbilities = if abilitiesPanel ~= nil then toggleAbilities else nil,
 		onLeave = leave,
 		onAbandon = abandon,
 		-- Fix round: Abandon has a key, named on its button, and while it waits for its second
@@ -1532,6 +1628,11 @@ local function bootMission(): ()
 		wallet.valor = if typeof(combat.valor) == "number" then combat.valor else 0
 		wallet.materials = if typeof(combat.materials) == "table" then combat.materials else {}
 		paintWallet()
+		if abilitiesPanel ~= nil then
+			local owned = combat.abilities
+			abilitiesPanel.SetState(wallet.valor, if typeof(owned) == "table" then owned else {})
+		end
+		SecretFx.SetFound(combat.secrets)
 	end
 
 	local function onStateChanged(payload: any): ()
@@ -1703,6 +1804,7 @@ local function bootMission(): ()
 			if debugPanel ~= nil then
 				debugPanel.SetKinds(rewardedKinds(run.levelId))
 			end
+			SecretFx.SetLevel(run.levelId)
 			-- A new level (or the lobby again) comes with a move of the body, and the server's
 			-- word of the move and this RunState arrive in either order: a word that came first
 			-- was read against the level before. Face forward again from the point it named,
@@ -1770,6 +1872,9 @@ local function bootMission(): ()
 			end
 		end
 		InputController.SetPhase(phase, waiting)
+		if abilitiesPanel ~= nil then
+			abilitiesPanel.SetLobby(phase == "lobby")
+		end
 
 		-- The map opens whenever the phase becomes `lobby` (the first RunState and every
 		-- return) and closes when the phase leaves it. On a return the server refuses a start
@@ -1864,6 +1969,12 @@ local function bootMission(): ()
 			end
 			return
 		end
+		if typeof(payload) == "table" and payload.action == BUY_ABILITY_ACTION then
+			if abilitiesPanel ~= nil then
+				abilitiesPanel.OnResult(payload)
+			end
+			return
+		end
 		local text, isError = actionResultText(payload)
 		if text ~= nil then
 			toast.Show(text, Theme.TOAST_ERROR_SECONDS, isError)
@@ -1897,6 +2008,10 @@ local function bootMission(): ()
 		if screen ~= nil then
 			screen.SetLayout(scale, size)
 		end
+		if abilitiesPanel ~= nil then
+			abilitiesPanel.SetLayout(scale, size)
+		end
+		SecretFx.SetLayout(scale)
 		crosshair.SetLayout(scale)
 		FeedbackController.SetLayout(scale)
 		local _, clusterLeft, clusterTop = touchCluster()
@@ -1939,14 +2054,27 @@ local function bootMission(): ()
 				if screen.IsOpen() then
 					screen.Close()
 				else
-					screen.Open()
+					openMap()
 				end
 			end
 			return
 		end
-		local lever = if studio then DEBUG_KEYS[input.KeyCode] else nil
+		if input.KeyCode == ABILITIES_KEY then
+			toggleAbilities()
+			return
+		end
 		local remote = remotes.requestDebug
-		if lever ~= nil and remote ~= nil and debounced() then
+		if not studio or remote == nil then
+			return
+		end
+		if input.KeyCode == AIR_JUMP_KEY then
+			if debounced() then
+				remote:FireServer(airJumpLever(), Unlocks.AIR_JUMP)
+			end
+			return
+		end
+		local lever = DEBUG_KEYS[input.KeyCode]
+		if lever ~= nil and debounced() then
 			remote:FireServer(lever.lever, lever.value)
 		end
 	end
@@ -1960,6 +2088,25 @@ local function bootMission(): ()
 	-- L1b: "Checkpoint" goes on the notice line under the wallet, the place the banner already
 	-- keeps clear of (placeBanner), not into the toast with the personal notices.
 	CampFx.SetNoticeHandler(hud.ShowNotice)
+	-- L2-14: a chest found or locked arrives on CombatFx (a batch, or one effect); only the
+	-- `secret` kind is SecretFx's, CombatFxController reads the rest.
+	local combatFx = remotes.combatFx
+	if combatFx ~= nil then
+		combatFx.OnClientEvent:Connect(function(payload: any)
+			if typeof(payload) ~= "table" then
+				return
+			end
+			if payload.kind ~= nil then
+				SecretFx.OnFx(payload)
+				return
+			end
+			for _, fx in payload :: { any } do
+				if typeof(fx) == "table" and fx.kind == "secret" then
+					SecretFx.OnFx(fx)
+				end
+			end
+		end)
+	end
 
 	remotes.stateChanged.OnClientEvent:Connect(onStateChanged)
 	remotes.actionResult.OnClientEvent:Connect(onActionResult)

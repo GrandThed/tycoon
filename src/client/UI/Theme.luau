@@ -1320,6 +1320,70 @@ local Theme = {
 	COMBAT_PERF_WIDTH = 140,
 	COMBAT_PERF_HEIGHT = 16,
 
+	-- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-3, L2-10, L2-14, L2-15).
+	-- The run layer's "Abilities" button, between Map and Return in the lobby. Map 72 +
+	-- Abilities 88 + Return 104 and two gaps make a 280 design px row: 257 px at MIN_SCALE on a
+	-- 667 x 375 phone, 280 of 375 in portrait.
+	COMBAT_ABILITIES_BUTTON_WIDTH = 88,
+	-- The Abilities panel (UI/AbilitiesPanel): a sheet over a scrim like the map. Its width
+	-- fits a 375 px portrait phone at MIN_SCALE with a margin; its rows scroll where a short
+	-- landscape screen cannot hold them all. Every button is 48 design px (44 physical at
+	-- MIN_SCALE).
+	ABILITIES_WIDTH = 340,
+	ABILITIES_PADDING = 10,
+	ABILITIES_HEADER_HEIGHT = 48,
+	ABILITIES_ROW_HEIGHT = 68, -- name, two lines of text, the price
+	ABILITIES_ROW_GAP = 6,
+	ABILITIES_BUTTON_WIDTH = 104,
+	ABILITIES_BUTTON_HEIGHT = 48,
+	ABILITIES_NAME_TEXT = 15,
+	ABILITIES_HINT_HEIGHT = 14,
+	ABILITIES_HINT_TEXT = 10,
+	-- A Buy the server never answered is live again after this long.
+	ABILITIES_RESULT_TIMEOUT_SECONDS = 3,
+	ABILITIES_TOAST_SECONDS = 2.5,
+	-- The first refused air jump of a session says where to get it, for this long.
+	AIR_JUMP_HINT_SECONDS = 4,
+	-- The map card's secrets row (MapScreen): one icon per secret with its key under it. 30
+	-- design px keeps the open card inside 330 design px of height (667 x 375 under a 58 px top
+	-- bar) with Return and no key line; with a keyboard as well it ends 6 px into the margin.
+	MAP_SECRET_ROW_HEIGHT = 30,
+	MAP_SECRET_ICON_SIZE = 16,
+	MAP_SECRET_ICON_TEXT = 11,
+	MAP_SECRET_CELL_WIDTH = 50,
+	MAP_SECRET_KEY_TEXT = 9,
+	-- What each key reads under its icon, and in a "Needs ..." toast (tools/check_levels.py
+	-- NEED_WORDS). A key not listed reads in capitals.
+	MAP_SECRET_KEY_WORDS = { doubleJump = "2× JUMP", fire = "FIRE", ice = "ICE" } :: {
+		[string]: string,
+	},
+	SECRET_NEED_WORDS = { doubleJump = "DOUBLE JUMP", fire = "FIRE", ice = "ICE" } :: {
+		[string]: string,
+	},
+	-- SecretFx: a light column over every unfound chest, so a chest is seen before it is reached
+	-- (non-colliding and never queried: no ray, camera or touch meets it).
+	SECRET_COLUMN_WIDTH = 2.5,
+	SECRET_COLUMN_HEIGHT = 60,
+	SECRET_COLUMN_TRANSPARENCY = 0.55,
+	SECRET_COLUMN_COLOR = Color3.fromRGB(214, 160, 255),
+	-- The chest's tint once found when Expeditions.json has no `secretOpen` look.
+	SECRET_OPEN_FALLBACK_COLOR = Color3.fromRGB(255, 200, 61),
+	-- The find: a burst (not on low-end devices) and a centre card for this long.
+	SECRET_CARD_SECONDS = 3,
+	SECRET_CARD_WIDTH = 300,
+	SECRET_CARD_PADDING = 12,
+	SECRET_CARD_TITLE_TEXT = 20,
+	SECRET_CARD_LINE_TEXT = 15,
+	SECRET_CARD_NOTE_TEXT = 12,
+	SECRET_CARD_TRANSPARENCY = 0.1,
+	SECRET_BURST_COUNT = 40,
+	SECRET_BURST_SECONDS = 1.5,
+	SECRET_BURST_SPEED = 18,
+	SECRET_BURST_SPREAD = 60, -- degrees off straight up
+	SECRET_BURST_SIZE = 0.6, -- studs, shrinking to nothing
+	SECRET_BURST_COLOR = Color3.fromRGB(255, 214, 92),
+	SECRET_TOAST_SECONDS = 3,
+
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,
 	ZINDEX_DIALOG = 20,

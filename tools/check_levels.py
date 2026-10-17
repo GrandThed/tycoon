@@ -9,6 +9,12 @@ L1b Wave 4, "no waits, no walls": the chase regions (their data, standable cells
 fences crossed only at gates, the lock clearance), camps.meleeAbove's range, the sniper perches,
 N's approaches and the tents' pace keys.
 
+L2 Wave 1, "the bought double jump and the lookout": Expeditions.json `abilities` and the price of
+Double Jump, SecretFlow's trigger numbers and the Studio levers, and "a secret is out of reach
+without its key, within reach with it" (L2-18): the owner's band, one jump with a dash, every
+lifting ability's arc worst case (LIFT_MODEL), the trigger met only on the ledge, and rewards only
+behind a sold key.
+
 A level is built in Studio from `src/shared/Layouts/Levels/<Name>.json`, and nobody sees it there
 before the owner does. This tool proves the layout on paper instead: it walks the level's `route`
 over the layout's boxes the way a player with one jump would, checks every gate of the constraint
@@ -22,7 +28,7 @@ What it reads, and copies no number from:
   Config/ProvingGrounds.json  movement.* (jump, double jump, walk, dash), the crowd kinds' radii,
                               keepAway bands and ground attacks' heights, threat.spawnClear,
                               crowd.maxAlive
-  Config/Expeditions.json     the map's nodes, themes and looks
+  Config/Expeditions.json     the map's nodes, themes, looks and abilities
   Config/Levels/*.json        each level's stages (which kinds stand in which camp, the boss spot)
   Layouts/Levels/*.json       the layouts; a file that names an `arena` is read through
                               sim_range.arena_as_layout, the mirror of LevelGeometry.FromArena
@@ -48,8 +54,8 @@ Usage:
   py tools/check_levels.py --plan-only    # the plans only
   py tools/check_levels.py --scale 4 8    # studs per character across and down (default 4 8)
 
-Every rule L1c and its fix round added is shown red on a mutated copy by
-tools/check_levels_mutants.py (run_gates below is what it calls).
+Every rule L1c and its fix round added, and every rule of L2 Wave 1, is shown red on a mutated copy
+by tools/check_levels_mutants.py (run_gates below is what it calls).
 """
 
 from __future__ import annotations
@@ -136,8 +142,9 @@ DENSITY_AREA = 200.0  # a camp's maxAlive is at most its floor area over this (t
 BAND_SHARE = 0.45  # a keepAway kind's bandMin is at most this share of the camp's shorter side
 RUN_CAP_RATIO = 2.0
 REQUIRED_LOOKS = ("ground", "path", "campFloor", "wall", "gate", "checkpoint", "checkpointDone", "secret",
-                  "sign", "water", "lobby", "fire", "tent")
-COLOUR_LOOKS = ("gate", "checkpoint", "checkpointDone", "secret", "fire", "tent")  # each must read at a glance
+                  "secretOpen", "sign", "water", "lobby", "fire", "tent")
+# Each must read at a glance (secretOpen, L2-14: a chest the player has found, tinted gold).
+COLOUR_LOOKS = ("gate", "checkpoint", "checkpointDone", "secret", "secretOpen", "fire", "tent")
 GREY_SPREAD = 40  # a grey's channels lie within this of each other; a colour's do not
 # The engine's Enum.Material names. LevelService leaves a Part of an unknown look or material as
 # the engine makes it, with one warn, so a look must name one of these, and a layout may name
@@ -203,6 +210,31 @@ FLOOR_WALLS = True
 # (sim_range.trigger_ceiling, StageFlow.Ceiling). False judges it at levels.triggerHeight, the
 # first fix round's rule, for the mutant driver.
 WALLED_CEILING = True
+# L2 Wave 1 (docs/prompts/l2-w1-contract.md): bought abilities, and secrets as chests behind keys.
+AIR_JUMP = "doubleJump"  # Unlocks.AIR_JUMP: the ability id the air jump keys on (structural)
+SECRET_RULES = ("secretReach", "secretBelow", "secretAbove")  # Combat.json levels: SecretFlow.Triggered (L2-11)
+DEBUG_UNLOCK_KEYS = ("grantAbilityAttribute", "removeAbilityAttribute", "resetSecretsAttribute")  # L2-19
+ABILITY_ID_MAX = 32  # CombatRemotes.MAX_ABILITY_ID_LENGTH: an id the buy remote carries (L2-7)
+SECRET_VALOR_MIN = 2  # L2-13: a paying chest gives at least this much Valor, and less than its key's price
+BODY_RADIUS = 1.0  # the root's half width on the flat (a body stands this far over an edge)
+# L2-18 (c), every lifting ability against a secret's ledge: arcs sampled this often, take-offs and
+# targets on this grid, plus this many targets on the castRange circle.
+LIFT_STEP = 0.5
+LIFT_GRID = 2.0
+LIFT_RIM = 64
+LIFT_ROUTES_MAX = 40  # (c) stops after this many take-offs with a route (enough to report)
+# (c)'s model of an aimed lift, a switch like UNDER_SIDE, and the code as it stands:
+# * "today": MovementController.Leap's apex is the lift's `height` over the higher of the root and
+#   the target, so a Leap Smash cast at the top of a jump rises jumpHeight + height over the floor;
+#   and GroundPoint's caster floor over a void is the caster's feet (L1c).
+# * "floor": the apex is `height` over the higher of the target and the caster's floor, never over an
+#   airborne root; and the caster's floor over a void is the feet less WallClip.Rise(movement, false).
+#   The change docs/prompts/l2-w1-reports/economy-designer.md asks for: it closes every lift route.
+LIFT_MODEL = "today"
+# Every mission is played with ProvingGrounds.json `loadout` (L2-5), whose families lift nobody, so a
+# route (c) finds under LIFT_MODEL is a known limit until W2's loadout picker: reported, not gated,
+# while no family with a lifting ability can enter a level. False gates it outright (the mutants).
+LIFT_KNOWN_LIMIT_W2 = True
 THEME_PATH = REPO_ROOT / "src" / "client" / "UI" / "Theme.luau"
 # The Theme numbers the highest camera is built from (the client's; read from the file, never copied).
 THEME_KEYS = ("COMBAT_CAMERA_PIVOT_HEIGHT", "COMBAT_CAMERA_MIN_PITCH_DEGREES", "COMBAT_SHAKE_MAX_STUDS")
@@ -622,6 +654,386 @@ def route_height_near(layout, x, z):
 
 
 # ---------------------------------------------------------------------------------------------
+# L2 Wave 1: a secret is out of reach without its key, within reach with it (L2-11, L2-18)
+# ---------------------------------------------------------------------------------------------
+
+
+def secret_rules(levels):
+    """SecretFlow.Triggered's numbers (Combat.json levels, L2-11): (reach, below, above), or None
+    when one is not a number."""
+    values = [levels.get(key) for key in SECRET_RULES]
+    return tuple(float(v) for v in values) if all(is_number(v) for v in values) else None
+
+
+def ability_ids(expeditions):
+    """The ids Expeditions.json `abilities.list` sells (Unlocks.HasKey holds only these)."""
+    return [a.get("id") for a in ((expeditions.get("abilities") or {}).get("list") or []) if isinstance(a, dict)]
+
+
+def lifting_abilities(proving):
+    """Every family's ability that lifts its caster, worst case (L2-18 c): [(family, ability)]."""
+    return [(family, w["ability"]) for family, w in sorted(proving["weapons"].items())
+            if (w.get("ability") or {}).get("height") and (w.get("ability") or {}).get("castRange")]
+
+
+def fielded_lifts(proving):
+    """The lifting abilities a level fields today: every mission is played with `loadout` (L2-5)."""
+    loadout = proving.get("loadout") or {}
+    return [family for family, _ability in lifting_abilities(proving) if family in loadout.values()]
+
+
+def point_rect(rect, x, z):
+    """The flat distance from (x, z) to a rectangle (x0, x1, z0, z1, ...)."""
+    return math.hypot(max(rect[0] - x, x - rect[1], 0.0), max(rect[2] - z, z - rect[3], 0.0))
+
+
+def segment_point(ax, az, bx, bz, px, pz):
+    """The flat distance from (px, pz) to the segment a-b."""
+    dx, dz = bx - ax, bz - az
+    run = dx * dx + dz * dz
+    f = 0.0 if run <= EPS else max(0.0, min(1.0, ((px - ax) * dx + (pz - az) * dz) / run))
+    return math.hypot(ax + dx * f - px, az + dz * f - pz)
+
+
+def segment_rect(ax, az, bx, bz, rect):
+    """The flat distance from the segment a-b to a rectangle (0 when it crosses or enters it)."""
+    if point_rect(rect, ax, az) <= EPS or point_rect(rect, bx, bz) <= EPS or seg_hits_rect(ax, az, bx, bz, rect[:4]):
+        return 0.0
+    corners = ((rect[0], rect[2]), (rect[0], rect[3]), (rect[1], rect[2]), (rect[1], rect[3]))
+    return min([point_rect(rect, ax, az), point_rect(rect, bx, bz)]
+               + [segment_point(ax, az, bx, bz, cx, cz) for cx, cz in corners])
+
+
+def secret_base(solids, secret):
+    """The block or floor a secret stands on: its top is the secret's bottom and it holds the
+    secret's centre; None when it floats."""
+    bottom = secret["y"] - secret["sy"] / 2
+    return next((s for s in solids if s.kind in ("block", "floor") and abs(s.top - bottom) < 0.01
+                 and s.holds(secret["x"], secret["z"])), None)
+
+
+def key_rects(solids, base, chest):
+    """The tops a secret's key opens: the base's top less whatever stands on it (an unclimbable
+    wall, the chest), and the chest's own top. [(x0, x1, z0, z1, top, name)]."""
+    covers = [s for s in solids if s is not base and s.top > base.top + EPS and s.bottom < base.top + BODY_HEIGHT
+              and s.x1 > base.x0 + EPS and s.x0 < base.x1 - EPS and s.z1 > base.z0 + EPS and s.z0 < base.z1 - EPS]
+    xs = sorted({base.x0, base.x1} | {min(max(v, base.x0), base.x1) for s in covers for v in (s.x0, s.x1)})
+    zs = sorted({base.z0, base.z1} | {min(max(v, base.z0), base.z1) for s in covers for v in (s.z0, s.z1)})
+    rects = []
+    for i in range(len(xs) - 1):
+        for k in range(len(zs) - 1):
+            if xs[i + 1] - xs[i] <= EPS or zs[k + 1] - zs[k] <= EPS:
+                continue
+            cx, cz = (xs[i] + xs[i + 1]) / 2, (zs[k] + zs[k + 1]) / 2
+            if not any(c.holds(cx, cz) for c in covers):
+                rects.append((xs[i], xs[i + 1], zs[k], zs[k + 1], base.top, base.name))
+    rects.append((chest.x0, chest.x1, chest.z0, chest.z1, chest.top, chest.name))
+    return rects
+
+
+def lift_takeoffs(solids, box, reach, skip, tall, move, model):
+    """(c)'s take-offs for one cast range: {(x, z, feet): (the caster's floor, how)}. Every
+    standable top (not an unclimbable wall, not a key surface) within castRange and a body's radius
+    of the key tops, on a LIFT_GRID grid, cast on the ground and at the top of one jump; and off
+    each such top's edge at the top of a jump, pushed out 1 and 4 studs, as far as the jump carries
+    at walk speed, and that plus half and all of an air dash (which holds its height). There the
+    caster's floor is the top under him, or over a void LIFT_MODEL's rule."""
+    jump = move["jumpHeight"]
+    standable = ("block", "floor", "secret", "fence", "obstacle")
+    top_reach = move["walkSpeed"] * math.sqrt(2 * jump / sr.GRAVITY)
+    offs = (1.0, 4.0, top_reach, top_reach + move["dashDistance"] / 2, top_reach + move["dashDistance"])
+    takeoffs = {}
+    for s in solids:
+        if s.kind not in standable or s.name in tall or s.name in skip:
+            continue
+        if rect_gap((s.x0, s.x1, s.z0, s.z1), box) > reach + BODY_RADIUS + offs[-1]:
+            continue
+        for x, z in standable_points(solids, s, LIFT_GRID):
+            if point_rect(box, x, z) <= reach + BODY_RADIUS:
+                takeoffs.setdefault((round(x, 2), round(z, 2), s.top), (s.top, f"{s.name} (on the ground)"))
+                takeoffs.setdefault((round(x, 2), round(z, 2), s.top + jump), (s.top, f"{s.name} (at a jump's top)"))
+        feet = s.top + jump
+        xs = [s.x0 + LIFT_GRID * k for k in range(int((s.x1 - s.x0) / LIFT_GRID) + 1)] + [s.x1]
+        zs = [s.z0 + LIFT_GRID * k for k in range(int((s.z1 - s.z0) / LIFT_GRID) + 1)] + [s.z1]
+        rim = ([(x, s.z0, 0.0, -1.0) for x in xs] + [(x, s.z1, 0.0, 1.0) for x in xs]
+               + [(s.x0, z, -1.0, 0.0) for z in zs] + [(s.x1, z, 1.0, 0.0) for z in zs])
+        for ex, ez, nx, nz in rim:
+            for d in offs:
+                x, z = ex + nx * d, ez + nz * d
+                if point_rect(box, x, z) > reach + BODY_RADIUS:
+                    continue
+                if any(o.holds(x, z) and o.top > feet + EPS and o.bottom < feet + BODY_HEIGHT for o in solids):
+                    continue  # inside something: no body there
+                under, _o = ground(solids, x, z, feet, kinds=standable)
+                if under is None:
+                    floor, how = (feet if model == "today" else feet - jump), "a void"
+                else:
+                    floor, how = under, f"a top at {under:g}"
+                takeoffs.setdefault((round(x, 2), round(z, 2), feet), (floor, f"off {s.name}'s edge, over {how}"))
+    return takeoffs
+
+
+def lift_arc_route(x, z, feet, caster, grid, near, keys, box, move, height, model):
+    """One take-off of (c): the first target whose arc puts the feet STEP_UP under a key top or
+    higher within BODY_RADIUS of it, as (target x, z, floor, sample x, z, feet, key), or None."""
+    jump = move["jumpHeight"]
+    low = min(k[4] for k in keys) - STEP_UP
+    root = feet + sr.ROOT_HEIGHT
+    for dx, dz in grid:
+        tx, tz = x + dx, z + dz
+        if segment_rect(x, z, tx, tz, box) > BODY_RADIUS + EPS:
+            continue
+        floor = max([o.top for o in near if o.holds(tx, tz)], default=None)
+        floor = caster if floor is None else floor
+        if floor - caster > jump + EPS:
+            continue  # GroundPoint refuses it: WallClip.TooHigh with Rise(movement, false)
+        to = floor + sr.ROOT_HEIGHT
+        apex = (max(root, to) + height if model == "today"
+                else max(root, to + height, caster + sr.ROOT_HEIGHT + height))
+        if apex - sr.ROOT_HEIGHT < low - EPS:
+            continue
+        up, down = math.sqrt(max(apex - root, 0.0)), math.sqrt(max(apex - to, 0.0))
+        share = up / (up + down) if up + down > EPS else 0.5
+        steps = max(int(math.ceil(math.hypot(dx, dz) / LIFT_STEP)), 1)
+        for k in range(steps + 1):
+            u = k / steps
+            if u <= share and share > EPS:
+                y = apex - (apex - root) * ((share - u) / share) ** 2
+            elif share < 1 - EPS:
+                y = apex - (apex - to) * ((u - share) / (1 - share)) ** 2
+            else:
+                y = apex
+            px, pz, f = x + dx * u, z + dz * u, y - sr.ROOT_HEIGHT
+            hit = next((kr for kr in keys if point_rect(kr, px, pz) <= BODY_RADIUS + EPS and f >= kr[4] - STEP_UP - EPS),
+                       None)
+            if hit is not None:
+                return tx, tz, floor, px, pz, f, hit
+            if k > 0 and any(o.holds(px, pz) and o.top > f + EPS and o.bottom < f + BODY_HEIGHT - EPS for o in near):
+                break  # stopped against a solid
+    return None
+
+
+def lift_routes(solids, keys, skip, tall, move, lifts, model=None):
+    """L2-18 (c): every way a player WITHOUT the double jump gets a lifting ability's arc onto a
+    secret's ledge (lift_takeoffs, then lift_arc_route). Targets as GroundPoint finds them: every
+    point within castRange on the flat (a LIFT_GRID grid and LIFT_RIM points on the rim); its floor
+    is the highest top under it, or the caster's floor over a void; refused when more than
+    WallClip.Rise(movement, false) = jumpHeight over the caster's floor. The arc is
+    MovementController.Leap's under LIFT_MODEL, sampled every LIFT_STEP and stopped at the first
+    solid over the feet. One route per take-off, at most LIFT_ROUTES_MAX: [text]."""
+    model = model or LIFT_MODEL
+    jump = move["jumpHeight"]
+    low = min(k[4] for k in keys) - STEP_UP
+    box = (min(k[0] for k in keys), max(k[1] for k in keys), min(k[2] for k in keys), max(k[3] for k in keys))
+    standable = ("block", "floor", "secret", "fence", "obstacle")
+    found = []
+    for family, ability in lifts:
+        height, reach = float(ability["height"]), float(ability["castRange"])
+        cells = int(reach // LIFT_GRID)
+        grid = [(dx * LIFT_GRID, dz * LIFT_GRID) for dx in range(-cells, cells + 1) for dz in range(-cells, cells + 1)
+                if math.hypot(dx * LIFT_GRID, dz * LIFT_GRID) <= reach + EPS]
+        grid += [(reach * math.cos(2 * math.pi * k / LIFT_RIM), reach * math.sin(2 * math.pi * k / LIFT_RIM))
+                 for k in range(LIFT_RIM)]
+        for (x, z, feet), (caster, how) in sorted(lift_takeoffs(solids, box, reach, skip, tall, move, model).items()):
+            near = [o for o in solids if rect_gap((o.x0, o.x1, o.z0, o.z1), (x - reach, x + reach, z - reach, z + reach))
+                    <= EPS]
+            # The highest arc any legal target gives from here: none reaches a key's step-up height.
+            best = max([caster] + [o.top for o in near if (o.kind in standable or o.look == "wall")
+                                   and o.top - caster <= jump + EPS])
+            root = feet + sr.ROOT_HEIGHT
+            bound = (max(root, best + sr.ROOT_HEIGHT) + height if model == "today"
+                     else max(root, best + sr.ROOT_HEIGHT + height, caster + sr.ROOT_HEIGHT + height))
+            if bound - sr.ROOT_HEIGHT < low - EPS:
+                continue
+            hit = lift_arc_route(x, z, feet, caster, grid, near, keys, box, move, height, model)
+            if hit is not None:
+                tx, tz, floor, px, pz, f, key = hit
+                found.append(f"{family}'s {ability.get('name') or ability.get('id')} from {how} at ({x:g}, {feet:g}, "
+                             f"{z:g}) aimed at ({tx:.1f}, {floor:g}, {tz:.1f}): feet {f:.1f} at ({px:.1f}, {pz:.1f}) "
+                             f"over {key[5]}'s top {key[4]:g}")
+                if len(found) >= LIFT_ROUTES_MAX:
+                    return found
+    return found
+
+
+def check_secret_reach(name, layout, ctx, expect, solids, tall):
+    """L2-18 (a) to (d) for every secret whose key is a bought ability (Expeditions.json
+    abilities.list): only those may pay (e). (a) with the key: the ledge's band and a standable
+    point inside the trigger; (b) without it, no jump, step up and dash gets on the ledge (the old
+    lookout test, unclimbable walls left out); (c) nor any lifting ability's arc (lift_routes);
+    (d) the trigger is met from nowhere else: no other standable top puts a standing root in it,
+    and every point of its circle lies over the ledge or an unclimbable wall, so an airborne root
+    meets it only over the ledge, where (b) and (c) keep him out."""
+    move, levels = ctx["move"], ctx["levels"]
+    tag = f"{name}:"
+    jump = jump_facts(move)
+    rules = secret_rules(levels)
+    sold = ctx.get("abilityIds") or []
+    for secret in layout["secrets"]:
+        sid, needs = secret["id"], secret["needs"]
+        if needs not in sold:
+            continue
+        if needs != AIR_JUMP:
+            expect(False, f"{tag} the {sid} needs {needs}, a sold ability check_levels has no reach rule for (L2-18)")
+            continue
+        chest = next((s for s in solids if s.name == f"Secret_{sid}"), None)
+        base = secret_base(solids, secret)
+        if base is None or chest is None or rules is None:
+            expect(False, f"{tag} the {sid} stands on a ledge block, and Combat.json levels has "
+                   f"{', '.join(SECRET_RULES)} (L2-18)")
+            continue
+        reach, below, above = rules
+        keys = key_rects(solids, base, chest)
+        skip = {base.name, chest.name}
+        # (a) The owner's band, and the trigger holds a standable point on a key top.
+        road, away = route_height_near(layout, secret["x"], secret["z"])
+        rise = base.top - road
+        lo = move["jumpHeight"] + STEP_UP
+        hi = move["jumpHeight"] + move["doubleJumpHeight"] - LOOKOUT_UNDER_DOUBLE
+        expect(lo < rise <= hi, f"{tag} the {sid} ledge's top is over {lo:g} and at most {hi:g} studs above the "
+               f"road under it (over one jump's {move['jumpHeight']:g} and a step up of {STEP_UP:g}, under jump + "
+               f"double jump's {move['jumpHeight'] + move['doubleJumpHeight']:g}): {rise:g}, {away:.0f} studs from "
+               f"the road (L2-18a)")
+        held = [kr[5] for kr in keys if point_rect(kr, secret["x"], secret["z"]) <= reach + EPS
+                and -below - EPS <= kr[4] + sr.ROOT_HEIGHT - base.top <= above + EPS]
+        expect(bool(held), f"{tag} the {sid}'s trigger (levels.secretReach {reach:g}, a root {below:g} under to "
+               f"{above:g} over the chest's foot at {base.top:g}) holds a standable point with the key: "
+               + (", ".join(sorted(set(held))) if held else "none") + " (L2-18a)")
+        # (b) One jump, a step up and a dash, from every surface but the keys and unclimbable walls.
+        ways, closest = [], (math.inf, None)
+        for s in solids:
+            if s.name in skip or s.name in tall:
+                continue
+            need = base.top - s.top - STEP_UP
+            gap = min(rect_gap((s.x0, s.x1, s.z0, s.z1), kr[:4]) for kr in keys)
+            spare = need - move["jumpHeight"]
+            if gap <= move["walkSpeed"] * jump["air"] + move["dashDistance"] and spare < closest[0]:
+                closest = (spare, s.name)
+            carry = reach_at_rise(move, need)
+            if carry is not None and gap <= carry + move["dashDistance"] + EPS:
+                ways.append(f"{s.name} ({base.top - s.top:g} up, {gap:.0f} away)")
+        expect(not ways, f"{tag} the {sid} needs the double jump: no surface is within one jump, a step up of "
+               f"{STEP_UP:g} studs and a dash of its ledge, unclimbable walls left out (L2-18b)"
+               + (f" (reachable from {', '.join(ways)})" if ways else
+                  f" (the closest call: {closest[1]}, {closest[0]:g} studs short)" if closest[1] else ""))
+        # (c) Every lifting ability, worst case.
+        lifts = ctx.get("lifts") or []
+        routes = lift_routes(solids, keys, skip, tall, move, lifts)
+        fielded = ctx.get("fieldedLifts") or []
+        known = bool(routes) and LIFT_KNOWN_LIMIT_W2 and not fielded
+        count = f"{len(routes)}{'+' if len(routes) >= LIFT_ROUTES_MAX else ''}"
+        told = ", ".join(f"{family} ({a.get('name')}, height {a['height']:g}, castRange {a['castRange']:g})"
+                         for family, a in lifts) or "none"
+        if not routes:
+            verdict = "no arc of a player without it ends on its ledge"
+        elif known:
+            verdict = (f"KNOWN LIMIT until W2 (LIFT_KNOWN_LIMIT_W2): {count} take-offs reach it, and no family with a "
+                       f"lift can enter a level (ProvingGrounds.json loadout {', '.join(ctx.get('loadout') or [])}); "
+                       f"e.g. {routes[0]}")
+        else:
+            verdict = (f"{count} take-offs reach it" + (f", and {', '.join(fielded)} can enter a level" if fielded else "")
+                       + f": {'; '.join(routes[:2])}")
+        expect(not routes or known, f"{tag} the {sid} needs the double jump against every lifting ability ({told}; "
+               f"LIFT_MODEL \"{LIFT_MODEL}\"): {verdict} (L2-18c)")
+        if routes:
+            ctx["gate16"].setdefault(name, {}).setdefault("lifts", []).append(
+                f"{sid}: {count} take-offs under LIFT_MODEL \"{LIFT_MODEL}\"" + (" (known limit until W2)" if known else "")
+                + f", e.g. {routes[0]}")
+        # (d) Nothing else meets the trigger.
+        others = []
+        for s in solids:
+            if s.name in skip or s.name in tall or s.kind not in ("block", "floor", "secret", "fence", "obstacle"):
+                continue
+            if point_rect((s.x0, s.x1, s.z0, s.z1), secret["x"], secret["z"]) > reach + EPS:
+                continue
+            if not (-below - EPS <= s.top + sr.ROOT_HEIGHT - base.top <= above + EPS):
+                continue
+            if any(math.hypot(x - secret["x"], z - secret["z"]) <= reach + EPS
+                   for x, z in standable_points(solids, s, 0.5)):
+                others.append(s.name)
+        circle = [(secret["x"] + reach * i / 8 * math.cos(2 * math.pi * k / 32),
+                   secret["z"] + reach * i / 8 * math.sin(2 * math.pi * k / 32)) for i in range(9) for k in range(32)]
+        loose = [(x, z) for x, z in circle if not base.holds(x, z) and not any(
+            s.name in tall and s.holds(x, z) for s in solids)]
+        expect(not others and not loose,
+               f"{tag} the {sid}'s trigger is met only on its ledge: no other standable top puts a standing root in it, "
+               f"and its {reach:g}-stud circle lies over {base.name} or an unclimbable wall (L2-18d)"
+               + (f" (a root on {', '.join(others)})" if others else "")
+               + (f" (off the ledge at ({loose[0][0]:.1f}, {loose[0][1]:.1f}))" if loose else ""))
+
+
+def check_secret_rewards(file, layout, expeditions, expect):
+    """L2-18 (e) and L2-13's sizing: a level file's secret pays (valor, materials or family) only
+    when its key is an ability Expeditions.json sells, and then at least SECRET_VALOR_MIN Valor and
+    less than that ability's price."""
+    entries = file.get("secrets") or {}
+    sold = {a.get("id"): a for a in ((expeditions.get("abilities") or {}).get("list") or []) if isinstance(a, dict)}
+    needs = {s["id"]: s["needs"] for s in layout["secrets"]}
+    bad, told = [], []
+    for sid, entry in sorted(entries.items()):
+        pays = [key for key in ("valor", "materials", "family") if key in (entry or {})]
+        if not pays:
+            told.append(f"{sid} pays nothing")
+            continue
+        key = needs.get(sid)
+        if key not in sold:
+            bad.append(f"{sid} pays {', '.join(pays)} behind {key}, which no ability opens")
+            continue
+        price = (sold[key].get("price") or {}).get("valor")
+        valor = entry.get("valor") or 0
+        if not (is_number(price) and is_number(valor) and SECRET_VALOR_MIN <= valor < price):
+            bad.append(f"{sid}'s {valor} Valor is not at least {SECRET_VALOR_MIN} and under {key}'s price {price}")
+        told.append(f"{sid} behind {key}: {valor} Valor, {entry.get('materials') or 0} {file.get('material')}"
+                    + (f", the {entry['family']}" if entry.get("family") else ""))
+    expect(not bad, f"{file['id']}: a secret pays only behind a sold key, and then {SECRET_VALOR_MIN} Valor or more and "
+           f"under that key's price (L2-18e, L2-13): " + ("; ".join(bad) if bad else "; ".join(told) or "no secrets"))
+
+
+def check_abilities(expeditions, level_files, expect):
+    """L2-6: Expeditions.json `abilities.list` as UnlockService.Init reads it (an id, a name, a
+    text, a whole price in Valor over 0, an order), the air jump among them; and Double Jump costs
+    no more than one solo Normal clear of the first level pays (the boss's Valor x rewardMult)."""
+    listed = (expeditions.get("abilities") or {}).get("list")
+    if not isinstance(listed, list) or not listed:
+        expect(False, "Expeditions.json abilities.list: a list of abilities (L2-6)")
+        return
+    bad, ids = [], []
+    for index, a in enumerate(listed, 1):
+        a = a if isinstance(a, dict) else {}
+        aid = a.get("id")
+        ids.append(aid)
+        price = (a.get("price") or {}).get("valor") if isinstance(a.get("price"), dict) else None
+        if not (isinstance(aid, str) and 0 < len(aid) <= ABILITY_ID_MAX):
+            bad.append(f"entry {index}: id {aid!r}")
+        if not (isinstance(a.get("name"), str) and a["name"] and isinstance(a.get("text"), str) and a["text"]):
+            bad.append(f"{aid}: a name and a text")
+        if not sr.whole(price):
+            bad.append(f"{aid}: price.valor {price} is not a whole number over 0")
+        if not is_number(a.get("order")):
+            bad.append(f"{aid}: order {a.get('order')}")
+    if len(set(ids)) != len(ids):
+        bad.append("an id twice")
+    expect(not bad and AIR_JUMP in ids, f"Expeditions.json abilities.list: every entry has an id of at most "
+           f"{ABILITY_ID_MAX} characters, a name, a text, a whole price in Valor over 0 and an order, no id twice, and "
+           f"{AIR_JUMP} is one (L2-6): " + ("; ".join(bad) if bad else ", ".join(
+               f"{a['id']} {a['price']['valor']} Valor" for a in listed)) + ("" if AIR_JUMP in ids else f"; no {AIR_JUMP}"))
+    # The first level on the map (the first node of kind "level" with a built file).
+    by_id = {f["id"]: f for f in level_files}
+    first = next((by_id[n["level"]] for n in expeditions["nodes"] if n.get("kind") == "level" and n.get("level") in by_id
+                  and by_id[n["level"]].get("stages")), None)
+    air = next((a for a in listed if isinstance(a, dict) and a.get("id") == AIR_JUMP), None)
+    if first is None or air is None or bad:
+        return
+    boss = next((w["boss"] for st in first["stages"] for w in st.get("waves") or [] if w.get("boss")), None) or {}
+    normal = (first.get("difficulties") or {}).get("normal") or {}
+    clear = sr.luau_round(boss.get("valor", 0) * normal.get("rewardMult", 0))
+    price = air["price"]["valor"]
+    expect(0 < price <= clear, f"Expeditions.json: {air['name']} costs {price} Valor, at most one solo Normal clear of "
+           f"{first['name']} ({clear} Valor: the boss's {boss.get('valor')} x rewardMult {normal.get('rewardMult')}; "
+           f"MISSIONS_DESIGN 22)")
+
+
+# ---------------------------------------------------------------------------------------------
 # The gates of one level layout
 # ---------------------------------------------------------------------------------------------
 
@@ -923,44 +1335,8 @@ def check_layout(name, layout, ctx, expect):
         expect(wide > 0 and held == (cells + 1) ** 2,
                f"{tag} the {secret['id']} sign's {wide:g} x {deep:g} foot stands on solid ground at its height "
                f"{sign.get('y', 0):g} ({held} of {(cells + 1) ** 2} samples), {away:.0f} studs from the route")
-    lookout = next((s for s in layout["secrets"] if s["id"] == "lookout"), None)
-    if lookout is not None:
-        bottom = lookout["y"] - lookout["sy"] / 2
-        ledge = next((s for s in solids if s.kind == "block" and abs(s.top - bottom) < 0.01
-                      and s.holds(lookout["x"], lookout["z"])), None)
-        if ledge is None:
-            expect(False, f"{tag} the lookout stands on a ledge block")
-        else:
-            road, away = route_height_near(layout, lookout["x"], lookout["z"])
-            rise = ledge.top - road
-            lo = move["jumpHeight"] + STEP_UP
-            hi = move["jumpHeight"] + move["doubleJumpHeight"] - LOOKOUT_UNDER_DOUBLE
-            expect(lo < rise <= hi, f"{tag} the lookout ledge's top is over {lo:g} and at most {hi:g} studs above the "
-                   f"road under it (over one jump's {move['jumpHeight']:g} and a step up of {STEP_UP:g}, under jump + "
-                   f"double jump's {move['jumpHeight'] + move['doubleJumpHeight']:g}): {rise:g}, {away:.0f} studs from "
-                   f"the road")
-            # No other surface gives a single jump (with a dash) the ledge. A body steps up onto
-            # a ledge its feet are STEP_UP under, and the air dash holds its altitude, so the jump
-            # only has to rise to STEP_UP under the top. Fences, gates and cover count: a player
-            # stands on them while the camp is open.
-            ways = []
-            closest = (math.inf, None)
-            for s in solids:
-                if s is ledge or s.name == "Secret_lookout":
-                    continue
-                need = ledge.top - s.top - STEP_UP
-                spare = need - move["jumpHeight"]
-                if s.gap_to(ledge) <= move["walkSpeed"] * jump["air"] + move["dashDistance"] and spare < closest[0]:
-                    closest = (spare, s.name)
-                carry = reach_at_rise(move, need)
-                if carry is None:
-                    continue
-                if s.gap_to(ledge) <= carry + move["dashDistance"] + EPS:
-                    ways.append(f"{s.name} ({ledge.top - s.top:g} up, {s.gap_to(ledge):.0f} away)")
-            expect(not ways, f"{tag} the lookout needs the double jump: no surface is within one jump, a step up of "
-                   f"{STEP_UP:g} studs and a dash of its ledge"
-                   + (f" (reachable from {', '.join(ways)})" if ways else
-                      f" (the closest call: {closest[1]}, {closest[0]:g} studs short)" if closest[1] else ""))
+    # L2-18 (a) to (d): the secrets a bought ability opens.
+    check_secret_reach(name, layout, ctx, expect, solids, tall)
     if spec.get("creek"):
         waters = [s for s in solids if s.look == "water"]
         loose = [b.get("name") for b in layout["blocks"] if b["look"] == "water" and b.get("collide") is False]
@@ -2972,7 +3348,8 @@ def load_all():
            "ranks": sr.difficulty_ranks(expeditions), "snapshotHz": proving["crowd"]["snapshotHz"],
            "gate16": {}, "chains": {}, "longbow": longbow_range(proving),
            "abilityHeight": ability_height(proving), "camera": combat.get("camera"), "theme": theme_numbers(),
-           "renderer": renderer_numbers()}
+           "renderer": renderer_numbers(), "abilityIds": ability_ids(expeditions), "lifts": lifting_abilities(proving),
+           "fieldedLifts": fielded_lifts(proving), "loadout": sorted((proving.get("loadout") or {}).values())}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 
@@ -3049,7 +3426,18 @@ def check_rules(combat, level_files, ctx, expect):
     expect(is_number(levels.get("gateSeconds")) and levels["gateSeconds"] >= GATE_FLOOR,
            f"Combat.json levels.gateSeconds {levels.get('gateSeconds')} is at least {GATE_FLOOR:g} (the client learns the "
            f"floor that long before the first body)")
+    # L2-11: SecretFlow.Triggered's numbers, and L2-19's three Studio levers.
+    rules = secret_rules(levels)
+    expect(rules is not None and rules[0] > 0 and rules[1] >= 0 and rules[2] > 0,
+           "Combat.json levels (L2-11): secretReach and secretAbove over 0, secretBelow 0 or more: "
+           + ", ".join(f"{key} {levels.get(key)}" for key in SECRET_RULES))
     debug = combat.get("debug") or {}
+    names = [debug.get(key) for key in DEBUG_UNLOCK_KEYS]
+    taken = [v for k, v in debug.items() if k.endswith("Attribute") and k not in DEBUG_UNLOCK_KEYS]
+    expect(all(isinstance(v, str) and v for v in names) and len(set(names)) == len(names)
+           and not set(names) & set(taken),
+           "Combat.json debug (L2-19): " + ", ".join(f"{k} {debug.get(k)!r}" for k in DEBUG_UNLOCK_KEYS)
+           + " are Workspace attribute names of their own")
     presets = [(p.get("melee"), p.get("ranged")) for p in debug.get("gearPresets") or []]
     proving = debug.get("provingGear") or {}
     tiers = sorted({d["recommendedTier"] for file in level_files for d in (file.get("difficulties") or {}).values()}
@@ -3076,6 +3464,7 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
           f"jump + double jump {move['jumpHeight'] + move['doubleJumpHeight']:g}")
     print()
     check_map(expeditions, level_files, layouts, expect)
+    check_abilities(expeditions, level_files, expect)
     check_rules(combat, level_files, ctx, expect)
     # The layouts are measured with these: without one of them nothing below can be said.
     lost = [key for key in READ_RULES if not is_number(ctx["levels"].get(key))]
@@ -3091,6 +3480,8 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
     for file in level_files:
         level = sr.resolve_level(file, ctx["missions"].get(file.get("mission")), ctx["runCap"])
         check_level_file(file, level, layouts, ctx, expect)
+        if file.get("layout") in layouts:
+            check_secret_rewards(file, layouts[file["layout"]], expeditions, expect)
     bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
                  for name, layout in layouts.items()}
     for name, layout in layouts.items():
@@ -3124,6 +3515,8 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
             print(f"    sniper      {line}")
         for line in found.get("walled") or []:
             print(f"    walled      {line}")
+        for line in found.get("lifts") or []:
+            print(f"    lifts       {line}")
     return facts
 
 
@@ -3176,12 +3569,6 @@ def main():
                         + (f" (+{l['rise']:g})" if l["via"] == "climb" else "") for l in legs))
         print()
         print("  " + LEGEND)
-        # A note for L2, not a gate (INTERFACES "Open for later steps").
-        ability = combat and sr.load_config(sr.CONFIG_PATH)["weapons"].get("greataxe", {}).get("ability") or {}
-        if ability.get("height"):
-            move = ctx["move"]
-            print(f"  note for L2: Leap Smash rises {ability['height']:g} studs, so one jump and a Leap Smash reach "
-                  f"{move['jumpHeight'] + ability['height']:g}: a ledge under that is open without the double jump.")
     if not args.plan_only:
         print()
         print(f"CHECK: {'PASS' if not failures else 'FAIL (' + str(len(failures)) + ')'}")

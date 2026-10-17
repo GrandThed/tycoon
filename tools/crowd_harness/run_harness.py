@@ -20,6 +20,9 @@ lists out of source text, InputController's GROUND_AIMED and AbilityService's `t
 mechanics (neither file loads here), and combat.project.json's CameraMaxZoomDistance, so the cases
 can hold each to the other (FIXTURES.source). Its second fix round adds the pure StrikePick (which
 of a strike's candidates it lands on and chains from, a held resident passed over).
+L2 W1 adds the profile's v7 step (ProfileSchema, loaded as it stands: its Types require resolves
+to the stub), the pure Unlocks (ownership, keys, the purchase) and SecretFlow (the chests), and
+tests_l2.luau: those, WallClip.Rise per player, StageFlow's secrets lines and the shipped chests.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -81,6 +84,10 @@ SOURCES = {
     "WallClip": "src/shared/WallClip.luau",
     # The L1c second fix round's F4: which candidates a strike lands on and chains from.
     "StrikePick": "src/combat/server/Services/StrikePick.luau",
+    # L2 W1: the v7 step, the unlocks and the chests (tests_l2.luau).
+    "ProfileSchema": "src/server/Services/ProfileSchema.luau",
+    "Unlocks": "src/shared/Unlocks.luau",
+    "SecretFlow": "src/combat/server/Services/SecretFlow.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -102,6 +109,8 @@ TESTS = [
     "tests_l1b_w4.luau",
     # L1c: WallClip, then the walled Chief's Clearing as built and planned.
     "tests_l1c.luau",
+    # L2 W1: the v7 step, Unlocks, SecretFlow, Rise per player, the shipped chests.
+    "tests_l2.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"

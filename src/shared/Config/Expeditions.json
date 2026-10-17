@@ -4,6 +4,11 @@
 	"difficulties": ["normal", "hard", "brutal"],
 	"difficultyNames": { "normal": "Normal", "hard": "Hard", "brutal": "Brutal" },
 	"lobby": { "layout": "Lobby" },
+	"abilities": {
+		"list": [
+			{ "id": "doubleJump", "name": "Double Jump", "text": "A second jump in the air.", "price": { "valor": 10 }, "order": 1 }
+		]
+	},
 	"nodes": [
 		{ "id": "forestRoad", "name": "Forest Road", "theme": "forest", "x": 0.12, "y": 0.73, "kind": "level", "level": "forestRoad" },
 		{ "id": "raiderArena", "name": "Raider Arena", "theme": "bonus", "x": 0.17, "y": 0.31, "kind": "bonus", "level": "raiderArena", "from": "forestRoad" },
@@ -29,6 +34,7 @@
 		"checkpoint": { "material": "SmoothPlastic", "color": [255, 200, 61] },
 		"checkpointDone": { "material": "SmoothPlastic", "color": [70, 182, 101] },
 		"secret": { "material": "SmoothPlastic", "color": [176, 96, 224] },
+		"secretOpen": { "material": "SmoothPlastic", "color": [240, 190, 40] },
 		"sign": { "material": "SmoothPlastic", "color": [52, 54, 62] },
 		"water": { "material": "SmoothPlastic", "color": [122, 138, 152], "transparency": 0.2 },
 		"lobby": { "material": "SmoothPlastic", "color": [124, 126, 132] },

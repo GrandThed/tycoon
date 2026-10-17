@@ -249,6 +249,8 @@ local START_OFFSETS = {
 }
 -- A spot's posture (L1b-3).
 local POSTURES: { [string]: boolean } = { guard = true, patrol = true, fire = true }
+-- L2-13: the longest weapon family id a secret may give (the remotes' family id cap).
+local MAX_FAMILY_LENGTH = 24
 
 local StageFlow = {}
 
@@ -289,6 +291,7 @@ function StageFlow.Resolve(
 			crowd = crowd,
 			stages = stages,
 			camps = file.camps or {},
+			secrets = file.secrets,
 		}
 	end
 	local block = if mission ~= nil then mission.crowd else nil
@@ -333,6 +336,7 @@ function StageFlow.Resolve(
 		},
 		stages = { camp },
 		camps = {},
+		secrets = file.secrets,
 	}
 end
 
@@ -892,6 +896,53 @@ local function regionProblems(
 					)
 				end
 			end
+		end
+	end
+end
+
+-- L2-13: the level file's `secrets` block against the layout's secrets. Every layout secret has
+-- an entry with a name; an entry's valor and materials, when given, are whole numbers >= 0, and
+-- its family a short string. Which secrets may pay at all (a reward only behind a sold key) is
+-- check_levels.py's rule (L2-18e), not a refusal here.
+local function secretProblems(
+	level: Types.LevelConfig,
+	layout: Types.LevelLayout,
+	problem: (string) -> ()
+): ()
+	local entries: any = level.secrets
+	if entries ~= nil and type(entries) ~= "table" then
+		problem("secrets is not a table")
+		entries = nil
+	end
+	local list: any = layout.secrets
+	if type(list) ~= "table" then
+		return
+	end
+	for index, secret: any in list do
+		local id = if type(secret) == "table" then secret.id else nil
+		if type(id) ~= "string" then
+			problem(`layout secret {index} has no id`)
+			continue
+		end
+		local entry: any = if entries ~= nil then entries[id] else nil
+		if type(entry) ~= "table" or type(entry.name) ~= "string" or entry.name == "" then
+			problem(`the secret "{id}" has no secrets entry with a name`)
+			continue
+		end
+		for _, key in { "valor", "materials" } do
+			local amount = entry[key]
+			if amount ~= nil and not (isFinite(amount) and amount >= 0 and amount % 1 == 0) then
+				problem(
+					`secrets.{id}.{key} is {tostring(amount)}, not a whole number of at least 0`
+				)
+			end
+		end
+		local family = entry.family
+		if
+			family ~= nil
+			and (type(family) ~= "string" or family == "" or #family > MAX_FAMILY_LENGTH)
+		then
+			problem(`secrets.{id}.family is {tostring(family)}, not a family id`)
 		end
 	end
 end
@@ -1498,6 +1549,7 @@ function StageFlow.Validate(
 		checkKind
 	)
 	regionProblems(level, layout, camps, kinds, ranks, rules, problem)
+	secretProblems(level, layout, problem)
 	return problems
 end
 
@@ -2545,13 +2597,15 @@ end
 
 -- One node for one player (rulings 25 and 28). Whether it is open is the LEADER's doing; the
 -- stars shown are the player's own. "notBuilt" wins over every other reason. nil for no such
--- node.
+-- node. L2-15: `secrets` = the player's own secret rows by level id (SecretFlow.MapRow); the
+-- node's level's row rides on its state whether it is open or not (nil = none).
 function StageFlow.NodeState(
 	map: Types.ExpeditionsConfig,
 	built: { [string]: boolean },
 	leader: Stars,
 	own: Stars,
-	nodeId: string
+	nodeId: string,
+	secrets: { [string]: { Types.MapSecretState } }?
 ): Types.MapNodeState?
 	local node = nodeOf(map, nodeId)
 	if node == nil then
@@ -2573,6 +2627,7 @@ function StageFlow.NodeState(
 		reason = nil,
 		needs = nil,
 		stars = stars,
+		secrets = if secrets ~= nil and levelId ~= nil then secrets[levelId] else nil,
 	}
 	if levelId == nil or built[levelId] ~= true then
 		state.reason = "notBuilt"
@@ -2598,17 +2653,18 @@ function StageFlow.NodeState(
 	return state
 end
 
--- Every node, in the config's order, for one player.
+-- Every node, in the config's order, for one player (`secrets`: their rows by level id).
 function StageFlow.MapState(
 	map: Types.ExpeditionsConfig,
 	built: { [string]: boolean },
 	leader: Stars,
 	own: Stars,
-	leaderUserId: number
+	leaderUserId: number,
+	secrets: { [string]: { Types.MapSecretState } }?
 ): Types.MapState
 	local nodes: { Types.MapNodeState } = {}
 	for _, node in map.nodes do
-		local state = StageFlow.NodeState(map, built, leader, own, node.id)
+		local state = StageFlow.NodeState(map, built, leader, own, node.id, secrets)
 		if state ~= nil then
 			table.insert(nodes, state)
 		end

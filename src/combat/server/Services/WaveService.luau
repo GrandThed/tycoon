@@ -35,6 +35,10 @@
 -- is dead, and its bonus is priced on what it fielded (StageFlow.Fielded); the boss room's close
 -- makes every other camp forget the road (CrowdService.ForgetOthers); N stops at each open camp's
 -- approach first.
+-- L2 W1 ("the bought double jump and the lookout"): every tick of a live run, each standing
+-- fighter is tested against the level's chests (SecretFlow); UnlockService opens one and writes
+-- the profile, and this file credits the summary, marks the wallet and tells the clients. The map
+-- carries each member's own row of secrets.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -59,6 +63,8 @@ local StageFlow = require(script.Parent:WaitForChild("StageFlow"))
 local LevelService = require(script.Parent:WaitForChild("LevelService"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
+local SecretFlow = require(script.Parent:WaitForChild("SecretFlow"))
+local UnlockService = require(script.Parent:WaitForChild("UnlockService"))
 
 -- Degrade value: without Combat.json the place never leaves the lobby, but the broadcast loop
 -- still needs a legal period.
@@ -147,6 +153,11 @@ type Run = {
 	-- L1b-W2-21: what the live locking camp's waves queued in this run, by kind (the director's
 	-- elites included, the boss and its calls not), for its clear bonus. Emptied at its close.
 	waveStock: { [string]: number },
+	-- L2-12: the played level's chests, and the last verdict each member's chest gave in this
+	-- run, by userId then secret id (a verdict fires once per run; a "locked" one is asked again
+	-- only once that player holds the key).
+	secretSites: { SecretFlow.Site },
+	secretSeen: { [number]: { [string]: SecretFlow.Verdict } },
 }
 
 local function freshRun(): Run
@@ -189,6 +200,8 @@ local function freshRun(): Run
 		tents = {},
 		warnedTent = false,
 		waveStock = {},
+		secretSites = {},
+		secretSeen = {},
 	}
 end
 
@@ -218,6 +231,9 @@ local boot = {
 	lobbyKillY = nil :: number?,
 	-- The living bodies on each floor, refilled by every advance (no table per tick).
 	aliveByFloor = {} :: { number },
+	-- L2-15: each level's chests for the map rows, by level id, built on first use (the files
+	-- are static); a level whose files cannot be read has none.
+	sitesByLevel = {} :: { [string]: { SecretFlow.Site } },
 }
 
 local WaveService = {}
@@ -439,6 +455,44 @@ local function difficultyRanks(map: Types.ExpeditionsConfig): { [string]: number
 	return ranks
 end
 
+-- A level's chests as its files have them (L2-15), cached. An arena level has none.
+local function sitesOf(levelId: string): { SecretFlow.Site }
+	local cached = boot.sitesByLevel[levelId]
+	if cached ~= nil then
+		return cached
+	end
+	local sites: { SecretFlow.Site } = {}
+	local read = pcall(function()
+		local file = Catalog.GetLevelFile(levelId)
+		local layout = if file ~= nil then Catalog.GetLevelLayout(file.layout) else nil
+		if file ~= nil and layout ~= nil and layout.arena == nil then
+			sites = SecretFlow.Sites(layout, file)
+		end
+	end)
+	if not read then
+		warn(`[WaveService] level {levelId}: its secrets could not be read`)
+	end
+	boot.sitesByLevel[levelId] = sites
+	return sites
+end
+
+-- L2-15: the receiver's own secret rows, by level id, from their profile's `combat.secrets`.
+local function secretRows(
+	player: Player,
+	built: { [string]: boolean }
+): { [string]: { Types.MapSecretState } }
+	local profile = DataService.GetState(player)
+	local opened = if profile ~= nil then profile.combat.secrets else nil
+	local rows: { [string]: { Types.MapSecretState } } = {}
+	for levelId in built do
+		local sites = sitesOf(levelId)
+		if #sites > 0 then
+			rows[levelId] = SecretFlow.MapRow(sites, if opened ~= nil then opened[levelId] else nil)
+		end
+	end
+	return rows
+end
+
 -- Rulings 25 and 28: each member gets their own stars; which nodes are open is the leader's
 -- doing. Sent at every admit, after every run and when the leader changes; `only` = to that one
 -- member (a client that asks for its snapshot again cannot ask for the map).
@@ -465,7 +519,14 @@ local function sendMapState(only: Player?): ()
 			RemoteService.FireClient(
 				player,
 				"MapState",
-				StageFlow.MapState(map, built, leaderStars, starsOf(member.userId), leader)
+				StageFlow.MapState(
+					map,
+					built,
+					leaderStars,
+					starsOf(member.userId),
+					leader,
+					secretRows(player, built)
+				)
 			)
 		end
 	end
@@ -1833,6 +1894,8 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	run.rank = ranks[difficulty] or 0
 	run.floors = runFloors
 	run.maxAlive = plan.population
+	-- The chests of the layout as it is built (an arena's adapter has none).
+	run.secretSites = SecretFlow.Sites(layout, level)
 	ArenaService.SetLevel({
 		id = level.id,
 		name = level.name,
@@ -1908,6 +1971,89 @@ local function tickAutoStart(combatConfig: Types.CombatConfig): ()
 	end
 end
 
+-- L2-12: what one chest did for one member. "pay": the summary and the wallet, every member's
+-- card, and the opener's map row; "locked": a private cue to that player; "known" and "nothing"
+-- say nothing.
+local function announceSecret(
+	player: Player,
+	userId: number,
+	site: SecretFlow.Site,
+	opening: SecretFlow.Opening,
+	levelId: string,
+	material: string
+): ()
+	local verdict = opening.verdict
+	if verdict ~= "pay" and verdict ~= "locked" then
+		return
+	end
+	local fx: Types.CombatFxSecret = {
+		kind = "secret",
+		event = if verdict == "pay" then "found" else "locked",
+		userId = userId,
+		levelId = levelId,
+		secretId = site.id,
+		name = site.name,
+		needs = site.needs,
+		valor = opening.valor,
+		materials = opening.materials,
+		material = material,
+		family = opening.family,
+	}
+	if verdict == "locked" then
+		RemoteService.FireClient(player, "CombatFx", { fx })
+		return
+	end
+	ArenaService.CreditSummary(userId, 0, material, opening.materials, opening.valor, 0)
+	run.walletDirty[userId] = true
+	RunFx.Push(fx)
+	sendMapState(player)
+end
+
+-- L2-12, every tick of a live run after `advance`: each admitted human who is fighting and
+-- standing, against every chest of the level. Bots and members waiting in the lobby camp are
+-- skipped. Chests pay flat, kept at once like a kill (Abandon keeps them).
+local function tickSecrets(rules: Types.CombatLevelsConfig): ()
+	local level = run.level
+	if level == nil or #run.secretSites == 0 or not isLive(run.phase) then
+		return
+	end
+	for _, member in ArenaService.GetMembers() do
+		local player = member.player
+		if
+			member.bot
+			or player == nil
+			or not ArenaService.IsFighting(member)
+			or VitalsService.IsDown(player)
+		then
+			continue
+		end
+		local root = rootOf(member)
+		if root == nil then
+			continue
+		end
+		local seen = run.secretSeen[member.userId]
+		if seen == nil then
+			seen = {}
+			run.secretSeen[member.userId] = seen
+		end
+		for _, site in run.secretSites do
+			local before = seen[site.id]
+			if
+				before ~= nil
+				and not (before == "locked" and UnlockService.HoldsKey(player, site.needs))
+			then
+				continue
+			end
+			if not SecretFlow.Triggered(site, root.Position, rules) then
+				continue
+			end
+			local opening = UnlockService.OpenSecret(player, level.id, site, level.material)
+			seen[site.id] = opening.verdict
+			announceSecret(player, member.userId, site, opening, level.id, level.material)
+		end
+	end
+end
+
 local function tick(): ()
 	local combatConfig = config()
 	if combatConfig == nil then
@@ -1969,6 +2115,7 @@ local function tick(): ()
 	end
 	tickTents()
 	advance(combatConfig)
+	tickSecrets(combatConfig.levels)
 	sendWallets(os.clock(), false)
 end
 
@@ -2080,6 +2227,20 @@ function WaveService.SpawnOne(kind: string): ()
 		CrowdService.Spawn(kind, nextSpawnPoint(zone), FIGHT, centreOf(zone), nil, zone.floor) ~= 0
 	then
 		run.spawnedThisGroup += 1
+	end
+end
+
+-- The `resetSecrets` lever (L2-19), after UnlockService has cleared the profiles: this run's
+-- memory of what each chest said goes too, for `player` (nil = everyone), and the map is resent.
+function WaveService.ForgetSecrets(player: Player?): ()
+	if player == nil then
+		table.clear(run.secretSeen)
+		sendMapState(nil)
+		return
+	end
+	run.secretSeen[player.UserId] = nil
+	if boot.mission and ArenaService.IsAdmitted(player) then
+		sendMapState(player)
 	end
 end
 

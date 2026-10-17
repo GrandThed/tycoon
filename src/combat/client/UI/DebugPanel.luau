@@ -14,6 +14,11 @@
 -- which has no keys, can do what the keys do. The wave stepper stays and forces a wave of the
 -- live camp.
 --
+-- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-19): "Double Jump on/off" (the J key: grant or
+-- remove the caller's own, the way to flip it asked of the host when pressed, the caption from
+-- SetAirJump) and "Reset secrets" (the H key). The mission HUD passes `deps.airJump`; without it
+-- neither button is built.
+--
 -- Geometry matches the hub's DebugPanel: 48 design px buttons (the 44 physical px tap
 -- target at MIN_SCALE) wrapped into two columns. A short landscape viewport makes the body
 -- SCROLL rather than shrink, because a lever that is 27 px tall is a lever no one can hit.
@@ -27,6 +32,9 @@ local Theme = require(script.Parent:WaitForChild("Theme"))
 export type Deps = {
 	onLever: (lever: string, value: any) -> (),
 	onToggle: ((open: boolean) -> ())?,
+	-- L2-19: the air jump's ability id and the lever that flips it for the caller now
+	-- ("grantAbility" or "removeAbility"); nil = no Double Jump or Reset secrets buttons.
+	airJump: { id: string, lever: () -> string }?,
 }
 
 export type DebugPanelHandle = {
@@ -35,6 +43,8 @@ export type DebugPanelHandle = {
 	SetKinds: (kinds: { string }) -> (),
 	SetWave: (wave: number) -> (),
 	SetGear: (melee: number, ranged: number) -> (),
+	-- L2-19: whether the caller owns the double jump now (the button's caption).
+	SetAirJump: (owned: boolean) -> (),
 	-- false = the whole strip, its tab included, is off the screen (the map is open: it is a
 	-- full-screen sheet of the strip's own ZIndex tier, and the tab drew over it). What was open
 	-- is open again when it comes back.
@@ -235,7 +245,7 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	leverButton("+" .. tostring(Theme.COMBAT_DEBUG_GRANT_MATERIALS) .. " mat", function()
 		deps.onLever("grantMaterials", Theme.COMBAT_DEBUG_GRANT_MATERIALS)
 	end)
-	leverButton("+" .. tostring(Theme.COMBAT_DEBUG_GRANT_VALOR) .. " Valor", function()
+	leverButton("+" .. tostring(Theme.COMBAT_DEBUG_GRANT_VALOR) .. " Valor (V)", function()
 		deps.onLever("grantValor", Theme.COMBAT_DEBUG_GRANT_VALOR)
 	end)
 	-- C2: runs the server's CheckAdmission for this player and toasts the verdict; nobody
@@ -243,6 +253,18 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	leverButton("Admit check", function()
 		deps.onLever("admitCheck", true)
 	end)
+	-- L2-19: the bought double jump and the secrets, so a chest can be seen without clearing a
+	-- level twice (the Studio store starts fresh every session).
+	local airJump = deps.airJump
+	local airJumpButton: TextButton? = nil
+	if airJump ~= nil then
+		airJumpButton = leverButton("Double Jump (J)", function()
+			deps.onLever(airJump.lever(), airJump.id)
+		end)
+		leverButton("Reset secrets (H)", function()
+			deps.onLever("resetSecrets", true)
+		end)
+	end
 
 	local handle: DebugPanelHandle = {
 		SetKinds = function(kinds: { string })
@@ -264,6 +286,12 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		SetGear = function(melee: number, ranged: number)
 			meleeTier = melee
 			rangedTier = ranged
+		end,
+		SetAirJump = function(owned: boolean)
+			local button = airJumpButton
+			if button ~= nil then
+				button.Text = if owned then "Double Jump: ON (J)" else "Double Jump: off (J)"
+			end
 		end,
 		SetVisible = function(visible: boolean)
 			root.Visible = visible

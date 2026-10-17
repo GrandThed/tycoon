@@ -27,6 +27,12 @@
 -- caller through Combat.json debug.gearPresets as a Studio-only session override, which is also
 -- what `setGear` sets in a proving build (there the baked gear wins over the profile, so writing
 -- the profile changed nothing where Ben plays).
+--
+-- L2 W1 (docs/prompts/l2-w1-contract.md, L2-19): `grantAbility` / `removeAbility` (value an
+-- ability id) and `resetSecrets` go through UnlockService; the Studio mock store starts every
+-- session at a fresh profile, so these are how a bought Double Jump or a found chest is seen
+-- without clearing a level twice. The remote path acts on the caller, the attribute path on
+-- everyone admitted. `resetSecrets` keeps the families found.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -46,6 +52,7 @@ local WaveService = require(script.Parent:WaitForChild("WaveService"))
 local RangeService = require(script.Parent:WaitForChild("RangeService"))
 local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
+local UnlockService = require(script.Parent:WaitForChild("UnlockService"))
 local RunFx = require(script.Parent:WaitForChild("RunFx"))
 
 local TICK_INTERVAL_SECONDS = 1
@@ -201,6 +208,33 @@ local function setGodMode(player: Player?, enabled: boolean): ()
 	end
 end
 
+-- L2-19: owned (or not) for the caller, or for everyone admitted on the attribute path; the
+-- party is told once when anybody's changed.
+local function setAbility(player: Player?, id: string, owned: boolean): ()
+	local targets: { Player } = if player ~= nil then { player } else UnlockService.Admitted()
+	local changed = false
+	for _, target in targets do
+		local done = if owned
+			then UnlockService.GrantAbility(target, id)
+			else UnlockService.RemoveAbility(target, id)
+		changed = changed or done
+	end
+	if changed then
+		RunFx.Push({
+			kind = "notice",
+			text = `{UnlockService.NameOf(id)} {if owned then "on" else "off"}`,
+		})
+	else
+		warn(`[DebugService] {if owned then "grant" else "remove"}Ability "{id}": nobody changed`)
+	end
+end
+
+local function resetSecrets(player: Player?): ()
+	UnlockService.ResetSecrets(player)
+	WaveService.ForgetSecrets(player)
+	RunFx.Push({ kind = "notice", text = "Secrets reset" })
+end
+
 -- P5 ruling 24: the crowd targets Players only, so a bot would stand in a camp doing nothing.
 local function refuseBots(): ()
 	if not warnedBots then
@@ -271,6 +305,12 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 		grantValor(player, value)
 	elseif lever == "admitCheck" then
 		admitCheck(player)
+	elseif lever == "grantAbility" and typeof(value) == "string" and value ~= "" then
+		setAbility(player, value, true)
+	elseif lever == "removeAbility" and typeof(value) == "string" and value ~= "" then
+		setAbility(player, value, false)
+	elseif lever == "resetSecrets" then
+		resetSecrets(player)
 	else
 		warn(`[DebugService] unknown or mistyped lever "{lever}"`)
 	end
@@ -328,6 +368,21 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 	local valor = consumeNumber(debugConfig.grantValorAttribute)
 	if valor ~= nil then
 		applyLever(nil, "grantValor", valor)
+	end
+	-- L2-19: a Combat.json without these keys leaves the attribute levers off.
+	local grantAttribute = debugConfig.grantAbilityAttribute
+	local granted = if grantAttribute ~= nil then consumeString(grantAttribute) else nil
+	if granted ~= nil then
+		applyLever(nil, "grantAbility", granted)
+	end
+	local removeAttribute = debugConfig.removeAbilityAttribute
+	local removed = if removeAttribute ~= nil then consumeString(removeAttribute) else nil
+	if removed ~= nil then
+		applyLever(nil, "removeAbility", removed)
+	end
+	local resetAttribute = debugConfig.resetSecretsAttribute
+	if resetAttribute ~= nil and consumeNumber(resetAttribute) ~= nil then
+		applyLever(nil, "resetSecrets", true)
 	end
 
 	-- States, read but never reset. God mode is applied when the attribute changes (and to

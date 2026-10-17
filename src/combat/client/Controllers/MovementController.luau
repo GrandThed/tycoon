@@ -40,6 +40,13 @@
 --
 -- The touch cluster (jump, dash, aim, two abilities, slot) is laid out here in one place
 -- (ClusterRect) so the six buttons can never be placed against each other by two owners.
+--
+-- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-3): the double jump is bought. The air jump
+-- needs the Player attribute the server sets (Unlocks.Attribute(Unlocks.AIR_JUMP), true for
+-- everyone in the range); without it a fresh air press does nothing and costs nothing (the
+-- press is refused before `airJumpUsed` is set). The first refused press of a session, outside
+-- the range, calls the host's hint handler once. The server never counts air jumps: the key is
+-- checked where a reward is given (L2-23).
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -50,6 +57,7 @@ local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Theme = require(uiFolder:WaitForChild("Theme"))
@@ -153,6 +161,8 @@ local downAlign: AlignOrientation? = nil
 -- L1 fix round: a move the server announced and the body has not been seen at yet. `at` is the
 -- feet point it named (nil = none pending), `expires` the os.clock() after which it is dropped.
 local placing = { at = nil :: Vector3?, expires = 0 }
+-- L2-3: the host's word for a refused air jump (nil = none), and whether it was said this session.
+local airJumpHint = { handler = nil :: (() -> ())?, said = false }
 
 local screenGui: ScreenGui? = nil
 local dashButton: TextButton? = nil
@@ -444,6 +454,16 @@ local function onJumpRequest(): ()
 	-- A request this soon after leaving the ground is the same press still arriving
 	-- (JumpRequest repeats while the key is held), never a deliberate double jump.
 	if now - leftGroundAt < Tuning.Get().movement.airJumpDelay then
+		return
+	end
+	-- L2-3: a deliberate air press without the bought double jump does nothing, and leaves the
+	-- air jump unused (a lever that grants it mid-air works on the next press).
+	if Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) ~= true then
+		local handler = airJumpHint.handler
+		if handler ~= nil and not airJumpHint.said and not CameraController.IsRange() then
+			airJumpHint.said = true
+			handler()
+		end
 		return
 	end
 	airJumpUsed = true
@@ -812,6 +832,12 @@ local function buildTouchControls(): ()
 end
 
 function MovementController.Init(): () end
+
+-- L2-3: called once per session, on the first deliberate air press made without the bought
+-- double jump (never in the range).
+function MovementController.SetAirJumpHintHandler(handler: () -> ()): ()
+	airJumpHint.handler = handler
+end
 
 function MovementController.Start(): ()
 	if started or not CameraController.IsCrowdCombat() then
