@@ -338,3 +338,18 @@ GrantValor does today.
   code would lose or reset data, stop and report before writing the migration.
 - The lead does the seven `Main.server.luau` wiring steps after the engineers report, and writes INTERFACES.
 - Reports go to `docs/prompts/l2-w1-reports/<role>.md`.
+
+## 11. Lead's ruling on the leap finding (2026-10-17)
+
+The designer's report (`l2-w1-reports/economy-designer.md`, "Finding") shows the L2-17 notch cannot close the
+Leap Smash route to the lookout; two formula changes together do (0 routes), each alone leaves hundreds.
+**Ruling: no notch; F1 + F2 in W1**, as pure functions in `src/shared/WallClip.luau` shared by client and
+server:
+- **F2 (caster's floor over a void):** with no floor hit below the caster, the floor is the feet minus the
+  player's own rise (`WallClip.Rise(movement, airJump)`), on both `WeaponService.GroundPoint` and
+  `InputController.groundPoint`.
+- **F1 (the leap's peak):** a leap's apex is `max(from.Y, to.Y + lift, casterFloor + standingOffset + lift)`
+  with `lift = max(height, 0)` in `MovementController.Leap` (and any server mirror of the leap's arc), so a
+  leap cast at the top of a jump no longer stacks its height on the jump.
+- Harness cases for both functions and a mutation each; `LIFT_MODEL = "floor"` in `tools/check_levels.py`
+  once both land, with check_levels and its mutants green. Ground-launched leaps must be unchanged.
