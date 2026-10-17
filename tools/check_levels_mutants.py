@@ -5,13 +5,15 @@ L2-19), shown red on a mutated copy of the shipped data, and green again on the 
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
-FLOOR_WALLS, WALLED_CEILING, LIFT_MODEL, LIFT_KNOWN_LIMIT_W2), runs every gate (check_levels.run_gates) and expects the named rule red, or green
-for a control. A rule is named by text its line always carries. Nothing on disk is written,
+FLOOR_WALLS, WALLED_CEILING, LIFT_MODEL, LIFT_KNOWN_LIMIT_W2, TRIGGER_MODEL), runs every gate
+(check_levels.run_gates) and expects the named rule red, or green for a control. A rule is named by text its line always carries. Nothing on disk is written,
 except for the stage-mirror cases (MIRROR_CASES), which run tools/check_stage_mirror.py with a line
 of StageFlow.luau and/or sim_range.py broken, from copies in a temporary folder, and expect it red:
 m2 (the "residents under the boss room's maxAlive" rule out of both), the second fix round's F1
 (the walled camp's trigger band out of the Python mirror alone) and the third's m3 (gate_nudge's
-fenced-rectangle test out of the Python mirror alone).
+fenced-rectangle test out of the Python mirror alone); and for the simulator's cases (SIM_CASES),
+which run tools/sim_range.py from a copy with one line broken and expect its check red: the L2 W1
+fix round's d3 (an air jump back on in the planner turns the one-jump gate red; about five minutes).
 
 Usage:
   py tools/check_levels_mutants.py                       # every case; exit 1 when one is not as expected
@@ -61,6 +63,10 @@ REACH_A = "the lookout ledge's top is over"
 REACH_B = "the lookout needs the double jump: no surface"
 REACH_C = "the lookout needs the double jump against every lifting ability"
 REACH_D = "the lookout's trigger is met only on its ledge"
+# The L2 W1 fix round: (a)'s standable point for every secret (s1 + d2), the one-jump gate (d3).
+TRIGGER_CACHE = "the cache's trigger (levels.secretReach"
+TRIGGER_LOOKOUT = "the lookout's trigger (levels.secretReach"
+ONE_JUMP = "Normal: one jump (L2-20)"
 REWARDS = "forestRoad: a secret pays only behind a sold key"
 ABILITIES = "Expeditions.json abilities.list: every entry"
 PRICE = "Expeditions.json: Double Jump costs"
@@ -270,8 +276,23 @@ CASES = (
      REACH_D, True),
     ("L2-18d: secretBelow 25 and secretReach 8 (a root on Road5)",
      lambda d: (levels(d).__setitem__("secretBelow", 25), levels(d).__setitem__("secretReach", 8)), {}, REACH_D, True),
-    ("L2-18d control: the chest 2 further back (z -61)", lambda d: secret(d, "lookout").__setitem__("z", -61), {},
-     REACH_D, False),
+    # Measured from the footprint (the fix round's s1), the ground within secretReach 2.5 of the
+    # chest's back face reaches the ledge's back edge (z -66) at z -60.5 and passes it at -61.
+    ("L2-18d control: the chest 1.5 further back (z -60.5)", lambda d: secret(d, "lookout").__setitem__("z", -60.5),
+     {}, REACH_D, False),
+    ("L2-18d: the chest 2 further back (z -61), the trigger over the void behind",
+     lambda d: secret(d, "lookout").__setitem__("z", -61), {}, REACH_D, True),
+    # The fix round's s1 + d2: (a)'s standable point runs for every secret, its key sold or not.
+    ("s1: the centre rule back (W1 as shipped: from the chest's centre, secretReach 5)",
+     lambda d: levels(d).__setitem__("secretReach", 5), {"TRIGGER_MODEL": "centre"}, TRIGGER_CACHE, True),
+    ("s1: the centre rule at today's secretReach 2.5", None, {"TRIGGER_MODEL": "centre"}, TRIGGER_CACHE, True),
+    ("s1: secretReach 0.9 (under a body's radius: nobody pressed against the cache opens it)",
+     lambda d: levels(d).__setitem__("secretReach", 0.9), {}, TRIGGER_CACHE, True),
+    ("s1 control: the footprint rule, the cache's trigger from beside it", None, {}, TRIGGER_CACHE, False),
+    ("s1 control: the centre rule keeps the lookout (its chest's top is within 2.5 of the centre)", None,
+     {"TRIGGER_MODEL": "centre"}, TRIGGER_LOOKOUT, False),
+    ("s1: the cache's chest raised 5 off the road (a root beside it is 2 under its foot)",
+     lambda d: secret(d, "cache").__setitem__("y", 18), {}, TRIGGER_CACHE, True),
     # L2-18 (e) and L2-13: rewards follow keys.
     ("L2-18e: the cache pays 1 Valor", lambda d: secret_entry(d, "cache").__setitem__("valor", 1), {}, REWARDS, True),
     ("L2-18e: the shrine names a family", lambda d: secret_entry(d, "shrine").__setitem__("family", "frostHammer"), {},
@@ -385,6 +406,42 @@ def stage_mirror_case(luau, flow_swap, py_swap, want):
             verdict + (f"; {named[0]}" if named else f"; no failing line carries {want!r}"))
 
 
+# The simulator's cases: (label, sim_range.py's line -> its broken copy, sim_range's arguments, text
+# its failing line must carry). The fix round's d3: the planner offers a jump in the air again (its
+# can_jump guard gone), so a timed jump leaves while he is airborne; the forest check's one-jump
+# gate must count it and go red (it could not before the fix: the timed press dropped it unseen).
+# About five minutes: the whole forest check runs.
+SIM_CASES = (
+    ("d3: the planner may jump in the air (can_jump always true)",
+     ("can_jump = self.jump is None and (self.lift is None or t >= self.lift[1])", "can_jump = True"),
+     ("--check", "--levels-only", "--level", "forest"), ONE_JUMP),
+)
+
+
+def sim_case(swap, arguments, want):
+    """Run tools/sim_range.py from a copy with one line swapped (in a temporary folder, run as the
+    real file so its paths hold, and registered as `sim_range` so its importers see the copy); it
+    must exit 1 with a FAIL line carrying `want`. (ok, what was seen)."""
+    mirror = TOOLS / "sim_range.py"
+    text = mirror.read_text(encoding="utf-8")
+    if text.count(swap[0]) != 1:
+        return False, f"the line {swap[0]!r} is not found exactly once (the mutant is stale)"
+    with tempfile.TemporaryDirectory() as folder:
+        copy_path = Path(folder) / "sim_range.py"
+        copy_path.write_text(text.replace(*swap), encoding="utf-8", newline="\n")
+        boot = ("import sys, types; sys.path.insert(0, sys.argv[3]); "
+                "m = types.ModuleType('sim_range'); m.__file__ = sys.argv[2]; sys.modules['sim_range'] = m; "
+                "code = compile(open(sys.argv[1], encoding='utf-8').read(), sys.argv[2], 'exec'); "
+                "sys.argv = [sys.argv[2]] + sys.argv[4:]; m.__dict__['__name__'] = '__main__'; exec(code, m.__dict__)")
+        done = subprocess.run([sys.executable, "-c", boot, str(copy_path), str(mirror), str(TOOLS), *arguments],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+    out = done.stdout + done.stderr
+    verdict = next((line.strip() for line in out.splitlines() if line.startswith("CHECK")), "no CHECK line")
+    named = [line.strip() for line in out.splitlines() if want in line and line.lstrip().startswith("FAIL")]
+    return (done.returncode != 0 and bool(named),
+            verdict + (f"; {named[0]}" if named else f"; no FAIL line carries {want!r}"))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--only", default=None, help="run only the cases whose label holds this text")
@@ -419,6 +476,13 @@ def main():
             continue
         good, seen = stage_mirror_case(luau, flow_swap, py_swap, want)
         print(f"  {'ok  ' if good else 'NOT '}  {label}: check_stage_mirror red -> {seen[:220]}")
+        if not good:
+            wrong.append(label)
+    for label, swap, arguments, want in SIM_CASES:
+        if args.only and args.only not in label:
+            continue
+        good, seen = sim_case(swap, arguments, want)
+        print(f"  {'ok  ' if good else 'NOT '}  {label}: sim_range red -> {seen[:220]}")
         if not good:
             wrong.append(label)
     print()

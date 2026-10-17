@@ -1351,7 +1351,10 @@ local Theme = {
 	MAP_SECRET_ICON_SIZE = 16,
 	MAP_SECRET_ICON_TEXT = 11,
 	MAP_SECRET_CELL_WIDTH = 50,
-	MAP_SECRET_KEY_TEXT = 9,
+	-- The fix round's c6: the keys are the only place the map says what to bring, so they read at
+	-- 11 (10 physical px at MIN_SCALE). 16 icon + 11 + 3 fills the 30 px row; "2× JUMP" is about
+	-- 47 design px wide in GothamBold 11, inside the 50 px cell.
+	MAP_SECRET_KEY_TEXT = 11,
 	-- What each key reads under its icon, and in a "Needs ..." toast (tools/check_levels.py
 	-- NEED_WORDS). A key not listed reads in capitals.
 	MAP_SECRET_KEY_WORDS = { doubleJump = "2× JUMP", fire = "FIRE", ice = "ICE" } :: {

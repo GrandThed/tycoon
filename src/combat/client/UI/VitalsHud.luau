@@ -149,6 +149,39 @@ local function bearingOf(camera: CFrame, origin: Vector3, from: Vector3): number
 	return math.deg(math.atan2(offset.X * -ahead.Z + offset.Z * ahead.X, offset:Dot(ahead)))
 end
 
+-- Where the health bar stands for `layout` on a screen of `size` px (this HUD ignores the
+-- top-bar inset): its centre X and its bottom edge, in px. The one rule applyLayout draws by and
+-- the run layer's button rows keep clear of (CombatUIController, the L2 W1 fix round's c1).
+function VitalsHud.BarPlace(layout: Layout, size: Vector2): (number, number)
+	local scale = layout.scale
+	local half = Theme.COMBAT_RANGE_VITALS_WIDTH * scale / 2
+	local gap = Theme.COMBAT_RANGE_VITALS_GAP * scale
+	local margin = Theme.SCREEN_MARGIN * scale
+	local centreX = size.X / 2
+	local bottom = size.Y - Theme.COMBAT_RANGE_VITALS_BOTTOM * scale
+	local clusterLeft = layout.clusterLeft
+	local clusterTop = layout.clusterTop
+	if clusterLeft ~= nil and clusterTop ~= nil then
+		local beside = math.min(centreX, clusterLeft - gap - half)
+		if beside - half >= margin then
+			centreX = beside
+		else
+			bottom = clusterTop - gap
+		end
+	else
+		-- Over the AbilityBar and its refund text, on the AbilityBar's own slide rule.
+		local limit = size.X - (layout.rightReserve + Theme.SCREEN_MARGIN) * scale - half
+		centreX = math.max(math.min(centreX, limit), half + margin)
+		local under = Theme.COMBAT_ABILITY_BAR_BOTTOM
+			+ Theme.COMBAT_ABILITY_BAR_TILE_HEIGHT
+			+ Theme.COMBAT_ABILITY_BAR_REFUND_TEXT
+			+ Theme.COMBAT_ABILITY_BAR_INSET
+			+ Theme.COMBAT_ABILITY_BAR_REFUND_RISE
+		bottom = size.Y - under * scale - gap
+	end
+	return centreX, bottom
+end
+
 function VitalsHud.new(parent: Instance): VitalsHudHandle
 	local layout: Layout = { scale = 1, rightReserve = 0 }
 	local connections: { RBXScriptConnection } = {}
@@ -320,31 +353,8 @@ function VitalsHud.new(parent: Instance): VitalsHudHandle
 			return
 		end
 		local scale = layout.scale
-		local half = Theme.COMBAT_RANGE_VITALS_WIDTH * scale / 2
 		local gap = Theme.COMBAT_RANGE_VITALS_GAP * scale
-		local margin = Theme.SCREEN_MARGIN * scale
-		local centreX = size.X / 2
-		local bottom = size.Y - Theme.COMBAT_RANGE_VITALS_BOTTOM * scale
-		local clusterLeft = layout.clusterLeft
-		local clusterTop = layout.clusterTop
-		if clusterLeft ~= nil and clusterTop ~= nil then
-			local beside = math.min(centreX, clusterLeft - gap - half)
-			if beside - half >= margin then
-				centreX = beside
-			else
-				bottom = clusterTop - gap
-			end
-		else
-			-- Over the AbilityBar and its refund text, on the AbilityBar's own slide rule.
-			local limit = size.X - (layout.rightReserve + Theme.SCREEN_MARGIN) * scale - half
-			centreX = math.max(math.min(centreX, limit), half + margin)
-			local under = Theme.COMBAT_ABILITY_BAR_BOTTOM
-				+ Theme.COMBAT_ABILITY_BAR_TILE_HEIGHT
-				+ Theme.COMBAT_ABILITY_BAR_REFUND_TEXT
-				+ Theme.COMBAT_ABILITY_BAR_INSET
-				+ Theme.COMBAT_ABILITY_BAR_REFUND_RISE
-			bottom = size.Y - under * scale - gap
-		end
+		local centreX, bottom = VitalsHud.BarPlace(layout, size)
 		bar.Position = UDim2.fromOffset(centreX, bottom)
 		local barTop = bottom - Theme.COMBAT_RANGE_VITALS_HEIGHT * scale
 

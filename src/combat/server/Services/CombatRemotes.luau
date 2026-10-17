@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local RemoteService =
 	require(script.Parent.Parent:WaitForChild("Services"):WaitForChild("RemoteService"))
 
@@ -35,15 +36,16 @@ local MAX_TUNE_STRING_LENGTH = 32
 local MAX_COMMAND_LENGTH = 24
 local MAX_COMMAND_ARG_LENGTH = 32
 -- P2: a weapon family id (broadsword, longbow, ...); RangeService checks it names a real family
--- that the player holds in that slot.
-local MAX_FAMILY_LENGTH = 24
+-- that the player holds in that slot. One home, Unlocks (a secret's family is held to it too).
+local MAX_FAMILY_LENGTH = Unlocks.MAX_FAMILY_LENGTH
 -- L1 (docs/INTERFACES.md "L1 contracts" → "Remotes"): a level id and a difficulty key. Shape
 -- only: WaveService.OnStartLevel resolves both against the level files and the map.
 local MAX_LEVEL_ID_LENGTH = 32
 local MAX_DIFFICULTY_LENGTH = 12
 -- L2-7: an ability id ("doubleJump"). Shape only: UnlockService resolves it against
--- Expeditions.json `abilities` and prices it from there.
-local MAX_ABILITY_ID_LENGTH = 32
+-- Expeditions.json `abilities` and prices it from there. One home, Unlocks (the Abilities panel
+-- and Unlocks.DefProblem read the same cap).
+local MAX_ABILITY_ID_LENGTH = Unlocks.MAX_ID_LENGTH
 
 local combatConfig = Catalog.GetCombatConfig()
 local maxTargets = if combatConfig ~= nil

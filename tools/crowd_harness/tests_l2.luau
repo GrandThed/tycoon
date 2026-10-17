@@ -6,6 +6,11 @@
 -- check, near, load, L1, L1C). Everything hangs off the L2 table (the 200-local limit), and every
 -- group runs behind L1.group, so one that throws fails a check and the bundle goes on to its
 -- verdict. UnlockService and WaveService cannot be loaded here: they execute what these decide.
+-- The fix round (docs/prompts/l2-w1-fix-round.md) adds: the trigger measured to the chest's
+-- footprint (s1), the caps' one home and DefProblem's empty text (s2, c5), the purchase and the
+-- chest's write as pure calls (s3, Unlocks.Apply and SecretFlow.Open), one rule for a repeated id
+-- (s4, Unlocks.Sellable and Find) and the ground point's step 4 as one call (c4,
+-- WallClip.GroundFloor), with the source check that both sides make it.
 
 print("L2: the bought double jump and the lookout (ProfileSchema, Unlocks, SecretFlow)")
 
@@ -22,8 +27,8 @@ local L2: any = {
 			},
 		},
 	},
-	-- A trigger band as the contract's starting values: reach 5, 1 below, 9 above.
-	rules = { secretReach = 5, secretBelow = 1, secretAbove = 9 },
+	-- A trigger band: reach 2 from the chest's footprint (the fix round's s1), 1 below, 9 above.
+	rules = { secretReach = 2, secretBelow = 1, secretAbove = 9 },
 }
 
 -- A PlayerState as a v6 profile has it, before the v7 step (no abilities, secrets, families,
@@ -185,6 +190,8 @@ function L2.unlockTests(): ()
 		{ "an empty id", with("id", "") },
 		{ "no name", with("name", nil) },
 		{ "no text", with("text", nil) },
+		{ "an empty text", with("text", "") },
+		{ "an id of 33 bytes", with("id", string.rep("d", 33)) },
 		{ "no order", with("order", nil) },
 		{ "a NaN order", with("order", L2.NAN) },
 		{ "no price", with("price", nil) },
@@ -205,8 +212,47 @@ function L2.unlockTests(): ()
 	check(U.Find(config, "doubleJump") == good and U.Find(config, "glide") == nil and U.Find(nil, "doubleJump") == nil and U.Find({}, "doubleJump") == nil and U.Find({ abilities = {} } :: any, "doubleJump") == nil, "Find: the sold entry by id; nothing for another id, no config, no block or no list")
 	local twice = { abilities = { list = { good, with("price", { valor = 99 }) } } }
 	check(U.Find(twice, "doubleJump") == good, "a repeated id: the first entry wins")
+	check(U.DefProblem(with("id", string.rep("d", 32))) == nil, "an id of exactly 32 bytes can be sold")
+	check(U.MAX_ID_LENGTH == 32 and U.MAX_FAMILY_LENGTH == 24, `the caps' one home: ability ids 32 bytes, family ids 24 ({U.MAX_ID_LENGTH}, {U.MAX_FAMILY_LENGTH})`)
+
+	-- s4: one rule for a repeated id. Find and Sellable (UnlockService.Init, the Abilities panel)
+	-- both take the first entry of an id that can be sold.
 	local badFirst = { abilities = { list = { with("price", { valor = 0 }), good } } }
-	check(U.Find(badFirst, "doubleJump") == nil, "a malformed first entry is not replaced by a later one of the same id")
+	check(U.Find(badFirst, "doubleJump") == good, "a malformed first entry is skipped: Find takes the sound one after it")
+	local glide = { id = "glide", name = "Glide", text = "Fall slowly.", price = { valor = 30 }, order = 2 }
+	local lists = {
+		{ good },
+		{ good, with("price", { valor = 99 }) },
+		{ with("price", { valor = 0 }), good },
+		{ with("text", ""), with("price", { valor = 99 }), good },
+		{ glide, 5, good, glide },
+		{ with("price", { valor = 0 }) },
+		{},
+	}
+	local disagree = {}
+	for index, list in lists do
+		local listConfig = { abilities = { list = list } }
+		local sold = U.Sellable(listConfig)
+		local soldIds = {}
+		for _, def in sold do
+			if soldIds[def.id] ~= nil then
+				table.insert(disagree, `list {index} sells {def.id} twice`)
+			end
+			soldIds[def.id] = def
+		end
+		for _, id in { "doubleJump", "glide" } do
+			if U.Find(listConfig, id) ~= soldIds[id] then
+				table.insert(disagree, `list {index}: {id}`)
+			end
+		end
+	end
+	check(#disagree == 0, `Sellable and Find pick the same entry of every id, once (differ: {table.concat(disagree, ", ")})`)
+	local sold, problems = U.Sellable({ abilities = { list = { with("text", ""), good, with("price", { valor = 99 }), glide } } } :: any)
+	check(#sold == 2 and sold[1] == good and sold[2] == glide and #problems == 2, `Sellable keeps the list's order and names each entry left out ({#sold} sold, {#problems} problems)`)
+	local noneSold, noneSaid = U.Sellable(nil)
+	local blockSold, blockSaid = U.Sellable({ abilities = { list = "doubleJump" } } :: any)
+	local emptySold, emptySaid = U.Sellable({} :: any)
+	check(#noneSold == 0 and #noneSaid == 0 and #emptySold == 0 and #emptySaid == 0 and #blockSold == 0 and #blockSaid == 1, "no config or no block: nothing sold, nothing said; a list that is not a list: nothing sold, said once")
 
 	-- BuyVerdict: every reason, in order.
 	local function profile(valor: number, abilities: any): any
@@ -224,6 +270,32 @@ function L2.unlockTests(): ()
 	check(U.BuyVerdict(profile(L2.NAN, {}), good, true) == "insufficientFunds", "a Valor that is not a number buys nothing")
 	check(U.BuyVerdict(profile(10, {}), good, true) == nil and U.BuyVerdict(profile(250, {}), good, true) == nil, "exactly the price, or more: yes")
 	check(U.BuyVerdict(profile(10, nil), good, true) == nil and U.BuyVerdict(profile(10, { doubleJump = false }), good, true) == nil, "a profile with no abilities map (v6 code saved it), or a false entry, may buy")
+
+	-- s3: Apply, the purchase written. Sold once: debited, owned; a second call reads owned.
+	local buyer = profile(25, { glide = true })
+	local kept = buyer.combat.abilities
+	check(U.Apply(buyer, good, true) == nil and buyer.combat.valor == 15 and buyer.combat.abilities.doubleJump == true, `sold: the price is taken and the ability owned (Valor {buyer.combat.valor})`)
+	check(buyer.combat.abilities == kept and kept.glide == true, "into the map the profile had, keeping what was in it")
+	check(U.Apply(buyer, good, true) == "owned" and buyer.combat.valor == 15, "a second purchase reads owned and takes nothing")
+	local untouched = {}
+	for _, case in {
+		{ "0 Valor", profile(0, {}), good, true, "insufficientFunds" },
+		{ "one Valor short", profile(9, {}), good, true, "insufficientFunds" },
+		{ "a live run", profile(50, {}), good, false, "busy" },
+		{ "no such ability", profile(50, {}), nil, true, "invalid" },
+		{ "a malformed entry", profile(50, {}), with("price", { valor = 0 }), true, "invalid" },
+	} do
+		local state = case[2]
+		local valor = state.combat.valor
+		local verdict = U.Apply(state, case[3], case[4])
+		if verdict ~= case[5] or state.combat.valor ~= valor or next(state.combat.abilities) ~= nil then
+			table.insert(untouched, `{case[1]}: {tostring(verdict)}, Valor {state.combat.valor}`)
+		end
+	end
+	check(#untouched == 0, `refused: BuyVerdict's reason, and the profile is untouched (wrong: {table.concat(untouched, "; ")})`)
+	check(U.Apply(nil, good, true) == "unavailable", "no profile: unavailable")
+	local fresh = profile(10, nil)
+	check(U.Apply(fresh, good, true) == nil and fresh.combat.valor == 0 and fresh.combat.abilities ~= nil and fresh.combat.abilities.doubleJump == true, "a profile with no abilities map gets one, and the ability in it (exactly the price leaves 0)")
 end
 L1.group("l2 unlockTests", L2.unlockTests)
 
@@ -275,13 +347,24 @@ function L2.secretTests(): ()
 	local junk = S.Sites(L2.layout(), { secrets = { lookout = { name = "L", valor = 2.5, materials = -4, family = "" } } })
 	check(junk[1].reward ~= nil and junk[1].reward.valor == 0 and junk[1].reward.materials == 0 and junk[1].reward.family == nil, "a malformed amount pays 0 and an empty family is none (Validate refuses such a file first)")
 
-	-- Triggered: the band and the reach, closed at every edge.
+	check(lookout.sx == 6 and lookout.sz == 6 and cache.sx == 12 and cache.sz == 12, "a site carries its block's footprint (sx, sz)")
+	local footless = L2.layout()
+	footless.secrets[1].sx = L2.NAN
+	footless.secrets[2].sz = -1
+	footless.secrets[3].sx = nil
+	check(#S.Sites(footless, L2.file()) == 0, "a secret whose footprint is missing, NaN or negative is skipped")
+
+	-- Triggered: the band and the reach from the chest's 6 x 6 footprint (the fix round's s1),
+	-- closed at every edge.
 	local rules = L2.rules
 	local function at(x: number, rise: number, z: number): boolean
 		return S.Triggered(lookout, vec(x, 10 + rise, z), rules)
 	end
-	check(at(0, 3, 0) and at(5, 3, 0) and at(0, 3, -5) and at(3, 3, 4), "within secretReach on the flat (exactly 5, and 3-4-5 on a diagonal): triggered")
-	check(not at(5.001, 3, 0) and not at(3.6, 3, 3.6), "a thousandth past the reach, or a diagonal past it: not")
+	check(at(0, 3, 0) and at(2.9, 3, -2.9) and at(3, 3, 0), "on the footprint (the centre, a corner, an edge): triggered")
+	check(at(5, 3, 0) and at(0, 3, -5) and at(-5, 3, 1) and at(4.2, 3, 4.59), "within secretReach of the footprint on the flat (exactly 2 off a face, just under 2 off a corner): triggered")
+	check(not at(5.001, 3, 0) and not at(0, 3, 5.001) and not at(4.5, 3, 4.5), "a thousandth past the reach off either face, or a corner's diagonal past it: not")
+	-- The cache is 12 x 12: a root against its face is 7 from its centre, and opens it.
+	check(S.Triggered(cache, vec(47, 3, 0), rules) and S.Triggered(cache, vec(40, 3, -7.5), rules) and not S.Triggered(cache, vec(48.001, 3, 0), rules), "a big chest opens from beside it on either axis (7 and 7.5 from its centre), not from past the reach")
 	check(at(4, -1, 0) and not at(4, -1.001, 0), "secretBelow under the chest's bottom is in; a thousandth deeper is out")
 	check(at(4, 9, 0) and not at(4, 9.001, 0), "secretAbove over it is in; a thousandth higher is out")
 	check(not at(0, -23, 0) and not at(0, -5, 0), "a root on the road 23 under it, or at the top of one jump from there (-5), opens nothing")
@@ -303,6 +386,50 @@ function L2.secretTests(): ()
 	check(#none == 3 and not none[1].found and not none[2].found and not none[3].found and #S.MapRow({}, { lookout = true }) == 0, "no map: nothing found; no sites: no row")
 end
 L1.group("l2 secretTests", L2.secretTests)
+
+-- s3: SecretFlow.Open, the chest's verdict and its write in one pure call (UnlockService only
+-- reads the profile and the key, then calls it).
+function L2.openTests(): ()
+	print(" SecretFlow.Open: what opening a chest writes into the profile (L2-12, the fix round's s3)")
+	local S = L2.Secret
+	local sites = S.Sites(L2.layout(), L2.file())
+	local lookout, cache = sites[1], sites[2]
+	-- A v6 profile's combat (no secrets or families maps): 7 Valor, 12 Timber.
+	local combat = L2.v6().combat
+	local first = S.Open(combat, "forestRoad", lookout, true, "Timber")
+	check(first.verdict == "pay" and first.valor == 3 and first.materials == 50 and first.family == "flamethrower", `pay: the opening reports the reward ({first.verdict}, {first.valor}, {first.materials}, {tostring(first.family)})`)
+	check(combat.valor == 10 and combat.materials.Timber == 62, `and credits it (Valor {combat.valor}, Timber {combat.materials.Timber})`)
+	check(combat.families ~= nil and combat.families.flamethrower == true, "the family is the player's")
+	check(combat.secrets ~= nil and combat.secrets.forestRoad ~= nil and combat.secrets.forestRoad.lookout == true, "the secret is recorded under its level, in maps made for a profile that lacked them")
+	local again = S.Open(combat, "forestRoad", lookout, true, "Timber")
+	check(again.verdict == "known" and again.valor == 0 and again.materials == 0 and again.family == nil and combat.valor == 10 and combat.materials.Timber == 62, "a second opening reads known and pays nothing")
+	local elsewhere = S.Open(combat, "castle", lookout, true, "Timber")
+	check(elsewhere.verdict == "pay" and combat.secrets.castle.lookout == true and combat.secrets.forestRoad.lookout == true and combat.valor == 13, "a secret of the same id in another level is its own")
+	local second = table.clone(lookout)
+	second.id = "second"
+	local beside = S.Open(combat, "forestRoad", second, true, "Timber")
+	check(beside.verdict == "pay" and combat.secrets.forestRoad.second == true and combat.secrets.forestRoad.lookout == true, "a second secret of the same level joins the first in its map")
+	local holder = L2.v6().combat
+	holder.families = { spear = true }
+	S.Open(holder, "forestRoad", lookout, true, "Timber")
+	check(holder.families.spear == true and holder.families.flamethrower == true, "a family joins the ones the profile had")
+
+	local locked = L2.v6().combat
+	local shut = S.Open(locked, "forestRoad", lookout, false, "Timber")
+	check(shut.verdict == "locked" and shut.valor == 0 and locked.valor == 7 and locked.materials.Timber == 12 and locked.secrets == nil and locked.families == nil, "no key: locked, and nothing is written")
+	local empty = L2.v6().combat
+	local nothing = S.Open(empty, "forestRoad", cache, true, "Timber")
+	check(nothing.verdict == "nothing" and empty.valor == 7 and empty.secrets == nil, "the key and no reward entry: nothing, and not recorded (it is asked again)")
+	local found = L2.v6().combat
+	found.secrets = { forestRoad = { lookout = true } }
+	local known = S.Open(found, "forestRoad", lookout, false, "Timber")
+	check(known.verdict == "known" and found.valor == 7, "already found (from an earlier session): known, whatever the key")
+
+	local nowhere = L2.v6().combat
+	local opened = S.Open(nowhere, "forestRoad", lookout, true, "")
+	check(opened.verdict == "pay" and opened.materials == 0 and nowhere.valor == 10 and nowhere.materials[""] == nil and nowhere.materials.Timber == 12, "a level with no material: the Valor and the family are paid, its materials go nowhere and are reported as 0")
+end
+L1.group("l2 openTests", L2.openTests)
 
 function L2.riseTests(): ()
 	print(" WallClip.Rise per player (L2-4)")
@@ -370,6 +497,49 @@ function L2.leapTests(): ()
 	check(Clip.LeapApex(11, 5, 8, standing, L2.NAN) == 11, "a NaN height: no lift")
 end
 L1.group("l2 leapTests", L2.leapTests)
+
+-- c4: WallClip.GroundFloor, the whole of step 4 that WeaponService.GroundPoint and
+-- InputController.groundPoint both call (neither loads here, so their source is read for the call).
+function L2.groundFloorTests(): ()
+	print(" WallClip.GroundFloor: the ground point's step 4, one call on both sides (the fix round's c4)")
+	local movement = FIXTURES.proving.movement
+	local Clip = L1C.Clip
+	local rise, owned = Clip.Rise(movement, false), Clip.Rise(movement, true)
+	-- The wanted floor and caster's floor first, the call last, so both of its values arrive.
+	local function same(floorY: number?, casterFloor: number, gotFloor: number?, gotCaster: number?): boolean
+		return gotFloor == floorY and gotCaster == casterFloor
+	end
+	-- Probed floors on both ends.
+	check(same(20, 8, Clip.GroundFloor(8, 8, 20, movement, nil)), "a target floor within the rise is the ground point's floor, measured from the caster's")
+	check(same(8 + rise, 8, Clip.GroundFloor(8, 8, 8 + rise, movement, false)), `exactly the rise above ({rise}) is allowed`)
+	check(same(nil, 8, Clip.GroundFloor(8, 8, 8 + rise + 0.001, movement, false)), "a thousandth higher is refused, and the caster's floor still comes back (the leap's apex needs it)")
+	check(same(-40, 8, Clip.GroundFloor(8, 8, -40, movement, false)), "any floor below is allowed")
+	-- The lookout: the ledge's top 34 over Road5 at 8.
+	check(same(nil, 8, Clip.GroundFloor(8, 8, 34, movement, false)) and same(34, 8, Clip.GroundFloor(8, 8, 34, movement, true)), "the ledge from Road5: refused without the double jump, allowed with it")
+	-- Only `true` owns: the attribute's other values (nil, false, a forged string or number) do not.
+	local forged = {}
+	if Clip.GroundFloor(8, 8, 8 + owned, movement, nil) ~= nil then
+		table.insert(forged, "nil")
+	end
+	for _, value in { false :: any, "true", 1, {} } do
+		if Clip.GroundFloor(8, 8, 8 + owned, movement, value) ~= nil then
+			table.insert(forged, tostring(value))
+		end
+	end
+	check(#forged == 0, `only an attribute of true adds the double jump (owned by: {table.concat(forged, ", ")})`)
+	-- Voids (F2).
+	local feet = 8 + movement.jumpHeight
+	check(same(feet - rise, feet - rise, Clip.GroundFloor(nil, feet, nil, movement, false)), "a void under both: level with the caster's floor, the feet less the rise")
+	check(same(nil, feet - rise, Clip.GroundFloor(nil, feet, 34, movement, false)), "the ledge from a jump's top over a void off Road5: refused (F2)")
+	check(same(8, 8, Clip.GroundFloor(8, 30, nil, movement, false)), "a void under the target: level with the probed caster's floor, not the feet")
+
+	-- Both callers make the call, and neither calls the parts again (run_harness.py reads them).
+	local ground = (FIXTURES.source or {}).groundFloor or {}
+	local client, server = ground.client or {}, ground.server or {}
+	check(client.calls == 1 and client.parts == 0, `InputController.groundPoint calls WallClip.GroundFloor once and no Rise, TooHigh or CasterFloor of its own ({tostring(client.calls)}, {tostring(client.parts)})`)
+	check(server.calls == 1 and server.parts == 0, `WeaponService.GroundPoint does the same ({tostring(server.calls)}, {tostring(server.parts)})`)
+end
+L1.group("l2 groundFloorTests", L2.groundFloorTests)
 
 function L2.flowTests(): ()
 	print(" StageFlow: Resolve carries secrets, Validate checks them, the map card's rows (L2-13, L2-15)")
@@ -514,6 +684,11 @@ function L2.realTests(): ()
 	check(S.Triggered(lookout, onTop, rules), "and so does one standing on the chest")
 	local road = 8
 	check(not S.Triggered(lookout, vec(lookout.x, road + root, lookout.z), rules) and not S.Triggered(lookout, vec(lookout.x, road + root + FIXTURES.proving.movement.jumpHeight, lookout.z), rules), "from Road5 below, standing or at the top of one jump, it does not")
+	-- The fix round's s1: the cache's 12 x 12 block is collidable, so a root can only stand beside
+	-- it, a body's radius off a face; measured to its footprint, that opens it (once a key exists).
+	local besideCache = vec(cache.x + cache.sx / 2 + 1, cache.floorY + root, cache.z)
+	local frontCache = vec(cache.x, cache.floorY + root, cache.z - cache.sz / 2 - 1)
+	check(S.Triggered(cache, besideCache, rules) and S.Triggered(cache, frontCache, rules), `the Raiders' Cache opens to a root standing against its side or its front ({besideCache.X}, {besideCache.Y}, {besideCache.Z})`)
 end
 L1.group("l2 realTests", L2.realTests)
 

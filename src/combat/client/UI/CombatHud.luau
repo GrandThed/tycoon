@@ -76,7 +76,17 @@
 --
 -- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-10): "Abilities" between Map and Return, in the
 -- lobby only, like Map (`deps.onAbilities`; nil = no button). It is the phone's way to the
--- Abilities panel; a keyboard also has K. The row is 280 design px with all three.
+-- Abilities panel; a keyboard also has K, a gamepad Y (`deps.abilitiesKey` names it).
+--
+-- The L2 W1 fix round's c1: Map, Abilities and Return make a 280 design px row, which ran under
+-- the health bar on a landscape phone and under the Dash and slot buttons in portrait. The
+-- buttons are laid out in ROWS (ActionRows): the host hands SetLayout what stands at the bottom
+-- of the screen (the health bar, the thumb cluster, the AbilityBar), each row ends a gap short
+-- of whatever is in its own band, and what does not fit goes up a row. Measured at MIN_SCALE:
+-- 667 x 375 and 640 x 360 give Map over Abilities + Return (Return ends 51 and 38 px short of
+-- the bar); 375 x 667 gives one button per row (Map, Abilities, Return), right edge 103 px
+-- against the slot button's 158; 1920 x 1080 keeps one row. The key hints and the perf line sit
+-- over however many rows there are.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -90,6 +100,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
+local ActionRows = require(script.Parent:WaitForChild("ActionRows"))
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
 local SoundController =
@@ -100,6 +111,9 @@ export type Deps = {
 	onMap: (() -> ())?,
 	-- L2: "Abilities" in the lobby, beside Map; nil = no such button.
 	onAbilities: (() -> ())?,
+	-- Fix round c2: the gamepad button that opens the panel, shown on the button where nothing
+	-- else could press it (a console); nil = none shown.
+	abilitiesKey: string?,
 	-- "Return to your city" (RequestLeave), offered in the lobby.
 	onLeave: () -> (),
 	-- L1: "Abandon", after its second press (RequestAbandon); nil = no such button.
@@ -135,6 +149,9 @@ export type HudEdges = {
 	noticeBottom: number,
 }
 
+-- Fix round c1: something at the bottom of the screen the bottom-left buttons keep clear of.
+export type Obstacle = ActionRows.Obstacle
+
 export type AbilityInfo = { name: string, cooldown: number }
 export type AbilitySet = { melee: AbilityInfo?, ranged: AbilityInfo? }
 
@@ -151,7 +168,13 @@ export type CombatHudHandle = {
 	SetWallet: (cash: number, material: string, amount: number, valor: number) -> (),
 	SetStance: (stance: string) -> (),
 	SetAbilities: (abilities: AbilitySet) -> (),
-	SetLayout: (scale: number, viewportSize: Vector2) -> HudEdges,
+	-- `obstacles` (fix round c1): what the bottom-left buttons keep clear of, in this HUD's px;
+	-- nil = nothing (one row).
+	SetLayout: (
+		scale: number,
+		viewportSize: Vector2,
+		obstacles: { ActionRows.Obstacle }?
+	) -> HudEdges,
 	-- C2.5 reticle: camera state, bow draw (nil = not drawing) and the hit marker.
 	SetAiming: (shoulderCamera: boolean, cursorLocked: boolean) -> (),
 	SetCharge: (fraction: number?) -> (),
@@ -492,29 +515,16 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	local hpFill = bar(hpTrack, "Bar", Theme.COMBAT_HP_BAR_HEIGHT)
 
 	-- The run's buttons live bottom-left (above the HP bar in the C1 HUD): the bottom-right
-	-- belongs to combat. L1: Map and Return to your city in the lobby, Abandon in a run.
+	-- belongs to combat. L1: Map and Return to your city in the lobby, Abandon in a run. Fix
+	-- round c1: placed in rows by packActions, not by a list layout.
 	local buttonRow = Create("Frame", {
 		Name = "Actions",
 		AnchorPoint = Vector2.new(0, 1),
-		Size = UDim2.fromOffset(
-			Theme.COMBAT_MAP_BUTTON_WIDTH
-				+ Theme.COMBAT_ABILITIES_BUTTON_WIDTH
-				+ Theme.ROW_SPACING * 2
-				+ Theme.COMBAT_RUN_BUTTON_WIDTH,
-			Theme.ROW_BUTTON_HEIGHT
-		),
+		Size = UDim2.fromOffset(Theme.COMBAT_RUN_BUTTON_WIDTH, Theme.ROW_BUTTON_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}) :: Frame
 	local buttonScale = Create("UIScale", { Parent = buttonRow }) :: UIScale
-	Create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Left,
-		VerticalAlignment = Enum.VerticalAlignment.Bottom,
-		Padding = UDim.new(0, Theme.ROW_SPACING),
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Parent = buttonRow,
-	})
 
 	-- Two words wrap onto two lines, so a 104 px button holds "Return to your city".
 	local function actionButton(
@@ -544,8 +554,16 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 
 	local mapButton = actionButton("Map", MAP_TEXT, 1, Theme.COMBAT_MAP_BUTTON_WIDTH, true)
 	mapButton.TextSize = Theme.TEXT_HEADER
-	local abilitiesButton =
-		actionButton("Abilities", ABILITIES_TEXT, 2, Theme.COMBAT_ABILITIES_BUTTON_WIDTH, true)
+	local abilitiesKey = deps.abilitiesKey
+	local abilitiesButton = actionButton(
+		"Abilities",
+		if abilitiesKey ~= nil
+			then ABILITIES_TEXT .. "\n[" .. abilitiesKey .. "]"
+			else ABILITIES_TEXT,
+		2,
+		Theme.COMBAT_ABILITIES_BUTTON_WIDTH,
+		true
+	)
 	local returnButton =
 		actionButton("Return", RETURN_TEXT, 3, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
 	local abandonButton =
@@ -786,6 +804,71 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		}) :: TextLabel,
 	}
 	local perfScale = Create("UIScale", { Parent = perf.line }) :: UIScale
+
+	-- Fix round c1: the bottom-left buttons in rows (ActionRows) and the hint stack over them.
+	-- `scale`, `margin` (px from the left), `base` (px from the bottom to the rows' bottom edge),
+	-- `height` (this HUD's height in px) and `obstacles` are the last SetLayout's; `shown` is the
+	-- set of buttons last laid out (one bit each). The hints stand over at least one row, so they
+	-- do not jump when Abandon comes and goes.
+	local rowState = {
+		scale = 0,
+		margin = 0,
+		base = 0,
+		height = 0,
+		obstacles = {} :: { ActionRows.Obstacle },
+		shown = -1,
+		buttons = { mapButton, abilitiesButton, returnButton, abandonButton, abandonPrompt } :: { GuiObject },
+	}
+	local function packActions(force: boolean): ()
+		local scale = rowState.scale
+		if scale <= 0 then
+			return -- before the first SetLayout
+		end
+		local shown = 0
+		for index, button in rowState.buttons do
+			if button.Visible then
+				shown = bit32.bor(shown, bit32.lshift(1, index))
+			end
+		end
+		if shown == rowState.shown and not force then
+			return
+		end
+		rowState.shown = shown
+		local visible: { GuiObject } = {}
+		local widths: { number } = {}
+		for _, button in rowState.buttons do
+			if button.Visible then
+				table.insert(visible, button)
+				table.insert(widths, button.Size.X.Offset)
+			end
+		end
+		local places, rows, widest = ActionRows.Pack(widths, {
+			scale = scale,
+			gap = Theme.ROW_SPACING,
+			rowHeight = Theme.ROW_BUTTON_HEIGHT,
+			margin = rowState.margin,
+			bottom = rowState.height - rowState.base,
+			clearance = Theme.COMBAT_CONTROL_GAP * scale,
+		}, rowState.obstacles)
+		local count = math.max(rows, 1)
+		local step = Theme.ROW_BUTTON_HEIGHT + Theme.ROW_SPACING
+		buttonRow.Size = UDim2.fromOffset(
+			math.max(widest, Theme.COMBAT_RUN_BUTTON_WIDTH),
+			count * step - Theme.ROW_SPACING
+		)
+		for index, button in visible do
+			local slot = places[index]
+			button.Position = UDim2.fromOffset(slot.x, (count - slot.row) * step)
+		end
+		-- The Alt hint over the top row, the Studio keys over it, the perf line over both.
+		local altBottom = rowState.base + count * step * scale
+		altHint.Position = UDim2.new(0, rowState.margin, 1, -altBottom)
+		local hintSlot = (Theme.COMBAT_ALT_HINT_HEIGHT + Theme.ROW_SPACING) * scale
+		keyHint.Position = UDim2.new(0, rowState.margin, 1, -(altBottom + hintSlot))
+		-- L1b-W2-23: over the stack, a slot above each key hint a keyboard can show.
+		local hintSlots = if not keyHints then 0 elseif keyHintText ~= nil then 2 else 1
+		perf.line.Position = UDim2.new(0, rowState.margin, 1, -(altBottom + hintSlot * hintSlots))
+	end
 
 	-- Reticle: a separate ScreenGui with no top-bar inset, so (0.5, 0.5) is the exact
 	-- viewport centre the camera's aim ray passes through. Nothing in it takes input.
@@ -1095,6 +1178,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		abandonButton.TextColor3 = if armed then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
 		-- Armed with the button off the screen: the label says it instead.
 		abandonPrompt.Visible = armed and not abandonButton.Visible
+		packActions(false)
 		if armed ~= objective.armed then
 			objective.armed = armed
 			local onArmed = deps.onAbandonArmed
@@ -1268,7 +1352,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			-- abandon any more, or the button is gone and there is no key to press instead.
 			objective.abandonUntil = 0
 		end
-		-- Always: the armed label depends on whether the button is on screen.
+		-- Always: the armed label depends on whether the button is on screen. It also lays the
+		-- buttons out again when the set shown changed.
 		paintAbandon()
 		if phase == "summary" or phase == "ended" then
 			table.clear(seenFighting) -- nothing carries past a run
@@ -1441,7 +1526,11 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 				paintAbility(entry)
 			end
 		end,
-		SetLayout = function(scale: number, viewportSize: Vector2)
+		SetLayout = function(
+			scale: number,
+			viewportSize: Vector2,
+			obstacles: { ActionRows.Obstacle }?
+		)
 			topScale.Scale = scale
 			walletScale.Scale = scale
 			noticeScale.Scale = scale
@@ -1536,22 +1625,14 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 					* scale
 				else 0
 			buttonRow.Position = UDim2.new(0, margin, 1, -(bottom + hpHeight))
-			local altBottom = bottom
-				+ hpHeight
-				+ (Theme.ROW_SPACING + Theme.ROW_BUTTON_HEIGHT) * scale
-			altHint.Position = UDim2.new(0, margin, 1, -altBottom)
 			keyHintScale.Scale = scale
-			keyHint.Position = UDim2.new(
-				0,
-				margin,
-				1,
-				-(altBottom + (Theme.COMBAT_ALT_HINT_HEIGHT + Theme.ROW_SPACING) * scale)
-			)
-			-- L1b-W2-23: over the stack, a slot above each key hint a keyboard can show.
-			local hintSlot = (Theme.COMBAT_ALT_HINT_HEIGHT + Theme.ROW_SPACING) * scale
-			local hintSlots = if not keyHints then 0 elseif keyHintText ~= nil then 2 else 1
 			perfScale.Scale = scale
-			perf.line.Position = UDim2.new(0, margin, 1, -(altBottom + hintSlot * hintSlots))
+			rowState.scale = scale
+			rowState.margin = margin
+			rowState.base = bottom + hpHeight
+			rowState.height = viewportSize.Y
+			rowState.obstacles = obstacles or {}
+			packActions(true)
 			local headerWidth = Theme.TOP_BAR_WIDTH * scale
 			return {
 				headerBottom = margin

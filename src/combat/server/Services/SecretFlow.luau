@@ -1,10 +1,11 @@
 --!strict
 -- L2 W1 (docs/prompts/l2-w1-contract.md, L2-11 to L2-15): the rules of a level's secrets as
 -- chests. Which chests a level has, when a standing root opens one, what opening it means for a
--- player (known, locked, nothing, pay) and the map card's row. A sibling of StageFlow, pure for
--- the same reason: tables, numbers and Vector3 values only, no service, no Instance, no clock,
--- so tools/crowd_harness loads it as it stands and mutate.py mutates it. WaveService tests the
--- roots and UnlockService writes the profile; both only execute what is decided here.
+-- player (known, locked, nothing, pay), what a pay writes into the profile (Open) and the map
+-- card's row. A sibling of StageFlow, pure for the same reason: tables, numbers and Vector3 values
+-- only, no service, no Instance, no clock, so tools/crowd_harness loads it as it stands and
+-- mutate.py mutates it. WaveService tests the roots and UnlockService hands Open the profile and
+-- the key; both only execute what is decided here.
 --
 -- No secret pays without its key: Decide asks for the key before it looks at the reward, and the
 -- key (Unlocks.HasKey) fails closed for anything W1 does not sell.
@@ -17,13 +18,16 @@ local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Typ
 -- family the player now holds.
 export type Reward = { valor: number, materials: number, family: string? }
 -- One chest: the layout's `Secret_<id>` block and the level file's entry. x, z = its centre on
--- the flat; floorY = the block's bottom (where a player stands to reach it); reward nil = the
--- entry names it and pays nothing (W1's cache and shrine).
+-- the flat and sx, sz its footprint's sizes (the fix round's s1: the trigger is measured to the
+-- footprint, so a big chest opens from beside it); floorY = the block's bottom (where a player
+-- stands to reach it); reward nil = the entry names it and pays nothing (W1's cache and shrine).
 export type Site = {
 	id: string,
 	needs: string,
 	x: number,
 	z: number,
+	sx: number,
+	sz: number,
 	floorY: number,
 	name: string,
 	reward: Reward?,
@@ -77,7 +81,11 @@ function SecretFlow.Sites(layout: Types.LevelLayout, levelFile: SecretsHolder?):
 				finite(secret.x)
 				and finite(secret.y)
 				and finite(secret.z)
+				and finite(secret.sx)
 				and finite(secret.sy)
+				and finite(secret.sz)
+				and secret.sx >= 0
+				and secret.sz >= 0
 			)
 		then
 			continue
@@ -93,6 +101,8 @@ function SecretFlow.Sites(layout: Types.LevelLayout, levelFile: SecretsHolder?):
 			needs = secret.needs,
 			x = secret.x,
 			z = secret.z,
+			sx = secret.sx,
+			sz = secret.sz,
 			floorY = secret.y - secret.sy / 2,
 			name = name,
 			reward = rewardOf(entry),
@@ -101,15 +111,16 @@ function SecretFlow.Sites(layout: Types.LevelLayout, levelFile: SecretsHolder?):
 	return sites
 end
 
--- True when a root opens the chest: within levels.secretReach of its centre on the flat
--- (closed), and from secretBelow under to secretAbove over its bottom (closed). Rules that are
--- not finite numbers open nothing.
+-- True when a root opens the chest: within levels.secretReach on the flat of its footprint, the
+-- axis-aligned sx by sz rectangle round its centre (closed; 0 inside it), and from secretBelow
+-- under to secretAbove over its bottom (closed). Rules that are not finite numbers open nothing.
 function SecretFlow.Triggered(site: Site, root: Vector3, rules: Types.CombatLevelsConfig): boolean
 	local reach, below, above = rules.secretReach, rules.secretBelow, rules.secretAbove
 	if not (finite(reach) and finite(below) and finite(above)) then
 		return false
 	end
-	local dx, dz = root.X - site.x, root.Z - site.z
+	local dx = math.max(math.abs(root.X - site.x) - site.sx / 2, 0)
+	local dz = math.max(math.abs(root.Z - site.z) - site.sz / 2, 0)
 	local rise = root.Y - site.floorY
 	return dx * dx + dz * dz <= (reach :: number) * (reach :: number)
 		and rise >= -(below :: number)
@@ -127,6 +138,68 @@ function SecretFlow.Decide(site: Site, hasKey: boolean, found: boolean): Verdict
 		return "nothing"
 	end
 	return "pay"
+end
+
+-- The profile's opened secrets of one level, and its families, each made when the profile lacks
+-- it (v6 code may have saved one without them).
+local function secretsOf(combat: Types.CombatProfile, levelId: string): { [string]: boolean }
+	local byLevel = combat.secrets
+	if byLevel == nil then
+		local made: { [string]: { [string]: boolean } } = {}
+		combat.secrets = made
+		byLevel = made
+	end
+	local levels = byLevel :: { [string]: { [string]: boolean } }
+	local own = levels[levelId]
+	if own == nil then
+		local made: { [string]: boolean } = {}
+		levels[levelId] = made
+		own = made
+	end
+	return own :: { [string]: boolean }
+end
+
+local function familiesOf(combat: Types.CombatProfile): { [string]: boolean }
+	local existing = combat.families
+	if existing ~= nil then
+		return existing
+	end
+	local made: { [string]: boolean } = {}
+	combat.families = made
+	return made
+end
+
+-- L2-12 (the fix round's s3): one player opens the chest, decided and written in one call with no
+-- yield. `hasKey` is Unlocks.HasKey on that player's profile (never the attribute); `material`
+-- is the level's ("" = its materials go nowhere and are reported as 0). On "pay" the reward goes
+-- into `combat` (Valor, the material, the family) and the secret is recorded, so a second call
+-- reads "known"; any other verdict writes nothing. UnlockService only reads the profile and calls
+-- this.
+function SecretFlow.Open(
+	combat: Types.CombatProfile,
+	levelId: string,
+	site: Site,
+	hasKey: boolean,
+	material: string
+): Opening
+	local byLevel = combat.secrets
+	local opened = if byLevel ~= nil then byLevel[levelId] else nil
+	local verdict = SecretFlow.Decide(site, hasKey, opened ~= nil and opened[site.id] == true)
+	local reward = site.reward
+	if verdict ~= "pay" or reward == nil then
+		return { verdict = verdict :: Verdict, valor = 0, materials = 0, family = nil }
+	end
+	combat.valor += reward.valor
+	local materials = if material ~= "" then reward.materials else 0
+	if materials > 0 then
+		combat.materials[material] = (combat.materials[material] or 0) + materials
+	end
+	local family = reward.family
+	if family ~= nil then
+		familiesOf(combat)[family] = true
+	end
+	secretsOf(combat, levelId)[site.id] = true
+	return { verdict = "pay", valor = reward.valor, materials = materials, family = family }
 end
 
 -- The map card's row for one player: every chest of the level in order, found from their own

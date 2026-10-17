@@ -25,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Region = require(sharedFolder:WaitForChild("Region"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
 
@@ -249,8 +250,6 @@ local START_OFFSETS = {
 }
 -- A spot's posture (L1b-3).
 local POSTURES: { [string]: boolean } = { guard = true, patrol = true, fire = true }
--- L2-13: the longest weapon family id a secret may give (the remotes' family id cap).
-local MAX_FAMILY_LENGTH = 24
 
 local StageFlow = {}
 
@@ -937,10 +936,12 @@ local function secretProblems(
 				)
 			end
 		end
+		-- The family id cap is the remotes' (Unlocks, its one home), counted in bytes; the Python
+		-- mirror counts bytes too.
 		local family = entry.family
 		if
 			family ~= nil
-			and (type(family) ~= "string" or family == "" or #family > MAX_FAMILY_LENGTH)
+			and (type(family) ~= "string" or family == "" or #family > Unlocks.MAX_FAMILY_LENGTH)
 		then
 			problem(`secrets.{id}.family is {tostring(family)}, not a family id`)
 		end

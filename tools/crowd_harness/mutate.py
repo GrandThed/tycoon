@@ -4349,8 +4349,8 @@ L2_MUTATIONS = {
     ),
     "l2: Find returns a malformed entry": (
         UNLOCKS,
-        "return if Unlocks.DefProblem(def) == nil then def else nil",
-        "return def",
+        'if type(def) == "table" and def.id == id and Unlocks.DefProblem(def) == nil then',
+        'if type(def) == "table" and def.id == id then',
     ),
     "l2: no profile reads as invalid": (UNLOCKS, 'return "unavailable"', 'return "invalid"'),
     "l2: a malformed entry may be bought": (
@@ -4447,7 +4447,7 @@ L2_MUTATIONS = {
         "amount ~= nil and not (isFinite(amount) and amount >= 0 and amount % 1 == 0)",
         "amount ~= nil and not (isFinite(amount) and amount % 1 == 0)",
     ),
-    "l2: a family of any length is accepted": (FLOW, " or #family > MAX_FAMILY_LENGTH", ""),
+    "l2: a family of any length is accepted": (FLOW, " or #family > Unlocks.MAX_FAMILY_LENGTH", ""),
     "l2: a block that is not a table is accepted": (FLOW, '\t\tproblem("secrets is not a table")\n', ""),
     "l2: MapState passes no rows": (
         FLOW,
@@ -4461,6 +4461,124 @@ L2_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L2_MUTATIONS)
+
+# The L2 W1 fix round (docs/prompts/l2-w1-fix-round.md), from the server agent: the trigger measured
+# to the chest's footprint (s1), the caps' one home and the empty text (s2, c5), Unlocks.Apply and
+# SecretFlow.Open (s3), one rule for a repeated id (s4), WallClip.GroundFloor and the source check
+# that both ground-point callers make it (c4). WeaponService is copied for that source check.
+WEAPON = "src/combat/server/Services/WeaponService.luau"
+FILES.append(WEAPON)
+L2_FIX_MUTATIONS = {
+    # s1: the footprint.
+    "l2 fix s1: the trigger is measured to the chest's centre": (
+        SECRET_FLOW,
+        "local dx = math.max(math.abs(root.X - site.x) - site.sx / 2, 0)\n"
+        "\tlocal dz = math.max(math.abs(root.Z - site.z) - site.sz / 2, 0)",
+        "local dx, dz = root.X - site.x, root.Z - site.z",
+    ),
+    "l2 fix s1: the footprint is ignored on z": (
+        SECRET_FLOW,
+        "local dz = math.max(math.abs(root.Z - site.z) - site.sz / 2, 0)",
+        "local dz = root.Z - site.z",
+    ),
+    "l2 fix s1: the footprint reaches its whole size each way": (SECRET_FLOW, "- site.sx / 2, 0)", "- site.sx, 0)"),
+    "l2 fix s1: a root inside the footprint counts as far": (
+        SECRET_FLOW,
+        "local dx = math.max(math.abs(root.X - site.x) - site.sx / 2, 0)",
+        "local dx = math.abs(root.X - site.x) - site.sx / 2",
+    ),
+    "l2 fix s1: a site with no footprint is kept": (SECRET_FLOW, "\t\t\t\tand finite(secret.sx)\n", ""),
+    "l2 fix s1: a negative footprint is kept": (
+        SECRET_FLOW,
+        "\t\t\t\tand secret.sx >= 0\n\t\t\t\tand secret.sz >= 0\n",
+        "",
+    ),
+    "l2 fix s1: a site forgets its footprint": (
+        SECRET_FLOW,
+        "\t\t\tsx = secret.sx,\n\t\t\tsz = secret.sz,\n",
+        "\t\t\tsx = 0,\n\t\t\tsz = 0,\n",
+    ),
+    # s2 and c5: the caps and the empty text.
+    "l2 fix s2: an empty text sells": (
+        UNLOCKS,
+        'if type(def.text) ~= "string" or def.text == "" then',
+        'if type(def.text) ~= "string" then',
+    ),
+    "l2 fix s2: an id past the cap sells": (UNLOCKS, "\tif #def.id > MAX_ID_LENGTH then\n", "\tif false then\n"),
+    "l2 fix s2: the ability id cap drifts": (UNLOCKS, "local MAX_ID_LENGTH = 32", "local MAX_ID_LENGTH = 31"),
+    "l2 fix s2: the family id cap drifts": (UNLOCKS, "local MAX_FAMILY_LENGTH = 24", "local MAX_FAMILY_LENGTH = 25"),
+    # s3: the purchase and the chest, written by pure calls.
+    "l2 fix s3: Apply sells whatever the verdict (sells at 0 Valor)": (
+        UNLOCKS,
+        "if verdict ~= nil or state == nil or def == nil then",
+        "if state == nil or def == nil then",
+    ),
+    "l2 fix s3: Apply takes no Valor": (UNLOCKS, "\tcombat.valor -= def.price.valor\n", ""),
+    "l2 fix s3: Apply does not record the ability": (UNLOCKS, "\tUnlocks.AbilitiesOf(combat)[def.id] = true\n", ""),
+    "l2 fix s3: AbilitiesOf replaces the profile's map": (
+        UNLOCKS,
+        "\tlocal existing = combat.abilities\n\tif existing ~= nil then\n\t\treturn existing\n\tend\n",
+        "",
+    ),
+    "l2 fix s3: Open pays whatever the verdict": (
+        SECRET_FLOW,
+        'if verdict ~= "pay" or reward == nil then',
+        "if reward == nil then",
+    ),
+    "l2 fix s3: Open pays no Valor": (SECRET_FLOW, "\tcombat.valor += reward.valor\n", ""),
+    "l2 fix s3: Open does not record the secret": (SECRET_FLOW, "\tsecretsOf(combat, levelId)[site.id] = true\n", ""),
+    "l2 fix s3: Open drops the family": (SECRET_FLOW, "\t\tfamiliesOf(combat)[family] = true\n", ""),
+    "l2 fix s3: Open credits materials to a level with none": (
+        SECRET_FLOW,
+        'if material ~= "" then reward.materials else 0',
+        "reward.materials",
+    ),
+    "l2 fix s3: Open reads found from another level": (
+        SECRET_FLOW,
+        "local opened = if byLevel ~= nil then byLevel[levelId] else nil",
+        "local opened = if byLevel ~= nil then byLevel.forestRoad else nil",
+    ),
+    "l2 fix s3: a level's secrets map is replaced": (SECRET_FLOW, "\tlocal own = levels[levelId]\n", "\tlocal own = nil\n"),
+    "l2 fix s3: the families map is replaced": (
+        SECRET_FLOW,
+        "\tlocal existing = combat.families\n\tif existing ~= nil then\n\t\treturn existing\n\tend\n",
+        "",
+    ),
+    # s4: one rule for a repeated id.
+    "l2 fix s4: Sellable keeps every repeat": (UNLOCKS, "\t\t\tif first ~= index then\n", "\t\t\tif false then\n"),
+    # c4: the ground point's step 4.
+    "l2 fix c4: GroundFloor owns on any attribute": (
+        WALL_CLIP,
+        "WallClip.Rise(movement, airJump == true)",
+        "WallClip.Rise(movement, airJump ~= nil)",
+    ),
+    "l2 fix c4: GroundFloor ignores the probed target": (
+        WALL_CLIP,
+        "local floorY = if probedTarget ~= nil then probedTarget else casterFloor",
+        "local floorY = casterFloor",
+    ),
+    "l2 fix c4: GroundFloor never refuses": (
+        WALL_CLIP,
+        "\tif WallClip.TooHigh(casterFloor, floorY, rise) then\n\t\treturn nil, casterFloor\n\tend\n",
+        "",
+    ),
+    "l2 fix c4: GroundFloor measures from the feet": (
+        WALL_CLIP,
+        "local casterFloor = WallClip.CasterFloor(probedCaster, feetY, rise)",
+        "local casterFloor = feetY",
+    ),
+    "l2 fix c4: the server's ground point keeps its own copy": (
+        WEAPON,
+        "local floorY = WallClip.GroundFloor(",
+        "local floorY = WallClip.TooHigh(",
+    ),
+    "l2 fix c4: the client's ground point keeps its own copy": (
+        INPUT,
+        "local floorY, casterFloor = WallClip.GroundFloor(",
+        "local floorY, casterFloor = WallClip.TooHigh(",
+    ),
+}
+MUTATIONS.update(L2_FIX_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

@@ -18,7 +18,8 @@
 --   double jump leap onto a ledge his jumps cannot reach. Over a void the caster's floor was his
 --   own feet, so a jump off a cliff made ground a jump above the road a legal target; and a leap
 --   cast at the top of a jump stacked its height on the jump. Both callers above and
---   MovementController.Leap use these, so client and server share one rule.
+--   MovementController.Leap use these, so client and server share one rule. The two ground-point
+--   callers go through GroundFloor, which is the whole of their step 4.
 
 -- A locking camp's fenced rectangle: centre and half sizes on the flat, and `y` its floor's top
 -- (Types.RunFloor's numbers, the halves grown by the fence), studs. `ceiling`: how far above `y` a
@@ -165,6 +166,29 @@ end
 -- ground above the height his jumps would have carried him from wherever he stood.
 function WallClip.CasterFloor(probed: number?, feetY: number, rise: number): number
 	return if probed ~= nil then probed else feetY - rise
+end
+
+-- Step 4 of an aimed ability's ground point, whole (the fix round's c4): the one call
+-- WeaponService.GroundPoint and InputController.groundPoint both make, so no copy of it can drift.
+-- `probedCaster` / `probedTarget`: the floors a ray found under the caster and under the aimed
+-- point (nil = a void); `feetY` the caster's feet; `airJump` the raw `Ability_doubleJump`
+-- attribute, of which only `true` counts as owned. Returns the ground point's floor (the probed
+-- one, else level with the caster's floor) or nil when it is higher above the caster's floor than
+-- his rise (refused), and that caster's floor (F2), from which the leap's apex is measured (F1).
+function WallClip.GroundFloor(
+	probedCaster: number?,
+	feetY: number,
+	probedTarget: number?,
+	movement: { jumpHeight: number, doubleJumpHeight: number },
+	airJump: unknown
+): (number?, number)
+	local rise = WallClip.Rise(movement, airJump == true)
+	local casterFloor = WallClip.CasterFloor(probedCaster, feetY, rise)
+	local floorY = if probedTarget ~= nil then probedTarget else casterFloor
+	if WallClip.TooHigh(casterFloor, floorY, rise) then
+		return nil, casterFloor
+	end
+	return floorY, casterFloor
 end
 
 -- F1: a leap's apex, as root heights. `fromY` the root at the cast, `toY` the root standing on the

@@ -14,18 +14,26 @@
 -- the host says the lobby is up (SetLobby); closes on K, Esc, its close button or a tap on the
 -- scrim, and whenever the lobby goes. No sound (Ben, 2026-09-24).
 --
+-- Gamepad (the fix round's c2): ButtonY toggles it, bound only while the lobby is up (in a run
+-- ButtonY is the weapon swap, which the lobby has no use for); the host closes the map when the
+-- panel opens, whatever opened it. Opened after gamepad input, the first live Buy is selected
+-- (else the close button) and selection cannot leave the sheet; ButtonB closes it, bound above
+-- the dash's priority (MovementController binds B at High) only while it is open.
+--
 -- Laid out for a landscape phone first: one sheet under one UIScale, 340 design px wide (fits
 -- 375 px portrait at MIN_SCALE), centred; the rows scroll when a short screen cannot hold them.
 -- At 667 x 375 under a 58 px top bar the sheet has 330 design px of height, and one row needs
 -- 48 + 6 + 68 + 6 + 14 + 20 = 162. The close button and Buy are 48 design px (44 physical at
 -- MIN_SCALE).
 
+local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Format = require(sharedFolder:WaitForChild("Format"))
+local Types = require(sharedFolder:WaitForChild("Types"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
@@ -38,6 +46,9 @@ export type Deps = {
 	toast: (text: string, seconds: number, isError: boolean) -> (),
 	-- The line naming the keys that close it; nil = no line.
 	keyHint: string?,
+	-- true = ButtonY toggles the panel while the lobby is up (the host closes the map in
+	-- onOpenChanged, as for every other way in).
+	padToggle: boolean?,
 }
 
 export type AbilitiesPanelHandle = {
@@ -71,44 +82,44 @@ local OWNED_TEXT = "Owned"
 local BUY_TEXT = "Buy"
 local BUYING_TEXT = "Buying..."
 local EMPTY_TEXT = "Nothing to learn yet"
-local MAX_ID_LENGTH = 32
 local REFUSALS: { [string]: string } = {
 	owned = "Already yours",
 	busy = "Only in the lobby",
 	insufficientFunds = "Not enough Valor",
 }
 local REFUSAL_FALLBACK = "Try again"
+-- Gamepad: the lobby's toggle and the open panel's close, above the High bindings of the run
+-- (InputController's swap on Y, MovementController's dash on B) so neither also fires.
+local PAD_TOGGLE_ACTION = "ExpeditionAbilitiesPad"
+local PAD_CLOSE_ACTION = "ExpeditionAbilitiesClose"
+local PAD_TOGGLE_KEY = Enum.KeyCode.ButtonY
+local PAD_CLOSE_KEY = Enum.KeyCode.ButtonB
+local PAD_PRIORITY = Enum.ContextActionPriority.High.Value + 1
+
+-- Whether the player's latest input came from a gamepad (Gamepad1 to Gamepad8).
+local function padLast(): boolean
+	return string.sub(UserInputService:GetLastInputType().Name, 1, 7) == "Gamepad"
+end
 
 local AbilitiesPanel = {}
 
--- The offers of Config/Expeditions.json `abilities.list`, by `order` (then id). An entry the
--- server would refuse to sell (Unlocks.DefProblem, the server's own rule) is left out: the panel
--- never offers what cannot be bought. `expeditions` is read loosely because the block is
--- optional and comes from JSON.
-function AbilitiesPanel.Offers(expeditions: any): { Offer }
+-- The gamepad toggle's button, for the host's hints ("Y").
+AbilitiesPanel.PAD_TOGGLE_NAME = "Y"
+
+-- The offers of Config/Expeditions.json `abilities.list`, by `order` (then id): exactly the
+-- entries the server sells (Unlocks.Sellable, the rule UnlockService.Init and Unlocks.Find read,
+-- caps and a repeated id included), so the panel never offers what cannot be bought. The server
+-- warns about the entries left out; the panel stays quiet.
+function AbilitiesPanel.Offers(expeditions: Types.ExpeditionsConfig?): { Offer }
 	local offers: { Offer } = {}
-	local block = if typeof(expeditions) == "table" then expeditions.abilities else nil
-	local list = if typeof(block) == "table" then block.list else nil
-	if typeof(list) ~= "table" then
-		return offers
-	end
-	local seen: { [string]: boolean } = {}
-	for _, entry in list do
-		local id = if typeof(entry) == "table" then entry.id else nil
-		if typeof(id) ~= "string" or seen[id] then
-			continue
-		end
-		-- The first entry of an id is the only one the server reads (Unlocks.Find), sound or not.
-		seen[id] = true
-		if Unlocks.DefProblem(entry) ~= nil or #id > MAX_ID_LENGTH then
-			continue
-		end
+	local sellable = Unlocks.Sellable(expeditions)
+	for _, def in sellable do
 		table.insert(offers, {
-			id = entry.id,
-			name = entry.name,
-			text = entry.text,
-			price = entry.price.valor,
-			order = entry.order,
+			id = def.id,
+			name = def.name,
+			text = def.text,
+			price = def.price.valor,
+			order = def.order,
 		})
 	end
 	table.sort(offers, function(a: Offer, b: Offer): boolean
@@ -164,6 +175,7 @@ function AbilitiesPanel.new(parent: Instance, offers: { Offer }, deps: Deps): Ab
 		BackgroundColor3 = Theme.COLOR_SCRIM,
 		BackgroundTransparency = Theme.MAP_SCRIM_TRANSPARENCY,
 		BorderSizePixel = 0,
+		Selectable = false,
 		Visible = false,
 		ZIndex = Theme.ZINDEX_CARD,
 		Parent = parent,
@@ -176,6 +188,12 @@ function AbilitiesPanel.new(parent: Instance, offers: { Offer }, deps: Deps): Ab
 		Size = UDim2.fromOffset(Theme.ABILITIES_WIDTH, Theme.ABILITIES_HEADER_HEIGHT),
 		BackgroundColor3 = Theme.MAP_COLOR_PANEL,
 		BorderSizePixel = 0,
+		-- A gamepad's selection stays on the sheet's buttons while it is open.
+		SelectionGroup = true,
+		SelectionBehaviorUp = Enum.SelectionBehavior.Stop,
+		SelectionBehaviorDown = Enum.SelectionBehavior.Stop,
+		SelectionBehaviorLeft = Enum.SelectionBehavior.Stop,
+		SelectionBehaviorRight = Enum.SelectionBehavior.Stop,
 		ZIndex = Theme.ZINDEX_CARD,
 		Parent = root,
 	}) :: Frame
@@ -385,7 +403,30 @@ function AbilitiesPanel.new(parent: Instance, offers: { Offer }, deps: Deps): Ab
 		empty.ZIndex = Theme.ZINDEX_CARD
 	end
 
-	local function setOpen(open: boolean): ()
+	-- The first live Buy, else the close button: where a gamepad's selection starts.
+	local function firstSelection(): GuiObject
+		for _, row in rows do
+			if row.button.Active then
+				return row.button
+			end
+		end
+		return close
+	end
+
+	local setOpen: (open: boolean) -> ()
+
+	local function onPadClose(
+		_action: string,
+		state: Enum.UserInputState,
+		_input: InputObject
+	): Enum.ContextActionResult
+		if state == Enum.UserInputState.Begin then
+			setOpen(false)
+		end
+		return Enum.ContextActionResult.Sink
+	end
+
+	setOpen = function(open: boolean): ()
 		if open and not view.lobby then
 			return
 		end
@@ -396,8 +437,54 @@ function AbilitiesPanel.new(parent: Instance, offers: { Offer }, deps: Deps): Ab
 		root.Visible = open
 		if open then
 			paint()
+			ContextActionService:BindActionAtPriority(
+				PAD_CLOSE_ACTION,
+				onPadClose,
+				false,
+				PAD_PRIORITY,
+				PAD_CLOSE_KEY
+			)
+			if padLast() then
+				GuiService.SelectedObject = firstSelection()
+			end
+		else
+			ContextActionService:UnbindAction(PAD_CLOSE_ACTION)
+			local selected = GuiService.SelectedObject
+			if selected ~= nil and selected:IsDescendantOf(root) then
+				GuiService.SelectedObject = nil
+			end
 		end
 		deps.onOpenChanged(open)
+	end
+
+	-- The lobby's gamepad toggle; bound while the lobby is up (SetLobby).
+	local padBound = false
+	local function onPadToggle(
+		_action: string,
+		state: Enum.UserInputState,
+		_input: InputObject
+	): Enum.ContextActionResult
+		if state == Enum.UserInputState.Begin then
+			setOpen(not view.open)
+		end
+		return Enum.ContextActionResult.Sink
+	end
+	local function bindPadToggle(bound: boolean): ()
+		if deps.padToggle ~= true or bound == padBound then
+			return
+		end
+		padBound = bound
+		if bound then
+			ContextActionService:BindActionAtPriority(
+				PAD_TOGGLE_ACTION,
+				onPadToggle,
+				false,
+				PAD_PRIORITY,
+				PAD_TOGGLE_KEY
+			)
+		else
+			ContextActionService:UnbindAction(PAD_TOGGLE_ACTION)
+		end
 	end
 
 	table.insert(
@@ -446,6 +533,7 @@ function AbilitiesPanel.new(parent: Instance, offers: { Offer }, deps: Deps): Ab
 		end,
 		SetLobby = function(inLobby: boolean)
 			view.lobby = inLobby
+			bindPadToggle(inLobby)
 			if not inLobby then
 				setOpen(false)
 			end
@@ -516,6 +604,8 @@ function AbilitiesPanel.new(parent: Instance, offers: { Offer }, deps: Deps): Ab
 			end
 		end,
 		Destroy = function()
+			setOpen(false)
+			bindPadToggle(false)
 			for _, connection in connections do
 				connection:Disconnect()
 			end

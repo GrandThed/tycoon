@@ -1838,11 +1838,11 @@ end
 -- the leap and refuses a ground-aimed cast early, so the two agree wherever both see the same
 -- arena.
 -- L1c §8: nil = refused, as WeaponService.GroundPoint refuses it, with the same shared rule
--- (WallClip.TooHigh): ground more than the caster's own rise above the caster's floor. Without
+-- (WallClip.GroundFloor): ground more than the caster's own rise above the caster's floor. Without
 -- it a leap aimed over a tall wall lands its probe on the wall's top, a perch that sees into a
 -- walled camp. L2-4: the rise is per player, jumpHeight plus doubleJumpHeight only for one who
 -- owns the double jump (the Player attribute the server sets; the server reads the same one).
--- Also returns the caster's floor it measured from (WallClip.CasterFloor): the leap's apex
+-- Also returns the caster's floor it measured from (GroundFloor's second value): the leap's apex
 -- stands on it (L2 W1 F1).
 local function groundPoint(
 	rig: LocalRig,
@@ -1866,15 +1866,16 @@ local function groundPoint(
 	end
 	-- 4: onto the floor under it (probed from GROUND_PROBE_LIFT above), else level with the
 	-- floor under the caster; over a void (L2 W1 F2) that is the feet less the caster's rise.
-	local airJump = Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) == true
-	local rise = WallClip.Rise(Tuning.Get().movement, airJump)
-	local casterFloor = WallClip.CasterFloor(
+	-- WallClip.GroundFloor is the whole step, the same call WeaponService.GroundPoint makes with
+	-- the server's copy of the same attribute (the fix round's c4), so the two cannot drift.
+	local floorY, casterFloor = WallClip.GroundFloor(
 		floorHit(root, params),
 		root.Y - rig.root.Size.Y * HALF - rig.humanoid.HipHeight,
-		rise
+		floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params),
+		Tuning.Get().movement,
+		Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP))
 	)
-	local floorY = floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params) or casterFloor
-	if WallClip.TooHigh(casterFloor, floorY, rise) then
+	if floorY == nil then
 		return nil, casterFloor
 	end
 	return Vector3.new(point.X, floorY, point.Z), casterFloor

@@ -2526,7 +2526,7 @@ end
 
 -- Ruling 4, which InputController mirrors on the client: where an aimed ability lands. nil =
 -- refused, and (L1c §8) so is ground higher above the caster's floor than their own jumps reach
--- (WallClip.TooHigh): a leap aimed over a tall wall would otherwise land on its top. L2-4: the
+-- (WallClip.GroundFloor): a leap aimed over a tall wall would otherwise land on its top. L2-4: the
 -- double jump counts only for a player who owns it, read from the attribute UnlockService (this
 -- server) sets, never from the client.
 function WeaponService.GroundPoint(
@@ -2558,16 +2558,16 @@ function WeaponService.GroundPoint(
 	end
 	-- 4: dropped onto the floor there, else level with the floor under the caster. Over a void
 	-- (L2 W1 F2) that floor is the caster's feet less his own rise, so a jump off a cliff does
-	-- not make ground a jump above the cliff's foot a legal target.
-	local airJump = player:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) == true
-	local rise = WallClip.Rise(Tuning.Get().movement, airJump)
-	local casterFloor = WallClip.CasterFloor(
+	-- not make ground a jump above the cliff's foot a legal target. WallClip.GroundFloor is the
+	-- whole step, the same call InputController.groundPoint makes.
+	local floorY = WallClip.GroundFloor(
 		floorBelow(root, params),
 		rootPosition.Y - standingOffset(root, humanoid),
-		rise
+		floorUnder(point, params),
+		Tuning.Get().movement,
+		player:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP))
 	)
-	local floorY = floorUnder(point, params) or casterFloor
-	if WallClip.TooHigh(casterFloor, floorY, rise) then
+	if floorY == nil then
 		return nil
 	end
 	return Vector3.new(point.X, floorY, point.Z)

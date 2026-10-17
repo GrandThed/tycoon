@@ -1,13 +1,13 @@
 --!strict
 -- L2 W1 (docs/prompts/l2-w1-contract.md, L2-2, L2-8, L2-9, L2-12, L2-19): what a player has
 -- unlocked in the dungeon place. It sells abilities (RequestBuyAbility), opens secrets for the
--- run loop, and applies the Studio levers. It is the only writer of the profile's
--- `combat.abilities`, `secrets`, `families` and `shortcuts` (schema v7), and of the
--- `Ability_<id>` Player attributes every client reads.
+-- run loop, and applies the Studio levers. Only it (through Unlocks.Apply and SecretFlow.Open,
+-- which it calls) writes the profile's `combat.abilities`, `secrets`, `families` and `shortcuts`
+-- (schema v7), and the `Ability_<id>` Player attributes every client reads.
 --
--- The rules are Unlocks' and SecretFlow's (pure, tested by tools/crowd_harness); this file only
--- reads the profile, asks them and writes what they decide. Nothing here yields, so no purchase
--- can be interleaved between its check and its write.
+-- The rules and the writes they decide are Unlocks' and SecretFlow's (pure, tested by
+-- tools/crowd_harness); this file only hands them the profile and acts on the verdict. Nothing
+-- here yields, so no purchase can be interleaved between its check and its write.
 --
 -- It requires neither WaveService nor DebugService: the shop's gate is a hook (SetShopGate), so
 -- both of those may require this module without a cycle.
@@ -64,46 +64,6 @@ local function answer(player: Player, id: string, verdict: string?): ()
 	RemoteService.FireClient(player, "ActionResult", result)
 end
 
--- The profile's map by that name, made when a profile lacks it (v6 code may have saved one, and
--- the v7 migration is the usual source). Only this place writes them.
-local function abilitiesOf(combat: Types.CombatProfile): { [string]: boolean }
-	local existing = combat.abilities
-	if existing ~= nil then
-		return existing
-	end
-	local made: { [string]: boolean } = {}
-	combat.abilities = made
-	return made
-end
-
-local function secretsOf(combat: Types.CombatProfile, levelId: string): { [string]: boolean }
-	local byLevel: { [string]: { [string]: boolean } }
-	local existing = combat.secrets
-	if existing ~= nil then
-		byLevel = existing
-	else
-		byLevel = {}
-		combat.secrets = byLevel
-	end
-	local own = byLevel[levelId]
-	if own ~= nil then
-		return own
-	end
-	local made: { [string]: boolean } = {}
-	byLevel[levelId] = made
-	return made
-end
-
-local function familiesOf(combat: Types.CombatProfile): { [string]: boolean }
-	local existing = combat.families
-	if existing ~= nil then
-		return existing
-	end
-	local made: { [string]: boolean } = {}
-	combat.families = made
-	return made
-end
-
 -- Every configured ability's attribute on this player, from the profile (in the range: all on,
 -- so the P1 bench plays as it always has).
 local function publish(player: Player): ()
@@ -131,31 +91,13 @@ function UnlockService.Configure(mode: Types.CombatMode): ()
 end
 
 -- Reads and checks Expeditions.json `abilities`: a bad entry is warned and cannot be bought, a
--- missing block sells nothing. Never throws.
+-- missing block sells nothing. Unlocks.Sellable is the rule Find uses, so the attribute published
+-- for an id and the entry a purchase prices are always the same entry. Never throws.
 function UnlockService.Init(): ()
-	table.clear(state.defs)
-	local config = Catalog.GetExpeditionsConfig()
-	local abilities: any = if config ~= nil then config.abilities else nil
-	if abilities == nil then
-		return
-	end
-	local list = if type(abilities) == "table" then abilities.list else nil
-	if type(list) ~= "table" then
-		warn("[UnlockService] Expeditions.json abilities.list is not a list: nothing is sold")
-		return
-	end
-	local seen: { [string]: boolean } = {}
-	for index, def in list do
-		local problem = Unlocks.DefProblem(def)
-		if problem == nil and seen[def.id] then
-			problem = `repeats the id "{def.id}"`
-		end
-		if problem ~= nil then
-			warn(`[UnlockService] abilities.list entry {index} {problem}: it cannot be bought`)
-			continue
-		end
-		seen[def.id] = true
-		table.insert(state.defs, def)
+	local defs, problems = Unlocks.Sellable(Catalog.GetExpeditionsConfig())
+	state.defs = defs
+	for _, problem in problems do
+		warn(`[UnlockService] Expeditions.json {problem}`)
 	end
 end
 
@@ -186,17 +128,17 @@ function UnlockService.OnBuyAbility(player: Player, id: string): ()
 		return
 	end
 	local profile = if state.players[player] then DataService.GetState(player) else nil
-	local def = Unlocks.Find(Catalog.GetExpeditionsConfig(), id)
 	local gate = state.gate
-	local verdict = Unlocks.BuyVerdict(profile, def, gate ~= nil and gate(player))
-	if verdict ~= nil or profile == nil or def == nil then
-		answer(player, id, verdict or "invalid")
+	local verdict = Unlocks.Apply(
+		profile,
+		Unlocks.Find(Catalog.GetExpeditionsConfig(), id),
+		gate ~= nil and gate(player)
+	)
+	if verdict ~= nil then
+		answer(player, id, verdict)
 		return
 	end
-	local combat = profile.combat
-	combat.valor -= def.price.valor
-	abilitiesOf(combat)[def.id] = true
-	player:SetAttribute(Unlocks.Attribute(def.id), true)
+	player:SetAttribute(Unlocks.Attribute(id), true)
 	answer(player, id, nil)
 	ArenaService.SendSnapshot(player)
 end
@@ -223,26 +165,8 @@ function UnlockService.OpenSecret(
 		return { verdict = "nothing", valor = 0, materials = 0, family = nil }
 	end
 	local combat = profile.combat
-	local byLevel = combat.secrets
-	local opened = if byLevel ~= nil then byLevel[levelId] else nil
-	local found = opened ~= nil and opened[site.id] == true
 	local hasKey = Unlocks.HasKey(combat.abilities, Catalog.GetExpeditionsConfig(), site.needs)
-	local verdict = SecretFlow.Decide(site, hasKey, found)
-	local reward = site.reward
-	if verdict ~= "pay" or reward == nil then
-		return { verdict = verdict :: SecretFlow.Verdict, valor = 0, materials = 0, family = nil }
-	end
-	combat.valor += reward.valor
-	local materials = if material ~= "" then reward.materials else 0
-	if materials > 0 then
-		combat.materials[material] = (combat.materials[material] or 0) + materials
-	end
-	local family = reward.family
-	if family ~= nil then
-		familiesOf(combat)[family] = true
-	end
-	secretsOf(combat, levelId)[site.id] = true
-	return { verdict = "pay", valor = reward.valor, materials = materials, family = family }
+	return SecretFlow.Open(combat, levelId, site, hasKey, material)
 end
 
 -- The `grantAbility` lever: owned, its attribute on, the wallet resent. False when the id is not
@@ -252,7 +176,7 @@ function UnlockService.GrantAbility(player: Player, id: string): boolean
 	if profile == nil or Unlocks.Find(Catalog.GetExpeditionsConfig(), id) == nil then
 		return false
 	end
-	abilitiesOf(profile.combat)[id] = true
+	Unlocks.AbilitiesOf(profile.combat)[id] = true
 	player:SetAttribute(Unlocks.Attribute(id), true)
 	ArenaService.SendSnapshot(player)
 	return true
@@ -264,7 +188,7 @@ function UnlockService.RemoveAbility(player: Player, id: string): boolean
 	if profile == nil or Unlocks.Find(Catalog.GetExpeditionsConfig(), id) == nil then
 		return false
 	end
-	abilitiesOf(profile.combat)[id] = nil
+	Unlocks.AbilitiesOf(profile.combat)[id] = nil
 	player:SetAttribute(Unlocks.Attribute(id), false)
 	ArenaService.SendSnapshot(player)
 	return true

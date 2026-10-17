@@ -5492,11 +5492,12 @@ double jump). No number moved: every Normal, Hard and Brutal line is identical t
 10, castRange 32), not today's loadout: take-offs on every standable top within reach, on the ground, at the
 top of one jump, and off each top's edge at a jump's top (with an air dash); targets as `GroundPoint` finds
 them; the arc as `MovementController.Leap` flies it. Take-offs from which some arc puts the feet within a step
-up (3) of the ledge's top, over it:
+up (3) of the ledge's top, over it. The table is the study **before F1 + F2**: its first row is `main`
+before e39215b, not the code that ships, which is the last row (`LIFT_MODEL "floor"`, 0 routes).
 
-| Lift model | The shipped ledge | With the contract's notch |
+| Lift model (before F1 + F2) | The shipped ledge | With the contract's notch |
 |---|---|---|
-| **Today**: apex = height over the higher of the root and the target; over a void the caster's floor is his feet | **937** | **429** |
+| **Before F1 + F2** (`LIFT_MODEL "today"`): apex = height over the higher of the root and the target; over a void the caster's floor is his feet | **937** | **429** |
 | F1 alone: apex = height over the higher of the target and the caster's floor | 443 | 159 |
 | F2 alone: over a void the caster's floor is his feet less his jump rise (18) | 653 | 258 |
 | **F1 + F2** | **0** | **0** |
@@ -5546,3 +5547,74 @@ against 27.4 (+3.0%). `sim_combat.py --check`: 23 of 23.
 | levels.secretReach missing; secretBelow −1 | L2-11 | red; red |
 | resetSecretsAttribute named GrantValor | L2-19 | red |
 | secretOpen grey | the looks | red |
+
+### L2 W1 fix round: the chest's trigger, every secret, and the one-jump gate (2026-10-17)
+
+Rulings: `docs/prompts/l2-w1-fix-round.md` (s1 + d2, d3, d4, c3).
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `SecretFlow.Triggered` (server) | flat distance to the chest's **centre** | flat distance to its block's **footprint** (sx × sz, 0 over it) | s1: the Raiders' Cache (12 × 12 × 10, collidable) could never trigger: a root beside it is 7 or more from the centre, one on its top 13 over its foot |
+| `Combat.json levels.secretReach` | 5 | **2.5** | Measured from the footprint now. A body pressed against a chest has its root at least its radius (1) off the face; 2.5 leaves 1.5 for a side-on body (arms) and an Rthro rig. The lookout: the ground within 2.5 of its 6 × 6 chest (x −288.5..−277.5, z −64.5..−53.5) lies inside the ledge (x −295..−271, z −66..−52), 1.5 inside the front edge and the back edge. A root on Road5 against the ledge's face is 5 off the footprint on the flat and 23 under its foot; camp A's fence corner is 16 off |
+| `secretBelow / secretAbove` | 1 / 9 | 1 / 9 (unchanged) | The ledge's root is 3 over the chest's foot, the chest's 7; the cache's road 3. The band holds without a change |
+| `check_levels.py` (a) | only for a secret whose key is sold, from the centre | for **every** secret: some standable top puts a standing root inside the trigger (a body on a top under the chest's keeps its radius off the side); with a sold key, on the ledge or the chest | d2: a chest whose key is sold later is never one nobody can open |
+| `check_levels.py` (d) | the reach's circle | the ground within the reach of the footprint, the same rule | s1 mirrored |
+| `sim_range.py` timed jump and hop | dropped an air press unseen | every press goes through `take_off`, which counts it | d3 (a press a knock's launch overtook is still lost) |
+
+Where the trigger is met on Forest Road (0.5-stud scan of every standable top, a standing root):
+
+| Secret | Opens from | Not from |
+|---|---|---|
+| The Lookout (needs Double Jump) | LookoutLedge against the chest (root 3 over its foot), the chest's top (7) | Road5 (−23; −5 at a jump's top), the sign pad, camp A's fence |
+| Raiders' Cache (fire, not sold) | CacheSpur beside the chest (3 over its foot) | its top (13 over: over secretAbove 9) |
+| Island Shrine (ice, not sold) | the Pond beside it (3), its top (6) | — |
+
+The cache still pays nothing (no reward entry, `HasKey` fails closed for fire); when W2 sells fire, its trigger is
+already reachable and `check_levels` (a) keeps it so. MISSIONS_DESIGN §22 rebuilds the cache as a cave in W2: (a)
+then judges the cave. For W3: the shrine needs a "without ice" reach rule and a pond that is not solid (a PLAN note, routed to docs).
+
+**The sim numbers do not move.** `sim_range.py --check --levels-only --level forest` is byte-identical before and
+after (the first run 4.23 / 4.25 / 4.31 min; 78 / 18 / 18 runs with 0 air presses). No reacting policy plans a
+jump in the air, so the new count is 0 in every shipped run; the knock path still loses the overtaken press.
+
+**The one-jump gate can fail now (d3).** With the planner's `can_jump` guard removed (the reviewer's mutant),
+a timed jump planned in the air leaves while he is airborne, `take_off` counts it, and the forest check goes red:
+"forest, Normal: one jump (L2-20) ... asked for 1 jump(s) in the air". Before the fix the same mutant stayed
+green (`airAsked` 0). Only one press in 78 Normal runs turns it: the planner rarely prefers a jump planned in
+mid-air, so the mutant is thin but deterministic (fixed seeds). It is `check_levels_mutants.py`'s SIM_CASES
+entry and runs the whole forest check (about five minutes).
+
+**One home for the id caps (s2, d4).** `sim_range.SECRET_FAMILY_MAX` and `check_levels.ABILITY_ID_MAX` read
+`Unlocks.luau`'s `MAX_FAMILY_LENGTH` (24) and `MAX_ID_LENGTH` (32) from the file, and count bytes as Luau's `#`
+does (they counted code points; the same for ASCII ids).
+
+**c3, the walk-off grace (`movement.coyoteSeconds` 0.12): no tool change.** The client takes the grace jump
+only while the root is no higher than where it left the floor, so a jump's height over the floor walked off is
+never more than `jumpHeight`, and every vertical rule (the lookout's 1-stud margin at camp A's fence, the
+unclimbable walls' `climb_max`, L2-18 b and c) is unchanged. It does carry further on the flat: the jump can
+leave up to `walkSpeed × coyoteSeconds` = 2.4 studs past the edge and 1.4 lower, which lengthens the reach a
+jump, a double jump and a dash cover (`stray_reach`) from 46.6 to 49.3 studs. A dash off an edge gains nothing
+the models do not already count (a dash's 20 studs are counted once either way; a ground dash drives the plane
+only, so the body falls). Every `check_levels` verdict was re-run with that longer reach: 168 of 168 the same
+(camp C's walls and "nothing beside camp C" still pass). `sim_range` has no edges to walk off (a player's floor
+under him changes in the frame he crosses it, and he jumps only from the floor), so nothing there changes. If a
+later layout comes within 3 studs of a `stray_reach` line, model the grace in `stray_reach` and `reach_at_rise`.
+
+**d1 (no player-player collision), the Python side:** no rule in `check_levels.py` or `sim_range.py` relied on
+it. Every reach rule models one body; `startSpacing` only spaces a party's spawns; `check_secret_reach`'s
+docstring now says why stacking is not modelled. The "owners of doubleJump only" sniper labels stay.
+
+`check_levels_mutants.py`, new and changed cases (all as expected; 73 data cases, 4 stage-mirror cases, 1
+simulator case in all):
+
+| Case | Rule | Expected |
+|---|---|---|
+| the centre rule back (TRIGGER_MODEL centre, secretReach 5: W1 as shipped) | (a), the cache | red |
+| the centre rule at secretReach 2.5 | (a), the cache | red |
+| secretReach 0.9 (under a body's radius) | (a), the cache | red |
+| the cache's chest raised 5 off the road | (a), the cache | red |
+| control: the footprint rule | (a), the cache | green (CacheSpur) |
+| control: the centre rule keeps the lookout | (a), the lookout | green (its chest's top) |
+| control: the chest 1.5 further back (z −60.5; was "2 further back, z −61") | L2-18d | green |
+| the chest 2 further back (z −61): the trigger over the void behind the ledge | L2-18d | red |
+| the planner may jump in the air (`can_jump` always true) | sim_range, one jump (L2-20) | red |

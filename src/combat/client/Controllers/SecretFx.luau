@@ -12,10 +12,15 @@
 --  * Found by the local player (the Snapshot, or the `found` event before it): the chest takes
 --    Expeditions.json's `secretOpen` look (client-local; the fallback is a gold tint) and the
 --    column goes. A Studio reset of the secrets puts both back.
---  * `found`, local player: a burst (not on low-end devices, spec section 10) and a centre card
---    for Theme.SECRET_CARD_SECONDS ("THE LOOKOUT FOUND", "+3 Valor", "+50 Timber", and a family
---    it records: nothing equips in W1). Someone else's find: a toast. `locked` (sent to that
+--  * `found`, local player: a burst (not on low-end devices, spec section 10) and a card for
+--    Theme.SECRET_CARD_SECONDS ("THE LOOKOUT FOUND", "+3 Valor", "+50 Timber", and a family it
+--    records: nothing equips in W1). Someone else's find: a toast. `locked` (sent to that
 --    player only): a toast naming the key ("Needs DOUBLE JUMP").
+--  * The fix round's c7: the card stands centred ABOVE the crosshair, its bottom clear of the
+--    reticle's resting ticks, because a find can come mid-chase (Wave 4 raiders follow anywhere
+--    on the road). Where the screen is too short for that (a landscape phone under the top bar)
+--    its top keeps to the margin and it may reach over the ticks, never down to the aim point
+--    with the usual two or three lines.
 --
 -- The card is Active = false and takes no tap; no sound (combat has none).
 
@@ -62,6 +67,9 @@ local OPEN_LOOK = "secretOpen"
 local FOUND_SUFFIX = " FOUND"
 local LATER_NOTE = " is yours: you can carry it in a later update"
 local SOMEONE = "Someone"
+-- The card's rows: each label is its text size plus this tall, with this gap between rows.
+local CARD_LINE_PAD = 6
+local CARD_ROW_GAP = 2
 
 local SecretFx = {}
 
@@ -77,6 +85,8 @@ local state = {
 	announced = {} :: { [string]: { [string]: boolean } },
 	chests = {} :: { [BasePart]: Chest },
 	connections = {} :: { RBXScriptConnection },
+	-- The HUD's scale and the crosshair's centre height in the HUD's px (SetLayout).
+	layout = { scale = 1, crossY = 0 },
 }
 
 local function isFound(id: string): boolean
@@ -227,7 +237,7 @@ local function cardLabel(
 		Active = false,
 		LayoutOrder = order,
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, size + 6),
+		Size = UDim2.new(1, 0, 0, size + CARD_LINE_PAD),
 		Font = Theme.FONT_BOLD,
 		TextSize = size,
 		TextColor3 = color,
@@ -241,8 +251,8 @@ local function buildCard(gui: ScreenGui): Card
 	local frame = Create("Frame", {
 		Name = "SecretCard",
 		Active = false,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
 		Size = UDim2.fromOffset(Theme.SECRET_CARD_WIDTH, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = Theme.MAP_COLOR_PANEL,
@@ -267,7 +277,7 @@ local function buildCard(gui: ScreenGui): Card
 		Parent = frame,
 	})
 	Create("UIListLayout", {
-		Padding = UDim.new(0, 2),
+		Padding = UDim.new(0, CARD_ROW_GAP),
 		HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		Parent = frame,
@@ -293,6 +303,27 @@ local function familyName(id: string): string
 	return string.upper(string.sub(id, 1, 1)) .. string.sub(id, 2)
 end
 
+-- c7: the card's top, from the rows it shows this time (the family note counted as one line).
+-- Its bottom sits a margin above the reticle's resting ticks (the melee gap plus a tick: bloom
+-- only pushes them out for a moment), unless that would lift its top past the screen's margin.
+local function placeCard(card: Card): ()
+	local layout = state.layout
+	local height = Theme.SECRET_CARD_PADDING * 2
+	local rows = 0
+	for _, row in { card.title, card.lines[1], card.lines[2], card.note } do
+		if row.Visible then
+			height += row.TextSize + CARD_LINE_PAD
+			rows += 1
+		end
+	end
+	height += math.max(rows - 1, 0) * CARD_ROW_GAP
+	local clear = Theme.COMBAT_RANGE_CROSSHAIR_MELEE_GAP
+		+ Theme.COMBAT_RANGE_CROSSHAIR_TICK_LENGTH
+		+ Theme.SCREEN_MARGIN
+	local top = layout.crossY - (clear + height) * layout.scale
+	card.frame.Position = UDim2.new(0.5, 0, 0, math.max(top, Theme.SCREEN_MARGIN * layout.scale))
+end
+
 local function showCard(
 	name: string,
 	valor: number,
@@ -312,6 +343,7 @@ local function showCard(
 	materialLine.Visible = materials > 0 and material ~= ""
 	card.note.Text = if family ~= nil then familyName(family) .. LATER_NOTE else ""
 	card.note.Visible = family ~= nil
+	placeCard(card)
 	card.frame.Visible = true
 	state.cardToken += 1
 	local token = state.cardToken
@@ -451,11 +483,18 @@ function SecretFx.OnFx(fx: any): ()
 	)
 end
 
--- The HUD's UI scale.
-function SecretFx.SetLayout(scale: number): ()
+-- The HUD's UI scale, and `crossY` the crosshair's centre height in the HUD's own px (the
+-- viewport's centre less the top-bar inset).
+function SecretFx.SetLayout(scale: number, crossY: number): ()
+	if scale <= 0 then
+		return
+	end
+	state.layout.scale = scale
+	state.layout.crossY = crossY
 	local card = state.card
-	if card ~= nil and scale > 0 then
+	if card ~= nil then
 		card.scale.Scale = scale
+		placeCard(card)
 	end
 end
 

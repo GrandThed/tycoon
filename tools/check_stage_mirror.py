@@ -134,8 +134,9 @@ import sim_range as sr  # noqa: E402
 
 HARNESS = ROOT / "tools" / "crowd_harness"
 DRIVER = HARNESS / "stage_mirror.luau"
+# Unlocks: StageFlow reads the family id cap from it (the L2 W1 fix round's s2).
 MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "LevelGeometry", "CampBrain",
-           "StageFlow")  # in load order
+           "Unlocks", "StageFlow")  # in load order
 # The functions each comparison needs; one that is missing fails the run by name.
 NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
                      "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),

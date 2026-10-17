@@ -10,8 +10,10 @@
 -- other group, the one every member's character parts are put in. A ray or a shape cast runs in
 -- the Default group, which the wall's group does not collide with, and passes through.
 -- The players' group collides with exactly what Default does, group by group (the arena's own
--- group, and C1's ragdoll group, registered by EnemyService), so nothing else about a
--- character changes.
+-- group, and C1's ragdoll group, registered by EnemyService), with one exception: a member's
+-- body never collides with another member's (the L2 W1 fix round's d1). Standing on a partner's
+-- head would otherwise lift a player without the double jump onto a ledge only an owner reaches,
+-- and two bodies put on one point (the close's entry, a lobby spawn) would shove each other.
 
 local PhysicsService = game:GetService("PhysicsService")
 
@@ -58,11 +60,7 @@ function BarrierGroups.Ensure(): boolean
 				PhysicsService:CollisionGroupSetCollidable(BARRIER_GROUP, name, false)
 			end
 		end
-		PhysicsService:CollisionGroupSetCollidable(
-			PLAYER_GROUP,
-			PLAYER_GROUP,
-			PhysicsService:CollisionGroupsAreCollidable(DEFAULT_GROUP, DEFAULT_GROUP)
-		)
+		PhysicsService:CollisionGroupSetCollidable(PLAYER_GROUP, PLAYER_GROUP, false)
 		PhysicsService:CollisionGroupSetCollidable(BARRIER_GROUP, PLAYER_GROUP, true)
 	end)
 	if not ok then

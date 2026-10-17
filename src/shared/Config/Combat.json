@@ -152,7 +152,7 @@
 		"regionLockMargin": 8,
 		"doorSpare": 0.5,
 		"cameraClear": 3.5,
-		"secretReach": 5,
+		"secretReach": 2.5,
 		"secretBelow": 1,
 		"secretAbove": 9
 	},

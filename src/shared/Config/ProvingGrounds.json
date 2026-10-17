@@ -259,6 +259,7 @@
 		"airAttackHangSeconds": 0.3,
 		"airSwingReachDown": 6,
 		"airJumpDelay": 0.12,
+		"coyoteSeconds": 0.12,
 		"slamLandingGrace": 0.5,
 		"slamMinDiveSpeed": 40,
 		"cameraFollowRate": 10,

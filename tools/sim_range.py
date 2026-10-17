@@ -2188,6 +2188,7 @@ class ThreatRun:
         self.shots_fired = 0
         self.busy_until = 0.0
         self.jump_at = None  # react: when the jump he is timing leaves the floor
+        self.jump_planned = -math.inf  # ... and when he planned it (a later launch overtakes it)
         # The boss fight: whom he closes on and how near, his ability if he uses it, and the
         # ground slam, his way through a plate when no hit of his weapon is heavy.
         self.want = math.inf
@@ -2391,11 +2392,16 @@ class ThreatRun:
                 self.dash = None
         policy = self.policy
         if self.jump_at is not None and t >= self.jump_at - THREAT_EPS:
-            # A timed jump a knock's launch overtook is lost: nobody jumps off the air (L2-20).
-            if self.jump is None and not self.lifted(t):
+            # A timed press a knock's launch overtook (it began after he planned the jump) is lost:
+            # nobody jumps off a launch he did not see coming. Any other press goes through
+            # take_off, which refuses one in the air and counts it (L2-20, the fix round's d3), so
+            # a jump planned while airborne is an air jump asked for, never dropped unseen.
+            if not (self.lifted(t) and self.lift[0] > self.jump_planned):
                 self.take_off(t)
             self.jump_at = None
-        if policy.get("hop") and self.jump is None and not self.lifted(t) and t - self.landed_at >= HOP_GROUND_SECONDS:
+        # The hopper presses again once he has stood HOP_GROUND_SECONDS; a launch does not stop
+        # him pressing, so a press during one is an air jump take_off counts.
+        if policy.get("hop") and self.jump is None and t - self.landed_at >= HOP_GROUND_SECONDS:
             self.take_off(t)
         if policy.get("walk") and self.dash is None:
             self.walk_lap(dt)
@@ -2873,6 +2879,7 @@ class ThreatRun:
         if plan["jump"]:
             if plan.get("delay"):
                 self.jump_at = t + plan["delay"]
+                self.jump_planned = t
             else:
                 self.take_off(t)
         if plan["dur"] > 0:
@@ -5265,8 +5272,21 @@ def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=
     return problems
 
 
-# L2-13: StageFlow.MAX_FAMILY_LENGTH, the longest weapon family id a secret may give.
-SECRET_FAMILY_MAX = 24
+UNLOCKS_PATH = REPO_ROOT / "src" / "shared" / "Unlocks.luau"
+
+
+def unlocks_cap(name):
+    """One of Unlocks.luau's id caps (`local MAX_ID_LENGTH = 32`), read from the file so the cap
+    has one home (the L2 W1 fix round, s2 + d4); counted in bytes as Luau's # does."""
+    match = re.search(rf"^local {name} = (\d+)$", UNLOCKS_PATH.read_text(encoding="utf-8"), re.MULTILINE)
+    if match is None:
+        raise SystemExit(f"sim_range: {UNLOCKS_PATH} has no `local {name} = <n>` line")
+    return int(match.group(1))
+
+
+# L2-13: Unlocks.MAX_FAMILY_LENGTH (StageFlow's secrets and the remotes read it), the longest weapon
+# family id a secret may give, in bytes.
+SECRET_FAMILY_MAX = unlocks_cap("MAX_FAMILY_LENGTH")
 
 
 def secret_problems(level, layout, problem):
@@ -5295,7 +5315,8 @@ def secret_problems(level, layout, problem):
             if amount is not None and not (finite(amount) and amount >= 0 and float(amount).is_integer()):
                 problem(f"secrets.{sid}.{key} is {amount}, not a whole number of at least 0")
         family = entry.get("family")
-        if family is not None and (not isinstance(family, str) or family == "" or len(family) > SECRET_FAMILY_MAX):
+        if family is not None and (not isinstance(family, str) or family == ""
+                                   or len(family.encode("utf-8")) > SECRET_FAMILY_MAX):
             problem(f"secrets.{sid}.family is {family}, not a family id")
 
 

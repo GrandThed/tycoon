@@ -40,8 +40,14 @@ export type Deps = {
 }
 
 export type AbilityBarHandle = {
-	-- rightReserve: design px kept free at the right edge (the RangePanel's column).
-	SetLayout: (scale: number, viewportSize: Vector2, rightReserve: number) -> (),
+	-- rightReserve: design px kept free at the right edge (the RangePanel's column). Returns the
+	-- bar's left, top and bottom edges in px (the L2 W1 fix round's c1: the run layer's buttons
+	-- keep clear of it); a hidden bar (touch) answers math.huge, 0, 0, which nothing meets.
+	SetLayout: (
+		scale: number,
+		viewportSize: Vector2,
+		rightReserve: number
+	) -> (number, number, number),
 	Destroy: () -> (),
 }
 
@@ -571,8 +577,12 @@ function AbilityBar.new(parent: Instance, deps: Deps): AbilityBarHandle
 			local margin = Theme.SCREEN_MARGIN * scale
 			local limit = viewportSize.X - (rightReserve + Theme.SCREEN_MARGIN) * scale - half
 			local centre = math.max(math.min(viewportSize.X / 2, limit), half + margin)
-			root.Position =
-				UDim2.fromOffset(centre, viewportSize.Y - Theme.COMBAT_ABILITY_BAR_BOTTOM * scale)
+			local bottom = viewportSize.Y - Theme.COMBAT_ABILITY_BAR_BOTTOM * scale
+			root.Position = UDim2.fromOffset(centre, bottom)
+			if not root.Visible then
+				return math.huge, 0, 0
+			end
+			return centre - half, bottom - root.Size.Y.Offset * scale, bottom
 		end,
 		Destroy = function()
 			for _, connection in connections do

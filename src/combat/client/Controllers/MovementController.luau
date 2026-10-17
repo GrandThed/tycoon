@@ -47,6 +47,13 @@
 -- press is refused before `airJumpUsed` is set). The first refused press of a session, outside
 -- the range, calls the host's hint handler once. The server never counts air jumps: the key is
 -- checked where a reward is given (L2-23).
+--
+-- The fix round's c3, the walk-off grace: Roblox has no coyote time, and before L2 a late press
+-- after walking off an edge became the air jump. Now a press within `movement.coyoteSeconds` of
+-- leaving a floor without jumping is the GROUND jump (jumpHeight), as long as the root is no
+-- higher than where it left the floor, so the jump's height above that floor is what a jump
+-- from it gives and no route rule changes. Any later press of such an airtime is still a late
+-- jump, not a deliberate second one: it never says "buy Double Jump".
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -74,6 +81,9 @@ local ACTION_SLAM = "RangeSlam"
 local MOVER_NAME = "RangeMover"
 -- Two JumpRequests closer than this are one held press, not a fresh one.
 local JUMP_PRESS_GAP = 0.06
+-- c3: a body that leaves its floor rising slower than this share of a jump's take-off speed did
+-- not jump (it walked, slid or was pushed off).
+local WALK_OFF_RISE_SHARE = 0.5
 -- A slam that has not touched down by then (fell off the map) gives up without firing.
 local SLAM_MAX_SECONDS = 3
 -- Ground probe length below the feet; beyond it the player counts as very high.
@@ -164,6 +174,9 @@ local downAlign: AlignOrientation? = nil
 local placing = { at = nil :: Vector3?, expires = 0 }
 -- L2-3: the host's word for a refused air jump (nil = none), and whether it was said this session.
 local airJumpHint = { handler = nil :: (() -> ())?, said = false }
+-- c3: how the current airtime began. `walkedOff` = the body left its floor without a jump (and
+-- no grace jump has been taken since); `y` = the root's height when it left.
+local takeoff = { walkedOff = false, y = 0 }
 
 local screenGui: ScreenGui? = nil
 local dashButton: TextButton? = nil
@@ -268,6 +281,25 @@ end
 
 local function jumpSpeed(height: number): number
 	return math.sqrt(2 * Workspace.Gravity * math.max(height, 0))
+end
+
+-- The airtime begins now: when, from what height, and whether the body jumped (see takeoff).
+local function noteTakeoff(rig: Rig, now: number): ()
+	leftGroundAt = now
+	wasAirborne = true
+	local rising = rig.root.AssemblyLinearVelocity.Y
+	takeoff.walkedOff = rising < jumpSpeed(Tuning.Get().movement.jumpHeight) * WALK_OFF_RISE_SHARE
+	takeoff.y = rig.root.Position.Y
+end
+
+-- A jump of `height` studs from where the root is now, in the air: JumpHeight drives the
+-- Jumping state's own impulse, and the velocity write makes it the same whether or not the state
+-- machine re-applies it this frame.
+local function jumpFromAir(rig: Rig, height: number): ()
+	rig.humanoid.JumpHeight = height
+	rig.humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	local velocity = rig.root.AssemblyLinearVelocity
+	rig.root.AssemblyLinearVelocity = Vector3.new(velocity.X, jumpSpeed(height), velocity.Z)
 end
 
 local function flatLook(): Vector3
@@ -452,29 +484,46 @@ local function onJumpRequest(): ()
 	then
 		return
 	end
+	if not wasAirborne then
+		-- The press arrived in the frame the body left its floor, before step saw it go.
+		noteTakeoff(rig, now)
+	end
+	local cfg = Tuning.Get().movement
+	-- c3: the walk-off grace. The ground jump, from no higher than the floor walked off; the air
+	-- jump stays unused. The airtime now began with a jump.
+	if
+		takeoff.walkedOff
+		and now - leftGroundAt <= cfg.coyoteSeconds
+		and rig.root.Position.Y <= takeoff.y
+	then
+		takeoff.walkedOff = false
+		leftGroundAt = now
+		jumpFromAir(rig, cfg.jumpHeight)
+		return
+	end
 	-- A request this soon after leaving the ground is the same press still arriving
 	-- (JumpRequest repeats while the key is held), never a deliberate double jump.
-	if now - leftGroundAt < Tuning.Get().movement.airJumpDelay then
+	if now - leftGroundAt < cfg.airJumpDelay then
 		return
 	end
 	-- L2-3: a deliberate air press without the bought double jump does nothing, and leaves the
-	-- air jump unused (a lever that grants it mid-air works on the next press).
+	-- air jump unused (a lever that grants it mid-air works on the next press). After walking off
+	-- an edge the press was a late jump, so it says nothing.
 	if Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) ~= true then
 		local handler = airJumpHint.handler
-		if handler ~= nil and not airJumpHint.said and not CameraController.IsRange() then
+		if
+			handler ~= nil
+			and not airJumpHint.said
+			and not takeoff.walkedOff
+			and not CameraController.IsRange()
+		then
 			airJumpHint.said = true
 			handler()
 		end
 		return
 	end
 	airJumpUsed = true
-	local height = Tuning.Get().movement.doubleJumpHeight
-	-- JumpHeight drives the Jumping state's own impulse; the velocity write makes the double
-	-- jump identical whether or not the state machine re-applies it this frame.
-	rig.humanoid.JumpHeight = height
-	rig.humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-	local velocity = rig.root.AssemblyLinearVelocity
-	rig.root.AssemblyLinearVelocity = Vector3.new(velocity.X, jumpSpeed(height), velocity.Z)
+	jumpFromAir(rig, cfg.doubleJumpHeight)
 end
 
 local function refreshDashButton(rig: Rig?): ()
@@ -649,7 +698,7 @@ local function step(deltaTime: number): ()
 	local humanoid = rig.humanoid
 	local airborne = isAirborne(rig)
 	if airborne and not wasAirborne then
-		leftGroundAt = os.clock()
+		noteTakeoff(rig, os.clock())
 	end
 	wasAirborne = airborne
 	humanoid.UseJumpPower = false
@@ -868,6 +917,7 @@ function MovementController.Start(): ()
 			slamming = false
 			airJumpUsed = false
 			wasAirborne = false
+			takeoff.walkedOff = false
 			-- A new body stands, unshoved: the align went with the old rig.
 			dashUntil = 0
 			knock = Vector3.zero

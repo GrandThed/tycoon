@@ -1984,6 +1984,9 @@ export type RangeMovementConfig = {
 	-- camera height follow while airborne.
 	airSwingReachDown: number,
 	airJumpDelay: number,
+	-- The L2 W1 fix round's c3: seconds after walking off an edge (no jump) during which a jump
+	-- press is still the ground jump, not the double jump.
+	coyoteSeconds: number,
 	slamLandingGrace: number,
 	slamMinDiveSpeed: number,
 	cameraFollowRate: number,

@@ -168,6 +168,11 @@ def gate_reading() -> dict:
 
 INPUT_CONTROLLER = "src/combat/client/Controllers/InputController.luau"
 ABILITY_SERVICE = "src/combat/server/Services/AbilityService.luau"
+WEAPON_SERVICE = "src/combat/server/Services/WeaponService.luau"
+# The L2 W1 fix round's c4: the ground point's step 4 is one call, WallClip.GroundFloor, on both
+# sides; a caller that calls the parts it is made of again holds a copy that can drift.
+GROUND_FLOOR_CALL = re.compile(r"\bWallClip\.GroundFloor\(")
+GROUND_PART_CALL = re.compile(r"\bWallClip\.(?:Rise|TooHigh|CasterFloor)\(")
 COMBAT_PROJECT = "combat.project.json"
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
@@ -178,7 +183,9 @@ def source_reading(repo: Path) -> dict:
     `groundClient` = the names InputController's GROUND_AIMED lists, `groundServer` = the
     AbilityService mechanics whose target is "ground", `zoomCap` = combat.project.json's
     StarterPlayer.CameraMaxZoomDistance (None when unset). A file that is missing reads as empty,
-    and the cases fail on an empty list."""
+    and the cases fail on an empty list. The L2 W1 fix round's c4 adds `groundFloor`: for the client
+    (InputController) and the server (WeaponService), how many times each calls WallClip.GroundFloor
+    and how many times it calls Rise, TooHigh or CasterFloor itself."""
     def text(rel: str) -> str:
         path = repo / rel
         return path.read_text(encoding="utf-8") if path.is_file() else ""
@@ -191,7 +198,14 @@ def source_reading(repo: Path) -> dict:
     if project:
         player = json.loads(project).get("tree", {}).get("StarterPlayer", {})
         zoom = player.get("$properties", {}).get("CameraMaxZoomDistance")
-    return {"groundClient": client, "groundServer": server, "zoomCap": zoom}
+    ground_floor = {}
+    for side, rel in (("client", INPUT_CONTROLLER), ("server", WEAPON_SERVICE)):
+        source = text(rel)
+        ground_floor[side] = {
+            "calls": len(GROUND_FLOOR_CALL.findall(source)),
+            "parts": len(GROUND_PART_CALL.findall(source)),
+        }
+    return {"groundClient": client, "groundServer": server, "zoomCap": zoom, "groundFloor": ground_floor}
 
 
 def sources(repo: Path) -> dict:

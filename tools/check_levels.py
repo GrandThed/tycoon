@@ -214,9 +214,14 @@ WALLED_CEILING = True
 AIR_JUMP = "doubleJump"  # Unlocks.AIR_JUMP: the ability id the air jump keys on (structural)
 SECRET_RULES = ("secretReach", "secretBelow", "secretAbove")  # Combat.json levels: SecretFlow.Triggered (L2-11)
 DEBUG_UNLOCK_KEYS = ("grantAbilityAttribute", "removeAbilityAttribute", "resetSecretsAttribute")  # L2-19
-ABILITY_ID_MAX = 32  # CombatRemotes.MAX_ABILITY_ID_LENGTH: an id the buy remote carries (L2-7)
+ABILITY_ID_MAX = sr.unlocks_cap("MAX_ID_LENGTH")  # Unlocks.MAX_ID_LENGTH, in bytes: an id the buy remote carries (L2-7)
 SECRET_VALOR_MIN = 2  # L2-13: a paying chest gives at least this much Valor, and less than its key's price
 BODY_RADIUS = 1.0  # the root's half width on the flat (a body stands this far over an edge)
+# SecretFlow.Triggered's flat reach, a switch like LIFT_MODEL. "footprint" (the L2 W1 fix round, s1):
+# levels.secretReach is measured from the chest block's footprint, so a root beside a big chest
+# (a body radius off its face) opens it. "centre" is W1 before the fix (from the chest's centre),
+# for the mutant driver: under it the 12-wide Raiders' Cache never triggers.
+TRIGGER_MODEL = "footprint"
 # L2-18 (c), every lifting ability against a secret's ledge: arcs sampled this often, take-offs and
 # targets on this grid, plus this many targets on the castRange circle.
 LIFT_STEP = 0.5
@@ -665,6 +670,95 @@ def secret_rules(levels):
     return tuple(float(v) for v in values) if all(is_number(v) for v in values) else None
 
 
+def trigger_gap(secret, x, z, model=None):
+    """SecretFlow.Triggered's flat distance from (x, z) to a chest: under TRIGGER_MODEL "footprint"
+    to its block's footprint (the axis-aligned sx x sz rectangle round its centre; 0 on or over
+    it), under "centre" to its centre."""
+    hx, hz = (0.0, 0.0) if (model or TRIGGER_MODEL) == "centre" else (secret["sx"] / 2, secret["sz"] / 2)
+    return math.hypot(max(abs(x - secret["x"]) - hx, 0.0), max(abs(z - secret["z"]) - hz, 0.0))
+
+
+def secret_triggered(secret, x, y, z, rules, model=None):
+    """SecretFlow.Triggered, term for term: a root at (x, y, z) opens the chest when it is within
+    secretReach of it on the flat (TRIGGER_MODEL, closed) and from secretBelow under to secretAbove
+    over the block's bottom (closed). rules = secret_rules(levels); None opens nothing."""
+    if rules is None:
+        return False
+    reach, below, above = rules
+    hx, hz = (0.0, 0.0) if (model or TRIGGER_MODEL) == "centre" else (secret["sx"] / 2, secret["sz"] / 2)
+    dx = max(abs(x - secret["x"]) - hx, 0.0)
+    dz = max(abs(z - secret["z"]) - hz, 0.0)
+    rise = y - (secret["y"] - secret["sy"] / 2)
+    return dx * dx + dz * dz <= reach * reach and -below <= rise <= above
+
+
+def footprint_ring(secret, hx, hz, offset, step=0.5):
+    """The flat points exactly `offset` from the rectangle of half sizes hx, hz round a secret's
+    centre: along each side every `step`, and 16 per corner round its arc."""
+    cx, cz = secret["x"], secret["z"]
+    ring = []
+    for k in range(int(2 * hx / step) + 1):
+        x = cx - hx + min(step * k, 2 * hx)
+        ring += [(x, cz - hz - offset), (x, cz + hz + offset)]
+    for k in range(int(2 * hz / step) + 1):
+        z = cz - hz + min(step * k, 2 * hz)
+        ring += [(cx - hx - offset, z), (cx + hx + offset, z)]
+    for sx, sz in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
+        for k in range(17):
+            a = math.pi / 2 * k / 16
+            ring.append((cx + sx * (hx + offset * math.cos(a)), cz + sz * (hz + offset * math.sin(a))))
+    return ring
+
+
+def standing_roots(secret, solids, chest, solid):
+    """Where a root stands on a solid's top near a chest: its standable points (0.5 grid), less
+    those where a body on a top under the collidable chest's would overlap its side (nearer its
+    footprint than BODY_RADIUS), plus the points exactly BODY_RADIUS off the footprint (a body
+    pressed against the chest). A body's overlap is the block's, whatever TRIGGER_MODEL measures."""
+    points = standable_points(solids, solid, 0.5)
+    if chest is None or solid.top >= chest.top - EPS or chest.bottom >= solid.top + BODY_HEIGHT:
+        return points
+    hx, hz = secret["sx"] / 2, secret["sz"] / 2
+    over = [o for o in solids if o is not solid and o.kind in ("block", "floor", "secret", "fence", "obstacle")
+            and o.top > solid.top + EPS]
+    pressed = [(x, z) for x, z in footprint_ring(secret, hx, hz, BODY_RADIUS)
+               if solid.holds(x, z) and not any(o.holds(x, z) for o in over if o is not chest)]
+    return [(x, z) for x, z in points if trigger_gap(secret, x, z, "footprint") >= BODY_RADIUS - EPS] + pressed
+
+
+def trigger_tops(secret, solids, chest, rules, tall):
+    """Every standable top (an unclimbable wall left out) with a point where a standing root opens
+    the chest (standing_roots, then secret_triggered at the root's height): [the solid's name]."""
+    if rules is None:
+        return []
+    reach = rules[0]
+    foot = (secret["x"] - secret["sx"] / 2, secret["x"] + secret["sx"] / 2,
+            secret["z"] - secret["sz"] / 2, secret["z"] + secret["sz"] / 2)
+    held = []
+    for s in solids:
+        if s.name in tall or s.kind not in ("block", "floor", "secret", "fence", "obstacle"):
+            continue
+        if rect_gap((s.x0, s.x1, s.z0, s.z1), foot) > reach + math.hypot(secret["sx"], secret["sz"]) + EPS:
+            continue
+        y = s.top + sr.ROOT_HEIGHT
+        if any(secret_triggered(secret, x, y, z, rules) for x, z in standing_roots(secret, solids, chest, s)):
+            held.append(s.name)
+    return held
+
+
+def trigger_region(secret, reach, step=0.5):
+    """The flat points a root opens the chest over (trigger_gap <= reach, closed), on a `step` grid
+    of their bounding box plus the boundary: under "footprint" a rounded rectangle, under "centre"
+    a disc."""
+    hx, hz = (0.0, 0.0) if TRIGGER_MODEL == "centre" else (secret["sx"] / 2, secret["sz"] / 2)
+    x0, x1 = secret["x"] - hx - reach, secret["x"] + hx + reach
+    z0, z1 = secret["z"] - hz - reach, secret["z"] + hz + reach
+    xs = [x0 + step * k for k in range(int((x1 - x0) / step) + 1)] + [x1]
+    zs = [z0 + step * k for k in range(int((z1 - z0) / step) + 1)] + [z1]
+    return ([(x, z) for x in xs for z in zs if trigger_gap(secret, x, z) <= reach + EPS]
+            + footprint_ring(secret, hx, hz, reach))
+
+
 def ability_ids(expeditions):
     """The ids Expeditions.json `abilities.list` sells (Unlocks.HasKey holds only these)."""
     return [a.get("id") for a in ((expeditions.get("abilities") or {}).get("list") or []) if isinstance(a, dict)]
@@ -858,12 +952,15 @@ def lift_routes(solids, keys, skip, tall, move, lifts, model=None):
 
 def check_secret_reach(name, layout, ctx, expect, solids, tall):
     """L2-18 (a) to (d) for every secret whose key is a bought ability (Expeditions.json
-    abilities.list): only those may pay (e). (a) with the key: the ledge's band and a standable
-    point inside the trigger; (b) without it, no jump, step up and dash gets on the ledge (the old
-    lookout test, unclimbable walls left out); (c) nor any lifting ability's arc (lift_routes);
-    (d) the trigger is met from nowhere else: no other standable top puts a standing root in it,
-    and every point of its circle lies over the ledge or an unclimbable wall, so an airborne root
-    meets it only over the ledge, where (b) and (c) keep him out."""
+    abilities.list): only those may pay (e); (a)'s "a standing root opens it from somewhere" runs
+    for every secret. (a) with the key: the ledge's band and a standable point inside the trigger;
+    (b) without it, no jump, step up and dash gets on the ledge (the old lookout test, unclimbable
+    walls left out); (c) nor any lifting ability's arc (lift_routes); (d) the trigger is met from
+    nowhere else: no other standable top puts a standing root in it, and all the ground within the
+    reach of its footprint lies over the ledge or an unclimbable wall, so an airborne root meets it
+    only over the ledge, where (b) and (c) keep him out. Every rule models one body: players do not
+    collide with players in the dungeon place (BarrierGroups, the fix round's d1), so nobody stands
+    on a partner's head."""
     move, levels = ctx["move"], ctx["levels"]
     tag = f"{name}:"
     jump = jump_facts(move)
@@ -871,12 +968,28 @@ def check_secret_reach(name, layout, ctx, expect, solids, tall):
     sold = ctx.get("abilityIds") or []
     for secret in layout["secrets"]:
         sid, needs = secret["id"], secret["needs"]
+        chest = next((s for s in solids if s.name == f"Secret_{sid}"), None)
+        # (a), for EVERY secret whatever its key (the fix round, s1 + d2): a standing root opens it
+        # from somewhere, so a chest whose key is sold later is never one nobody can open. With a
+        # sold key the point must be on the ledge or the chest, which (d) below makes the only ones.
+        if rules is not None and chest is not None:
+            reach, below, above = rules
+            floor = secret["y"] - secret["sy"] / 2
+            held = trigger_tops(secret, solids, chest, rules, tall)
+            base = secret_base(solids, secret)
+            if needs in sold and base is not None:
+                held = [h for h in held if h in (base.name, chest.name)]
+            measured = (f"its {secret['sx']:g} x {secret['sz']:g} footprint" if TRIGGER_MODEL == "footprint"
+                        else "its centre (TRIGGER_MODEL centre)")
+            expect(bool(held), f"{tag} the {sid}'s trigger (levels.secretReach {reach:g} from {measured}, a root "
+                   f"{below:g} under to {above:g} over its foot at {floor:g}) holds a standable point"
+                   + (" on its ledge or the chest, with the key" if needs in sold else f" (its key {needs} is not sold yet)")
+                   + ": " + (", ".join(sorted(set(held))) if held else "none") + " (L2-18a)")
         if needs not in sold:
             continue
         if needs != AIR_JUMP:
             expect(False, f"{tag} the {sid} needs {needs}, a sold ability check_levels has no reach rule for (L2-18)")
             continue
-        chest = next((s for s in solids if s.name == f"Secret_{sid}"), None)
         base = secret_base(solids, secret)
         if base is None or chest is None or rules is None:
             expect(False, f"{tag} the {sid} stands on a ledge block, and Combat.json levels has "
@@ -894,11 +1007,6 @@ def check_secret_reach(name, layout, ctx, expect, solids, tall):
                f"road under it (over one jump's {move['jumpHeight']:g} and a step up of {STEP_UP:g}, under jump + "
                f"double jump's {move['jumpHeight'] + move['doubleJumpHeight']:g}): {rise:g}, {away:.0f} studs from "
                f"the road (L2-18a)")
-        held = [kr[5] for kr in keys if point_rect(kr, secret["x"], secret["z"]) <= reach + EPS
-                and -below - EPS <= kr[4] + sr.ROOT_HEIGHT - base.top <= above + EPS]
-        expect(bool(held), f"{tag} the {sid}'s trigger (levels.secretReach {reach:g}, a root {below:g} under to "
-               f"{above:g} over the chest's foot at {base.top:g}) holds a standable point with the key: "
-               + (", ".join(sorted(set(held))) if held else "none") + " (L2-18a)")
         # (b) One jump, a step up and a dash, from every surface but the keys and unclimbable walls.
         ways, closest = [], (math.inf, None)
         for s in solids:
@@ -940,24 +1048,13 @@ def check_secret_reach(name, layout, ctx, expect, solids, tall):
                 f"{sid}: {count} take-offs under LIFT_MODEL \"{LIFT_MODEL}\"" + (" (known limit until W2)" if known else "")
                 + f", e.g. {routes[0]}")
         # (d) Nothing else meets the trigger.
-        others = []
-        for s in solids:
-            if s.name in skip or s.name in tall or s.kind not in ("block", "floor", "secret", "fence", "obstacle"):
-                continue
-            if point_rect((s.x0, s.x1, s.z0, s.z1), secret["x"], secret["z"]) > reach + EPS:
-                continue
-            if not (-below - EPS <= s.top + sr.ROOT_HEIGHT - base.top <= above + EPS):
-                continue
-            if any(math.hypot(x - secret["x"], z - secret["z"]) <= reach + EPS
-                   for x, z in standable_points(solids, s, 0.5)):
-                others.append(s.name)
-        circle = [(secret["x"] + reach * i / 8 * math.cos(2 * math.pi * k / 32),
-                   secret["z"] + reach * i / 8 * math.sin(2 * math.pi * k / 32)) for i in range(9) for k in range(32)]
-        loose = [(x, z) for x, z in circle if not base.holds(x, z) and not any(
+        others = [h for h in trigger_tops(secret, solids, chest, rules, tall) if h not in skip]
+        loose = [(x, z) for x, z in trigger_region(secret, reach) if not base.holds(x, z) and not any(
             s.name in tall and s.holds(x, z) for s in solids)]
         expect(not others and not loose,
                f"{tag} the {sid}'s trigger is met only on its ledge: no other standable top puts a standing root in it, "
-               f"and its {reach:g}-stud circle lies over {base.name} or an unclimbable wall (L2-18d)"
+               f"and the ground within {reach:g} of its {'footprint' if TRIGGER_MODEL == 'footprint' else 'centre'} lies "
+               f"over {base.name} or an unclimbable wall (L2-18d)"
                + (f" (a root on {', '.join(others)})" if others else "")
                + (f" (off the ledge at ({loose[0][0]:.1f}, {loose[0][1]:.1f}))" if loose else ""))
 
@@ -1003,7 +1100,7 @@ def check_abilities(expeditions, level_files, expect):
         aid = a.get("id")
         ids.append(aid)
         price = (a.get("price") or {}).get("valor") if isinstance(a.get("price"), dict) else None
-        if not (isinstance(aid, str) and 0 < len(aid) <= ABILITY_ID_MAX):
+        if not (isinstance(aid, str) and 0 < len(aid.encode("utf-8")) <= ABILITY_ID_MAX):
             bad.append(f"entry {index}: id {aid!r}")
         if not (isinstance(a.get("name"), str) and a["name"] and isinstance(a.get("text"), str) and a["text"]):
             bad.append(f"{aid}: a name and a text")
@@ -1014,7 +1111,7 @@ def check_abilities(expeditions, level_files, expect):
     if len(set(ids)) != len(ids):
         bad.append("an id twice")
     expect(not bad and AIR_JUMP in ids, f"Expeditions.json abilities.list: every entry has an id of at most "
-           f"{ABILITY_ID_MAX} characters, a name, a text, a whole price in Valor over 0 and an order, no id twice, and "
+           f"{ABILITY_ID_MAX} bytes, a name, a text, a whole price in Valor over 0 and an order, no id twice, and "
            f"{AIR_JUMP} is one (L2-6): " + ("; ".join(bad) if bad else ", ".join(
                f"{a['id']} {a['price']['valor']} Valor" for a in listed)) + ("" if AIR_JUMP in ids else f"; no {AIR_JUMP}"))
     # The first level on the map (the first node of kind "level" with a built file).

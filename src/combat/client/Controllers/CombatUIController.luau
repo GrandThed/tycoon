@@ -185,7 +185,12 @@ local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · H reset 
 local HOLD_ABILITIES = "abilities"
 local ABILITIES_KEY = Enum.KeyCode.K
 local ABILITIES_KEY_HINT = "K or Esc closes"
+-- The fix round's c2: a gamepad toggles the panel with Y in the lobby and closes it with B.
+local ABILITIES_PAD_HINT = AbilitiesPanel.PAD_TOGGLE_NAME .. " or B closes"
 local AIR_JUMP_HINT_KEYS = "Double Jump: buy it in the lobby (K)"
+local AIR_JUMP_HINT_PAD = "Double Jump: buy it in the lobby ("
+	.. AbilitiesPanel.PAD_TOGGLE_NAME
+	.. ")"
 local AIR_JUMP_HINT_TOUCH = "Double Jump: buy it in the lobby (Abilities)"
 -- Run phases with nothing left to fight: the summary card has the screen.
 local RUN_OVER_PHASES: { [string]: boolean } = { summary = true, ended = true }
@@ -430,6 +435,44 @@ local function touchCluster(): (number, number?, number?)
 	return viewport.Y - jumpTopLeft.Y + jumpSize,
 		math.min(meleeCentre.X - meleeSize / 2, slotCentre.X - slotSize / 2),
 		meleeCentre.Y - meleeSize / 2
+end
+
+-- The L2 W1 fix round's c1: what stands at the bottom of a mission's screen, which the run
+-- layer's bottom-left buttons keep clear of, in the HUD ScreenGui's px (`origin` = its top-left
+-- in the viewport). On touch every button of the thumb cluster and Roblox's jump button; the
+-- health bar by its own rule (VitalsHud.BarPlace, on the inset-free layer, so in viewport px);
+-- and the AbilityBar, already in the HUD's px (math.huge when hidden, which nothing meets).
+local function bottomObstacles(
+	viewport: Vector2,
+	origin: Vector2,
+	vitals: VitalsHud.Layout,
+	barLeft: number,
+	barTop: number,
+	barBottom: number
+): { CombatHud.Obstacle }
+	local list: { CombatHud.Obstacle } = { { left = barLeft, top = barTop, bottom = barBottom } }
+	local function add(left: number, top: number, bottom: number): ()
+		table.insert(
+			list,
+			{ left = left - origin.X, top = top - origin.Y, bottom = bottom - origin.Y }
+		)
+	end
+	if UserInputService.TouchEnabled then
+		local jumpTopLeft, jumpSize = MovementController.JumpButtonRect(viewport)
+		add(jumpTopLeft.X, jumpTopLeft.Y, jumpTopLeft.Y + jumpSize)
+		for _, key in { "dash", "aim", "abilityMelee", "abilityRanged", "slot" } do
+			local centre, size =
+				MovementController.ClusterRect(viewport, key :: MovementController.ClusterKey)
+			add(centre.X - size / 2, centre.Y - size / 2, centre.Y + size / 2)
+		end
+	end
+	local centreX, bottom = VitalsHud.BarPlace(vitals, viewport)
+	add(
+		centreX - Theme.COMBAT_RANGE_VITALS_WIDTH * vitals.scale / 2,
+		bottom - Theme.COMBAT_RANGE_VITALS_HEIGHT * vitals.scale,
+		bottom
+	)
+	return list
 end
 
 -- Where a mission's boss bar goes, in px of the HUD ScreenGui (see the header's layout notes).
@@ -1439,19 +1482,31 @@ local function bootMission(): ()
 				return true
 			end,
 			onOpenChanged = function(open: boolean)
+				-- One sheet at a time, whatever opened this one (the button, K or the pad's Y).
+				local screen = mapScreen
+				if open and screen ~= nil and screen.IsOpen() then
+					screen.Close()
+				end
 				CameraController.SetCursorHold(HOLD_ABILITIES, open)
 				if debugPanel ~= nil then
 					debugPanel.SetVisible(not open)
 				end
 			end,
 			toast = toast.Show,
-			keyHint = if UserInputService.KeyboardEnabled then ABILITIES_KEY_HINT else nil,
+			keyHint = if UserInputService.KeyboardEnabled
+				then ABILITIES_KEY_HINT
+				elseif UserInputService.GamepadEnabled then ABILITIES_PAD_HINT
+				else nil,
+			padToggle = true,
 		})
 		else nil
 	SecretFx.Mount(screenGui, toast.Show)
 	MovementController.SetAirJumpHintHandler(function()
 		toast.Show(
-			if UserInputService.KeyboardEnabled then AIR_JUMP_HINT_KEYS else AIR_JUMP_HINT_TOUCH,
+			if UserInputService.KeyboardEnabled
+				then AIR_JUMP_HINT_KEYS
+				elseif UserInputService.GamepadEnabled then AIR_JUMP_HINT_PAD
+				else AIR_JUMP_HINT_TOUCH,
 			Theme.AIR_JUMP_HINT_SECONDS,
 			false
 		)
@@ -1497,15 +1552,12 @@ local function bootMission(): ()
 			screen.Open()
 		end
 	end
-	-- L2-10: K and the HUD's button. The panel opens only in the lobby (SetLobby).
+	-- L2-10: K and the HUD's button (the pad's Y is the panel's own). The panel opens only in the
+	-- lobby (SetLobby), and closes the map as it opens.
 	local function toggleAbilities(): ()
 		local panel = abilitiesPanel
 		if panel == nil or st.phase ~= "lobby" then
 			return
-		end
-		local screen = mapScreen
-		if not panel.IsOpen() and screen ~= nil and screen.IsOpen() then
-			screen.Close()
 		end
 		panel.Toggle()
 	end
@@ -1515,6 +1567,12 @@ local function bootMission(): ()
 	local hud = CombatHud.new(screenGui, {
 		onMap = if mapScreen ~= nil then openMap else nil,
 		onAbilities = if abilitiesPanel ~= nil then toggleAbilities else nil,
+		-- Fix round c2: a console has only the pad's Y to reach the panel, so the button names it.
+		abilitiesKey = if UserInputService.GamepadEnabled
+				and not UserInputService.KeyboardEnabled
+				and not UserInputService.TouchEnabled
+			then AbilitiesPanel.PAD_TOGGLE_NAME
+			else nil,
 		onLeave = leave,
 		onAbandon = abandon,
 		-- Fix round: Abandon has a key, named on its button, and while it waits for its second
@@ -1997,7 +2055,32 @@ local function bootMission(): ()
 		if scale == nil then
 			return -- AbsoluteSize is zero before the first layout; the signal re-enters
 		end
-		local edges = hud.SetLayout(scale, size)
+		-- This ScreenGui starts under the top bar; the crosshair's and the vitals HUD's does
+		-- not, so the crosshair's centre is the viewport's, less the inset.
+		local inset = GuiService:GetGuiInset()
+		local camera = Workspace.CurrentCamera
+		local viewport = if camera ~= nil then camera.ViewportSize else size + inset
+		local _, clusterLeft, clusterTop = touchCluster()
+		local vitals: VitalsHud.Layout = {
+			scale = scale,
+			rightReserve = 0,
+			clusterLeft = clusterLeft,
+			clusterTop = clusterTop,
+		}
+		-- No panel column: the tiles and the health bar sit bottom centre.
+		local barLeft, barTop, barBottom = abilityBar.SetLayout(scale, size, 0)
+		local edges = hud.SetLayout(
+			scale,
+			size,
+			bottomObstacles(
+				viewport,
+				screenGui.AbsolutePosition,
+				vitals,
+				barLeft,
+				barTop,
+				barBottom
+			)
+		)
 		summaryCard.SetScale(scale)
 		loadScreen.SetScale(scale)
 		toast.SetLayout(scale, size.X > size.Y, 0)
@@ -2011,26 +2094,13 @@ local function bootMission(): ()
 		if abilitiesPanel ~= nil then
 			abilitiesPanel.SetLayout(scale, size)
 		end
-		SecretFx.SetLayout(scale)
+		SecretFx.SetLayout(scale, viewport.Y / 2 - inset.Y)
 		crosshair.SetLayout(scale)
 		FeedbackController.SetLayout(scale)
-		local _, clusterLeft, clusterTop = touchCluster()
-		-- No panel column: the tiles and the health bar sit bottom centre.
-		abilityBar.SetLayout(scale, size, 0)
-		-- This ScreenGui starts under the top bar; the crosshair's and the vitals HUD's does
-		-- not, so the crosshair's centre is the viewport's, less the inset.
-		local inset = GuiService:GetGuiInset()
-		local camera = Workspace.CurrentCamera
-		local viewport = if camera ~= nil then camera.ViewportSize else size + inset
 		local bossBottom = placeMissionBoss(bossBar, scale, size, edges, viewport / 2 - inset)
 		st.bossLimit = if bossBottom ~= nil then bossBottom + inset.Y else nil
 		placeBanner(scale, size, viewport, inset, edges, bossBottom)
-		st.vitalsLayout = {
-			scale = scale,
-			rightReserve = 0,
-			clusterLeft = clusterLeft,
-			clusterTop = clusterTop,
-		}
+		st.vitalsLayout = vitals
 		applyVitalsLayout()
 	end
 
