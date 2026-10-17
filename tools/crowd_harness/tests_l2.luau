@@ -499,7 +499,8 @@ end
 L1.group("l2 leapTests", L2.leapTests)
 
 -- c4: WallClip.GroundFloor, the whole of step 4 that WeaponService.GroundPoint and
--- InputController.groundPoint both call (neither loads here, so their source is read for the call).
+-- InputController.groundPoint both call through GroundRule.Floor (the second fix round's Minor 1;
+-- neither caller loads here, so their source is read for the call).
 function L2.groundFloorTests(): ()
 	print(" WallClip.GroundFloor: the ground point's step 4, one call on both sides (the fix round's c4)")
 	local movement = FIXTURES.proving.movement
@@ -533,11 +534,49 @@ function L2.groundFloorTests(): ()
 	check(same(nil, feet - rise, Clip.GroundFloor(nil, feet, 34, movement, false)), "the ledge from a jump's top over a void off Road5: refused (F2)")
 	check(same(8, 8, Clip.GroundFloor(8, 30, nil, movement, false)), "a void under the target: level with the probed caster's floor, not the feet")
 
-	-- Both callers make the call, and neither calls the parts again (run_harness.py reads them).
+	-- The second fix round's Minor 1: GroundRule.Floor reads both inputs itself, the heights from
+	-- Tuning on every call and the double jump from the player's attribute (only true owns).
+	local Rule = load("GroundRule")
+	local live = load("Tuning").Get()
+	local saved = live.movement
+	local attribute = L2.Unlocks.Attribute(L2.Unlocks.AIR_JUMP)
+	local function playerWith(value: any): any
+		return {
+			GetAttribute = function(_self: any, name: string): any
+				return if name == attribute then value else nil
+			end,
+		}
+	end
+	local owner = playerWith(true)
+	-- Heights no other case uses, so a copy of ProvingGrounds.json's numbers cannot pass.
+	live.movement = { jumpHeight = 7, doubleJumpHeight = 5 }
+	check(same(20, 8, Rule.Floor(owner, 8, 8, 20)) and same(nil, 8, Rule.Floor(owner, 8, 8, 20.001)), "GroundRule: an owner rises Tuning's jump plus double jump (7 + 5), no more")
+	local owned = {}
+	for _, value in { false :: any, "true", 1, {} } do
+		if Rule.OwnsAirJump(playerWith(value)) or Rule.Floor(playerWith(value), 8, 8, 15.001) ~= nil then
+			table.insert(owned, tostring(value))
+		end
+	end
+	local nobody = playerWith(nil)
+	check(#owned == 0 and not Rule.OwnsAirJump(nobody) and Rule.OwnsAirJump(owner), `GroundRule: only an attribute of true owns the double jump (owned by: {table.concat(owned, ", ")})`)
+	check(same(15, 8, Rule.Floor(nobody, 8, 8, 15)) and same(nil, 8, Rule.Floor(nobody, 8, 8, 15.001)), "GroundRule: anyone else rises Tuning's jump alone (7)")
+	check(same(13, 13, Rule.Floor(nobody, nil, 20, nil)), "GroundRule: over a void, the feet less that rise")
+	live.movement = { jumpHeight = 9, doubleJumpHeight = 4 }
+	check(same(17, 8, Rule.Floor(nobody, 8, 8, 17)) and same(nil, 8, Rule.Floor(nobody, 8, 8, 17.001)) and same(21, 8, Rule.Floor(owner, 8, 8, 21)), "GroundRule: read from Tuning on every call, never a copy kept from before")
+	live.movement = saved
+
+	-- Both callers make that one call, and neither calls WallClip's rule or its parts again nor
+	-- reads an input itself; run_harness.py reads each ground-point function's own text.
 	local ground = (FIXTURES.source or {}).groundFloor or {}
+	local function callsRule(side: any): boolean
+		return side.found == true and side.rule == 1 and side.calls == 0 and side.parts == 0 and side.reads == 0
+	end
+	local function said(side: any): string
+		return `found {tostring(side.found)}, GroundRule.Floor {tostring(side.rule)}, GroundFloor {tostring(side.calls)}, parts {tostring(side.parts)}, inputs read {tostring(side.reads)}`
+	end
 	local client, server = ground.client or {}, ground.server or {}
-	check(client.calls == 1 and client.parts == 0, `InputController.groundPoint calls WallClip.GroundFloor once and no Rise, TooHigh or CasterFloor of its own ({tostring(client.calls)}, {tostring(client.parts)})`)
-	check(server.calls == 1 and server.parts == 0, `WeaponService.GroundPoint does the same ({tostring(server.calls)}, {tostring(server.parts)})`)
+	check(callsRule(client), `InputController.groundPoint calls GroundRule.Floor once, and no GroundFloor, Rise, TooHigh, CasterFloor or input of its own ({said(client)})`)
+	check(callsRule(server), `WeaponService.GroundPoint does the same ({said(server)})`)
 end
 L1.group("l2 groundFloorTests", L2.groundFloorTests)
 

@@ -438,8 +438,11 @@ local function touchCluster(): (number, number?, number?)
 end
 
 -- The L2 W1 fix round's c1: what stands at the bottom of a mission's screen, which the run
--- layer's bottom-left buttons keep clear of, in the HUD ScreenGui's px (`origin` = its top-left
--- in the viewport). On touch every button of the thumb cluster and Roblox's jump button; the
+-- layer's bottom-left buttons keep clear of, in the HUD ScreenGui's px. `origin` is that
+-- ScreenGui's top-left in the viewport: GuiService:GetGuiInset(), the same convention the
+-- crosshair's centre uses (the second fix round's Major 1). Not its AbsolutePosition: that is
+-- measured from under the top bar too, so it reads (0, 0) and every viewport rect would land a
+-- whole inset too low. On touch every button of the thumb cluster and Roblox's jump button; the
 -- health bar by its own rule (VitalsHud.BarPlace, on the inset-free layer, so in viewport px);
 -- and the AbilityBar, already in the HUD's px (math.huge when hidden, which nothing meets).
 local function bottomObstacles(
@@ -2072,14 +2075,7 @@ local function bootMission(): ()
 		local edges = hud.SetLayout(
 			scale,
 			size,
-			bottomObstacles(
-				viewport,
-				screenGui.AbsolutePosition,
-				vitals,
-				barLeft,
-				barTop,
-				barBottom
-			)
+			bottomObstacles(viewport, inset, vitals, barLeft, barTop, barBottom)
 		)
 		summaryCard.SetScale(scale)
 		loadScreen.SetScale(scale)

@@ -121,8 +121,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
-local WallClip = require(sharedFolder:WaitForChild("WallClip"))
-local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local GroundRule = require(sharedFolder:WaitForChild("GroundRule"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -1838,7 +1837,8 @@ end
 -- the leap and refuses a ground-aimed cast early, so the two agree wherever both see the same
 -- arena.
 -- L1c §8: nil = refused, as WeaponService.GroundPoint refuses it, with the same shared rule
--- (WallClip.GroundFloor): ground more than the caster's own rise above the caster's floor. Without
+-- (WallClip.GroundFloor, through GroundRule.Floor): ground more than the caster's own rise above
+-- the caster's floor. Without
 -- it a leap aimed over a tall wall lands its probe on the wall's top, a perch that sees into a
 -- walled camp. L2-4: the rise is per player, jumpHeight plus doubleJumpHeight only for one who
 -- owns the double jump (the Player attribute the server sets; the server reads the same one).
@@ -1866,14 +1866,14 @@ local function groundPoint(
 	end
 	-- 4: onto the floor under it (probed from GROUND_PROBE_LIFT above), else level with the
 	-- floor under the caster; over a void (L2 W1 F2) that is the feet less the caster's rise.
-	-- WallClip.GroundFloor is the whole step, the same call WeaponService.GroundPoint makes with
-	-- the server's copy of the same attribute (the fix round's c4), so the two cannot drift.
-	local floorY, casterFloor = WallClip.GroundFloor(
+	-- GroundRule.Floor is the whole step, the same call WeaponService.GroundPoint makes (the fix
+	-- round's c4): it reads the movement heights and the double jump itself (the second fix
+	-- round's Minor 1), so this side passes only what its rays found and cannot drift.
+	local floorY, casterFloor = GroundRule.Floor(
+		Players.LocalPlayer,
 		floorHit(root, params),
 		root.Y - rig.root.Size.Y * HALF - rig.humanoid.HipHeight,
-		floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params),
-		Tuning.Get().movement,
-		Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP))
+		floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params)
 	)
 	if floorY == nil then
 		return nil, casterFloor

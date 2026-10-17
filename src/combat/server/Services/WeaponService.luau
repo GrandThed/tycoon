@@ -38,11 +38,10 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
+local GroundRule = require(sharedFolder:WaitForChild("GroundRule"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local SwingGate = require(sharedFolder:WaitForChild("SwingGate"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
-local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
-local WallClip = require(sharedFolder:WaitForChild("WallClip"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
@@ -2526,9 +2525,9 @@ end
 
 -- Ruling 4, which InputController mirrors on the client: where an aimed ability lands. nil =
 -- refused, and (L1c §8) so is ground higher above the caster's floor than their own jumps reach
--- (WallClip.GroundFloor): a leap aimed over a tall wall would otherwise land on its top. L2-4: the
--- double jump counts only for a player who owns it, read from the attribute UnlockService (this
--- server) sets, never from the client.
+-- (WallClip.GroundFloor, through GroundRule.Floor): a leap aimed over a tall wall would otherwise
+-- land on its top. L2-4: the double jump counts only for a player who owns it, read from the
+-- attribute UnlockService (this server) sets, never from the client.
 function WeaponService.GroundPoint(
 	player: Player,
 	origin: Vector3,
@@ -2558,14 +2557,14 @@ function WeaponService.GroundPoint(
 	end
 	-- 4: dropped onto the floor there, else level with the floor under the caster. Over a void
 	-- (L2 W1 F2) that floor is the caster's feet less his own rise, so a jump off a cliff does
-	-- not make ground a jump above the cliff's foot a legal target. WallClip.GroundFloor is the
-	-- whole step, the same call InputController.groundPoint makes.
-	local floorY = WallClip.GroundFloor(
+	-- not make ground a jump above the cliff's foot a legal target. GroundRule.Floor is the whole
+	-- step, the same call InputController.groundPoint makes, and it reads the movement heights
+	-- and this server's attribute itself (the second fix round's Minor 1).
+	local floorY = GroundRule.Floor(
+		player,
 		floorBelow(root, params),
 		rootPosition.Y - standingOffset(root, humanoid),
-		floorUnder(point, params),
-		Tuning.Get().movement,
-		player:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP))
+		floorUnder(point, params)
 	)
 	if floorY == nil then
 		return nil

@@ -21,11 +21,16 @@
 --    on the road). Where the screen is too short for that (a landscape phone under the top bar)
 --    its top keeps to the margin and it may reach over the ticks, never down to the aim point
 --    with the usual two or three lines.
+--  * The second fix round's Minor 2: every row is as tall as its text wrapped at the card's
+--    inner width (TextService measures it when the card is filled), and placeCard sums those
+--    heights. The family note ("Flamethrower is yours: ...") takes two lines on the 300-wide
+--    card; counted as one, it pushed the card's bottom a line lower than placed, onto the ticks.
 --
 -- The card is Active = false and takes no tap; no sound (combat has none).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextService = game:GetService("TextService")
 local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
@@ -65,9 +70,10 @@ local CHEST_PATTERN = "^Secret_(.+)$"
 local SIGN_SUFFIX = "_Sign"
 local OPEN_LOOK = "secretOpen"
 local FOUND_SUFFIX = " FOUND"
-local LATER_NOTE = " is yours: you can carry it in a later update"
+local LATER_NOTE = " is yours (usable soon)"
 local SOMEONE = "Someone"
--- The card's rows: each label is its text size plus this tall, with this gap between rows.
+-- The card's rows: each label is its wrapped text's height plus this tall (fitRow), with this
+-- gap between rows.
 local CARD_LINE_PAD = 6
 local CARD_ROW_GAP = 2
 
@@ -242,6 +248,9 @@ local function cardLabel(
 		TextSize = size,
 		TextColor3 = color,
 		TextWrapped = true,
+		-- fitRow sets the height from the measured text; growing past it is only a safety net
+		-- should the engine wrap one line more than TextService said (Size is the floor).
+		AutomaticSize = Enum.AutomaticSize.Y,
 		Text = "",
 		Parent = parent,
 	}) :: TextLabel
@@ -290,7 +299,6 @@ local function buildCard(gui: ScreenGui): Card
 	}
 	local note = cardLabel("Family", Theme.SECRET_CARD_NOTE_TEXT, Theme.MAP_COLOR_DIM, 4, frame)
 	note.Font = Theme.FONT
-	note.AutomaticSize = Enum.AutomaticSize.Y
 	return { frame = frame, scale = scale, title = title, lines = lines, note = note }
 end
 
@@ -303,16 +311,25 @@ local function familyName(id: string): string
 	return string.upper(string.sub(id, 1, 1)) .. string.sub(id, 2)
 end
 
--- c7: the card's top, from the rows it shows this time (the family note counted as one line).
--- Its bottom sits a margin above the reticle's resting ticks (the melee gap plus a tick: bloom
--- only pushes them out for a moment), unless that would lift its top past the screen's margin.
+-- Minor 2: a row's height for its text as it is now, wrapped at the card's inner width (design
+-- px: the card's UIScale applies on top). An empty text still takes a line.
+local function fitRow(row: TextLabel): ()
+	local width = Theme.SECRET_CARD_WIDTH - 2 * Theme.SECRET_CARD_PADDING
+	local bounds =
+		TextService:GetTextSize(row.Text, row.TextSize, row.Font, Vector2.new(width, math.huge))
+	row.Size = UDim2.new(1, 0, 0, math.ceil(math.max(bounds.Y, row.TextSize)) + CARD_LINE_PAD)
+end
+
+-- c7: the card's top, from the rows it shows this time at their measured heights (fitRow). Its
+-- bottom sits a margin above the reticle's resting ticks (the melee gap plus a tick: bloom only
+-- pushes them out for a moment), unless that would lift its top past the screen's margin.
 local function placeCard(card: Card): ()
 	local layout = state.layout
 	local height = Theme.SECRET_CARD_PADDING * 2
 	local rows = 0
 	for _, row in { card.title, card.lines[1], card.lines[2], card.note } do
 		if row.Visible then
-			height += row.TextSize + CARD_LINE_PAD
+			height += row.Size.Y.Offset
 			rows += 1
 		end
 	end
@@ -343,6 +360,9 @@ local function showCard(
 	materialLine.Visible = materials > 0 and material ~= ""
 	card.note.Text = if family ~= nil then familyName(family) .. LATER_NOTE else ""
 	card.note.Visible = family ~= nil
+	for _, row in { card.title, valorLine, materialLine, card.note } do
+		fitRow(row)
+	end
 	placeCard(card)
 	card.frame.Visible = true
 	state.cardToken += 1

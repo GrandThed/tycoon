@@ -23,6 +23,8 @@ of a strike's candidates it lands on and chains from, a held resident passed ove
 L2 W1 adds the profile's v7 step (ProfileSchema, loaded as it stands: its Types require resolves
 to the stub), the pure Unlocks (ownership, keys, the purchase) and SecretFlow (the chests), and
 tests_l2.luau: those, WallClip.Rise per player, StageFlow's secrets lines and the shipped chests.
+Its second fix round adds GroundRule (the ground point's movement and double-jump inputs, read
+once for both callers) and scopes the ground-point source check to the two functions.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -88,6 +90,8 @@ SOURCES = {
     "ProfileSchema": "src/server/Services/ProfileSchema.luau",
     "Unlocks": "src/shared/Unlocks.luau",
     "SecretFlow": "src/combat/server/Services/SecretFlow.luau",
+    # The L2 W1 second fix round's Minor 1: the ground point's inputs, read in one place.
+    "GroundRule": "src/shared/GroundRule.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -169,10 +173,19 @@ def gate_reading() -> dict:
 INPUT_CONTROLLER = "src/combat/client/Controllers/InputController.luau"
 ABILITY_SERVICE = "src/combat/server/Services/AbilityService.luau"
 WEAPON_SERVICE = "src/combat/server/Services/WeaponService.luau"
-# The L2 W1 fix round's c4: the ground point's step 4 is one call, WallClip.GroundFloor, on both
-# sides; a caller that calls the parts it is made of again holds a copy that can drift.
+# The L2 W1 fix round's c4 and its second round's Minor 1: the ground point's step 4 is one call on
+# both sides, GroundRule.Floor, which reads the movement heights and the double jump itself. A
+# caller that calls WallClip.GroundFloor or its parts again, or reads an input of its own, holds a
+# copy that can drift. Read inside each ground-point function only, so the rest of a file may use
+# WallClip as it likes.
+GROUND_RULE_CALL = re.compile(r"\bGroundRule\.Floor\(")
 GROUND_FLOOR_CALL = re.compile(r"\bWallClip\.GroundFloor\(")
 GROUND_PART_CALL = re.compile(r"\bWallClip\.(?:Rise|TooHigh|CasterFloor)\(")
+GROUND_INPUT_READ = re.compile(r"\bGetAttribute\(|\bTuning\.Get\(|\.movement\b")
+GROUND_POINT_BODY = {
+    "client": re.compile(r"(?ms)^local function groundPoint\(.*?^end$"),
+    "server": re.compile(r"(?ms)^function WeaponService\.GroundPoint\(.*?^end$"),
+}
 COMBAT_PROJECT = "combat.project.json"
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
@@ -184,8 +197,10 @@ def source_reading(repo: Path) -> dict:
     AbilityService mechanics whose target is "ground", `zoomCap` = combat.project.json's
     StarterPlayer.CameraMaxZoomDistance (None when unset). A file that is missing reads as empty,
     and the cases fail on an empty list. The L2 W1 fix round's c4 adds `groundFloor`: for the client
-    (InputController) and the server (WeaponService), how many times each calls WallClip.GroundFloor
-    and how many times it calls Rise, TooHigh or CasterFloor itself."""
+    (InputController.groundPoint) and the server (WeaponService.GroundPoint), read inside that one
+    function (`found` false when it is not there): how many times it calls GroundRule.Floor
+    (`rule`), WallClip.GroundFloor (`calls`), Rise, TooHigh or CasterFloor (`parts`), and how many
+    inputs it reads itself (`reads`: GetAttribute, Tuning.Get, `.movement`)."""
     def text(rel: str) -> str:
         path = repo / rel
         return path.read_text(encoding="utf-8") if path.is_file() else ""
@@ -200,10 +215,14 @@ def source_reading(repo: Path) -> dict:
         zoom = player.get("$properties", {}).get("CameraMaxZoomDistance")
     ground_floor = {}
     for side, rel in (("client", INPUT_CONTROLLER), ("server", WEAPON_SERVICE)):
-        source = text(rel)
+        body = GROUND_POINT_BODY[side].search(text(rel))
+        source = body.group(0) if body else ""
         ground_floor[side] = {
+            "found": body is not None,
+            "rule": len(GROUND_RULE_CALL.findall(source)),
             "calls": len(GROUND_FLOOR_CALL.findall(source)),
             "parts": len(GROUND_PART_CALL.findall(source)),
+            "reads": len(GROUND_INPUT_READ.findall(source)),
         }
     return {"groundClient": client, "groundServer": server, "zoomCap": zoom, "groundFloor": ground_floor}
 

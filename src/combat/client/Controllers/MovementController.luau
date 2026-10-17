@@ -82,8 +82,12 @@ local MOVER_NAME = "RangeMover"
 -- Two JumpRequests closer than this are one held press, not a fresh one.
 local JUMP_PRESS_GAP = 0.06
 -- c3: a body that leaves its floor rising slower than this share of a jump's take-off speed did
--- not jump (it walked, slid or was pushed off).
+-- not jump (it walked or slid off). Speed cannot tell an enemy launch apart: every launch in
+-- ProvingGrounds.json is 3 studs, 34 studs/s against this line's 42, so ApplyKnock marks it.
 local WALK_OFF_RISE_SHARE = 0.5
+-- The second fix round's Minor 3: a body that leaves its floor this soon after a launch was
+-- launched, not walked off (the lift reaches the root through Freefall within a frame or two).
+local LAUNCH_TAKEOFF_SECONDS = 0.25
 -- A slam that has not touched down by then (fell off the map) gives up without firing.
 local SLAM_MAX_SECONDS = 3
 -- Ground probe length below the feet; beyond it the player counts as very high.
@@ -174,9 +178,10 @@ local downAlign: AlignOrientation? = nil
 local placing = { at = nil :: Vector3?, expires = 0 }
 -- L2-3: the host's word for a refused air jump (nil = none), and whether it was said this session.
 local airJumpHint = { handler = nil :: (() -> ())?, said = false }
--- c3: how the current airtime began. `walkedOff` = the body left its floor without a jump (and
--- no grace jump has been taken since); `y` = the root's height when it left.
-local takeoff = { walkedOff = false, y = 0 }
+-- c3: how the current airtime began. `walkedOff` = the body left its floor without a jump or a
+-- launch (and no grace jump has been taken since); `y` = the root's height when it left;
+-- `launchedAt` = the os.clock() of the last launch that lifted the body (ApplyKnock).
+local takeoff = { walkedOff = false, y = 0, launchedAt = -math.huge }
 
 local screenGui: ScreenGui? = nil
 local dashButton: TextButton? = nil
@@ -288,7 +293,8 @@ local function noteTakeoff(rig: Rig, now: number): ()
 	leftGroundAt = now
 	wasAirborne = true
 	local rising = rig.root.AssemblyLinearVelocity.Y
-	takeoff.walkedOff = rising < jumpSpeed(Tuning.Get().movement.jumpHeight) * WALK_OFF_RISE_SHARE
+	takeoff.walkedOff = now - takeoff.launchedAt > LAUNCH_TAKEOFF_SECONDS
+		and rising < jumpSpeed(Tuning.Get().movement.jumpHeight) * WALK_OFF_RISE_SHARE
 	takeoff.y = rig.root.Position.Y
 end
 
@@ -918,6 +924,7 @@ function MovementController.Start(): ()
 			airJumpUsed = false
 			wasAirborne = false
 			takeoff.walkedOff = false
+			takeoff.launchedAt = -math.huge
 			-- A new body stands, unshoved: the align went with the old rig.
 			dashUntil = 0
 			knock = Vector3.zero
@@ -1106,6 +1113,11 @@ function MovementController.ApplyKnock(push: Vector3, launch: number): ()
 	clearMover()
 	knock = Vector3.zero
 	if lift > 0 then
+		-- A launch is no walk-off (Minor 3): no grace jump from it, and the first air press after
+		-- it still names the double jump. On the ground, the take-off that step notes next reads
+		-- launchedAt; already in the air, this airtime counts as the launch's from here on.
+		takeoff.walkedOff = false
+		takeoff.launchedAt = os.clock()
 		if not knockedDown then
 			-- Off the Humanoid's floor hold first: on the ground it would swallow the lift.
 			rig.humanoid:ChangeState(Enum.HumanoidStateType.Freefall)

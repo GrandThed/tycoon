@@ -4569,16 +4569,94 @@ L2_FIX_MUTATIONS = {
     ),
     "l2 fix c4: the server's ground point keeps its own copy": (
         WEAPON,
-        "local floorY = WallClip.GroundFloor(",
+        "local floorY = GroundRule.Floor(",
         "local floorY = WallClip.TooHigh(",
     ),
     "l2 fix c4: the client's ground point keeps its own copy": (
         INPUT,
-        "local floorY, casterFloor = WallClip.GroundFloor(",
+        "local floorY, casterFloor = GroundRule.Floor(",
         "local floorY, casterFloor = WallClip.TooHigh(",
     ),
 }
 MUTATIONS.update(L2_FIX_MUTATIONS)
+
+# The L2 W1 second fix round (docs/prompts/l2-w1-fix2.md), Minor 1: GroundRule reads the ground
+# point's inputs for both callers, and the source check reads each ground-point function alone.
+# The first two are the fix-diff reviewer's own probes, written against the new call sites: each
+# caller going back to writing its inputs, one of them wrong.
+GROUND_RULE = "src/shared/GroundRule.luau"
+FILES.append(GROUND_RULE)
+CLIENT_GROUND_CALL = (
+    "GroundRule.Floor(\n"
+    "\t\tPlayers.LocalPlayer,\n"
+    "\t\tfloorHit(root, params),\n"
+    "\t\troot.Y - rig.root.Size.Y * HALF - rig.humanoid.HipHeight,\n"
+    "\t\tfloorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params)\n"
+    "\t)"
+)
+SERVER_GROUND_CALL = (
+    "GroundRule.Floor(\n"
+    "\t\tplayer,\n"
+    "\t\tfloorBelow(root, params),\n"
+    "\t\trootPosition.Y - standingOffset(root, humanoid),\n"
+    "\t\tfloorUnder(point, params)\n"
+    "\t)"
+)
+L2_FIX2_MUTATIONS = {
+    "l2 fix2 m1: the client writes its own inputs and reads the attribute as ~= false": (
+        INPUT,
+        CLIENT_GROUND_CALL,
+        "WallClip.GroundFloor(\n"
+        "\t\tfloorHit(root, params),\n"
+        "\t\troot.Y - rig.root.Size.Y * HALF - rig.humanoid.HipHeight,\n"
+        "\t\tfloorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params),\n"
+        "\t\tTuning.Get().movement,\n"
+        "\t\tPlayers.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) ~= false\n"
+        "\t)",
+    ),
+    "l2 fix2 m1: the server writes its own inputs with 30 studs of rise": (
+        WEAPON,
+        SERVER_GROUND_CALL,
+        "WallClip.GroundFloor(\n"
+        "\t\tfloorBelow(root, params),\n"
+        "\t\trootPosition.Y - standingOffset(root, humanoid),\n"
+        "\t\tfloorUnder(point, params),\n"
+        "\t\t{ jumpHeight = 30, doubleJumpHeight = 0 },\n"
+        "\t\tplayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP))\n"
+        "\t)",
+    ),
+    "l2 fix2 m1: the server calls the rule but overrides the double jump itself": (
+        WEAPON,
+        "\t\tfloorUnder(point, params)\n\t)\n\tif floorY == nil then",
+        "\t\tfloorUnder(point, params)\n\t)\n"
+        "\tif player:GetAttribute(\"Ability_doubleJump\") ~= nil then\n\t\tfloorY = floorUnder(point, params)\n\tend\n"
+        "\tif floorY == nil then",
+    ),
+    "l2 fix2 m1: the server's ground point is not where the check reads": (
+        WEAPON,
+        "function WeaponService.GroundPoint(",
+        "function WeaponService.GroundPointAt(",
+    ),
+    "l2 fix2 m1: GroundRule owns on any attribute but false": (GROUND_RULE, ") == true", ") ~= false"),
+    "l2 fix2 m1: GroundRule types its own heights": (
+        GROUND_RULE,
+        "Tuning.Get().movement",
+        "{ jumpHeight = 30, doubleJumpHeight = 0 }",
+    ),
+    "l2 fix2 m1: GroundRule keeps the heights of its first call": (
+        GROUND_RULE,
+        "\t\tTuning.Get().movement,\n",
+        "\t\tGroundRule.kept or (function()\n\t\t\tGroundRule.kept = Tuning.Get().movement\n"
+        "\t\t\treturn GroundRule.kept\n\t\tend)(),\n",
+    ),
+    "l2 fix2 m1: GroundRule ignores the double jump": (GROUND_RULE, "GroundRule.OwnsAirJump(player)\n", "false\n"),
+    "l2 fix2 m1: GroundRule reads another attribute": (
+        GROUND_RULE,
+        "Unlocks.Attribute(Unlocks.AIR_JUMP)",
+        'Unlocks.Attribute("airJump")',
+    ),
+}
+MUTATIONS.update(L2_FIX2_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
