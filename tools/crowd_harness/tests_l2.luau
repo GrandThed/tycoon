@@ -1,7 +1,7 @@
 -- Cases for L2 W1, the bought double jump and the lookout (docs/prompts/l2-w1-contract.md): the
 -- profile's v7 step (ProfileSchema, L2-1), the pure Unlocks (L2-2, L2-9), the pure SecretFlow
--- (L2-11 to L2-15), WallClip.Rise per player (L2-4), StageFlow's secrets lines (L2-13, L2-15),
--- then the shipped files: Forest Road's chests, Expeditions.json's Double Jump and Combat.json's
+-- (L2-11 to L2-15), WallClip.Rise per player (L2-4) and the leap's F1 / F2 (§11), StageFlow's
+-- secrets lines (L2-13, L2-15), then the shipped files: Forest Road's chests, Expeditions.json's Double Jump and Combat.json's
 -- trigger. Appended last by run_harness.py, so every local of the earlier files is in scope (vec,
 -- check, near, load, L1, L1C). Everything hangs off the L2 table (the 200-local limit), and every
 -- group runs behind L1.group, so one that throws fails a check and the bundle goes on to its
@@ -314,6 +314,62 @@ function L2.riseTests(): ()
 	check(Clip.TooHigh(8, 34, Clip.Rise(movement, false)) and not Clip.TooHigh(8, 34, Clip.Rise(movement, true)), "a ground point 26 over the caster's floor: refused without the double jump, allowed with it")
 end
 L1.group("l2 riseTests", L2.riseTests)
+
+-- L2 W1 §11, the lead's ruling on the leap finding: F2 (the caster's floor over a void) and F1 (the
+-- leap's apex), pure in WallClip so WeaponService.GroundPoint, InputController.groundPoint and
+-- MovementController.Leap share them. None of the three loads here; the rule they call is this one.
+function L2.leapTests(): ()
+	print(" WallClip.CasterFloor and LeapApex (L2 W1 F2, F1)")
+	local movement = FIXTURES.proving.movement
+	local Clip = L1C.Clip
+	local rise, owned = Clip.Rise(movement, false), Clip.Rise(movement, true)
+	local height = FIXTURES.proving.weapons.greataxe.ability.height
+	local standing = 3
+
+	-- F2: a probed floor is the floor, wherever it is; over a void, the feet less the rise.
+	check(Clip.CasterFloor(8, 26, rise) == 8 and Clip.CasterFloor(-40, 26, rise) == -40 and Clip.CasterFloor(0, 26, rise) == 0, "a floor under the caster is his floor, whatever the feet and the rise")
+	check(Clip.CasterFloor(30, 26, rise) == 30, "even a floor the ray finds above the feet (a root sunk into a step)")
+	check(Clip.CasterFloor(nil, 26, rise) == 26 - rise and Clip.CasterFloor(nil, 26, owned) == 26 - owned, `over a void: the feet less the caster's own rise ({Clip.CasterFloor(nil, 26, rise)}, {Clip.CasterFloor(nil, 26, owned)})`)
+	-- The lookout (Road5 at 8, the ledge's top at 34): a jump off the road's edge puts the feet at
+	-- 8 + one jump over a void. The ledge is then as far out of reach as from the road itself.
+	local feet = 8 + movement.jumpHeight
+	check(Clip.TooHigh(Clip.CasterFloor(nil, feet, rise), 34, rise), `the ledge (34) from a jump's top over a void off Road5 (feet {feet}): refused without the double jump`)
+	-- An owner's rise is both jumps, so over a void his floor is the feet less both: at the top of
+	-- his double jump the ledge is in reach as from the road, at one jump's top it is not yet.
+	local both = 8 + owned
+	check(not Clip.TooHigh(Clip.CasterFloor(nil, both, owned), 34, owned), `an owner at his double jump's top (feet {both}): allowed, as from the road`)
+	check(Clip.TooHigh(Clip.CasterFloor(nil, feet, owned), 34, owned), "an owner at one jump's top over the void: refused (his rise counts both jumps)")
+	check(not Clip.TooHigh(feet, 34, rise), "(the old rule, the feet as the floor, allowed it: the hole F2 closes)")
+
+	-- F1, ground casts: the root stands on its floor, and the apex is the old one, height over the
+	-- higher end, for targets above, level and below, and for any height.
+	local same = true
+	for _, floor in { -12, 0, 8, 26.5 } do
+		for _, target in { -30, floor - 4, floor, floor + 6, floor + rise } do
+			for _, h in { 0, 2.5, height, 18 } do
+				local from, to = floor + standing, target + standing
+				if not near(Clip.LeapApex(from, to, floor, standing, h), math.max(from, to) + h) then
+					same = false
+				end
+			end
+		end
+	end
+	check(same, "cast from the ground: the apex is height over the higher end, as before F1")
+	check(Clip.LeapApex(11, 5, 8, standing, height) == 11 + height, "a ground cast down a slope: height over the caster's root, not the target's")
+	check(Clip.LeapApex(11, 17, 8, standing, height) == 17 + height, "a ground cast up a step: height over the target's root")
+
+	-- F1, airborne casts: the height goes over the caster's floor, never over the airborne root.
+	local root = feet + standing
+	check(Clip.LeapApex(root, 8 + standing, 8, standing, height) == root, `at a jump's top over Road5, aimed level: the apex is the root ({root}), not root + height ({root + height})`)
+	check(Clip.LeapApex(root, 20 + standing, 8, standing, height) == 20 + standing + height, "aimed at a target that height lifts above the root: height over the target")
+	check(Clip.LeapApex(root, 8 + standing, 8, standing, 30) == 8 + standing + 30, "a lift above the jump itself: height over the caster's floor")
+	check(Clip.LeapApex(root, 8 + standing, Clip.CasterFloor(nil, feet, rise), standing, height) == root, "over a void (F2's floor): never above the root for a lift under the rise")
+
+	-- A height that is not a positive number lifts nothing.
+	check(Clip.LeapApex(11, 5, 8, standing, -6) == 11 and Clip.LeapApex(11, 15, 8, standing, -6) == 15, "a negative height: the higher end, no lift")
+	check(Clip.LeapApex(11, 5, 8, standing, L2.NAN) == 11, "a NaN height: no lift")
+end
+L1.group("l2 leapTests", L2.leapTests)
 
 function L2.flowTests(): ()
 	print(" StageFlow: Resolve carries secrets, Validate checks them, the map card's rows (L2-13, L2-15)")

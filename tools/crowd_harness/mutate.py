@@ -4261,6 +4261,32 @@ L2_MUTATIONS = {
         "movement.doubleJumpHeight",
     ),
     "l2: Rise never adds the double jump": (WALL_CLIP, "(if airJump then movement.doubleJumpHeight else 0)", "0"),
+    # WallClip.CasterFloor and LeapApex (§11, the leap finding's F2 and F1).
+    "l2 leap: over a void the floor is the feet (F2 undone)": (
+        WALL_CLIP,
+        "return if probed ~= nil then probed else feetY - rise",
+        "return if probed ~= nil then probed else feetY",
+    ),
+    "l2 leap: the probed floor is ignored": (
+        WALL_CLIP,
+        "return if probed ~= nil then probed else feetY - rise",
+        "return feetY - rise",
+    ),
+    "l2 leap: the height stacks on an airborne root (F1 undone)": (
+        WALL_CLIP,
+        "return math.max(fromY, toY + lift, floorY + standing + lift)",
+        "return math.max(fromY, toY) + lift",
+    ),
+    "l2 leap: the caster's floor never lifts the apex": (
+        WALL_CLIP,
+        "return math.max(fromY, toY + lift, floorY + standing + lift)",
+        "return math.max(fromY, toY + lift)",
+    ),
+    "l2 leap: a negative height lowers the apex": (
+        WALL_CLIP,
+        "local lift = if height > 0 then height else 0",
+        "local lift = height",
+    ),
     # ProfileSchema v7 (L2-1).
     "l2: the schema stays at v6": (SCHEMA, "local SCHEMA_VERSION = 7", "local SCHEMA_VERSION = 6"),
     "l2: the template lacks abilities": (SCHEMA, "\t\tabilities = {},\n", ""),

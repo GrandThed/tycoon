@@ -14,6 +14,11 @@
 --   the caster's floor than the caster's own jumps reach is refused: a jump, plus the double jump
 --   for a player who owns it (L2-4). WeaponService.GroundPoint (server) and
 --   InputController.groundPoint (client) ask the same question with the same numbers.
+-- * CasterFloor / LeapApex (L2 W1 §11, F2 and F1): the two holes that let a player without the
+--   double jump leap onto a ledge his jumps cannot reach. Over a void the caster's floor was his
+--   own feet, so a jump off a cliff made ground a jump above the road a legal target; and a leap
+--   cast at the top of a jump stacked its height on the jump. Both callers above and
+--   MovementController.Leap use these, so client and server share one rule.
 
 -- A locking camp's fenced rectangle: centre and half sizes on the flat, and `y` its floor's top
 -- (Types.RunFloor's numbers, the halves grown by the fence), studs. `ceiling`: how far above `y` a
@@ -153,6 +158,30 @@ end
 -- floorY: the cast is refused. Exactly `rise` above is allowed.
 function WallClip.TooHigh(floorY: number, targetY: number, rise: number): boolean
 	return targetY - floorY > rise
+end
+
+-- F2: the floor a ground point is measured from. `probed`, the floor a ray found under the caster,
+-- when there is one; over a void (nil) the caster's feet less his own rise, so nobody targets
+-- ground above the height his jumps would have carried him from wherever he stood.
+function WallClip.CasterFloor(probed: number?, feetY: number, rise: number): number
+	return if probed ~= nil then probed else feetY - rise
+end
+
+-- F1: a leap's apex, as root heights. `fromY` the root at the cast, `toY` the root standing on the
+-- target, `floorY` the caster's floor (CasterFloor) and `standing` the root's height over a floor
+-- it stands on. The lift goes over the higher of the target and the caster's floor, never over an
+-- airborne root, so a cast at the top of a jump does not add `height` on top of the jump; cast
+-- from the ground, the root stands at floorY + standing and the apex is what it always was. A
+-- height that is not a positive number lifts nothing.
+function WallClip.LeapApex(
+	fromY: number,
+	toY: number,
+	floorY: number,
+	standing: number,
+	height: number
+): number
+	local lift = if height > 0 then height else 0
+	return math.max(fromY, toY + lift, floorY + standing + lift)
 end
 
 return WallClip

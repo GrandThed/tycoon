@@ -230,7 +230,7 @@ LIFT_ROUTES_MAX = 40  # (c) stops after this many take-offs with a route (enough
 # * "floor": the apex is `height` over the higher of the target and the caster's floor, never over an
 #   airborne root; and the caster's floor over a void is the feet less WallClip.Rise(movement, false).
 #   The change docs/prompts/l2-w1-reports/economy-designer.md asks for: it closes every lift route.
-LIFT_MODEL = "today"
+LIFT_MODEL = "floor"
 # Every mission is played with ProvingGrounds.json `loadout` (L2-5), whose families lift nobody, so a
 # route (c) finds under LIFT_MODEL is a known limit until W2's loadout picker: reported, not gated,
 # while no family with a lifting ability can enter a level. False gates it outright (the mutants).

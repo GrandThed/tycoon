@@ -1842,12 +1842,14 @@ end
 -- it a leap aimed over a tall wall lands its probe on the wall's top, a perch that sees into a
 -- walled camp. L2-4: the rise is per player, jumpHeight plus doubleJumpHeight only for one who
 -- owns the double jump (the Player attribute the server sets; the server reads the same one).
+-- Also returns the caster's floor it measured from (WallClip.CasterFloor): the leap's apex
+-- stands on it (L2 W1 F1).
 local function groundPoint(
 	rig: LocalRig,
 	origin: Vector3,
 	direction: Vector3,
 	castRange: number
-): Vector3?
+): (Vector3?, number)
 	local params = worldParams()
 	local root = rig.root.Position
 	local range = math.max(castRange, 0)
@@ -1863,15 +1865,19 @@ local function groundPoint(
 		point = Vector3.new(root.X + pulled.X, point.Y, root.Z + pulled.Z)
 	end
 	-- 4: onto the floor under it (probed from GROUND_PROBE_LIFT above), else level with the
-	-- floor under the caster, else the caster's own feet.
-	local casterFloor = floorHit(root, params)
-		or root.Y - rig.root.Size.Y * HALF - rig.humanoid.HipHeight
-	local floorY = floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params) or casterFloor
+	-- floor under the caster; over a void (L2 W1 F2) that is the feet less the caster's rise.
 	local airJump = Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) == true
-	if WallClip.TooHigh(casterFloor, floorY, WallClip.Rise(Tuning.Get().movement, airJump)) then
-		return nil
+	local rise = WallClip.Rise(Tuning.Get().movement, airJump)
+	local casterFloor = WallClip.CasterFloor(
+		floorHit(root, params),
+		root.Y - rig.root.Size.Y * HALF - rig.humanoid.HipHeight,
+		rise
+	)
+	local floorY = floorHit(point + Vector3.new(0, GROUND_PROBE_LIFT, 0), params) or casterFloor
+	if WallClip.TooHigh(casterFloor, floorY, rise) then
+		return nil, casterFloor
 	end
-	return Vector3.new(point.X, floorY, point.Z)
+	return Vector3.new(point.X, floorY, point.Z), casterFloor
 end
 
 -- What the caster's own client does at the cast (every visual is AbilityFx's, from the
@@ -1882,14 +1888,20 @@ local function applyCast(
 	ability: Types.RangeAbilityDef,
 	direction: Vector3,
 	castAt: number,
-	groundTarget: Vector3?
+	groundTarget: Vector3?,
+	casterFloor: number
 ): ()
 	local id = ability.id
 	if id == "whirlwind" then
 		MovementController.Channel(ability.durationSeconds or 0, ability.moveSpeedMult or 1)
 	elseif id == "leapSmash" then
 		if groundTarget ~= nil then
-			MovementController.Leap(groundTarget, ability.delaySeconds or 0, ability.height or 0)
+			MovementController.Leap(
+				groundTarget,
+				ability.delaySeconds or 0,
+				ability.height or 0,
+				casterFloor
+			)
 		end
 	elseif id == "impaleDash" then
 		-- The lunge flattens the aim itself; the server's capsule uses the same flat line.
@@ -1944,8 +1956,9 @@ local function castAbility(slot: Stance): ()
 	-- (ground too high above the caster's floor) is not sent, so it costs no cooldown, no token
 	-- and no predicted leap.
 	local groundTarget: Vector3? = nil
+	local casterFloor = 0
 	if GROUND_AIMED[ability.id] then
-		groundTarget = groundPoint(rig, origin, direction, ability.castRange or 0)
+		groundTarget, casterFloor = groundPoint(rig, origin, direction, ability.castRange or 0)
 		if groundTarget == nil then
 			return
 		end
@@ -1973,7 +1986,7 @@ local function castAbility(slot: Stance): ()
 		cancelDraw()
 		rangeState.tapQueuedAt = nil
 	end
-	applyCast(family, ability, direction, castAt, groundTarget)
+	applyCast(family, ability, direction, castAt, groundTarget, casterFloor)
 end
 
 -- A player's slot change (1 / 2, gamepad Y, the touch slot button): refused while busy (P3

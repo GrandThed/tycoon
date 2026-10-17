@@ -2556,12 +2556,18 @@ function WeaponService.GroundPoint(
 		local pulled = flat.Unit * range
 		point = Vector3.new(rootPosition.X + pulled.X, point.Y, rootPosition.Z + pulled.Z)
 	end
-	-- 4: dropped onto the floor there, else level with the floor under the caster (else the
-	-- caster's feet, over a void).
-	local casterFloor = floorBelow(root, params) or rootPosition.Y - standingOffset(root, humanoid)
-	local floorY = floorUnder(point, params) or casterFloor
+	-- 4: dropped onto the floor there, else level with the floor under the caster. Over a void
+	-- (L2 W1 F2) that floor is the caster's feet less his own rise, so a jump off a cliff does
+	-- not make ground a jump above the cliff's foot a legal target.
 	local airJump = player:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) == true
-	if WallClip.TooHigh(casterFloor, floorY, WallClip.Rise(Tuning.Get().movement, airJump)) then
+	local rise = WallClip.Rise(Tuning.Get().movement, airJump)
+	local casterFloor = WallClip.CasterFloor(
+		floorBelow(root, params),
+		rootPosition.Y - standingOffset(root, humanoid),
+		rise
+	)
+	local floorY = floorUnder(point, params) or casterFloor
+	if WallClip.TooHigh(casterFloor, floorY, rise) then
 		return nil
 	end
 	return Vector3.new(point.X, floorY, point.Z)

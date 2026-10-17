@@ -58,6 +58,7 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local WallClip = require(sharedFolder:WaitForChild("WallClip"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Theme = require(uiFolder:WaitForChild("Theme"))
@@ -924,16 +925,25 @@ function MovementController.AirHang(seconds: number): ()
 end
 
 -- Leap Smash: an arc from the root to stand on `ground` (a floor point, InputController's
--- ruling-4 mirror) in `seconds`, the apex `height` above the higher end. Returns false when
--- there is no character or no time to leap in.
-function MovementController.Leap(ground: Vector3, seconds: number, height: number): boolean
+-- ruling-4 mirror) in `seconds`. The apex is `height` above the higher of the target and
+-- `casterFloor`, the floor groundPoint measured the cast from (L2 W1 F1, WallClip.LeapApex):
+-- cast from the ground that is the old "above the higher end"; cast at the top of a jump the
+-- height no longer stacks on the jump. Returns false when there is no character or no time
+-- to leap in.
+function MovementController.Leap(
+	ground: Vector3,
+	seconds: number,
+	height: number,
+	casterFloor: number
+): boolean
 	local rig = localRig()
 	if not started or rig == nil or knockedDown or seconds <= 0 then
 		return false
 	end
 	local from = rig.root.Position
-	local to = ground + Vector3.new(0, standingOffset(rig), 0)
-	local apex = math.max(from.Y, to.Y) + math.max(height, 0)
+	local standing = standingOffset(rig)
+	local to = ground + Vector3.new(0, standing, 0)
+	local apex = WallClip.LeapApex(from.Y, to.Y, casterFloor, standing, height)
 	-- Rise to the apex and fall from it in `seconds` total under one constant gravity:
 	-- T = sqrt(2/g) (sqrt(up) + sqrt(down)), so g = 2 (sqrt(up) + sqrt(down))^2 / T^2.
 	local up = math.sqrt(math.max(apex - from.Y, 0))
