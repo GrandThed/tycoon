@@ -15614,3 +15614,8 @@ As built (lead, 2026-10-16): the server's ground point is `WeaponService.GroundP
 refused press spends nothing. `src/shared/WallClip.luau` exports `Reach` (camera clip), `Rise`
 (`jumpHeight + doubleJumpHeight` from ProvingGrounds `movement`) and `TooHigh(floorY, targetY, rise)`.
 `RunFloor.locks` carries the camp's locking flag to the client.
+
+# L2 W1 contracts — the bought double jump and the lookout
+
+Decisions: `docs/MISSIONS_DESIGN.md` §22. Study: `docs/prompts/l2-study-report.md`. Contract of record:
+`docs/prompts/l2-w1-contract.md` (rulings L2-1 to L2-28, §10 the lead's rulings), on branch `l2-secrets`.
