@@ -3885,7 +3885,7 @@ tools 4). All fixed:
   doubleJump only". LookoutLedge on Hard +1.6%, still the thinnest gate.
 
 **QA:**
-- full mutate on 613e736: <to be filled by lead>
+- full mutate on 613e736: 870 run, 0 not caught (fix 2: filtered 46 run, 0 not caught; 879 entries, 0 stale)
 - Fix 2 (`b056843`): harness PASS (2,630 checks); filtered `mutate.py` 46 run, 0 not caught;
   stale-text count 879 entries, 0 stale.
 - Fix round (`d6b3777`): filtered `mutate.py` 301 run, 0 not caught; `check_levels` and
