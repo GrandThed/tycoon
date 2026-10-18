@@ -15619,3 +15619,8 @@ refused press spends nothing. `src/shared/WallClip.luau` exports `Reach` (camera
 
 Decisions: `docs/MISSIONS_DESIGN.md` §22. Study: `docs/prompts/l2-study-report.md`. Contract of record:
 `docs/prompts/l2-w1-contract.md` (rulings L2-1 to L2-28, §10 the lead's rulings), on branch `l2-secrets`.
+
+# L2 W2 contracts — fire, the Flamethrower, the cave and the shortcut
+
+Decisions: `docs/MISSIONS_DESIGN.md` §22 (with its W2 paragraph). Contract of record:
+`docs/prompts/l2-w2-contract.md` (rulings L2-29 to L2-47, §10 Ben's answers and the lead's rulings), on branch `l2-w2`.

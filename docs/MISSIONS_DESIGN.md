@@ -511,3 +511,9 @@ rescue) and the pond grows so the island shrine is out of reach without ice. Dou
 (one Normal clear), bought from an **Abilities panel in the lobby** (later the Armory's second tab). Waves:
 W1 the bought double jump and the lookout (with the Flamethrower in its chest and the lobby loadout picker);
 W2 fire, the cave and the shortcut; W3 ice, the frost hammer and the creek. Each wave is playable alone.
+
+**W2 decisions (2026-10-18, click questions with plans):** the cave is the **Pickets bypass** — its bramble
+mouth under the lookout, a roofed tunnel behind a ridge past camp A with the Raiders' Cache in an alcove, out
+onto the road into Main Camp; once found, later runs skip the Pickets (~25 s on Normal, ~5% of the pay given
+up) **[Ben]**. The lobby weapon choice is kept **for this visit** only; L3 designs the saved loadout **[Ben]**.
+The 6-stud gap at the road's U-bend that players could hop is **closed now** **[Ben]**.
