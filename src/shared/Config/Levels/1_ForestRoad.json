@@ -8,7 +8,7 @@
 	"runCapSeconds": 1500,
 	"secrets": {
 		"lookout": { "name": "The Lookout", "valor": 3, "materials": 50, "family": "flamethrower" },
-		"cache": { "name": "Raiders' Cache" },
+		"cache": { "name": "Raiders' Cache", "valor": 4, "materials": 60 },
 		"shrine": { "name": "Island Shrine" }
 	},
 	"difficulties": {

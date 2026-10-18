@@ -677,7 +677,7 @@ L1.group("l2 flowTests", L2.flowTests)
 -- The shipped files: Forest Road's chests as the layout and the level file have them, the Double
 -- Jump Expeditions.json sells, Combat.json's trigger band.
 function L2.realTests(): ()
-	print(" The real files: the lookout pays behind the Double Jump, the cache and the shrine pay nothing")
+	print(" The real files: the lookout pays behind the Double Jump, the shrine pays nothing (W2: the cache pays behind fire)")
 	local S, U = L2.Secret, L2.Unlocks
 	local file = L1.real.file("forestRoad")
 	local layout = file ~= nil and L1.real.layouts[file.layout] or nil
@@ -701,7 +701,7 @@ function L2.realTests(): ()
 	check(lookout.needs == U.AIR_JUMP and cache.needs == "fire" and shrine.needs == "ice", "the lookout needs the double jump, the cache fire, the shrine ice")
 	local reward = lookout.reward
 	check(reward ~= nil and reward.valor >= 2 and def ~= nil and reward.valor < def.price.valor and reward.materials > 0 and reward.family == "flamethrower", `the lookout pays: at least 2 Valor and under Double Jump's price, Timber, and the Flamethrower ({reward and reward.valor}, {reward and reward.materials}, {reward and tostring(reward.family)})`)
-	check(cache.reward == nil and shrine.reward == nil, "the cache and the shrine have no reward entry in W1 (no secret pays without a key W1 sells)")
+	check(shrine.reward == nil, "the shrine has no reward entry (no secret pays without a key that is sold or found; W2 gives the cache its reward, tests_l2w2.luau)")
 	check(S.Decide(lookout, U.HasKey({}, config, lookout.needs), false) == "locked" and S.Decide(lookout, U.HasKey({ doubleJump = true }, config, lookout.needs), false) == "pay", "the lookout: locked without the double jump, pays with it")
 	local claims = { doubleJump = true, fire = true, ice = true }
 	check(S.Decide(cache, U.HasKey(claims, config, cache.needs), false) == "locked" and S.Decide(shrine, U.HasKey(claims, config, shrine.needs), false) == "locked", "the cache and the shrine stay locked whatever the profile claims")

@@ -46,6 +46,8 @@ local MAX_DIFFICULTY_LENGTH = 12
 -- Expeditions.json `abilities` and prices it from there. One home, Unlocks (the Abilities panel
 -- and Unlocks.DefProblem read the same cap).
 local MAX_ABILITY_ID_LENGTH = Unlocks.MAX_ID_LENGTH
+-- L2-32: a variant key ("A"). Shape only: UnlockService resolves the family and its variant.
+local MAX_VARIANT_LENGTH = Unlocks.MAX_VARIANT_LENGTH
 
 local combatConfig = Catalog.GetCombatConfig()
 local maxTargets = if combatConfig ~= nil
@@ -139,6 +141,17 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 			bucket = "calls",
 			validate = function(args: RemoteService.PackedArgs): boolean
 				return args.n == 1 and isShortString(args[1], MAX_ABILITY_ID_LENGTH)
+			end,
+		},
+		-- L2-32: hold a family (and one of its variants) in a slot, in the lobby. Three names, no
+		-- amount: UnlockService checks the family exists, fills that slot, and is owned.
+		RequestSetFamily = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 3
+					and (args[1] == "melee" or args[1] == "ranged")
+					and isShortString(args[2], MAX_FAMILY_LENGTH)
+					and isShortString(args[3], MAX_VARIANT_LENGTH)
 			end,
 		},
 		-- L1 ruling 21: end the live run with what was banked, or cut the summary's wait short.

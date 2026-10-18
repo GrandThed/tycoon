@@ -148,6 +148,14 @@ export type PredictedSwing = {
 	airborne: boolean,
 }
 
+-- L2-29: a shot of a continuous family as it left: family, variant, shot origin, direction.
+export type StreamHandler = (
+	family: string,
+	variant: Types.RangeWeaponVariant,
+	origin: Vector3,
+	direction: Vector3
+) -> ()
+
 -- A module's top level is one Luau function, and Studio (debug level 2) gives it 200 local
 -- registers, constants included. So related constants and state live in a few tables here and
 -- the touch buttons in RangeTouchButtons; tools/check_compile.py is the gate.
@@ -302,6 +310,9 @@ type RangeState = {
 	swingSteps: { [string]: number },
 	lastSwingAt: number,
 	onSwing: ((swing: PredictedSwing) -> ())?,
+	-- L2-29: told on the frame a shot of a continuous family leaves (FlameFx draws the local
+	-- stream from it, not from the server's answer).
+	onStream: StreamHandler?,
 	-- Sustained-fire accumulator (see dueShots): when the next shot is due, the interval it
 	-- was scheduled at, and whether the previous frame wanted to fire (a stream in progress).
 	nextShotAt: number,
@@ -1271,7 +1282,8 @@ local function tapFireOn(cfg: Types.ProvingGroundsConfig): boolean
 end
 
 -- Touch auto-fire's "on target": the assist cone for guns and bows, the whole cone for a cone
--- gun (it hits everything inside), the padded melee shape for melee.
+-- gun (it hits everything inside) and the whole capsule for a stream (L2-48: the short
+-- Flamethrower fires only with a body inside its reach), the padded melee shape for melee.
 local function targetOnAuto(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
@@ -1282,7 +1294,7 @@ local function targetOnAuto(
 	local root = rig.root.Position
 	if isRanged(variant) then
 		local origin, look = shotRay(rig)
-		if variant.shape == "cone" then
+		if variant.shape == "cone" or variant.shape == "capsule" then
 			return enemyInReach(variant, origin, look, 0, lagPad)
 		end
 		return enemyInSights(variant, origin, look, controls.autoFireAssistDegrees, lagPad)
@@ -1478,6 +1490,10 @@ local function rangeAttack(
 		if (variant.projectileSpeed or 0) <= 0 and variant.continuous ~= true then
 			WeaponController.Shoot(origin, direction, variant.range, "semi")
 		end
+		local onStream = rangeState.onStream
+		if onStream ~= nil and variant.continuous == true then
+			onStream(family, variant, origin, direction)
+		end
 		return
 	end
 	-- P3.1: the server resolves the swing at this origin along this heading, so it lands where
@@ -1638,7 +1654,8 @@ local function busySecondsOf(ability: Types.RangeAbilityDef): number
 		or id == "overchargedShot"
 	then
 		return math.max(ability.delaySeconds or 0, 0)
-	elseif id == "slugBurst" then
+	elseif id == "slugBurst" or id == "dragonBreath" then
+		-- L2-29: Dragon's Breath is the Slug Burst launcher with flame cones.
 		return math.max((ability.count or 0) * (ability.tickSeconds or 0), 0)
 	end
 	return 0
@@ -2505,6 +2522,12 @@ end
 -- it requires this module and not the other way round. One handler; nil clears it.
 function InputController.SetSwingHandler(handler: ((swing: PredictedSwing) -> ())?): ()
 	rangeState.onSwing = handler
+end
+
+-- L2-29: `handler` is called on the frame a shot of a continuous family is sent, with what was
+-- sent (FlameFx registers: it requires this module). One handler; nil clears it.
+function InputController.SetStreamHandler(handler: StreamHandler?): ()
+	rangeState.onStream = handler
 end
 
 -- P3.1 ruling 2: the server's strike for the local swing `seq` of `family`, with the combo

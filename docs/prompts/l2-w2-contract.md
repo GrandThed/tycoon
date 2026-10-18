@@ -331,3 +331,12 @@ Studio key **F** toggles the Flamethrower for the caller (like J); **H** already
   launcher, ticks never heavy, six ticks to burn, the leader's save deciding the shortcut, cache chest 4 Valor +
   60 Timber, the Abilities panel grown into an "Armory" panel with Weapons and Abilities tabs.
 - The lead does the two `Main.server.luau` wiring steps after the engineers report, and writes INTERFACES.
+
+## 11. Lead's rulings on the designer's four questions (2026-10-18)
+
+1. CaveMouth and CaveExit are accepted as new Normal sniper spots (both earn under the mission player on Normal
+   and Hard); making the cave part of the raiders' region is rejected.
+2. The Flamethrower-run bands are accepted: compare the Flamethrower pair with the Longbow pair; clear band
+   4.0–5.75 min.
+3. The cache sign stands on Road4 beside the mouth.
+4. A shortcut found from the exit end (burn the exit bramble from RoadAB5 and step in) counts as found.

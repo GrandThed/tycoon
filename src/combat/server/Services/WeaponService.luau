@@ -42,6 +42,7 @@ local GroundRule = require(sharedFolder:WaitForChild("GroundRule"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local SwingGate = require(sharedFolder:WaitForChild("SwingGate"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
@@ -216,7 +217,17 @@ type StrikeFx = {
 	step: number?,
 	tick: boolean?,
 	links: { number }?,
+	-- L2-35: the empty end strike of a projectile a set or a run abandoned. Never sent; the
+	-- strike listeners skip it (it resolved nothing in the world).
+	abandoned: boolean?,
 }
+-- L2-35: what OnStrikeResolved's listeners are handed: the shape as WorldReact reads it.
+type StrikeListener = (
+	player: Player,
+	weapon: string,
+	fx: WorldReact.Strike,
+	ability: string?
+) -> ()
 -- Chain lightning: jumps per hit enemy, the jump radius (body centre to body centre) and the
 -- damage multiplier each jump applies to the one before.
 type ChainSpec = { count: number, radius: number, falloff: number }
@@ -235,6 +246,10 @@ local state = {
 	pending = {} :: { Projectile },
 	loadoutListeners = {} :: { (player: Player, slot: SlotName) -> () },
 	dealtListeners = {} :: { (player: Player, dealt: number) -> () },
+	-- L2-35: told of every resolved strike (LevelService.React, wired by Main); a listener that
+	-- throws is warned once and the strike goes on.
+	strikeListeners = {} :: { StrikeListener },
+	warnedStrikeListener = false,
 	statsAccumulator = 0,
 	-- Ruling 21 (nil = every player may act) and the range's readout fields.
 	actGate = nil :: ((player: Player) -> boolean)?,
@@ -794,6 +809,19 @@ local function finish(
 		tick = fx.tick,
 		links = fx.links,
 	})
+	if not fx.abandoned then
+		local abilityId = if ability ~= nil then ability.id else nil
+		for _, listener in state.strikeListeners do
+			local ok, problem = pcall(function(): any
+				listener(player, weapon, fx, abilityId)
+				return nil
+			end)
+			if not ok and not state.warnedStrikeListener then
+				state.warnedStrikeListener = true
+				warn(`[WeaponService] a strike listener failed: {problem}`)
+			end
+		end
+	end
 	local shooter = state.shooters[player]
 	if shooter == nil then
 		return
@@ -831,6 +859,7 @@ local function abandonProjectiles(): ()
 				width = nil,
 				endPoint = projectile.position,
 				seq = projectile.seed,
+				abandoned = true,
 			},
 			{ hits = projectile.volley.distinct, kills = projectile.volley.kills },
 			projectile.ability
@@ -1435,6 +1464,8 @@ local function resolveRanged(
 		width = variant.width,
 		endPoint = nil,
 		seq = seed,
+		-- L2-29: a held stream's shots are ticks of one lasting stream, as a held beam's are.
+		tick = if variant.continuous == true then true else nil,
 	})
 end
 
@@ -1988,6 +2019,15 @@ end
 -- included). Must not yield. RangeService starts its clear clock on it.
 function WeaponService.OnDamageDealt(callback: (player: Player, dealt: number) -> ()): ()
 	table.insert(state.dealtListeners, callback)
+end
+
+-- L2-35: runs synchronously at the end of every resolved strike (an attack, an ability's strike,
+-- a projectile's hit), after its CombatFxStrike is queued, with the strike's shape as drawn and
+-- the ability id when an ability dealt it. The empty end strikes of abandoned projectiles are
+-- skipped. Must not yield; a throw is caught (warned once) so the strike's readout still goes
+-- out. The lead wires LevelService.React here.
+function WeaponService.OnStrikeResolved(callback: StrikeListener): ()
+	table.insert(state.strikeListeners, callback)
 end
 
 -- Runs synchronously at every 2 Hz readout tick, just before the readouts go out. Must not

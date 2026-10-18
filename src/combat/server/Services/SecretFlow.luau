@@ -35,6 +35,17 @@ export type Site = {
 export type Verdict = "known" | "locked" | "nothing" | "pay"
 -- What UnlockService.OpenSecret did: the verdict, and on "pay" what it credited (else 0 / nil).
 export type Opening = { verdict: Verdict, valor: number, materials: number, family: string? }
+-- L2-36: one shortcut's trigger box, from the layout's `shortcuts`: centre and size, studs.
+export type Shortcut = {
+	id: string,
+	name: string,
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
+}
 -- The level file's (or the resolved level's) secrets block; LevelFile and LevelConfig both fit.
 type SecretsHolder = { secrets: { [string]: Types.LevelSecretConfig }? }
 
@@ -169,6 +180,10 @@ local function familiesOf(combat: Types.CombatProfile): { [string]: boolean }
 	return made
 end
 
+-- The profile's families, made when it lacks them: the `grantFamily` lever (UnlockService) writes
+-- through the same function a chest's pay does.
+SecretFlow.FamiliesOf = familiesOf
+
 -- L2-12 (the fix round's s3): one player opens the chest, decided and written in one call with no
 -- yield. `hasKey` is Unlocks.HasKey on that player's profile (never the attribute); `material`
 -- is the level's ("" = its materials go nowhere and are reported as 0). On "pay" the reward goes
@@ -200,6 +215,105 @@ function SecretFlow.Open(
 	end
 	secretsOf(combat, levelId)[site.id] = true
 	return { verdict = "pay", valor = reward.valor, materials = materials, family = family }
+end
+
+-- L2-36: every shortcut of a layout, in its order. An entry whose id is not a string, or whose
+-- numbers are not finite (or whose size is negative), is skipped: it can never be found. A
+-- missing name reads as the id.
+function SecretFlow.Shortcuts(layout: Types.LevelLayout): { Shortcut }
+	local found: { Shortcut } = {}
+	local list: any = layout.shortcuts
+	if type(list) ~= "table" then
+		return found
+	end
+	for _, entry: any in list do
+		if
+			type(entry) ~= "table"
+			or type(entry.id) ~= "string"
+			or entry.id == ""
+			or not (
+				finite(entry.x)
+				and finite(entry.y)
+				and finite(entry.z)
+				and finite(entry.sx)
+				and finite(entry.sy)
+				and finite(entry.sz)
+				and entry.sx >= 0
+				and entry.sy >= 0
+				and entry.sz >= 0
+			)
+		then
+			continue
+		end
+		table.insert(found, {
+			id = entry.id,
+			name = if type(entry.name) == "string" and entry.name ~= ""
+				then entry.name
+				else entry.id,
+			x = entry.x,
+			y = entry.y,
+			z = entry.z,
+			sx = entry.sx,
+			sy = entry.sy,
+			sz = entry.sz,
+		})
+	end
+	return found
+end
+
+-- L2-36: true when a root stands inside the shortcut's box (closed on every face).
+function SecretFlow.InShortcut(box: Shortcut, root: Vector3): boolean
+	return math.abs(root.X - box.x) <= box.sx / 2
+		and math.abs(root.Y - box.y) <= box.sy / 2
+		and math.abs(root.Z - box.z) <= box.sz / 2
+end
+
+-- L2-36: one player found the shortcut `id` of `levelId`: recorded in their profile's
+-- `combat.shortcuts[levelId]` (each made when the profile lacks it). True when it is new; a second
+-- call records nothing more and answers false. Pure, no yield, like Open.
+function SecretFlow.RecordShortcut(
+	combat: Types.CombatProfile,
+	levelId: string,
+	id: string
+): boolean
+	local byLevel = combat.shortcuts
+	if byLevel == nil then
+		local made: { [string]: { [string]: boolean } } = {}
+		combat.shortcuts = made
+		byLevel = made
+	end
+	local shortcutsByLevel = byLevel :: { [string]: { [string]: boolean } }
+	local mine = shortcutsByLevel[levelId]
+	if mine == nil then
+		local made: { [string]: boolean } = {}
+		shortcutsByLevel[levelId] = made
+		mine = made
+	end
+	local found = mine :: { [string]: boolean }
+	if found[id] == true then
+		return false
+	end
+	found[id] = true
+	return true
+end
+
+-- L2-36: the shortcuts of `levelId` a profile has found, as a set of its own (a find later in the
+-- run cannot change a level already built). Empty when there is none.
+function SecretFlow.FoundShortcuts(
+	combat: Types.CombatProfile?,
+	levelId: string
+): { [string]: boolean }
+	local open: { [string]: boolean } = {}
+	local byLevel = if combat ~= nil then combat.shortcuts else nil
+	local own = if byLevel ~= nil then byLevel[levelId] else nil
+	if type(own) == "table" then
+		for id, found in own do
+			if found == true then
+				open[id] = true
+			end
+		end
+	end
+	return open
 end
 
 -- The map card's row for one player: every chest of the level in order, found from their own

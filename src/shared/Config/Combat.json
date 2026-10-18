@@ -129,6 +129,8 @@
 		"grantAbilityAttribute": "DebugGrantAbility",
 		"removeAbilityAttribute": "DebugRemoveAbility",
 		"resetSecretsAttribute": "DebugResetSecrets",
+		"grantFamilyAttribute": "DebugGrantFamily",
+		"removeFamilyAttribute": "DebugRemoveFamily",
 		"perfLogSeconds": 10,
 		"perfAttribute": "CrowdPerfMs"
 	},
@@ -154,7 +156,8 @@
 		"cameraClear": 3.5,
 		"secretReach": 2.5,
 		"secretBelow": 1,
-		"secretAbove": 9
+		"secretAbove": 9,
+		"react": { "fireHits": 6, "pad": 0.5 }
 	},
 	"camps": {
 		"guard": { "sight": 30, "cone": 140, "rise": 0 },

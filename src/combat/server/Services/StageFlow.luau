@@ -948,6 +948,58 @@ local function secretProblems(
 	end
 end
 
+-- L2-34, L2-36: the layout's reactive blocks and shortcuts. A block's `react` is "fire" or "ice"
+-- and the block collides (a block nothing stops would be burnt by a stream that passes through
+-- it); its `opens` names an entry of `layout.shortcuts`. `shortcuts` is a list whose entries have
+-- a unique id of at most Unlocks.MAX_ID_LENGTH bytes and finite numbers.
+local function reactProblems(layout: Types.LevelLayout, problem: (string) -> ()): ()
+	local ids: { [string]: boolean } = {}
+	local shortcuts: any = layout.shortcuts
+	if shortcuts ~= nil and type(shortcuts) ~= "table" then
+		problem("shortcuts is not a list")
+		shortcuts = nil
+	end
+	for index, entry: any in shortcuts or {} do
+		local id = if type(entry) == "table" then entry.id else nil
+		if type(id) ~= "string" or id == "" or #id > Unlocks.MAX_ID_LENGTH then
+			problem(`shortcut {index} has no id of at most {Unlocks.MAX_ID_LENGTH} bytes`)
+			continue
+		end
+		if ids[id] then
+			problem(`the shortcut id "{id}" is used twice`)
+		end
+		ids[id] = true
+		for _, key in { "x", "y", "z", "sx", "sy", "sz" } do
+			if not isFinite(entry[key]) then
+				problem(`shortcut "{id}": {key} is {tostring(entry[key])}, not a number`)
+			end
+		end
+	end
+	local blocks: any = layout.blocks
+	if type(blocks) ~= "table" then
+		return
+	end
+	for index, block: any in blocks do
+		if type(block) ~= "table" then
+			continue
+		end
+		local where = `block {if type(block.name) == "string" then block.name else index}`
+		local react = block.react
+		if react ~= nil then
+			if react ~= "fire" and react ~= "ice" then
+				problem(`{where}: react is {tostring(react)}, neither "fire" nor "ice"`)
+			end
+			if block.collide == false then
+				problem(`{where} reacts and does not collide`)
+			end
+		end
+		local opens = block.opens
+		if opens ~= nil and (type(opens) ~= "string" or not ids[opens]) then
+			problem(`{where} opens {tostring(opens)}, which names no shortcut`)
+		end
+	end
+end
+
 -- Validate's L1b lines, one per problem, into `problems`: the numbers the run reads, which camps
 -- lock and which stage names them, the level's `camps` entries, every spot of every layout camp,
 -- every resident group and its units; then, once all of that is sound, every group's posts on
@@ -1551,6 +1603,7 @@ function StageFlow.Validate(
 	)
 	regionProblems(level, layout, camps, kinds, ranks, rules, problem)
 	secretProblems(level, layout, problem)
+	reactProblems(layout, problem)
 	return problems
 end
 

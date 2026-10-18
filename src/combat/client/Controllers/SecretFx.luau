@@ -26,6 +26,13 @@
 --    heights. The family note ("Flamethrower is yours: ...") takes two lines on the 300-wide
 --    card; counted as one, it pushed the card's bottom a line lower than placed, onto the ticks.
 --
+-- L2 W2 (docs/prompts/l2-w2-contract.md, section 2 and L2-36):
+--  * The family note says where the weapon is now: "Flamethrower is yours: equip it in the
+--    Armory (K)" (the key the host names at Mount: K, the pad's Y, or none on a phone).
+--  * A shortcut found (CombatFxSecret event "shortcut", to every member): the finder's card
+--    reads "SHORTCUT FOUND" over "<name> stays open on runs you lead"; everyone else gets a toast.
+--    The server sends it once per run per player, so nothing is remembered here.
+--
 -- The card is Active = false and takes no tap; no sound (combat has none).
 
 local Players = game:GetService("Players")
@@ -70,7 +77,9 @@ local CHEST_PATTERN = "^Secret_(.+)$"
 local SIGN_SUFFIX = "_Sign"
 local OPEN_LOOK = "secretOpen"
 local FOUND_SUFFIX = " FOUND"
-local LATER_NOTE = " is yours (usable soon)"
+local ARMORY_NOTE = " is yours: equip it in the Armory"
+local SHORTCUT_TITLE = "SHORTCUT FOUND"
+local SHORTCUT_LINE = " stays open on runs you lead"
 local SOMEONE = "Someone"
 -- The card's rows: each label is its wrapped text's height plus this tall (fitRow), with this
 -- gap between rows.
@@ -84,6 +93,8 @@ local state = {
 	card = nil :: Card?,
 	cardToken = 0,
 	toast = nil :: Toast?,
+	-- What the family note names as the Armory's key (" (K)"), or "".
+	armoryKey = "",
 	levelId = "",
 	-- The profile's finds (Snapshot), and the local finds announced since (the next Snapshot
 	-- carries them too).
@@ -341,6 +352,28 @@ local function placeCard(card: Card): ()
 	card.frame.Position = UDim2.new(0.5, 0, 0, math.max(top, Theme.SCREEN_MARGIN * layout.scale))
 end
 
+-- One optional row: its text, or hidden.
+local function setRow(row: TextLabel, text: string?): ()
+	row.Text = text or ""
+	row.Visible = text ~= nil
+end
+
+-- Shows the card for Theme.SECRET_CARD_SECONDS, placed for the rows it shows this time.
+local function revealCard(card: Card): ()
+	for _, row in { card.title, card.lines[1], card.lines[2], card.note } do
+		fitRow(row)
+	end
+	placeCard(card)
+	card.frame.Visible = true
+	state.cardToken += 1
+	local token = state.cardToken
+	task.delay(Theme.SECRET_CARD_SECONDS, function()
+		if token == state.cardToken then
+			card.frame.Visible = false
+		end
+	end)
+end
+
 local function showCard(
 	name: string,
 	valor: number,
@@ -353,25 +386,30 @@ local function showCard(
 		return
 	end
 	card.title.Text = string.upper(name) .. FOUND_SUFFIX
-	local valorLine, materialLine = card.lines[1], card.lines[2]
-	valorLine.Text = "+" .. Format.Cash(valor) .. " Valor"
-	valorLine.Visible = valor > 0
-	materialLine.Text = "+" .. Format.Cash(materials) .. " " .. material
-	materialLine.Visible = materials > 0 and material ~= ""
-	card.note.Text = if family ~= nil then familyName(family) .. LATER_NOTE else ""
-	card.note.Visible = family ~= nil
-	for _, row in { card.title, valorLine, materialLine, card.note } do
-		fitRow(row)
+	setRow(card.lines[1], if valor > 0 then "+" .. Format.Cash(valor) .. " Valor" else nil)
+	setRow(
+		card.lines[2],
+		if materials > 0 and material ~= ""
+			then "+" .. Format.Cash(materials) .. " " .. material
+			else nil
+	)
+	setRow(
+		card.note,
+		if family ~= nil then familyName(family) .. ARMORY_NOTE .. state.armoryKey else nil
+	)
+	revealCard(card)
+end
+
+local function showShortcutCard(name: string): ()
+	local card = state.card
+	if card == nil then
+		return
 	end
-	placeCard(card)
-	card.frame.Visible = true
-	state.cardToken += 1
-	local token = state.cardToken
-	task.delay(Theme.SECRET_CARD_SECONDS, function()
-		if token == state.cardToken then
-			card.frame.Visible = false
-		end
-	end)
+	card.title.Text = SHORTCUT_TITLE
+	setRow(card.lines[1], name .. SHORTCUT_LINE)
+	setRow(card.lines[2], nil)
+	setRow(card.note, nil)
+	revealCard(card)
 end
 
 -- Sparks off the chest's top. Particles are skipped on low-end devices (spec section 10).
@@ -417,13 +455,15 @@ local function say(text: string, isError: boolean): ()
 	end
 end
 
--- Mission HUD only: `gui` holds the card, `toast` says the short lines.
-function SecretFx.Mount(gui: ScreenGui, toast: Toast): ()
+-- Mission HUD only: `gui` holds the card, `toast` says the short lines, `armoryKey` is what the
+-- family note names as the Armory's key ("K"; nil = none, a phone).
+function SecretFx.Mount(gui: ScreenGui, toast: Toast, armoryKey: string?): ()
 	if state.gui ~= nil then
 		return
 	end
 	state.gui = gui
 	state.toast = toast
+	state.armoryKey = if armoryKey ~= nil then " (" .. armoryKey .. ")" else ""
 	state.card = buildCard(gui)
 	task.spawn(watchLevel)
 end
@@ -475,6 +515,18 @@ function SecretFx.OnFx(fx: any): ()
 	if fx.event == "locked" then
 		if mine then
 			say("Needs " .. needWord(fx.needs), true)
+		end
+		return
+	end
+	if fx.event == "shortcut" then
+		if mine then
+			showShortcutCard(fx.name)
+		else
+			local player = Players:GetPlayerByUserId(fx.userId)
+			say(
+				(if player ~= nil then player.DisplayName else SOMEONE) .. " found " .. fx.name,
+				false
+			)
 		end
 		return
 	end

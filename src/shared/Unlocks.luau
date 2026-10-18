@@ -22,12 +22,21 @@ local ATTRIBUTE_PREFIX = "Ability_"
 local MAX_ID_LENGTH = 32
 -- ... and a weapon family id (P2's equip and loadout intents, a secret's `family`, L2-13).
 local MAX_FAMILY_LENGTH = 24
+-- ... and a variant key ("A", "B"), L2-32's third argument.
+local MAX_VARIANT_LENGTH = 8
+-- L2-29, L2-31: the words a family's `element` (and a secret's key) may say. Anything else is no
+-- element: a key that names it is never held.
+local ELEMENTS: { [string]: Types.Element } = {}
+ELEMENTS.fire = "fire"
+ELEMENTS.ice = "ice"
+table.freeze(ELEMENTS)
 
 local Unlocks = {}
 
 Unlocks.AIR_JUMP = AIR_JUMP
 Unlocks.MAX_ID_LENGTH = MAX_ID_LENGTH
 Unlocks.MAX_FAMILY_LENGTH = MAX_FAMILY_LENGTH
+Unlocks.MAX_VARIANT_LENGTH = MAX_VARIANT_LENGTH
 
 function Unlocks.Attribute(abilityId: string): string
 	return ATTRIBUTE_PREFIX .. abilityId
@@ -144,15 +153,118 @@ function Unlocks.AbilitiesOf(combat: Types.CombatProfile): { [string]: boolean }
 	return made
 end
 
--- A secret's key (its layout `needs`). An ability id that `abilities.list` sells is held when
--- owned. Anything else (an element, "fire" or "ice", or an unknown word) is false in W1: W2 and
--- W3 add the elements. It fails closed.
+-- A secret's key (its layout `needs`), abilities only: an ability id that `abilities.list` sells
+-- is held when owned. Anything else (an element, "fire" or "ice", or an unknown word) is false
+-- here; HoldsKey adds the elements (L2-31). It fails closed.
 function Unlocks.HasKey(
 	abilities: { [string]: boolean }?,
 	config: Types.ExpeditionsConfig?,
 	needs: string
 ): boolean
 	return Unlocks.Find(config, needs) ~= nil and Unlocks.Owns(abilities, needs)
+end
+
+-- L2-30: the starter families, a set: the config `loadout`'s values (ProvingGrounds.json), owned
+-- by everyone and never written to a profile (L2-1). A slot the loadout leaves out (or names with
+-- something that is not a string) adds nothing.
+function Unlocks.Starters(loadout: { melee: string, ranged: string }?): { [string]: boolean }
+	local starters: { [string]: boolean } = {}
+	if type(loadout) ~= "table" then
+		return starters
+	end
+	for _, family in { loadout.melee, loadout.ranged } do
+		if type(family) == "string" and family ~= "" then
+			starters[family] = true
+		end
+	end
+	return starters
+end
+
+-- L2-30: owned = a starter, or a family the profile's `families` holds true for.
+function Unlocks.OwnsFamily(
+	families: { [string]: boolean }?,
+	id: string,
+	starters: { [string]: boolean }
+): boolean
+	return starters[id] == true or (families ~= nil and families[id] == true)
+end
+
+-- The element a family carries: its `element` when that is one of the two words, else nil (no
+-- such family, no element, or a word that is not an element: it fails closed).
+function Unlocks.ElementOf(
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	family: string
+): Types.Element?
+	local def = if type(weapons) == "table" then weapons[family] else nil
+	local element: any = if type(def) == "table" then def.element else nil
+	return if type(element) == "string" then ELEMENTS[element] else nil
+end
+
+-- L2-31: true when an owned family (a starter or a written one) carries `element`. A word that is
+-- not an element is never held, whatever the profile claims.
+function Unlocks.HasElement(
+	families: { [string]: boolean }?,
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	starters: { [string]: boolean },
+	element: string
+): boolean
+	if ELEMENTS[element] == nil or type(weapons) ~= "table" then
+		return false
+	end
+	for family in weapons do
+		if
+			Unlocks.ElementOf(weapons, family) == element
+			and Unlocks.OwnsFamily(families, family, starters)
+		then
+			return true
+		end
+	end
+	return false
+end
+
+-- L2-31: a secret's key held by a profile's combat, as UnlockService asks it: a sold ability that
+-- is owned, then an element an owned family carries. Every other word fails closed.
+function Unlocks.HoldsKey(
+	combat: Types.CombatProfile,
+	config: Types.ExpeditionsConfig?,
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	starters: { [string]: boolean },
+	needs: string
+): boolean
+	return Unlocks.HasKey(combat.abilities, config, needs)
+		or Unlocks.HasElement(combat.families, weapons, starters, needs)
+end
+
+-- L2-32: may this player hold `family` (its variant `variant`) in `slot` now? nil = yes; otherwise
+-- the ActionResult's reason, the first that applies in this order: no profile loaded; no such
+-- family or variant, or the family fills the other slot; not owned; not allowed here (gateOpen =
+-- WaveService.MayLeave: false while fighting in a live run).
+function Unlocks.FamilyVerdict(
+	state: Types.PlayerState?,
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	starters: { [string]: boolean },
+	slot: string,
+	family: string,
+	variant: string,
+	gateOpen: boolean
+): string?
+	local def = if type(weapons) == "table" then weapons[family] else nil
+	local verdict: string? = nil
+	if state == nil then
+		verdict = "unavailable"
+	elseif
+		type(def) ~= "table"
+		or def.slot ~= slot
+		or type(def.variants) ~= "table"
+		or def.variants[variant] == nil
+	then
+		verdict = "invalid"
+	elseif not Unlocks.OwnsFamily(state.combat.families, family, starters) then
+		verdict = "locked"
+	elseif not gateOpen then
+		verdict = "busy"
+	end
+	return verdict
 end
 
 -- L2-9: may this player buy `def` now? nil = yes; otherwise the ActionResult's reason, the

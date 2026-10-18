@@ -33,6 +33,11 @@
 -- session at a fresh profile, so these are how a bought Double Jump or a found chest is seen
 -- without clearing a level twice. The remote path acts on the caller, the attribute path on
 -- everyone admitted. `resetSecrets` keeps the families found.
+--
+-- L2 W2 (docs/prompts/l2-w2-contract.md, L2-38): `grantFamily` / `removeFamily` (value a weapon
+-- family id) write or clear the profile's families through UnlockService (a removed family that
+-- is held goes back to its slot's starter; starters cannot be removed); `resetSecrets` also
+-- forgets the found shortcuts, which open again from the next run.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -232,7 +237,29 @@ end
 local function resetSecrets(player: Player?): ()
 	UnlockService.ResetSecrets(player)
 	WaveService.ForgetSecrets(player)
-	RunFx.Push({ kind = "notice", text = "Secrets reset" })
+	RunFx.Push({ kind = "notice", text = "Secrets and shortcuts reset (from the next run)" })
+end
+
+-- L2-38: a weapon family owned (or not) by the caller, or by everyone admitted on the attribute
+-- path; the party is told once when anybody's changed.
+local function setFamily(player: Player?, id: string, owned: boolean): ()
+	local targets: { Player } = if player ~= nil then { player } else UnlockService.Admitted()
+	local changed = false
+	for _, target in targets do
+		local done = if owned
+			then UnlockService.GrantFamily(target, id)
+			else UnlockService.RemoveFamily(target, id)
+		changed = changed or done
+	end
+	local name = UnlockService.FamilyName(id)
+	if changed then
+		RunFx.Push({
+			kind = "notice",
+			text = if owned then `{name} is yours` else `{name} removed`,
+		})
+	else
+		warn(`[DebugService] {if owned then "grant" else "remove"}Family "{id}": nobody changed`)
+	end
 end
 
 -- P5 ruling 24: the crowd targets Players only, so a bot would stand in a camp doing nothing.
@@ -311,6 +338,10 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 		setAbility(player, value, false)
 	elseif lever == "resetSecrets" then
 		resetSecrets(player)
+	elseif lever == "grantFamily" and typeof(value) == "string" and value ~= "" then
+		setFamily(player, value, true)
+	elseif lever == "removeFamily" and typeof(value) == "string" and value ~= "" then
+		setFamily(player, value, false)
 	else
 		warn(`[DebugService] unknown or mistyped lever "{lever}"`)
 	end
@@ -383,6 +414,21 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 	local resetAttribute = debugConfig.resetSecretsAttribute
 	if resetAttribute ~= nil and consumeNumber(resetAttribute) ~= nil then
 		applyLever(nil, "resetSecrets", true)
+	end
+	-- L2-38: the same, for weapon families.
+	local grantFamilyAttribute = debugConfig.grantFamilyAttribute
+	local grantedFamily = if grantFamilyAttribute ~= nil
+		then consumeString(grantFamilyAttribute)
+		else nil
+	if grantedFamily ~= nil then
+		applyLever(nil, "grantFamily", grantedFamily)
+	end
+	local removeFamilyAttribute = debugConfig.removeFamilyAttribute
+	local removedFamily = if removeFamilyAttribute ~= nil
+		then consumeString(removeFamilyAttribute)
+		else nil
+	if removedFamily ~= nil then
+		applyLever(nil, "removeFamily", removedFamily)
 	end
 
 	-- States, read but never reset. God mode is applied when the attribute changes (and to

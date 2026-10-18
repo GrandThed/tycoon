@@ -52,6 +52,10 @@ export type Piece = {
 	-- false = nothing collides with it, touches it or is stopped by it in a ray.
 	collide: boolean,
 	text: string?,
+	-- L2-34, blocks only: the element that takes it away ("fire" | "ice"), and the shortcut id a
+	-- found shortcut leaves it out for (Pieces' `open`).
+	react: string?,
+	opens: string?,
 }
 
 -- The id of the one camp an arena becomes (ruling 27; StageFlow.Resolve names the same zone).
@@ -672,7 +676,10 @@ end
 -- is cut at its gates and the road runs through. A marker or a sign whose size `sizes` does not
 -- give is left out (a tent marker carries its own size).
 -- Names are what Studio's Explorer shows (Camp_A_Floor, Gate_A_1, Barrier_A_3,
--- Secret_lookout). nil and one line saying why when the layout cannot be built: it still
+-- Secret_lookout). L2-36: a block whose `opens` names a shortcut in `open` (the leader's found
+-- shortcuts; nil = none) is left out, as if the layout did not hold it, before any block is
+-- measured; every other block keeps its `react` and `opens` on its piece.
+-- nil and one line saying why when the layout cannot be built: it still
 -- names an arena, a camp has gates and no fence, a camp's floor has no depth (`sizes.floor`),
 -- a piece has a position that is not a number or a size that is not positive (a block, a
 -- camp, a piece of cover or a secret with a size of 0 or less), or it is more than `maxParts`
@@ -680,7 +687,8 @@ end
 function LevelGeometry.Pieces(
 	layout: Types.LevelLayout,
 	sizes: Sizes,
-	maxParts: number
+	maxParts: number,
+	open: { [string]: boolean }?
 ): ({ Piece }?, string?)
 	if layout.arena ~= nil and layout.camps == nil then
 		return nil,
@@ -689,7 +697,21 @@ function LevelGeometry.Pieces(
 	local depth = depthOf(sizes.floor)
 	local pieces: { Piece } = {}
 	local blocks = listOf(layout.blocks)
-	for index, box in LevelGeometry.BlockBoxes(layout, depth) do
+	local measured = layout
+	if open ~= nil and next(open) ~= nil then
+		local kept: { Types.LevelBlock } = {}
+		for _, block in blocks do
+			local opens = block.opens
+			if opens == nil or open[opens] ~= true then
+				table.insert(kept, block)
+			end
+		end
+		-- A copy, so the layout every other caller reads keeps the block.
+		measured = table.clone(layout)
+		measured.blocks = kept
+		blocks = kept
+	end
+	for index, box in LevelGeometry.BlockBoxes(measured, depth) do
 		local block = blocks[index]
 		table.insert(pieces, {
 			name = block.name or `Block_{index}`,
@@ -698,6 +720,8 @@ function LevelGeometry.Pieces(
 			look = block.look,
 			collide = block.collide ~= false,
 			text = block.text,
+			react = block.react,
+			opens = block.opens,
 		})
 	end
 	local barrier = layout.barrier

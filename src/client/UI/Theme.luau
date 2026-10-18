@@ -1325,7 +1325,7 @@ local Theme = {
 	-- Abilities 88 + Return 104 and two gaps make a 280 design px row: 257 px at MIN_SCALE on a
 	-- 667 x 375 phone, 280 of 375 in portrait.
 	COMBAT_ABILITIES_BUTTON_WIDTH = 88,
-	-- The Abilities panel (UI/AbilitiesPanel): a sheet over a scrim like the map. Its width
+	-- The Abilities panel (UI/ArmoryPanel since L2 W2): a sheet over a scrim like the map. Its width
 	-- fits a 375 px portrait phone at MIN_SCALE with a margin; its rows scroll where a short
 	-- landscape screen cannot hold them all. Every button is 48 design px (44 physical at
 	-- MIN_SCALE).
@@ -1386,6 +1386,68 @@ local Theme = {
 	SECRET_BURST_SIZE = 0.6, -- studs, shrinking to nothing
 	SECRET_BURST_COLOR = Color3.fromRGB(255, 214, 92),
 	SECRET_TOAST_SECONDS = 3,
+
+	-- L2 Wave 2 (docs/prompts/l2-w2-contract.md, L2-29 to L2-38).
+	-- The Armory panel (UI/ArmoryPanel), W1's Abilities panel grown into two tabs. It keeps the
+	-- ABILITIES_* sheet (340 wide, 48 px buttons); the tabs replace the title row, so the sheet
+	-- is the header (48) plus the page plus the key line. Weapons page: two columns of family
+	-- cards, each card a name row and one 48 px row of buttons; the ranged column with two cards
+	-- is 18 + 2 x (80 + 6) = 190 design px, and the sheet 284, inside the 313 design px a
+	-- 640 x 360 phone leaves under its top bar at MIN_SCALE (the page scrolls below that).
+	LOBBY_ARMORY_TAB_WIDTH = 108,
+	LOBBY_ARMORY_COLUMN_GAP = 6,
+	LOBBY_ARMORY_COLUMN_TITLE_HEIGHT = 18,
+	LOBBY_ARMORY_CARD_PAD = 4,
+	LOBBY_ARMORY_CARD_NAME_HEIGHT = 20,
+	LOBBY_ARMORY_CARD_NAME_TEXT = 14,
+	LOBBY_ARMORY_CHIP_HEIGHT = 16,
+	LOBBY_ARMORY_CHIP_TEXT = 10,
+	LOBBY_ARMORY_CHIP_PAD = 6,
+	LOBBY_ARMORY_VALOR_ROW_HEIGHT = 20,
+	-- An element's chip on its family's card (the words are SECRET_NEED_WORDS').
+	LOBBY_ARMORY_ELEMENT_COLORS = {
+		fire = Color3.fromRGB(255, 122, 40),
+		ice = Color3.fromRGB(110, 196, 255),
+	} :: { [string]: Color3 },
+	-- A pick the server never answered is live again after this long (L2 W2 section 2: 3 s).
+	LOBBY_ARMORY_RESULT_TIMEOUT_SECONDS = 3,
+
+	-- FlameFx: a held fire stream, per shooter, from the hand to the reach the server cut at the
+	-- first wall (the strike's size). Particles in a widening cone, and a tapered core that is
+	-- the whole look on low-end devices (and fainter over the particles elsewhere). The stream
+	-- stays this long after its last tick (2 intervals at rate 10, floored as the Beam's is).
+	COMBAT_FLAME_LINGER_INTERVALS = 2,
+	COMBAT_FLAME_MIN_LINGER_SECONDS = 0.25,
+	COMBAT_FLAME_CORE_START_WIDTH = 0.6,
+	COMBAT_FLAME_CORE_TRANSPARENCY = 0.55, -- over the particles
+	COMBAT_FLAME_CORE_LOW_END_TRANSPARENCY = 0.25, -- alone
+	COMBAT_FLAME_CORE_COLOR = Color3.fromRGB(255, 226, 140),
+	COMBAT_FLAME_EDGE_COLOR = Color3.fromRGB(255, 104, 28),
+	COMBAT_FLAME_TAIL_COLOR = Color3.fromRGB(150, 40, 20),
+	COMBAT_FLAME_PARTICLE_RATE = 70, -- per second, per stream
+	COMBAT_FLAME_PARTICLE_LIFETIME = 0.3, -- particles cross the reach in this long
+	COMBAT_FLAME_PARTICLE_START_SIZE = 0.5,
+	COMBAT_FLAME_PARTICLE_END_SHARE = 0.55, -- end size = width x this
+	COMBAT_FLAME_WOBBLE = 0.12, -- core width flicker (not under reducedMotion)
+	COMBAT_FLAME_WOBBLE_HZ = 9,
+	COMBAT_FLAME_LIGHT_RANGE = 12,
+	COMBAT_FLAME_LIGHT_BRIGHTNESS = 2,
+	-- Fallback width when neither the strike nor the config has one.
+	COMBAT_FLAME_DEFAULT_WIDTH = 4,
+
+	-- ReactFx: a bramble heating (the server's Heat attribute, 0 to 1) darkens toward charcoal
+	-- and throws embers; when it burns, a flash and a ghost of its box that shrinks away, with
+	-- smoke (not on low-end devices).
+	REACT_CHAR_COLOR = Color3.fromRGB(42, 28, 20),
+	REACT_EMBER_COLOR = Color3.fromRGB(255, 140, 40),
+	REACT_EMBER_RATE = 36, -- per second at full heat
+	REACT_EMBER_LOW_END_RATE = 10,
+	REACT_FLASH_COLOR = Color3.fromRGB(255, 190, 90),
+	REACT_FLASH_SECONDS = 0.25,
+	REACT_GHOST_SECONDS = 0.7,
+	REACT_GHOST_TRANSPARENCY = 0.15,
+	REACT_SMOKE_COUNT = 30,
+	REACT_SMOKE_SECONDS = 1.6,
 
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,

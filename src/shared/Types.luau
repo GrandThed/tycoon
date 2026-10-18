@@ -159,7 +159,8 @@ export type ActionResult = {
 		| "joinRun"
 		| "party"
 		| "startLevel"
-		| "buyAbility",
+		| "buyAbility"
+		| "setFamily",
 	slotId: string,
 	ok: boolean,
 	-- C0 adds `unavailable`: place id 0, Studio, a teleport that failed after its retries, or a
@@ -173,6 +174,9 @@ export type ActionResult = {
 	-- L2-9 "buyAbility" (slotId = the ability id): unavailable (no profile loaded), invalid (no
 	-- such ability, or its entry is malformed), owned, busy (fighting in a live run),
 	-- insufficientFunds (Valor short).
+	-- L2-32 "setFamily" (slotId = the family id): unavailable (no profile loaded), invalid (no such
+	-- family or variant, or the family fills the other slot), locked (not owned), busy (fighting in
+	-- a live run).
 	reason: (
 		"insufficientFunds"
 		| "locked"
@@ -1288,6 +1292,10 @@ export type CombatDebugConfig = {
 	grantAbilityAttribute: string?,
 	removeAbilityAttribute: string?,
 	resetSecretsAttribute: string?,
+	-- L2-38: a string attribute naming a weapon family id (consumed): written to the profile's
+	-- families, or cleared from them (a held one goes back to its slot's starter). nil = off.
+	grantFamilyAttribute: string?,
+	removeFamilyAttribute: string?,
 }
 -- Enemy AI tunables (EnemyService) and client presentation tunables (CombatFxController).
 export type CombatEnemyConfig = {
@@ -1667,6 +1675,7 @@ export type CombatFx =
 	| CombatFxCamp
 	| CombatFxNotice
 	| CombatFxSecret
+	| CombatFxReact
 
 -- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub never sends
 -- an ActiveRun to a client (it sends RunListEntry), so a client can never teleport itself into a
@@ -1837,7 +1846,13 @@ export type RangeWeaponDef = {
 	default: string,
 	variants: { [string]: RangeWeaponVariant },
 	ability: RangeAbilityDef?,
+	-- L2-29: the element the family carries (structural, untunable). Read only by the world's
+	-- reactions (LevelService.React) and by the element keys (Unlocks.HasElement); nil = none.
+	-- A word other than these two is no element at all (Unlocks.ElementOf fails closed).
+	element: Element?,
 }
+-- L2-29: what a weapon family's element (and a block's `react`) may say.
+export type Element = "fire" | "ice"
 -- P3: the range-wide ability switches.
 export type RangeAbilitiesConfig = {
 	-- Multiplies every cooldown and its floor: 1 = as tuned, 0 = no cooldowns (range testing).
@@ -2599,6 +2614,24 @@ export type LevelBlock = {
 	sz: number,
 	collide: boolean?,
 	text: string?,
+	-- L2-34: "fire" | "ice" = a block the weapons of that element burn or freeze away (a string, as
+	-- `look` is: JSON cannot narrow it; StageFlow.Validate refuses any other word, and a reactive
+	-- block that does not collide). opens = the id of the `layout.shortcuts` entry a found shortcut
+	-- leaves this block out for (the leader's save, L2-36).
+	react: string?,
+	opens: string?,
+}
+-- L2-36: a shortcut's trigger box (world centre and size, studs). A standing fighter's root inside
+-- it finds the shortcut; name is what the card says.
+export type LevelShortcut = {
+	id: string,
+	name: string,
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
 }
 -- side "north" (-Z) | "south" | "west" (-X) | "east"; at = offset from the side's middle
 export type LevelGate = { side: string, at: number, width: number }
@@ -2658,6 +2691,10 @@ export type LevelLayout = {
 	sneak: { ArenaPoint }?,
 	-- L1b Wave 4: the chase regions (L1b-W4-14); nil = none
 	regions: { LevelRegion }?,
+	-- L2-36: the level's shortcuts (nil = none); `shortcutRoute` is tool-only (check_levels.py, the
+	-- simulators), like `sneak`: the game never reads it.
+	shortcuts: { LevelShortcut }?,
+	shortcutRoute: { LevelRoutePoint }?,
 }
 
 -- Config/Expeditions.json
@@ -2744,7 +2781,13 @@ export type CombatLevelsConfig = {
 	secretReach: number?,
 	secretBelow: number?,
 	secretAbove: number?,
+	-- L2-34: the world's reactions. fireHits = the strikes of a fire weapon that burn a `react =
+	-- "fire"` block away (W3 adds iceHits); pad = studs a strike's segment may pass beside the
+	-- block and still touch it. nil (or a count that is not a whole number of at least 1) = that
+	-- element changes nothing.
+	react: CombatReactConfig?,
 }
+export type CombatReactConfig = { fireHits: number?, iceHits: number?, pad: number? }
 
 -- RunState (built only by ArenaService)
 -- RunFloor, replacing the type (L1b Wave 4). cells: its region's cells (RegionGraph.cells), the same
@@ -2799,6 +2842,22 @@ export type CombatFxCamp = { kind: "camp", event: string, name: string, ids: { n
 export type CombatFxNotice = { kind: "notice", text: string }
 -- L2-12: a chest. "found" goes to every member (userId = who opened it), "locked" to that player
 -- only. valor and materials are what it paid (0 on "locked"); family = a weapon family it gave.
+-- L2-36 adds "shortcut": to every member (userId = who found it: their card, the others' toast),
+-- secretId = the shortcut's id, name its name, needs "", valor and materials 0.
+-- L2-35: a reactive block went away. event "burnt" (W3 adds "frozen"); name = its Part's name,
+-- react = the element; x, y, z, sx, sy, sz = its box as it stood (the client's ghost).
+export type CombatFxReact = {
+	kind: "react",
+	event: string,
+	name: string,
+	react: string,
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
+}
 export type CombatFxSecret = {
 	kind: "secret",
 	-- "found" | "locked" (a string, as CombatFxCamp's event, so the CombatFx union still infers)

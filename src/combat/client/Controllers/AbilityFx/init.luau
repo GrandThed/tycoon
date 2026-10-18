@@ -85,6 +85,8 @@ local BUILDERS: { [string]: Builder } = {
 	arrowRain = require(script:WaitForChild("ArrowRain")),
 	volley = require(script:WaitForChild("Volley")),
 	slugBurst = require(script:WaitForChild("SlugBurst")),
+	-- L2-29: the Flamethrower's ability, on the Slug Burst launcher with its own look.
+	dragonBreath = require(script:WaitForChild("DragonBreath")),
 	overchargedShot = require(script:WaitForChild("OverchargedShot")),
 	magDump = require(script:WaitForChild("MagDump")),
 	clusterShell = require(script:WaitForChild("ClusterShell")),

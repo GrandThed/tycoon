@@ -151,6 +151,13 @@
 			},
 			"ability": {"id": "volley", "name": "Volley", "cooldownSeconds": 9, "minCooldownSeconds": 3.5, "killRefundSeconds": 0.125, "damage": 42, "count": 10, "arcDegrees": 80, "spacing": 1, "pierce": 2, "range": 70, "width": 0.8, "pad": 0.6, "cap": 0, "speed": 160, "gravity": 10, "knockback": 10, "launch": 0}
 		},
+		"flamethrower": {
+			"name": "Flamethrower", "slot": "ranged", "era": 1, "default": "A", "element": "fire",
+			"variants": {
+				"A": {"label": "Flame stream", "kind": "ranged", "shape": "capsule", "range": 20, "width": 7, "pad": 0.8, "cap": 0, "damage": 5, "rate": 10, "knockback": 2, "launch": 0, "projectileSpeed": 0, "bloomMult": 0, "continuous": true}
+			},
+			"ability": {"id": "dragonBreath", "name": "Dragon's Breath", "cooldownSeconds": 10, "minCooldownSeconds": 4, "killRefundSeconds": 0.5, "damage": 36, "count": 4, "tickSeconds": 0.15, "range": 20, "arcDegrees": 50, "pad": 0.8, "cap": 0, "knockback": 24, "launch": 4}
+		},
 		"shotgun": {
 			"name": "Shotgun", "slot": "ranged", "era": 2, "default": "A",
 			"variants": {

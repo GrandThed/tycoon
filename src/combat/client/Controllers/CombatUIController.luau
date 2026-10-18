@@ -101,7 +101,8 @@
 --  * CampFx's "Checkpoint" notice is the HUD's notice line under the wallet.
 --
 -- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-3, L2-10, L2-14, L2-19), in `bootMission`; the
--- behaviour lives in UI/AbilitiesPanel and Controllers/SecretFx, this only wires them:
+-- behaviour lives in UI/AbilitiesPanel (now UI/ArmoryPanel) and Controllers/SecretFx, this only
+-- wires them:
 --  * K, or the run layer's "Abilities" button, opens the Abilities panel in the lobby (closing
 --    the map: one sheet at a time; M closes the panel the same way). Buy sends
 --    RequestBuyAbility(id); the `buyAbility` ActionResult goes to the panel. The Snapshot's
@@ -112,6 +113,16 @@
 --  * Studio keys: J toggles the caller's Double Jump (grant or remove, from its own attribute),
 --    H resets the caller's secrets, V grants Theme.COMBAT_DEBUG_GRANT_VALOR. The strip has the
 --    first two as buttons ("+10 Valor" was there already).
+--
+-- L2 Wave 2 (docs/prompts/l2-w2-contract.md, sections 2, 3, 4 and L2-38), in `bootMission`:
+--  * The Abilities panel is the Armory panel (UI/ArmoryPanel: Weapons and Abilities tabs), on the
+--    same K, Y and HUD button ("Armory"). A pick sends RequestSetFamily(slot, family, variant);
+--    the `setFamily` ActionResult goes to the panel, and so does every TuneState's loadout (the
+--    server's word on what is held). The Snapshot's `combat.families` feeds it.
+--  * CombatFx of kind `react` (a bramble burnt) go to ReactFx, which also watches the level's
+--    Parts for the server's Heat attribute. SecretFx's family note names the Armory's key.
+--  * Studio: F toggles the caller's fire family (the config's family whose element is "fire":
+--    grantFamily or removeFamily, from the Snapshot's `families`); the strip has it as a button.
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -143,7 +154,7 @@ local AbilityBar = require(uiFolder:WaitForChild("AbilityBar"))
 local BossBar = require(uiFolder:WaitForChild("BossBar"))
 local VitalsHud = require(uiFolder:WaitForChild("VitalsHud"))
 local MapScreen = require(uiFolder:WaitForChild("MapScreen"))
-local AbilitiesPanel = require(uiFolder:WaitForChild("AbilitiesPanel"))
+local ArmoryPanel = require(uiFolder:WaitForChild("ArmoryPanel"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -156,6 +167,7 @@ local ThreatFx = require(script.Parent:WaitForChild("ThreatFx"))
 local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 local CampFx = require(script.Parent:WaitForChild("CampFx"))
 local SecretFx = require(script.Parent:WaitForChild("SecretFx"))
+local ReactFx = require(script.Parent:WaitForChild("ReactFx"))
 local Haptics = require(script.Parent:WaitForChild("Haptics"))
 
 local HUMANOID_WAIT_SECONDS = 5
@@ -178,20 +190,28 @@ local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.V] = { lever = "grantValor", value = Theme.COMBAT_DEBUG_GRANT_VALOR },
 }
 local AIR_JUMP_KEY = Enum.KeyCode.J
-local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · H reset secrets · V +"
+-- L2-38: F toggles the caller's fire family (the Flamethrower).
+local FIRE_FAMILY_KEY = Enum.KeyCode.F
+local FIRE_ELEMENT = "fire"
+local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · F flamethrower"
+	.. " · H reset secrets · V +"
 	.. tostring(Theme.COMBAT_DEBUG_GRANT_VALOR)
 	.. " Valor"
--- L2-10: the Abilities panel's key, in the lobby, and what the first refused air jump says.
-local HOLD_ABILITIES = "abilities"
-local ABILITIES_KEY = Enum.KeyCode.K
-local ABILITIES_KEY_HINT = "K or Esc closes"
--- The fix round's c2: a gamepad toggles the panel with Y in the lobby and closes it with B.
-local ABILITIES_PAD_HINT = AbilitiesPanel.PAD_TOGGLE_NAME .. " or B closes"
-local AIR_JUMP_HINT_KEYS = "Double Jump: buy it in the lobby (K)"
-local AIR_JUMP_HINT_PAD = "Double Jump: buy it in the lobby ("
-	.. AbilitiesPanel.PAD_TOGGLE_NAME
+-- L2-10: the Armory panel's key, in the lobby, and what the first refused air jump says.
+local HOLD_ARMORY = "armory"
+local ARMORY_KEY = Enum.KeyCode.K
+local ARMORY_KEY_HINT = "K or Esc closes"
+-- The fix round's c2: a gamepad toggles the panel with Y in the lobby and closes it with B; W2's
+-- LB and RB switch its tabs.
+local ARMORY_PAD_HINT = ArmoryPanel.PAD_TOGGLE_NAME
+	.. " or B closes · "
+	.. ArmoryPanel.PAD_TAB_NAMES
+	.. " tabs"
+local AIR_JUMP_HINT_KEYS = "Double Jump: buy it in the lobby's Armory (K)"
+local AIR_JUMP_HINT_PAD = "Double Jump: buy it in the lobby's Armory ("
+	.. ArmoryPanel.PAD_TOGGLE_NAME
 	.. ")"
-local AIR_JUMP_HINT_TOUCH = "Double Jump: buy it in the lobby (Abilities)"
+local AIR_JUMP_HINT_TOUCH = "Double Jump: buy it in the lobby's Armory"
 -- Run phases with nothing left to fight: the summary card has the screen.
 local RUN_OVER_PHASES: { [string]: boolean } = { summary = true, ended = true }
 -- L1 ruling 8: the five phases in which a member may act.
@@ -236,8 +256,9 @@ local PAD_KEYS: { [Enum.KeyCode]: boolean } = {
 local ABANDON_KEY = Enum.KeyCode.Backspace
 -- What a refused RequestStartLevel tells the player (ActionResult.reason).
 local START_ACTION = "startLevel"
--- L2-9: a purchase's answer, which the Abilities panel reads.
+-- L2-9: a purchase's answer, and L2-32 a weapon pick's, which the Armory panel reads.
 local BUY_ABILITY_ACTION = "buyAbility"
+local SET_FAMILY_ACTION = "setFamily"
 local START_REFUSALS: { [string]: string } = {
 	notLeader = "Only the leader can depart",
 	busy = "Not ready yet",
@@ -693,6 +714,22 @@ end
 local function airJumpLever(): string
 	local owned = Players.LocalPlayer:GetAttribute(Unlocks.Attribute(Unlocks.AIR_JUMP)) == true
 	return if owned then "removeAbility" else "grantAbility"
+end
+
+-- L2-38: the family F and the strip's button flip: the first (by id) whose element is fire.
+local function fireFamily(): string?
+	local config = Catalog.GetProvingGroundsConfig()
+	if config == nil then
+		return nil
+	end
+	local ids: { string } = {}
+	for id in config.weapons do
+		if Unlocks.ElementOf(config.weapons, id) == FIRE_ELEMENT then
+			table.insert(ids, id)
+		end
+	end
+	table.sort(ids)
+	return ids[1]
 end
 
 -- A boot's first layout pass. It must never take the boot down with it: the snapshot request
@@ -1252,6 +1289,7 @@ local function bootMission(): ()
 		requestAbandon = remotesFolder:WaitForChild("RequestAbandon", timeout) :: RemoteEvent?,
 		requestDebug = remotesFolder:WaitForChild("RequestDebug", timeout) :: RemoteEvent?,
 		requestBuyAbility = remotesFolder:WaitForChild("RequestBuyAbility", timeout) :: RemoteEvent?,
+		requestSetFamily = remotesFolder:WaitForChild("RequestSetFamily", timeout) :: RemoteEvent?,
 		combatFx = remotesFolder:WaitForChild("CombatFx", timeout) :: RemoteEvent?,
 	}
 
@@ -1304,6 +1342,8 @@ local function bootMission(): ()
 		vitalsLayout = nil :: VitalsHud.Layout?,
 		floors = {} :: { Types.RunFloor },
 		wallet = { cash = 0, valor = 0, materials = {} :: { [string]: any } },
+		-- L2 W2: the Snapshot's `combat.families` (the families written to the profile).
+		families = {} :: { [string]: any },
 	}
 	local mapName = if expeditions ~= nil then expeditions.name else DEFAULT_MAP_NAME
 
@@ -1316,6 +1356,15 @@ local function bootMission(): ()
 		end
 		st.lastIntentTime = now
 		return true
+	end
+	-- L2-38: whether the caller holds the fire family now (the Snapshot's families), and the lever
+	-- F and the strip's button send to flip it.
+	local function ownsFireFamily(): boolean
+		local family = fireFamily()
+		return family ~= nil and st.families[family] == true
+	end
+	local function fireFamilyLever(): string
+		return if ownsFireFamily() then "removeFamily" else "grantFamily"
 	end
 	local function leave(): ()
 		if debounced() then
@@ -1461,6 +1510,14 @@ local function bootMission(): ()
 			end,
 			-- L2-19: the strip's Double Jump button asks which way to flip it when pressed.
 			airJump = { id = Unlocks.AIR_JUMP, lever = airJumpLever },
+			-- L2-38: the strip's Flamethrower button (F), when the config has a fire family.
+			fireFamily = if fireFamily() ~= nil
+				then {
+					lever = function(): (string, string)
+						return fireFamilyLever(), fireFamily() or ""
+					end,
+				}
+				else nil,
 		})
 		else nil
 	if debugPanel ~= nil then
@@ -1472,38 +1529,57 @@ local function bootMission(): ()
 		paintAirJump()
 	end
 
-	-- L2-10: the lobby's Abilities panel (no offers in the config = no panel and no button).
-	local offers = AbilitiesPanel.Offers(expeditions)
-	local abilitiesPanel = if #offers > 0
-		then AbilitiesPanel.new(screenGui, offers, {
-			onBuy = function(abilityId: string): boolean
-				local remote = remotes.requestBuyAbility
-				if remote == nil then
-					return false
-				end
-				remote:FireServer(abilityId)
-				return true
-			end,
-			onOpenChanged = function(open: boolean)
-				-- One sheet at a time, whatever opened this one (the button, K or the pad's Y).
-				local screen = mapScreen
-				if open and screen ~= nil and screen.IsOpen() then
-					screen.Close()
-				end
-				CameraController.SetCursorHold(HOLD_ABILITIES, open)
-				if debugPanel ~= nil then
-					debugPanel.SetVisible(not open)
-				end
-			end,
-			toast = toast.Show,
-			keyHint = if UserInputService.KeyboardEnabled
-				then ABILITIES_KEY_HINT
-				elseif UserInputService.GamepadEnabled then ABILITIES_PAD_HINT
-				else nil,
-			padToggle = true,
-		})
-		else nil
-	SecretFx.Mount(screenGui, toast.Show)
+	-- L2-10, L2 W2 section 2: the lobby's Armory panel (Weapons and Abilities tabs).
+	local armoryPanel = ArmoryPanel.new(screenGui, ArmoryPanel.Offers(expeditions), {
+		onBuy = function(abilityId: string): boolean
+			local remote = remotes.requestBuyAbility
+			if remote == nil then
+				return false
+			end
+			remote:FireServer(abilityId)
+			return true
+		end,
+		onSetFamily = function(slot: string, family: string, variant: string): boolean
+			local remote = remotes.requestSetFamily
+			if remote == nil then
+				return false
+			end
+			remote:FireServer(slot, family, variant)
+			return true
+		end,
+		onOpenChanged = function(open: boolean)
+			-- One sheet at a time, whatever opened this one (the button, K or the pad's Y).
+			local screen = mapScreen
+			if open and screen ~= nil and screen.IsOpen() then
+				screen.Close()
+			end
+			CameraController.SetCursorHold(HOLD_ARMORY, open)
+			if debugPanel ~= nil then
+				debugPanel.SetVisible(not open)
+			end
+		end,
+		toast = toast.Show,
+		keyHint = if UserInputService.KeyboardEnabled
+			then ARMORY_KEY_HINT
+			elseif UserInputService.GamepadEnabled then ARMORY_PAD_HINT
+			else nil,
+		padToggle = true,
+	})
+	-- Every TuneState carries the loadout the server holds for this player (L2-32's answer).
+	FeedbackController.SetTuneStateHandler(function()
+		armoryPanel.SetLoadout(FeedbackController.GetLoadout())
+	end)
+	-- A TuneState may have come before this handler was set.
+	armoryPanel.SetLoadout(FeedbackController.GetLoadout())
+	ReactFx.Mount()
+	SecretFx.Mount(
+		screenGui,
+		toast.Show,
+		if UserInputService.KeyboardEnabled
+			then ARMORY_KEY.Name
+			elseif UserInputService.GamepadEnabled then ArmoryPanel.PAD_TOGGLE_NAME
+			else nil
+	)
 	MovementController.SetAirJumpHintHandler(function()
 		toast.Show(
 			if UserInputService.KeyboardEnabled
@@ -1549,32 +1625,29 @@ local function bootMission(): ()
 	local function openMap(): ()
 		local screen = mapScreen
 		if screen ~= nil and st.phase == "lobby" then
-			if abilitiesPanel ~= nil then
-				abilitiesPanel.Close() -- one sheet at a time
-			end
+			armoryPanel.Close() -- one sheet at a time
 			screen.Open()
 		end
 	end
 	-- L2-10: K and the HUD's button (the pad's Y is the panel's own). The panel opens only in the
 	-- lobby (SetLobby), and closes the map as it opens.
-	local function toggleAbilities(): ()
-		local panel = abilitiesPanel
-		if panel == nil or st.phase ~= "lobby" then
+	local function toggleArmory(): ()
+		if st.phase ~= "lobby" then
 			return
 		end
-		panel.Toggle()
+		armoryPanel.Toggle()
 	end
 
 	-- The cluster's handlers are never pressed (it is not shown); they route to the range path
 	-- like every other entry point, so a stray call still does the right thing.
 	local hud = CombatHud.new(screenGui, {
 		onMap = if mapScreen ~= nil then openMap else nil,
-		onAbilities = if abilitiesPanel ~= nil then toggleAbilities else nil,
+		onArmory = toggleArmory,
 		-- Fix round c2: a console has only the pad's Y to reach the panel, so the button names it.
-		abilitiesKey = if UserInputService.GamepadEnabled
+		armoryKey = if UserInputService.GamepadEnabled
 				and not UserInputService.KeyboardEnabled
 				and not UserInputService.TouchEnabled
-			then AbilitiesPanel.PAD_TOGGLE_NAME
+			then ArmoryPanel.PAD_TOGGLE_NAME
 			else nil,
 		onLeave = leave,
 		onAbandon = abandon,
@@ -1689,9 +1762,16 @@ local function bootMission(): ()
 		wallet.valor = if typeof(combat.valor) == "number" then combat.valor else 0
 		wallet.materials = if typeof(combat.materials) == "table" then combat.materials else {}
 		paintWallet()
-		if abilitiesPanel ~= nil then
-			local owned = combat.abilities
-			abilitiesPanel.SetState(wallet.valor, if typeof(owned) == "table" then owned else {})
+		local owned = combat.abilities
+		local families = combat.families
+		st.families = if typeof(families) == "table" then families else {}
+		armoryPanel.SetState(
+			wallet.valor,
+			if typeof(owned) == "table" then owned else {},
+			st.families
+		)
+		if debugPanel ~= nil then
+			debugPanel.SetFireFamily(ownsFireFamily())
 		end
 		SecretFx.SetFound(combat.secrets)
 	end
@@ -1933,9 +2013,7 @@ local function bootMission(): ()
 			end
 		end
 		InputController.SetPhase(phase, waiting)
-		if abilitiesPanel ~= nil then
-			abilitiesPanel.SetLobby(phase == "lobby")
-		end
+		armoryPanel.SetLobby(phase == "lobby")
 
 		-- The map opens whenever the phase becomes `lobby` (the first RunState and every
 		-- return) and closes when the phase leaves it. On a return the server refuses a start
@@ -2030,10 +2108,11 @@ local function bootMission(): ()
 			end
 			return
 		end
-		if typeof(payload) == "table" and payload.action == BUY_ABILITY_ACTION then
-			if abilitiesPanel ~= nil then
-				abilitiesPanel.OnResult(payload)
-			end
+		if
+			typeof(payload) == "table"
+			and (payload.action == BUY_ABILITY_ACTION or payload.action == SET_FAMILY_ACTION)
+		then
+			armoryPanel.OnResult(payload)
 			return
 		end
 		local text, isError = actionResultText(payload)
@@ -2087,9 +2166,7 @@ local function bootMission(): ()
 		if screen ~= nil then
 			screen.SetLayout(scale, size)
 		end
-		if abilitiesPanel ~= nil then
-			abilitiesPanel.SetLayout(scale, size)
-		end
+		armoryPanel.SetLayout(scale, size)
 		SecretFx.SetLayout(scale, viewport.Y / 2 - inset.Y)
 		crosshair.SetLayout(scale)
 		FeedbackController.SetLayout(scale)
@@ -2125,8 +2202,8 @@ local function bootMission(): ()
 			end
 			return
 		end
-		if input.KeyCode == ABILITIES_KEY then
-			toggleAbilities()
+		if input.KeyCode == ARMORY_KEY then
+			toggleArmory()
 			return
 		end
 		local remote = remotes.requestDebug
@@ -2136,6 +2213,13 @@ local function bootMission(): ()
 		if input.KeyCode == AIR_JUMP_KEY then
 			if debounced() then
 				remote:FireServer(airJumpLever(), Unlocks.AIR_JUMP)
+			end
+			return
+		end
+		if input.KeyCode == FIRE_FAMILY_KEY then
+			local family = fireFamily()
+			if family ~= nil and debounced() then
+				remote:FireServer(fireFamilyLever(), family)
 			end
 			return
 		end
@@ -2164,11 +2248,16 @@ local function bootMission(): ()
 			end
 			if payload.kind ~= nil then
 				SecretFx.OnFx(payload)
+				ReactFx.OnFx(payload)
 				return
 			end
 			for _, fx in payload :: { any } do
-				if typeof(fx) == "table" and fx.kind == "secret" then
-					SecretFx.OnFx(fx)
+				if typeof(fx) == "table" then
+					if fx.kind == "secret" then
+						SecretFx.OnFx(fx)
+					elseif fx.kind == "react" then
+						ReactFx.OnFx(fx)
+					end
 				end
 			end
 		end)

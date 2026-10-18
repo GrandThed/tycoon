@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 """The check_levels mutants, committed (the L1c fix round's m6): every rule L1c and its fix round
-added to tools/check_levels.py, and every rule of L2 Wave 1 (L2-6, L2-11, L2-13, L2-14, L2-18,
-L2-19), shown red on a mutated copy of the shipped data, and green again on the data as it ships.
+added to tools/check_levels.py, every rule of L2 Wave 1 (L2-6, L2-11, L2-13, L2-14, L2-18, L2-19)
+and of L2 Wave 2 (L2-34, L2-36, L2-37, L2-38, L2-47: the cave behind fire, the shortcut route, the
+chain of keys, R8's sight, the bend), shown red on a mutated copy of the shipped data, and green
+again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
-FLOOR_WALLS, WALLED_CEILING, LIFT_MODEL, LIFT_KNOWN_LIMIT_W2, TRIGGER_MODEL), runs every gate
+FLOOR_WALLS, WALLED_CEILING, LIFT_MODEL, TRIGGER_MODEL, SIGHT_WALLS), runs every gate
 (check_levels.run_gates) and expects the named rule red, or green for a control. A rule is named by text its line always carries. Nothing on disk is written,
 except for the stage-mirror cases (MIRROR_CASES), which run tools/check_stage_mirror.py with a line
 of StageFlow.luau and/or sim_range.py broken, from copies in a temporary folder, and expect it red:
@@ -67,12 +69,21 @@ REACH_D = "the lookout's trigger is met only on its ledge"
 TRIGGER_CACHE = "the cache's trigger (levels.secretReach"
 TRIGGER_LOOKOUT = "the lookout's trigger (levels.secretReach"
 ONE_JUMP = "Normal: one jump (L2-20)"
-REWARDS = "forestRoad: a secret pays only behind a sold key"
+REWARDS = "forestRoad: a secret pays only behind a key"
 ABILITIES = "Expeditions.json abilities.list: every entry"
 PRICE = "Expeditions.json: Double Jump costs"
 SECRET_NUMBERS = "Combat.json levels (L2-11)"
-LEVERS = "Combat.json debug (L2-19)"
+LEVERS = "Combat.json debug (L2-19"
 LOOKS = "map: the looks are greys, except"
+# L2 Wave 2 (docs/prompts/l2-w2-contract.md, L2-34 to L2-38, L2-47).
+SEALED = "behind fire: with every bramble standing"
+RIDGE = "behind fire: every wall that faces the sealed air is unclimbable"
+CACHE_A = "the cache's trigger (needs fire) is met from its alcove floor"
+SHORTCUT = "the shortcut route, with the brambles burnt"
+SNEAK_CAVE = "every point of the shortcut route lies farther than its posture's sight"
+SNIPER_OPEN = "with the brambles burnt, the unreachable sniper spots"
+BEND = "no hop cuts a bend"
+REACT = "Combat.json levels.react (L2-34)"
 
 
 def layout(data):
@@ -148,6 +159,28 @@ def lift_fielded(data):
     """The Greataxe (Leap Smash) in the loadout every mission plays with (W2's picker, early)."""
     data["ctx"]["fieldedLifts"] = [family for family, _ability in data["ctx"]["lifts"]]
     data["ctx"]["loadout"] = ["greataxe", "longbow"]
+
+
+def shift_cave(data, dz):
+    """The whole cave `dz` studs south (+z): its blocks, the cache's chest, the shortcut's box and
+    the shortcut route off the main road (every point north of the road's edge)."""
+    for b in layout(data)["blocks"]:
+        if b.get("name", "").startswith("Cave"):
+            b["z"] += dz
+    secret(data, "cache")["z"] += dz
+    for sc in layout(data)["shortcuts"]:
+        sc["z"] += dz
+    for point in layout(data)["shortcutRoute"]:
+        if point["z"] < -52:
+            point["z"] += dz
+
+
+def straight_exit(data):
+    """The exit without its turn: the mouth under the exit leg (x -116..-104), the old mouth walled."""
+    wall = block(data, "CaveWallExitS")
+    wall.update({"x": -88, "sx": 32})  # x -104..-72: over the old mouth
+    bramble = block(data, "CaveBrambleE")
+    bramble.update({"x": -110, "sx": 13})  # x -116.5..-103.5, flush with RoadAB5's north edge
 
 
 def cliff(data, name, x0, x1, top):
@@ -249,19 +282,19 @@ CASES = (
     # L2-18 (c): today's Leap Smash reaches the ledge from hundreds of take-offs (off a void edge,
     # the caster's floor is his feet; at a jump's top the lift adds its height); the "floor" model
     # (the formula change the designer's report asks for) closes every one, on the same layout.
-    ("L2-18c: today's Leap Smash, the known limit off", None, {"LIFT_MODEL": "today", "LIFT_KNOWN_LIMIT_W2": False},
-     REACH_C, True),
-    ("L2-18c: a Greataxe in the loadout (a lift enters a level)", lift_fielded, {"LIFT_MODEL": "today"}, REACH_C, True),
-    ("L2-18c control: the floor model, the known limit off", None, {"LIFT_MODEL": "floor", "LIFT_KNOWN_LIMIT_W2": False},
-     REACH_C, False),
+    # L2-37: every family can enter a level now (W1's known limit is gone).
+    ("L2-18c: today's Leap Smash", None, {"LIFT_MODEL": "today"}, REACH_C, True),
+    ("L2-18c: today's Leap Smash, the Greataxe in the loadout as well", lift_fielded, {"LIFT_MODEL": "today"}, REACH_C,
+     True),
+    ("L2-18c control: the floor model", None, {"LIFT_MODEL": "floor"}, REACH_C, False),
     ("L2-18c: Leap Smash height 24 under the floor model", lambda d: lift_height(d, 24),
-     {"LIFT_MODEL": "floor", "LIFT_KNOWN_LIMIT_W2": False}, REACH_C, True),
+     {"LIFT_MODEL": "floor"}, REACH_C, True),
     ("L2-18c control: Leap Smash height 18 under the floor model", lambda d: lift_height(d, 18),
-     {"LIFT_MODEL": "floor", "LIFT_KNOWN_LIMIT_W2": False}, REACH_C, False),
+     {"LIFT_MODEL": "floor"}, REACH_C, False),
     # At 20 a target on camp A's fence (top 12) lifts the arc to 12 + 20 = 32, over the 31 a step up
     # needs: the floor model's margin is the fence, not the jump.
     ("L2-18c: Leap Smash height 20 under the floor model (a target on A's fence)", lambda d: lift_height(d, 20),
-     {"LIFT_MODEL": "floor", "LIFT_KNOWN_LIMIT_W2": False}, REACH_C, True),
+     {"LIFT_MODEL": "floor"}, REACH_C, True),
     # L2-18 (b): one jump, a step up and a dash, unclimbable walls left out.
     ("L2-18b: a ledge (top 14) west of the sign pad", lambda d: add_block(d, "MutantStep", "ground", -310, -306, -62, -56,
                                                                            14, 8), {}, REACH_B, True),
@@ -283,15 +316,21 @@ CASES = (
     ("L2-18d: the chest 2 further back (z -61), the trigger over the void behind",
      lambda d: secret(d, "lookout").__setitem__("z", -61), {}, REACH_D, True),
     # The fix round's s1 + d2: (a)'s standable point runs for every secret, its key sold or not.
-    ("s1: the centre rule back (W1 as shipped: from the chest's centre, secretReach 5)",
-     lambda d: levels(d).__setitem__("secretReach", 5), {"TRIGGER_MODEL": "centre"}, TRIGGER_CACHE, True),
-    ("s1: the centre rule at today's secretReach 2.5", None, {"TRIGGER_MODEL": "centre"}, TRIGGER_CACHE, True),
+    # L2 W2: the cache is a 6 x 6 chest in the alcove, and its top has room for a body, so the
+    # general (a) always holds through the top; these cases judge the cave's own (a), which asks
+    # for a root on the alcove floor beside the chest (L2-37 a).
+    ("s1 control: the centre rule at secretReach 5 opens the 6-wide chest from its floor (4 off its centre)",
+     lambda d: levels(d).__setitem__("secretReach", 5), {"TRIGGER_MODEL": "centre"}, CACHE_A, False),
+    ("s1: the centre rule at today's secretReach 2.5 (a root beside the chest is 4 off its centre)", None,
+     {"TRIGGER_MODEL": "centre"}, CACHE_A, True),
     ("s1: secretReach 0.9 (under a body's radius: nobody pressed against the cache opens it)",
-     lambda d: levels(d).__setitem__("secretReach", 0.9), {}, TRIGGER_CACHE, True),
+     lambda d: levels(d).__setitem__("secretReach", 0.9), {}, CACHE_A, True),
     ("s1 control: the footprint rule, the cache's trigger from beside it", None, {}, TRIGGER_CACHE, False),
     ("s1 control: the centre rule keeps the lookout (its chest's top is within 2.5 of the centre)", None,
      {"TRIGGER_MODEL": "centre"}, TRIGGER_LOOKOUT, False),
-    ("s1: the cache's chest raised 5 off the road (a root beside it is 2 under its foot)",
+    # L2 W2: the chest stands in the alcove (floor 8, roof 22): raised 8, a root beside it is 6 under its
+    # foot, and its top has 2 studs under the roof, no room for a body.
+    ("s1: the cache's chest raised 8 off its alcove floor",
      lambda d: secret(d, "cache").__setitem__("y", 18), {}, TRIGGER_CACHE, True),
     # L2-18 (e) and L2-13: rewards follow keys.
     ("L2-18e: the cache pays 1 Valor", lambda d: secret_entry(d, "cache").__setitem__("valor", 1), {}, REWARDS, True),
@@ -313,6 +352,69 @@ CASES = (
      lambda d: d["combat"]["debug"].__setitem__("resetSecretsAttribute", "GrantValor"), {}, LEVERS, True),
     ("L2-14: secretOpen grey", lambda d: d["expeditions"]["looks"]["secretOpen"].__setitem__("color", [150, 150, 150]),
      {}, LOOKS, True),
+    # L2-37 (f), closed: the brambles, walls and roof seal the cave at any width.
+    ("L2-37f: a 1-stud gap beside the west bramble (x -340..-339)",
+     lambda d: block(d, "CaveBrambleW").update({"x": -333.25, "sx": 11.5}), {}, SEALED, True),
+    ("L2-37f control: the west bramble flush with the wall's face (x -340..-327.5), no overlap",
+     lambda d: block(d, "CaveBrambleW").update({"x": -333.75, "sx": 12.5}), {}, SEALED, False),
+    ("L2-37f: a 0.2-stud slit under the east bramble (its foot at 8.2)",
+     lambda d: block(d, "CaveBrambleE").update({"y": 15.1, "sy": 13.8}), {}, SEALED, True),
+    ("L2-37f: the long leg's roof 3 studs short of the alcove wall (x -342..-224)",
+     lambda d: block(d, "CaveRoofW").update({"x": -283, "sx": 118}), {}, SEALED, True),
+    ("L2-37f: the ridge 60 high by the ledge (CaveWallS1)", lambda d: top_at(d, "CaveWallS1", 60), {}, RIDGE, True),
+    ("L2-37f control: CaveWallS1 81 high (43 over the lookout chest's top, 38)", lambda d: top_at(d, "CaveWallS1", 81),
+     {}, RIDGE, False),
+    # L2-37 (a): the cache's trigger, met from the alcove only; a roof with no room over it.
+    ("L2-37a: the alcove's roof down to 13 (5 over its floor: no room for a body)",
+     lambda d: block(d, "CaveRoofAlcove").update({"y": 38.5, "sy": 51}), {}, CACHE_A, True),
+    # L2-37 (f), open: the shortcut route.
+    ("L2-37f: the long leg's north wall 1 stud in (z -99..-97: 11 wide)",
+     lambda d: [block(d, n).update({"z": -98, "sz": 2}) for n in ("CaveWallN1", "CaveWallN2")], {}, SHORTCUT, True),
+    ("L2-37f: the step 11 high (the cave's floor at 0 then 11)",
+     lambda d: [block(d, n).update({"y": 3.5, "sy": 15}) for n in ("CaveTunnel", "CaveAlcove", "CaveExitLeg", "CaveExit")]
+     + [p.__setitem__("y", 11) for p in layout(d)["shortcutRoute"][2:7]], {}, SHORTCUT, True),
+    ("L2-37f: the tunnel 14 from fireN's fire (the cave moved 52 south)", lambda d: shift_cave(d, 52), {}, SNEAK_CAVE,
+     True),
+    ("L2-37f control: the cave 30 south (its long leg 36 from fireN's fire)", lambda d: shift_cave(d, 30), {},
+     SNEAK_CAVE, False),
+    # R8 with L2-37's sight.
+    ("L2-37 R8: the exit without its turn (the mouth under the exit leg)", straight_exit, {}, SNIPER_OPEN, True),
+    ("L2-37 R8: no sight rule (W1's: every unreachable top within the Longbow's range)", None, {"SIGHT_WALLS": False},
+     SNIPER, True),
+    # L2-37 (e) and the chain.
+    ("L2-37e: the cache pays 10 Valor (its chain's Double Jump price)",
+     lambda d: secret_entry(d, "cache").__setitem__("valor", 10), {}, REWARDS, True),
+    ("L2-37e control: the cache pays 9 Valor", lambda d: secret_entry(d, "cache").__setitem__("valor", 9), {}, REWARDS,
+     False),
+    ("L2-37e: the cache pays 70 Timber (32% of the Normal stock)",
+     lambda d: secret_entry(d, "cache").__setitem__("materials", 70), {}, REWARDS, True),
+    ("L2-37e: the lookout pays nothing (no Flamethrower: fire never resolves)",
+     lambda d: level(d)["secrets"].__setitem__("lookout", {"name": "The Lookout"}), {}, REWARDS, True),
+    ("L2-37e: the Flamethrower carries no element", lambda d: d["ctx"]["weapons"]["flamethrower"].pop("element"), {},
+     REWARDS, True),
+    ("L2-37e control: the lookout pays 2 Valor and the Flamethrower only",
+     lambda d: level(d)["secrets"].__setitem__("lookout", {"name": "The Lookout", "valor": 2, "family": "flamethrower"}),
+     {}, REWARDS, False),
+    # L2-34 and L2-36: Validate's new lines.
+    ("L2-34: a bramble opens a shortcut that does not exist", lambda d: block(d, "CaveBrambleE").__setitem__("opens", "tunnel"),
+     {}, PROBLEMS, True),
+    ("L2-34: a bramble that reacts to water", lambda d: block(d, "CaveBrambleW").__setitem__("react", "water"), {},
+     PROBLEMS, True),
+    ("L2-34: a bramble that does not collide", lambda d: block(d, "CaveBrambleW").__setitem__("collide", False), {},
+     PROBLEMS, True),
+    ("L2-36: the shortcut id twice", lambda d: layout(d)["shortcuts"].append(dict(layout(d)["shortcuts"][0])), {},
+     PROBLEMS, True),
+    ("L2-34: levels.react.fireHits 0", lambda d: levels(d)["react"].__setitem__("fireHits", 0), {}, REACT, True),
+    ("L2-38: grantFamilyAttribute is DebugGrantAbility's name",
+     lambda d: d["combat"]["debug"].__setitem__("grantFamilyAttribute", "DebugGrantAbility"), {}, LEVERS, True),
+    ("L2-34: the bramble look grey", lambda d: d["expeditions"]["looks"]["bramble"].__setitem__("color", [110, 112, 104]),
+     {}, LOOKS, True),
+    # L2-47: the AB bend.
+    ("L2-47: the bend wall removed", lambda d: layout(d)["blocks"].remove(block(d, "BendWall")), {}, BEND, True),
+    ("L2-47: the bend wall only between the roads (z -52..-8: a hop round its north end)",
+     lambda d: block(d, "BendWall").update({"z": -30, "sz": 44}), {}, BEND, True),
+    ("L2-47 control: the bend wall 4 short of the ridge (z -78..-8: the way round is 58)",
+     lambda d: block(d, "BendWall").update({"z": -43, "sz": 70}), {}, BEND, False),
 )
 
 

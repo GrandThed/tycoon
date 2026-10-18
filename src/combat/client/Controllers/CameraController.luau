@@ -83,6 +83,16 @@
 -- The L1c fix round's M1: Reset Character would leave no rig, and with none the default camera
 -- takes over (free orbit, StarterPlayer's zoom) for the whole respawn: the menu item is turned
 -- off in this place. combat.project.json caps CameraMaxZoomDistance at camera.maxZoom behind it.
+--
+-- L2 W2 (docs/prompts/l2-w2-contract.md, L2-44), the Raiders' Tunnel (12 wide, 14 high, one step
+-- of +8, two bends): its roof and walls are colliding, queried Parts in the Default group, so the
+-- spherecasts below stop the boom at the roof as at any wall, with the camera's centre at least
+-- the collision radius plus the pad (0.7) under it. What a roof adds is the pivot: its height lags
+-- the root by up to movement.cameraMaxLag (3) and, during a leap or lunge, its flat position
+-- trails it by as much, so off the step's edge or round a bend it could stand inside the step or
+-- a wall, where a spherecast starting inside a part sees nothing of it and the camera ends up
+-- behind the rock. The pivot is therefore pulled back toward the head along a ray first
+-- (openPivot); with no lag the two are one point and nothing is cast.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -423,6 +433,25 @@ local function clearDistance(params: RaycastParams, from: Vector3, offset: Vecto
 	return math.max(result.Distance - Theme.COMBAT_CAMERA_COLLISION_PAD, 0)
 end
 
+-- L2-44: the lagging pivot, pulled back toward the head (root + pivot height, always in the open:
+-- the body stands there) when a solid lies between them, so every spherecast starts in the open.
+local function openPivot(params: RaycastParams, rootPosition: Vector3, pivot: Vector3): Vector3
+	local head = rootPosition + Vector3.new(0, Theme.COMBAT_CAMERA_PIVOT_HEIGHT, 0)
+	local offset = pivot - head
+	if offset.Magnitude < LAG_EPSILON then
+		return pivot
+	end
+	local hit = Workspace:Raycast(head, offset, params)
+	if hit == nil then
+		return pivot
+	end
+	local keep = math.max(
+		hit.Distance - Theme.COMBAT_CAMERA_COLLISION_RADIUS - Theme.COMBAT_CAMERA_COLLISION_PAD,
+		0
+	)
+	return head + offset.Unit * keep
+end
+
 -- L1c-5a: how far along `offset` from `from` the camera may go before entering a locking camp
 -- whose rectangle does not hold `root`; the full length when no camp is in the way.
 local function campReach(from: Vector3, offset: Vector3, root: Vector3): number
@@ -757,10 +786,14 @@ local function update(deltaTime: number): ()
 	local yawFrame = CFrame.Angles(0, yaw, 0)
 	local rotation = yawFrame * CFrame.Angles(pitch, 0, 0)
 	local flatPivot = followFlat(rootPosition, deltaTime)
-	local pivot = Vector3.new(
-		flatPivot.X,
-		followHeight(rootPosition.Y, deltaTime) + Theme.COMBAT_CAMERA_PIVOT_HEIGHT,
-		flatPivot.Z
+	local pivot = openPivot(
+		params,
+		rootPosition,
+		Vector3.new(
+			flatPivot.X,
+			followHeight(rootPosition.Y, deltaTime) + Theme.COMBAT_CAMERA_PIVOT_HEIGHT,
+			flatPivot.Z
+		)
 	)
 	-- The shoulder offset is pulled in against a wall first, so the camera never starts
 	-- its boom from inside the wall the player is hugging.

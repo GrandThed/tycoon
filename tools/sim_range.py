@@ -144,6 +144,8 @@ FAMILY_TARGETS = {
     "smg": {"single": 108, "crowd3": 108},  # the boss and elite shredder
     "beam": {"crowd6": 250},  # paint the crowd
     "chaingun": {"crowd6": 240},  # lightning through a pack
+    # L2-29: a crowd weapon you must stand close to (the Shotgun's role), the Beam's single-target rate.
+    "flamethrower": {"single": 50, "crowd6": 280},
 }
 # A and B of one family sit at similar crowd DPS: |A - B| / mean at most this.
 AB_SPREAD = 0.20
@@ -263,6 +265,22 @@ PLATE_FINISH_SECONDS = 2.0
 PLATE_FOLLOW_SECONDS = 1.0
 PLATE_REEL_MAX_SECONDS = 2.0
 PLATE_SLAMS = 2
+# L2 W2 (docs/prompts/l2-w2-contract.md, L2-39 and section 7). An elemental family (the Flamethrower)
+# never kills a boss faster than the default melee under the same policy: its fastest seed is no
+# faster than the Broadsword's slowest, with its ability and without (RANGED_KILL_SECONDS holds too).
+# On Forest Road at the proving gear, a player who carries the Broadsword and the Flamethrower (each
+# swing with the one that reaches) clears inside PAIR_CLEAR_MINUTES, with no down, earns at most
+# PAIR_CASH_SHARE of the same player's cash a minute carrying the Broadsword and the Longbow (today's
+# loadout: carrying any ranged weapon at all speeds this player up, so the melee-only run is no fair
+# yardstick; it is reported), and its Colossus takes at least PAIR_BOSS_SHARE of that run's. The
+# clear band is L2 W1's first-run band (4.0, not the contract's 4.5: the pair, with either ranged
+# weapon, clears in about 4.2 min). With the tunnel found, the run's cash a minute is at most
+# SHORTCUT_CASH_SHARE of the full run's on Normal and Hard (past it: reported to the lead, no camp
+# change); the clear's saving is reported.
+PAIR_CLEAR_MINUTES = (4.0, 5.75)
+PAIR_CASH_SHARE = 1.10
+PAIR_BOSS_SHARE = 0.90
+SHORTCUT_CASH_SHARE = 1.15
 
 # ---------------------------------------------------------------------------------------------
 # Modelling constants (the sim's stand-ins for Roblox and player facts, not game tunables).
@@ -1082,7 +1100,8 @@ def single_dps(v, full=True):
 
 
 def standard_front(v):
-    return CONE_FRONT if v["shape"] == "cone" else RANGED_FRONT
+    """Cone guns and the flame stream (a capsule from the muzzle) fire from close in."""
+    return CONE_FRONT if v["shape"] in ("cone", "capsule") else RANGED_FRONT
 
 
 def crowd_dps(cfg, v, spacing, trials, rng, surround=False, full=True):
@@ -1215,7 +1234,7 @@ def plan_ability(cfg, family, ab, ctx):
         cast.at(RANGED_FRONT / max(g("speed"), EPSILON),
                 lambda w: fly(w, cfg, v, ranged_origin, fwd, damage, False, seed)[0])
         return cast
-    if aid == "slugBurst":
+    if aid in ("slugBurst", "dragonBreath"):  # L2-29: Dragon's Breath is the Slug Burst launcher
         cast = Cast(busy=count_of(g("count"), 0) * g("tickSeconds"))
         for k in range(count_of(g("count"), 0)):
             cast.at(k * g("tickSeconds"), lambda w: strike(w, cfg, {"shape": "cone", "origin": ranged_origin,
@@ -2200,6 +2219,20 @@ class ThreatRun:
         self.slam_ready = 0.0
         chain = self.variant.get("chain") or [1.0]
         self.heavy = self.variant["damage"] * (max(chain) if self.melee else 1) >= crowd["heavyHit"]
+        # L2 W2: a player who carries a pair (`pair` = the melee family, the ranged family) fights
+        # each swing with the one that reaches: the melee within its reach, else the ranged (no slot
+        # switch time: the most the pair can earn).
+        self.kit = None
+        if policy.get("pair") is not None:
+            self.kit = {}
+            for family in policy["pair"]:
+                v = variant_of(cfg, family)
+                melee = v["kind"] == "melee"
+                links = v.get("chain") or [1.0]
+                slot = cfg["weapons"][family]["slot"]
+                self.kit[slot] = {"variant": v, "melee": melee, "scale": scales.get(slot, 1.0),
+                                  "heavy": v["damage"] * (max(links) if melee else 1) >= crowd["heavyHit"]}
+            self.wield(self.kit["melee"])
         self.guards_at = None  # when the last of a boss's guard fell
         self.gave = 0.0  # studs the boss walked between then and its plate's break
         if self.boss is not None:
@@ -2431,10 +2464,29 @@ class ThreatRun:
         speed = self.move["walkSpeed"] / math.hypot(vx, vz)
         self.shift(vx * speed * dt, vz * speed * dt)
 
+    def wield(self, kit):
+        """L2 W2: the pair player takes up one of his two weapons."""
+        self.variant, self.melee, self.hit_scale, self.heavy = kit["variant"], kit["melee"], kit["scale"], kit["heavy"]
+        self.world.scale = self.hit_scale
+
+    def choose(self, live):
+        """L2 W2: the pair player's weapon for this swing: the melee when its reach holds his
+        target, else the ranged."""
+        boss = self.boss if self.policy.get("boss") and self.boss is not None and self.boss.alive else None
+        target = min(live, key=lambda e: (e.x - self.x) ** 2 + (e.z - self.z) ** 2)
+        if boss is not None:
+            target = self.mark(live, boss, target)
+        melee = self.kit["melee"]
+        reach = melee["variant"]["range"] + melee["variant"]["pad"] + target.r
+        near = math.hypot(target.x - self.x, target.z - self.z) <= reach or "ranged" not in self.kit
+        self.wield(melee if near else self.kit["ranged"])
+
     def swing(self, t):
         live = self.swingable()
         if not live:
             return
+        if self.kit is not None:
+            self.choose(live)
         v = self.variant
         boss = self.boss if self.policy.get("boss") and self.boss is not None and self.boss.alive else None
         nearest = min(live, key=lambda e: (e.x - self.x) ** 2 + (e.z - self.z) ** 2)
@@ -2503,10 +2555,10 @@ class ThreatRun:
 
     def wanted(self, target):
         """How near a target he wants to stand: inside his weapon's reach of it, or, when only
-        the slam breaks its plate, inside the slam's."""
-        v = self.variant
-        reach = v["range"] + (v["pad"] if self.melee else 0) + target.r
-        want = reach - CHASE_MARGIN if self.melee else min(reach - CHASE_MARGIN, RANGED_STAND)
+        the slam breaks its plate, inside the slam's. The pair player closes to his melee's."""
+        v, melee = (self.kit["melee"]["variant"], True) if self.kit is not None else (self.variant, self.melee)
+        reach = v["range"] + (v["pad"] if melee else 0) + target.r
+        want = reach - CHASE_MARGIN if melee else min(reach - CHASE_MARGIN, RANGED_STAND)
         if self.slam_for(target):
             want = min(want, self.slam_reach(target) - CHASE_MARGIN)
         return want
@@ -4886,6 +4938,20 @@ def check_boss(cfg, env, bosses, expect):
                     expect(slowest is not None and slowest <= RANGED_KILL_SECONDS,
                            f"{who}: a ranged family that is not a bow wins in {fmt(slowest, 0, 1).strip()} s at the "
                            f"slowest (<= {RANGED_KILL_SECONDS:.0f})")
+        # L2-39: an elemental family is never faster on a boss than the default melee, same policy.
+        elemental = {w["name"] for w in cfg["weapons"].values() if w.get("element")}
+        for r in boss["rows"]:
+            if r["policy"] != "slay" or r["weapon"] not in elemental:
+                continue
+            sword = next((b for b in boss["rows"] if b["policy"] == "slay" and b["weapon"] == f["melee"]
+                          and b["abilities"] == r["abilities"]), None)
+            mine, theirs = r["killSpan"], (sword or {}).get("killSpan")
+            expect(mine is not None and theirs is not None and mine[0] >= theirs[1] - THREAT_EPS
+                   and mine[1] <= RANGED_KILL_SECONDS and r["solid"] == 0,
+                   f"{name}, {r['weapon']}" + (" with its ability" if r["abilities"] else "") + f": never faster than the "
+                   f"{f['melee']} (L2-39): its fastest seed {fmt(mine[0] if mine else None, 0, 1).strip()} s, the "
+                   f"{f['melee']}'s slowest {fmt(theirs[1] if theirs else None, 0, 1).strip()} s; within "
+                   f"{RANGED_KILL_SECONDS:.0f} s and none of the boss's hits lands ({r['solid']})")
         quiet = boss["quiet"]
         base = next((r for r in boss["rows"] if r["policy"] == "slay" and not r["abilities"]
                      and r["weapon"] == f["melee"]), None)
@@ -5132,6 +5198,34 @@ def load_level_layout(name, rescue_below):
     return layout
 
 
+def shortcut_layout(layout):
+    """L2-36: the layout a leader who has found every shortcut plays: every block that `opens` one
+    left out (LevelGeometry.Pieces), and the route through layout.shortcutRoute in place of the
+    stretch of the main route between where it leaves and where it rejoins (the simulator's course;
+    the game reads no route). None for a layout with no shortcut route."""
+    path = layout.get("shortcutRoute") or []
+    route = layout.get("route") or []
+    if not layout.get("shortcuts") or len(path) < 2 or len(route) < 2:
+        return None
+
+    def leg_of(point):
+        for index in range(len(route) - 1):
+            a, b = route[index], route[index + 1]
+            dx, dz = b["x"] - a["x"], b["z"] - a["z"]
+            run = dx * dx + dz * dz
+            f = 0.0 if run <= 1e-12 else max(0.0, min(1.0, ((point["x"] - a["x"]) * dx + (point["z"] - a["z"]) * dz) / run))
+            if math.hypot(a["x"] + dx * f - point["x"], a["z"] + dz * f - point["z"]) < 0.01:
+                return index
+        return None
+
+    leave, join = leg_of(path[0]), leg_of(path[-1])
+    if leave is None or join is None or join < leave:
+        return None
+    ids = {sc["id"] for sc in layout["shortcuts"]}
+    return {**layout, "blocks": [b for b in layout["blocks"] if b.get("opens") is None or b["opens"] not in ids],
+            "route": route[:leave + 1] + [dict(p) for p in path] + route[join + 1:]}
+
+
 def is_catalog_name(stem):
     """Catalog reads a module of Config/Levels (and of Config/Missions) only when its name begins
     with digits and an underscore: string.match(name, "^%d+_")."""
@@ -5269,6 +5363,7 @@ def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=
         camp_level_problems(level, layout, rules or {}, kinds, ranks or {}, crowd_max, problems)
     if layout is not None:
         secret_problems(level, layout, problems.append)
+        react_problems(layout, problems.append)
     return problems
 
 
@@ -5318,6 +5413,49 @@ def secret_problems(level, layout, problem):
         if family is not None and (not isinstance(family, str) or family == ""
                                    or len(family.encode("utf-8")) > SECRET_FAMILY_MAX):
             problem(f"secrets.{sid}.family is {family}, not a family id")
+
+
+# L2-34: the words a block's `react` may say (StageFlow.reactProblems).
+REACT_WORDS = ("fire", "ice")
+SHORTCUT_ID_MAX = unlocks_cap("MAX_ID_LENGTH")
+
+
+def react_problems(layout, problem):
+    """StageFlow.reactProblems (L2-34, L2-36), after the secrets: `shortcuts` is a list whose
+    entries have a unique id of at most Unlocks.MAX_ID_LENGTH bytes and finite x, y, z, sx, sy, sz;
+    a block's `react` is "fire" or "ice" and the block collides; its `opens` names a shortcut."""
+    ids = set()
+    shortcuts = layout.get("shortcuts")
+    if shortcuts is not None and not isinstance(shortcuts, list):
+        problem("shortcuts is not a list")
+        shortcuts = None
+    for index, entry in enumerate(shortcuts or [], 1):
+        sid = entry.get("id") if isinstance(entry, dict) else None
+        if not isinstance(sid, str) or sid == "" or len(sid.encode("utf-8")) > SHORTCUT_ID_MAX:
+            problem(f"shortcut {index} has no id of at most {SHORTCUT_ID_MAX} bytes")
+            continue
+        if sid in ids:
+            problem(f'the shortcut id "{sid}" is used twice')
+        ids.add(sid)
+        for key in ("x", "y", "z", "sx", "sy", "sz"):
+            if not finite(entry.get(key)):
+                problem(f'shortcut "{sid}": {key} is {entry.get(key)}, not a number')
+    blocks = layout.get("blocks")
+    if not isinstance(blocks, list):
+        return
+    for index, block in enumerate(blocks, 1):
+        if not isinstance(block, dict):
+            continue
+        where = f"block {block['name'] if isinstance(block.get('name'), str) else index}"
+        react = block.get("react")
+        if react is not None:
+            if react not in REACT_WORDS:
+                problem(f'{where}: react is {react}, neither "fire" nor "ice"')
+            if block.get("collide") is False:
+                problem(f"{where} reacts and does not collide")
+        opens = block.get("opens")
+        if opens is not None and (not isinstance(opens, str) or opens not in ids):
+            problem(f"{where} opens {opens}, which names no shortcut")
 
 
 def camp_index(layout, camp_id):
@@ -6769,7 +6907,7 @@ SNIPER_HARD = "hard"  # R8: rated on Normal and on this difficulty, both at the 
 # for L1 as a known limit (camps never refill, so the pay is bounded and a camp only clears faster).
 # Their rate is reported, not gated; every hit landing stays gated. L4 re-places the perches, and the
 # set must be empty before L4 ships.
-SNIPER_KNOWN_LIMIT_L4 = {"normal": ("LookoutLedge", "Secret_lookout", "Secret_cache")}
+SNIPER_KNOWN_LIMIT_L4 = {"normal": ("LookoutLedge", "Secret_lookout")}  # L2 W2: the cache moved into the cave
 
 
 # L2-5: the spots only a player with a bought ability stands on (a ledge an ability-keyed secret
@@ -8964,6 +9102,15 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
 
     spots = sniper_spots_of(level, layout, combat_cfg, cfg)
     report["spots"] = spots
+    # L2 W2: the tunnel found (the leader's open layout), its spots beyond the closed ones, and the
+    # fire family a pair carries.
+    cut = shortcut_layout(layout)
+    report["cut"] = cut
+    shut_ids = {spot["id"] for spot in spots}
+    report["cutSpots"] = ([spot for spot in sniper_spots_of(level, cut, combat_cfg, cfg) if spot["id"] not in shut_ids]
+                          if cut is not None else [])
+    flame = next((f for f, w in cfg["weapons"].items() if w.get("element") == "fire"), None)
+    report["flame"] = flame
 
     def sniper_runs(view, hp, difficulty):
         """R8: a straight course from every listed spot, every seed."""
@@ -8971,11 +9118,21 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                                       dict(THREAT_POLICIES["sniper"], weapon=(bow, None), spot=spot), seed).run()
                              for seed in MISSION_SEEDS] for spot in spots}
 
-    def runs_of(view, hp, difficulty, key, weapon=None, stop_zone=None, seconds=None):
+    def runs_of(view, hp, difficulty, key, weapon=None, stop_zone=None, seconds=None, where=None, pair=None):
         policy = THREAT_POLICIES[key] if weapon is None else dict(THREAT_POLICIES[key], weapon=(weapon, None))
-        return [LevelRun(view, hp, ctx, level, layout, difficulty, policy, seed, stop_zone=stop_zone,
+        if pair is not None:
+            policy = dict(policy, pair=pair, label=policy["label"] + ", carrying " + " and ".join(pair))
+        return [LevelRun(view, hp, ctx, level, where or layout, difficulty, policy, seed, stop_zone=stop_zone,
                          seconds=seconds).run()
                 for seed in MISSION_SEEDS]
+
+    def cut_snipers(view, hp, difficulty):
+        """L2-37: the straight sniper course from every spot the open tunnel adds, on its blocks
+        (the course starts by the camp's gate on the main route, as R8's does)."""
+        snipe = {**cut, "route": layout["route"]}
+        return {spot["id"]: [LevelRun(view, hp, ctx, level, snipe, difficulty,
+                                      dict(THREAT_POLICIES["sniper"], weapon=(bow, None), spot=spot), seed).run()
+                             for seed in MISSION_SEEDS] for spot in report["cutSpots"]}
 
     for difficulty in ctx["expeditions"]["difficulties"]:
         scales = level["difficulties"].get(difficulty)
@@ -9003,6 +9160,23 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                              "zone": stop["id"],
                              "boss": boss_alone(view, plan, hp, level, FOREST_BOSS, seeds=BOSS_RANGED_SEEDS, weapon=bow)}
         row.update({"sneak": [], "road": [], "bow": []})
+        # L2 W2: the tunnel found, on Normal and Hard at the row's gear: its clear, pay and cash a
+        # minute against the full run's. On Normal also the pair (the Broadsword and the
+        # Flamethrower) and, reported, the Flamethrower alone.
+        row["cave"] = None
+        if cut is not None and difficulty in (ctx["expeditions"]["difficulties"][0], SNIPER_HARD):
+            row["cave"] = {"runs": runs_of(view, hp, difficulty, "mission", where=cut),
+                           "human": runs_of(view, hp, difficulty, "human", where=cut) if human else []}
+        row["pair"] = row["pairBow"] = row["flame"] = None
+        if rank == 1 and flame is not None:
+            row["pair"] = runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], flame))
+            row["pairBow"] = runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], bow))
+            # The Flamethrower alone has no heavy hit and the level's player slams no resident, so it
+            # cannot open a plate: through the first open camp only (information).
+            first = (open_zones(plan, layout) or [None])[0]
+            row["flame"] = runs_of(view, hp, difficulty, "mission", flame,
+                                   stop_zone=first["floor"] if first is not None else None)
+        row["cutSniper"] = {}
         if rank == 1:
             if scenarios:
                 row["stand"] = runs_of(view, hp, difficulty, "still")
@@ -9015,6 +9189,7 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                 row["walkout"] = runs_of(view, hp, difficulty, "walkout")
                 row["lose"] = runs_of(view, hp, difficulty, "lose")
                 row["sniper"] = sniper_runs(view, hp, difficulty)
+                row["cutSniper"] = cut_snipers(view, hp, difficulty) if cut is not None else {}
                 above = next((g for g in presets if (g["melee"], g["ranged"]) > (gear["melee"], gear["ranged"])), None)
                 if above is not None:
                     fast_view, fast_hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], above)
@@ -9049,6 +9224,7 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                 mine = lower["runs"] if lower is not None and lower["gear"] == proving else None
                 row["under"]["runs"] = mine if mine is not None else runs_of(weak_view, weak_hp, difficulty, "mission")
                 row["under"]["sniper"] = sniper_runs(weak_view, weak_hp, difficulty)
+                row["under"]["cutSniper"] = cut_snipers(weak_view, weak_hp, difficulty) if cut is not None else {}
         report["difficulties"][difficulty] = row
     return report
 
@@ -9430,9 +9606,120 @@ def paid_exactly(r):
         float(value).is_integer() for value in r["priced"].values())
 
 
+def cash_rate(runs):
+    """The mean cash a minute of runs that cleared (None when one did not)."""
+    return mean_of([pay_rate(r)[0] for r in runs]) if runs and all(r["end"] == "cleared" for r in runs) else None
+
+
+def colossus_seconds(runs):
+    """The mean of the boss's fight inside each run (None unless every run killed it)."""
+    fights = [r["bosses"].get(FOREST_BOSS) for r in runs]
+    if not fights or any(f is None or f[1] is None for f in fights):
+        return None
+    return mean_of([f[1] - f[0] for f in fights])
+
+
+def print_cave(cfg, report):
+    """L2 W2: the pair, the Flamethrower alone, the tunnel found and its new sniper spots."""
+    if report is None or (report.get("cut") is None and report.get("flame") is None):
+        return
+    names = report["ctx"]["expeditions"]["difficultyNames"]
+    print()
+    print("L2 W2 (the Flamethrower and the Raiders' Tunnel; docs/prompts/l2-w2-contract.md section 7)")
+    for difficulty, row in report["difficulties"].items():
+        tag = f"  {names.get(difficulty, difficulty).upper()} at gear {gear_text(row['gear'])}"
+        lines = []
+        for label, runs in (("the full run (Broadsword, reacting player)", row["runs"]),
+                            ("the pair: Broadsword + Longbow, each swing with the one that reaches", row.get("pairBow")),
+                            ("the pair: Broadsword + Flamethrower", row.get("pair")),
+                            ("the Flamethrower alone, through the first open camp (information)", row.get("flame")),
+                            ("the tunnel found, reacting player", (row.get("cave") or {}).get("runs")),
+                            ("the tunnel found, a human's reaction", (row.get("cave") or {}).get("human"))):
+            if not runs:
+                continue
+            lines.append(f"    {label}:")
+            for seed, r in zip(MISSION_SEEDS, runs):
+                fight = (r["bosses"].get(FOREST_BOSS) or (None, None))
+                took = f"{fight[1] - fight[0]:.1f} s" if fight[1] is not None else "-"
+                cash, timber = pay_rate(r)
+                lines.append(f"      seed {seed}: {r['end']} at {r['at'] / 60:.2f} min, {r['downs']} down(s), {r['hits']} hits, "
+                             f"paid {wallet_text(r)} ({cash:,.0f} cash and {timber:.1f} {report['level']['material']} a "
+                             f"minute), the {FOREST_BOSS} {took}, A cleared "
+                             + (f"{r['clearedAt']['A']:.1f} s" if r["clearedAt"].get("A") is not None else "never (skipped)"))
+        if lines:
+            print(tag)
+            for line in lines:
+                print(line)
+    for difficulty, row in report["difficulties"].items():
+        snipers = row.get("cutSniper") or (row.get("under") or {}).get("cutSniper") or {}
+        mission = row["runs"] if row.get("cutSniper") else (row.get("under") or {}).get("runs")
+        for spot, runs in snipers.items():
+            for seed, r, m in zip(MISSION_SEEDS, runs, mission or []):
+                cash, timber = sniper_rate(r)
+                mine, mine_t = pay_rate(m)
+                print(f"    R8 sniper, the tunnel open, {names.get(difficulty, difficulty)}, {spot} seed {seed}: {cash:,.0f} / "
+                      f"{timber:.1f} against {mine:,.0f} / {mine_t:.1f} ({sum(r['killed'].values())} kills, hits on him "
+                      f"{r['hits']})")
+
+
+def check_cave_runs(cfg, report, expect):
+    """L2 W2's bands on Forest Road (section 7): the pair, the tunnel found, the open spots (R8)."""
+    names = report["ctx"]["expeditions"]["difficultyNames"]
+    flame = report.get("flame")
+    for difficulty, row in report["difficulties"].items():
+        tag = f"forest, {names.get(difficulty, difficulty)} at gear {gear_text(row['gear'])}"
+        full = cash_rate(row["runs"])
+        pair = row.get("pair")
+        if pair:
+            lo, hi = PAIR_CLEAR_MINUTES
+            bow = row.get("pairBow") or []
+            mine, boss, base = cash_rate(pair), colossus_seconds(pair), colossus_seconds(bow)
+            alone = full
+            full = cash_rate(bow)
+            fname = cfg["weapons"][flame]["name"]
+            if mine and alone:
+                print(f"  note  {tag}: the pair against the Broadsword alone (the reacting player of the band above): "
+                      f"x{mine / alone:.2f} its cash a minute (reported)")
+            expect(all(r["end"] == "cleared" and lo * 60 <= r["at"] <= hi * 60 and r["downs"] == 0 for r in pair),
+                   f"{tag}: the reacting player carrying the Broadsword and the {fname} clears in {lo:g}-{hi:g} min with no "
+                   f"down, every seed: " + ", ".join(f"{r['end']} at {r['at'] / 60:.2f} min ({r['downs']} down)" for r in pair))
+            expect(mine is not None and full is not None and mine <= PAIR_CASH_SHARE * full,
+                   f"{tag}: the pair's cash a minute is at most x{PAIR_CASH_SHARE:g} the same player's carrying the Broadsword "
+                   f"and the Longbow: "
+                   + (f"{mine:,.0f} against {full:,.0f} (x{mine / full:.2f})" if mine and full else "a run did not clear"))
+            expect(boss is not None and base is not None and boss >= PAIR_BOSS_SHARE * base,
+                   f"{tag}: the pair's {FOREST_BOSS} in the run is not shorter than x{PAIR_BOSS_SHARE:g} the Longbow pair's: "
+                   + (f"{boss:.1f} s against {base:.1f} s" if boss and base else "not killed"))
+        full = cash_rate(row["runs"])
+        cave = row.get("cave")
+        if cave:
+            runs = cave["runs"]
+            mine = cash_rate(runs)
+            saved = (mean_of([r["at"] for r in row["runs"]]) - mean_of([r["at"] for r in runs])) if mine else None
+            expect(all(r["end"] == "cleared" and r["downs"] == 0 for r in runs),
+                   f"{tag}: with the tunnel found the reacting player clears with no down, every seed: "
+                   + ", ".join(f"{r['end']} at {r['at'] / 60:.2f} min ({r['downs']} down)" for r in runs))
+            expect(mine is not None and full is not None and mine <= SHORTCUT_CASH_SHARE * full,
+                   f"{tag}: with the tunnel found the run's cash a minute is at most x{SHORTCUT_CASH_SHARE:g} the full run's "
+                   f"(past it: to the lead, no camp change): "
+                   + (f"{mine:,.0f} against {full:,.0f} (x{mine / full:.2f}); the clear {saved:+.1f} s shorter on average"
+                      if mine and full else "a run did not clear"))
+        snipers = row.get("cutSniper") or (row.get("under") or {}).get("cutSniper") or {}
+        mission = row["runs"] if row.get("cutSniper") else (row.get("under") or {}).get("runs")
+        for spot, runs in snipers.items():
+            good = all(sniper_rate(r)[0] < pay_rate(m)[0] and sniper_rate(r)[1] < pay_rate(m)[1] and r["evaded"] == 0
+                       for r, m in zip(runs, mission))
+            expect(good, f"{tag if row.get('cutSniper') else 'forest, ' + names.get(difficulty, difficulty) + ' at the proving gear'}"
+                   f": with the tunnel open, the sniper from {spot} earns less cash and less Timber a minute than the mission "
+                   f"player on the same seeds, every hit landing (R8, L2-37): " + "; ".join(
+                       f"seed {seed} {sniper_rate(r)[0]:,.0f} / {sniper_rate(r)[1]:.1f} against {pay_rate(m)[0]:,.0f} / "
+                       f"{pay_rate(m)[1]:.1f}" for seed, r, m in zip(MISSION_SEEDS, runs, mission)))
+
+
 def check_forest(cfg, report, expect):
     if report is None:
         return
+    check_cave_runs(cfg, report, expect)
     level, ctx = report["level"], report["ctx"]
     names = ctx["expeditions"]["difficultyNames"]
     # L2-20: every reacting policy says it has one jump, in so many words.
@@ -9692,12 +9979,18 @@ def check_first_run(ctx, level, row, tag, gear, expect):
     expect(bool(valor) and price is not None and all(v >= price for v in valor),
            f"{tag}: one solo first clear buys {(air or {}).get('name', 'Double Jump')} (L2-6): it pays "
            + ", ".join(str(v) for v in valor) + f" Valor against a price of {price}")
-    keys = {s["id"]: s["needs"] for s in (load_level_layout(level["layout"], 0) or {}).get("secrets") or []}
+    import check_levels as cl
+
+    shape = load_level_layout(level["layout"], 0) or {}
+    keys = {s["id"]: s["needs"] for s in shape.get("secrets") or []}
+    # L2-37: an element key (fire) costs what the ability its chain starts from costs.
+    chain, _families = cl.key_chain(level, shape, ctx["expeditions"], load_config(CONFIG_PATH)["weapons"])
     told, good = [], True
     for sid, entry in sorted((level.get("secrets") or {}).items()):
         if not any(key in entry for key in ("valor", "materials", "family")):
             continue
-        cost = (sold.get(keys.get(sid)) or {}).get("price", {}).get("valor")
+        root = chain[keys[sid]][1] if keys.get(sid) in chain else keys.get(sid)
+        cost = (sold.get(root) or {}).get("price", {}).get("valor")
         shares = [entry.get("materials", 0) / max(r["wallet"]["materials"], 1) for r in human if r["end"] == "cleared"]
         ok = (bool(shares) and all(CHEST_MATERIAL_SHARE[0] <= s <= CHEST_MATERIAL_SHARE[1] for s in shares)
               and cost is not None and CHEST_VALOR_MIN <= entry.get("valor", 0) < cost)
@@ -9705,7 +9998,8 @@ def check_first_run(ctx, level, row, tag, gear, expect):
         told.append(f"{entry.get('name', sid)}: {entry.get('materials', 0)} {level['material']} = "
                     + "/".join(f"{s:.0%}" for s in shares) + f" of the clear's "
                     + "/".join(str(r["wallet"]["materials"]) for r in human if r["end"] == "cleared")
-                    + f", {entry.get('valor', 0)} Valor (its key {keys.get(sid)} costs {cost})")
+                    + f", {entry.get('valor', 0)} Valor (its key {keys.get(sid)}"
+                    + (f", through {root}," if root != keys.get(sid) else "") + f" costs {cost})")
     expect(good and bool(told), f"{tag}: a paying chest gives {CHEST_MATERIAL_SHARE[0]:.0%}-{CHEST_MATERIAL_SHARE[1]:.0%} of "
            f"the first clear's {level['material']} and {CHEST_VALOR_MIN} Valor or more, under its key's price (L2-13): "
            + ("; ".join(told) or "no paying chest"))
@@ -9913,6 +10207,7 @@ def main():
             print_mission(cfg, report)
         if args.level in (None, "forest"):
             print_forest(cfg, forest)
+            print_cave(cfg, forest)
         if args.check:
             failures = []
 
@@ -9941,6 +10236,7 @@ def main():
     print_mission(cfg, report)
     forest = forest_report(cfg)
     print_forest(cfg, forest)
+    print_cave(cfg, forest)
     if args.check:
         sys.exit(0 if check(cfg, fam_rows, ab_rows, threat, bosses, report, forest) else 1)
 

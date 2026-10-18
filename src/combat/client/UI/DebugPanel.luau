@@ -19,6 +19,10 @@
 -- SetAirJump) and "Reset secrets" (the H key). The mission HUD passes `deps.airJump`; without it
 -- neither button is built.
 --
+-- L2 Wave 2 (docs/prompts/l2-w2-contract.md, L2-38): "Flamethrower on/off" (the F key: grant or
+-- remove the caller's fire family, the lever and the family asked of the host when pressed, the
+-- caption from SetFireFamily). The mission HUD passes `deps.fireFamily`; without it, no button.
+--
 -- Geometry matches the hub's DebugPanel: 48 design px buttons (the 44 physical px tap
 -- target at MIN_SCALE) wrapped into two columns. A short landscape viewport makes the body
 -- SCROLL rather than shrink, because a lever that is 27 px tall is a lever no one can hit.
@@ -35,6 +39,9 @@ export type Deps = {
 	-- L2-19: the air jump's ability id and the lever that flips it for the caller now
 	-- ("grantAbility" or "removeAbility"); nil = no Double Jump or Reset secrets buttons.
 	airJump: { id: string, lever: () -> string }?,
+	-- L2-38: the lever ("grantFamily" or "removeFamily") and the family it flips for the caller
+	-- now; nil = no Flamethrower button.
+	fireFamily: { lever: () -> (string, string) }?,
 }
 
 export type DebugPanelHandle = {
@@ -45,6 +52,8 @@ export type DebugPanelHandle = {
 	SetGear: (melee: number, ranged: number) -> (),
 	-- L2-19: whether the caller owns the double jump now (the button's caption).
 	SetAirJump: (owned: boolean) -> (),
+	-- L2-38: whether the caller holds the fire family now (the button's caption).
+	SetFireFamily: (owned: boolean) -> (),
 	-- false = the whole strip, its tab included, is off the screen (the map is open: it is a
 	-- full-screen sheet of the strip's own ZIndex tier, and the tab drew over it). What was open
 	-- is open again when it comes back.
@@ -265,6 +274,14 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 			deps.onLever("resetSecrets", true)
 		end)
 	end
+	local fireFamily = deps.fireFamily
+	local fireButton: TextButton? = nil
+	if fireFamily ~= nil then
+		fireButton = leverButton("Flamethrower (F)", function()
+			local lever, family = fireFamily.lever()
+			deps.onLever(lever, family)
+		end)
+	end
 
 	local handle: DebugPanelHandle = {
 		SetKinds = function(kinds: { string })
@@ -291,6 +308,12 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 			local button = airJumpButton
 			if button ~= nil then
 				button.Text = if owned then "Double Jump: ON (J)" else "Double Jump: off (J)"
+			end
+		end,
+		SetFireFamily = function(owned: boolean)
+			local button = fireButton
+			if button ~= nil then
+				button.Text = if owned then "Flamethrower: ON (F)" else "Flamethrower: off (F)"
 			end
 		end,
 		SetVisible = function(visible: boolean)

@@ -16,6 +16,9 @@ and compares what they answer, value by value:
     Combat.json that lacks any one of the `levels` numbers a run reads, is refused on both;
   * `StageFlow.Validate`'s secrets lines (L2-13), each broken once in a copy of Forest Road's file or
     layout, refused alike.
+  * `StageFlow.Validate`'s react, opens and shortcuts lines (L2-34, L2-36): a copy of Forest Road's
+    layout given a test tunnel (a shortcut and a fire bramble that opens it) is accepted alike, and
+    each line broken once in it is refused alike.
   * `StageFlow.Validate`'s L1b lines: the residents, the spots, which camps lock, the population
     gate and the three new `levels` numbers, each broken once in a copy of the shipped level, its
     layout or Combat.json, refused alike; and (the L1c fix round's data m2) every broken copy of
@@ -353,6 +356,49 @@ L2_REFUSALS = (
 
 def region_cell(layout, cid):
     return next(cell for region in layout["regions"] for cell in region["cells"] if cell["id"] == cid)
+
+
+# L2-34, L2-36: StageFlow.reactProblems' lines. Every case first gives the layout a test tunnel of
+# its own (whatever the shipped layout already has), so the cases hold before and after the cave's
+# data lands; the first case is the tunnel alone, which both sides must accept.
+def with_tunnel(layout):
+    layout.setdefault("shortcuts", []).append(
+        {"id": "testTunnel", "name": "Test Tunnel", "x": 0, "y": 400, "z": 0, "sx": 4, "sy": 4, "sz": 4})
+    layout["blocks"].append({"name": "TestBramble", "look": "bramble", "x": 0, "y": 400, "z": 10, "sx": 4, "sy": 4,
+                             "sz": 1, "react": "fire", "opens": "testTunnel"})
+    return layout["blocks"][-1], layout["shortcuts"][-1]
+
+
+def tunnel_change(change):
+    def apply(f, l, r):
+        bramble, shortcut = with_tunnel(l)
+        change(l, bramble, shortcut)
+    return apply
+
+
+L2W2_ACCEPTED = (
+    ("a test tunnel and its bramble", tunnel_change(lambda l, b, s: None)),
+    ("a bramble that reacts to ice", tunnel_change(lambda l, b, s: b.__setitem__("react", "ice"))),
+    ("a block that opens a shortcut and reacts to nothing", tunnel_change(lambda l, b, s: b.pop("react"))),
+    ("a shortcut id of 32 characters",
+     tunnel_change(lambda l, b, s: (s.__setitem__("id", "s" * 32), b.__setitem__("opens", "s" * 32)))),
+)
+L2W2_REFUSALS = (
+    ("a bramble that reacts to lava", tunnel_change(lambda l, b, s: b.__setitem__("react", "lava"))),
+    ("a react that is a number", tunnel_change(lambda l, b, s: b.__setitem__("react", 5))),
+    ("a reactive block that does not collide", tunnel_change(lambda l, b, s: b.__setitem__("collide", False))),
+    ("opens naming no shortcut", tunnel_change(lambda l, b, s: b.__setitem__("opens", "nowhere"))),
+    ("opens that is a number", tunnel_change(lambda l, b, s: b.__setitem__("opens", 7))),
+    ("shortcuts that are a string", tunnel_change(lambda l, b, s: l.__setitem__("shortcuts", "cave"))),
+    ("a shortcut with no id", tunnel_change(lambda l, b, s: s.pop("id"))),
+    ("a shortcut with an empty id", tunnel_change(lambda l, b, s: s.__setitem__("id", ""))),
+    ("a shortcut id of 33 characters",
+     tunnel_change(lambda l, b, s: (s.__setitem__("id", "s" * 33), b.__setitem__("opens", "s" * 33)))),
+    ("a shortcut id used twice", tunnel_change(lambda l, b, s: l["shortcuts"].append(copy.deepcopy(s)))),
+    ("a shortcut whose y is a string", tunnel_change(lambda l, b, s: s.__setitem__("y", "4"))),
+    ("a shortcut with no sz", tunnel_change(lambda l, b, s: s.pop("sz"))),
+    ("a shortcut that is a string", tunnel_change(lambda l, b, s: l["shortcuts"].append("cave"))),
+)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1855,6 +1901,8 @@ def main():
     # The L1c fix round's data m2: the refusal cases a copy is broken for (all but "as shipped"). Two
     # sides that agree prove nothing about a rule removed from both: each of these must be refused.
     must_refuse = set()
+    # L2 W2: cases both sides must ACCEPT (a refusal of a sound tunnel on both sides is a drift too).
+    must_accept = set()
     data = {"combat": combat, "expeditions": expeditions, "proving": cfg, "levels": files, "missions": missions,
             "layouts": raw_layouts, "ranks": ranks, "planDifficulties": plan_difficulties, "pointCases": [],
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
@@ -2064,6 +2112,23 @@ def main():
                                                                               ranks, crowd_max))
                     expected[case] = ("L2: Validate's secrets lines refuse alike", f"{name}, {label}", refused)
                     must_refuse.add(case)
+            # L2-34, L2-36: the react, opens and shortcuts lines, on a test tunnel of their own.
+            if raw_layouts[file["layout"]].get("blocks"):
+                for cases, verdict in ((L2W2_ACCEPTED, False), (L2W2_REFUSALS, True)):
+                    for label, change in cases:
+                        changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
+                        change(changed, raw, short_rules)
+                        case = f"refusal.{number}.{len(data['refusalCases'])}"
+                        data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
+                        level_changed = resolved(changed)
+                        refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules,
+                                                                                  crowd_kinds, ranks, crowd_max))
+                        expected[case] = ("L2 W2: Validate's react, opens and shortcuts lines refuse alike",
+                                          f"{name}, {label}", refused)
+                        if verdict:
+                            must_refuse.add(case)
+                        else:
+                            must_accept.add(case)
     for target in sorted({key[0] for key in bursts}):
         for count in (0, -1):
             bursts[(target, count, 1.0)] = None
@@ -2148,9 +2213,13 @@ def main():
         if kind.startswith("StageFlow.Validate"):
             report.compare(kind, label, luau_answer if isinstance(luau_answer, dict) else list(luau_answer or []), python)
             continue
-        if kind.startswith("ruling 6") or kind.startswith("L1b: Validate") or kind.startswith("L2: Validate"):
+        if (kind.startswith("ruling 6") or kind.startswith("L1b: Validate") or kind.startswith("L2: Validate")
+                or kind.startswith("L2 W2: Validate")):
             if key in must_refuse and not python and not luau_answer:
                 report.differ(kind, f"{label}: accepted on both sides (the rule it breaks is gone from both)")
+                continue
+            if key in must_accept and python and luau_answer:
+                report.differ(kind, f"{label}: refused on both sides (a sound tunnel must be playable)")
                 continue
             if isinstance(luau_answer, dict) and "threw" in luau_answer:
                 report.compare(kind, label, luau_answer, python)

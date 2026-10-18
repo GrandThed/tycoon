@@ -11,6 +11,12 @@
 --
 -- It requires neither WaveService nor DebugService: the shop's gate is a hook (SetShopGate), so
 -- both of those may require this module without a cycle.
+--
+-- L2 W2 (docs/prompts/l2-w2-contract.md, L2-30 to L2-32, L2-36, L2-38): it also answers
+-- RequestSetFamily (Unlocks.FamilyVerdict, then WeaponService holds the family for the session:
+-- no save, L2-33), records found shortcuts, and keys a secret on an element an owned family
+-- carries. WeaponService requires none of the place's services that require this one, so the
+-- new require adds no cycle.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -18,14 +24,17 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local SecretFlow = require(script.Parent:WaitForChild("SecretFlow"))
+local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
 
-type Reason = "unavailable" | "invalid" | "owned" | "busy" | "insufficientFunds"
+type Reason = "unavailable" | "invalid" | "owned" | "busy" | "insufficientFunds" | "locked"
+type Action = "buyAbility" | "setFamily"
 
 local state = {
 	mode = "mission" :: Types.CombatMode,
@@ -50,18 +59,36 @@ local function reasonOf(verdict: string): Reason
 		return "insufficientFunds"
 	elseif verdict == "invalid" then
 		return "invalid"
+	elseif verdict == "locked" then
+		return "locked"
 	end
 	return "unavailable"
 end
 
-local function answer(player: Player, id: string, verdict: string?): ()
+local function answer(player: Player, id: string, verdict: string?, action: Action?): ()
 	local result: Types.ActionResult = {
-		action = "buyAbility",
+		action = action or "buyAbility",
 		slotId = id,
 		ok = verdict == nil,
 		reason = if verdict ~= nil then reasonOf(verdict) else nil,
 	}
 	RemoteService.FireClient(player, "ActionResult", result)
+end
+
+-- The weapon families and the starters (L2-30), from the weapons' config as Tuning reads it.
+local function weapons(): { [string]: Types.RangeWeaponDef }?
+	local config: any = Tuning.Get()
+	return if type(config.weapons) == "table" then config.weapons else nil
+end
+
+local function starters(): { [string]: boolean }
+	local config: any = Tuning.Get()
+	return Unlocks.Starters(config.loadout)
+end
+
+-- L2-31: the key a secret needs, held by this profile's combat (abilities, then elements).
+local function holds(combat: Types.CombatProfile, needs: string): boolean
+	return Unlocks.HoldsKey(combat, Catalog.GetExpeditionsConfig(), weapons(), starters(), needs)
 end
 
 -- Every configured ability's attribute on this player, from the profile (in the range: all on,
@@ -143,11 +170,44 @@ function UnlockService.OnBuyAbility(player: Player, id: string): ()
 	ArenaService.SendSnapshot(player)
 end
 
--- True when the player's profile holds the key a secret needs (never the attribute).
+-- True when the player's profile holds the key a secret needs (never the attribute): a sold
+-- ability that is owned, then an element an owned family carries (L2-31). So `fire` is held once
+-- the lookout has paid the Flamethrower, whatever the player carries in this run.
 function UnlockService.HoldsKey(player: Player, needs: string): boolean
 	local profile = DataService.GetState(player)
-	return profile ~= nil
-		and Unlocks.HasKey(profile.combat.abilities, Catalog.GetExpeditionsConfig(), needs)
+	return profile ~= nil and holds(profile.combat, needs)
+end
+
+-- RequestSetFamily (L2-32), in a mission: the verdict in order (unavailable, invalid, locked,
+-- busy), then WeaponService holds the variant and the family; its TuneState carries the loadout
+-- back to the client. Answered with an ActionResult either way. The range has its own commands.
+function UnlockService.OnSetFamily(
+	player: Player,
+	slot: string,
+	family: string,
+	variant: string
+): ()
+	if state.mode == "range" then
+		return
+	end
+	local profile = if state.players[player] then DataService.GetState(player) else nil
+	local gate = state.gate
+	local verdict = Unlocks.FamilyVerdict(
+		profile,
+		weapons(),
+		starters(),
+		slot,
+		family,
+		variant,
+		gate ~= nil and gate(player)
+	)
+	if verdict == nil then
+		-- The variant first, so the family's own TuneState (the last one sent) carries both.
+		local held = WeaponService.SetVariant(player, family, variant)
+			and WeaponService.SetFamily(player, family)
+		verdict = if held then nil else "unavailable"
+	end
+	answer(player, family, verdict, "setFamily")
 end
 
 -- L2-12: a standing fighter reached `site` in the run on `levelId`. The key is read from the
@@ -165,8 +225,75 @@ function UnlockService.OpenSecret(
 		return { verdict = "nothing", valor = 0, materials = 0, family = nil }
 	end
 	local combat = profile.combat
-	local hasKey = Unlocks.HasKey(combat.abilities, Catalog.GetExpeditionsConfig(), site.needs)
-	return SecretFlow.Open(combat, levelId, site, hasKey, material)
+	return SecretFlow.Open(combat, levelId, site, holds(combat, site.needs), material)
+end
+
+-- L2-36: a standing fighter is inside the shortcut `id` of `levelId`. Recorded in their own
+-- profile; true when it is new (the caller shows the card). False without a profile.
+function UnlockService.FindShortcut(player: Player, levelId: string, id: string): boolean
+	local profile = DataService.GetState(player)
+	if profile == nil then
+		return false
+	end
+	local new = SecretFlow.RecordShortcut(profile.combat, levelId, id)
+	if new then
+		ArenaService.SendSnapshot(player)
+	end
+	return new
+end
+
+-- L2-36: the shortcuts of `levelId` this player has found, a set of its own (the leader's opens
+-- the level a run builds). Empty without a profile.
+function UnlockService.FoundShortcuts(player: Player, levelId: string): { [string]: boolean }
+	local profile = DataService.GetState(player)
+	return SecretFlow.FoundShortcuts(if profile ~= nil then profile.combat else nil, levelId)
+end
+
+-- The `grantFamily` lever (L2-38): written to the profile's families, the wallet resent. False
+-- when the id is no family, is a starter (owned by everyone, never written: L2-30) or the player
+-- has no profile.
+function UnlockService.GrantFamily(player: Player, id: string): boolean
+	local profile = DataService.GetState(player)
+	local roster = weapons()
+	if profile == nil or roster == nil or roster[id] == nil or starters()[id] then
+		return false
+	end
+	SecretFlow.FamiliesOf(profile.combat)[id] = true
+	ArenaService.SendSnapshot(player)
+	return true
+end
+
+-- The `removeFamily` lever (L2-38): cleared from the profile's families; a slot holding it goes
+-- back to its starter. False for a starter, an id that is no family, or no profile.
+function UnlockService.RemoveFamily(player: Player, id: string): boolean
+	local profile = DataService.GetState(player)
+	local roster = weapons()
+	local def = if roster ~= nil then roster[id] else nil
+	if profile == nil or def == nil or starters()[id] then
+		return false
+	end
+	SecretFlow.FamiliesOf(profile.combat)[id] = nil
+	local loadout = WeaponService.LoadoutOf(player)
+	local held = if loadout == nil
+		then nil
+		elseif def.slot == "melee" then loadout.melee
+		else loadout.ranged
+	if held == id then
+		local config: any = Tuning.Get()
+		local starter = if type(config.loadout) == "table" then config.loadout[def.slot] else nil
+		if type(starter) == "string" then
+			WeaponService.SetFamily(player, starter)
+		end
+	end
+	ArenaService.SendSnapshot(player)
+	return true
+end
+
+-- A family's display name, for the levers' notices (the id when there is no such family).
+function UnlockService.FamilyName(id: string): string
+	local roster = weapons()
+	local def = if roster ~= nil then roster[id] else nil
+	return if def ~= nil and type(def.name) == "string" then def.name else id
 end
 
 -- The `grantAbility` lever: owned, its attribute on, the wallet resent. False when the id is not

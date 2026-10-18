@@ -1557,8 +1557,8 @@ WORLD_MUTATIONS = {
     # caught by: a lobby file that leaves camps, secrets and route out is its blocks
     "world: Pieces builds the ground as the layout writes it": (
         GEOMETRY,
-        "for index, box in LevelGeometry.BlockBoxes(layout, depth) do",
-        "for index, box in LevelGeometry.BlockBoxes(layout, nil) do",
+        "for index, box in LevelGeometry.BlockBoxes(measured, depth) do",
+        "for index, box in LevelGeometry.BlockBoxes(measured, nil) do",
     ),
     # caught by: a camp and no floor depth (none, 0, under 0, not a number, not finite): refused
     "world: a camp is built with no floor depth": (
@@ -4657,6 +4657,163 @@ L2_FIX2_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L2_FIX2_MUTATIONS)
+
+# L2 W2, fire, the Flamethrower, the cave and the shortcut (docs/prompts/l2-w2-contract.md), from the
+# luau-engineer: Unlocks' families and element keys (L2-30 to L2-32), the pure WorldReact (L2-34),
+# SecretFlow's shortcuts (L2-36), Pieces' open set, Validate's react / opens / shortcuts lines and
+# the element as a structural Tuning path. Proved by tests_l2w2.luau.
+WORLD_REACT = "src/shared/WorldReact.luau"
+FILES.append(WORLD_REACT)
+L2W2_MUTATIONS = {
+    # Unlocks (L2-30 to L2-32).
+    "l2w2: the variant cap drifts": (UNLOCKS, "local MAX_VARIANT_LENGTH = 8", "local MAX_VARIANT_LENGTH = 9"),
+    "l2w2: a starter is not owned": (
+        UNLOCKS,
+        "return starters[id] == true or (families ~= nil and families[id] == true)",
+        "return families ~= nil and families[id] == true",
+    ),
+    "l2w2: any written value owns a family": (
+        UNLOCKS,
+        "(families ~= nil and families[id] == true)",
+        "(families ~= nil and families[id] ~= nil)",
+    ),
+    "l2w2: the ranged starter is dropped": (
+        UNLOCKS,
+        "for _, family in { loadout.melee, loadout.ranged } do",
+        "for _, family in { loadout.melee } do",
+    ),
+    "l2w2: an empty starter name counts": (UNLOCKS, 'if type(family) == "string" and family ~= "" then', 'if type(family) == "string" then'),
+    "l2w2: ElementOf takes any word": (
+        UNLOCKS,
+        'return if type(element) == "string" then ELEMENTS[element] else nil',
+        'return if type(element) == "string" then element else nil',
+    ),
+    "l2w2: HasElement ignores ownership": (UNLOCKS, "\t\t\tand Unlocks.OwnsFamily(families, family, starters)\n", ""),
+    "l2w2: HoldsKey asks no element": (
+        UNLOCKS,
+        "\n\t\tor Unlocks.HasElement(combat.families, weapons, starters, needs)",
+        "",
+    ),
+    "l2w2: HoldsKey asks no ability": (
+        UNLOCKS,
+        "return Unlocks.HasKey(combat.abilities, config, needs)\n",
+        "return false\n",
+    ),
+    "l2w2: FamilyVerdict, no profile reads as invalid": (UNLOCKS, 'verdict = "unavailable"', 'verdict = "invalid"'),
+    "l2w2: FamilyVerdict, the slot is not checked": (UNLOCKS, "\t\tor def.slot ~= slot\n", ""),
+    "l2w2: FamilyVerdict, the variant is not checked": (UNLOCKS, "\t\tor def.variants[variant] == nil\n", ""),
+    "l2w2: FamilyVerdict, ownership is not checked": (
+        UNLOCKS,
+        "elseif not Unlocks.OwnsFamily(state.combat.families, family, starters) then",
+        "elseif false then",
+    ),
+    "l2w2: FamilyVerdict, the gate is not checked": (UNLOCKS, "elseif not gateOpen then", "elseif false then"),
+    # WorldReact (L2-34, L2-35).
+    "l2w2: a cone sweeps a segment": (
+        WORLD_REACT,
+        'if shape ~= "capsule" and shape ~= "ray" then',
+        'if shape ~= "capsule" and shape ~= "ray" and shape ~= "cone" then',
+    ),
+    "l2w2: a ray ignores where it stopped": (
+        WORLD_REACT,
+        'local finish = if shape == "ray" then fx.endPoint else nil',
+        "local finish = nil",
+    ),
+    "l2w2: the direction is not made a unit": (
+        WORLD_REACT,
+        "finish = origin + direction / direction.Magnitude * size",
+        "finish = origin + direction * size",
+    ),
+    "l2w2: a negative size sweeps": (WORLD_REACT, "if not (size >= 0) then", "if false then"),
+    "l2w2: the width is not grown": (
+        WORLD_REACT,
+        "local grow = length(fx.width) / 2 + length(pad)",
+        "local grow = length(pad)",
+    ),
+    "l2w2: the pad is not grown": (
+        WORLD_REACT,
+        "local grow = length(fx.width) / 2 + length(pad)",
+        "local grow = length(fx.width) / 2",
+    ),
+    "l2w2: the whole width is grown": (
+        WORLD_REACT,
+        "local grow = length(fx.width) / 2 + length(pad)",
+        "local grow = length(fx.width) + length(pad)",
+    ),
+    "l2w2: a negative length grows": (
+        WORLD_REACT,
+        "return if finite(value) and (value :: number) >= 0 then value :: number else 0",
+        "return if finite(value) then value :: number else 0",
+    ),
+    "l2w2: grazing a face is no touch": (WORLD_REACT, "\t\t\tif low > high then\n", "\t\t\tif low >= high then\n"),
+    "l2w2: an axis with no motion is not judged": (WORLD_REACT, "if a < min or a > max then", "if false then"),
+    "l2w2: a block with no size is met": (WORLD_REACT, "\t\t\tand box.sx > 0\n", ""),
+    "l2w2: a block that is not finite is met": (WORLD_REACT, "\t\t\tfinite(box.x)\n", "\t\t\ttrue\n"),
+    "l2w2: fire takes iceHits": (WORLD_REACT, "then rules.fireHits", "then rules.iceHits"),
+    "l2w2: a fractional count reacts": (WORLD_REACT, "hits >= 1 and hits % 1 == 0 then", "hits >= 1 then"),
+    "l2w2: a count of 0 reacts": (WORLD_REACT, "hits >= 1 and hits % 1 == 0 then", "hits >= 0 and hits % 1 == 0 then"),
+    "l2w2: the pad is a constant": (
+        WORLD_REACT,
+        "return length(if rules ~= nil then rules.pad else nil)",
+        "return 0.5",
+    ),
+    "l2w2: the last strike is not enough": (WORLD_REACT, "return now, now >= need", "return now, now > need"),
+    "l2w2: a need of 0 still heats": (
+        WORLD_REACT,
+        "if not (finite(need) and need >= 1 and need % 1 == 0) then",
+        "if false then",
+    ),
+    "l2w2: the share is not held to 1": (WORLD_REACT, "math.clamp(heat / need, 0, 1)", "heat / need"),
+    # SecretFlow's shortcuts (L2-36).
+    "l2w2: a shortcut with a NaN x is kept": (SECRET_FLOW, "\t\t\t\tfinite(entry.x)\n", "\t\t\t\ttrue\n"),
+    "l2w2: a shortcut with a negative size is kept": (SECRET_FLOW, "\t\t\t\tand entry.sx >= 0\n", ""),
+    "l2w2: a nameless shortcut has no name": (SECRET_FLOW, "\t\t\t\telse entry.id,\n", '\t\t\t\telse "",\n'),
+    "l2w2: a shortcut's X faces are open": (SECRET_FLOW, "math.abs(root.X - box.x) <= box.sx / 2", "math.abs(root.X - box.x) < box.sx / 2"),
+    "l2w2: a shortcut has no height": (SECRET_FLOW, "\t\tand math.abs(root.Y - box.y) <= box.sy / 2\n", ""),
+    "l2w2: a shortcut's Z faces are open": (SECRET_FLOW, "math.abs(root.Z - box.z) <= box.sz / 2", "math.abs(root.Z - box.z) < box.sz / 2"),
+    "l2w2: every find is new": (SECRET_FLOW, "\tif found[id] == true then\n\t\treturn false", "\tif false then\n\t\treturn false"),
+    "l2w2: a find is not written": (SECRET_FLOW, "\tfound[id] = true\n\treturn true", "\treturn true"),
+    "l2w2: a level's shortcut map is replaced": (SECRET_FLOW, "local mine = shortcutsByLevel[levelId]", "local mine = nil"),
+    "l2w2: FoundShortcuts counts any value": (SECRET_FLOW, "\t\t\tif found == true then\n", "\t\t\tif found ~= nil then\n"),
+    "l2w2: FoundShortcuts hands out the profile's own map": (
+        SECRET_FLOW,
+        "\treturn open\nend",
+        '\treturn if type(own) == "table" then own else open\nend',
+    ),
+    # Pieces' open set (L2-36) and its reactive pieces (L2-34).
+    "l2w2: a found shortcut's blocks are still built": (
+        GEOMETRY,
+        "if opens == nil or open[opens] ~= true then",
+        "if true then",
+    ),
+    "l2w2: every block that opens anything is left out": (
+        GEOMETRY,
+        "if opens == nil or open[opens] ~= true then",
+        "if opens == nil then",
+    ),
+    "l2w2: the layout itself loses the block": (GEOMETRY, "\t\tmeasured = table.clone(layout)\n", "\t\tmeasured = layout\n"),
+    "l2w2: a piece drops its react": (GEOMETRY, "\t\t\treact = block.react,\n", ""),
+    "l2w2: a piece drops its opens": (GEOMETRY, "\t\t\topens = block.opens,\n", ""),
+    # Validate's react, opens and shortcuts lines (L2-34, L2-36).
+    "l2w2: any react word is accepted": (FLOW, 'if react ~= "fire" and react ~= "ice" then', "if false then"),
+    "l2w2: a reactive block may not collide": (FLOW, "\t\t\tif block.collide == false then\n", "\t\t\tif false then\n"),
+    "l2w2: opens is not checked": (
+        FLOW,
+        'if opens ~= nil and (type(opens) ~= "string" or not ids[opens]) then',
+        "if false then",
+    ),
+    "l2w2: a shortcut id may repeat": (FLOW, "\t\tif ids[id] then\n", "\t\tif false then\n"),
+    "l2w2: a shortcut's numbers are not checked": (FLOW, "if not isFinite(entry[key]) then", "if false then"),
+    "l2w2: a long shortcut id is accepted": (FLOW, "#id > Unlocks.MAX_ID_LENGTH then", "#id > 40 then"),
+    "l2w2: shortcuts that are no list are accepted": (
+        FLOW,
+        'if shortcuts ~= nil and type(shortcuts) ~= "table" then',
+        "if false then",
+    ),
+    # The element is structural (L2-29).
+    "l2w2: the element tunes": (TUNING, '\t"^weapons%.[^.]+%.element$",\n', ""),
+}
+MUTATIONS.update(L2W2_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

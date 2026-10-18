@@ -251,6 +251,8 @@ RangeService.Configure(mode == "range")
 ArenaService.SetSnapshotSender(sendSnapshot)
 -- L2: a purchase is allowed only where leaving is (the lobby, the summary, waiting), never mid-fight.
 UnlockService.SetShopGate(WaveService.MayLeave)
+-- L2 W2: every resolved strike reaches the level, so a fire weapon can burn a bramble block.
+WeaponService.OnStrikeResolved(LevelService.React)
 
 -- ReturnService needs the join sequence to re-admit a player whose teleport home failed, and
 -- only Main has it; handing it over as a hook keeps the service free of Main's requires.
@@ -426,6 +428,17 @@ RemoteService.SetHandler("RequestBuyAbility", function(player: Player, abilityId
 	end
 	UnlockService.OnBuyAbility(player, abilityId)
 end)
+
+-- L2 W2: choosing a weapon family in the lobby Armory (owned families only, never mid-fight).
+RemoteService.SetHandler(
+	"RequestSetFamily",
+	function(player: Player, slot: string, family: string, variant: string)
+		if RangeService.IsActive() then
+			return
+		end
+		UnlockService.OnSetFamily(player, slot, family, variant)
+	end
+)
 
 -- Studio levers, the remote half (the attribute half is DebugService's own 1 Hz poll). The
 -- handler itself refuses everything outside Studio.

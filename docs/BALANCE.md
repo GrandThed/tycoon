@@ -5618,3 +5618,146 @@ simulator case in all):
 | control: the chest 1.5 further back (z −60.5; was "2 further back, z −61") | L2-18d | green |
 | the chest 2 further back (z −61): the trigger over the void behind the ledge | L2-18d | red |
 | the planner may jump in the air (`can_jump` always true) | sim_range, one jump (L2-20) | red |
+
+## L2 W2: fire, the Flamethrower, the cave and the shortcut (2026-10-18)
+
+Contract: `docs/prompts/l2-w2-contract.md` (L2-29 to L2-47, its §10: §5 Option 1, the Pickets bypass, and the AB
+bend closed now). Gear: Normal 2 / 2, Hard 4 / 4, Brutal 6 / 6, seeds 11 / 23 / 37; `py -3.12 tools/sim_range.py
+--check` on the gate's 64-bit Python 3.12 (PASS, 491 lines, 11.8 min); `py tools/check_levels.py` PASS;
+`py -3.12 tools/sim_combat.py --check` 23 of 23.
+
+### L2 W2: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json weapons.flamethrower` | — | ranged, era 1, `element` "fire", one variant: capsule **range 20, width 7**, pad 0.8, damage 5, rate 10, continuous | L2-29. The contract's 16 × 5 measured crowd6 **159** against the target 280 (the stream reached one row of the 6-stud grid); 20 × 7 gives 268–277, inside FAMILY_TOLERANCE. Range was preferred to width so the capsule stays a stream (a 9-wide capsule from the muzzle hits bodies beside the player like a sweep). Single 50 (= Beam A) |
+| `weapons.flamethrower.ability` (Dragon's Breath) | contract: damage 30, killRefund 0.3 | **damage 36, killRefundSeconds 0.5**; count 4, tick 0.15, range 20, arc 50, cooldown 10, floor 4 | At 30 the burst was 833 / 277 = 3.0 s, on the band's floor; 36 gives 3.7 s. At refund 0.3 the busy-crowd cooldown was 71% of base (band 40–60%); 0.5 gives 53%. 36 stays under `heavyHit` 40: no flame hit opens a plate (the slam does) |
+| `Expeditions.json looks.bramble` | — | LeafyGrass (96, 132, 38) | A colour look (spread 94); `check_levels` holds it with the colour looks |
+| `Combat.json levels.react` | — | `{ fireHits 6, pad 0.5 }` | L2-34 as written (0.6 s of flame burns a bramble) |
+| `Combat.json debug` | — | `grantFamilyAttribute` "DebugGrantFamily", `removeFamilyAttribute` "DebugRemoveFamily" | L2-38 |
+| `1_ForestRoad.json secrets.cache` | a name only | **4 Valor, 60 Timber** | §7 as written: 60 = 28% of a first clear's 211 (band 15–30%; 27% of the level's Normal stock of 220), 4 Valor under Double Jump's 10, the price its chain starts from |
+| `ForestRoad.json` | the cache on CacheSpur | the cave (below); CacheSpur and CacheSignPad gone (blocks and region cells); `shortcuts` [cave], `shortcutRoute`; **BendWall** | §5 Option 1, L2-47 |
+| `check_levels.py` | — | headroom rule, `exposed`, R8's sight, (e) chain, (f) cave, the bend rule, `fielded_lifts` = every family, `levels.react` and the two levers | below |
+| `sim_range.py` | — | `flamethrower` target, a capsule fires from 8 studs (as cones), `dragonBreath` = Slug Burst, L2-39, the pair player, the tunnel runs, open-tunnel sniper courses, the Validate mirror of `react` / `opens` / `shortcuts`, `Secret_cache` out of the known limits | below |
+
+### L2 W2: the cave (grey blocks)
+
+The mouth (CaveMouth, floor 0, x −340..−328) opens on Road4's north edge under the lookout; one step of +8 at
+z −86 onto the long leg (CaveTunnel, floor 8, interior z −98..−86, x −340..−116), the alcove (CaveAlcove,
+x −218..−206, z −110..−98) with the Raiders' Cache (6 × 4 × 6 at (−212, 10, −104)), the exit leg (CaveExitLeg,
+x −116..−104) south to CaveExit, which turns east and opens on RoadAB5's north edge at x −86..−74, by Main
+Camp's west gate. Every leg is 12 wide; the roof's foot is 22 everywhere (14 over the long leg, 22 over the
+mouth so the step has headroom). Walls and roof are `wall` blocks: **84** within a stray jump (49.3 with the
+walk-off grace) of the lookout's ledge and its chest (top 38), **64** beyond; every one is at least 46 over
+every surface within 49.3 (the contract's 43 + 3). The alcove sits 2 studs further east than first drawn so its
+64-high walls stay 51 off the ledge. Brambles (`react` fire, `opens` cave) fill both mouths flush with the road,
+half a stud into the walls. Sign: "RAIDERS' CACHE - needs FIRE" on Road4 at (−322, 0, −49), beside the mouth.
+The trigger box (shortcut `cave`) stands in the exit at (−80, 14, −59). Not a region cell: raiders never enter.
+Parts: **112** (maxParts 600).
+
+| Measure | Value |
+|---|---|
+| Main route | **1,079 studs** (unchanged; band 900–1,100) |
+| Shortcut route (Road4 → mouth → step → long leg → exit leg → exit → RoadAB5) | **350 studs**, in place of **342** of the main route, camp A skipped; 1 climb (+8) |
+| Sneak rule along it | tightest Normal B.fire1, **+14.0** past its sight (16); Pickets fireN 60 away |
+| Sealed with the brambles standing | 891 floor points of the five cave floors and every point of the cache's trigger: no way in at any width |
+| The cache's trigger | met from CaveAlcove (root 3 over the chest's foot) and the chest's top (7) only |
+| The AB bend (L2-47) | BendWall x −122..−116, z −82..−8, top 64, meets the ridge: the most any hop between two walked road blocks now saves is **49** studs (a corner; rule ceiling 60; the open bend saved about 115) |
+
+### L2 W2: the Flamethrower (range, tier 1)
+
+| Row | Value |
+|---|---|
+| Single / crowd6 / crowd3 | **50 / 268 / 1,025** (targets 50 / 280, ±15%) |
+| Dragon's Breath | burst **3.7 s** of crowd DPS (3–5), busy 0.6, net 3.1, busy-crowd cooldown **5.3 s = 53%**, floor 4 s = 40% |
+| Colossus, Broadsword (reacting) | 75.4–77.2 s |
+| Colossus, Flamethrower / with Dragon's Breath | **110.2–110.4 s / 86.0–86.7 s**, 0 hits taken |
+| Warlord, Broadsword | 97.3–98.1 s |
+| Warlord, Flamethrower / with Dragon's Breath | **126.6–127.1 s / 111.8 s**, 0 hits; guard down 33.8 s, plate broken at 51.4 s by **11 ground slams** (plate phase 17.6 s, 42 studs) |
+
+L2-39 is a gate now: an elemental family's fastest seed is never faster than the Broadsword's slowest (margins
++11% Colossus with the ability, +14% Warlord), within RANGED_KILL_SECONDS 150, no hit landing.
+
+### L2 W2: Forest Road with the Flamethrower (Normal 2 / 2)
+
+The simulator plays one weapon per run, so a **pair player** was added: he carries the melee and a ranged family
+and fights each swing with the one that reaches (the melee within its reach, else the ranged; no switch time,
+the most a pair can earn); he closes on a boss to his melee's reach.
+
+| Run | Clear (min) | Cash a minute | Colossus in the run |
+|---|---|---|---|
+| Broadsword alone (the band's reacting player) | 5.26 / 4.69 / 5.04 | 26,412 | 80.3 / 76.0 / 77.4 s |
+| Pair: Broadsword + Longbow (today's loadout) | 4.20 / 4.32 / 4.32 | 30,688 | 77.9 / 75.6 / 77.8 s |
+| Pair: Broadsword + Flamethrower | **4.05 / 4.24 / 4.17**, 0 downs | **31,663 = ×1.03 the Longbow pair** (×1.20 the Broadsword alone) | **74.4 / 73.6 / 75.3 s** (×0.96) |
+| Flamethrower alone, the Pickets only | A cleared 29.4 / 30.6 / 29.9 s (the Broadsword: 35.8 / 37.3 / 38.8) | — | — |
+
+**Two bands moved from the contract (the lead's to confirm).** (1) The cash yardstick is the Longbow pair, not
+the melee-only run: carrying any ranged weapon speeds this player up by about 16% (the Longbow pair is ×1.16 the
+Broadsword alone), so against the melee-only run the gate measured "a second weapon", not the Flamethrower.
+Against the same player with today's loadout the Flamethrower adds 3%. (2) The clear band is L2 W1's first-run
+band, **4.0–5.75 min** (not 4.5): the pair clears in about 4.2 min with either ranged weapon. The Flamethrower
+alone clears the Pickets faster than the Broadsword (the stream reaches the slingers) but cannot open a plate, so
+a flame-only player stalls in Main Camp: information, not a band.
+
+### L2 W2: the shortcut run (the tunnel found)
+
+| | Normal 2 / 2 | Hard 4 / 4 |
+|---|---|---|
+| Full run, reacting player | 5.26 / 4.69 / 5.04 min, 131,410–132,110 cash, 211 Timber | 5.11 / 5.33 / 5.20 min, 282,400–285,020 cash, 454 Timber |
+| Tunnel, reacting player | **4.34 / 4.29 / 4.52 min** (−37 s on average), 124,040 cash (−5.6%), 201 Timber | **4.95 / 4.83 / 4.72 min** (−23 s), 256,440–258,440 cash (−9.6%), 414 Timber |
+| Tunnel, a human's reaction | 4.02 / 4.17 / 4.31 min, 0 downs | 4.55 / 4.35 / 4.29 min, 0 downs |
+| Cash a minute, tunnel / full | **×1.07** (gate ≤ ×1.15) | **×0.98** |
+
+The saving is larger on Normal (37 s; the contract expected about 25) and smaller on Hard (23 s; expected
+30–35). Camp A's residents are given up (about 7,400 cash and 10 Timber on Normal, 26,000 and 40 on Hard).
+
+### L2 W2: R8, the sniper spots
+
+`standable_points` counts a roofed top when a body has headroom (6) over it, and R8 now keeps a spot only where
+a bow's line in plan reaches a region cell (walls and brambles that rise from under both feet to over both heads
+stop it; a roof does not). Closed variant (the brambles standing): the pinned list less **Secret_cache**; nothing
+in the cave is a spot. **Open variant (a leader who found the tunnel): CaveMouth and CaveExit join.** Any open
+mouth onto the region leaves a floor that sees the road and that no rusher reaches (a body in a corridor past a
+corner always sees round it, so no bend can remove this); the exit's bend keeps every other cave floor clean (the
+exit block runs 9 studs up the exit leg to hold the deepest point that sees out, z −73.5). Both are rated, Normal
+and Hard, and earn far less than fighting:
+
+| Spot (tunnel open) | Normal cash / Timber a minute (mission 25,104–28,041 / 40–45) | Hard at 2 / 2 (mission 18,614–20,512 / 27–30) |
+|---|---|---|
+| CaveMouth | 1,436 / 7,181 / 958; 0–9.6 | 0 / **19,151** / 0; 0–28.7 (seed 23: −6.6% cash, −5.6% Timber, the thinnest) |
+| CaveExit | 2,825 / 2,825 / 565; 0–5.6 | 0 / 0 / 0 |
+
+`SNIPER_KNOWN_LIMIT_L4.normal` is now LookoutLedge and Secret_lookout. The two open-variant spots need the lead's
+OK (pinned in `EXPECTED.sniperSpotsOpen`).
+
+### L2 W2: `check_levels_mutants.py`, new and changed cases
+
+| Case | Rule | Expected |
+|---|---|---|
+| a 1-stud gap beside the west bramble | (f) sealed | red |
+| control: the bramble flush with the wall's face | (f) sealed | green |
+| a 0.2-stud slit under the east bramble | (f) sealed | red |
+| the long leg's roof 3 short of the alcove wall | (f) sealed | red |
+| the ridge 60 high by the ledge | (f) unclimbable ridge | red |
+| control: that wall 81 (43 over the lookout chest's 38) | (f) unclimbable ridge | green |
+| the alcove's roof down to 13 (no headroom) | (a) the cache | red |
+| the long leg 11 wide | (f) shortcut route | red |
+| the step 11 high | (f) shortcut route | red |
+| the cave 52 south (14 from fireN's fire) | sneak rule on the shortcut | red |
+| control: the cave 30 south | sneak rule on the shortcut | green |
+| the exit without its turn | R8, open | red (CaveExitLeg, CaveTunnel join) |
+| no sight rule (W1's R8) | R8, closed | red |
+| the cache pays 10 Valor / control 9 | (e) | red / green |
+| the cache pays 70 Timber (32%) | (e) | red |
+| the lookout pays nothing; the Flamethrower carries no element | (e) chain | red; red |
+| control: the lookout pays 2 Valor and the Flamethrower only | (e) chain | green |
+| a bramble opens no shortcut; reacts to water; does not collide; the shortcut id twice | Validate | red ×4 |
+| levels.react.fireHits 0; grantFamilyAttribute named DebugGrantAbility; bramble grey | config | red ×3 |
+| the bend wall removed; only between the roads (a hop round its end) | L2-47 | red; red |
+| control: the bend wall 4 short of the ridge (the way round is 58) | L2-47 | green |
+| L2-18c: today's Leap Smash; with the Greataxe in the loadout; control: the floor model | (c), every family fielded | red; red; green |
+| the cache's chest raised 8 off its alcove floor | (a) the cache | red |
+| s1: the centre rule at secretReach 2.5; secretReach 0.9 (now judged by the cave's (a): a root on the alcove floor) | (a) the cache | red; red |
+| s1 control: the centre rule at secretReach 5 (was red on the 12-wide cache; the 6-wide chest opens from 4 off its centre) | (a) the cache | green |
+
+The full driver: 108 data cases, the 4 stage-mirror cases and the 1 simulator case, all as expected (35 min).

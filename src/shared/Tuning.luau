@@ -41,7 +41,8 @@ local SLOTS = { "melee", "ranged" }
 -- A family's name, slot and era describe the roster, not a feel to try: tuning them would move a
 -- family between slots under a live loadout, so they are not tunable at all. P3: an ability's id
 -- picks its mechanic in AbilityService and its name labels it, and a held beam's `continuous`
--- decides how every client draws it, so those are roster too.
+-- decides how every client draws it, so those are roster too. L2-29: a family's element is a key
+-- to the world (what it burns, which secrets it opens), so it is roster as well.
 local STRUCTURAL_PATHS = {
 	"^weapons%.[^.]+%.name$",
 	"^weapons%.[^.]+%.slot$",
@@ -49,6 +50,7 @@ local STRUCTURAL_PATHS = {
 	"^weapons%.[^.]+%.ability%.id$",
 	"^weapons%.[^.]+%.ability%.name$",
 	"^weapons%.[^.]+%.variants%.[^.]+%.continuous$",
+	"^weapons%.[^.]+%.element$",
 }
 -- Ability fields that must stay positive: a repeat interval of 0 would fire a timeline's ticks
 -- without end, and an ability shot at speed 0 could never leave the caster.
@@ -86,6 +88,9 @@ local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
 			return def ~= nil and def.variants[value] ~= nil
 		end,
 	},
+	-- L2-29: structural above, so never tuned; the set is named here too, so a rule that ever
+	-- lets it through still holds it to the two words.
+	{ pattern = "^weapons%.[^.]+%.element$", check = oneOf({ "fire", "ice" }) },
 	{ pattern = "^loadout%.melee$", check = familyForSlot },
 	{ pattern = "^loadout%.ranged$", check = familyForSlot },
 	{

@@ -87,6 +87,10 @@
 -- the bar); 375 x 667 gives one button per row (Map, Abilities, Return), right edge 103 px
 -- against the slot button's 158; 1920 x 1080 keeps one row. The key hints and the perf line sit
 -- over however many rows there are.
+--
+-- L2 Wave 2 (docs/prompts/l2-w2-contract.md, section 2): the button reads "Armory" and opens the
+-- Armory panel (Weapons and Abilities tabs) in the same slot, at the same width, so the rows
+-- above do not change (`deps.onArmory`, `deps.armoryKey`).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -109,11 +113,11 @@ local SoundController =
 export type Deps = {
 	-- L1: "Map" in the lobby; nil = no such button.
 	onMap: (() -> ())?,
-	-- L2: "Abilities" in the lobby, beside Map; nil = no such button.
-	onAbilities: (() -> ())?,
+	-- L2: "Armory" in the lobby, beside Map; nil = no such button.
+	onArmory: (() -> ())?,
 	-- Fix round c2: the gamepad button that opens the panel, shown on the button where nothing
 	-- else could press it (a console); nil = none shown.
-	abilitiesKey: string?,
+	armoryKey: string?,
 	-- "Return to your city" (RequestLeave), offered in the lobby.
 	onLeave: () -> (),
 	-- L1: "Abandon", after its second press (RequestAbandon); nil = no such button.
@@ -205,7 +209,7 @@ local LOBBY_TEXT = "Camp"
 local RUN_OVER_TEXT = "Run over"
 local ROAD_TEXT = "Follow the road"
 local MAP_TEXT = "Map"
-local ABILITIES_TEXT = "Abilities"
+local ARMORY_TEXT = "Armory"
 local RETURN_TEXT = "Return to your city"
 local ABANDON_TEXT = "Abandon"
 local ABANDON_CONFIRM_TEXT = "Press again to abandon"
@@ -554,12 +558,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 
 	local mapButton = actionButton("Map", MAP_TEXT, 1, Theme.COMBAT_MAP_BUTTON_WIDTH, true)
 	mapButton.TextSize = Theme.TEXT_HEADER
-	local abilitiesKey = deps.abilitiesKey
-	local abilitiesButton = actionButton(
-		"Abilities",
-		if abilitiesKey ~= nil
-			then ABILITIES_TEXT .. "\n[" .. abilitiesKey .. "]"
-			else ABILITIES_TEXT,
+	local armoryKey = deps.armoryKey
+	local armoryButton = actionButton(
+		"Armory",
+		if armoryKey ~= nil then ARMORY_TEXT .. "\n[" .. armoryKey .. "]" else ARMORY_TEXT,
 		2,
 		Theme.COMBAT_ABILITIES_BUTTON_WIDTH,
 		true
@@ -817,7 +819,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		height = 0,
 		obstacles = {} :: { ActionRows.Obstacle },
 		shown = -1,
-		buttons = { mapButton, abilitiesButton, returnButton, abandonButton, abandonPrompt } :: { GuiObject },
+		buttons = { mapButton, armoryButton, returnButton, abandonButton, abandonPrompt } :: { GuiObject },
 	}
 	local function packActions(force: boolean): ()
 		local scale = rowState.scale
@@ -1331,7 +1333,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		-- 21: the only human, else the leader). The summary card has its own buttons.
 		local inLobby = phase == "lobby"
 		mapButton.Visible = inLobby and deps.onMap ~= nil
-		abilitiesButton.Visible = inLobby and deps.onAbilities ~= nil
+		armoryButton.Visible = inLobby and deps.onArmory ~= nil
 		returnButton.Visible = inLobby and deps.runButtons ~= false
 		-- No Abandon under the left thumb of a player in the middle of a fight (see the
 		-- header). One who is waiting or down is not fighting, and may want to leave.
@@ -1414,12 +1416,12 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			end)
 		)
 	end
-	local onAbilities = deps.onAbilities
-	if onAbilities ~= nil then
+	local onArmory = deps.onArmory
+	if onArmory ~= nil then
 		table.insert(
 			connections,
-			-- No click sound: the Abilities panel makes none (L2-10, Ben's 2026-09-24 ruling).
-			abilitiesButton.Activated:Connect(onAbilities)
+			-- No click sound: the Armory panel makes none (L2-10, Ben's 2026-09-24 ruling).
+			armoryButton.Activated:Connect(onArmory)
 		)
 	end
 	table.insert(

@@ -39,6 +39,9 @@
 -- fighter is tested against the level's chests (SecretFlow); UnlockService opens one and writes
 -- the profile, and this file credits the summary, marks the wallet and tells the clients. The map
 -- carries each member's own row of secrets.
+-- L2 W2 ("fire, the Flamethrower, the cave and the shortcut"): the level is built without the
+-- blocks the leader's found shortcuts open; each tick a standing fighter inside a shortcut's box
+-- records it (UnlockService), once per run; a reactive block that goes is told to everyone.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -158,6 +161,10 @@ type Run = {
 	-- only once that player holds the key).
 	secretSites: { SecretFlow.Site },
 	secretSeen: { [number]: { [string]: SecretFlow.Verdict } },
+	-- L2-36: the played level's shortcuts, and which each member has been inside in this run, by
+	-- userId then shortcut id (a find is recorded once per run per player).
+	shortcuts: { SecretFlow.Shortcut },
+	shortcutSeen: { [number]: { [string]: boolean } },
 }
 
 local function freshRun(): Run
@@ -202,6 +209,8 @@ local function freshRun(): Run
 		waveStock = {},
 		secretSites = {},
 		secretSeen = {},
+		shortcuts = {},
+		shortcutSeen = {},
 	}
 end
 
@@ -1850,7 +1859,10 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	-- A start that threw after an earlier Build (between it and the run's own fields) left that
 	-- level standing in the lobby, and Build refuses a second one: what is not played goes first.
 	LevelService.Clear()
-	if not LevelService.Build(layout, map, rules) then
+	-- L2-36: the leader's save decides which shortcuts stand open, for everyone in the run.
+	if
+		not LevelService.Build(layout, map, rules, UnlockService.FoundShortcuts(player, levelId))
+	then
 		return "unavailable"
 	end
 	-- L1b "Flow" → "Start": the field is cleared, then one crowd floor per camp is set, once for
@@ -1896,6 +1908,7 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	run.maxAlive = plan.population
 	-- The chests of the layout as it is built (an arena's adapter has none).
 	run.secretSites = SecretFlow.Sites(layout, level)
+	run.shortcuts = SecretFlow.Shortcuts(layout)
 	ArenaService.SetLevel({
 		id = level.id,
 		name = level.name,
@@ -2012,9 +2025,31 @@ end
 -- L2-12, every tick of a live run after `advance`: each admitted human who is fighting and
 -- standing, against every chest of the level. Bots and members waiting in the lobby camp are
 -- skipped. Chests pay flat, kept at once like a kill (Abandon keeps them).
+-- L2-36: one member is inside a shortcut's box. A new find goes to everyone (the finder's card,
+-- the others' toast); one they had found before says nothing.
+local function findShortcut(player: Player, userId: number, shortcut: SecretFlow.Shortcut): ()
+	local level = run.level
+	if level == nil or not UnlockService.FindShortcut(player, level.id, shortcut.id) then
+		return
+	end
+	RunFx.Push({
+		kind = "secret",
+		event = "shortcut",
+		userId = userId,
+		levelId = level.id,
+		secretId = shortcut.id,
+		name = shortcut.name,
+		needs = "",
+		valor = 0,
+		materials = 0,
+		material = level.material,
+		family = nil,
+	})
+end
+
 local function tickSecrets(rules: Types.CombatLevelsConfig): ()
 	local level = run.level
-	if level == nil or #run.secretSites == 0 or not isLive(run.phase) then
+	if level == nil or (#run.secretSites == 0 and #run.shortcuts == 0) or not isLive(run.phase) then
 		return
 	end
 	for _, member in ArenaService.GetMembers() do
@@ -2051,7 +2086,36 @@ local function tickSecrets(rules: Types.CombatLevelsConfig): ()
 			seen[site.id] = opening.verdict
 			announceSecret(player, member.userId, site, opening, level.id, level.material)
 		end
+		local inside = run.shortcutSeen[member.userId]
+		if inside == nil then
+			inside = {}
+			run.shortcutSeen[member.userId] = inside
+		end
+		for _, shortcut in run.shortcuts do
+			if inside[shortcut.id] or not SecretFlow.InShortcut(shortcut, root.Position) then
+				continue
+			end
+			inside[shortcut.id] = true
+			findShortcut(player, member.userId, shortcut)
+		end
 	end
+end
+
+-- L2-35: a reactive block went (LevelService's listener): every member's clients draw it.
+local function onReacted(event: LevelService.Reacted): ()
+	local box = event.box
+	RunFx.Push({
+		kind = "react",
+		event = if event.react == "ice" then "frozen" else "burnt",
+		name = event.name,
+		react = event.react,
+		x = box.x,
+		y = box.y,
+		z = box.z,
+		sx = box.sx,
+		sy = box.sy,
+		sz = box.sz,
+	})
 end
 
 local function tick(): ()
@@ -2232,13 +2296,16 @@ end
 
 -- The `resetSecrets` lever (L2-19), after UnlockService has cleared the profiles: this run's
 -- memory of what each chest said goes too, for `player` (nil = everyone), and the map is resent.
+-- L2-38: and the run's memory of the shortcuts they were inside.
 function WaveService.ForgetSecrets(player: Player?): ()
 	if player == nil then
 		table.clear(run.secretSeen)
+		table.clear(run.shortcutSeen)
 		sendMapState(nil)
 		return
 	end
 	run.secretSeen[player.UserId] = nil
+	run.shortcutSeen[player.UserId] = nil
 	if boot.mission and ArenaService.IsAdmitted(player) then
 		sendMapState(player)
 	end
@@ -2273,6 +2340,7 @@ function WaveService.Init(): ()
 	end
 	boot.proving = CombatMode.IsProving()
 	CrowdService.OnKilled(onCrowdKilled)
+	LevelService.OnReacted(onReacted)
 	ArenaService.SetShareSource(damageShare)
 	ArenaService.SetDownSource(function(userId: number): boolean
 		local member = ArenaService.GetMember(userId)

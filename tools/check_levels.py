@@ -103,8 +103,16 @@ EXPECTED = {
         "approaches": 2,
         # The fix round's R8: the spots no rusher reaches within the Longbow's range of the region.
         # L1c: the gatehouse's two floors are new tops by the region (sim_range rates them).
+        # L2 W2: the cache moved into the cave, behind fire and walls (L2-37's sight): Secret_cache left.
         "sniperSpots": ["Creek", "GatehouseTurn", "GatehouseWalk", "LookoutLedge", "LookoutSignPad", "Road2", "Road3",
-                        "Road4", "RoadBC5", "RoadBC6", "Secret_cache", "Secret_lookout", "ShrineSignPad"],
+                        "Road4", "RoadBC5", "RoadBC6", "Secret_lookout", "ShrineSignPad"],
+        # L2-37: with the brambles burnt (a leader who found the tunnel) the two mouths' floors join:
+        # any open mouth onto the region leaves a floor that sees out and that no rusher reaches (the
+        # lead's OK pending; sim_range rates both on Normal and Hard). The long leg, the alcove and
+        # the exit leg see nothing (the exit's bend), the cache's top neither.
+        "sniperSpotsOpen": ["CaveExit", "CaveMouth", "Creek", "GatehouseTurn", "GatehouseWalk", "LookoutLedge",
+                            "LookoutSignPad", "Road2", "Road3", "Road4", "RoadBC5", "RoadBC6", "Secret_lookout",
+                            "ShrineSignPad"],
     },
 }
 # What a sign must say for each key, so a player knows what to bring.
@@ -142,9 +150,9 @@ DENSITY_AREA = 200.0  # a camp's maxAlive is at most its floor area over this (t
 BAND_SHARE = 0.45  # a keepAway kind's bandMin is at most this share of the camp's shorter side
 RUN_CAP_RATIO = 2.0
 REQUIRED_LOOKS = ("ground", "path", "campFloor", "wall", "gate", "checkpoint", "checkpointDone", "secret",
-                  "secretOpen", "sign", "water", "lobby", "fire", "tent")
+                  "secretOpen", "sign", "water", "lobby", "fire", "tent", "bramble")
 # Each must read at a glance (secretOpen, L2-14: a chest the player has found, tinted gold).
-COLOUR_LOOKS = ("gate", "checkpoint", "checkpointDone", "secret", "secretOpen", "fire", "tent")
+COLOUR_LOOKS = ("gate", "checkpoint", "checkpointDone", "secret", "secretOpen", "fire", "tent", "bramble")
 GREY_SPREAD = 40  # a grey's channels lie within this of each other; a colour's do not
 # The engine's Enum.Material names. LevelService leaves a Part of an unknown look or material as
 # the engine makes it, with one warn, so a look must name one of these, and a layout may name
@@ -166,6 +174,12 @@ PERCH_STEP = 1.0  # a perch's top is sampled this often for its distance to the 
 # cliff gate reads the rule from here; set it False to see the gate fail on the shipped layout.
 UNDER_SIDE = True
 SPOT_STEP = 1.0  # R8: a standable top is sampled this often for the unreachable sniper spots
+# L2-37: R8 counts a spot only where a bow's line in plan reaches a region cell: walls and brambles
+# stop it (sight_blockers). False is W1's rule (every unreachable top within the Longbow's range),
+# for the mutant driver.
+SIGHT_WALLS = True
+SIGHT_LOOKS = ("wall", "bramble")
+SIGHT_RASTER = 1.0  # PlanRooms' grid
 # The `levels` numbers this tool itself reads to measure a layout.
 READ_RULES = ("fenceThickness", "floorThickness", "triggerHeight", "crowdCeiling", "startSpacing", "maxParts")
 GEAR_PRESETS = ((2, 2), (4, 4), (6, 6))  # L1b-W2-20: the Studio gear presets (melee, ranged)
@@ -210,10 +224,12 @@ FLOOR_WALLS = True
 # (sim_range.trigger_ceiling, StageFlow.Ceiling). False judges it at levels.triggerHeight, the
 # first fix round's rule, for the mutant driver.
 WALLED_CEILING = True
+WALLED_NEAR = 200.0  # the walled gate's walls lie within this of the camp's floor (eyes stand by its gates)
 # L2 Wave 1 (docs/prompts/l2-w1-contract.md): bought abilities, and secrets as chests behind keys.
 AIR_JUMP = "doubleJump"  # Unlocks.AIR_JUMP: the ability id the air jump keys on (structural)
 SECRET_RULES = ("secretReach", "secretBelow", "secretAbove")  # Combat.json levels: SecretFlow.Triggered (L2-11)
-DEBUG_UNLOCK_KEYS = ("grantAbilityAttribute", "removeAbilityAttribute", "resetSecretsAttribute")  # L2-19
+DEBUG_UNLOCK_KEYS = ("grantAbilityAttribute", "removeAbilityAttribute", "resetSecretsAttribute",  # L2-19
+                     "grantFamilyAttribute", "removeFamilyAttribute")  # L2-38
 ABILITY_ID_MAX = sr.unlocks_cap("MAX_ID_LENGTH")  # Unlocks.MAX_ID_LENGTH, in bytes: an id the buy remote carries (L2-7)
 SECRET_VALOR_MIN = 2  # L2-13: a paying chest gives at least this much Valor, and less than its key's price
 BODY_RADIUS = 1.0  # the root's half width on the flat (a body stands this far over an edge)
@@ -236,10 +252,17 @@ LIFT_ROUTES_MAX = 40  # (c) stops after this many take-offs with a route (enough
 #   airborne root; and the caster's floor over a void is the feet less WallClip.Rise(movement, false).
 #   The change docs/prompts/l2-w1-reports/economy-designer.md asks for: it closes every lift route.
 LIFT_MODEL = "floor"
-# Every mission is played with ProvingGrounds.json `loadout` (L2-5), whose families lift nobody, so a
-# route (c) finds under LIFT_MODEL is a known limit until W2's loadout picker: reported, not gated,
-# while no family with a lifting ability can enter a level. False gates it outright (the mutants).
-LIFT_KNOWN_LIMIT_W2 = True
+# L2 Wave 2 (docs/prompts/l2-w2-contract.md): fire, the cave and the shortcut.
+REACT_WORDS = ("fire", "ice")  # a block's `react` and an element key (Types RangeWeaponDef.element)
+# L2-37 (e): a chest pays at least this and at most this share of the level's Normal stock in its
+# material (every resident, every tent body and the boss at rewardMult: a first clear's whole pay).
+SECRET_MATERIAL_SHARE = (0.15, 0.30)
+CAVE_MARGIN = 30.0  # the enclosure's flood fills the cave's box grown by this on the flat
+CAVE_STEP = 2.0  # (f): a cave floor is proved enclosed on this grid and its edges
+# The bend rule (L2-47, Ben's "close it now"): no hop between two walked road blocks that are not
+# touching saves more than this much road, measured along the route (a corner may be cut, a bend not).
+SKIP_SAVE = 60.0  # the corners of today's road save up to about 35 (Road2 to Road5); the AB bend about 115
+SKIP_STEP = 2.0  # the road blocks' edges are sampled this often for the hop's ends
 THEME_PATH = REPO_ROOT / "src" / "client" / "UI" / "Theme.luau"
 # The Theme numbers the highest camera is built from (the client's; read from the file, never copied).
 THEME_KEYS = ("COMBAT_CAMERA_PIVOT_HEIGHT", "COMBAT_CAMERA_MIN_PITCH_DEGREES", "COMBAT_SHAKE_MAX_STUDS")
@@ -459,6 +482,7 @@ def unclimbable(solids, move, ability):
     reach = stray_reach(move, 0)
     climb = climb_max(move, ability)
     standable = ("block", "floor", "secret", "fence", "obstacle")
+    bare = exposed(solids)
     found = {s.name for s in solids if is_tall(s)}
     changed = True
     while changed:
@@ -467,7 +491,7 @@ def unclimbable(solids, move, ability):
             if wall.name not in found:
                 continue
             for other in solids:
-                if other is wall or other.name in found or other.kind not in standable:
+                if other is wall or other.name in found or other.kind not in standable or other.name not in bare:
                     continue
                 if wall.gap_to(other) <= reach + EPS and wall.top - other.top < climb - EPS:
                     found.discard(wall.name)
@@ -771,9 +795,9 @@ def lifting_abilities(proving):
 
 
 def fielded_lifts(proving):
-    """The lifting abilities a level fields today: every mission is played with `loadout` (L2-5)."""
-    loadout = proving.get("loadout") or {}
-    return [family for family, _ability in lifting_abilities(proving) if family in loadout.values()]
+    """The lifting abilities a level fields (L2-37): every family in `weapons`, since W2's lobby
+    picker and the Studio lever can carry any into a level (L3 will sell more)."""
+    return [family for family, _ability in lifting_abilities(proving)]
 
 
 def point_rect(rect, x, z):
@@ -837,8 +861,9 @@ def lift_takeoffs(solids, box, reach, skip, tall, move, model):
     top_reach = move["walkSpeed"] * math.sqrt(2 * jump / sr.GRAVITY)
     offs = (1.0, 4.0, top_reach, top_reach + move["dashDistance"] / 2, top_reach + move["dashDistance"])
     takeoffs = {}
+    bare = exposed(solids)
     for s in solids:
-        if s.kind not in standable or s.name in tall or s.name in skip:
+        if s.kind not in standable or s.name in tall or s.name in skip or s.name not in bare:
             continue
         if rect_gap((s.x0, s.x1, s.z0, s.z1), box) > reach + BODY_RADIUS + offs[-1]:
             continue
@@ -1009,8 +1034,9 @@ def check_secret_reach(name, layout, ctx, expect, solids, tall):
                f"the road (L2-18a)")
         # (b) One jump, a step up and a dash, from every surface but the keys and unclimbable walls.
         ways, closest = [], (math.inf, None)
+        bare = exposed(solids)
         for s in solids:
-            if s.name in skip or s.name in tall:
+            if s.name in skip or s.name in tall or s.name not in bare:
                 continue
             need = base.top - s.top - STEP_UP
             gap = min(rect_gap((s.x0, s.x1, s.z0, s.z1), kr[:4]) for kr in keys)
@@ -1028,7 +1054,7 @@ def check_secret_reach(name, layout, ctx, expect, solids, tall):
         lifts = ctx.get("lifts") or []
         routes = lift_routes(solids, keys, skip, tall, move, lifts)
         fielded = ctx.get("fieldedLifts") or []
-        known = bool(routes) and LIFT_KNOWN_LIMIT_W2 and not fielded
+        known = False  # L2-37: the W1 known limit is gone, every family can enter
         count = f"{len(routes)}{'+' if len(routes) >= LIFT_ROUTES_MAX else ''}"
         told = ", ".join(f"{family} ({a.get('name')}, height {a['height']:g}, castRange {a['castRange']:g})"
                          for family, a in lifts) or "none"
@@ -1059,13 +1085,59 @@ def check_secret_reach(name, layout, ctx, expect, solids, tall):
                + (f" (off the ledge at ({loose[0][0]:.1f}, {loose[0][1]:.1f}))" if loose else ""))
 
 
-def check_secret_rewards(file, layout, expeditions, expect):
-    """L2-18 (e) and L2-13's sizing: a level file's secret pays (valor, materials or family) only
-    when its key is an ability Expeditions.json sells, and then at least SECRET_VALOR_MIN Valor and
-    less than that ability's price."""
+def key_chain(file, layout, expeditions, weapons):
+    """L2-37 (e): which keys a player can come to hold on this level. A sold ability resolves at
+    step 0; a family that a paying secret gives resolves one step after that secret's key; an
+    element ("fire", "ice") resolves with the first family that carries it. A key in a cycle never
+    resolves. ({key: (step, the sold ability its chain starts from)}, {family: step})."""
+    sold = [a.get("id") for a in ((expeditions.get("abilities") or {}).get("list") or []) if isinstance(a, dict)]
+    needs = {s["id"]: s["needs"] for s in layout["secrets"]}
+    entries = file.get("secrets") or {}
+    keys = {aid: (0, aid) for aid in sold}
+    families = {}
+    changed = True
+    while changed:
+        changed = False
+        for sid, entry in sorted(entries.items()):
+            family, key = (entry or {}).get("family"), needs.get(sid)
+            if family and key in keys and family not in families:
+                families[family] = (keys[key][0] + 1, keys[key][1])
+                changed = True
+        for element in REACT_WORDS:
+            carriers = [families[f] for f in families if (weapons.get(f) or {}).get("element") == element]
+            if element not in keys and carriers:
+                keys[element] = min(carriers)
+                changed = True
+    return keys, {f: step for f, (step, _root) in families.items()}
+
+
+def level_stock(file, layout, ranks, difficulty="normal"):
+    """L2-37 (e): the level's whole stock in its material at a difficulty: every resident and every
+    tent body fielded there, and every boss, at its rewardMult (what a first clear pays at most,
+    the clear bonuses aside; the simulator measures the run)."""
+    rewards = (file.get("crowd") or {}).get("rewards") or {}
+    rank = ranks.get(difficulty, 1)
+    defs, _residents = sr.groups_of(file, layout, rank, ranks)
+    tents, _stocks = sr.tents_of(file, layout, rank, ranks)
+    kinds = [u["kind"] for d in defs for u in d["units"] for _ in range(u["count"])]
+    kinds += [k for t in tents for k in t["kinds"]]
+    kinds += [w["boss"]["kind"] for st in file.get("stages") or [] for w in st.get("waves") or [] if w.get("boss")]
+    mult = ((file.get("difficulties") or {}).get(difficulty) or {}).get("rewardMult", 1)
+    return sum((rewards.get(k) or {}).get("materials", 0) for k in kinds) * mult
+
+
+def check_secret_rewards(file, layout, expeditions, expect, weapons=None, ranks=None):
+    """L2-18 (e), L2-13's sizing and L2-37's chain: a level file's secret pays (valor, materials or
+    family) only behind a key a player can come to hold (key_chain: a sold ability, or an element a
+    family another secret pays carries, its own key resolving first; no cycle); then at least
+    SECRET_VALOR_MIN Valor and under the price of the ability its chain starts from, and its
+    material within SECRET_MATERIAL_SHARE of the level's Normal stock."""
     entries = file.get("secrets") or {}
     sold = {a.get("id"): a for a in ((expeditions.get("abilities") or {}).get("list") or []) if isinstance(a, dict)}
     needs = {s["id"]: s["needs"] for s in layout["secrets"]}
+    keys, families = key_chain(file, layout, expeditions, weapons or {})
+    stock = level_stock(file, layout, ranks or {}) if ranks is not None else None
+    lo_m, hi_m = SECRET_MATERIAL_SHARE
     bad, told = [], []
     for sid, entry in sorted(entries.items()):
         pays = [key for key in ("valor", "materials", "family") if key in (entry or {})]
@@ -1073,17 +1145,26 @@ def check_secret_rewards(file, layout, expeditions, expect):
             told.append(f"{sid} pays nothing")
             continue
         key = needs.get(sid)
-        if key not in sold:
-            bad.append(f"{sid} pays {', '.join(pays)} behind {key}, which no ability opens")
+        if key not in keys:
+            bad.append(f"{sid} pays {', '.join(pays)} behind {key}, which no ability opens and no family another secret "
+                       f"pays carries")
             continue
-        price = (sold[key].get("price") or {}).get("valor")
+        step, root = keys[key]
+        price = (sold[root].get("price") or {}).get("valor")
         valor = entry.get("valor") or 0
         if not (is_number(price) and is_number(valor) and SECRET_VALOR_MIN <= valor < price):
-            bad.append(f"{sid}'s {valor} Valor is not at least {SECRET_VALOR_MIN} and under {key}'s price {price}")
-        told.append(f"{sid} behind {key}: {valor} Valor, {entry.get('materials') or 0} {file.get('material')}"
+            bad.append(f"{sid}'s {valor} Valor is not at least {SECRET_VALOR_MIN} and under {root}'s price {price}")
+        amount = entry.get("materials") or 0
+        if stock is not None and amount and not (lo_m * stock - EPS <= amount <= hi_m * stock + EPS):
+            bad.append(f"{sid}'s {amount} {file.get('material')} is not {lo_m:.0%}-{hi_m:.0%} of the Normal stock {stock:g}")
+        chain = f"{root}" + (f" -> ... -> {key} (step {step})" if key != root else "")
+        told.append(f"{sid} behind {chain}: {valor} Valor, {amount} {file.get('material')}"
+                    + (f" ({amount / stock:.0%} of the Normal stock {stock:g})" if stock and amount else "")
                     + (f", the {entry['family']}" if entry.get("family") else ""))
-    expect(not bad, f"{file['id']}: a secret pays only behind a sold key, and then {SECRET_VALOR_MIN} Valor or more and "
-           f"under that key's price (L2-18e, L2-13): " + ("; ".join(bad) if bad else "; ".join(told) or "no secrets"))
+    expect(not bad, f"{file['id']}: a secret pays only behind a key a player comes to hold (a sold ability, or an "
+           f"element a family another secret pays carries, its key first, no cycle), then {SECRET_VALOR_MIN} Valor or "
+           f"more and under the price of its chain's ability, its material {lo_m:.0%}-{hi_m:.0%} of the Normal stock "
+           f"(L2-18e, L2-13, L2-37): " + ("; ".join(bad) if bad else "; ".join(told) or "no secrets"))
 
 
 def check_abilities(expeditions, level_files, expect):
@@ -1434,6 +1515,8 @@ def check_layout(name, layout, ctx, expect):
                f"{sign.get('y', 0):g} ({held} of {(cells + 1) ** 2} samples), {away:.0f} studs from the route")
     # L2-18 (a) to (d): the secrets a bought ability opens.
     check_secret_reach(name, layout, ctx, expect, solids, tall)
+    # L2-47: the road's bends cannot be hopped.
+    check_route_skips(name, layout, ctx, expect, solids, tall)
     if spec.get("creek"):
         waters = [s for s in solids if s.look == "water"]
         loose = [b.get("name") for b in layout["blocks"] if b["look"] == "water" and b.get("collide") is False]
@@ -2010,6 +2093,7 @@ def check_residents(name, level, layout, ctx, expect):
     check_wave2(name, level, layout, ctx, expect, caps, solids)
     check_wave4(name, level, layout, ctx, expect, solids)
     check_walled(name, level, layout, ctx, expect, solids)
+    check_cave(name, level, layout, ctx, expect, solids)
 
 
 def rect_gap(a, b):
@@ -2043,19 +2127,149 @@ def shape_holds(above, height):
 
 
 def standable_points(solids, solid, step):
-    """The points of a solid's top a player stands on (nothing standable over them there), on a
-    `step` grid and its edges."""
+    """The points of a solid's top a player stands on, on a `step` grid and its edges: nothing
+    standable over them there that leaves a body less than BODY_HEIGHT of headroom (L2-37: a
+    roofed floor is ground; a top under a solid with room for nobody is not)."""
     kinds = ("block", "floor", "secret", "fence", "obstacle")
     xs = [solid.x0 + step * k for k in range(int((solid.x1 - solid.x0) / step) + 1)] + [solid.x1]
     zs = [solid.z0 + step * k for k in range(int((solid.z1 - solid.z0) / step) + 1)] + [solid.z1]
     near = [o for o in solids if o is not solid and o.kind in kinds and o.top > solid.top + EPS
+            and o.bottom < solid.top + BODY_HEIGHT - EPS
             and o.x0 <= solid.x1 and o.x1 >= solid.x0 and o.z0 <= solid.z1 and o.z1 >= solid.z0]
     return [(x, z) for x in xs for z in zs if not any(o.holds(x, z) for o in near)]
+
+
+_EXPOSED = {}
+
+
+def exposed(solids):
+    """L2-37: the names of the solids a body can stand on at all (standable_points finds a point
+    on a 1-stud grid): a top inside a wall or under a roof with no headroom (a bramble that fills a
+    mouth up to its roof) is no surface. Kept per solids list."""
+    key = id(solids)
+    if key not in _EXPOSED or _EXPOSED[key][0] is not solids:
+        _EXPOSED[key] = (solids, {s.name for s in solids if standable_points(solids, s, 1.0)})
+    return _EXPOSED[key][1]
 
 
 def region_defn(region, layout):
     """A region group as CampBrain.Melee reads it: its floor's height and its cells."""
     return {"floorY": region["y"], "region": sr.region_cells(layout, region)}
+
+
+def sight_blockers(solids, stand, floor):
+    """L2-37 (R8's sight): what stops a bow's line in plan between a player standing at `stand` and
+    a body on a region floor at `floor`: every block of look `wall` or `bramble`, and a camp fence
+    taller than a body (the boss room's wall), that rises from under both feet + ROOT_HEIGHT to over
+    both heads (a roof over a corridor stops nothing in it), as rectangles (x0, x1, z0, z1)."""
+    low, high = min(stand, floor) + sr.ROOT_HEIGHT, max(stand, floor) + BODY_HEIGHT
+    return sorted((s.x0, s.x1, s.z0, s.z1) for s in solids
+                  if ((s.kind == "block" and s.look in SIGHT_LOOKS) or (s.kind == "fence" and s.top - s.bottom >= BODY_HEIGHT))
+                  and s.bottom < low - EPS and s.top > high + EPS)
+
+
+def ray_entry(px, pz, ux, uz, rect):
+    """How far along the ray from (px, pz) in direction (ux, uz) it enters the rectangle (0 from
+    on or inside it), or None when it misses."""
+    t0, t1 = 0.0, math.inf
+    for p, d, lo, hi in ((px, ux, rect[0], rect[1]), (pz, uz, rect[2], rect[3])):
+        if abs(d) < 1e-12:
+            if p < lo - EPS or p > hi + EPS:
+                return None
+            continue
+        a, c = (lo - p) / d, (hi - p) / d
+        t0, t1 = max(t0, min(a, c)), min(t1, max(a, c))
+        if t0 > t1 + EPS:
+            return None
+    return t0
+
+
+class PlanRooms:
+    """L2-37: the plan cut into rooms by the sight blockers, on a SIGHT_RASTER grid (a cell is shut
+    only when one blocker covers all of it; neighbours by eight sides): a line of sight never
+    leaves its room, so a point whose room holds no region cell sees none, at no cost."""
+
+    def __init__(self, blockers, cells, bounds):
+        step = SIGHT_RASTER
+        self.x0, self.z0 = math.floor(bounds[0]) - 2 * step, math.floor(bounds[2]) - 2 * step
+        self.nx = int(math.ceil((bounds[1] - self.x0) / step)) + 2
+        self.nz = int(math.ceil((bounds[3] - self.z0) / step)) + 2
+        shut = bytearray(self.nx * self.nz)
+        for b in blockers:
+            i0, i1 = math.ceil((b[0] - self.x0) / step - EPS), math.floor((b[1] - self.x0) / step + EPS)
+            k0, k1 = math.ceil((b[2] - self.z0) / step - EPS), math.floor((b[3] - self.z0) / step + EPS)
+            for i in range(max(i0, 0), min(i1, self.nx)):
+                for k in range(max(k0, 0), min(k1, self.nz)):
+                    shut[i * self.nz + k] = 1
+        label = [0] * (self.nx * self.nz)
+        rooms = 0
+        for start in range(self.nx * self.nz):
+            if shut[start] or label[start]:
+                continue
+            rooms += 1
+            label[start] = rooms
+            stack = [start]
+            while stack:
+                here = stack.pop()
+                i, k = divmod(here, self.nz)
+                for di in (-1, 0, 1):
+                    for dk in (-1, 0, 1):
+                        ni, nk = i + di, k + dk
+                        if 0 <= ni < self.nx and 0 <= nk < self.nz:
+                            there = ni * self.nz + nk
+                            if not shut[there] and not label[there]:
+                                label[there] = rooms
+                                stack.append(there)
+        self.label = label
+        self.lit = set()
+        for c in cells:
+            for x in (c[0], (c[0] + c[1]) / 2, c[1]):
+                for z in (c[2], (c[2] + c[3]) / 2, c[3]):
+                    self.lit |= self.rooms_at(x, z)
+
+    def rooms_at(self, x, z):
+        """The rooms of the raster cells that touch (x, z)."""
+        found = set()
+        fx, fz = (x - self.x0) / SIGHT_RASTER, (z - self.z0) / SIGHT_RASTER
+        for i in {math.floor(fx - EPS), math.floor(fx + EPS)}:
+            for k in {math.floor(fz - EPS), math.floor(fz + EPS)}:
+                if 0 <= i < self.nx and 0 <= k < self.nz and self.label[i * self.nz + k]:
+                    found.add(self.label[i * self.nz + k])
+        return found
+
+    def lit_at(self, x, z):
+        return bool(self.rooms_at(x, z) & self.lit)
+
+
+def sees_region(px, pz, cells, blockers, reach):
+    """L2-37 (R8's sight): some line from (px, pz) reaches a region cell within `reach` without a
+    blocker in front. Exact in plan: between two critical directions (a corner of the cell or of a
+    blocker) the rectangles a ray meets, and their order, do not change, so the middle direction
+    of every such interval of each cell's arc is cast."""
+    near = []
+    for b in blockers:
+        if point_rect(b, px, pz) <= reach + EPS:
+            corners = ((b[0], b[2]), (b[0], b[3]), (b[1], b[2]), (b[1], b[3]))
+            near.append((b, [math.atan2(z - pz, x - px) for x, z in corners], hull_arc(px, pz, corners, 0.0)))
+    for c in sorted(cells, key=lambda c: point_rect(c, px, pz)):
+        if point_rect(c, px, pz) > reach + EPS:
+            break
+        corners = ((c[0], c[2]), (c[0], c[3]), (c[1], c[2]), (c[1], c[3]))
+        far = max(math.hypot(x - px, z - pz) for x, z in corners)
+        for lo, hi in hull_arc(px, pz, corners, 0.0):
+            front = [(b, angles) for b, angles, arcs in near if point_rect(b, px, pz) < far + EPS
+                     and any(a0 < hi and a1 > lo for a0, a1 in arcs)]
+            cuts = sorted({lo, hi} | {a for _b, angles in front for a in angles if lo < a < hi})
+            for a, z in zip(cuts, cuts[1:]):
+                mid = (a + z) / 2
+                ux, uz = math.cos(mid), math.sin(mid)
+                into = ray_entry(px, pz, ux, uz, c)
+                if into is None or into > reach + EPS:
+                    continue
+                if all(ray_entry(px, pz, ux, uz, b) is None or ray_entry(px, pz, ux, uz, b) > into + EPS
+                       for b, _angles in front):
+                    return True
+    return False
 
 
 def sniper_spots(level, layout, ctx, solids):
@@ -2082,6 +2296,10 @@ def sniper_spots(level, layout, ctx, solids):
         open_camps = [camps[cid] for cid in region.get("camps") or [] if cid in camps and not camps[cid].get("locks")]
         if not open_camps:
             continue
+        boxes = [cell_box(c) for c in rects]
+        bounds = (min([s.x0 for s in solids] + [b[0] for b in boxes]), max([s.x1 for s in solids] + [b[1] for b in boxes]),
+                  min([s.z0 for s in solids] + [b[2] for b in boxes]), max([s.z1 for s in solids] + [b[3] for b in boxes]))
+        plans = {}
         for solid in solids:
             if (solid.kind not in ("block", "floor", "secret", "fence", "obstacle") or solid.name.startswith(rooms)
                     or solid.name in tall):
@@ -2100,7 +2318,17 @@ def sniper_spots(level, layout, ctx, solids):
                 found.append((gap, x, z))
             if not found:
                 continue
-            gap, x, z = min(found)
+            # L2-37: a spot only where the bow's line reaches a cell: the nearest point that sees one.
+            found.sort()
+            blockers = tuple(sight_blockers(solids, solid.top, region["y"])) if SIGHT_WALLS else ()
+            if blockers and blockers not in plans:
+                plans[blockers] = PlanRooms(blockers, boxes, bounds)
+            plan = plans.get(blockers)
+            seen = next((f for f in found if plan is None or (plan.lit_at(f[1], f[2])
+                                                                and sees_region(f[1], f[2], boxes, blockers, reach))), None)
+            if seen is None:
+                continue
+            gap, x, z = seen
             camp = min(open_camps, key=lambda c: rect_distance(x, z, *camp_rect(c)))
             spots.append({"id": solid.name, "region": region["id"], "camp": camp["id"], "top": solid.top,
                           "points": len(found), "at": (x, solid.top, z), "gap": gap,
@@ -2293,8 +2521,10 @@ def check_wave4(name, level, layout, ctx, expect, solids):
         # below, not gated here.
         rooms = tuple(f"Camp_{c['id']}_" for c in locking)
         tall = unclimbable(solids, ctx["move"], ctx["abilityHeight"])  # L1c-3: nobody perches on these
+        bare = exposed(solids)
         for solid in solids:
-            if solid.kind not in ("block", "fence", "obstacle", "secret", "floor") or solid.name in tall:
+            if (solid.kind not in ("block", "fence", "obstacle", "secret", "floor") or solid.name in tall
+                    or solid.name not in bare):
                 continue
             mine = (solid.x0, solid.x1, solid.z0, solid.z1)
             gap = min(rect_gap(mine, b) for b in boxes)
@@ -2508,8 +2738,9 @@ def reachable_solids(layout, solids, move, ability, skip, tall):
     """The standable solids a player reaches from the start without entering the camp whose
     pieces start with `skip`: from one to another that lies within stray_reach (falling the drop
     between them) and at most climb_max over it. Walls do not stop a jump here (conservative)."""
+    bare = exposed(solids)
     standable = [s for s in solids if s.kind in ("block", "floor", "secret", "fence", "obstacle")
-                 and not s.name.startswith(skip) and s.name not in tall]
+                 and not s.name.startswith(skip) and s.name not in tall and s.name in bare]
     start = layout["start"]
     _top, first = ground(solids, start["x"], start["z"], start["y"] + EPS)
     if first is None or first not in standable:
@@ -2839,8 +3070,11 @@ def check_walled(name, level, layout, ctx, expect, solids):
         # of the fix round's C1: the client keeps the boom out of every locking camp's fenced
         # rectangle grown by levels.cameraClear unless the root is inside the true rectangle.
         gates = camp.get("gates") or []
+        # Only walls near enough to stand between an eye by a gate and a body inside (L2 W2: the
+        # cave's ridge, hundreds of studs off, cuts no such line and only slowed the gate).
         walls = [(s.x0, s.x1, s.z0, s.z1) for s in solids
-                 if s.kind == "block" and s.look == "wall" and s.top >= wall_top - EPS]
+                 if s.kind == "block" and s.look == "wall" and s.top >= wall_top - EPS
+                 and rect_gap((s.x0, s.x1, s.z0, s.z1), camp_rect(camp)) <= WALLED_NEAR]
         theme = ctx.get("theme") or {}
         clear, factor = levels.get("cameraClear"), body_reach(ctx)
         shake, sphere = theme.get("COMBAT_SHAKE_MAX_STUDS"), theme.get("COMBAT_CAMERA_COLLISION_RADIUS")
@@ -3256,6 +3490,474 @@ def check_sneak(name, level, layout, ctx, expect, solids, sneak, facts):
            + (": " + "; ".join(seen[:4]) if seen else f": the tightest {', '.join(told[:4])}"))
 
 
+# ---------------------------------------------------------------------------------------------
+# L2 Wave 2: the cave behind fire, the shortcut, and the bends (L2-36, L2-37, L2-47)
+# ---------------------------------------------------------------------------------------------
+
+
+def open_layout(layout, opened=None):
+    """L2-36: the layout a leader who has found these shortcuts plays: LevelGeometry.Pieces leaves
+    out every block whose `opens` is in the set (default: every shortcut of the layout)."""
+    ids = {sc["id"] for sc in layout.get("shortcuts") or []} if opened is None else set(opened)
+    return {**layout, "blocks": [b for b in layout["blocks"] if b.get("opens") is None or b["opens"] not in ids]}
+
+
+class Enclosure:
+    """(f): the air of a box of the world cut on every block face (a grid of the blocks' own
+    coordinates, so a gap of any width is a row of its own), filled from the box's sides through
+    every face no block covers. A point is "solid" inside a block, "out" in air the fill reached,
+    "in" in air nothing outside reaches: sealed, whatever a player does (jumps, dashes, lifting
+    arcs, sight: no way in exists at all)."""
+
+    def __init__(self, layout, box):
+        import bisect
+
+        self.bisect = bisect
+        x0, x1, y0, y1, z0, z1 = box
+        blocks = []
+        for b in layout["blocks"]:
+            if b.get("collide") is False:
+                continue
+            bx0, bx1 = b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2
+            by0, by1 = b["y"] - b["sy"] / 2, b["y"] + b["sy"] / 2
+            bz0, bz1 = b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2
+            if bx1 <= x0 or bx0 >= x1 or by1 <= y0 or by0 >= y1 or bz1 <= z0 or bz0 >= z1:
+                continue
+            blocks.append((max(bx0, x0), min(bx1, x1), max(by0, y0), min(by1, y1), max(bz0, z0), min(bz1, z1),
+                           b.get("name") or b["look"], b["look"]))
+        self.xs = sorted({x0, x1} | {v for b in blocks for v in b[0:2]})
+        self.ys = sorted({y0, y1} | {v for b in blocks for v in b[2:4]})
+        self.zs = sorted({z0, z1} | {v for b in blocks for v in b[4:6]})
+        nx, ny, nz = len(self.xs) - 1, len(self.ys) - 1, len(self.zs) - 1
+        self.n = (nx, ny, nz)
+        owner = [None] * (nx * ny * nz)  # the first block over each cell (None = air)
+        for b in blocks:
+            i0, i1 = bisect.bisect_left(self.xs, b[0]), bisect.bisect_left(self.xs, b[1])
+            j0, j1 = bisect.bisect_left(self.ys, b[2]), bisect.bisect_left(self.ys, b[3])
+            k0, k1 = bisect.bisect_left(self.zs, b[4]), bisect.bisect_left(self.zs, b[5])
+            for i in range(i0, i1):
+                for j in range(j0, j1):
+                    base = (i * ny + j) * nz
+                    for k in range(k0, k1):
+                        if owner[base + k] is None:
+                            owner[base + k] = b
+        self.owner = owner
+        reached = bytearray(nx * ny * nz)
+        stack = []
+        for i in range(nx):
+            for j in range(ny):
+                for k in range(nz):
+                    if (i in (0, nx - 1) or j in (0, ny - 1) or k in (0, nz - 1)) and owner[(i * ny + j) * nz + k] is None:
+                        reached[(i * ny + j) * nz + k] = 1
+                        stack.append((i, j, k))
+        while stack:
+            i, j, k = stack.pop()
+            for di, dj, dk in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
+                a, b2, c = i + di, j + dj, k + dk
+                if 0 <= a < nx and 0 <= b2 < ny and 0 <= c < nz:
+                    cell = (a * ny + b2) * nz + c
+                    if not reached[cell] and owner[cell] is None:
+                        reached[cell] = 1
+                        stack.append((a, b2, c))
+        self.reached = reached
+
+    def cell(self, x, y, z):
+        nx, ny, nz = self.n
+        i = self.bisect.bisect_right(self.xs, x) - 1
+        j = self.bisect.bisect_right(self.ys, y) - 1
+        k = self.bisect.bisect_right(self.zs, z) - 1
+        if not (0 <= i < nx and 0 <= j < ny and 0 <= k < nz):
+            return None
+        return (i * ny + j) * nz + k
+
+    def at(self, x, y, z):
+        """"solid", "out" or "in" (outside the box: "out")."""
+        cell = self.cell(x, y, z)
+        if cell is None:
+            return "out"
+        if self.owner[cell] is not None:
+            return "solid"
+        return "out" if self.reached[cell] else "in"
+
+    def boundary(self):
+        """The blocks that face sealed air: (name, look) of every block owning a cell beside an
+        "in" cell."""
+        nx, ny, nz = self.n
+        found = set()
+        for i in range(nx):
+            for j in range(ny):
+                for k in range(nz):
+                    cell = (i * ny + j) * nz + k
+                    if self.owner[cell] is not None or self.reached[cell]:
+                        continue
+                    for di, dj, dk in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
+                        a, b, c = i + di, j + dj, k + dk
+                        if 0 <= a < nx and 0 <= b < ny and 0 <= c < nz:
+                            other = self.owner[(a * ny + b) * nz + c]
+                            if other is not None:
+                                found.add((other[6], other[7]))
+        return found
+
+
+def walked_samples(points, step):
+    """(x, z, the leg's index) every `step` studs along a route-like polyline of {x, y, z, via}
+    points, walked legs only (a climb or a gap is its own leg)."""
+    found = []
+    for index in range(1, len(points)):
+        a, b = points[index - 1], points[index]
+        if b.get("via") is not None:
+            continue
+        run = math.hypot(b["x"] - a["x"], b["z"] - a["z"])
+        cuts = max(int(math.ceil(run / step)), 1)
+        found += [(a["x"] + (b["x"] - a["x"]) * k / cuts, a["z"] + (b["z"] - a["z"]) * k / cuts, index)
+                  for k in range(cuts + 1)]
+    return found
+
+
+def on_polyline(points, x, z):
+    """Whether (x, z) lies on a leg of a polyline of {x, z} points, and how far along it."""
+    walked = 0.0
+    for a, b in zip(points, points[1:]):
+        run = math.hypot(b["x"] - a["x"], b["z"] - a["z"])
+        if segment_gap(x, z, (a["x"], a["z"]), (b["x"], b["z"])) < 0.01:
+            return True, walked + math.hypot(x - a["x"], z - a["z"])
+        walked += run
+    return False, None
+
+
+def floors_under(solids, samples, heights):
+    """The path or ground blocks a polyline's samples stand on (at the heights given)."""
+    found = {}
+    for (x, z, _leg), y in zip(samples, heights):
+        top, under = ground(solids, x, z, y + WALK_RISE)
+        if under is not None and under.kind == "block" and abs(top - y) <= WALK_RISE + EPS:
+            found[under.name] = under
+    return found
+
+
+def clearance(solids, x, z, floor, along):
+    """At (x, z) on a floor at `floor`, walking along the unit vector `along`: the free width
+    across (to the nearest solid that stands over WALK_RISE above the floor within a body's
+    height, each side) and the headroom (to the lowest solid over the floor there)."""
+    ax, az = along
+    nx, nz = -az, ax
+    width = 0.0
+    walls = [(o.x0, o.x1, o.z0, o.z1) for o in solids
+             if o.top > floor + WALK_RISE + EPS and o.bottom < floor + BODY_HEIGHT - EPS]
+    for sign in (1, -1):
+        hits = [t for w in walls if (t := ray_entry(x, z, sign * nx, sign * nz, w)) is not None]
+        width += min(hits + [40.0])
+    over = [o.bottom - floor for o in solids if o.holds(x, z) and o.bottom > floor - EPS and o.top > floor + EPS
+            and o.bottom >= floor + WALK_RISE - EPS]
+    return width, min(over, default=math.inf)
+
+
+def check_cave(name, level, layout, ctx, expect, solids):
+    """L2-36 and L2-37 (f), (a) for a fire secret, and R8 on the open variant. Run on a layout with
+    `shortcuts` only.
+      closed (the brambles stand): every floor the shortcut route crosses off the main route, and
+        every point of an element-keyed chest's trigger, is sealed air or solid (Enclosure: the
+        brambles, walls and roof leave no way in at any width); every wall-look block that faces
+        the sealed air is unclimbable (nobody stands on the ridge); the chest's trigger is met only
+        from its alcove floor and its own top;
+      open (every block that `opens` a shortcut left out, as LevelGeometry.Pieces builds it for a
+        leader who found it): layout.shortcutRoute leaves the main route and rejoins it, walked
+        with one jump (the route's climbs and gaps), at least ROAD_MIN_WIDTH between walls and a
+        body's headroom (a climb's own rise more), every point farther than every open-camp group's
+        sight (the sneak rule); the chest's alcove opens onto a floor the route walks; and the
+        unreachable sniper spots are the pinned open list."""
+    shortcuts = layout.get("shortcuts") or []
+    if not shortcuts:
+        return
+    move, levels = ctx["move"], ctx["levels"]
+    spec = EXPECTED.get(level["layout"]) or {}
+    tag = f"{name}:"
+    jump = jump_facts(move)
+    thickness, depth = levels["fenceThickness"], levels["floorThickness"]
+    path = layout.get("shortcutRoute") or []
+    # The chests behind a shortcut's brambles: keyed on the element those brambles react to.
+    burns = {b.get("react") for b in layout["blocks"] if b.get("react") is not None and b.get("opens") is not None}
+    secrets = [x for x in layout["secrets"] if x["needs"] in REACT_WORDS and x["needs"] in burns]
+    rules = secret_rules(levels)
+    # The box the enclosure is judged in: the shortcut route, its trigger boxes, the reactive blocks
+    # and the element-keyed chests, grown on the flat.
+    xs = [p["x"] for p in path] + [sc["x"] for sc in shortcuts] + [x["x"] for x in secrets]
+    zs = [p["z"] for p in path] + [sc["z"] for sc in shortcuts] + [x["z"] for x in secrets]
+    for b in layout["blocks"]:
+        if b.get("react") is not None:
+            xs.append(b["x"])
+            zs.append(b["z"])
+    box_xz = (min(xs) - CAVE_MARGIN, max(xs) + CAVE_MARGIN, min(zs) - CAVE_MARGIN, max(zs) + CAVE_MARGIN)
+    inside = [b for b in layout["blocks"] if b["x"] + b["sx"] / 2 > box_xz[0] and b["x"] - b["sx"] / 2 < box_xz[1]
+              and b["z"] + b["sz"] / 2 > box_xz[2] and b["z"] - b["sz"] / 2 < box_xz[3]]
+    box = (box_xz[0], box_xz[1], min(b["y"] - b["sy"] / 2 for b in inside) - 5, max(b["y"] + b["sy"] / 2 for b in inside) + 5,
+           box_xz[2], box_xz[3])
+    shut = Enclosure(layout, box)
+    tall = unclimbable(solids, move, ctx["abilityHeight"])
+    # The floors the shortcut route crosses that the main route does not.
+    route_samples = walked_samples(layout["route"], SAMPLE * 4)
+    route_heights = [route_height_near(layout, x, z)[0] for x, z, _leg in route_samples]
+    main_floors = floors_under(solids, route_samples, route_heights)
+    opened = open_layout(layout)
+    open_solids = solids_of(opened, thickness, depth)
+    cave_samples = walked_samples(path, SAMPLE * 4)
+    cave_heights = []
+    for x, z, leg in cave_samples:
+        a, b = path[leg - 1], path[leg]
+        run = math.hypot(b["x"] - a["x"], b["z"] - a["z"])
+        f = math.hypot(x - a["x"], z - a["z"]) / run if run > EPS else 0.0
+        cave_heights.append(a["y"] + (b["y"] - a["y"]) * f)
+    cave_floors = {n: f for n, f in floors_under(open_solids, cave_samples, cave_heights).items() if n not in main_floors}
+    bases = {}
+    for secret in secrets:
+        base = secret_base(solids, secret)
+        if base is not None:
+            bases[secret["id"]] = base
+            cave_floors.setdefault(base.name, base)
+    # (f) closed: sealed.
+    leaks = []
+    proved = 0
+    for fname, floor in sorted(cave_floors.items()):
+        for x, z in standable_points(solids, floor, CAVE_STEP):
+            proved += 1
+            where = shut.at(x, floor.top + 1.0, z)
+            if where == "out":
+                leaks.append(f"{fname} ({x:g}, {floor.top:g}, {z:g})")
+                break
+    trigger_open = []
+    for secret in secrets:
+        if rules is None:
+            break
+        reach, below, above = rules
+        foot = secret["y"] - secret["sy"] / 2
+        heights = [foot - below + k for k in range(int(below + above) + 1)] + [foot + above]
+        for x, z in trigger_region(secret, reach, 1.0):
+            if any(shut.at(x, y, z) == "out" for y in heights):
+                trigger_open.append(f"{secret['id']} at ({x:g}, {z:g})")
+                break
+    expect(bool(cave_floors) and not leaks and not trigger_open,
+           f"{tag} behind fire: with every bramble standing, the {len(cave_floors)} floors the shortcut route crosses off "
+           f"the main route ({', '.join(sorted(cave_floors)) or 'none'}) and the trigger of every element-keyed chest lie "
+           f"in sealed air: no point is reached from outside through any gap, of any width, at any height ({proved} "
+           f"floor points; L2-37 f)" + (f": a way in at {', '.join(leaks[:3])}" if leaks else "")
+           + (f": the trigger is open at {', '.join(trigger_open[:3])}" if trigger_open else ""))
+    facing = shut.boundary()
+    loose = sorted(n for n, look in facing if look == "wall" and n not in tall)
+    walls = sorted(n for n, look in facing if look == "wall")
+    expect(bool(walls) and not loose,
+           f"{tag} behind fire: every wall that faces the sealed air is unclimbable (top at least "
+           f"{climb_max(move, ctx['abilityHeight']):g} over every surface within {stray_reach(move, 0):.1f}), so nobody "
+           f"stands on the ridge or its roof (L2-37 f): " + (f"climbable {', '.join(loose)}" if loose else f"{len(walls)} walls"))
+    # (a) for a fire secret: met from its alcove floor and its own top, from nowhere outside.
+    for secret in secrets:
+        chest = next((x for x in solids if x.name == f"Secret_{secret['id']}"), None)
+        base = bases.get(secret["id"])
+        held = trigger_tops(secret, solids, chest, rules, tall) if chest is not None else []
+        mine = {base.name, chest.name} if base is not None and chest is not None else set()
+        expect(base is not None and base.name in held and set(held) <= mine,
+               f"{tag} the {secret['id']}'s trigger (needs {secret['needs']}) is met from its alcove floor and its own top "
+               f"only (L2-37 a): " + (", ".join(sorted(set(held))) or "none")
+               + (f" (its floor: {base.name})" if base is not None else " (it stands on no floor)"))
+    # (f) open: the shortcut route, walked.
+    problems, facts = walk_route({**opened, "route": path, "start": path[0] if path else layout["start"], "camps": []},
+                                 open_solids, move)
+    starts, at_from = on_polyline(layout["route"], path[0]["x"], path[0]["z"]) if path else (False, None)
+    ends, at_to = on_polyline(layout["route"], path[-1]["x"], path[-1]["z"]) if path else (False, None)
+    if not (starts and ends and at_to > at_from):
+        problems.append("it does not leave the main route and rejoin it further on")
+    narrow, low = [], []
+    for (x, z, leg), y in zip(cave_samples, cave_heights):
+        a, b = path[leg - 1], path[leg]
+        run = math.hypot(b["x"] - a["x"], b["z"] - a["z"])
+        if run <= EPS or (layout_hold := ground(open_solids, x, z, y + WALK_RISE))[0] is None:
+            continue
+        if layout_hold[1].name in main_floors:
+            continue
+        width, head = clearance(open_solids, x, z, layout_hold[0], ((b["x"] - a["x"]) / run, (b["z"] - a["z"]) / run))
+        if width < ROAD_MIN_WIDTH - 0.25 - EPS:
+            narrow.append(f"({x:g}, {z:g}) {width:g}")
+        if head < BODY_HEIGHT - EPS:
+            low.append(f"({x:g}, {z:g}) {head:g}")
+    for leg in facts["legs"]:
+        if leg["via"] == "climb":
+            a = leg["from"]
+            _w, head = clearance(open_solids, a["x"], a["z"], a["y"], (1.0, 0.0))
+            if head < leg["rise"] + BODY_HEIGHT - EPS:
+                low.append(f"the climb at ({a['x']:g}, {a['z']:g}): {head:g} over its foot, under {leg['rise']:g} + a body")
+    climbs = [l for l in facts["legs"] if l["via"] == "climb"]
+    length = facts["length"]
+    skipped = (at_to - at_from) if starts and ends else None
+    camps_skipped = [leg["camp"] for leg in walk_route(layout, solids, move)[1]["legs"]
+                     if leg.get("camp") and starts and ends
+                     and at_from < on_polyline(layout["route"], leg["from"]["x"], leg["from"]["z"])[1] < at_to]
+    ctx["gate16"].setdefault(level["layout"], {}).setdefault("cave", []).append(
+        f"shortcut route {length:.0f} studs (replaces {skipped:.0f} of the main route, camp(s) "
+        f"{', '.join(camps_skipped) or 'none'} skipped)" if skipped is not None else f"shortcut route {length:.0f} studs")
+    expect(not problems and not narrow and not low,
+           f"{tag} the shortcut route, with the brambles burnt: it leaves the main route and rejoins it, walked with one "
+           f"jump ({len(climbs)} climb(s) of at most {jump['climb']}, gaps of at most {jump['gap']}), at least "
+           f"{ROAD_MIN_WIDTH:g} between walls and a body's headroom ({BODY_HEIGHT:g}, a climb's rise more): {length:.0f} "
+           f"studs" + (f", in place of {skipped:.0f} of the main route (skipping camp {', '.join(camps_skipped)})"
+                       if skipped is not None and camps_skipped else "") + " (L2-37 f)"
+           + (": " + "; ".join(problems[:3]) if problems else "")
+           + (f": narrow at {', '.join(narrow[:3])}" if narrow else "") + (f": low at {', '.join(low[:3])}" if low else ""))
+    # The chest's alcove opens onto a floor the route walks (same top, sides touching).
+    walked = [f for n, f in floors_under(open_solids, cave_samples, cave_heights).items()]
+    for secret in secrets:
+        base = bases.get(secret["id"])
+        joined = base is not None and any(base is f or (abs(f.top - base.top) < 0.01 and base.gap_to(f) <= EPS
+                                                       and min(base.x1, f.x1) - max(base.x0, f.x0) + min(base.z1, f.z1)
+                                                       - max(base.z0, f.z0) >= 2 * BODY_RADIUS) for f in walked)
+        expect(joined, f"{tag} with the brambles burnt the {secret['id']}'s floor ({base.name if base else 'none'}) is a "
+               f"floor the shortcut route walks or opens onto one at its height (L2-37 f)")
+    # The sneak rule along the shortcut route.
+    kinds, ranks, camp_rules = ctx["kinds"], ctx["ranks"], ctx["camps"]
+    seen, tight = [], None
+    points = [(p["x"], p["z"]) for p in path]
+    for difficulty in level["difficulties"]:
+        defs, _tents = all_defs(level, layout, ranks.get(difficulty, 0), ranks)
+        for defn in defs:
+            if defn["held"]:
+                continue
+            sight = sr.cb_posture(defn, camp_rules)["sight"]
+            for member in resting_eyes(defn):
+                ex, ez = member["at"][0], member["at"][2]
+                d = min(segment_gap(ex, ez, a, b) for a, b in zip(points, points[1:])) if len(points) > 1 else math.inf
+                if tight is None or d - sight < tight[0]:
+                    tight = (d - sight, f"{difficulty} {defn['id']}", sight)
+                if d - sight <= EPS:
+                    seen.append(f"{difficulty} {defn['id']} at ({ex:g}, {ez:g}): {d:.1f} studs, sight {sight:g}")
+    expect(bool(points) and not seen,
+           f"{tag} every point of the shortcut route lies farther than its posture's sight from every resting place of "
+           f"every open-camp group, tents included, every difficulty (the sneak rule, L2-37 f)"
+           + (": " + "; ".join(seen[:3]) if seen else f": the tightest {tight[1]} {tight[0]:+.1f} (sight {tight[2]:g})"
+              if tight else ""))
+    # R8 on the open variant: the pinned open list.
+    spots = sniper_spots(level, opened, ctx, open_solids)
+    found = sorted(sp["id"] for sp in spots)
+    pinned = spec.get("sniperSpotsOpen")
+    ctx["gate16"].setdefault(level["layout"], {}).setdefault("cave", []).append(
+        "sniper spots with the brambles burnt: " + ", ".join(
+            f"{sp['id']} (camp {sp['camp']}, nearest seen ({sp['at'][0]:g}, {sp['at'][2]:g}) {sp['gap']:.1f} off)"
+            for sp in spots if sp["id"] not in (spec.get("sniperSpots") or [])) + " beyond the closed list")
+    expect(pinned is None or found == sorted(pinned),
+           f"{name}: with the brambles burnt, the unreachable sniper spots (R8 with L2-37's sight) are the pinned open "
+           f"list: {', '.join(found) or 'none'}"
+           + (f" (pinned: {', '.join(sorted(pinned))})" if pinned is not None and found != sorted(pinned) else ""))
+
+
+def route_blocks(layout, solids, step):
+    """The route's walked samples and how far along the route each lies, by the path or ground
+    block under it: {name: (the Solid, [(along, x, z)])}."""
+    found = {}
+    walked = 0.0
+    route = layout["route"]
+    for index in range(1, len(route)):
+        a, b = route[index - 1], route[index]
+        run = math.hypot(b["x"] - a["x"], b["z"] - a["z"])
+        if b.get("via") is None and run > EPS:
+            cuts = max(int(math.ceil(run / step)), 1)
+            for k in range(cuts + 1):
+                f = k / cuts
+                x, z = a["x"] + (b["x"] - a["x"]) * f, a["z"] + (b["z"] - a["z"]) * f
+                for sld in solids:
+                    if (sld.kind == "block" and sld.look in ("path", "ground") and abs(sld.top - a["y"]) < 0.01
+                            and sld.holds(x, z)):
+                        found.setdefault(sld.name, (sld, []))[1].append((walked + run * f, x, z))
+        walked += run
+    return found
+
+
+def rim_points(solid, step):
+    xs = [solid.x0 + step * k for k in range(int((solid.x1 - solid.x0) / step) + 1)] + [solid.x1]
+    zs = [solid.z0 + step * k for k in range(int((solid.z1 - solid.z0) / step) + 1)] + [solid.z1]
+    return list({(x, solid.z0) for x in xs} | {(x, solid.z1) for x in xs} | {(solid.x0, z) for z in zs}
+                | {(solid.x1, z) for z in zs})
+
+
+def check_route_skips(name, layout, ctx, expect, solids, tall):
+    """L2-47 (Ben: "close it now"): no hop cuts a bend of the road. For every two walked road
+    blocks that do not touch, the shortest way through the air from the edge of one to the edge
+    of the other (round every unclimbable wall: through their corners, in plan) is longer than a
+    jump, a double jump, a dash and the walk-off grace carry (falling the drop between them), or it
+    saves at most SKIP_SAVE studs of the route (measured from the route's nearest point on each
+    block)."""
+    move = ctx["move"]
+    blocks = route_blocks(layout, solids, SAMPLE * 4)
+    walls = [(s.x0, s.x1, s.z0, s.z1) for s in solids if s.name in tall]
+    grace = move["walkSpeed"] * (move.get("coyoteSeconds") or 0)
+    names = sorted(blocks)
+    worst, cuts = None, []
+    for i, an in enumerate(names):
+        for bn in names[i + 1:]:
+            a, sa = blocks[an]
+            b, sb = blocks[bn]
+            gap = a.gap_to(b)
+            if gap <= EPS:
+                continue
+            lo, hi = (a, b) if a.top >= b.top else (b, a)
+            reach = stray_reach(move, lo.top - hi.top) + grace
+            if gap > reach + EPS or hi.top - lo.top > climb_max(move, ctx["abilityHeight"]) + EPS:
+                continue
+            box = (min(a.x0, b.x0) - reach, max(a.x1, b.x1) + reach, min(a.z0, b.z0) - reach, max(a.z1, b.z1) + reach)
+            near = [w for w in walls if rect_gap(w, box[:4]) <= EPS]
+            corners = [(w[0] - 0.01, w[2] - 0.01) for w in near] + [(w[0] - 0.01, w[3] + 0.01) for w in near]
+            corners += [(w[1] + 0.01, w[2] - 0.01) for w in near] + [(w[1] + 0.01, w[3] + 0.01) for w in near]
+
+            def clear(p, q):
+                return not any(seg_hits_rect(p[0], p[1], q[0], q[1], w) for w in near)
+
+            n = len(corners)
+            graph = [[math.inf] * n for _ in range(n)]
+            for u in range(n):
+                graph[u][u] = 0.0
+                for v in range(u + 1, n):
+                    if clear(corners[u], corners[v]):
+                        graph[u][v] = graph[v][u] = math.dist(corners[u], corners[v])
+            for k in range(n):
+                for u in range(n):
+                    for v in range(n):
+                        if graph[u][k] + graph[k][v] < graph[u][v]:
+                            graph[u][v] = graph[u][k] + graph[k][v]
+            pa = [p for p in rim_points(a, SKIP_STEP) if point_rect((b.x0, b.x1, b.z0, b.z1), *p) <= reach]
+            pb = [p for p in rim_points(b, SKIP_STEP) if point_rect((a.x0, a.x1, a.z0, a.z1), *p) <= reach]
+            if not pa or not pb:
+                continue
+            to_b = []
+            for q in pb:
+                seen = [math.dist(q, corners[v]) if clear(q, corners[v]) else math.inf for v in range(n)]
+                to_b.append([min((graph[u][v] + seen[v] for v in range(n)), default=math.inf) for u in range(n)])
+
+            def along(points, p):
+                return min(points, key=lambda r: (r[1] - p[0]) ** 2 + (r[2] - p[1]) ** 2)[0]
+
+            for p in pa:
+                from_a = [math.dist(p, corners[u]) if clear(p, corners[u]) else math.inf for u in range(n)]
+                sp = along(sa, p)
+                for q, rest in zip(pb, to_b):
+                    hop = math.dist(p, q) if clear(p, q) else min((from_a[u] + rest[u] for u in range(n)), default=math.inf)
+                    if hop > reach + EPS:
+                        continue
+                    saved = abs(along(sb, q) - sp) - hop
+                    if worst is None or saved > worst[0]:
+                        worst = (saved, f"{an} ({p[0]:g}, {p[1]:g}) to {bn} ({q[0]:g}, {q[1]:g}), a hop of {hop:.1f}")
+                    if saved > SKIP_SAVE + EPS:
+                        cuts.append(f"{an} to {bn}: a hop of {hop:.1f} from ({p[0]:g}, {p[1]:g}) to ({q[0]:g}, {q[1]:g}) "
+                                    f"saves {saved:.0f} studs of road")
+                        break
+                else:
+                    continue
+                break
+    expect(not cuts, f"{tag_of(name)} no hop cuts a bend: between two walked road blocks that do not touch, the shortest way "
+           f"round the unclimbable walls is beyond a jump, a double jump, a dash and the walk-off grace, or saves at most "
+           f"{SKIP_SAVE:g} studs of road (L2-47)" + (": " + "; ".join(cuts[:3]) if cuts else
+                                                     f" (the most any hop saves: {worst[0]:.0f}, {worst[1]})" if worst else ""))
+
+
+def tag_of(name):
+    return f"{name}:"
+
+
 def three_positive(value):
     """Is `value` a list of exactly three positive numbers (a size in studs)?"""
     return (isinstance(value, list) and len(value) == 3
@@ -3313,8 +4015,8 @@ def check_map(expeditions, level_files, layouts, expect):
 # The pictures
 # ---------------------------------------------------------------------------------------------
 
-LOOK_CHARS = {"path": "=", "ground": "%", "water": "~", "lobby": ":", "wall": "#", "sign": "i"}
-LEGEND = ("= road   % ledge or ground   ~ water   . camp floor   # fence or wall   | - gate   x spawn point   "
+LOOK_CHARS = {"path": "=", "ground": "%", "water": "~", "lobby": ":", "wall": "#", "sign": "i", "bramble": "*"}
+LEGEND = ("= road   % ledge or ground   ~ water   . camp floor   # fence or wall   * bramble   | - gate   x spawn point   "
           "o obstacle   c checkpoint   ? secret site   i sign   S start   B boss   A B C the camp's middle")
 
 
@@ -3446,7 +4148,8 @@ def load_all():
            "gate16": {}, "chains": {}, "longbow": longbow_range(proving),
            "abilityHeight": ability_height(proving), "camera": combat.get("camera"), "theme": theme_numbers(),
            "renderer": renderer_numbers(), "abilityIds": ability_ids(expeditions), "lifts": lifting_abilities(proving),
-           "fieldedLifts": fielded_lifts(proving), "loadout": sorted((proving.get("loadout") or {}).values())}
+           "fieldedLifts": fielded_lifts(proving), "loadout": sorted((proving.get("loadout") or {}).values()),
+           "weapons": proving["weapons"]}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 
@@ -3528,12 +4231,17 @@ def check_rules(combat, level_files, ctx, expect):
     expect(rules is not None and rules[0] > 0 and rules[1] >= 0 and rules[2] > 0,
            "Combat.json levels (L2-11): secretReach and secretAbove over 0, secretBelow 0 or more: "
            + ", ".join(f"{key} {levels.get(key)}" for key in SECRET_RULES))
+    react = levels.get("react") or {}
+    expect(isinstance(react, dict) and sr.whole(react.get("fireHits")) and is_number(react.get("pad"))
+           and react["pad"] >= 0,
+           f"Combat.json levels.react (L2-34): fireHits a whole number of at least 1 ({react.get('fireHits')}) and pad 0 "
+           f"or more ({react.get('pad')})")
     debug = combat.get("debug") or {}
     names = [debug.get(key) for key in DEBUG_UNLOCK_KEYS]
     taken = [v for k, v in debug.items() if k.endswith("Attribute") and k not in DEBUG_UNLOCK_KEYS]
     expect(all(isinstance(v, str) and v for v in names) and len(set(names)) == len(names)
            and not set(names) & set(taken),
-           "Combat.json debug (L2-19): " + ", ".join(f"{k} {debug.get(k)!r}" for k in DEBUG_UNLOCK_KEYS)
+           "Combat.json debug (L2-19, L2-38): " + ", ".join(f"{k} {debug.get(k)!r}" for k in DEBUG_UNLOCK_KEYS)
            + " are Workspace attribute names of their own")
     presets = [(p.get("melee"), p.get("ranged")) for p in debug.get("gearPresets") or []]
     proving = debug.get("provingGear") or {}
@@ -3578,7 +4286,7 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
         level = sr.resolve_level(file, ctx["missions"].get(file.get("mission")), ctx["runCap"])
         check_level_file(file, level, layouts, ctx, expect)
         if file.get("layout") in layouts:
-            check_secret_rewards(file, layouts[file["layout"]], expeditions, expect)
+            check_secret_rewards(file, layouts[file["layout"]], expeditions, expect, ctx.get("weapons"), ctx["ranks"])
     bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
                  for name, layout in layouts.items()}
     for name, layout in layouts.items():

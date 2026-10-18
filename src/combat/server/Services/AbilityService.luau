@@ -713,6 +713,9 @@ local MECHANICS: { [string]: Mechanic } = {
 	overloadSweep = { busy = busyForDuration, launch = launchOverloadSweep },
 	stormCoil = { target = "ground", busy = noBusy, launch = launchStormCoil },
 }
+-- L2-29: the Flamethrower's Dragon's Breath is the Slug Burst launcher (four flame cones from the
+-- muzzle): the same entry, so its busy window, target and launch can never drift apart.
+MECHANICS.dragonBreath = MECHANICS.slugBurst
 
 -- Timelines ----------------------------------------------------------------------------------------
 

@@ -18,6 +18,14 @@
 -- colour that is not three numbers or no sign block leaves that one property as the engine made
 -- it, with one warn. Whatever still fails while the Parts are made (the build is behind a
 -- pcall) leaves no Part behind: half a level would be stacked on by the next Build.
+--
+-- L2 W2 (docs/prompts/l2-w2-contract.md, L2-34 to L2-36): a block with `react` is reactive. Build
+-- keeps a list of those it made, for this run only; React (wired by Main to WeaponService's
+-- strike listener) heats one a strike of its element touches (WorldReact's rules), shows the
+-- heat on its Part's `Heat` attribute (0 to 1, with `React` naming the element, both set at
+-- build so the client knows the block), and destroys it once it has taken its count, telling the
+-- OnReacted listeners (WaveService). A block whose `opens` names a shortcut the leader has found
+-- is never built (LevelGeometry.Pieces' `open`).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -25,6 +33,9 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local BarrierGroups = require(script.Parent:WaitForChild("BarrierGroups"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
@@ -41,6 +52,18 @@ type CampParts = {
 	barriers: { BasePart },
 	checkpoint: BasePart?,
 }
+-- L2-35: one reactive block of the level that is built: its Part's name, the Part, its box, the
+-- element that takes it away, the strikes it has taken and the shortcut it opens.
+type Reactive = {
+	name: string,
+	part: BasePart,
+	box: LevelGeometry.Box,
+	react: string,
+	heat: number,
+	opens: string?,
+}
+-- What OnReacted's listeners are told: the block's name, its element and its box as it stood.
+export type Reacted = { name: string, react: string, box: LevelGeometry.Box }
 
 local CONST = {
 	LOBBY_FOLDER = "Lobby",
@@ -50,6 +73,10 @@ local CONST = {
 	SPAWN_NAME = "LobbySpawn",
 	SPAWN_SIZE = Vector3.new(6, 1, 6),
 	-- A block's text goes on its four side faces.
+	-- L2-35: infrastructure, like ArenaService's PLACED_ATTRIBUTE: a reactive block's Part
+	-- attributes, the element (set at build) and the share of the way it has gone (0 to 1).
+	REACT_ATTRIBUTE = "React",
+	HEAT_ATTRIBUTE = "Heat",
 	TEXT_FACES = table.freeze({
 		Enum.NormalId.Front,
 		Enum.NormalId.Back,
@@ -72,6 +99,9 @@ local state = {
 	-- The looks the level was built in (SetCamp recolours a checkpoint from them).
 	looks = nil :: Looks?,
 	warned = {} :: { [string]: boolean },
+	-- L2-35: the built level's reactive blocks (emptied by Clear) and who hears one go.
+	reactive = {} :: { Reactive },
+	reactedListeners = {} :: { (Reacted) -> () },
 }
 
 local LevelService = {}
@@ -210,9 +240,10 @@ end
 local function piecesOf(
 	layout: Types.LevelLayout,
 	sizes: LevelGeometry.Sizes,
-	maxParts: number
+	maxParts: number,
+	open: { [string]: boolean }?
 ): ({ LevelGeometry.Piece }?, string?)
-	local ok, pieces, problem = pcall(LevelGeometry.Pieces, layout, sizes, maxParts)
+	local ok, pieces, problem = pcall(LevelGeometry.Pieces, layout, sizes, maxParts, open)
 	if not ok then
 		return nil, `the layout could not be read: {pieces}`
 	end
@@ -276,7 +307,8 @@ end
 local function construct(
 	folder: Folder,
 	pieces: { LevelGeometry.Piece },
-	expeditions: Types.ExpeditionsConfig?
+	expeditions: Types.ExpeditionsConfig?,
+	reactive: { Reactive }
 ): { [string]: CampParts }
 	local looks: Looks? = if expeditions ~= nil then expeditions.looks else nil
 	local camps: { [string]: CampParts } = {}
@@ -349,6 +381,19 @@ local function construct(
 		if text ~= nil and text ~= "" and expeditions ~= nil then
 			addText(part, text, expeditions)
 		end
+		local react = piece.react
+		if react ~= nil and piece.role == "block" then
+			part:SetAttribute(CONST.REACT_ATTRIBUTE, react)
+			part:SetAttribute(CONST.HEAT_ATTRIBUTE, 0)
+			table.insert(reactive, {
+				name = piece.name,
+				part = part :: BasePart,
+				box = box,
+				react = react,
+				heat = 0,
+				opens = piece.opens,
+			})
+		end
 		part.Parent = folder
 	end
 	return camps
@@ -363,15 +408,19 @@ local function raise(
 	layout: Types.LevelLayout,
 	sizes: LevelGeometry.Sizes,
 	maxParts: number,
-	expeditions: Types.ExpeditionsConfig?
+	expeditions: Types.ExpeditionsConfig?,
+	open: { [string]: boolean }?,
+	reactive: { Reactive }?
 ): ({ [string]: CampParts }?, string?)
-	local pieces, problem = piecesOf(layout, sizes, maxParts)
+	local pieces, problem = piecesOf(layout, sizes, maxParts, open)
 	if pieces == nil then
 		return nil, problem
 	end
-	local ok, camps = pcall(construct, folder, pieces, expeditions)
+	local made: { Reactive } = reactive or {}
+	local ok, camps = pcall(construct, folder, pieces, expeditions, made)
 	if not ok then
 		folder:ClearAllChildren()
+		table.clear(made)
 		return nil, `a Part could not be made ({tostring(camps)})`
 	end
 	return camps, nil
@@ -489,11 +538,13 @@ end
 -- built, when a level is already standing, before Init, when LevelGeometry.Pieces refuses the
 -- layout (it still names an arena, gates with no fence, a camp and no levels.floorThickness, a
 -- size of 0 or less, over levels.maxParts), or when a Part cannot be made: the Parts made
--- before it are cleared, so the next Build starts from an empty folder. Never yields.
+-- before it are cleared, so the next Build starts from an empty folder. Never yields. L2-36:
+-- `open` = the shortcut ids the leader has found (nil = none): a block that opens one is left out.
 function LevelService.Build(
 	layout: Types.LevelLayout,
 	expeditions: Types.ExpeditionsConfig,
-	rules: Types.CombatLevelsConfig
+	rules: Types.CombatLevelsConfig,
+	open: { [string]: boolean }?
 ): boolean
 	local folder = state.levelFolder
 	if folder == nil then
@@ -505,11 +556,13 @@ function LevelService.Build(
 		return false
 	end
 	local sizes = sizesOf(expeditions, rules)
-	local camps, problem = raise(folder, layout, sizes, rules.maxParts, expeditions)
+	local reactive: { Reactive } = {}
+	local camps, problem = raise(folder, layout, sizes, rules.maxParts, expeditions, open, reactive)
 	if camps == nil then
 		warn(`[LevelService] the level was not built: {problem}`)
 		return false
 	end
+	state.reactive = reactive
 	warnUnsized(layout, sizes)
 	state.camps = camps
 	state.looks = expeditions.looks
@@ -526,10 +579,74 @@ function LevelService.Clear(): ()
 	state.camps = {}
 	state.looks = nil
 	state.built = false
+	state.reactive = {}
 end
 
 function LevelService.IsBuilt(): boolean
 	return state.built
+end
+
+-- L2-35: `callback` hears every reactive block that goes, after its Part is destroyed. Called
+-- inside the strike's frame: it must not yield.
+function LevelService.OnReacted(callback: (Reacted) -> ()): ()
+	table.insert(state.reactedListeners, callback)
+end
+
+-- L2-35, WeaponService's strike listener (Main wires it): `player`'s strike with `weapon`
+-- touched what it touched. Every reactive block of the built level whose element is the
+-- family's (Unlocks.ElementOf, through Tuning) and whose box the strike's segment meets
+-- (WorldReact.Touches, Combat.json levels.react.pad) takes one strike; at its count
+-- (WorldReact.Need) its Part is destroyed and the OnReacted listeners are told. No "in play" rule
+-- (a bramble is not loot), and no ability rule here: a shape that is not a segment touches
+-- nothing. Never yields, never throws on what the config says.
+function LevelService.React(
+	_player: Player,
+	weapon: string,
+	fx: WorldReact.Strike,
+	_ability: string?
+): ()
+	local reactive = state.reactive
+	if #reactive == 0 then
+		return
+	end
+	local config: any = Tuning.Get()
+	local element = Unlocks.ElementOf(config.weapons, weapon)
+	if element == nil then
+		return
+	end
+	local combat = Catalog.GetCombatConfig()
+	local rules = if combat ~= nil then combat.levels.react else nil
+	local need = WorldReact.Need(rules, element)
+	if need == nil then
+		warnOnce(
+			`react:{element}`,
+			`[LevelService] Combat.json levels.react has no count for "{element}"; nothing reacts to it`
+		)
+		return
+	end
+	local pad = WorldReact.Pad(rules)
+	local gone: { Reactive } = {}
+	for index = #reactive, 1, -1 do
+		local entry = reactive[index]
+		if entry.react ~= element or not WorldReact.Touches(fx, entry.box, pad) then
+			continue
+		end
+		local heat, done = WorldReact.Heat(entry.heat, need)
+		entry.heat = heat
+		if done then
+			table.remove(reactive, index)
+			table.insert(gone, entry)
+		else
+			entry.part:SetAttribute(CONST.HEAT_ATTRIBUTE, WorldReact.Share(heat, need))
+		end
+	end
+	for _, entry in gone do
+		entry.part:Destroy()
+		local event: Reacted = { name = entry.name, react = entry.react, box = entry.box }
+		for _, listener in state.reactedListeners do
+			listener(event)
+		end
+	end
 end
 
 -- "open" (as built): the gates are not there and the invisible wall is off. "closed": the gates

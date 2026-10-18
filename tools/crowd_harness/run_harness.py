@@ -25,6 +25,10 @@ to the stub), the pure Unlocks (ownership, keys, the purchase) and SecretFlow (t
 tests_l2.luau: those, WallClip.Rise per player, StageFlow's secrets lines and the shipped chests.
 Its second fix round adds GroundRule (the ground point's movement and double-jump inputs, read
 once for both callers) and scopes the ground-point source check to the two functions.
+L2 W2 adds the pure WorldReact (a strike's segment against a reactive block, the heat) and
+tests_l2w2.luau: Unlocks' owned families, element keys and set-family verdict, WorldReact,
+SecretFlow's shortcuts, LevelGeometry.Pieces' open set, Validate's react, opens and shortcuts
+lines, and a family's element as a structural Tuning path.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -92,6 +96,8 @@ SOURCES = {
     "SecretFlow": "src/combat/server/Services/SecretFlow.luau",
     # The L2 W1 second fix round's Minor 1: the ground point's inputs, read in one place.
     "GroundRule": "src/shared/GroundRule.luau",
+    # L2 W2: the world's reactions (tests_l2w2.luau).
+    "WorldReact": "src/shared/WorldReact.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -115,6 +121,9 @@ TESTS = [
     "tests_l1c.luau",
     # L2 W1: the v7 step, Unlocks, SecretFlow, Rise per player, the shipped chests.
     "tests_l2.luau",
+    # L2 W2: owned families, element keys, the set-family verdict, WorldReact, shortcuts,
+    # Pieces' open set, Validate's react/opens/shortcuts lines, the element as structural.
+    "tests_l2w2.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"

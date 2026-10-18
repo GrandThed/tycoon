@@ -69,6 +69,10 @@
 --    without turning: the local early effect, and every other player's swing drawn from its
 --    strike. Ability, ranged and tick strikes stay fixed in the world. So does the wireframe:
 --    it is the shape the server resolved, there to check the effect against.
+--
+-- L2 W2 (docs/prompts/l2-w2-contract.md, L2-29): a continuous family that is not a ray (the
+-- Flamethrower's capsule) is a stream, not a beam: its strikes go to FlameFx, which draws the
+-- fire, and nothing else changes here (ticks merge their numbers as the Beam's do).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -93,6 +97,7 @@ local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 -- P4: the haptic pulse is shared with VitalsController (being hit), which drives the same
 -- motors; it used to be private here.
 local Haptics = require(script.Parent:WaitForChild("Haptics"))
+local FlameFx = require(script.Parent:WaitForChild("FlameFx"))
 
 -- Below this length a vector has no heading (mirrors HitShapes' own epsilon).
 local EPSILON = 1e-6
@@ -2860,7 +2865,9 @@ local function onStrike(strike: Strike): ()
 	-- Every drawing reads the bodies before react() starts any death flight.
 	local hitboxStrength = feedbackStrength("hitboxEffect")
 	local wire = wireframe
-	if beamWeapon then
+	if beamWeapon and FlameFx.IsStream(variant) then
+		FlameFx.OnStrike(strike, variant)
+	elseif beamWeapon then
 		feedBeam(strike, variant :: Types.RangeWeaponVariant)
 		-- One wireframe per marker interval: ten a second would bury the beam.
 		local beam = beams[strike.userId]
@@ -3399,6 +3406,7 @@ function FeedbackController.Start(): ()
 	Haptics.Detect()
 	-- Input cannot require this module (this one requires it), so the swing reaches us here.
 	InputController.SetSwingHandler(FeedbackController.PredictSwing)
+	FlameFx.Start()
 	table.insert(connections, RunService.RenderStepped:Connect(onRenderStep))
 	-- A player who leaves mid-beam takes the beam along (no more strikes would end it on time).
 	table.insert(
@@ -3555,6 +3563,7 @@ function FeedbackController.Destroy(): ()
 	end
 	table.clear(connections)
 	InputController.SetSwingHandler(nil)
+	FlameFx.Destroy()
 	releaseHitstop()
 	Haptics.Stop()
 	for _, effect in effects do
