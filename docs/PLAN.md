@@ -3924,17 +3924,157 @@ tools 4). All fixed:
 - [x] Reviewed: three slices, 0 / 0 / 15 (`a21f153`)
 - [x] Fix round (`d6b3777`)
 - [x] Fix-diff review 0 / 1 / 3, fixed (`b056843`)
-- [ ] QA: full mutate on `613e736` (lead)
-- [ ] Merged to `main`, six place files rebuilt (lead)
+- [x] QA: full mutate on `613e736` (lead)
+- [x] Merged to `main`, six place files rebuilt (lead, `fed5ed6`)
 - [ ] L2 Wave 1 playtest (Ben)
 
-### Wave 2 — fire, the cave and the shortcut (next, on Ben's word)
+### Wave 2 — fire, the Flamethrower, the cave and the shortcut (2026-10-18/19)
 
-- The **Flamethrower** as a weapon family (honours `families.flamethrower` from W1).
-- The cache becomes a roofed **cave** behind a bramble mouth that fire burns.
-- A hidden path through the cave skips ahead to Main Camp; once found it stays open on later runs
-  (`combat.shortcuts`).
-- The **lobby loadout picker** (moved from W1).
+**Documents:**
+- Ben's W2 decisions (2026-10-18): `docs/MISSIONS_DESIGN.md` §22, "W2 decisions".
+- Contract: `docs/prompts/l2-w2-contract.md` (rulings L2-29 to L2-48; Ben's answers §10, lead's rulings §11).
+  INTERFACES "# L2 W2 contracts".
+- Fix rounds: `docs/prompts/l2-w2-fix-round.md`, `l2-w2-fix2.md`, `l2-w2-fix3.md`.
+- Reports: `docs/prompts/l2-w2-reports/`. Findings: `docs/prompts/l2-w2-review/` (`server.md`, `client.md`,
+  `data-tools.md`, `fix-diff.md`, `fix2-diff.md`).
+- Values: `docs/BALANCE.md` "L2 W2" and "L2 W2 fix round".
+- Branch `l2-w2` (worktree `tycoon-p5`); fixes 2 and 3 on `l2-w2-fix2` (worktree `tycoon-p5b`).
+
+**What shipped:**
+- **The Flamethrower** (`weapons.flamethrower`, ranged, era 1, `element = "fire"`, one variant).
+  - A held stream: capsule **20 studs × 7 wide**, 5 damage a tick, 10 ticks a second. Ticks merge their numbers.
+  - The stream is cut at the first wall. It never blooms (streams take no spread).
+  - A 5-damage tick is never heavy (40): it cannot break a plate; the slam does.
+  - **Dragon's Breath** (ability): four flame cones in 0.45 s on the Slug Burst launcher, 36 damage each.
+    Cooldown 10 s, floor 4 s, kill refund 0.5 s.
+  - Visuals: `FlameFx` (the local stream starts on the press frame, from the shot origin), `DragonBreath`.
+    Low-end devices draw only the core. No sound.
+  - It never kills a boss faster than the Broadsword (new `sim_range` gate L2-39).
+- **Owning and choosing weapons.**
+  - Owned = a starter (Broadsword, Longbow) or a family written to the save. `fire` is held once the lookout
+    chest has paid the Flamethrower, whatever the player carries.
+  - Remote `RequestSetFamily(slot, family, variant)`: ids only; verdict unavailable → invalid → locked → busy
+    (lobby only). The choice lives **for this visit** (session memory, no save).
+- **The Armory panel** (the W1 Abilities panel grown): tabs **Weapons** and **Abilities**.
+  - Opened by **K**, the **Armory** HUD button (same slot as "Abilities"), gamepad **Y**. **LB / RB** switch
+    tabs; **B**, Esc, X close.
+  - Weapons: Melee and Ranged columns, one card per owned family, a "FIRE" chip, the held one gold.
+  - The Flamethrower shows **locked, "Hidden on Forest Road"** until found.
+  - Chest card note: "Flamethrower is yours: equip it in the Armory (K)".
+- **Brambles that fire burns.** A `blocks` entry may carry `react = "fire"` and `opens = "cave"`.
+  - Pure `src/shared/WorldReact.luau` (`Touches`, `Apply`, `Wants`, `AimClear`).
+  - Six Flamethrower ticks (~0.6 s) burn one (`Combat.json levels.react`). Abilities never burn; the Longbow
+    never burns.
+  - Part attributes `React` and `Heat` (0–1) for the client; CombatFx `react` / `burnt` for everyone.
+  - `ReactFx`: darkening and embers while it heats, then a flash and a collapse (fades only on low graphics).
+  - **Phones burn too:** auto-fire fires the stream at a bramble in reach when no body is in the stream. A
+    resting raider in the stream still holds fire.
+- **The Raiders' Tunnel (the Pickets bypass).**
+  - Bramble mouth on Road4 under the lookout. A roofed tunnel (12 wide × 14 high) under a ridge, one +8 step,
+    a long leg, one turn 12 studs before the exit. Exit bramble onto RoadAB5 by Main Camp's west gate.
+  - The **Raiders' Cache** in an alcove off the long leg: **+4 Valor, +60 Timber**, needs FIRE. Sign on Road4
+    beside the mouth. The old CacheSpur and its sign pad are gone.
+  - Ridge tops 84 near the lookout ledge and the chest, 64 elsewhere: nothing stands on it.
+  - Not a raiders' region cell: raiders never enter; a player chased in is lost by them.
+- **The shortcut, found and saved.**
+  - Stepping into the box in the exit leg records `combat.shortcuts.forest.cave`. Card "SHORTCUT FOUND —
+    Raiders' Tunnel stays open on runs you lead"; others get a toast. Finding it from the exit end counts.
+  - The **leader's save** decides: a found tunnel is built with no brambles on later runs.
+  - A found run skips camp A: **~37 s faster on Normal, 5.6% less pay**; Hard 23 s faster, 9.6% less.
+- **The AB U-bend is closed** (BendWall). A new check_levels rule (L2-47) and its mutant.
+- **Camp C's wall is 2.5 thick** (per-camp `fence.thickness`; `RunFloor.fence` for the camera clip).
+  - L1c sight margins grew: eyes +4.09, cameras +5.20. The close's nudge can move a root up to 4.5 studs.
+  - The gatehouse's east and west walls end 1.5 sooner (z −28.5), flush with the new wall.
+- **The shot-origin wall rule.** The server refuses an origin with more than `shooting.originWallChord` (1.5)
+  of solid between the head and it, for weapons and abilities.
+  - Fast moves: also allowed from the head led along the server's own measured motion (`PositionRing.Motion`);
+    the client's velocity may only shorten the lead.
+  - The first refusal per player warns once in Studio's Output.
+- **Camera:** `openPivot` keeps the pivot out of rock after a motion ability at the step or a bend.
+- **Studio levers** (both entry points; inert outside Studio and in the range): **F** toggles the Flamethrower
+  (`grantFamily` / `removeFamily`, attributes `DebugGrantFamily`, `DebugRemoveFamily`); **H** now resets secrets
+  **and** shortcuts (from the next run). DebugPanel "Flamethrower: ON/off (F)".
+- **Gates:** `check_levels.py` (f) closed and open variants, (a) for the cache, (e) the key chain, R8 headroom and
+  plan-view sight, the ridge with double-jump arcs, the origin chord gate, the bend rule; `check_levels_mutants`;
+  harness suite `tests_l2w2.luau`; `check_stage_mirror`; `sim_range` Flamethrower rows, L2-39, pair and shortcut
+  runs.
+
+**Commits:**
+- Brief `805a6e2`; contract and Ben's answers `40cb729`. Build `4176172`.
+- Review brief `0f78d30`; findings and rulings `e14fb78`. Fix round `78463a0`.
+- Fix-diff review: `863344b` brief, `d98b85d` findings. Fix 2 `aca232d`.
+- Second fix-diff review: `98851e3` brief, `44afe09` findings. Fix 3 `21205da`.
+- Plus this docs commit.
+
+**First review: three Opus slices, 0 Critical, 3 Major, 15 Minor** (server 0 / 0 / 3, client 0 / 2 / 8, data and
+tools 0 / 1 / 4). All fixed or ruled:
+- **c-M1:** phones could not burn a bramble → auto-fire targets a reactive Part in reach.
+- **c-M2:** the flame was drawn short (from the camera) → one `InputController.ShotRay()` for both.
+- **d-M1:** a Leap Smash or Spear dash off the lookout ledge reached the ridge → those pieces to 84 (split at
+  x −180); the ridge rule runs every lifting arc with the double jump.
+- Server: the burn lines sat outside every gate → pure `WorldReact.Apply`, source checks; ability strikes never
+  burn; Validate refuses a shortcut size ≤ 0.
+- Data: the grace in the ridge's reach (49.3); the fire sniper rated (CaveExit 8% of the mission player); the
+  ability-arc bend hop recorded as a known limit until L3; forged origins through thin walls → the origin wall rule.
+- Client: camera pivot spherecast; gamepad re-select; result matched on `slotId`; low graphics on
+  `lowEndDevice`, never `reducedMotion`; flame out on release; one result timeout; stale comments.
+
+**Fix-diff review: 0 Critical, 0 Major, 3 Minor, 1 Suggestion.** All fixed in fix 2:
+- **m1:** camp C's 1-stud fence let a forged origin through → per-camp thickness, C 2.5; an origin chord gate.
+- **m2:** honest origins refused on fast moves round a corner → a lag-led line from the head.
+- **m3:** streams bloomed, so the drawn flame missed the server's capsule → no bloom on streams.
+- **s1:** cached client ray params.
+
+**Second fix-diff review: 0 Critical, 0 Major, 1 Minor, 2 Suggestions.** All fixed in fix 3 or ruled:
+- **m1:** the lead followed the client's velocity → it follows the server's measured motion.
+- **s1:** the honest gatehouse case is now a harness case, with two mutants.
+- **s2:** the Beam no longer blooms while moving (a playtest note).
+
+**Balance (BALANCE "L2 W2"), Normal 2 / 2:**
+- Flamethrower in the range, tier 1: Colossus 110 s (86 s with Dragon's Breath) against the Broadsword's 75–77;
+  Warlord 127 s (112 s), plate broken by the slam at 51 s. 0 hits taken.
+- Forest Road with Broadsword + Flamethrower: **4.05 / 4.24 / 4.17 min**, 0 downs; cash a minute ×1.03 of the
+  Longbow pair.
+- Shortcut run: Normal **4.29–4.52 min**, 124,040 cash, 201 Timber, cash a minute ×1.07 (gate ×1.15); Hard 23 s
+  faster, ×0.98.
+- Cache: 60 Timber = 28% of a first clear's 211, plus 4 Valor.
+- New Normal sniper spots CaveMouth and CaveExit (tunnel open), accepted by the lead (§11); Hard has none.
+
+**QA:**
+- full mutate on 863344b: 972 run, 0 not caught; fix rounds 2–3 filtered (387 and 137 run, 0 not caught; 996
+  entries, 0 stale); other gates: all 21 gates PASS on 863344b (harness 2,809; check_levels_mutants 121 cases; mirror_mutants 104/104; sim_range, sim_combat, sim_economy; builds; check_compile 172 files); after fix 3: harness 2,849, check_stage_mirror, check_compile PASS
+
+**Carried (owners):**
+- **economy-designer + luau-engineer (L3):** ability-arc hops at both U-bends (AB and BC, ~3–4 s, no camp skipped)
+  are a known limit until L3. check_levels turns red once a carrying family can be owned without a lever; close
+  with data then (a wall at BC, BendWall run south).
+- **luau-engineer:** a hop can still lead the origin rule straight up (real motion, accepted). No Forest Road wall
+  is low enough to matter today; re-check any new low wall beside a fight floor.
+- **lead → Ben:** the Beam no longer blooms while moving (streams and the Beam share the no-bloom rule).
+- **lead + ui-engineer (L3):** the loadout is kept for the visit only; back from the city a player starts on
+  Broadsword + Longbow. L3 designs the saved one.
+- **lead + luau-engineer (L5):** a guest leader without the shortcut keeps it shut for the party; a guest's find
+  counts on runs he leads.
+- **lead, Studio only:** how dark the tunnel reads under default Lighting; phone auto-fire at a bramble; gamepad
+  A on Equip must not walk the character.
+- Every W1, L1c and L1b carried item above stands (the W1 `fielded_lifts` item is done in W2). **Publish freeze
+  (lead):** no Expeditions publish from `main` until L4.
+- **Next wave: W3 (ice)**, only on Ben's word.
+
+**Next:**
+1. The lead fills the QA line, merges to `main` and rebuilds the six place files.
+2. **Ben's look:** `docs/PLAYTEST.md` "L2 Wave 2 — the Flamethrower and the tunnel"; setup
+   `docs/MANUAL_STEPS.md` "L2 Wave 2".
+3. Then Wave 3 (ice), only on Ben's word.
+
+- [x] W2 built (`4176172`)
+- [x] Reviewed: three slices, 0 / 3 / 15 (`e14fb78`)
+- [x] Fix round (`78463a0`)
+- [x] Fix-diff review 0 / 0 / 3 + 1, fixed (`aca232d`)
+- [x] Second fix-diff review 0 / 0 / 1 + 2, fixed (`21205da`)
+- [ ] QA: other gates line (lead)
+- [ ] Merged to `main`, six place files rebuilt (lead)
+- [ ] L2 Wave 2 playtest (Ben)
 
 ### Wave 3 — ice, the frost hammer and the creek (after W2)
 

@@ -5159,7 +5159,7 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - **About 20 minutes with the L1c look. Keys only, no panel.** Grey blocks, no sound.
 
 **Status 2026-10-17:** built, reviewed (three slices: 0 Critical, 0 Major, 15 Minor; fix-diff:
-0 / 1 / 3; all fixed), QA green. **Wait for the lead's merge word.**
+0 / 1 / 3; all fixed), QA green. **Merged to `main` (`fed5ed6`); unplayed.**
 
 Setup: `docs/MANUAL_STEPS.md` "L2 Wave 1".
 
@@ -5269,6 +5269,164 @@ Asked afterwards, as click questions:
 - **The chest's pay (3 Valor, 50 Timber, the Flamethrower):** too little / about right / too much.
 
 Also, if you have a view: anything wrong, by step number, PC or phone.
+
+## L2 Wave 2 — the Flamethrower and the tunnel
+
+<!-- FILE TO OPEN: start. Lead: if L2 Wave 2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Only after the lead says L2 Wave 2 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** the key hint on screen has **"F flamethrower"** in it, and the
+  lobby button reads **"Armory"** (not "Abilities").
+<!-- FILE TO OPEN: end -->
+
+**Goal:** the lookout's Flamethrower burns a bramble, and a tunnel behind it skips the first camp.
+- The Flamethrower is a held stream of fire. You equip it in the lobby's **Armory**.
+- The bramble under the lookout burns. Behind it a roofed tunnel runs past the Pickets to Main
+  Camp, with the **Raiders' Cache** inside.
+- Once you have walked it, your later runs start with the tunnel open.
+- **About 20 minutes. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-19:** built, reviewed (three slices: 0 Critical, 3 Major, 15 Minor; two fix-diff
+reviews: 0 / 0 / 3 + 1 and 0 / 0 / 1 + 2; all fixed), QA green. **Wait for the lead's merge word.**
+
+**Played Wave 1 and L1c yet? If not, do those first, in this same file:**
+1. "L1c — the Chief's Clearing" (above), steps 1–8.
+2. "L2 Wave 1 — Double Jump and the lookout" (above), steps 2–9.
+- On this build, Wave 1's **Abilities panel** is the **Abilities tab** of the **Armory** panel.
+  Same key (K). The air-jump toast now reads "buy it in the lobby's Armory (K)".
+- The chest card's last line now reads **"Flamethrower is yours: equip it in the Armory (K)"**.
+
+Setup: `docs/MANUAL_STEPS.md` "L2 Wave 2".
+
+**Keys:**
+- **Enter** = Depart; **arrows** = level and difficulty; **M** = map.
+- **K** = Armory (lobby only; **Y** on a gamepad).
+- **1** / **2** = melee / ranged; **E** = ranged ability; **Space** jump; **Left Shift** dash.
+- **N** = next camp; **G** = stronger gear; **Backspace** twice = Abandon.
+- Studio only: **J** = Double Jump on / off; **F** = Flamethrower on / off; **H** = reset secrets
+  **and the tunnel**; **V** = +10 Valor.
+
+**Studio resets your save every session.** Each Play starts with no Double Jump, no Flamethrower,
+no secrets, no tunnel and no Valor. J, F, H and V stand in for clearing the level again.
+
+### The run (no panel)
+
+- [ ] 1. **Play.** You are in the lobby. Press **K**: the **Armory** opens.
+      - Two tabs: **Weapons** and **Abilities**. Click each.
+      - **Weapons:** Melee has **Broadsword**. Ranged has **Longbow** and **Flamethrower**, the
+        Flamethrower **locked**, **"Hidden on Forest Road"**, with a **FIRE** chip.
+      - **K** or **Esc** closes it.
+      - Bug: the Flamethrower can be equipped; no Flamethrower card; the tabs don't switch.
+- [ ] 2. **Get the Flamethrower.** Either way is fine:
+      - **The real way:** press **J**, **Enter**, double jump onto the lookout and open its chest
+        (Wave 1 step 7). Then **Backspace** twice, back to the lobby.
+      - **The quick way:** press **F** in the lobby. Toast "Flamethrower is yours".
+      - **K**: the Flamethrower card now has an **Equip** button.
+      - Bug: still locked after the chest or F.
+- [ ] 3. **Equip it.** On the Weapons tab click **Equip** under Flamethrower.
+      - Toast "Flamethrower equipped"; the card turns **gold**; Longbow is no longer gold.
+      - In a run the Armory does not open (lobby only).
+      - Bug: nothing happens; it equips mid-fight; the card stays grey for more than 3 s.
+- [ ] 4. **The stream.** **Enter**, walk to the first raiders. Press **2**, hold the mouse.
+      - A stream of fire from your hand **from the first frame**, about **20 studs** long.
+      - It **stops at walls** and fences. Let go: it goes out at once.
+      - Raiders inside it take small, fast numbers that merge.
+      - Press **E**: **Dragon's Breath**, four gouts of fire ahead.
+      - Bug: the flame starts late; it goes through a wall; numbers appear beyond its tip; it keeps
+        burning after release.
+- [ ] 5. **Burn the bramble.** Go back to **Road4**, just before the climb to the first camp. On
+      its north side, **under the lookout**, a bramble fills a mouth in the ridge. A sign beside
+      it: **"RAIDERS' CACHE - needs FIRE"**.
+      - Hold fire on it. In about **0.6 s** it darkens and throws embers, then flashes and
+        collapses.
+      - A Longbow arrow or Dragon's Breath does **nothing** to it.
+      - Bug: it does not burn; it burns from an arrow or the ability; it burns through the ridge.
+- [ ] 6. **Walk the tunnel.** Go in. A step up, a long leg east, one turn, then the exit.
+      - At the step and at both bends, **turn the camera all round, up and down**.
+      - The camera must **never show outside the ridge** or the sky through the roof.
+      - **Is it too dark?** (Tell Claude.)
+      - Bug: the view shows the road, the sky or the outside of the rock.
+- [ ] 7. **The Raiders' Cache.** In an alcove off the long leg. Stand beside it.
+      - Card **"+4 Valor"**, **"+60 Timber"**. It turns gold. Again: nothing more.
+      - Bug: no card; it pays twice; it opens from outside the alcove.
+- [ ] 8. **The exit.** Walk on to the far end, where a second bramble closes the tunnel.
+      - Just before it: card **"SHORTCUT FOUND"**, **"Raiders' Tunnel stays open on runs you
+        lead"**.
+      - Burn that bramble. You come out onto the road **by Main Camp's west gate**. The Pickets
+        are behind you, untouched.
+      - Walk back into the exit: no second card this run.
+      - Bug: no card; the card shows every time; you come out somewhere else.
+- [ ] 9. **The next run.** **Backspace** twice, then **Enter**.
+      - Both brambles are **gone**: the tunnel stands open from the start.
+      - Walk it straight to Main Camp: you skip the Pickets.
+      - Press **H**, **Backspace** twice, **Enter**: the brambles are back.
+      - Bug: brambles still there after the find; gone again after H.
+- [ ] 10. **The U-bend.** Walk the road past the first camp (fight or run past). Before Main
+      Camp the road bends back on itself.
+      - At the bend, try to **jump across the gap** from the first leg to the return leg (jump,
+        double jump, dash).
+      - A **wall** stops you. You must walk round.
+      - Bug: you cross the gap.
+- [ ] 11. **The boss camp's wall.** **N** twice, sneak past Main Camp to the gatehouse (never
+      **B**). Walk the bent passage.
+      - The ambush inside is still **hidden** until you step through the gate.
+      - The gate passage is a little deeper (the wall is now 2.5 thick).
+      - Bug: you see into the clearing from outside; a jerk of more than a few studs when the gate
+        shuts.
+- [ ] 12. **A bow shot round a bend.** In the gatehouse, press **2** with the **Longbow** held
+      (equip it back in the Armory, or F off). **Dash** round a bend and shoot as you turn.
+      - The arrow lands. **View → Output** shows **no** "[WeaponService] … a shot origin … refused"
+        line.
+      - Then **Backspace** twice. Close Studio without saving.
+      - Bug: the shot vanishes; the Output shows that line on an honest shot.
+
+**Optional, not one of the twelve:**
+- **Phone.** Test (*Prueba*) → Device (*Dispositivo*) → a 375×667 phone. Play, both ways:
+  landscape (**667×375**) and portrait (**375×667**).
+  - The lobby button reads **Armory**, where "Abilities" was. Tap it: tabs and buttons fit, no
+    scrolling on the Weapons tab.
+  - **F**, equip the Flamethrower, **Enter**. Face the Road4 bramble with no raider near: the
+    stream **fires by itself** and burns it.
+  - With a **resting** raider inside the flame, it does **not** fire.
+  - An awake raider behind a wall or fence does not start the stream.
+  - On a low graphics level (1–3) the bramble only fades and the flame does not flicker.
+  - Bug: auto-fire never burns; it fires at a resting raider; a button on the health bar.
+- **Gamepad.** In the lobby **Y** opens the Armory; **LB / RB** switch tabs; **A** on Equip
+  equips (the stick must not walk you); **B** closes and does not dash.
+- **Two players.** Test (*Prueba*) → **Local Server** (*Servidor local*), **2 players**
+  (*2 jugadores*) → **Start** (*Iniciar*), in `proving.rbxl`.
+  - **The leader's save decides the tunnel.** The leader is the host, normally **Player1**.
+  - Player2 alone (F, burn, walk the tunnel): he gets the card; Player1 gets a toast. Next run:
+    the brambles **stand** (Player1 leads and has not found it).
+  - Player1 walks it too. Next run: open for both.
+  - One burn opens the bramble for both players.
+  - Bug: a guest's find opens the tunnel on the leader's runs; one player sees a bramble the
+    other burnt.
+
+### Not a bug (don't report these)
+
+- The **Beam** no longer spreads (blooms) while you move. On purpose: streams and the Beam aim
+  straight.
+- Back from the city (or a new Play), you hold **Broadsword + Longbow** again. The weapon pick is
+  kept for this visit only; L3 saves it.
+- With a Leap Smash or Spear dash (lever-given families only) you can still cut a U-bend corner
+  (~3–4 s, no camp skipped). Known until L3.
+- The Island Shrine still says "Needs ICE" (Wave 3).
+- The Flamethrower kills bosses slower than the Broadsword. On purpose; it breaks no plates
+  (the ground slam does).
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- **Does the Flamethrower feel good?** Great / fine / weak / too strong.
+- **Is the tunnel worth it?** About 37 s faster, about 6% less pay. Yes / not really / make it
+  faster.
+- **The cache's pay (4 Valor, 60 Timber):** too little / about right / too much.
+
+Also, if you have a view: is the tunnel too dark; anything wrong, by step number, PC or phone.
 
 ## M12 — Village growing city
 

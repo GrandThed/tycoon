@@ -1985,8 +1985,8 @@ feels right").
 - Profile v7 is safe to publish with the hub later: live players gain four empty maps, nothing is
   lost (PLAN "L2", Wave 1). Not a step now.
 
-**Status 2026-10-17:** built, reviewed, two fix rounds, QA green on `l2-secrets` + `l2-w1-fix2`.
-**Not merged yet.** Wait for the lead's word (step 0) before step 1.
+**Status 2026-10-17:** built, reviewed, two fix rounds, QA green; merged to `main` (`fed5ed6`).
+**Unplayed.** Run it as part of "L2 Wave 2" below, or alone.
 
 <!-- FILE TO OPEN: start. Lead: if L2 Wave 1 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -2001,8 +2001,8 @@ feels right").
 **Steps:**
 
 - [ ] 0. (Lead) Merge, rebuild, tell Ben.
-      - [ ] Full `mutate.py` verdict in (PLAN "L2", Wave 1, QA).
-      - [ ] `l2-w1-fix2` and `l2-secrets` merged to `main`; the six place files rebuilt.
+      - [x] Full `mutate.py` verdict in (PLAN "L2", Wave 1, QA).
+      - [x] `l2-w1-fix2` and `l2-secrets` merged to `main`; the six place files rebuilt (`fed5ed6`).
       - [ ] Ben told: "L2 Wave 1 is merged, Build all. Start with the L1c clearing."
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
@@ -2017,6 +2017,54 @@ feels right").
   Use **J** (Double Jump on / off), **H** (reset secrets) and **V** (+10 Valor).
 - The phone check of the **Return** button needs `C:\Users\benja\Desktop\tycoon\build\combat.rbxl`
   (same lobby; `proving.rbxl` hides Return). Do not tap Return there: it kicks you.
+
+## L2 Wave 2
+
+**Studio only. Nothing to set up beyond opening the rebuilt file.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setup.
+- No game pass or developer product: the Flamethrower is found in the lookout chest.
+- The brambles, the ridge, the tunnel and the cache are grey blocks the game builds from data.
+- The flame and the burn are particles and Parts the game makes; nothing to import.
+- Still silent (no audio step).
+- No profile schema step: v7 (Wave 1) already holds `families` and `shortcuts`.
+
+**Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
+
+**Status 2026-10-19:** built, reviewed, three fix rounds, QA green on `l2-w2` + `l2-w2-fix2`.
+**Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L2 Wave 2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Wait for the lead's word first.** Before the merge, "Build all" gives Wave 1 (no
+  Flamethrower, no tunnel).
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the key hint has **"F flamethrower"** in it and the lobby button
+  reads **"Armory"**.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [ ] QA "other gates" line filled (PLAN "L2", Wave 2, QA).
+      - [ ] `l2-w2-fix2` and `l2-w2` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L2 Wave 2 is merged, Build all. If you haven't played L1c and Wave 1, start
+            with those."
+- [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
+- [ ] 4. Not played yet? First `docs/PLAYTEST.md` "L1c — the Chief's Clearing" (steps 1–8), then
+      "L2 Wave 1 — Double Jump and the lookout" (steps 2–9). Same file.
+- [ ] 5. Run `docs/PLAYTEST.md` "L2 Wave 2 — the Flamethrower and the tunnel" (twelve steps, then
+      an optional phone, gamepad and two-player check, then three click questions).
+- [ ] 6. Close Studio without saving `proving.rbxl`. Tell Claude when you are done.
+
+**Notes:**
+- **Every Play starts a fresh save** (Studio's mock store): no Double Jump, no Flamethrower, no
+  secrets, no tunnel, no Valor. Use **J** (Double Jump), **F** (Flamethrower), **H** (reset
+  secrets and the tunnel, from the next run) and **V** (+10 Valor).
+- The Output line "[WeaponService] … a shot origin … refused" shows at most once per player. On
+  an honest shot it is a bug; say which step.
 
 ## M10 — Icon, store icons, thumbnails
 
