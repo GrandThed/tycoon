@@ -239,6 +239,9 @@ DEBUG_UNLOCK_KEYS = ("grantAbilityAttribute", "removeAbilityAttribute", "resetSe
 ABILITY_ID_MAX = sr.unlocks_cap("MAX_ID_LENGTH")  # Unlocks.MAX_ID_LENGTH, in bytes: an id the buy remote carries (L2-7)
 SECRET_VALOR_MIN = 2  # L2-13: a paying chest gives at least this much Valor, and less than its key's price
 BODY_RADIUS = 1.0  # the root's half width on the flat (a body stands this far over an edge)
+# The L2 W2 second fix round's m1: the head's centre over the root (R15), where WeaponService's aim rule
+# starts its line to a shot origin. A piece whose top a standing head clears is not a wall to shoot past.
+HEAD_ABOVE_ROOT = 1.5
 # SecretFlow.Triggered's flat reach, a switch like LIFT_MODEL. "footprint" (the L2 W1 fix round, s1):
 # levels.secretReach is measured from the chest block's footprint, so a root beside a big chest
 # (a body radius off its face) opens it. "centre" is W1 before the fix (from the chest's centre),
@@ -316,16 +319,27 @@ def camp_rect(camp):
     return camp["x"] - camp["sx"] / 2, camp["x"] + camp["sx"] / 2, camp["z"] - camp["sz"] / 2, camp["z"] + camp["sz"] / 2
 
 
+def fence_thickness(camp, default):
+    """The L2 W2 second fix round's m1: how thick a camp's fence is built (LevelGeometry.FenceThickness):
+    the layout's own fence.thickness when it is a positive finite number, else `default`
+    (levels.fenceThickness). Every helper here that takes a fence `thickness` passes it through this,
+    so a caller hands it the config's value and each camp gets its own."""
+    return sr.fence_thickness(camp, default)
+
+
 def fence_strips(camp, thickness):
-    """The four fence strips, outside the floor (the Village rule): {side: (x0, x1, z0, z1)}."""
+    """The four fence strips, outside the floor (the Village rule): {side: (x0, x1, z0, z1)}.
+    `thickness` is the config's; the camp's own fence.thickness wins (fence_thickness)."""
     x0, x1, z0, z1 = camp_rect(camp)
-    t = thickness
+    t = fence_thickness(camp, thickness)
     return {"north": (x0 - t, x1 + t, z0 - t, z0), "south": (x0 - t, x1 + t, z1, z1 + t),
             "west": (x0 - t, x0, z0, z1), "east": (x1, x1 + t, z0, z1)}
 
 
 def gate_rect(camp, gate, thickness):
-    """The opening a gate fills in its side's fence strip: (x0, x1, z0, z1)."""
+    """The opening a gate fills in its side's fence strip: (x0, x1, z0, z1). `thickness` is the
+    config's; the camp's own fence.thickness wins (fence_thickness)."""
+    thickness = fence_thickness(camp, thickness)
     x0, x1, z0, z1 = camp_rect(camp)
     half = gate["width"] / 2
     if gate["side"] in ("west", "east"):
@@ -384,8 +398,8 @@ def layout_bounds(layout, thickness, floor_depth=1.0):
     boxes += [(b.x0, b.x1, b.z0, b.z1, b.bottom, b.top)
               for b in (block_solid(x) for x in layout["blocks"] if x.get("collide") is False)]
     barrier = layout.get("barrier") or {}
-    reach = wall_reach(thickness, barrier)
     for camp in layout["camps"]:
+        reach = wall_reach(fence_thickness(camp, thickness), barrier)
         x0, x1, z0, z1 = camp_rect(camp)
         boxes.append((x0 - reach, x1 + reach, z0 - reach, z1 + reach, camp["y"] - floor_depth,
                       camp["y"] + (barrier.get("height") or 0)))
@@ -1408,6 +1422,12 @@ def check_layout(name, layout, ctx, expect):
         gates = camp.get("gates") or []
         fence = camp.get("fence")
         entry, leave = camp["entry"], camp["exit"]
+        # The L2 W2 second fix round's m1: a camp's own fence.thickness is a size above 0
+        # (LevelGeometry.Pieces refuses anything else); `own` is what this camp builds.
+        given = (fence or {}).get("thickness")
+        expect(given is None or (isinstance(given, (int, float)) and not isinstance(given, bool) and 0 < given < math.inf),
+               f"{tag} camp {cid}: its fence.thickness, when it names one, is a size above 0: {given}")
+        own = fence_thickness(camp, thickness)
         # L1c-3: a fence nobody gets on (every strip unclimbable) is exempt: no root stands on it.
         walled = bool(fence) and all(f"Camp_{cid}_Fence_{side}" in tall for side in SIDES)
         expect(bool(fence) and 0 < fence["height"] and (walled or fence["height"] <= levels["triggerHeight"] - sr.ROOT_HEIGHT),
@@ -1487,7 +1507,7 @@ def check_layout(name, layout, ctx, expect):
                f"its floor and its obstacles stand on it" + (f" ({bumps or stray})" if bumps or stray else ""))
         # Within the wire's reach of the world origin, the invisible wall included; and in height
         # with the highest a launch may carry a crowd body (levels.crowdCeiling) on top.
-        reach = wall_reach(thickness, barrier)
+        reach = wall_reach(own, barrier)
         ceiling = levels["crowdCeiling"]
         furthest = max(abs(x0 - reach), abs(x1 + reach), abs(z0 - reach), abs(z1 + reach), abs(camp["y"]) + ceiling)
         expect(furthest <= ORIGIN_LIMIT, f"{tag} camp {cid} lies within {ORIGIN_LIMIT:g} studs of the world origin on "
@@ -1501,10 +1521,10 @@ def check_layout(name, layout, ctx, expect):
         # rectangle (what this rule measures), less unclimbable walls and the roads through its own
         # gates (as the band rule below).
         axis = camp_axis(camp)
-        lo, hi = (x0 - thickness, x1 + thickness) if axis == "x" else (z0 - thickness, z1 + thickness)
+        lo, hi = (x0 - own, x1 + own) if axis == "x" else (z0 - own, z1 + own)
         drop = camp["y"] + (fence["height"] if fence else 0) - layout["killY"]
         clear = stray_reach(move, 0)
-        fenced = (x0 - thickness, x1 + thickness, z0 - thickness, z1 + thickness)
+        fenced = (x0 - own, x1 + own, z0 - own, z1 + own)
         beside = []
         for s in solids:
             if s.name.startswith(f"Camp_{cid}_") or s.name in tall:
@@ -1661,13 +1681,50 @@ def check_kill_height(tag, layout, solids, levels, expect):
            f"levels.floorThickness {depth:g} deep, or rests on another solid" + (f" (thin: {', '.join(thin)})" if thin else ""))
 
 
+def check_origin_chord(name, layout, ctx, expect):
+    """The L2 W2 second fix round's m1: ProvingGrounds.json shooting.originWallChord is under the
+    thickness of every tall colliding piece a player can stand beside. WeaponService's aim rule
+    lets a shot origin's line from the head cross that much solid (an honest shoulder origin clips
+    a wall's edge at an inner corner), so a piece no thicker than it lets a forged origin through.
+    Every colliding piece the level builds counts: its blocks, every camp's generated fence and
+    gates (at the camp's own fence.thickness), cover and secrets. A piece is tall when its top
+    stands over the head (root + HEAD_ABOVE_ROOT) of a body on ground beside it: a floor, a secret,
+    cover or a ground-look block within BODY_RADIUS of its footprint whose top lies between
+    BODY_HEIGHT under the piece's foot and the piece's top. Its thickness is its smallest size: the
+    shortest way through it. A low fence, cover or the lobby's rail is shot over, never through."""
+    chord = ctx.get("originWallChord")
+    if not is_number(chord) or chord < 0:
+        expect(False, f"{name}: ProvingGrounds.json shooting.originWallChord is a number of 0 or more ({chord})")
+        return
+    levels = ctx["levels"]
+    solids = solids_of(layout, levels["fenceThickness"], levels["floorThickness"])
+    head = sr.ROOT_HEIGHT + HEAD_ABOVE_ROOT
+    grounds = [s for s in solids if s.kind in ("floor", "secret", "obstacle")
+               or (s.kind == "block" and s.look in GROUND_LOOKS)]
+    tall, thin = [], []
+    for piece in solids:
+        beside = [g for g in grounds if g is not piece and piece.gap_to(g) <= BODY_RADIUS + EPS
+                  and piece.bottom - BODY_HEIGHT - EPS <= g.top < piece.top - EPS]
+        if not any(piece.top > g.top + head + EPS for g in beside):
+            continue
+        through = min(piece.x1 - piece.x0, piece.z1 - piece.z0, piece.top - piece.bottom)
+        tall.append((through, piece.name))
+        if through <= chord + EPS:
+            thin.append(f"{piece.name} {through:g}")
+    least = min(tall, default=None)
+    expect(not thin, f"{name}: shooting.originWallChord {chord:g} is under the thickness of every tall colliding piece "
+           f"a player stands beside, generated fences included (top over a standing head, {head:g} over the ground "
+           f"beside it)" + (f" (not: {', '.join(sorted(thin))})" if thin else
+                            f" ({len(tall)} pieces, the thinnest {least[1]} {least[0]:g})" if least else " (none)"))
+
+
 def check_arena_layout(name, layout, ctx, expect):
     """A layout that names an arena (ruling 27): the gates that still apply to its one camp."""
     levels = ctx["levels"]
     camp = layout["camps"][0]
     x0, x1, z0, z1 = camp_rect(camp)
     barrier = layout.get("barrier") or {}
-    reach = wall_reach(levels["fenceThickness"], barrier)
+    reach = wall_reach(fence_thickness(camp, levels["fenceThickness"]), barrier)
     expect(barrier.get("height") == BARRIER["height"] and barrier.get("thickness") == BARRIER["thickness"],
            f"{name}: the arena {layout['arena']} has the barrier ({BARRIER['height']:g} high, "
            f"{BARRIER['thickness']:g} thick)")
@@ -3071,7 +3128,7 @@ def check_walled(name, level, layout, ctx, expect, solids):
         fence = camp.get("fence") or {}
         wall_top = camp["y"] + (fence.get("height") or 0)
         floor = camp_rect(camp)
-        fenced = grown(floor, thickness)
+        fenced = grown(floor, fence_thickness(camp, thickness))
         # Height (L1c-1): over the highest camera, WALL_SPARE to spare.
         expect(top_cam is not None and (fence.get("height") or 0) >= top_cam + WALL_SPARE - EPS,
                f"{tag} its fence ({fence.get('height')}) stands at least the highest camera + {WALL_SPARE:g} over its "
@@ -3177,7 +3234,7 @@ def check_walled(name, level, layout, ctx, expect, solids):
         expect(clear >= shake - EPS, f"{tag} levels.cameraClear {clear:g} is at least the camera's shake {shake:g} (a "
                f"clipped camera never enters the fence)")
         keep = max(clear - shake, 0.0)
-        lockers = [grown(camp_rect(c), thickness) for c in layout["camps"] if c.get("locks") is True]
+        lockers = [grown(camp_rect(c), fence_thickness(c, thickness)) for c in layout["camps"] if c.get("locks") is True]
         clip = {"fenced": fenced, "grown": grown(fenced, clear), "keeps": [grown(r, keep) for r in lockers],
                 "standoff": sphere - shake}
         inside, cams, lazy, reached = sight_points(layout, solids, ctx, camp, gates, walls, tall, clip)
@@ -4313,7 +4370,8 @@ def load_all():
            "renderer": renderer_numbers(), "abilityIds": ability_ids(expeditions), "lifts": lifting_abilities(proving),
            "fieldedLifts": fielded_lifts(proving), "loadout": sorted((proving.get("loadout") or {}).values()),
            "dashes": dashing_abilities(proving),
-           "weapons": proving["weapons"]}
+           "weapons": proving["weapons"],
+           "originWallChord": (proving.get("shooting") or {}).get("originWallChord")}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 
@@ -4459,6 +4517,7 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
     bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
                  for name, layout in layouts.items()}
     for name, layout in layouts.items():
+        check_origin_chord(name, layout, ctx, expect)
         if name == lobby_name:
             check_lobby(name, layout, ctx, bounds_of, expect)
         elif layout.get("arena"):

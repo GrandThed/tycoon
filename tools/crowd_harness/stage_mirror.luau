@@ -247,6 +247,7 @@ function L.zone(zone: any): any
 		floorY = zone.floorY,
 		rect = L.rect(zone.rect),
 		inner = L.rect(zone.inner),
+		fence = zone.fence,
 		trigger = L.rect(zone.trigger),
 		ceiling = zone.ceiling,
 		entry = zone.entry,
@@ -458,6 +459,13 @@ end)
 for _, case in data.ceilingCases do
 	J.try(case.id, function()
 		return Flow.Ceiling(case.camp, case.height)
+	end)
+end
+
+-- The L2 W2 second fix round's m1: how thick a camp's fence is built ---------------------------------------
+for _, case in data.fenceCases do
+	J.try(case.id, function()
+		return Geo.FenceThickness(case.camp, case.default)
 	end)
 end
 

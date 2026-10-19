@@ -331,6 +331,11 @@ type RangeState = {
 	-- The last auto test found a takeable target but a refused body held the shot: a bow keeps
 	-- its draw and a held beam stops, instead of firing as if the target had left.
 	aimHeld: boolean,
+	-- worldParams' cache (the L2 W2 second fix round's s1): touch auto-fire and the local flame
+	-- each ask it every frame a stream is held. Rebuilt only after a character came or went
+	-- (watchPlayer and forgetPlayer, through invalidateCrosshair), as WeaponService's is.
+	worldParams: RaycastParams?,
+	worldStale: boolean,
 }
 local rangeState: RangeState = {
 	rangeStarted = false,
@@ -360,6 +365,8 @@ local rangeState: RangeState = {
 	aimTaken = {},
 	aimRefused = {},
 	aimHeld = false,
+	worldParams = nil,
+	worldStale = true,
 }
 
 -- P3 ability state. Every time here is workspace:GetServerTimeNow() unless named "clock".
@@ -568,8 +575,10 @@ local function nearestInCone(
 	return best
 end
 
+-- A character came or went: both cached world queries leave it out or take it in again.
 local function invalidateCrosshair(): ()
 	missionState.crosshairParams = nil
+	rangeState.worldStale = true
 end
 
 local function crosshairParamsFor(): RaycastParams
@@ -1040,12 +1049,16 @@ local function firstShotReady(cfg: Types.ProvingGroundsConfig): boolean
 end
 
 -- Half-angle (degrees) of the cone the next shot is drawn from: 0 for a first shot, for
--- melee and during Mag Dump, otherwise the bloom with the ADS multiplier.
+-- melee, for a continuous (stream) family and during Mag Dump, otherwise the bloom with the ADS
+-- multiplier. A stream takes no bloom (the L2 W2 second fix round's m3): its capsule then runs
+-- along the crosshair line, the line FlameFx draws the local flame on and touch auto-fire tests a
+-- bramble with, so the drawn flame and the server's capsule are one.
 local function nextSpreadDegrees(cfg: Types.ProvingGroundsConfig): number
 	local variant = currentVariant(cfg)
 	if
 		variant == nil
 		or not isRanged(variant)
+		or variant.continuous == true
 		or castState.magDump ~= nil
 		or firstShotReady(cfg)
 	then
@@ -1089,8 +1102,12 @@ local function shotRay(rig: LocalRig): (Vector3, Vector3)
 end
 
 -- The same world query RangeService makes: players skipped, collidable geometry only (crowd
--- enemies have no Instances).
+-- enemies have no Instances). Cached until a character comes or goes (RangeState.worldStale).
 local function worldParams(): RaycastParams
+	local cached = rangeState.worldParams
+	if cached ~= nil and not rangeState.worldStale then
+		return cached
+	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.RespectCanCollide = true
@@ -1102,6 +1119,8 @@ local function worldParams(): RaycastParams
 		end
 	end
 	params.FilterDescendantsInstances = ignored
+	rangeState.worldParams = params
+	rangeState.worldStale = false
 	return params
 end
 
@@ -2393,6 +2412,13 @@ local function startRange(): ()
 	table.insert(connections, UserInputService.InputChanged:Connect(onRangeInputChanged))
 	table.insert(connections, UserInputService.InputEnded:Connect(onRangeInputEnded))
 	table.insert(connections, UserInputService.LastInputTypeChanged:Connect(onDeviceChanged))
+	-- s1: worldParams' cache goes stale whenever a character comes or goes (the same watch the
+	-- mission path keeps for its crosshair query).
+	for _, player in Players:GetPlayers() do
+		watchPlayer(player)
+	end
+	table.insert(connections, Players.PlayerAdded:Connect(watchPlayer))
+	table.insert(connections, Players.PlayerRemoving:Connect(forgetPlayer))
 	-- A new body is never mid-ability locally: Mag Dump and the local busy windows end with
 	-- the old one (MovementController drops its own motion). The server's lock still counts.
 	table.insert(

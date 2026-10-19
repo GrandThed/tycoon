@@ -482,13 +482,15 @@ end
 -- character leads the server's view of it by the ping plus a margin. The speed is the server's
 -- own measure (ruling 7: the fastest stretch of shooting.originSpeedSeconds inside the last
 -- originLagMaxSeconds of its position ring) and the ping the client's word, so neither buys more
--- slack than the fastest legal move over the longest lag the range excuses.
+-- slack than the fastest legal move over the longest lag the range excuses. Also returns that
+-- speed and that lag: the aim rule carries the head by them (WorldReact.LeadHead, second fix
+-- round m2), so its lead stays inside this slack.
 local function claimSlack(
 	shooter: Shooter,
 	root: BasePart,
 	pad: number,
 	config: Types.ProvingGroundsConfig
-): number
+): (number, number, number)
 	local shooting = config.shooting
 	local fastest = Tuning.FastestMove(config)
 	local window = math.max(shooting.originLagMaxSeconds, 0)
@@ -502,7 +504,14 @@ local function claimSlack(
 	-- A NaN speed fails every comparison, math.min included.
 	speed = if speed == speed then math.min(speed, fastest) else 0
 	local lag = Tuning.CommitLag(shooting, shooter.player:GetNetworkPing())
-	return math.max(pad, 0) + speed * lag
+	return math.max(pad, 0) + speed * lag, speed, lag
+end
+
+-- WorldReact.AimClear's world: the first solid between two points, through the parts every world
+-- query here uses (characters excluded, RespectCanCollide), as a distance from `from`.
+local function worldHit(from: Vector3, to: Vector3): number?
+	local result = workspace:Raycast(from, to - from, worldParams())
+	return if result ~= nil then result.Distance else nil
 end
 
 -- Fortnite aim: the ray starts at the camera, which must sit near this character's head, on the
@@ -511,8 +520,13 @@ end
 -- origin, and back, through the parts every world query here uses, measures the solid between
 -- them; WorldReact.OriginClear allows shooting.originWallChord of it, the edge an honest
 -- shoulder origin's line cuts at an inner corner (0.36 standing still, 0.97 with the server's
--- head 1 stud behind, 1.25 at 1.5; tests_l2w2 "originTests"). In Studio a wall refusal warns
--- once per player.
+-- head 1 stud behind, 1.25 at 1.5; tests_l2w2 "originTests"). The second fix round's m2: when
+-- that line is not clear, the line from the head carried along the root's velocity by the lag
+-- the distance test excuses (WorldReact.LeadHead, cut short of the first wall by AimClear) may
+-- be, so a dash round a bend is judged from about where the player's own screen had him; a
+-- forged origin beyond a wall thicker than the chord is refused either way (check_levels "origin
+-- chord" holds every tall piece, walled camps' fences included, over it). In Studio a wall
+-- refusal warns once per player.
 local function aimAllowed(
 	shooter: Shooter,
 	root: BasePart,
@@ -524,20 +538,16 @@ local function aimAllowed(
 	local anchor = if head ~= nil and head:IsA("BasePart") then head.Position else root.Position
 	local offset = origin - anchor
 	local distance = offset.Magnitude
-	if distance > claimSlack(shooter, root, config.shooting.originPad, config) then
+	local slack, speed, lag = claimSlack(shooter, root, config.shooting.originPad, config)
+	if distance > slack then
 		return false
 	end
-	local params = worldParams()
-	local forward = workspace:Raycast(anchor, offset, params)
-	local backward = if forward ~= nil then workspace:Raycast(origin, -offset, params) else nil
-	local clear = WorldReact.OriginClear(
-		distance,
-		if forward ~= nil then forward.Distance else nil,
-		if backward ~= nil then backward.Distance else nil,
-		config.shooting.originWallChord
-	)
+	local lead = WorldReact.LeadHead(anchor, root.AssemblyLinearVelocity, speed, lag)
+	local clear =
+		WorldReact.AimClear(anchor, lead, origin, config.shooting.originWallChord, worldHit)
 	if not clear and RunService:IsStudio() and not state.warnedAimWall[shooter.player] then
 		state.warnedAimWall[shooter.player] = true
+		local forward = workspace:Raycast(anchor, offset, worldParams())
 		local through = if forward ~= nil then forward.Instance:GetFullName() else "?"
 		warn(
 			`[WeaponService] {shooter.player.Name}: a shot origin {string.format("%.2f", distance)}`

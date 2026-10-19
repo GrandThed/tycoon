@@ -30,7 +30,8 @@ export type Bounds = {
 }
 export type Size = { sx: number, sy: number, sz: number }
 -- What a layout does not say and the config does: the fence's thickness and how deep the ground
--- is (Combat.json levels.fenceThickness, levels.floorThickness), and how big a checkpoint
+-- is (Combat.json levels.fenceThickness, levels.floorThickness; a camp's own fence.thickness wins
+-- over `fence`, FenceThickness), and how big a checkpoint
 -- marker, a fire spot's marker and a secret's sign are (Combat.json levels.checkpointSize,
 -- levels.fireMarkerSize, Expeditions.json sign.size). A size the config does not give is nil,
 -- and what it sizes is then not built: no size lives in code. Without `floor` a layout with a
@@ -219,6 +220,20 @@ local function fenceHeight(camp: Types.LevelCamp): number
 		return 0
 	end
 	return fence.height
+end
+
+-- The L2 W2 second fix round's m1: how thick a camp's fence is built, studs outward from the
+-- floor's edge. The layout's own fence.thickness when it is a positive finite number, else
+-- `default` (Combat.json levels.fenceThickness). A walled camp sets its own so that a shot origin
+-- forged beyond it crosses more solid than shooting.originWallChord allows. Pieces (its fence, its
+-- gates, its invisible wall), StageFlow's trigger and the client's camera clip all read it here.
+function LevelGeometry.FenceThickness(camp: Types.LevelCamp, default: number): number
+	local fence = camp.fence
+	local own: any = if fence ~= nil then fence.thickness else nil
+	if type(own) == "number" and own > 0 and own < math.huge then
+		return own
+	end
+	return default
 end
 
 -- The floor: its top face at camp.y, `depth` deep under it (Combat.json levels.floorThickness).
@@ -680,7 +695,8 @@ end
 -- shortcuts; nil = none) is left out, as if the layout did not hold it, before any block is
 -- measured; every other block keeps its `react` and `opens` on its piece.
 -- nil and one line saying why when the layout cannot be built: it still
--- names an arena, a camp has gates and no fence, a camp's floor has no depth (`sizes.floor`),
+-- names an arena, a camp has gates and no fence, a camp's fence names a thickness that is not a
+-- positive number, a camp's floor has no depth (`sizes.floor`),
 -- a piece has a position that is not a number or a size that is not positive (a block, a
 -- camp, a piece of cover or a secret with a size of 0 or less), or it is more than `maxParts`
 -- Parts.
@@ -731,6 +747,11 @@ function LevelGeometry.Pieces(
 		if fence == nil and #listOf(camp.gates) > 0 then
 			return nil, `camp {id} has gates and no fence`
 		end
+		local own: any = if fence ~= nil then fence.thickness else nil
+		if own ~= nil and not (type(own) == "number" and own > 0 and own < math.huge) then
+			return nil, `camp {id}'s fence.thickness is {tostring(own)}, not a size above 0`
+		end
+		local thickness = LevelGeometry.FenceThickness(camp, sizes.fence)
 		if depth == nil then
 			return nil,
 				`camp {id} has no floor: levels.floorThickness is missing or is not a positive number`
@@ -746,7 +767,7 @@ function LevelGeometry.Pieces(
 			camp = id,
 			collide = true,
 		})
-		for index, box in LevelGeometry.FenceBoxes(camp, sizes.fence) do
+		for index, box in LevelGeometry.FenceBoxes(camp, thickness) do
 			table.insert(pieces, {
 				name = `Camp_{id}_Fence_{index}`,
 				role = "fence",
@@ -759,7 +780,7 @@ function LevelGeometry.Pieces(
 			})
 		end
 		local locks = camp.locks == true
-		local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, sizes.fence) else {}
+		local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, thickness) else {}
 		for index, box in gates do
 			table.insert(pieces, {
 				name = `Gate_{id}_{index}`,
@@ -830,7 +851,7 @@ function LevelGeometry.Pieces(
 			})
 		end
 		if barrier ~= nil and locks then
-			for index, box in LevelGeometry.BarrierBoxes(camp, sizes.fence, barrier) do
+			for index, box in LevelGeometry.BarrierBoxes(camp, thickness, barrier) do
 				table.insert(pieces, {
 					name = `Barrier_{id}_{index}`,
 					role = "barrier",

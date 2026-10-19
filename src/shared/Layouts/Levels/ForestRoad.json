@@ -208,7 +208,7 @@
 			"z": 31.5,
 			"sx": 115,
 			"sz": 115,
-			"fence": { "height": 64 },
+			"fence": { "height": 64, "thickness": 2.5 },
 			"gates": [{ "side": "north", "at": 0, "width": 16 }, { "side": "east", "at": -41.5, "width": 16 }],
 			"entry": { "x": 309.5, "z": -16 },
 			"exit": { "x": 361, "z": -10 },
@@ -333,8 +333,8 @@
 		{ "name": "GatehouseTurn", "look": "path", "x": 313.5, "y": 6, "z": -31, "sx": 16, "sy": 12, "sz": 10 },
 		{ "name": "GatehouseWallN", "look": "wall", "x": 289.75, "y": 38, "z": -53, "sx": 67.5, "sy": 76, "sz": 2 },
 		{ "name": "GatehouseWallS", "look": "wall", "x": 280.75, "y": 38, "z": -35, "sx": 49.5, "sy": 76, "sz": 2 },
-		{ "name": "GatehouseWallE", "look": "wall", "x": 322.5, "y": 38, "z": -40.5, "sx": 2, "sy": 76, "sz": 27 },
-		{ "name": "GatehouseWallW", "look": "wall", "x": 304.5, "y": 38, "z": -31.5, "sx": 2, "sy": 76, "sz": 9 },
+		{ "name": "GatehouseWallE", "look": "wall", "x": 322.5, "y": 38, "z": -41.25, "sx": 2, "sy": 76, "sz": 25.5 },
+		{ "name": "GatehouseWallW", "look": "wall", "x": 304.5, "y": 38, "z": -32.25, "sx": 2, "sy": 76, "sz": 7.5 },
 		{ "name": "TrailEnd", "look": "path", "x": 379, "y": 10, "z": -10, "sx": 16, "sy": 4, "sz": 16 }
 	],
 	"secrets": [

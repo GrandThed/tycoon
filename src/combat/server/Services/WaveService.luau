@@ -1888,6 +1888,7 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 			cells = if region ~= nil then region.cells else nil,
 			locks = zone.locks,
 			ceiling = zone.ceiling,
+			fence = zone.fence,
 		})
 	end
 	if not CrowdService.SetFloors(floors) then

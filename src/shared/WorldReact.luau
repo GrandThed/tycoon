@@ -5,6 +5,8 @@
 -- Instance, no clock, so tools/crowd_harness tests the very rules LevelService runs. LevelService
 -- holds the blocks and the heat, and only executes what is decided here (StrikeElement, then
 -- Apply); phone auto-fire asks Wants whether a reactive Part is worth holding the stream on.
+-- WeaponService's aim rule asks OriginClear and AimClear whether a shot origin lies on the head's
+-- side of the walls (fix round d-m3, second fix round m2).
 --
 -- Only a segment burns: a `capsule` (a flame stream, its reach cut at the first wall, so a stream
 -- stopped by a bramble ends on its face) and a `ray`. Every other shape (arcs, spheres, cones:
@@ -32,8 +34,15 @@ export type Rules = { fireHits: number?, iceHits: number?, pad: number? }
 -- One reactive block as Apply reads it: the element that takes it away, its box, and how many
 -- strikes of that element it has taken (Apply writes the new count back).
 export type Entry = { react: string, box: Box, heat: number }
+-- AimClear's world: the first solid on the segment from `from` to `to`, as a distance from `from`
+-- (nil = none). Like a Roblox ray, it does not see a part that holds `from`.
+export type Cast = (from: Vector3, to: Vector3) -> number?
 
 local WorldReact = {}
+
+-- Studs a carried head (AimClear) stops short of the first solid on its way: under the R15 head's
+-- half width (0.6), so it is a place a head can be and a ray from it still sees that solid.
+local LEAD_STANDOFF = 0.5
 
 local function finite(value: any): boolean
 	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
@@ -255,6 +264,61 @@ function WorldReact.OriginClear(
 	end
 	local chord = distance - (backward :: number) - (forward :: number)
 	return chord <= length(tolerance)
+end
+
+-- The L2 W2 second fix round's m2: the server's copy of the head trails a fast player by the lag
+-- the aim rule's distance test excuses, so round a corner or off an edge an honest origin's line
+-- from it crossed the wall. LeadHead carries the head along the root's `velocity` (the server's
+-- copy, which trails the same lag) for `lag` seconds, its speed held to `speed`: claimSlack's, the
+-- fastest stretch of the position ring capped at Tuning.FastestMove. So the lead never lies further
+-- from the head than the slack the distance test grants. A head or velocity that is not finite, or
+-- a speed or lag that is not a finite number above 0, leads nowhere: the head itself.
+function WorldReact.LeadHead(head: Vector3, velocity: Vector3, speed: number, lag: number): Vector3
+	if not (finitePoint(head) and finitePoint(velocity)) then
+		return head
+	end
+	local magnitude = velocity.Magnitude
+	if not (magnitude > 0) then
+		return head
+	end
+	return head + velocity * (math.min(magnitude, length(speed)) / magnitude * length(lag))
+end
+
+-- OriginClear on the line from `from` to `to`: the ray forward and, only when it hit, the ray back.
+local function lineClear(from: Vector3, to: Vector3, tolerance: number, cast: Cast): boolean
+	local forward = cast(from, to)
+	local backward = if forward ~= nil then cast(to, from) else nil
+	return WorldReact.OriginClear((to - from).Magnitude, forward, backward, tolerance)
+end
+
+-- The aim rule whole (fix round d-m3, second fix round m2). A shot origin is allowed when the line
+-- from the server's `head` to it is clear (OriginClear: up to `tolerance` studs of solid), or else
+-- when the line from the carried head is. The carried head is `lead` (LeadHead) cut back
+-- LEAD_STANDOFF short of the first solid on the way from the head, so it always stands on the
+-- head's side of every wall: a forged origin beyond a wall thicker than `tolerance` stays refused
+-- however the velocity was claimed, while an honest player rounding a bend at a dash is judged from
+-- about where his own screen had him. `cast` is the world (WeaponService casts Roblox rays through
+-- its world query; the harness a box caster).
+function WorldReact.AimClear(
+	head: Vector3,
+	lead: Vector3,
+	origin: Vector3,
+	tolerance: number,
+	cast: Cast
+): boolean
+	if lineClear(head, origin, tolerance, cast) then
+		return true
+	end
+	local reach = lead - head
+	local distance = reach.Magnitude
+	if not (distance > 0 and finite(distance)) then
+		return false
+	end
+	local hit = cast(head, lead)
+	local carried = if hit ~= nil
+		then head + reach * (math.max(hit - LEAD_STANDOFF, 0) / distance)
+		else lead
+	return lineClear(carried, origin, tolerance, cast)
 end
 
 -- Fix round c-M1: whether phone auto-fire holds the stream on a reactive Part. Its `React`

@@ -3,7 +3,10 @@
 added to tools/check_levels.py, every rule of L2 Wave 1 (L2-6, L2-11, L2-13, L2-14, L2-18, L2-19)
 and of L2 Wave 2 (L2-34, L2-36, L2-37, L2-38, L2-47: the cave behind fire, the shortcut route, the
 chain of keys, R8's sight, the bend) and its fix round (d-M1: no carrying ability onto the ridge;
-d-m1: the walk-off grace in the ridge's reach; d-m2: the bend's known limit; s-m3: a shortcut's size),
+d-m1: the walk-off grace in the ridge's reach; d-m2: the bend's known limit; s-m3: a shortcut's size)
+and its second fix round (m1: shooting.originWallChord under every tall piece's thickness, a camp's own
+fence.thickness, mirrored by sim_range.fence_thickness; the L1c sight cases calibrated on the 1-stud
+wall now run on it through l1c_wall, each with a twin on the shipped 2.5-stud wall),
 shown red on a mutated copy of the shipped data, and green again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
@@ -88,6 +91,9 @@ BEND = "no hop cuts a bend"
 RIDGE_LIFT = "behind fire: no ability that carries a player with the double jump"
 BEND_LIFT = "no hop with an ability that carries"
 REACT = "Combat.json levels.react (L2-34)"
+# The L2 W2 second fix round (docs/prompts/l2-w2-fix2.md: m1).
+CHORD = "ForestRoad: shooting.originWallChord"
+THICKNESS = "camp C: its fence.thickness, when it names one"
 
 
 def layout(data):
@@ -136,6 +142,15 @@ def shift_east(data, by):
     a doorway's edge looks along."""
     for point in spot(data, "ambushE")["points"][:2]:
         point["z"] += by
+
+
+def l1c_wall(data):
+    """Camp C as L1c built it, before the L2 W2 second fix round's m1: its fence at the config's 1
+    stud and the gatehouse's east and west walls back to z -27, flush with that fence (the sight
+    cases calibrated on it keep their meaning; each has a twin on the shipped 2.5-stud wall)."""
+    camp(data)["fence"].pop("thickness", None)
+    block(data, "GatehouseWallE").update({"z": -40.5, "sz": 27})
+    block(data, "GatehouseWallW").update({"z": -31.5, "sz": 9})
 
 
 def levels(data):
@@ -233,26 +248,41 @@ CASES = (
     # C1: the camera clip.
     ("C1: levels.cameraClear 0.2 (2a58134's client)", lambda d: levels(d).__setitem__("cameraClear", 0.2), {}, SIGHT,
      True),
-    ("C1: levels.cameraClear 2 (over the shake, under a body)", lambda d: levels(d).__setitem__("cameraClear", 2),
-     {}, SIGHT, True),
+    ("C1: levels.cameraClear 2 (over the shake, under a body), on L1c's 1-stud wall",
+     lambda d: (l1c_wall(d), levels(d).__setitem__("cameraClear", 2)), {}, SIGHT, True),
+    ("C1: levels.cameraClear 0.5 (over the shake 0.35), on the shipped 2.5-stud wall",
+     lambda d: levels(d).__setitem__("cameraClear", 0.5), {}, SIGHT, True),
     ("C1: levels.cameraClear 0.2 is under the shake", lambda d: levels(d).__setitem__("cameraClear", 0.2), {},
      CLEAR, True),
     ("C1: levels.cameraClear missing", lambda d: levels(d).pop("cameraClear"), {}, READS, True),
     ("C1 control: cameraClear 0.2 with cameras exempt in the doorway (2a58134's gate)",
      lambda d: levels(d).__setitem__("cameraClear", 0.2), {"EXEMPT_CAMERAS": True}, SIGHT, False),
     # m1: the exact extremes and the drawn body.
-    ("m1: ambushE's inner fodder 2.4 off the north wall", lambda d: shift_east(d, 2.4), {}, SIGHT, True),
-    ("m1 control: the same on the 2-stud grid, radius only (the build's gate)",
-     lambda d: (shift_east(d, 2.4), d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0})),
+    ("m1: ambushE's inner fodder 2.4 off the north wall, on L1c's 1-stud wall",
+     lambda d: (l1c_wall(d), shift_east(d, 2.4)), {}, SIGHT, True),
+    ("m1 control: the same on the 2-stud grid, radius only (the build's gate), on L1c's 1-stud wall",
+     lambda d: (l1c_wall(d), shift_east(d, 2.4),
+                d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0})),
+     {"SIGHT_ZONES": False}, SIGHT, False),
+    ("m1: ambushE's inner fodder 4.5 off the north wall, on the shipped 2.5-stud wall", lambda d: shift_east(d, 4.5),
+     {}, SIGHT, True),
+    ("m1 control: the same on the 2-stud grid, radius only (the build's gate), on the shipped wall",
+     lambda d: (shift_east(d, 4.5), d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0})),
      {"SIGHT_ZONES": False}, SIGHT, False),
     ("m1: CrowdRenderer's torso keys missing", lambda d: d["ctx"].__setitem__("renderer", {}), {}, READS, True),
     # The margin ruling: every margin at least the camp's sightMargin.
-    ("margin: ambushE's innermost fodder back on 2a58134's post (345.5, -22.5)",
-     lambda d: spot(d, "ambushE")["points"][0].update({"x": 345.5, "z": -22.5}), {}, MARGIN, True),
-    ("margin: Hard's extra unit a brute again (L1c's mix: a fourth brute fits no hidden post)",
-     lambda d: [unit.__setitem__("kind", "brute") for spot_id in ("ambushW", "ambushE")
-                for unit in residents(d, spot_id)["units"] if unit.get("minDifficulty") == "hard"], {}, MARGIN, True),
-    ("margin: sightMargin 2", lambda d: camp(d).__setitem__("sightMargin", 2), {}, MARGIN, True),
+    ("margin: ambushE's innermost fodder back on 2a58134's post (345.5, -22.5), on L1c's 1-stud wall",
+     lambda d: (l1c_wall(d), spot(d, "ambushE")["points"][0].update({"x": 345.5, "z": -22.5})), {}, MARGIN, True),
+    ("margin: Hard's extra unit a brute again (L1c's mix: a fourth brute fits no hidden post), on L1c's 1-stud wall",
+     lambda d: (l1c_wall(d), [unit.__setitem__("kind", "brute") for spot_id in ("ambushW", "ambushE")
+                              for unit in residents(d, spot_id)["units"] if unit.get("minDifficulty") == "hard"]),
+     {}, MARGIN, True),
+    ("margin: sightMargin 2, on L1c's 1-stud wall (+1.57)",
+     lambda d: (l1c_wall(d), camp(d).__setitem__("sightMargin", 2)), {}, MARGIN, True),
+    ("margin: ambushE's inner fodder 3.5 off the north wall (+0.75, seen from nowhere), on the shipped wall",
+     lambda d: shift_east(d, 3.5), {}, MARGIN, True),
+    ("margin: sightMargin 4.5, over the shipped wall's +4.09", lambda d: camp(d).__setitem__("sightMargin", 4.5), {},
+     MARGIN, True),
     ("margin: sightMargin missing", lambda d: camp(d).pop("sightMargin"), {}, MARGIN, True),
     ("margin control: sightMargin 1.5 with ambushE's inner fodder 0.05 off the wall",
      lambda d: shift_east(d, 0.05), {}, MARGIN, False),
@@ -450,6 +480,23 @@ CASES = (
     ("s-m3: the shortcut's sx -12", lambda d: layout(d)["shortcuts"][0].__setitem__("sx", -12), {}, PROBLEMS, True),
     ("s-m3 control: the shortcut's sy 0.01", lambda d: layout(d)["shortcuts"][0].__setitem__("sy", 0.01), {}, PROBLEMS,
      False),
+    # The second fix round's m1: shooting.originWallChord is under the thickness of every tall
+    # colliding piece, camp C's generated wall included (its own fence.thickness 2.5).
+    ("fix2 m1: camp C's fence at the config's 1 (no thickness of its own: today's 1-stud wall)",
+     lambda d: camp(d)["fence"].pop("thickness"), {}, CHORD, True),
+    ("fix2 m1: originWallChord 2.5 (as thick as camp C's wall)", lambda d: d["ctx"].__setitem__("originWallChord", 2.5),
+     {}, CHORD, True),
+    ("fix2 m1: originWallChord 6 (shooting.originPad's number)", lambda d: d["ctx"].__setitem__("originWallChord", 6),
+     {}, CHORD, True),
+    ("fix2 m1 control: originWallChord 1.9 (under the 2-stud walls and brambles)",
+     lambda d: d["ctx"].__setitem__("originWallChord", 1.9), {}, CHORD, False),
+    ("fix2 m1: a 1-stud wall 6 over the road beside Road2",
+     lambda d: add_block(d, "MutantWall", "wall", -370, -350, 8, 9, 6, -4), {}, CHORD, True),
+    ("fix2 m1 control: the same 1-stud rail 4 over the road (a standing head clears it)",
+     lambda d: add_block(d, "MutantWall", "wall", -370, -350, 8, 9, 4, -4), {}, CHORD, False),
+    ("fix2 m1: camp C's fence.thickness 0", lambda d: camp(d)["fence"].__setitem__("thickness", 0), {}, THICKNESS, True),
+    ("fix2 m1: camp C's fence.thickness \"2.5\"", lambda d: camp(d)["fence"].__setitem__("thickness", "2.5"), {},
+     THICKNESS, True),
     # L2-47: the AB bend.
     ("L2-47: the bend wall removed", lambda d: layout(d)["blocks"].remove(block(d, "BendWall")), {}, BEND, True),
     ("L2-47: the bend wall only between the roads (z -52..-8: a hop round its north end)",
@@ -516,6 +563,10 @@ MIRROR_CASES = (
     ("s-m3: sim_range's react_problems takes a shortcut size of 0 (the mirror alone)", None,
      ("            if finite(entry.get(key)) and entry[key] <= 0:", "            if False:"),
      "a shortcut with an sz of 0"),
+    # The L2 W2 second fix round's m1: a camp's own fence.thickness out of the Python mirror alone
+    # (the Luau side's mutants are tools/crowd_harness/mutate.py's).
+    ("fix2 m1: sim_range's fence_thickness ignores the camp's own (the mirror alone)", None,
+     ("        return own\n", "        return default\n"), "LevelGeometry.FenceThickness"),
 )
 
 

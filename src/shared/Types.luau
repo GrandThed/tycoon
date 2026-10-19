@@ -2019,7 +2019,8 @@ export type RangeShootingConfig = {
 	adsSpeedMult: number,
 	originPad: number,
 	-- L2 W2 d-m3: studs of solid a shot origin's line from the head may cross (an honest shoulder
-	-- origin clips a wall's edge at an inner corner); under the thinnest wall a level builds (2).
+	-- origin clips a wall's edge at an inner corner). Under the thinnest tall colliding piece a
+	-- level builds, generated fences included (check_levels "origin chord"; second fix round m1).
 	originWallChord: number,
 	critMult: number,
 	-- Speed above which a character counts as moving for bloom; server origin check adds
@@ -2647,7 +2648,10 @@ export type LevelCamp = {
 	sx: number,
 	sz: number,
 	floor: ArenaSurface?,
-	fence: { height: number, material: string?, color: { number }? }?,
+	-- thickness (the L2 W2 second fix round's m1): the camp's own fence depth, studs outward from
+	-- the floor's edge (LevelGeometry.FenceThickness); nil = Combat.json levels.fenceThickness. A
+	-- walled camp's fence is thicker than shooting.originWallChord (check_levels "origin chord").
+	fence: { height: number, thickness: number?, material: string?, color: { number }? }?,
 	-- entry first, exit second; may be empty
 	gates: { LevelGate },
 	entry: ArenaPoint,
@@ -2811,6 +2815,9 @@ export type RunFloor = {
 	-- trigger band (StageFlow.Ceiling: a walled camp's fence top, else levels.triggerHeight);
 	-- nil = levels.triggerHeight.
 	ceiling: number?,
+	-- The L2 W2 second fix round's m1: the zone's fence thickness (LevelGeometry.FenceThickness),
+	-- by which the client grows a locking floor's rectangle; nil = levels.fenceThickness.
+	fence: number?,
 }
 export type RunResult = {
 	levelId: string,

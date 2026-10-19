@@ -440,7 +440,7 @@ function L1C.ceilingTests(): ()
 	end
 	local missed = {}
 	for _, rise in { height + 0.5, 33, 36.5, 43, top } do
-		for _, z in { edge, edge + rules.fenceThickness / 2, zone.rect.z - zone.rect.hz } do
+		for _, z in { edge, edge + zone.fence / 2, zone.rect.z - zone.rect.hz } do
 			local state = armed()
 			local actions = L1.advance(plan, state, { now = 5, roots = { vec(gateX, floor + rise, z) } })
 			if L1.find(actions, "gate") == nil then
@@ -453,8 +453,9 @@ function L1C.ceilingTests(): ()
 	check(#L1.advance(plan, over, { now = 5, roots = { vec(gateX, floor + top + 0.5, edge) } }) == 0 and over.step == "armed", "over the wall's top, nothing")
 
 	-- The camera: inside C at 33 to 43 over the floor, the boom is held whole in every direction
-	-- (the rectangle and the clip exactly as CameraController builds them from RunState.floors).
-	local fence = rules.fenceThickness
+	-- (the rectangle and the clip exactly as CameraController builds them from RunState.floors,
+	-- grown by RunFloor.fence, the zone's own thickness).
+	local fence = zone.fence
 	local rect = { x = zone.rect.x, y = floor, z = zone.rect.z, hx = zone.rect.hx + fence, hz = zone.rect.hz + fence, ceiling = zone.ceiling }
 	local clip = { pad = 0.2, margin = FIXTURES.combat.levels.cameraClear, height = height }
 	local boom = FIXTURES.combat.camera.maxZoom
@@ -494,7 +495,7 @@ function L1C.entryTests(): ()
 	local gateX = shipped.x + gate.at
 	local edge = zone.trigger.z - zone.trigger.hz
 	local inner = zone.inner
-	local depth = rules.fenceThickness + rules.closeInset
+	local depth = zone.fence + rules.closeInset
 	local limit = depth + 0.05
 	local quiet, wrong, worst = {}, {}, 0
 	for _, rise in { 3, 33, 43 } do
@@ -522,7 +523,7 @@ function L1C.entryTests(): ()
 		end
 	end
 	check(#quiet == 0, `a root anywhere on the north gate's trigger line (z {edge}), standing or at the top of a jump, shuts the gate in that tick{L1.real.list(quiet)}`)
-	check(#wrong == 0, `and the close only nudges it inside along the gate's inward normal, X and height kept, at most fenceThickness + closeInset ({depth}) + 0.05 (worst {string.format("%.2f", worst)}){L1.real.list(wrong)}`)
+	check(#wrong == 0, `and the close only nudges it inside along the gate's inward normal, X and height kept, at most its fence + closeInset ({depth}) + 0.05 (worst {string.format("%.2f", worst)}){L1.real.list(wrong)}`)
 	-- m3: every root in the fenced rectangle outside `inner` (the fence band and the inset strip
 	-- on all four sides, the corners too), on a quarter-stud grid across the band and a half-stud
 	-- one along it: onto the nearest point of inner, height kept, at most `depth` on an axis.

@@ -15624,3 +15624,11 @@ Decisions: `docs/MISSIONS_DESIGN.md` §22. Study: `docs/prompts/l2-study-report.
 
 Decisions: `docs/MISSIONS_DESIGN.md` §22 (with its W2 paragraph). Contract of record:
 `docs/prompts/l2-w2-contract.md` (rulings L2-29 to L2-47, §10 Ben's answers and the lead's rulings), on branch `l2-w2`.
+
+As built after the W2 fix rounds (lead, 2026-10-18): a camp's layout may set `fence.thickness` (default
+`Combat.json levels.fenceThickness`; camp C 2.5), read by `LevelGeometry.FenceThickness` and mirrored by every
+tool; `RunFloor.fence: number?` carries it to the client's camera clip. The shot-origin rule
+(`WorldReact.AimClear`, tolerance `ProvingGrounds.json shooting.originWallChord`) tests the line from the head,
+then from the head led by the lag slack; check_levels keeps the tolerance under every tall colliding piece.
+Phone auto-fire also targets a reactive Part it can burn (`WorldReact.Wants`); ability strikes never burn
+(`WorldReact.StrikeElement`). Stream families take no bloom.

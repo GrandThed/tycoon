@@ -71,7 +71,7 @@
 -- outside, but an open gate does not stop the spherecast (open gates are CanQuery false), so a
 -- camera swung near the gate looked in along the inner wall. The boom, from the pivot through
 -- the shoulder to the camera, never comes within levels.cameraClear of the fenced rectangle
--- (floor + levels.fenceThickness) of a locking camp unless the local root stands inside that
+-- (floor + its fence thickness, RunFloor.fence) of a locking camp unless the local root stands inside that
 -- rectangle within its trigger band (RunFloor.ceiling: levels.triggerHeight, or a walled camp's
 -- fence top, the L1c second fix round's F1); it stops COMBAT_CAMERA_COLLISION_PAD short
 -- of the grown edge (WallClip.Reach, pure and tested in the harness). The L1c fix round grew the
@@ -186,8 +186,8 @@ local placement = {
 	rootSeen = nil :: Vector3?,
 	jumpedAt = -math.huge,
 }
--- L1c-5a: the run's locking camps as fenced rectangles (each floor grown by `fence`, read from
--- Combat.json levels.fenceThickness), which the boom stays out of. Empty outside a level. `clip`
+-- L1c-5a: the run's locking camps as fenced rectangles (each floor grown by its RunFloor.fence,
+-- else `fence`, read from Combat.json levels.fenceThickness), which the boom stays out of. Empty outside a level. `clip`
 -- is how (WallClip.Clip): the pad, levels.cameraClear and levels.triggerHeight. Without them the
 -- clip is the first L1c one: nothing grown, a root inside at any height.
 -- `resetTries` and `resetWait`: SetCore throws until the CoreScripts have registered the reset
@@ -961,19 +961,26 @@ function CameraController.Start(): ()
 end
 
 -- L1c-5a: the run's floors (RunState.floors, `{}` in the lobby). Only a locking camp's floor
--- keeps the boom out; it is grown by levels.fenceThickness, as the server's trigger is (the
--- further levels.cameraClear is WallClip's, for the cut alone), and holds the root up to the
--- floor's own ceiling, the server's trigger band (levels.triggerHeight when it names none).
+-- keeps the boom out; it is grown by its own fence thickness (RunFloor.fence, else
+-- levels.fenceThickness), as the server's trigger is (the further levels.cameraClear is
+-- WallClip's, for the cut alone), and holds the root up to the floor's own ceiling, the server's
+-- trigger band (levels.triggerHeight when it names none).
 function CameraController.SetFloors(floors: { Types.RunFloor }): ()
 	table.clear(wallClip.rects)
 	for _, floor in floors do
 		if floor.locks == true then
+			local own = floor.fence
+			local fence = if own ~= nil
+					and own >= 0
+					and own < math.huge
+				then own
+				else wallClip.fence
 			table.insert(wallClip.rects, {
 				x = floor.x,
 				y = floor.y,
 				z = floor.z,
-				hx = floor.hx + wallClip.fence,
-				hz = floor.hz + wallClip.fence,
+				hx = floor.hx + fence,
+				hz = floor.hz + fence,
 				ceiling = floor.ceiling,
 			})
 		end

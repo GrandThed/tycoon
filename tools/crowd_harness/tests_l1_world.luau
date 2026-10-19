@@ -915,4 +915,67 @@ function L1W.refuseTests(): ()
 end
 L1W.refuseTests()
 
+-- The L2 W2 second fix round's m1: a camp may set its own fence thickness, and its fence, its
+-- gates and its invisible wall are built from it (a walled camp's fence is thicker than
+-- shooting.originWallChord, so a shot origin forged beyond it is refused).
+function L1W.fenceThicknessTests(): ()
+	print(" FenceThickness: a camp's own fence depth (the L2 W2 second fix round's m1)")
+	local Geo = L1W.Geo
+	local function camp(fence: any): any
+		local c = L1W.camp()
+		c.fence = fence
+		return c
+	end
+	check(Geo.FenceThickness(camp({ height = 6 }), 1) == 1 and Geo.FenceThickness(camp(nil), 1) == 1, "no thickness of its own (or no fence): the config's")
+	check(Geo.FenceThickness(camp({ height = 64, thickness = 2.5 }), 1) == 2.5, "its own 2.5 wins over the config's 1")
+	local bad = {}
+	for _, value in { 0, -1, 0 / 0, math.huge, "2.5" } do
+		if Geo.FenceThickness(camp({ height = 6, thickness = value }), 1) ~= 1 then
+			table.insert(bad, tostring(value))
+		end
+	end
+	check(#bad == 0, `a thickness of 0, below 0, NaN, endless or not a number reads as the config's{if #bad > 0 then ": " .. table.concat(bad, ", ") else ""}`)
+
+	local function level(fence: any): any
+		return {
+			version = 1,
+			start = { x = 0, y = 5, z = 0 },
+			killY = -40,
+			barrier = { height = 80, thickness = 8 },
+			camps = { camp(fence) },
+			blocks = {},
+			secrets = {},
+			route = {},
+		}
+	end
+	local pieces, problem = Geo.Pieces(level({ height = 6, thickness = 2.5 }), L1W.sizes, 600)
+	local byName: { [string]: any } = {}
+	local thin = {}
+	for _, piece in pieces or {} do
+		byName[piece.name] = piece
+		if piece.role == "fence" or piece.role == "gate" then
+			local box = piece.box
+			local depth = if math.abs(box.z - -50) > 30 then box.sz else box.sx
+			if not near(depth, 2.5) then
+				table.insert(thin, `{piece.name} {depth}`)
+			end
+		end
+	end
+	check(problem == nil and pieces ~= nil and #thin == 0, `with its own 2.5 every fence and gate Part is 2.5 deep, not sizes.fence 1 ({problem}){if #thin > 0 then ": " .. table.concat(thin, ", ") else ""}`)
+	check(byName.Gate_A_1 ~= nil and L1W.is(byName.Gate_A_1.box, 100, 8, -18.75, 12, 6, 2.5), `Gate_A_1 stands out from the floor's edge by 2.5 ({byName.Gate_A_1 and L1W.show(byName.Gate_A_1.box)})`)
+	local deep = Geo.Pieces(level({ height = 6, thickness = 9 }), L1W.sizes, 600)
+	local west = nil
+	for _, piece in deep or {} do
+		if piece.name == "Barrier_A_3" then
+			west = piece
+		end
+	end
+	check(west ~= nil and L1W.is(west.box, 65.5, 45, -50, 9, 80, 60), `a fence of 9, thicker than the barrier's 8: the wall is never thinner than the fence ({west and L1W.show(west.box)})`)
+	for _, value in { 0, -2, 0 / 0, "3" } do
+		local refused, why = Geo.Pieces(level({ height = 6, thickness = value }), L1W.sizes, 600)
+		check(refused == nil and why ~= nil and string.find(why, "camp A's fence.thickness", 1, true) ~= nil, `a fence.thickness of {tostring(value)} is refused, by name ({why})`)
+	end
+end
+L1W.fenceThicknessTests()
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

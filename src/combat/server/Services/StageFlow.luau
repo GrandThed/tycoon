@@ -56,8 +56,11 @@ export type Zone = {
 	-- moved to the entry (MustEnter). Not in the contract's list; added by the lead's ruling on
 	-- the close.
 	inner: Rect,
-	-- The whole fenced rectangle: the floor grown by levels.fenceThickness, so a root on a fence
-	-- top triggers the camp as one on its floor does.
+	-- How thick its fence is built (LevelGeometry.FenceThickness: the layout's own fence.thickness,
+	-- else levels.fenceThickness; the L2 W2 second fix round's m1). RunFloor.fence carries it.
+	fence: number,
+	-- The whole fenced rectangle: the floor grown by `fence`, so a root on a fence top triggers
+	-- the camp as one on its floor does.
 	trigger: Rect,
 	-- How far above floorY a root still triggers it (StageFlow.Ceiling): a walled camp's fence
 	-- top, else levels.triggerHeight. The L1c second fix round's F1 and F3: inside a 64-stud wall
@@ -1719,6 +1722,7 @@ function StageFlow.Plan(
 		end
 		local mark = camp.checkpoint
 		local stop = if camp.locks == true then nil else camp.approach
+		local fence = LevelGeometry.FenceThickness(camp, rules.fenceThickness)
 		local zone: Zone = {
 			id = camp.id,
 			floor = index,
@@ -1731,7 +1735,8 @@ function StageFlow.Plan(
 			floorY = camp.y,
 			rect = rect,
 			inner = inner,
-			trigger = grown(rect, rules.fenceThickness),
+			fence = fence,
+			trigger = grown(rect, fence),
 			ceiling = StageFlow.Ceiling(camp, rules.triggerHeight),
 			entry = Vector3.new(entry.x, camp.y, entry.z),
 			exit = Vector3.new(exit.x, camp.y, exit.z),
@@ -2489,8 +2494,8 @@ end
 -- The L1c third fix round's m3: where the close puts a fighter MustEnter names whose root is in
 -- the zone's fenced rectangle (its trigger), between levels.triggerBelow under and its ceiling
 -- over its floor: the nearest point of `inner`, X and Z each held to it and the height kept, a
--- move of at most fenceThickness + closeInset on an axis. WaveService moves the body by that much
--- and leaves its speed alone, so a jump or a dash goes on. With a countdown of 0 the close comes
+-- move of at most the zone's fence thickness + closeInset on an axis. WaveService moves the body
+-- by that much and leaves its speed alone, so a jump or a dash goes on. With a countdown of 0 the close comes
 -- in the tick the camp triggers, wherever in that rectangle the root was first seen: a dash past
 -- a gate's edge is first sampled in the strip beside the opening, and held to the opening alone
 -- (the second fix round's lanes) it went to the entry, 10 studs sideways. nil = outside the

@@ -5931,6 +5931,17 @@ def fielded(zone, tent, sent, refused=None):
     return stock
 
 
+def fence_thickness(camp, default):
+    """LevelGeometry.FenceThickness (the L2 W2 second fix round's m1): how thick a camp's fence is
+    built, studs outward from its floor's edge. The layout's own fence.thickness when it is a
+    positive finite number, else `default` (levels.fenceThickness)."""
+    fence = camp.get("fence")
+    own = fence.get("thickness") if isinstance(fence, dict) else None
+    if isinstance(own, (int, float)) and not isinstance(own, bool) and 0 < own < math.inf:
+        return own
+    return default
+
+
 def trigger_ceiling(camp, trigger_height):
     """StageFlow.Ceiling (the L1c second fix round's F1 and F3): how far above its floor a root
     still triggers a camp. A locking camp's fence top when that is over levels.triggerHeight (the
@@ -6002,10 +6013,10 @@ def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
             names[config["id"]] = config["name"]
     zones = []
     by_id = {}
-    grow = rules["fenceThickness"]
     keep = rules["closeInset"] if rules.get("closeInset") is not None else 0
     for index, camp in enumerate(layout["camps"], 1):
         hx, hz = camp["sx"] / 2, camp["sz"] / 2
+        grow = fence_thickness(camp, rules["fenceThickness"])
         centre = {"x": camp["x"], "z": camp["z"]}
         entry, leave = camp.get("entry") or centre, camp.get("exit") or centre
         mark = camp.get("checkpoint")
@@ -6016,6 +6027,7 @@ def plan_level(level, layout, difficulty, rules, ranks=None, kinds=None):
                 "tentStock": tent_stocks.get(camp["id"], 0), "floorY": camp["y"],
                 "rect": (camp["x"], camp["z"], hx, hz),
                 "inner": (camp["x"], camp["z"], max(hx - keep, 0), max(hz - keep, 0)),
+                "fence": grow,
                 "trigger": (camp["x"], camp["z"], max(hx + grow, 0), max(hz + grow, 0)),
                 "ceiling": trigger_ceiling(camp, rules["triggerHeight"]),
                 "entry": (entry["x"], entry["z"]), "exit": (leave["x"], leave["z"]),
@@ -7815,8 +7827,8 @@ class LevelRun(ThreatRun):
         for region in self.layout.get("regions") or []:
             for c in region_cells(self.layout, region):
                 walls.append((c["x"] - c["hx"], c["x"] + c["hx"], c["z"] - c["hz"], c["z"] + c["hz"], region["y"]))
-        t = self.rules["fenceThickness"]
         for camp in self.layout["camps"]:
+            t = fence_thickness(camp, self.rules["fenceThickness"])
             x0, x1 = camp["x"] - camp["sx"] / 2, camp["x"] + camp["sx"] / 2
             z0, z1 = camp["z"] - camp["sz"] / 2, camp["z"] + camp["sz"] / 2
             walls.append((x0, x1, z0, z1, camp["y"]))

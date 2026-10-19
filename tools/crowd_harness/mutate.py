@@ -899,12 +899,12 @@ L1_MUTATIONS = {
     ),
     "l1: the trigger stops at the floor's edge": (
         FLOW,
-        "trigger = grown(rect, rules.fenceThickness),",
+        "trigger = grown(rect, fence),",
         "trigger = rect,",
     ),
     "l1: the trigger is the close's rectangle": (
         FLOW,
-        "trigger = grown(rect, rules.fenceThickness),",
+        "trigger = grown(rect, fence),",
         "trigger = inner,",
     ),
     "l1: a camp that is not next triggers": (
@@ -2305,8 +2305,8 @@ L1B_RUN_MUTATIONS = {
     ),
     "l1b: an open camp builds gates": (
         GEOMETRY,
-        "local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, sizes.fence) else {}",
-        "local gates: { Box } = LevelGeometry.GateBoxes(camp, sizes.fence)",
+        "local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, thickness) else {}",
+        "local gates: { Box } = LevelGeometry.GateBoxes(camp, thickness)",
     ),
     "l1b: FromArena not locking": (
         GEOMETRY,
@@ -4940,15 +4940,12 @@ L2W2_FIX_MUTATIONS = {
         "\t\tif WorldReact.Touches(fx, cells[index].box, pad) then\n\t\t\ttable.insert(gone, index)\n"
         "\t\tend\n\tend",
     ),
-    "l2w2 fix: the aim has no wall ray": (
-        WEAPON,
-        "local forward = workspace:Raycast(anchor, offset, params)",
-        "local forward = nil",
-    ),
+    # Re-aimed by the second fix round: the rays are WorldReact.AimClear's (lineClear).
+    "l2w2 fix: the aim has no wall ray": (WORLD_REACT, "\tlocal forward = cast(from, to)\n", "\tlocal forward = nil\n"),
     "l2w2 fix: the aim has no ray back": (
-        WEAPON,
-        "workspace:Raycast(origin, -offset, params) else nil",
-        "nil else nil",
+        WORLD_REACT,
+        "local backward = if forward ~= nil then cast(to, from) else nil",
+        "local backward = nil",
     ),
     "l2w2 fix: the aim ignores the verdict": (WEAPON, "\treturn clear\nend", "\treturn true\nend"),
     # d-m3: OriginClear.
@@ -4977,6 +4974,79 @@ L2W2_FIX_MUTATIONS = {
     "l2w2 fix: a negative wall tolerance counts": (WORLD_REACT, "return chord <= length(tolerance)", "return chord <= tolerance"),
 }
 MUTATIONS.update(L2W2_FIX_MUTATIONS)
+
+# The L2 W2 second fix round (docs/prompts/l2-w2-fix2.md): m1, a camp's own fence.thickness
+# (LevelGeometry.FenceThickness, Pieces, StageFlow's trigger) and aimAllowed's chord argument (read
+# by run_harness.py's source check); m2, the head led by the lag (WorldReact.LeadHead, AimClear) and
+# its wiring in aimAllowed and worldHit.
+L2W2_FIX2_MUTATIONS = {
+    "fix2 m1: aimAllowed's chord is originPad": (
+        WEAPON,
+        "config.shooting.originWallChord, worldHit)",
+        "config.shooting.originPad, worldHit)",
+    ),
+    "fix2 m1: FenceThickness ignores the camp's own": (
+        GEOMETRY,
+        '\tif type(own) == "number" and own > 0 and own < math.huge then\n\t\treturn own\n\tend\n\treturn default',
+        "\treturn default",
+    ),
+    "fix2 m1: FenceThickness takes a thickness of 0": (
+        GEOMETRY,
+        '\tif type(own) == "number" and own > 0 and own < math.huge then\n\t\treturn own',
+        '\tif type(own) == "number" and own >= 0 and own < math.huge then\n\t\treturn own',
+    ),
+    "fix2 m1: Pieces builds the config's thickness": (
+        GEOMETRY,
+        "local thickness = LevelGeometry.FenceThickness(camp, sizes.fence)",
+        "local thickness = sizes.fence",
+    ),
+    "fix2 m1: Pieces takes any fence.thickness": (
+        GEOMETRY,
+        'if own ~= nil and not (type(own) == "number" and own > 0 and own < math.huge) then',
+        "if false then",
+    ),
+    "fix2 m1: the trigger grows by the config's thickness": (
+        FLOW,
+        "local fence = LevelGeometry.FenceThickness(camp, rules.fenceThickness)",
+        "local fence = rules.fenceThickness",
+    ),
+    "fix2 m2: the aim leads nowhere": (
+        WEAPON,
+        "local lead = WorldReact.LeadHead(anchor, root.AssemblyLinearVelocity, speed, lag)",
+        "local lead = anchor",
+    ),
+    "fix2 m2: worldHit ignores the world query": (
+        WEAPON,
+        "workspace:Raycast(from, to - from, worldParams())",
+        "workspace:Raycast(from, to - from)",
+    ),
+    "fix2 m2: the lead runs at the root's full speed": (
+        WORLD_REACT,
+        "math.min(magnitude, length(speed)) / magnitude * length(lag)",
+        "length(lag)",
+    ),
+    "fix2 m2: the lead ignores the lag": (
+        WORLD_REACT,
+        "math.min(magnitude, length(speed)) / magnitude * length(lag)",
+        "math.min(magnitude, length(speed)) / magnitude",
+    ),
+    "fix2 m2: an endless velocity leads": (
+        WORLD_REACT,
+        "\tif not (finitePoint(head) and finitePoint(velocity)) then\n\t\treturn head\n\tend\n\tlocal magnitude",
+        "\tlocal magnitude",
+    ),
+    "fix2 m2: the lead is carried through walls": (
+        WORLD_REACT,
+        "local carried = if hit ~= nil\n\t\tthen head + reach * (math.max(hit - LEAD_STANDOFF, 0) / distance)\n\t\telse lead",
+        "local carried = lead",
+    ),
+    "fix2 m2: AimClear never tries the lead": (
+        WORLD_REACT,
+        "return lineClear(carried, origin, tolerance, cast)",
+        "return false",
+    ),
+}
+MUTATIONS.update(L2W2_FIX2_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

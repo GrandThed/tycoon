@@ -1970,7 +1970,11 @@ function L1.real.planChecks(tag: string, level: any, layout: any, plan: any, pie
 		local function insetBy(inner: any, by: number): boolean
 			return near(inner.x, rect.x) and near(inner.z, rect.z) and near(inner.hx, rect.hx - by) and near(inner.hz, rect.hz - by)
 		end
-		check(insetBy(zone.trigger, -rules.fenceThickness) and insetBy(zone.inner, rules.closeInset), `{where}: its trigger is its whole fenced rectangle (the floor grown by levels.fenceThickness, {rules.fenceThickness}) and its close keeps the floor inset by levels.closeInset ({rules.closeInset}), on both axes`)
+		-- The L2 W2 second fix round's m1: a camp's own fence.thickness wins over levels.fenceThickness.
+		local ownFence = if camp.fence ~= nil then camp.fence.thickness else nil
+		local fence = if type(ownFence) == "number" then ownFence else rules.fenceThickness
+		check(zone.fence == fence, `{where}: the zone's fence is the layout's own thickness, else levels.fenceThickness ({fence}; it has {tostring(zone.fence)})`)
+		check(insetBy(zone.trigger, -fence) and insetBy(zone.inner, rules.closeInset), `{where}: its trigger is its whole fenced rectangle (the floor grown by its fence, {fence}) and its close keeps the floor inset by levels.closeInset ({rules.closeInset}), on both axes`)
 		local edge: { string } = {}
 		local sides = { { "north", 0, -1 }, { "south", 0, 1 }, { "west", -1, 0 }, { "east", 1, 0 } }
 		for _, side in sides do
@@ -2096,9 +2100,11 @@ end
 -- included (closed, it is all that holds a body in). An open camp (L1b-12): no gate and no wall.
 function L1.real.campChecks(name: string, layout: any, pieces: { any }): ()
 	local real = L1.real
-	local thickness = real.rules.fenceThickness
 	for _, camp in layout.camps or {} do
 		local where = `{name}, camp {camp.id}`
+		-- The L2 W2 second fix round's m1: the camp's own fence.thickness, else the config's.
+		local own = if camp.fence ~= nil then camp.fence.thickness else nil
+		local thickness = if type(own) == "number" then own else real.rules.fenceThickness
 		local hx, hz = camp.sx / 2, camp.sz / 2
 		-- The Part of `role` of this camp that holds the point (x, z) at the floor's level.
 		local function partAt(role: string, x: number, z: number): any
@@ -2119,14 +2125,16 @@ function L1.real.campChecks(name: string, layout: any, pieces: { any }): ()
 			fences += 1
 			local box = piece.box
 			local dx, dz = math.abs(box.x - camp.x), math.abs(box.z - camp.z)
-			-- Inside the floor grown by the fence's thickness, and not over the floor itself.
+			-- Inside the floor grown by the fence's thickness, and not over the floor itself; its
+			-- outer face on that grown edge, so every piece is the camp's own thickness deep.
 			local within = dx + box.sx / 2 <= hx + thickness + 1e-6 and dz + box.sz / 2 <= hz + thickness + 1e-6
 			local onFloor = dx - box.sx / 2 < hx - 1e-6 and dz - box.sz / 2 < hz - 1e-6
-			if not within or onFloor or not near(box.y - box.sy / 2, camp.y) then
+			local outer = near(math.max(dx + box.sx / 2 - hx, dz + box.sz / 2 - hz), thickness)
+			if not within or onFloor or not outer or not near(box.y - box.sy / 2, camp.y) then
 				table.insert(stray, piece.name)
 			end
 		end
-		check(#stray == 0, `{where}: its {fences} fence and gate Parts stand on the fence line: outside the floor's edge, within the fence's thickness of it, on the floor's level{real.list(stray)}`)
+		check(#stray == 0, `{where}: its {fences} fence and gate Parts stand on the fence line: outside the floor's edge, out to its fence's thickness ({thickness}) and no further, on the floor's level{real.list(stray)}`)
 
 		if camp.locks ~= true then
 			local closing: { string } = {}

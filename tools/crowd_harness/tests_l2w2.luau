@@ -553,7 +553,8 @@ function W2.wiringTests(): ()
 	check(w.finishFound and w.finishListeners == 1 and w.finishGuarded, `finish() tells its strike listeners once, inside "if not fx.abandoned" ({w.finishFound}, {w.finishListeners}, {w.finishGuarded})`)
 	check(w.reactFound and w.reactElement == 1, `LevelService.React takes its element from WorldReact.StrikeElement with the ability id ({w.reactElement})`)
 	check(w.reactApply == 1 and w.reactOwnLoop == 0, `and hands the loop to WorldReact.Apply, with none of its own (Apply {w.reactApply}, own {w.reactOwnLoop})`)
-	check(w.aimFound and w.aimRay == 1 and w.aimRayMost == 1, `aimAllowed casts head to origin and back and answers with WorldReact.OriginClear, each line once ({w.aimRay} to {w.aimRayMost})`)
+	check(w.aimFound and w.aimRay == 1 and w.aimRayMost == 1, `aimAllowed answers with WorldReact.AimClear from the head and from the head led by claimSlack's own speed and lag, with shooting.originWallChord as the tolerance, each line once ({w.aimRay} to {w.aimRayMost})`)
+	check(w.hitFound and w.hitLines == 1, `its caster, worldHit, casts through worldParams and answers with the hit's distance ({w.hitFound}, {w.hitLines})`)
 end
 L1.group("l2w2 wiringTests", W2.wiringTests)
 
@@ -626,5 +627,62 @@ function W2.originTests(): ()
 	check(not W2.originClear(vec(1, 3, -5), vec(-0.3, 3, -5), walls, tolerance), "even 0.3 into it")
 end
 L1.group("l2w2 originTests", W2.originTests)
+
+-- The second fix round's m2: AimClear with the head carried by the lag (LeadHead), on the same
+-- bend. `walls` are the boxes the caster sees, as WeaponService's rays see Parts.
+function W2.aimClear(head: any, lead: any, origin: any, walls: { any }, tolerance: number): boolean
+	return W2.React.AimClear(head, lead, origin, tolerance, function(from: any, to: any): number?
+		return W2.firstHit(from, to, walls)
+	end)
+end
+
+function W2.leadTests(): ()
+	print(" WorldReact.LeadHead and AimClear: an honest origin on fast travel (the second fix round's m2)")
+	local R = W2.React
+	local head = vec(1, 3, -7.7)
+	local lead = R.LeadHead(head, vec(0, 0, 60), 60, 0.11)
+	check(near(lead.X, 1) and near(lead.Y, 3) and near(lead.Z, -1.1), `the head carried along the root's velocity for the lag: 6.6 studs at 60 for 0.11 s ({lead.X}, {lead.Y}, {lead.Z})`)
+	local capped = R.LeadHead(head, vec(0, 0, 200), 60, 0.11)
+	check(near(capped.Z, -1.1), `a velocity over the ring's speed is held to it: the lead never runs past the slack the distance test grants ({capped.Z})`)
+	local nothing = {
+		R.LeadHead(head, vec(0, 0, 60), 0, 0.11),
+		R.LeadHead(head, vec(0, 0, 60), 60, 0),
+		R.LeadHead(head, vec(0, 0, 0), 60, 0.11),
+		R.LeadHead(head, vec(0, 0, W2.NAN), 60, 0.11),
+		R.LeadHead(head, vec(0, 0, 60), W2.NAN, 0.11),
+		R.LeadHead(head, vec(0, 0, 60), 60, -1),
+		R.LeadHead(head, vec(math.huge, 0, 0), 60, 0.11),
+	}
+	local moved = 0
+	for _, point in nothing do
+		-- Exactly the head: a NaN point (an endless velocity times 0) is not "unmoved".
+		if not (point.X == head.X and point.Y == head.Y and point.Z == head.Z) then
+			moved += 1
+		end
+	end
+	check(moved == 0, `standing still, no lag, or a speed, lag or velocity that is not a finite number above 0 (an endless one included): the head itself ({moved} moved)`)
+
+	local walls = {
+		{ x = -1, y = 5, z = -10, sx = 2, sy = 20, sz = 20 },
+		{ x = -10, y = 5, z = -1, sx = 20, sy = 20, sz = 2 },
+	}
+	local tolerance = 1.5
+	local origin = vec(-1.2, 3.6, 0.9)
+	check(not W2.originClear(head, origin, walls, tolerance), "the bend's honest origin from a head 6.5 studs behind (a dash with lag): refused by the head's line alone")
+	check(W2.aimClear(head, lead, origin, walls, tolerance), "AimClear from the head led round by the lag: allowed")
+	check(not W2.aimClear(head, head, origin, walls, tolerance), "with no lead (standing still on the server's copy): refused as before")
+	check(W2.aimClear(vec(1, 3, -1.2), vec(1, 3, -1.2), origin, walls, tolerance), "standing at the corner: allowed by the head's own line, lead or none")
+
+	-- Forged: the velocity claimed through a 2.5-stud wall, the origin beyond it.
+	local thick = { { x = -1.25, y = 5, z = -10, sx = 2.5, sy = 20, sz = 20 } }
+	local at = vec(1, 3, -5)
+	local through = R.LeadHead(at, vec(-60, 0, 0), 60, 0.11)
+	check(not W2.aimClear(at, through, vec(-3.5, 3, -5), thick, tolerance), "a velocity claimed through a 2.5-stud wall, the origin beyond it: refused (the carried head stops on this side)")
+	check(not W2.aimClear(at, through, vec(-1.2, 3, -5), thick, tolerance), "the origin inside that wall: refused")
+	check(not W2.aimClear(at, vec(-1.25, 3, -5), vec(-3.5, 3, -5), thick, tolerance), "a lead claimed inside the wall itself: refused")
+	local far = R.LeadHead(at, vec(0, 0, 60), 60, 0.11)
+	check(not W2.aimClear(at, far, vec(-3.5, 3, -5), thick, tolerance) and W2.aimClear(at, far, vec(2, 3, 1), thick, tolerance), "led along the wall: the origin beyond it still refused, one on this side allowed")
+end
+L1.group("l2w2 leadTests", W2.leadTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

@@ -30,6 +30,8 @@ and compares what they answer, value by value:
     trigger's ceiling (the L1c second fix round's F1: a walled camp's fence top), entry, exit and
     spawn points); every resident group; the population (L1b-11);
   * `StageFlow.Ceiling` against `sim_range.trigger_ceiling`: every shipped camp and the edges;
+  * `LevelGeometry.FenceThickness` against `sim_range.fence_thickness` (the L2 W2 second fix round's
+    m1): every shipped camp and the edges; every zone row carries its `fence` too;
   * `StageFlow.GateNudge` against `sim_range.gate_nudge` on a grid over the fenced rectangle of
     every shipped locking camp (its edges, `inner`'s, the corners, half a stud either side) and
     in height;
@@ -805,7 +807,7 @@ def script_run(run, variant, rules, start_y):
                 """The point `studs` outside the floor's edge, in line with the entry."""
                 return ex + ox * (gap + studs), ez + oz * (gap + studs)
 
-            floor, fence = zone["floorY"], rules["fenceThickness"]
+            floor, fence = zone["floorY"], zone["fence"]
             root = floor + sr.ROOT_HEIGHT
             x, z = out(fence + 0.5)
             tick((x, root, z))  # outside the fenced rectangle
@@ -901,7 +903,8 @@ def zone_row(zone):
     return {"id": zone["id"], "floor": zone["floor"], "locks": zone["locks"], "name": zone["name"],
             "checkpoint": None if mark is None else [mark[0], floor, mark[1]], "residents": zone["residents"],
             "stock": dict(zone["stock"]), "tentStock": zone["tentStock"],
-            "floorY": floor, "rect": list(zone["rect"]), "inner": list(zone["inner"]), "trigger": list(zone["trigger"]),
+            "floorY": floor, "rect": list(zone["rect"]), "inner": list(zone["inner"]), "fence": zone["fence"],
+            "trigger": list(zone["trigger"]),
             "ceiling": zone["ceiling"],
             "entry": [zone["entry"][0], floor, zone["entry"][1]], "exit": [zone["exit"][0], floor, zone["exit"][1]],
             "spawns": [[x, floor, z] for x, z in zone["spawns"]],
@@ -1914,7 +1917,7 @@ def main():
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
             "campRules": combat["camps"], "campCases": [], "splitCases": [], "rayCases": [], "swingCases": [],
             "combatCases": [], "reserveCases": [], "tentOwesCases": [], "regionCases": [], "fieldedCases": [],
-            "ceilingCases": []}
+            "ceilingCases": [], "fenceCases": []}
     # The L1c second fix round's F1: StageFlow.Ceiling against sim_range.trigger_ceiling, on every
     # shipped camp and on the edges: a low fence, one at triggerHeight, an open camp's tall one,
     # none, a height that is a string or absent.
@@ -1930,6 +1933,16 @@ def main():
         data["ceilingCases"].append({"id": case, "camp": camp, "height": rules["triggerHeight"]})
         expected[case] = ("StageFlow.Ceiling: a camp's trigger band (the L1c second fix round's F1)", label,
                           sr.trigger_ceiling(camp, rules["triggerHeight"]))
+    # The L2 W2 second fix round's m1: LevelGeometry.FenceThickness against sim_range.fence_thickness,
+    # on every shipped camp and on the edges: none, the camp's own, 0, below 0, a string, no fence.
+    fence_edges = [{"fence": {"height": 4}}, {"fence": {"height": 64, "thickness": 2.5}},
+                   {"fence": {"height": 4, "thickness": 0}}, {"fence": {"height": 4, "thickness": -1}},
+                   {"fence": {"height": 4, "thickness": "2.5"}}, {}]
+    for index, (label, camp) in enumerate([(f"edge {i}", c) for i, c in enumerate(fence_edges, 1)] + shipped_camps, 1):
+        case = f"fence.{index}"
+        data["fenceCases"].append({"id": case, "camp": camp, "default": rules["fenceThickness"]})
+        expected[case] = ("LevelGeometry.FenceThickness: a camp's own fence depth (the L2 W2 second fix round's m1)",
+                          label, sr.fence_thickness(camp, rules["fenceThickness"]))
     shipped_plans = []  # (label, plan) of every level with residents at every difficulty: Wave 2's camp cases
     bursts, tempos = {}, {}
     scripted = {}  # trace id -> (label, the Python's ticks)
