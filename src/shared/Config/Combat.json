@@ -157,7 +157,11 @@
 		"secretReach": 2.5,
 		"secretBelow": 1,
 		"secretAbove": 9,
-		"react": { "fireHits": 6, "pad": 0.5 }
+		"react": {
+			"fireHits": 6,
+			"pad": 0.5,
+			"ice": { "cell": 7, "lift": 0.2, "thickness": 1, "reachDown": 6, "ahead": 4 }
+		}
 	},
 	"camps": {
 		"guard": { "sight": 30, "cone": 140, "rise": 0 },

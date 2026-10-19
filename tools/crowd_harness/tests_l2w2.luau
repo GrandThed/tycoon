@@ -161,7 +161,8 @@ function W2.reactTests(): ()
 	-- How many strikes, the pad, the heat.
 	local rules = { fireHits = 6, pad = 0.5 }
 	check(R.Need(rules, "fire") == 6, "fire takes fireHits")
-	check(R.Need(rules, "ice") == nil and R.Need({ iceHits = 3 }, "ice") == 3, "ice takes iceHits, and none without it")
+	-- Re-aimed by L2 W3 (L2-54): ice is never counted; Freeze takes a cell at its first chill.
+	check(R.Need(rules, "ice") == nil and R.Need({ iceHits = 3, fireHits = 6 } :: any, "ice") == nil, "ice is never counted, whatever the rules hold")
 	check(R.Need(nil, "fire") == nil and R.Need(rules, "lava") == nil, "no rules, or a word that is no element: nothing reacts")
 	check(R.Need({ fireHits = 0 }, "fire") == nil and R.Need({ fireHits = 2.5 }, "fire") == nil and R.Need({ fireHits = W2.NAN }, "fire") == nil and R.Need({ fireHits = math.huge }, "fire") == nil, "a count of 0, a fraction, NaN or endless: nothing reacts")
 	check(R.Need({ fireHits = 1 }, "fire") == 1, "a count of 1 is a count")
@@ -321,7 +322,8 @@ function W2.flowTests(): ()
 		return o.shortcuts[#o.shortcuts]
 	end
 	check(#problems(function() end) == 0, `a tunnel and its bramble are accepted ({table.concat(problems(function() end), "; ")})`)
-	check(#problems(function(o: any) last(o).react = "ice" end) == 0, "ice is a word a block may react to")
+	-- Re-aimed by L2 W3 (L2-52): an ice block is deep water that does not collide and opens nothing.
+	check(#problems(function(o: any) last(o).react = "ice" last(o).collide = false last(o).opens = nil end) == 0, "ice is a word a block may react to (deep water: no collision, opens nothing)")
 	check(#problems(function(o: any) last(o).react = nil end) == 0, "a block that opens a shortcut and reacts to nothing is not refused")
 	check(#problems(function(o: any) last(o).opens = nil end) == 0, "nor one that reacts and opens nothing")
 	local refusals = {

@@ -2619,11 +2619,15 @@ export type LevelBlock = {
 	collide: boolean?,
 	text: string?,
 	-- L2-34: "fire" | "ice" = a block the weapons of that element burn or freeze away (a string, as
-	-- `look` is: JSON cannot narrow it; StageFlow.Validate refuses any other word, and a reactive
-	-- block that does not collide). opens = the id of the `layout.shortcuts` entry a found shortcut
-	-- leaves this block out for (the leader's save, L2-36).
+	-- `look` is: JSON cannot narrow it; StageFlow.Validate refuses any other word). A "fire" block
+	-- collides; an "ice" block is deep water and does not (L2-52), opens nothing, and is built
+	-- with its ice cells (LevelGeometry.Pieces, levels.react.ice). opens = the id of the
+	-- `layout.shortcuts` entry a found shortcut leaves this block out for (the leader's save, L2-36).
 	react: string?,
 	opens: string?,
+	-- L2-58, an "ice" block only: where a body that fell through this water is put back (feet,
+	-- world studs; StageFlow.Landing), outside a closed camp's fight. nil = the run's safe point.
+	landing: { x: number, y: number, z: number }?,
 }
 -- L2-36: a shortcut's trigger box (world centre and size, studs). A standing fighter's root inside
 -- it finds the shortcut; name is what the card says.
@@ -2732,6 +2736,10 @@ export type ExpeditionsConfig = {
 	sign: { textColor: { number }, pixelsPerStud: number, size: { number }? },
 	-- L2-6: what the lobby's Abilities panel sells (nil = nothing)
 	abilities: { list: { UnlockAbilityDef } }?,
+	-- L2-51: families "built now, found later": family id -> the map node where it will be found
+	-- and the Armory's hint. Nothing on the server reads it (the family stays locked until a
+	-- Studio lever writes it); the Armory lists a family it names. nil = none.
+	found: { [string]: { node: string, text: string } }?,
 }
 -- L2-6: one bought ability (named apart from the weapons' AbilityDef). price.valor is a whole
 -- number > 0; a bad entry is warned at Init and cannot be bought.
@@ -2789,12 +2797,23 @@ export type CombatLevelsConfig = {
 	secretBelow: number?,
 	secretAbove: number?,
 	-- L2-34: the world's reactions. fireHits = the strikes of a fire weapon that burn a `react =
-	-- "fire"` block away (W3 adds iceHits); pad = studs a strike's segment may pass beside the
-	-- block and still touch it. nil (or a count that is not a whole number of at least 1) = that
-	-- element changes nothing.
+	-- "fire"` block away; pad = studs a strike's segment may pass beside the block and still touch
+	-- it. nil (or a count that is not a whole number of at least 1) = fire changes nothing. L2-53:
+	-- `ice` = how deep water freezes (nil = it never does: the water is only deep).
 	react: CombatReactConfig?,
 }
-export type CombatReactConfig = { fireHits: number?, iceHits: number?, pad: number? }
+export type CombatReactConfig = { fireHits: number?, pad: number?, ice: CombatIceConfig? }
+-- L2-53, L2-54: an ice block's footprint is cut into cells about `cell` studs square (WorldReact.
+-- Cells), each built as a hidden piece `thickness` deep whose top is `lift` over the water's top. A
+-- frost swing (an arc) freezes a cell whose top lies from its origin down to `reachDown` under it
+-- and whose centre lies within the swing's range + `ahead` and inside its sector (WorldReact.Chills).
+export type CombatIceConfig = {
+	cell: number,
+	lift: number,
+	thickness: number,
+	reachDown: number,
+	ahead: number,
+}
 
 -- RunState (built only by ArenaService)
 -- RunFloor, replacing the type (L1b Wave 4). cells: its region's cells (RegionGraph.cells), the same
@@ -2854,8 +2873,9 @@ export type CombatFxNotice = { kind: "notice", text: string }
 -- only. valor and materials are what it paid (0 on "locked"); family = a weapon family it gave.
 -- L2-36 adds "shortcut": to every member (userId = who found it: their card, the others' toast),
 -- secretId = the shortcut's id, name its name, needs "", valor and materials 0.
--- L2-35: a reactive block went away. event "burnt" (W3 adds "frozen"); name = its Part's name,
--- react = the element; x, y, z, sx, sy, sz = its box as it stood (the client's ghost).
+-- L2-35: a reactive block went away. event "burnt"; name = its Part's name, react = the element;
+-- x, y, z, sx, sy, sz = its box as it stood (the client's ghost). L2-54: event "frozen", react
+-- "ice" = one ice cell froze; name = its Part's (Ice_<block>_<k>, which stays), the box is the cell's.
 export type CombatFxReact = {
 	kind: "react",
 	event: string,

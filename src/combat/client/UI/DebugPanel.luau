@@ -23,6 +23,9 @@
 -- remove the caller's fire family, the lever and the family asked of the host when pressed, the
 -- caption from SetFireFamily). The mission HUD passes `deps.fireFamily`; without it, no button.
 --
+-- L2 Wave 3 (docs/prompts/l2-w3-contract.md, L2-61): "Frost Hammer on/off" (the I key), the same
+-- for the caller's ice family, from `deps.iceFamily` and SetIceFamily.
+--
 -- Geometry matches the hub's DebugPanel: 48 design px buttons (the 44 physical px tap
 -- target at MIN_SCALE) wrapped into two columns. A short landscape viewport makes the body
 -- SCROLL rather than shrink, because a lever that is 27 px tall is a lever no one can hit.
@@ -42,6 +45,8 @@ export type Deps = {
 	-- L2-38: the lever ("grantFamily" or "removeFamily") and the family it flips for the caller
 	-- now; nil = no Flamethrower button.
 	fireFamily: { lever: () -> (string, string) }?,
+	-- L2-61: the same for the ice family; nil = no Frost Hammer button.
+	iceFamily: { lever: () -> (string, string) }?,
 }
 
 export type DebugPanelHandle = {
@@ -54,6 +59,8 @@ export type DebugPanelHandle = {
 	SetAirJump: (owned: boolean) -> (),
 	-- L2-38: whether the caller holds the fire family now (the button's caption).
 	SetFireFamily: (owned: boolean) -> (),
+	-- L2-61: whether the caller holds the ice family now (the button's caption).
+	SetIceFamily: (owned: boolean) -> (),
 	-- false = the whole strip, its tab included, is off the screen (the map is open: it is a
 	-- full-screen sheet of the strip's own ZIndex tier, and the tab drew over it). What was open
 	-- is open again when it comes back.
@@ -282,6 +289,14 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 			deps.onLever(lever, family)
 		end)
 	end
+	local iceFamily = deps.iceFamily
+	local iceButton: TextButton? = nil
+	if iceFamily ~= nil then
+		iceButton = leverButton("Frost Hammer (I)", function()
+			local lever, family = iceFamily.lever()
+			deps.onLever(lever, family)
+		end)
+	end
 
 	local handle: DebugPanelHandle = {
 		SetKinds = function(kinds: { string })
@@ -314,6 +329,12 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 			local button = fireButton
 			if button ~= nil then
 				button.Text = if owned then "Flamethrower: ON (F)" else "Flamethrower: off (F)"
+			end
+		end,
+		SetIceFamily = function(owned: boolean)
+			local button = iceButton
+			if button ~= nil then
+				button.Text = if owned then "Frost Hammer: ON (I)" else "Frost Hammer: off (I)"
 			end
 		end,
 		SetVisible = function(visible: boolean)

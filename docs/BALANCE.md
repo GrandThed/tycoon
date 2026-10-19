@@ -5857,3 +5857,126 @@ is still the bow's Hard CaveMouth seed 23 (−6.6%).
 | sim_range's size rule out (the mirror alone) | check_stage_mirror | red |
 
 The full driver: 114 data cases, the 5 stage-mirror cases and the 1 simulator case, all as expected (40 min).
+
+## L2 W3: ice, the Frost Hammer, deep water and the island shrine (2026-10-19)
+
+Contract: `docs/prompts/l2-w3-contract.md` (L2-49 to L2-68; its §13: §5 Option A, the creek into a pond, a patch
+per swing, the ice for the whole run). Gear: Normal 2 / 2, Hard 4 / 4, Brutal 6 / 6, seeds 11 / 23 / 37;
+`py -3.12 tools/sim_range.py --check` on the gate's 64-bit Python 3.12 (PASS, 523 checks, 11.6 min); `py tools/check_levels.py` PASS;
+`py -3.12 tools/sim_combat.py --check` 23 of 23; `py tools/check_stage_mirror.py` PASS on the server's lines.
+
+### L2 W3: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json weapons.frostHammer` | — (contract: arc 9 / **140°**, damage **36**, rate **1.5**) | melee, era 1, `element` "ice", one variant: arc range 9, **120°**, pad 1.5, cap 8, **damage 38, rate 1.55**, knockback 22, launch 6, chain 1 / 1 / 1.8 | L2-49's numbers failed the boss gates: the Colossus took **87.3–94.2 s** (band 60–90). The boss fight is set by the dodging rhythm, so the kill does not move with DPS in a line: damage 40 makes every swing a heavy hit (the contract wants only the finisher heavy) and drops the Colossus to 76.6 s, under the Broadsword's slowest 77.2 (L2-39); 38 at 1.55 gives **83.2–84.9 s**, inside both. At 120° instead of 140° crowd6 falls from 469 (0.5% under its ceiling 471) to **439**; a boss is one body in front, so its rows do not move. Single **75** (target 68, +10%, in band); the finisher 68.4 is the only heavy hit (38 < `heavyHit` 40) |
+| `weapons.frostHammer.ability` (Frost Quake) | contract: damage **50**, count **3**, radius **8**, spacing 6 | **damage 30, count 1, radius 32**; cooldown 12, floor 5, refund 0.25, delay 0.25, knockback 18, launch 8 (still the Earthquake launcher, L2-50) | L2-39 holds the kill *with* the ability too. Earthquake's three rings all land on a boss at the caster's feet (128.6 a cast), so the contract's Frost Quake took the Colossus to **72.9–76.6 s** and the Warlord to 100.8 (the Broadsword's slowest: 77.2 and 98.1). With the swing above, the window left the ability about 4% of a boss kill. One wide ring keeps the crowd burst (it reaches more bodies) while a boss takes one 30 a cast: burst **3.5 s** of crowd DPS (3–5), busy-crowd cooldown **6.6 s = 55%**, floor 42%. On the bosses it no longer shortens the kill (below) |
+| `Expeditions.json looks.ice` | — | Ice, **(150, 208, 245)** | A colour look (spread 95), in `REQUIRED_LOOKS` and `COLOUR_LOOKS` |
+| `Expeditions.json found` | — | `frostHammer`: node `castle`, "Found in the Castle" | L2-51 |
+| `Combat.json levels.react.ice` | — | `{ cell 7, lift 0.2, thickness 1, reachDown 6, ahead 4 }` | L2-53 as written: cell 7 <= (9 + 4 − 1) / 1.5 = 8 (two rows a swing); reachDown 6 >= Road2's root over the water, 0 + 3 − (−1) = 4 |
+| `1_ForestRoad.json secrets.shrine` | a name only | **6 Valor, 63 Timber** | L2-59 as written: the biggest of the three chests |
+| `ForestRoad.json` | Creek 20 × 90 and Pond 52 × 44, solid; the shrine a 12 × 3 × 12 slab on the pond | **CreekUp** (x −410..−390, z −30..8, deep, no react); **Creek** (z 8..96) and **Pond** (x −436..−364, z 96..156), deep, `react` "ice", `landing` (−385, 0, 2); **ShrineIsland** 16 × 4 × 16, top 0, at (−400, 128); the shrine a 6 × 4 × 6 chest on it | §5 Option A as drawn; the island's position kept (the reach rule holds with +21.5 to spare) |
+| `check_levels.py` | the W1 creek rule | deep water, landings, (g) dry, (h) frozen, the frozen layout's walls / lookout / R8 / chord / killY, `found` (map and chain), ice look and config, ice pieces in the Part count | below |
+| `sim_range.py` | — | `frostHammer` target, `frostQuake` = Earthquake, Validate's ice and landing lines, `ice_cells`, `frozen_layout`, the Frost Hammer + Longbow pair, R8 on the frozen spots, the crossing, the chest gate's price from a map node | below |
+
+### L2 W3: the water and the island (grey blocks)
+
+The route still crosses the creek on Road2 (the bridge, top 0; the water's top −1, 1 under it; 21 route samples
+over water). A fall into the Creek or the Pond (their footprints grown by `rescue.outside` 4) comes back to
+Road2 at (−385, 0, 2), 6 studs from the ice's first row; from the ice's top to `killY` −13 is a 12.2-stud fall,
+0.35 s, before the rescue's own step. **A slip off Road2's north edge falls into CreekUp, which has no landing
+(only ice may carry one, L2-58): that player goes back to `SafePoint`** (on a first run before camp A, the
+trailhead, about 70 studs). Giving CreekUp ice and a landing would add a frozen floor north of the road, a new
+sniper spot by Road3: not done; the lead's call.
+
+| Measure | Value |
+|---|---|
+| Ice pieces | Creek 3 × 13 = 39, Pond 11 × 9 = 99, 6 under the island: **132**; Parts **248** of 600 |
+| The island with the water as built (g) | not reached by the jumps, a dash and the walk-off grace (49.3), by Leap Smash after the jumps and a dash (71.0) or by Impale Dash held in the air (80.6); the tightest top, ShrineSignPad, is **102.0** away: **+21.5** over the farthest (rule: ICE_MARGIN 15) |
+| The island frozen (h) | reached from the start; the chest opens from the island; the shortest chain of cells from a bank to the island **16 cells** (4 cells touch a bank, 6 the island) |
+| The trigger | met from ShrineIsland and the chest's top only; the ground within 2.5 of the chest lies over the island (2.5 to spare each side) |
+| With the ice frozen | every one of the 31 unclimbable walls stays so; the lookout's (a) to (d) hold; killY 12.2 under the ice; the frozen sheets are floor, never walls, for the shot-origin chord (the thinnest tall piece is still CaveBrambleE, 2) |
+
+### L2 W3: the crossing (Frost Hammer, a patch a swing)
+
+The simulator's model (`ice_crossing`): he stands on the bank where the shortest chain starts, swings at the
+next unfrozen cell of the chain (WorldReact.Chills: range + ahead = 13 from his root, 60° either side, the cell
+within reachDown under his root), walks to the far edge of the last frozen chain cell (his root a stud back), and
+swings again once the swing is ready and the ice has shown; then onto the island to the chest's trigger.
+
+| | Swings | Seconds | Studs | Cells frozen |
+|---|---|---|---|---|
+| Ideal (no lag, no reaction) | 9 | **5.8** | 109 | 38 |
+| A human (0.15 s round trip, 0.25 s reaction each swing) | 9 | **9.0** | 109 | 38 |
+
+The lead's band is 8–20 s; the human's crossing is in it (gate `ICE_CROSSING_SECONDS`), **the ideal is under
+it**: a swing freezes about 13.5 studs, which a walking player covers in the swing's own 0.65 s, so the crossing
+is set by walking 109 studs. A slower crossing needs a shorter freeze (smaller `ahead` and a smaller `cell`, more
+pieces) or a slower swing; not changed (Ben's "freeze your way across" reads as walking with it).
+
+### L2 W3: the Frost Hammer (range, tier 1)
+
+| Row | Value |
+|---|---|
+| Single / crowd6 / surround6 / crowd3 | **75 / 439 / 396 / 597** (targets 68 / 410 ±15%; the Broadsword 76 / 545) |
+| Frost Quake | burst **3.5 s** (3–5), busy 0.25, net 3.2, busy-crowd cooldown **6.6 s = 55%**, floor 5 s = 42% |
+| Plate (armoured, 80) | 6 hits, 3.23 s (2 combos; the finisher is the heavy hit) |
+| Colossus, Broadsword (reacting) | 75.4–77.2 s |
+| Colossus, Frost Hammer / with Frost Quake | **83.2–84.9 s / 83.7–90.5 s**, 0 hits taken (the cast costs as much as it gives) |
+| Warlord, Broadsword | 97.3–98.1 s |
+| Warlord, Frost Hammer / with Frost Quake | **102.9–107.1 s / 101.0–105.3 s**, 0 hits; guard down 30.0 s, plate broken at 47.8 s (siege **45%**, plate phase 18.9 s, 45 studs) |
+
+L2-39 margins (the hammer's fastest seed over the Broadsword's slowest): Colossus +6.0 s, with Frost Quake
++6.5 s; Warlord +4.8 s, with Frost Quake **+2.9 s** (the thinnest). **These are tight: any hammer number change
+re-runs the boss rows** (L2-62).
+
+### L2 W3: Forest Road with the Frost Hammer (Normal 2 / 2)
+
+| Run | Clear (min) | Cash a minute | Colossus in the run |
+|---|---|---|---|
+| Broadsword alone (reacting) | 5.26 / 4.69 / 5.04 | 26,376 | 78.5 / 76.0 / 77.4 s |
+| Pair: Broadsword + Longbow | 4.14 / 4.32 / 4.32 | 30,859 | 75.7 / 75.6 / 77.8 s |
+| Pair: **Frost Hammer + Longbow** | **4.46 / 4.69 / 4.43**, 0 downs | **29,178 = ×0.95 the Longbow pair** (gate ≤ ×1.10) | **80.6 / 84.4 / 81.5 s** (×1.07 the Longbow pair's; gate ≥ ×0.90) |
+
+### L2 W3: the shrine chest
+
+6 Valor and 63 Timber behind ice (its chain starts at the Castle node, `found:castle`; held under the dearest sold
+ability, Double Jump's 10). 63 is **30%** of a first Normal clear's 211 Timber (the band's top, 15–30%) and 29%
+of the level's Normal stock of 220. The three chests: lookout 3 + 50 + the Flamethrower, cache 4 + 60, shrine
+6 + 63.
+
+### L2 W3: R8, the sniper spots
+
+With the water deep, **Creek leaves** both pinned lists (`sniperSpots`, `sniperSpotsOpen`). With the ice frozen
+(both bramble variants) the lists are the same **plus Creek** (`sniperSpotsFrozen`, `sniperSpotsOpenFrozen`); no
+other name, the pond and the island lie beyond the Longbow's 110. The frozen Creek's nearest point that sees the
+region is (−391, 9), 99.7 off it (the solid Creek reached z −30 and was nearer). Its straight course earns
+**0 / 0** cash / Timber a minute on Normal and on Hard at 2 / 2 (the mission player 24,986–28,047 and
+18,789–20,513). `SNIPER_KNOWN_LIMIT_L4` unchanged.
+
+### L2 W3: `check_levels_mutants.py`, new and changed cases
+
+| Case | Rule | Expected |
+|---|---|---|
+| the Creek solid again; the Pond reacts to nothing; the water 0.25 under the bridge; the pond 1 under the creek / control: 0.5 under | deep water | red ×4 / green |
+| an ice block that collides; an ice block that opens the cave; a landing on CreekUp (not ice); a landing whose y is a string | Validate | red ×4 |
+| the Creek's landing over the void; a stud over Road2; on camp A's floor / control: on ShrineSignPad | L2-58 | red ×3 / green |
+| the island 45 from the sign pad / control 52 | (g) the jumps | red / green |
+| no air dash, the island 65 / control 75 | (g) Leap Smash | red / green |
+| the island 75 / control 85 | (g) Impale Dash held in the air | red / green |
+| the island 85 / control 96 | (g) ICE_MARGIN | red / green |
+| the chest 6 east on the island / control 1.5 east | (a), (d) | red / green |
+| ice.cell 12 / control 8; ice.reachDown 3.5 / control 4; the Frost Hammer carries no element | (h) the swing | red / green; red / green; red |
+| the creek ends 16 short of the pond; a wall across the creek covering a row | (h) the chain | red; red |
+| the island 66 south of the pond | (h) frozen, reached | red |
+| a pond 17 high by the lookout ledge / control 6 high | the lookout, frozen | red / green |
+| a pond 42 high 4 off CaveWallS1 | the walls, frozen | red |
+| a pond south of Road4; the same with the brambles burnt | R8, frozen | red; red |
+| found names no node; text 41 / control 40; the Broadsword found; a family no weapon has; the cache also pays the Frost Hammer | L2-51 | red; red / green; red ×3 |
+| the shrine pays 10 Valor / control 9; 67 Timber; no `found` (nothing holds ice) | L2-59, (e) | red / green; red; red |
+| levels.react.ice.cell 0; missing; iceHits back | L2-53 | red ×3 |
+| sim_range's ice-collides line out; its landing-not-ice line out (the mirror alone) | check_stage_mirror | red ×2 |
+| changed: "the shrine names a family" now also drops `found` (ice would resolve through the Castle otherwise) | (e) | red |
+
+The full driver: 176 data cases, the 8 stage-mirror cases and the 1 simulator case, all as expected (about 1.5 h
+beside a full simulator run).

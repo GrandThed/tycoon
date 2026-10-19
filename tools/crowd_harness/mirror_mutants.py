@@ -224,6 +224,21 @@ MUTANTS = [
      "math.min(math.max(position.X, inner.x - inner.hx), inner.x + inner.hx),", "position.X,"),
     ("L1c m3: the nudge lands on the floor's edge", "StageFlow",
      "local inner = zone.inner\n\treturn Vector3.new(", "local inner = zone.rect\n\treturn Vector3.new("),
+    # L2 W3 (L2-52, L2-58): Validate's ice and landing lines.
+    ("L2 W3: an ice block may collide", "StageFlow",
+     "\t\t\tif block.collide ~= false then\n\t\t\t\tproblem(`{where} is ice and collides`)",
+     "\t\t\tif false then\n\t\t\t\tproblem(`{where} is ice and collides`)"),
+    ("L2 W3: an ice block may open a shortcut", "StageFlow",
+     "\t\t\tif opens ~= nil then\n\t\t\t\tproblem(`{where} is ice and opens",
+     "\t\t\tif false then\n\t\t\t\tproblem(`{where} is ice and opens"),
+    ("L2 W3: any block may have a landing", "StageFlow",
+     "\t\t\tif react ~= \"ice\" then\n\t\t\t\tproblem(`{where} has a landing and is not ice`)",
+     "\t\t\tif false then\n\t\t\t\tproblem(`{where} has a landing and is not ice`)"),
+    ("L2 W3: a landing's numbers are not checked", "StageFlow",
+     "\t\t\t\t\tif not isFinite(landing[key]) then", "\t\t\t\t\tif false then"),
+    ("L2 W3: a landing that is no table passes", "StageFlow",
+     "\t\t\tif type(landing) ~= \"table\" then\n\t\t\t\tproblem(`{where}: landing is {tostring(landing)}, not a point`)\n\t\t\telse",
+     "\t\t\tif false then\n\t\t\telseif type(landing) == \"table\" then"),
 ]
 
 

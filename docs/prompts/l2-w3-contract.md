@@ -320,3 +320,18 @@ secrets (the shrine included); the ice resets with every run.
   water ahead, the same pure rule as the server); frozen cells must not open any new sniper perch or ledge route
   (check_levels with the frozen layout, every lifting arc); frozen sheets are floor, not walls, for the
   shot-origin chord gate — say so in the report.
+
+## 14. Lead's rulings after the build (2026-10-19)
+
+- Accepted from the designer: Frost Hammer swing 38 dmg, 1.55/s, 120°; Frost Quake one ring (count 1, radius 32,
+  damage 30). INTERFACES' L2-49/L2-50 numbers are superseded by the data.
+- The crossing band (8–20 s) is judged at the human pace (9.0 s); the ideal 5.8 s is fine.
+- **Queued for the fix round (known; reviewers need not re-find them):**
+  - Q1: phone auto-swing at water uses a narrower cone than the swing (`controls.iceAutoDegrees` in config,
+    e.g. 60), so walking along Road2's south half does not swing at the creek beside it; it can only remove
+    swings.
+  - Q2: frozen cells keep normal grip (CustomPhysicalProperties or a non-slippery material with the ice look):
+    no sliding into the water.
+  - Q3: any deep (non-colliding) water block may carry a `landing`, not only ice; CreekUp lands on Road2 by the
+    creek, not SafePoint (Validate + mirror + check_levels).
+  - Q4: the Frost Quake visual draws the configured ring count (one ring at radius 32).

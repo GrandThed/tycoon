@@ -122,6 +122,11 @@
 --    Parts for the server's Heat attribute. SecretFx's family note names the Armory's key.
 --  * Studio: F toggles the caller's fire family (the config's family whose element is "fire":
 --    grantFamily or removeFamily, from the Snapshot's `families`); the strip has it as a button.
+--
+-- L2 Wave 3 (docs/prompts/l2-w3-contract.md, L2-61): Studio key I toggles the caller's ice family
+-- (the Frost Hammer, owned only by this lever until the Castle) exactly as F does the fire one,
+-- and the strip has it as a button. The default I zoom does nothing: the camera is Scriptable.
+-- CombatFx `react` "frozen" (a water cell frozen) goes to ReactFx like "burnt".
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -189,11 +194,14 @@ local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.V] = { lever = "grantValor", value = Theme.COMBAT_DEBUG_GRANT_VALOR },
 }
 local AIR_JUMP_KEY = Enum.KeyCode.J
--- L2-38: F toggles the caller's fire family (the Flamethrower).
-local FIRE_FAMILY_KEY = Enum.KeyCode.F
-local FIRE_ELEMENT = "fire"
+-- L2-38: F toggles the caller's fire family (the Flamethrower); L2-61: I the ice family (the
+-- Frost Hammer).
+local ELEMENT_FAMILY_KEYS: { [Enum.KeyCode]: string } = {
+	[Enum.KeyCode.F] = "fire",
+	[Enum.KeyCode.I] = "ice",
+}
 local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · F flamethrower"
-	.. " · H reset secrets · V +"
+	.. " · I frost hammer · H reset secrets · V +"
 	.. tostring(Theme.COMBAT_DEBUG_GRANT_VALOR)
 	.. " Valor"
 -- L2-10: the Armory panel's key, in the lobby, and what the first refused air jump says.
@@ -715,15 +723,16 @@ local function airJumpLever(): string
 	return if owned then "removeAbility" else "grantAbility"
 end
 
--- L2-38: the family F and the strip's button flip: the first (by id) whose element is fire.
-local function fireFamily(): string?
+-- L2-38, L2-61: the family a key (F, I) and the strip's button flip: the first (by id) whose
+-- element is `element`.
+local function elementFamily(element: string): string?
 	local config = Catalog.GetProvingGroundsConfig()
 	if config == nil then
 		return nil
 	end
 	local ids: { string } = {}
 	for id in config.weapons do
-		if Unlocks.ElementOf(config.weapons, id) == FIRE_ELEMENT then
+		if Unlocks.ElementOf(config.weapons, id) == element then
 			table.insert(ids, id)
 		end
 	end
@@ -1356,14 +1365,14 @@ local function bootMission(): ()
 		st.lastIntentTime = now
 		return true
 	end
-	-- L2-38: whether the caller holds the fire family now (the Snapshot's families), and the lever
-	-- F and the strip's button send to flip it.
-	local function ownsFireFamily(): boolean
-		local family = fireFamily()
+	-- L2-38, L2-61: whether the caller holds the element's family now (the Snapshot's families),
+	-- and the lever its key (F, I) and the strip's button send to flip it.
+	local function ownsElementFamily(element: string): boolean
+		local family = elementFamily(element)
 		return family ~= nil and st.families[family] == true
 	end
-	local function fireFamilyLever(): string
-		return if ownsFireFamily() then "removeFamily" else "grantFamily"
+	local function elementFamilyLever(element: string): string
+		return if ownsElementFamily(element) then "removeFamily" else "grantFamily"
 	end
 	local function leave(): ()
 		if debounced() then
@@ -1510,10 +1519,18 @@ local function bootMission(): ()
 			-- L2-19: the strip's Double Jump button asks which way to flip it when pressed.
 			airJump = { id = Unlocks.AIR_JUMP, lever = airJumpLever },
 			-- L2-38: the strip's Flamethrower button (F), when the config has a fire family.
-			fireFamily = if fireFamily() ~= nil
+			fireFamily = if elementFamily("fire") ~= nil
 				then {
 					lever = function(): (string, string)
-						return fireFamilyLever(), fireFamily() or ""
+						return elementFamilyLever("fire"), elementFamily("fire") or ""
+					end,
+				}
+				else nil,
+			-- L2-61: the strip's Frost Hammer button (I), when the config has an ice family.
+			iceFamily = if elementFamily("ice") ~= nil
+				then {
+					lever = function(): (string, string)
+						return elementFamilyLever("ice"), elementFamily("ice") or ""
 					end,
 				}
 				else nil,
@@ -1770,7 +1787,8 @@ local function bootMission(): ()
 			st.families
 		)
 		if debugPanel ~= nil then
-			debugPanel.SetFireFamily(ownsFireFamily())
+			debugPanel.SetFireFamily(ownsElementFamily("fire"))
+			debugPanel.SetIceFamily(ownsElementFamily("ice"))
 		end
 		SecretFx.SetFound(combat.secrets)
 	end
@@ -2217,10 +2235,11 @@ local function bootMission(): ()
 			end
 			return
 		end
-		if input.KeyCode == FIRE_FAMILY_KEY then
-			local family = fireFamily()
+		local element = ELEMENT_FAMILY_KEYS[input.KeyCode]
+		if element ~= nil then
+			local family = elementFamily(element)
 			if family ~= nil and debounced() then
-				remote:FireServer(fireFamilyLever(), family)
+				remote:FireServer(elementFamilyLever(element), family)
 			end
 			return
 		end

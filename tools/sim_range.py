@@ -97,6 +97,12 @@ again for levels.closeGraceSeconds (still_closing); State.closedAt and State.fou
 earns the star (earns_star); and the Studio levers Skip and Force, which the simulator's own
 runs never use and tools/check_stage_mirror.py holds to the Luau.
 
+L2 Wave 3 (docs/prompts/l2-w3-contract.md) adds the Frost Hammer's targets (Frost Quake is the
+Earthquake launcher), Validate's ice and landing lines, the ice cells LevelGeometry builds
+(ice_cells) and the frozen layout the reach models judge (frozen_layout), the Frost Hammer + Longbow
+pair on Forest Road, R8's straight course from the frozen layout's spots, and the crossing to the
+island shrine (ice_crossing). Deep water is no floor: it does not collide, so nothing here stands on it.
+
 WHICH PYTHON. The gate is `py tools/sim_range.py --check`, and the launcher follows the first
 line of this file to the 64-bit Python 3.12. `py -`, a script with no such line, and whatever
 imports this file from one run on the machine's other Python (3.14, a 32-bit build). A level
@@ -146,6 +152,8 @@ FAMILY_TARGETS = {
     "chaingun": {"crowd6": 240},  # lightning through a pack
     # L2-29: a crowd weapon you must stand close to (the Shotgun's role), the Beam's single-target rate.
     "flamethrower": {"single": 50, "crowd6": 280},
+    # L2-49: the frost hammer, a slower Broadsword (36 x 1.27 x 1.5 = 68 against its 76; crowd6 410 against 456).
+    "frostHammer": {"single": 68, "crowd6": 410},
 }
 # A and B of one family sit at similar crowd DPS: |A - B| / mean at most this.
 AB_SPREAD = 0.20
@@ -1194,7 +1202,7 @@ def plan_ability(cfg, family, ab, ctx):
                                                              "size": g("range"), "arcDegrees": 360, "pad": pad,
                                                              "cap": cap, "damage": damage}))
         return cast
-    if aid == "earthquake":
+    if aid in ("earthquake", "frostQuake"):  # L2-50: Frost Quake is the Earthquake launcher
         cast = Cast(busy=g("delaySeconds"))
         floor_point = (0.0, 0.0, 0.0)
         for k in range(1, count_of(g("count"), 0) + 1):
@@ -5452,14 +5460,85 @@ def react_problems(layout, problem):
             continue
         where = f"block {block['name'] if isinstance(block.get('name'), str) else index}"
         react = block.get("react")
+        opens = block.get("opens")
         if react is not None:
             if react not in REACT_WORDS:
                 problem(f'{where}: react is {react}, neither "fire" nor "ice"')
-            if block.get("collide") is False:
+            # L2-52: deep water is ice that does not collide (a fall goes through it to the rescue);
+            # anything else that reacts must collide (a stream would burn a block it passes through).
+            if react == "ice":
+                if block.get("collide") is not False:
+                    problem(f"{where} is ice and collides")
+                if opens is not None:
+                    problem(f"{where} is ice and opens {opens}")
+            elif block.get("collide") is False:
                 problem(f"{where} reacts and does not collide")
-        opens = block.get("opens")
         if opens is not None and (not isinstance(opens, str) or opens not in ids):
             problem(f"{where} opens {opens}, which names no shortcut")
+        # L2-58: a deep water block's landing, where a fall into it comes back.
+        landing = block.get("landing")
+        if landing is not None:
+            if react != "ice":
+                problem(f"{where} has a landing and is not ice")
+            if not isinstance(landing, dict):
+                problem(f"{where}: landing is {landing}, not a point")
+            else:
+                for key in ("x", "y", "z"):
+                    if not finite(landing.get(key)):
+                        problem(f"{where}: landing.{key} is {landing.get(key)}, not a number")
+
+
+def ice_cells(layout, ice):
+    """L2-53, LevelGeometry.Pieces' ice pieces: every block whose `react` is "ice" divided evenly
+    into ceil(side / ice.cell) cells per axis (WorldReact.Cells); a cell whose centre lies under a
+    colliding block or a secret whose top stands over the water's top (Road2, the island: the
+    footprint holds the centre, edges included) gets no piece. [{block, i, k, box (x0, x1, z0, z1),
+    top (the water's top + ice.lift), water (the water's top)}] in the layout's block order, i
+    across x, k across z. `ice` nil (Combat.json levels.react.ice absent): no cells."""
+    if not isinstance(ice, dict) or not finite(ice.get("cell")) or ice["cell"] <= 0:
+        return []
+    size, lift = ice["cell"], ice.get("lift") or 0
+    blocks = [b for b in layout.get("blocks") or [] if isinstance(b, dict)]
+    covers = [(b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2, b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2,
+               b["y"] + b["sy"] / 2, b) for b in blocks if b.get("collide") is not False]
+    covers += [(s["x"] - s["sx"] / 2, s["x"] + s["sx"] / 2, s["z"] - s["sz"] / 2, s["z"] + s["sz"] / 2,
+                s["y"] + s["sy"] / 2, s) for s in layout.get("secrets") or []]
+    found = []
+    for b in blocks:
+        if b.get("react") != "ice":
+            continue
+        x0, z0 = b["x"] - b["sx"] / 2, b["z"] - b["sz"] / 2
+        water = b["y"] + b["sy"] / 2
+        nx, nz = max(math.ceil(b["sx"] / size), 1), max(math.ceil(b["sz"] / size), 1)
+        wx, wz = b["sx"] / nx, b["sz"] / nz
+        for i in range(nx):
+            for k in range(nz):
+                cx, cz = x0 + wx * (i + 0.5), z0 + wz * (k + 0.5)
+                if any(c[5] is not b and c[0] <= cx <= c[1] and c[2] <= cz <= c[3] and c[4] > water for c in covers):
+                    continue
+                found.append({"block": b.get("name") or b["look"], "i": i, "k": k,
+                              "box": (x0 + wx * i, x0 + wx * (i + 1), z0 + wz * k, z0 + wz * (k + 1)),
+                              "top": water + lift, "water": water})
+    return found
+
+
+def frozen_layout(layout, ice):
+    """L2-60 (h): the layout with every ice block frozen whole, as a reach model sees it: a colliding
+    block of the same footprint and name, look "ice", its top at the water's top + ice.lift and
+    ice.thickness deep (its react and landing gone). The cells a colliding block or secret covers
+    lie under that solid, so the whole block stands for its cells. The layout itself when `ice` is
+    not a table (no ice: the water stays deep)."""
+    if not isinstance(ice, dict):
+        return layout
+    lift, deep = ice.get("lift") or 0, ice.get("thickness") or 1
+    blocks = []
+    for b in layout["blocks"]:
+        if b.get("react") == "ice":
+            top = b["y"] + b["sy"] / 2 + lift
+            b = {key: value for key, value in b.items() if key not in ("react", "landing", "collide")}
+            b.update({"look": "ice", "y": top - deep / 2, "sy": deep})
+        blocks.append(b)
+    return {**layout, "blocks": blocks}
 
 
 def camp_index(layout, camp_id):
@@ -9142,6 +9221,139 @@ def mission_report(cfg, path=None, mission=None, careless=True):
             "stand": stand, "bosses": bosses, "runs": runs, "careless": careless_runs, "combat": combat_cfg, "sc": sc}
 
 
+# L2 W3 (docs/prompts/l2-w3-contract.md section 9): the crossing to the island shrine. A player who
+# carries the ice family stands on the bank where the shortest chain of ice cells starts and freezes
+# his way along it: each swing freezes every unfrozen cell WorldReact.Chills holds (an arc's sector
+# of range + ice.ahead round his root, arcDegrees wide about the way to the next cell of the chain, the
+# cell's top between his root and reachDown under it), then he walks on to the far edge of the last
+# frozen cell of the chain and swings again once his swing is ready (1 / rate) and, with a lag, once
+# the server's answer has made the ice he swung at solid, and a human's reaction after that before he
+# steps onto it. The crossing is from his first swing to his root inside the chest's trigger
+# (levels.secretReach from its footprint). The lead's band is ICE_CROSSING_SECONDS for that human
+# (a 0.15 s round trip and REACTION_SECONDS); the ideal (no lag, no reaction) is reported.
+ICE_CROSSING_SECONDS = (8.0, 20.0)
+ICE_CROSSING_LAG = 0.15  # PING_CHECKS' worst: the answer that makes the swung-at ice solid
+
+
+def ice_crossing(cfg, combat_cfg, layout, lag=ICE_CROSSING_LAG, react=REACTION_SECONDS):
+    """The crossing (section 9) for the first family whose element is ice, its default variant: {swings,
+    seconds, studs, cells (frozen), chain (cells), family} or None when the layout has no ice-keyed
+    secret, no ice cells or no chain."""
+    family = next((f for f, w in cfg["weapons"].items() if w.get("element") == "ice"), None)
+    ice = (combat_cfg["levels"].get("react") or {}).get("ice")
+    secret = next((s for s in layout.get("secrets") or [] if s.get("needs") == "ice"), None)
+    cells = ice_cells(layout, ice)
+    if family is None or secret is None or not cells:
+        return None
+    weapon = cfg["weapons"][family]
+    v = weapon["variants"][weapon["default"]]
+    reach, half = v["range"] + ice["ahead"], (v.get("arcDegrees") or 360) / 2
+    walk = cfg["movement"]["walkSpeed"]
+    foot = secret["y"] - secret["sy"] / 2
+
+    def box_of(b):
+        return (b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2, b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2)
+
+    def gap(a, b):
+        return math.hypot(max(a[0] - b[1], b[0] - a[1], 0.0), max(a[2] - b[3], b[2] - a[3], 0.0))
+
+    def touch(a, b):
+        ox, oz = min(a[1], b[1]) - max(a[0], b[0]), min(a[3], b[3]) - max(a[2], b[2])
+        return (abs(ox) <= 1e-6 and oz > 1e-6) or (abs(oz) <= 1e-6 and ox > 1e-6)
+
+    solid = [b for b in layout["blocks"] if b.get("collide") is not False]
+    island = next((b for b in solid if abs(b["x"] - secret["x"]) <= b["sx"] / 2 and abs(b["z"] - secret["z"]) <= b["sz"] / 2
+                   and abs(b["y"] + b["sy"] / 2 - foot) < 0.01), None)
+    if island is None:
+        return None
+    banks = [b for b in solid if b is not island and b["y"] + b["sy"] / 2 >= cells[0]["water"] - 1e-6]
+    starts = {i: next(b for b in banks if gap(c["box"], box_of(b)) <= 1e-6) for i, c in enumerate(cells)
+              if any(gap(c["box"], box_of(b)) <= 1e-6 for b in banks)}
+    goals = {i for i, c in enumerate(cells) if gap(c["box"], box_of(island)) <= 1e-6}
+    back = {i: None for i in starts}
+    queue = list(starts)
+    while queue:
+        here = queue.pop(0)
+        for j, c in enumerate(cells):
+            if j not in back and touch(cells[here]["box"], c["box"]):
+                back[j] = here
+                queue.append(j)
+    ends = [g for g in goals if g in back]
+    if not ends:
+        return None
+
+    def chain_of(end):
+        found = [end]
+        while back[found[-1]] is not None:
+            found.append(back[found[-1]])
+        return found[::-1]
+
+    chain = min((chain_of(g) for g in ends), key=len)
+    centre = [((cells[i]["box"][0] + cells[i]["box"][1]) / 2, (cells[i]["box"][2] + cells[i]["box"][3]) / 2) for i in chain]
+    first, bank = cells[chain[0]]["box"], box_of(starts[chain[0]])
+    # His root on the bank, at the middle of the edge the first cell shares with it.
+    x = min(max(centre[0][0], max(first[0], bank[0])), min(first[1], bank[1]))
+    z = min(max(centre[0][1], max(first[2], bank[2])), min(first[3], bank[3]))
+    y = starts[chain[0]]["y"] + starts[chain[0]]["sy"] / 2 + ROOT_HEIGHT
+    frozen, at, swings, studs, ready = set(), -1, 0, 0.0, 0.0
+    t = 0.0
+    while True:
+        # The next unfrozen cell of the chain sets his facing.
+        nxt = next((k for k in range(len(chain)) if chain[k] not in frozen), None)
+        if nxt is None:
+            break
+        fx, fz = centre[nxt][0] - x, centre[nxt][1] - z
+        run = math.hypot(fx, fz) or 1.0
+        t = max(t, ready)
+        swings += 1
+        if swings > 200:
+            return None
+        ready = t + 1 / v["rate"]
+        for i, c in enumerate(cells):
+            if i in frozen:
+                continue
+            cx, cz = (c["box"][0] + c["box"][1]) / 2, (c["box"][2] + c["box"][3]) / 2
+            dx, dz = cx - x, cz - z
+            far = math.hypot(dx, dz)
+            cos = 1.0 if far < 1e-9 else max(-1.0, min(1.0, (dx * fx + dz * fz) / (far * run)))
+            if far <= reach and (half >= 180 or math.degrees(math.acos(cos)) <= half) and y - ice["reachDown"] <= c["top"] <= y:
+                frozen.add(i)
+        t += lag + react
+        # He walks along the chain to the far edge of its last frozen cell, his root a body's radius
+        # back from the edge toward the next cell.
+        last = at
+        while last + 1 < len(chain) and chain[last + 1] in frozen:
+            last += 1
+        path = [centre[k] for k in range(at + 1, last + 1)]
+        if last >= 0 and last + 1 < len(chain):
+            (px, pz), (nx, nz) = centre[last], centre[last + 1]
+            box = cells[chain[last]]["box"]
+            norm = math.hypot(nx - px, nz - pz) or 1.0
+            ux, uz = (nx - px) / norm, (nz - pz) / norm
+            edge = abs(ux) * (box[1] - box[0]) / 2 + abs(uz) * (box[3] - box[2]) / 2
+            path.append((px + ux * (edge - 1.0), pz + uz * (edge - 1.0)))
+        for px, pz in path:
+            step = math.hypot(px - x, pz - z)
+            studs += step
+            t += step / walk
+            x, z = px, pz
+        if last > at:
+            at = last
+            y = cells[chain[at]]["top"] + ROOT_HEIGHT
+    # Onto the island, to the chest's trigger: levels.secretReach from its footprint, on the line
+    # from the last cell to the chest.
+    reach_in = combat_cfg["levels"].get("secretReach") or 0
+    dx, dz = secret["x"] - x, secret["z"] - z
+    norm = math.hypot(dx, dz) or 1.0
+    ux, uz = dx / norm, dz / norm
+    to_face = abs(ux) * secret["sx"] / 2 + abs(uz) * secret["sz"] / 2
+    left = max(norm - to_face - reach_in, 0.0)
+    studs += left
+    t += left / walk
+    return {"family": family, "swings": swings, "seconds": t, "studs": studs, "cells": len(frozen), "chain": len(chain),
+            "lag": lag, "react": react}
+
+
 def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=True, below=True, scenarios=True):
     """Forest Road's bands, per difficulty, each at its recommended gear (Normal at the proving
     gear, Hard and Brutal at the gear preset of their recommendedTier): the hit shares, the boss
@@ -9180,12 +9392,30 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                           if cut is not None else [])
     flame = next((f for f, w in cfg["weapons"].items() if w.get("element") == "fire"), None)
     report["flame"] = flame
+    # L2 W3: the ice family a pair carries with the Longbow; the frozen layout (sr.frozen_layout: the
+    # creek and the pond frozen whole) and its spots beyond the dry ones, rated by R8's straight
+    # course on Normal and Hard like the others (the frozen Creek); the crossing to the shrine.
+    frost = next((f for f, w in cfg["weapons"].items() if w.get("element") == "ice"), None)
+    report["frost"] = frost
+    ice = (combat_cfg["levels"].get("react") or {}).get("ice")
+    frozen = frozen_layout(layout, ice)
+    report["frozen"] = frozen
+    report["iceSpots"] = ([spot for spot in sniper_spots_of(level, frozen, combat_cfg, cfg) if spot["id"] not in shut_ids]
+                          if frozen is not layout else [])
+    report["crossing"] = {"human": ice_crossing(cfg, combat_cfg, layout),
+                          "ideal": ice_crossing(cfg, combat_cfg, layout, lag=0.0, react=0.0)}
 
     def sniper_runs(view, hp, difficulty):
-        """R8: a straight course from every listed spot, every seed."""
-        return {spot["id"]: [LevelRun(view, hp, ctx, level, layout, difficulty,
-                                      dict(THREAT_POLICIES["sniper"], weapon=(bow, None), spot=spot), seed).run()
-                             for seed in MISSION_SEEDS] for spot in spots}
+        """R8: a straight course from every listed spot, every seed; L2 W3: and from every spot the
+        frozen layout adds, on it."""
+        found = {spot["id"]: [LevelRun(view, hp, ctx, level, layout, difficulty,
+                                       dict(THREAT_POLICIES["sniper"], weapon=(bow, None), spot=spot), seed).run()
+                              for seed in MISSION_SEEDS] for spot in spots}
+        for spot in report["iceSpots"]:
+            found[spot["id"]] = [LevelRun(view, hp, ctx, level, frozen, difficulty,
+                                          dict(THREAT_POLICIES["sniper"], weapon=(bow, None), spot=spot), seed).run()
+                                 for seed in MISSION_SEEDS]
+        return found
 
     def runs_of(view, hp, difficulty, key, weapon=None, stop_zone=None, seconds=None, where=None, pair=None):
         policy = THREAT_POLICIES[key] if weapon is None else dict(THREAT_POLICIES[key], weapon=(weapon, None))
@@ -9254,10 +9484,14 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
         if cut is not None and difficulty in (ctx["expeditions"]["difficulties"][0], SNIPER_HARD):
             row["cave"] = {"runs": runs_of(view, hp, difficulty, "mission", where=cut),
                            "human": runs_of(view, hp, difficulty, "human", where=cut) if human else []}
-        row["pair"] = row["pairBow"] = row["flame"] = None
+        row["pair"] = row["pairBow"] = row["flame"] = row["pairIce"] = None
+        if rank == 1 and frost is not None:
+            # L2 W3 (section 9): the Frost Hammer with the Longbow, against the Broadsword with it.
+            row["pairIce"] = runs_of(view, hp, difficulty, "mission", pair=(frost, bow))
+            row["pairBow"] = runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], bow))
         if rank == 1 and flame is not None:
             row["pair"] = runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], flame))
-            row["pairBow"] = runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], bow))
+            row["pairBow"] = row["pairBow"] or runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], bow))
             # The Flamethrower alone has no heavy hit and the level's player slams no resident, so it
             # cannot open a plate: through the first open camp only (information).
             first = (open_zones(plan, layout) or [None])[0]
@@ -9719,6 +9953,7 @@ def print_cave(cfg, report):
         for label, runs in (("the full run (Broadsword, reacting player)", row["runs"]),
                             ("the pair: Broadsword + Longbow, each swing with the one that reaches", row.get("pairBow")),
                             ("the pair: Broadsword + Flamethrower", row.get("pair")),
+                            ("L2 W3, the pair: Frost Hammer + Longbow", row.get("pairIce")),
                             ("the Flamethrower alone, through the first open camp (information)", row.get("flame")),
                             ("the tunnel found, reacting player", (row.get("cave") or {}).get("runs")),
                             ("the tunnel found, a human's reaction", (row.get("cave") or {}).get("human"))):
@@ -9747,6 +9982,34 @@ def print_cave(cfg, report):
                 print(f"    R8 sniper, the tunnel open, {names.get(difficulty, difficulty)}, {spot} seed {seed}: {cash:,.0f} / "
                       f"{timber:.1f} against {mine:,.0f} / {mine_t:.1f} ({sum(r['killed'].values())} kills, hits on him "
                       f"{r['hits']})")
+    print_ice(cfg, report)
+
+
+def print_ice(cfg, report):
+    """L2 W3 (docs/prompts/l2-w3-contract.md section 9): the crossing, the shrine chest's share of a
+    first clear, the frozen spots (their rows are in R8's table)."""
+    crossing = report.get("crossing") or {}
+    if not crossing.get("human"):
+        return
+    print()
+    print("L2 W3 (the Frost Hammer and the island shrine; docs/prompts/l2-w3-contract.md section 9)")
+    for key, label in (("ideal", "ideal (no lag, no reaction)"), ("human", "a human (0.15 s round trip, the reaction)")):
+        c = crossing.get(key)
+        if c:
+            print(f"    the crossing, {label}: {c['swings']} swings of the {cfg['weapons'][c['family']]['name']}, "
+                  f"{c['seconds']:.1f} s and {c['studs']:.0f} studs from the first swing to the chest's trigger, "
+                  f"{c['cells']} cells frozen (the chain {c['chain']} cells)")
+    entry = (report["level"].get("secrets") or {}).get("shrine") or {}
+    normal = (report["difficulties"].get("normal") or {}).get("runs") or []
+    paid = mean_of([r["wallet"]["materials"] for r in normal]) if normal else None
+    if paid:
+        print(f"    the shrine chest: {entry.get('valor', 0)} Valor and {entry.get('materials', 0)} "
+              f"{report['level']['material']}, {entry.get('materials', 0) / paid:.0%} of a first Normal clear's "
+              f"{paid:.0f} {report['level']['material']} (the reacting player's mean)")
+    if report.get("iceSpots"):
+        print("    with the ice frozen, the spots beyond the dry ones (rated in R8's table): "
+              + ", ".join(f"{s['id']} (top {s['top']:g}, nearest ({s['at'][0]:g}, {s['at'][2]:g}) {s['gap']:.1f} off)"
+                          for s in report["iceSpots"]))
 
 
 def check_cave_runs(cfg, report, expect):
@@ -9777,6 +10040,23 @@ def check_cave_runs(cfg, report, expect):
             expect(boss is not None and base is not None and boss >= PAIR_BOSS_SHARE * base,
                    f"{tag}: the pair's {FOREST_BOSS} in the run is not shorter than x{PAIR_BOSS_SHARE:g} the Longbow pair's: "
                    + (f"{boss:.1f} s against {base:.1f} s" if boss and base else "not killed"))
+        ice_pair = row.get("pairIce")
+        if ice_pair:
+            lo, hi = PAIR_CLEAR_MINUTES
+            bow = row.get("pairBow") or []
+            mine, boss, base, yard = cash_rate(ice_pair), colossus_seconds(ice_pair), colossus_seconds(bow), cash_rate(bow)
+            fname = cfg["weapons"][report["frost"]]["name"]
+            expect(all(r["end"] == "cleared" and lo * 60 <= r["at"] <= hi * 60 and r["downs"] == 0 for r in ice_pair),
+                   f"{tag}: the reacting player carrying the {fname} and the Longbow clears in {lo:g}-{hi:g} min with no "
+                   f"down, every seed (L2 W3): " + ", ".join(f"{r['end']} at {r['at'] / 60:.2f} min ({r['downs']} down)"
+                                                            for r in ice_pair))
+            expect(mine is not None and yard is not None and mine <= PAIR_CASH_SHARE * yard,
+                   f"{tag}: the {fname} pair's cash a minute is at most x{PAIR_CASH_SHARE:g} the same player's carrying the "
+                   f"Broadsword and the Longbow (L2 W3): "
+                   + (f"{mine:,.0f} against {yard:,.0f} (x{mine / yard:.2f})" if mine and yard else "a run did not clear"))
+            expect(boss is not None and base is not None and boss >= PAIR_BOSS_SHARE * base,
+                   f"{tag}: the {fname} pair's {FOREST_BOSS} in the run is not shorter than x{PAIR_BOSS_SHARE:g} the Longbow "
+                   f"pair's (L2 W3): " + (f"{boss:.1f} s against {base:.1f} s" if boss and base else "not killed"))
         full = cash_rate(row["runs"])
         cave = row.get("cave")
         if cave:
@@ -9803,10 +10083,25 @@ def check_cave_runs(cfg, report, expect):
                        f"{pay_rate(m)[1]:.1f}" for seed, r, m in zip(MISSION_SEEDS, runs, mission)))
 
 
+def check_crossing(cfg, report, expect):
+    """L2 W3 (section 9): the crossing to the island shrine, a human's pace, inside the lead's band."""
+    c = (report.get("crossing") or {}).get("human")
+    if not report.get("frost") or not any(s.get("needs") == "ice" for s in report["layout"].get("secrets") or []):
+        return
+    lo, hi = ICE_CROSSING_SECONDS
+    ideal = (report.get("crossing") or {}).get("ideal")
+    expect(c is not None and lo <= c["seconds"] <= hi,
+           f"forest: the crossing to the island shrine, freezing a patch a swing, takes {lo:g}-{hi:g} s at a human's pace "
+           f"(a {ICE_CROSSING_LAG:g} s round trip and a {REACTION_SECONDS:g} s reaction a swing; L2 W3 section 9): "
+           + (f"{c['swings']} swings, {c['seconds']:.1f} s over {c['studs']:.0f} studs"
+              + (f" (ideal {ideal['seconds']:.1f} s)" if ideal else "") if c else "no chain of ice reaches the island"))
+
+
 def check_forest(cfg, report, expect):
     if report is None:
         return
     check_cave_runs(cfg, report, expect)
+    check_crossing(cfg, report, expect)
     level, ctx = report["level"], report["ctx"]
     names = ctx["expeditions"]["difficultyNames"]
     # L2-20: every reacting policy says it has one jump, in so many words.
@@ -10077,7 +10372,8 @@ def check_first_run(ctx, level, row, tag, gear, expect):
         if not any(key in entry for key in ("valor", "materials", "family")):
             continue
         root = chain[keys[sid]][1] if keys.get(sid) in chain else keys.get(sid)
-        cost = (sold.get(root) or {}).get("price", {}).get("valor")
+        # L2-51: a chain from a map node ("found:castle") is held under the dearest sold ability's price.
+        cost = cl.chain_price(sold, root)
         shares = [entry.get("materials", 0) / max(r["wallet"]["materials"], 1) for r in human if r["end"] == "cleared"]
         ok = (bool(shares) and all(CHEST_MATERIAL_SHARE[0] <= s <= CHEST_MATERIAL_SHARE[1] for s in shares)
               and cost is not None and CHEST_VALOR_MIN <= entry.get("valor", 0) < cost)

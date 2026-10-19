@@ -125,7 +125,11 @@ export type Plan = {
 	tents: { PlanTent },
 	-- L1b-W2-5's left side at the played difficulty: what the client prewarms its pool with.
 	population: number,
+	-- L2-58: every ice block with a landing, in the layout's order (Landing).
+	waters: { Water },
 }
+-- L2-58: a deep water's footprint and where a body that fell through it is put back (feet).
+export type Water = { rect: Rect, landing: Vector3 }
 export type State = {
 	stage: number,
 	-- "travel" | "armed" | "gate" | "fight" | "breather" | "over"
@@ -951,9 +955,10 @@ local function secretProblems(
 	end
 end
 
--- L2-34, L2-36: the layout's reactive blocks and shortcuts. A block's `react` is "fire" or "ice"
--- and the block collides (a block nothing stops would be burnt by a stream that passes through
--- it); its `opens` names an entry of `layout.shortcuts`. `shortcuts` is a list whose entries have
+-- L2-34, L2-36: the layout's reactive blocks and shortcuts. A block's `react` is "fire" or "ice";
+-- a fire block collides (a block nothing stops would be burnt by a stream that passes through
+-- it), an ice block (L2-52, deep water) does not and opens nothing, and only an ice block has a
+-- `landing`, three finite numbers (L2-58); its `opens` names an entry of `layout.shortcuts`. `shortcuts` is a list whose entries have
 -- a unique id of at most Unlocks.MAX_ID_LENGTH bytes, finite numbers and sizes above 0.
 local function reactProblems(layout: Types.LevelLayout, problem: (string) -> ()): ()
 	local ids: { [string]: boolean } = {}
@@ -995,17 +1000,43 @@ local function reactProblems(layout: Types.LevelLayout, problem: (string) -> ())
 		end
 		local where = `block {if type(block.name) == "string" then block.name else index}`
 		local react = block.react
-		if react ~= nil then
-			if react ~= "fire" and react ~= "ice" then
+		local opens = block.opens
+		if react == "ice" then
+			-- L2-52: deep water a body falls through until it freezes; it is the way to a key, so
+			-- it opens nothing.
+			if block.collide ~= false then
+				problem(`{where} is ice and collides`)
+			end
+			if opens ~= nil then
+				problem(`{where} is ice and opens {tostring(opens)}`)
+			end
+		elseif react ~= nil then
+			if react ~= "fire" then
 				problem(`{where}: react is {tostring(react)}, neither "fire" nor "ice"`)
 			end
 			if block.collide == false then
 				problem(`{where} reacts and does not collide`)
 			end
 		end
-		local opens = block.opens
 		if opens ~= nil and (type(opens) ~= "string" or not ids[opens]) then
 			problem(`{where} opens {tostring(opens)}, which names no shortcut`)
+		end
+		-- L2-58: a landing is where a fall through ice water comes back to, so only an ice block
+		-- has one, and it is a point.
+		local landing = block.landing
+		if landing ~= nil then
+			if react ~= "ice" then
+				problem(`{where} has a landing and is not ice`)
+			end
+			if type(landing) ~= "table" then
+				problem(`{where}: landing is {tostring(landing)}, not a point`)
+			else
+				for _, key in { "x", "y", "z" } do
+					if not isFinite(landing[key]) then
+						problem(`{where}: landing.{key} is {tostring(landing[key])}, not a number`)
+					end
+				end
+			end
 		end
 	end
 end
@@ -1748,6 +1779,18 @@ function StageFlow.Plan(
 		byId[camp.id] = zone
 	end
 
+	local waters: { Water } = {}
+	local blocks: { Types.LevelBlock } = layout.blocks or {}
+	for _, block in blocks do
+		local landing = block.landing
+		if block.react == "ice" and landing ~= nil then
+			table.insert(waters, {
+				rect = { x = block.x, z = block.z, hx = block.sx / 2, hz = block.sz / 2 },
+				landing = Vector3.new(landing.x, landing.y, landing.z),
+			})
+		end
+	end
+
 	local stages: { Stage } = {}
 	local caps: { [string]: number } = {}
 	for _, stage in level.stages do
@@ -1813,6 +1856,7 @@ function StageFlow.Plan(
 			caps,
 			StageFlow.BossReserve(level, kinds)
 		),
+		waters = waters,
 	}
 end
 
@@ -2566,6 +2610,41 @@ function StageFlow.IsOut(
 		end
 	end
 	return StageFlow.OutOfBox(plan.bounds, plan.killY, position, boxMargin)
+end
+
+-- L2-58: where a body at `position` that fell through deep water is put back: the landing of the
+-- first of the plan's waters whose footprint, grown by `margin` on every side (player.rescue's
+-- outside: a fall carries a body past the edge it went in at), holds the position in plan. nil
+-- when none does, or for a position that is not finite; a margin that is not a finite number of
+-- at least 0 counts as 0.
+function StageFlow.Landing(plan: Plan, position: Vector3, margin: number): Vector3?
+	local x, z = position.X, position.Z
+	if not (isFinite(x) and isFinite(z)) then
+		return nil
+	end
+	local grow = if isFinite(margin) and margin >= 0 then margin else 0
+	for _, water in plan.waters do
+		if inRect(grown(water.rect, grow), x, z) then
+			return water.landing
+		end
+	end
+	return nil
+end
+
+-- L2-58: where WaveService's rescue puts a body it judged out of the level (Rescue's "level"):
+-- Landing, except while a camp is closed (its fight and its breathers), when the run's safe point
+-- holds as before (the camp's own entry). nil = the safe point.
+function StageFlow.FallLanding(
+	plan: Plan,
+	state: State,
+	position: Vector3,
+	margin: number
+): Vector3?
+	local step = state.step
+	if step == "fight" or step == "breather" then
+		return nil
+	end
+	return StageFlow.Landing(plan, position, margin)
 end
 
 -- Ruling 19, whole: must the body at `position` be put back on the ground, and where? "level" =

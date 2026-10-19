@@ -9,6 +9,9 @@
 			{ "id": "doubleJump", "name": "Double Jump", "text": "A second jump in the air.", "price": { "valor": 10 }, "order": 1 }
 		]
 	},
+	"found": {
+		"frostHammer": { "node": "castle", "text": "Found in the Castle" }
+	},
 	"nodes": [
 		{ "id": "forestRoad", "name": "Forest Road", "theme": "forest", "x": 0.12, "y": 0.73, "kind": "level", "level": "forestRoad" },
 		{ "id": "raiderArena", "name": "Raider Arena", "theme": "bonus", "x": 0.17, "y": 0.31, "kind": "bonus", "level": "raiderArena", "from": "forestRoad" },
@@ -40,7 +43,8 @@
 		"lobby": { "material": "SmoothPlastic", "color": [124, 126, 132] },
 		"fire": { "material": "Neon", "color": [255, 150, 30] },
 		"tent": { "material": "Fabric", "color": [222, 184, 120] },
-		"bramble": { "material": "LeafyGrass", "color": [96, 132, 38] }
+		"bramble": { "material": "LeafyGrass", "color": [96, 132, 38] },
+		"ice": { "material": "Ice", "color": [150, 208, 245] }
 	},
 	"sign": { "textColor": [243, 246, 255], "pixelsPerStud": 20, "size": [6, 4, 6] }
 }

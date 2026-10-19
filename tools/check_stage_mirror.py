@@ -19,7 +19,11 @@ and compares what they answer, value by value:
   * `StageFlow.Validate`'s react, opens and shortcuts lines (L2-34, L2-36): a copy of Forest Road's
     layout given a test tunnel (a shortcut and a fire bramble that opens it) is accepted alike, and
     each line broken once in it is refused alike (the L2 W2 fix round's s-m3 adds a shortcut size
-    of 0 or below).
+    of 0 or below). L2 W3 (L2-52, L2-58): the same copy given a test pool of deep water (an ice
+    block that does not collide, with a landing) is accepted alike, and each of the ice and
+    landing lines broken once in it (it collides, opens a shortcut, a landing on a fire block or on
+    plain water, a landing whose numbers are not finite or that is no point) is refused alike;
+    the W2 case "a bramble that reacts to ice" became a refusal (it collides and opens a shortcut).
   * `StageFlow.Validate`'s L1b lines: the residents, the spots, which camps lock, the population
     gate and the three new `levels` numbers, each broken once in a copy of the shipped level, its
     layout or Combat.json, refused alike; and (the L1c fix round's data m2) every broken copy of
@@ -140,9 +144,10 @@ import sim_range as sr  # noqa: E402
 
 HARNESS = ROOT / "tools" / "crowd_harness"
 DRIVER = HARNESS / "stage_mirror.luau"
-# Unlocks: StageFlow reads the family id cap from it (the L2 W1 fix round's s2).
-MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "LevelGeometry", "CampBrain",
-           "Unlocks", "StageFlow")  # in load order
+# Unlocks: StageFlow reads the family id cap from it (the L2 W1 fix round's s2). WorldReact (L2 W3):
+# LevelGeometry cuts deep water into ice cells with it, and it reads Unlocks.
+MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "Unlocks", "WorldReact",
+           "LevelGeometry", "CampBrain", "StageFlow")  # in load order
 # The functions each comparison needs; one that is missing fails the run by name.
 NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
                      "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
@@ -381,13 +386,15 @@ def tunnel_change(change):
 
 L2W2_ACCEPTED = (
     ("a test tunnel and its bramble", tunnel_change(lambda l, b, s: None)),
-    ("a bramble that reacts to ice", tunnel_change(lambda l, b, s: b.__setitem__("react", "ice"))),
     ("a block that opens a shortcut and reacts to nothing", tunnel_change(lambda l, b, s: b.pop("react"))),
     ("a shortcut id of 32 characters",
      tunnel_change(lambda l, b, s: (s.__setitem__("id", "s" * 32), b.__setitem__("opens", "s" * 32)))),
     ("a shortcut a hundredth of a stud wide", tunnel_change(lambda l, b, s: s.__setitem__("sx", 0.01))),
 )
 L2W2_REFUSALS = (
+    # Re-aimed by L2 W3 (L2-52): an ice block is deep water, so a bramble that reacts to ice (it
+    # collides and opens the tunnel) is refused.
+    ("a bramble that reacts to ice", tunnel_change(lambda l, b, s: b.__setitem__("react", "ice"))),
     ("a bramble that reacts to lava", tunnel_change(lambda l, b, s: b.__setitem__("react", "lava"))),
     ("a react that is a number", tunnel_change(lambda l, b, s: b.__setitem__("react", 5))),
     ("a reactive block that does not collide", tunnel_change(lambda l, b, s: b.__setitem__("collide", False))),
@@ -406,6 +413,42 @@ L2W2_REFUSALS = (
     ("a shortcut with an sz of 0", tunnel_change(lambda l, b, s: s.__setitem__("sz", 0))),
     ("a shortcut with a negative sx", tunnel_change(lambda l, b, s: s.__setitem__("sx", -4))),
     ("a shortcut with a negative sy", tunnel_change(lambda l, b, s: s.__setitem__("sy", -0.5))),
+)
+
+
+# L2-52, L2-58: StageFlow.reactProblems' ice and landing lines. Every case first gives the layout a
+# test tunnel (whose shortcut an ice block may try to open) and a test pool of deep water of its
+# own; the first case is the pool alone, which both sides must accept.
+def with_pool(layout):
+    bramble, shortcut = with_tunnel(layout)
+    layout["blocks"].append({"name": "TestPool", "look": "water", "x": 0, "y": 400, "z": 30, "sx": 14, "sy": 2,
+                             "sz": 14, "collide": False, "react": "ice", "landing": {"x": 0, "y": 401, "z": 10}})
+    return layout["blocks"][-1], shortcut
+
+
+def pool_change(change):
+    def apply(f, l, r):
+        pool, shortcut = with_pool(l)
+        change(l, pool, shortcut)
+    return apply
+
+
+L2W3_ACCEPTED = (
+    ("a test pool of deep water with a landing", pool_change(lambda l, p, s: None)),
+    ("a pool with no landing", pool_change(lambda l, p, s: p.pop("landing"))),
+    ("deep water that reacts to nothing", pool_change(lambda l, p, s: (p.pop("react"), p.pop("landing")))),
+)
+L2W3_REFUSALS = (
+    ("a pool that collides", pool_change(lambda l, p, s: p.pop("collide"))),
+    ("a pool with collide true", pool_change(lambda l, p, s: p.__setitem__("collide", True))),
+    ("a pool that opens a shortcut", pool_change(lambda l, p, s: p.__setitem__("opens", s["id"]))),
+    ("a fire block with a landing", pool_change(lambda l, p, s: (p.__setitem__("react", "fire"),
+                                                                 p.__setitem__("collide", True)))),
+    ("plain water with a landing", pool_change(lambda l, p, s: p.pop("react"))),
+    ("a landing whose y is null", pool_change(lambda l, p, s: p["landing"].__setitem__("y", None))),
+    ("a landing with no z", pool_change(lambda l, p, s: p["landing"].pop("z"))),
+    ("a landing whose x is a string", pool_change(lambda l, p, s: p["landing"].__setitem__("x", "0"))),
+    ("a landing that is a string", pool_change(lambda l, p, s: p.__setitem__("landing", "Road2"))),
 )
 
 
@@ -2131,9 +2174,13 @@ def main():
                                                                               ranks, crowd_max))
                     expected[case] = ("L2: Validate's secrets lines refuse alike", f"{name}, {label}", refused)
                     must_refuse.add(case)
-            # L2-34, L2-36: the react, opens and shortcuts lines, on a test tunnel of their own.
+            # L2-34, L2-36: the react, opens and shortcuts lines, on a test tunnel of their own; L2-52,
+            # L2-58: the ice and landing lines, on a test pool.
             if raw_layouts[file["layout"]].get("blocks"):
-                for cases, verdict in ((L2W2_ACCEPTED, False), (L2W2_REFUSALS, True)):
+                w2 = "L2 W2: Validate's react, opens and shortcuts lines refuse alike"
+                w3 = "L2 W3: Validate's ice and landing lines refuse alike"
+                for cases, verdict, title in ((L2W2_ACCEPTED, False, w2), (L2W2_REFUSALS, True, w2),
+                                              (L2W3_ACCEPTED, False, w3), (L2W3_REFUSALS, True, w3)):
                     for label, change in cases:
                         changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
                         change(changed, raw, short_rules)
@@ -2142,8 +2189,7 @@ def main():
                         level_changed = resolved(changed)
                         refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules,
                                                                                   crowd_kinds, ranks, crowd_max))
-                        expected[case] = ("L2 W2: Validate's react, opens and shortcuts lines refuse alike",
-                                          f"{name}, {label}", refused)
+                        expected[case] = (title, f"{name}, {label}", refused)
                         if verdict:
                             must_refuse.add(case)
                         else:
@@ -2233,7 +2279,7 @@ def main():
             report.compare(kind, label, luau_answer if isinstance(luau_answer, dict) else list(luau_answer or []), python)
             continue
         if (kind.startswith("ruling 6") or kind.startswith("L1b: Validate") or kind.startswith("L2: Validate")
-                or kind.startswith("L2 W2: Validate")):
+                or kind.startswith("L2 W2: Validate") or kind.startswith("L2 W3: Validate")):
             if key in must_refuse and not python and not luau_answer:
                 report.differ(kind, f"{label}: accepted on both sides (the rule it breaks is gone from both)")
                 continue

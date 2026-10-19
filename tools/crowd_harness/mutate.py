@@ -1557,8 +1557,8 @@ WORLD_MUTATIONS = {
     # caught by: a lobby file that leaves camps, secrets and route out is its blocks
     "world: Pieces builds the ground as the layout writes it": (
         GEOMETRY,
-        "for index, box in LevelGeometry.BlockBoxes(measured, depth) do",
-        "for index, box in LevelGeometry.BlockBoxes(measured, nil) do",
+        "local built = LevelGeometry.BlockBoxes(measured, depth)",
+        "local built = LevelGeometry.BlockBoxes(measured, nil)",
     ),
     # caught by: a camp and no floor depth (none, 0, under 0, not a number, not finite): refused
     "world: a camp is built with no floor depth": (
@@ -4747,7 +4747,11 @@ L2W2_MUTATIONS = {
     ),
     "l2w2: grazing a face is no touch": (WORLD_REACT, "\t\t\tif low > high then\n", "\t\t\tif low >= high then\n"),
     "l2w2: an axis with no motion is not judged": (WORLD_REACT, "if a < min or a > max then", "if false then"),
-    "l2w2: a block with no size is met": (WORLD_REACT, "\t\t\tand box.sx > 0\n", ""),
+    "l2w2: a block with no size is met": (
+        WORLD_REACT,
+        "\t\t\tand box.sx > 0\n\t\t\tand box.sy > 0\n",
+        "\t\t\tand box.sy > 0\n",
+    ),
     "l2w2: a block that is not finite is met": (WORLD_REACT, "\t\t\tfinite(box.x)\n", "\t\t\ttrue\n"),
     "l2w2: fire takes iceHits": (WORLD_REACT, "then rules.fireHits", "then rules.iceHits"),
     "l2w2: a fractional count reacts": (WORLD_REACT, "hits >= 1 and hits % 1 == 0 then", "hits >= 1 then"),
@@ -4795,7 +4799,11 @@ L2W2_MUTATIONS = {
     "l2w2: a piece drops its react": (GEOMETRY, "\t\t\treact = block.react,\n", ""),
     "l2w2: a piece drops its opens": (GEOMETRY, "\t\t\topens = block.opens,\n", ""),
     # Validate's react, opens and shortcuts lines (L2-34, L2-36).
-    "l2w2: any react word is accepted": (FLOW, 'if react ~= "fire" and react ~= "ice" then', "if false then"),
+    "l2w2: any react word is accepted": (
+        FLOW,
+        "if react ~= \"fire\" then\n\t\t\t\tproblem(`{where}: react is",
+        "if false then\n\t\t\t\tproblem(`{where}: react is",
+    ),
     "l2w2: a reactive block may not collide": (FLOW, "\t\t\tif block.collide == false then\n", "\t\t\tif false then\n"),
     "l2w2: opens is not checked": (
         FLOW,
@@ -5106,6 +5114,250 @@ L2W2_FIX3_MUTATIONS = {
     "fix3 s1: LEAD_STANDOFF = 50": (WORLD_REACT, "local LEAD_STANDOFF = 0.5", "local LEAD_STANDOFF = 50"),
 }
 MUTATIONS.update(L2W2_FIX3_MUTATIONS)
+
+
+# L2 W3, ice, the frost hammer, deep water and the island shrine (docs/prompts/l2-w3-contract.md),
+# from the luau-engineer: WorldReact's Cells, Chills and Freeze (L2-53, L2-54), Need for fire alone,
+# Pieces' ice cells, Validate's ice and landing lines (L2-52, L2-58), Plan's waters, Landing and
+# FallLanding (L2-58), and the source checks on LevelService's freeze, the rescue's landing in
+# WaveService and Frost Quake's launcher. Proved by tests_l2w3.luau. WaveService is copied for its
+# source check.
+WAVE_SERVICE = "src/combat/server/Services/WaveService.luau"
+FILES.append(WAVE_SERVICE)
+ICE_BRANCH = '\tif element == "ice" then\n\t\tfreeze(element, fx, rules)\n\t\treturn\n\tend\n'
+L2W3_MUTATIONS = {
+    # Cells (L2-53).
+    "l2w3: CellGrid takes a negative cell": (WORLD_REACT, "\t\t\tfinite(cell)\n\t\t\tand cell > 0\n", "\t\t\tfinite(cell)\n"),
+    "l2w3: CellGrid rounds down": (
+        WORLD_REACT,
+        "return math.ceil(box.sx / cell), math.ceil(box.sz / cell)",
+        "return math.floor(box.sx / cell), math.ceil(box.sz / cell)",
+    ),
+    "l2w3: CellGrid swaps the axes": (
+        WORLD_REACT,
+        "return math.ceil(box.sx / cell), math.ceil(box.sz / cell)",
+        "return math.ceil(box.sz / cell), math.ceil(box.sx / cell)",
+    ),
+    "l2w3: Cells runs Z fastest": (
+        WORLD_REACT,
+        "\tfor j = 1, nz do\n\t\tfor i = 1, nx do\n",
+        "\tfor i = 1, nx do\n\t\tfor j = 1, nz do\n",
+    ),
+    "l2w3: Cells starts at the block's centre": (
+        WORLD_REACT,
+        "local west, north = box.x - box.sx / 2, box.z - box.sz / 2",
+        "local west, north = box.x, box.z",
+    ),
+    "l2w3: Cells is half a cell off": (WORLD_REACT, "x = west + (i - 0.5) * wide,", "x = west + i * wide,"),
+    "l2w3: Cells loses the block's height": (WORLD_REACT, "\t\t\t\ty = box.y,\n", "\t\t\t\ty = 0,\n"),
+    # Chills (L2-54).
+    "l2w3: any shape chills": (
+        WORLD_REACT,
+        '\tif fx.shape ~= "arc" then\n\t\treturn false\n\tend\n\tlocal origin, direction, arc',
+        "\tlocal origin, direction, arc",
+    ),
+    "l2w3: the band has no floor": (
+        WORLD_REACT,
+        "if not (top <= origin.Y and top >= origin.Y - reachDown) then",
+        "if not (top <= origin.Y) then",
+    ),
+    "l2w3: the band has no ceiling": (
+        WORLD_REACT,
+        "if not (top <= origin.Y and top >= origin.Y - reachDown) then",
+        "if not (top >= origin.Y - reachDown) then",
+    ),
+    "l2w3: the band reads the cell's centre": (
+        WORLD_REACT,
+        "local top = box.y + box.sy / 2\n\tif not (top <= origin.Y",
+        "local top = box.y\n\tif not (top <= origin.Y",
+    ),
+    "l2w3: ahead is not added": (WORLD_REACT, "if not (distance <= fx.size + ahead) then", "if not (distance <= fx.size) then"),
+    "l2w3: the reach's edge is open": (
+        WORLD_REACT,
+        "if not (distance <= fx.size + ahead) then",
+        "if not (distance < fx.size + ahead) then",
+    ),
+    "l2w3: 360 is not all round": (WORLD_REACT, "if sweep >= 360 or distance == 0 then", "if distance == 0 then"),
+    "l2w3: a centre under the origin needs a heading": (
+        WORLD_REACT,
+        "if sweep >= 360 or distance == 0 then",
+        "if sweep >= 360 then",
+    ),
+    "l2w3: the whole arc each side": (WORLD_REACT, "math.cos(math.rad(sweep / 2))", "math.cos(math.rad(sweep))"),
+    "l2w3: the heading keeps its height": (
+        WORLD_REACT,
+        "local heading = math.sqrt(hx * hx + hz * hz)",
+        "local heading = direction.Magnitude",
+    ),
+    "l2w3: an arc of 0 chills": (WORLD_REACT, "\tif not (sweep > 0) then\n\t\treturn false", "\tif false then\n\t\treturn false"),
+    "l2w3: an endless reachDown reaches": (WORLD_REACT, "\t\t\tand finite(reachDown)\n\t\t\tand finite(ahead)\n", "\t\t\tand finite(ahead)\n"),
+    # Freeze (L2-54) and Need.
+    "l2w3: Freeze takes any element": (
+        WORLD_REACT,
+        '\tif element ~= "ice" then\n\t\treturn frozen',
+        "\tif element == nil then\n\t\treturn frozen",
+    ),
+    "l2w3: Freeze freezes the frozen again": (
+        WORLD_REACT,
+        "if not cell.frozen and WorldReact.Chills(fx, cell.box, reachDown, ahead) then",
+        "if WorldReact.Chills(fx, cell.box, reachDown, ahead) then",
+    ),
+    "l2w3: Freeze does not write frozen": (WORLD_REACT, "\t\t\tcell.frozen = true\n", ""),
+    "l2w3: Freeze drops ahead": (
+        WORLD_REACT,
+        "WorldReact.Chills(fx, cell.box, reachDown, ahead) then",
+        "WorldReact.Chills(fx, cell.box, reachDown, 0) then",
+    ),
+    "l2w3: Freeze answers highest first": (
+        WORLD_REACT,
+        "\tfor index, cell in cells do\n\t\tif not cell.frozen",
+        "\tfor index = #cells, 1, -1 do\n\t\tlocal cell = cells[index]\n\t\tif not cell.frozen",
+    ),
+    "l2w3: ice counts iceHits again": (
+        WORLD_REACT,
+        'local hits: any = if element == "fire" then rules.fireHits else nil',
+        'local hits: any = if element == "fire" then rules.fireHits elseif element == "ice" then (rules :: any).iceHits else nil',
+    ),
+    # Pieces' ice cells (L2-53).
+    "l2w3: no ice cells": (GEOMETRY, "\tlocal ice = sizes.ice\n\tif ice ~= nil then", "\tlocal ice = sizes.ice\n\tif false then"),
+    "l2w3: every reactive block has cells": (
+        GEOMETRY,
+        '\t\t\tif block.react ~= "ice" then\n\t\t\t\tcontinue',
+        "\t\t\tif block.react == nil then\n\t\t\t\tcontinue",
+    ),
+    "l2w3: nothing covers the water": (GEOMETRY, "\t\t\t\tother.y + other.sy / 2 > top\n", "\t\t\t\tfalse\n"),
+    "l2w3: a cover's height is not judged": (
+        GEOMETRY,
+        "\t\t\t\tother.y + other.sy / 2 > top\n",
+        "\t\t\t\tother.y + other.sy / 2 > -math.huge\n",
+    ),
+    "l2w3: a cover's edge is open": (
+        GEOMETRY,
+        "and math.abs(cell.x - other.x) <= other.sx / 2",
+        "and math.abs(cell.x - other.x) < other.sx / 2",
+    ),
+    "l2w3: secrets cover nothing": (
+        GEOMETRY,
+        "\t\tfor _, secret in listOf(layout.secrets) do\n\t\t\ttable.insert(covers, LevelGeometry.SecretBox(secret))\n\t\tend\n",
+        "",
+    ),
+    "l2w3: a block nothing meets covers": (
+        GEOMETRY,
+        "\t\t\tif blocks[index].collide ~= false then\n\t\t\t\ttable.insert(covers, box)",
+        "\t\t\tif true then\n\t\t\t\ttable.insert(covers, box)",
+    ),
+    "l2w3: the ice's top ignores lift": (
+        GEOMETRY,
+        "y = top + ice.lift - ice.thickness / 2,",
+        "y = top - ice.thickness / 2,",
+    ),
+    "l2w3: the ice is the water's depth": (GEOMETRY, "\t\t\t\t\tsy = ice.thickness,\n", "\t\t\t\t\tsy = cell.sy,\n"),
+    "l2w3: an ice piece collides": (
+        GEOMETRY,
+        '\t\t\t\tlook = "ice",\n\t\t\t\tcollide = false,',
+        '\t\t\t\tlook = "ice",\n\t\t\t\tcollide = true,',
+    ),
+    "l2w3: ice names skip no covered cell": (GEOMETRY, "name = `Ice_{name}_{k}`,", "name = `Ice_{name}_{#pieces + 1}`,"),
+    # Validate's ice and landing lines (L2-52, L2-58).
+    "l2w3: ice takes the fire lines": (
+        FLOW,
+        '\t\tif react == "ice" then\n\t\t\t-- L2-52',
+        "\t\tif false then\n\t\t\t-- L2-52",
+    ),
+    "l2w3: an ice block may collide": (
+        FLOW,
+        "\t\t\tif block.collide ~= false then\n\t\t\t\tproblem(`{where} is ice and collides`)",
+        "\t\t\tif false then\n\t\t\t\tproblem(`{where} is ice and collides`)",
+    ),
+    "l2w3: an ice block may open a shortcut": (
+        FLOW,
+        "\t\t\tif opens ~= nil then\n\t\t\t\tproblem(`{where} is ice and opens",
+        "\t\t\tif false then\n\t\t\t\tproblem(`{where} is ice and opens",
+    ),
+    "l2w3: any block may have a landing": (
+        FLOW,
+        '\t\t\tif react ~= "ice" then\n\t\t\t\tproblem(`{where} has a landing and is not ice`)',
+        "\t\t\tif false then\n\t\t\t\tproblem(`{where} has a landing and is not ice`)",
+    ),
+    "l2w3: a landing's numbers are not checked": (FLOW, "\t\t\t\t\tif not isFinite(landing[key]) then", "\t\t\t\t\tif false then"),
+    "l2w3: a landing that is no table passes": (
+        FLOW,
+        '\t\t\tif type(landing) ~= "table" then\n\t\t\t\tproblem(`{where}: landing is {tostring(landing)}, not a point`)\n\t\t\telse',
+        '\t\t\tif false then\n\t\t\telseif type(landing) == "table" then',
+    ),
+    # Plan's waters, Landing, FallLanding (L2-58).
+    "l2w3: Plan has no waters": (FLOW, '\t\tif block.react == "ice" and landing ~= nil then', "\t\tif false then"),
+    "l2w3: any block's landing is a water": (
+        FLOW,
+        '\t\tif block.react == "ice" and landing ~= nil then',
+        "\t\tif landing ~= nil then",
+    ),
+    "l2w3: Landing ignores the margin": (
+        FLOW,
+        "if inRect(grown(water.rect, grow), x, z) then",
+        "if inRect(water.rect, x, z) then",
+    ),
+    "l2w3: Landing takes a negative margin": (
+        FLOW,
+        "local grow = if isFinite(margin) and margin >= 0 then margin else 0",
+        "local grow = if isFinite(margin) then margin else 0",
+    ),
+    "l2w3: Landing takes a margin that is not finite": (
+        FLOW,
+        "local grow = if isFinite(margin) and margin >= 0 then margin else 0",
+        "local grow = if margin >= 0 then margin else 0",
+    ),
+    "l2w3: Landing takes the last water": (
+        FLOW,
+        "\tfor _, water in plan.waters do\n",
+        "\tfor index = #plan.waters, 1, -1 do\n\t\tlocal water = plan.waters[index]\n",
+    ),
+    "l2w3: FallLanding lands in a closed camp": (
+        FLOW,
+        '\tif step == "fight" or step == "breather" then\n\t\treturn nil\n\tend\n\treturn StageFlow.Landing',
+        "\treturn StageFlow.Landing",
+    ),
+    "l2w3: FallLanding lands in a breather": (
+        FLOW,
+        '\tif step == "fight" or step == "breather" then\n\t\treturn nil\n\tend\n\treturn StageFlow.Landing',
+        '\tif step == "fight" then\n\t\treturn nil\n\tend\n\treturn StageFlow.Landing',
+    ),
+    # The lines that act on them (source checks, tests_l2w3.luau's wiringTests).
+    "l2w3: React sends ice down the fire path": (LEVEL_SERVICE, ICE_BRANCH, ""),
+    "l2w3: freeze asks no Freeze": (
+        LEVEL_SERVICE,
+        "WorldReact.Freeze(cells, element, fx, reachDown, ahead)",
+        "WorldReact.Freeze(cells, element, fx, reachDown, 0)",
+    ),
+    "l2w3: a frozen cell does not collide": (LEVEL_SERVICE, "\t\tpart.CanCollide = true\n", ""),
+    "l2w3: a frozen cell is not met by rays": (LEVEL_SERVICE, "\t\tpart.CanQuery = true\n", ""),
+    "l2w3: a frozen cell keeps Ice false": (
+        LEVEL_SERVICE,
+        "part:SetAttribute(CONST.ICE_ATTRIBUTE, true)",
+        "part:SetAttribute(CONST.ICE_ATTRIBUTE, false)",
+    ),
+    "l2w3: nobody hears a freeze": (
+        LEVEL_SERVICE,
+        "box = entry.cell.box }\n\t\tfor _, listener in state.reactedListeners do\n\t\t\tlistener(event)\n",
+        "box = entry.cell.box }\n\t\tfor _, listener in state.reactedListeners do\n\t\t\tlocal _ = listener\n",
+    ),
+    "l2w3: the rescue ignores the landing": (
+        WAVE_SERVICE,
+        "local landing = StageFlow.FallLanding(plan, flow, root.Position, rescue.outside)",
+        "local landing = nil",
+    ),
+    "l2w3: the rescue's margin is rescue.below": (
+        WAVE_SERVICE,
+        "StageFlow.FallLanding(plan, flow, root.Position, rescue.outside)",
+        "StageFlow.FallLanding(plan, flow, root.Position, rescue.below)",
+    ),
+    "l2w3: Frost Quake has no launcher": (
+        ABILITY,
+        "MECHANICS.frostQuake = MECHANICS.earthquake",
+        "MECHANICS.frostQuake = MECHANICS.whirlwind",
+    ),
+}
+MUTATIONS.update(L2W3_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

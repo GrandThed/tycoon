@@ -31,6 +31,10 @@ SecretFlow's shortcuts, LevelGeometry.Pieces' open set, Validate's react, opens 
 lines, and a family's element as a structural Tuning path. Its fix round adds WorldReact's
 StrikeElement, Apply and Wants, and reads as text the lines that act on them (Main's wiring,
 finish()'s abandoned skip, LevelService.React) and aimAllowed's wall ray (`source.wiring`).
+L2 W3 adds tests_l2w3.luau: WorldReact's Cells, Chills and Freeze, LevelGeometry.Pieces' ice cells,
+Validate's ice and landing lines, Plan's waters with StageFlow.Landing and FallLanding, the shipped
+creek crossed swing by swing, and as text (`source.w3`) LevelService.React's ice branch and its
+freeze, the rescue's landing in WaveService and Frost Quake's launcher in AbilityService.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -126,6 +130,9 @@ TESTS = [
     # L2 W2: owned families, element keys, the set-family verdict, WorldReact, shortcuts,
     # Pieces' open set, Validate's react/opens/shortcuts lines, the element as structural.
     "tests_l2w2.luau",
+    # L2 W3: Cells, Chills, Freeze, the ice pieces, Validate's ice and landing lines, Landing,
+    # the shipped crossing, and the lines that act on them.
+    "tests_l2w3.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -236,6 +243,24 @@ WORLD_HIT_LINES = (
     "local result = workspace:Raycast(from, to - from, worldParams())",
     "return if result ~= nil then result.Distance else nil",
 )
+# L2 W3: the lines that act on Freeze, FallLanding and Frost Quake, read as text. React sends a
+# strike of ice to `freeze`; freeze hands the cells to WorldReact.Freeze, turns each frozen cell
+# to floor (collides, met by rays, `Ice` true) and tells the listeners; rescueFallen asks
+# StageFlow.FallLanding with player.rescue's outside and goes to its answer; Frost Quake is the
+# Earthquake launcher's entry.
+WAVE_SERVICE = "src/combat/server/Services/WaveService.luau"
+FREEZE_BODY = re.compile(r"(?ms)^local function freeze\(.*?^end$")
+RESCUE_BODY = re.compile(r"(?ms)^local function rescueFallen\(.*?^end$")
+W3_LINES = {
+    "reactIce": '\tif element == "ice" then\n\t\tfreeze(element, fx, rules)\n\t\treturn\n\tend\n',
+    "reactFreeze": "freeze(element, fx, rules)",
+    "freezeCall": "WorldReact.Freeze(cells, element, fx, reachDown, ahead)",
+    "freezeTold": "\t\tfor _, listener in state.reactedListeners do\n\t\t\tlistener(event)\n",
+    "rescueLanding": "local landing = StageFlow.FallLanding(plan, flow, root.Position, rescue.outside)",
+    "rescueTarget": "\t\t\tif landing ~= nil then\n\t\t\t\ttarget = landing\n",
+    "quakeAlias": "MECHANICS.frostQuake = MECHANICS.earthquake",
+}
+FREEZE_FLOOR = ("\t\tpart.CanCollide = true\n", "\t\tpart.CanQuery = true\n", "part:SetAttribute(CONST.ICE_ATTRIBUTE, true)")
 COMBAT_PROJECT = "combat.project.json"
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
@@ -304,12 +329,30 @@ def source_reading(repo: Path) -> dict:
         "claimLines": min(claim_text.count(line) for line in CLAIM_LINES),
         "claimMotion": claim_text.count("motion"),
     }
+    freeze = FREEZE_BODY.search(text(LEVEL_SERVICE))
+    freeze_text = freeze.group(0) if freeze else ""
+    rescue = RESCUE_BODY.search(text(WAVE_SERVICE))
+    rescue_text = rescue.group(0) if rescue else ""
+    w3 = {
+        "reactIce": react_text.count(W3_LINES["reactIce"]),
+        "reactFreeze": react_text.count(W3_LINES["reactFreeze"]),
+        "freezeFound": freeze is not None,
+        "freezeCall": freeze_text.count(W3_LINES["freezeCall"]),
+        "freezeTold": freeze_text.count(W3_LINES["freezeTold"]),
+        # Each of the three once: the smallest count times three, so one missing reads short.
+        "freezeFloor": 3 * min(freeze_text.count(line) for line in FREEZE_FLOOR),
+        "rescueFound": rescue is not None,
+        "rescueLanding": rescue_text.count(W3_LINES["rescueLanding"]),
+        "rescueTarget": rescue_text.count(W3_LINES["rescueTarget"]),
+        "quakeAlias": text(ABILITY_SERVICE).count(W3_LINES["quakeAlias"]),
+    }
     return {
         "groundClient": client,
         "groundServer": server,
         "zoomCap": zoom,
         "groundFloor": ground_floor,
         "wiring": wiring,
+        "w3": w3,
     }
 
 

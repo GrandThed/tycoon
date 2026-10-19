@@ -79,6 +79,8 @@ local CATCH_UP_GRACE = 0.2
 local BUILDERS: { [string]: Builder } = {
 	whirlwind = require(script:WaitForChild("Whirlwind")),
 	earthquake = require(script:WaitForChild("Earthquake")),
+	-- L2-50: the Frost Hammer's ability, on the Earthquake launcher with its own look.
+	frostQuake = require(script:WaitForChild("FrostQuake")),
 	bladeStorm = require(script:WaitForChild("BladeStorm")),
 	leapSmash = require(script:WaitForChild("LeapSmash")),
 	impaleDash = require(script:WaitForChild("ImpaleDash")),

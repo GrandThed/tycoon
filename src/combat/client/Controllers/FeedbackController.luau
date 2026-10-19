@@ -73,6 +73,10 @@
 -- L2 W2 (docs/prompts/l2-w2-contract.md, L2-29): a continuous family that is not a ray (the
 -- Flamethrower's capsule) is a stream, not a beam: its strikes go to FlameFx, which draws the
 -- fire, and nothing else changes here (ticks merge their numbers as the Beam's do).
+--
+-- L2 W3 (docs/prompts/l2-w3-contract.md, L2-49 and L2-56): an ice family's swing is routed to
+-- FrostFx (the frost puff, and on the local swing ReactFx's ghosts of ice) and its hitbox effect
+-- takes the frost colour; nothing else changes here.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -98,6 +102,7 @@ local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 -- motors; it used to be private here.
 local Haptics = require(script.Parent:WaitForChild("Haptics"))
 local FlameFx = require(script.Parent:WaitForChild("FlameFx"))
+local FrostFx = require(script.Parent:WaitForChild("FrostFx"))
 
 -- Below this length a vector has no heading (mirrors HitShapes' own epsilon).
 local EPSILON = 1e-6
@@ -1354,6 +1359,7 @@ local function drawHitbox(
 	local color = if crit
 		then Theme.COMBAT_RANGE_HITBOX_CRIT_COLOR
 		elseif strike.ability ~= nil then Theme.COMBAT_RANGE_ABILITY_COLOR
+		elseif FrostFx.IsIce(strike.weapon) then Theme.COMBAT_FROST_HITBOX_COLOR
 		else Theme.COMBAT_RANGE_HITBOX_COLOR
 	-- Strength fades the effect in (below 1) and lets it linger (above 1).
 	local opacity = math.min(strength, 1)
@@ -2860,6 +2866,9 @@ local function onStrike(strike: Strike): ()
 		if step ~= nil then
 			InputController.ConfirmSwing(strike.weapon, seq, step)
 		end
+	elseif swing and not mine then
+		-- L2-56: someone else's ice swing puffs frost (the local one did on its press).
+		FrostFx.OnStrike(strike)
 	end
 
 	-- Every drawing reads the bodies before react() starts any death flight.
@@ -3511,6 +3520,8 @@ function FeedbackController.PredictSwing(swing: InputController.PredictedSwing):
 	if fxFolder == nil then
 		return
 	end
+	-- L2-56: an ice swing's frost and ghosts of ice are information, drawn whatever hitboxEffect is.
+	FrostFx.OnSwing(swing)
 	local variant = swing.variant
 	local shape = variant.shape
 	local chain = variant.chain
@@ -3564,6 +3575,7 @@ function FeedbackController.Destroy(): ()
 	table.clear(connections)
 	InputController.SetSwingHandler(nil)
 	FlameFx.Destroy()
+	FrostFx.Destroy()
 	releaseHitstop()
 	Haptics.Stop()
 	for _, effect in effects do

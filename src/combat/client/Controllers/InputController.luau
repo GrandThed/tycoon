@@ -1386,6 +1386,45 @@ local function reactOnAuto(
 	return found
 end
 
+-- L2-55: with no body in the swing's shape, an ice family swings at water it would freeze: an
+-- unfrozen ice cell (ReactFx.ForEachIce) that WorldReact.Chills, the server's own rule, names for
+-- the strike the server builds from this swing (the root, the flat camera look, the variant's
+-- range and arc). Of two arcs (a finisher's own) the narrower is asked, so a swing that would
+-- freeze nothing at its step never fires. A frozen cell never triggers.
+local function iceOnAuto(
+	cfg: Types.ProvingGroundsConfig,
+	variant: Types.RangeWeaponVariant,
+	origin: Vector3,
+	heading: Vector3
+): boolean
+	if Unlocks.ElementOf(cfg.weapons, (activeFamily(cfg))) ~= "ice" then
+		return false
+	end
+	local reachDown, ahead = ReactFx.IceReach()
+	if reachDown == nil or ahead == nil then
+		return false
+	end
+	-- No arc on the variant is no arc on the server's strike either (Chills then says no).
+	local arc = variant.arcDegrees
+	local finisher = variant.finisherArcDegrees
+	local swing: WorldReact.Strike = {
+		shape = variant.shape,
+		origin = origin,
+		direction = heading,
+		size = variant.range,
+		width = variant.width,
+		arcDegrees = if arc ~= nil and finisher ~= nil then math.min(arc, finisher) else arc,
+	}
+	local found = false
+	ReactFx.ForEachIce(function(part: BasePart)
+		if not found then
+			local box = WorldReact.BoxOf(part.Position, part.Size)
+			found = WorldReact.Chills(swing, box, reachDown, ahead)
+		end
+	end)
+	return found
+end
+
 local function autoFireOn(cfg: Types.ProvingGroundsConfig): boolean
 	return rangeState.device == "touch" and cfg.controls.touchMode == "autoFire"
 end
@@ -1398,7 +1437,9 @@ end
 -- gun (it hits everything inside) and the whole capsule for a stream (L2-48: the short
 -- Flamethrower fires only with a body inside its reach), the padded melee shape for melee. A
 -- stream's capsule is cut at the first wall (c-m4), and with no body in it the stream also fires
--- at a block it would burn (c-M1: a phone has no trigger), never past a resting body in it.
+-- at a block it would burn (c-M1: a phone has no trigger), never past a resting body in it. A
+-- melee swing likewise, with no body in its shape, swings at water an ice family would freeze
+-- (L2-55), never past a resting body in it.
 local function targetOnAuto(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
@@ -1421,9 +1462,13 @@ local function targetOnAuto(
 		end
 		return enemyInSights(variant, origin, look, controls.autoFireAssistDegrees, lagPad)
 	end
-	return (
-		enemyInReach(variant, root, flatCameraLook(), variant.range, controls.autoSwingPad, lagPad)
-	)
+	local look = flatCameraLook()
+	local onBody, refused =
+		enemyInReach(variant, root, look, variant.range, controls.autoSwingPad, lagPad)
+	if onBody or refused then
+		return onBody
+	end
+	return iceOnAuto(cfg, variant, root, look)
 end
 
 -- A queued tap still inside its buffer; an expired one is dropped.
@@ -1773,6 +1818,8 @@ local function busySecondsOf(ability: Types.RangeAbilityDef): number
 		return math.max(ability.durationSeconds or 0, 0)
 	elseif
 		id == "earthquake"
+		-- L2-50: Frost Quake is the Earthquake launcher with its own look.
+		or id == "frostQuake"
 		or id == "leapSmash"
 		or id == "impaleDash"
 		or id == "overchargedShot"

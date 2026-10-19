@@ -6,9 +6,10 @@
 -- the C1 Village arena as a level of one camp, and the whole list of Parts a layout becomes.
 -- LevelService turns that list into Instances and does no arithmetic of its own.
 --
--- Pure: tables and numbers only. No Vector3, no Instance, no clock and nothing yields; the one
--- require is Types, for the layout shapes. tools/crowd_harness loads this file as it stands
--- (tests_l1_world.luau), because a rule no test can load is only ever checked by reading.
+-- Pure: tables and numbers only. No Vector3, no Instance, no clock and nothing yields; it
+-- requires Types, for the layout shapes, and the pure WorldReact, whose Cells cuts deep water into
+-- ice cells (L2-53). tools/crowd_harness loads this file as it stands (tests_l1_world.luau),
+-- because a rule no test can load is only ever checked by reading.
 --
 -- Conventions. A layout is in world coordinates, in studs. A Box is a centre and a size and is
 -- always axis-aligned. A camp's x, y, z is the centre of its floor's TOP face. North is -Z,
@@ -17,7 +18,9 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(sharedFolder:WaitForChild("Types"))
+local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 export type Box = { x: number, y: number, z: number, sx: number, sy: number, sz: number }
 export type Bounds = {
@@ -29,20 +32,32 @@ export type Bounds = {
 	maxZ: number,
 }
 export type Size = { sx: number, sy: number, sz: number }
+-- L2-53: how an ice block's cells are built (Combat.json levels.react.ice): about `cell` studs
+-- square, `thickness` deep, the top `lift` over the water's top.
+export type IceSize = { cell: number, lift: number, thickness: number }
 -- What a layout does not say and the config does: the fence's thickness and how deep the ground
 -- is (Combat.json levels.fenceThickness, levels.floorThickness; a camp's own fence.thickness wins
 -- over `fence`, FenceThickness), and how big a checkpoint
 -- marker, a fire spot's marker and a secret's sign are (Combat.json levels.checkpointSize,
 -- levels.fireMarkerSize, Expeditions.json sign.size). A size the config does not give is nil,
 -- and what it sizes is then not built: no size lives in code. Without `floor` a layout with a
--- camp is refused (a camp has no floor) and every block is built as the layout writes it.
-export type Sizes = { fence: number, floor: number?, checkpoint: Size?, fire: Size?, sign: Size? }
+-- camp is refused (a camp has no floor) and every block is built as the layout writes it. Without
+-- `ice` (levels.react.ice) an ice block has no cells: its water is only deep.
+export type Sizes = {
+	fence: number,
+	floor: number?,
+	checkpoint: Size?,
+	fire: Size?,
+	sign: Size?,
+	ice: IceSize?,
+}
 -- One Part to build. `look` names a key of Expeditions.json `looks` (nil = no look at all: the
 -- invisible wall); `material` and `color` are the piece's own and win over the look's.
 export type Piece = {
 	name: string,
 	-- "block" | "floor" | "fence" | "gate" | "obstacle" | "checkpoint" | "fire" | "tent" |
-	-- "barrier" | "secret" | "sign"
+	-- "barrier" | "secret" | "sign" | "ice" (L2-53: one cell of an ice block, built hidden and
+	-- walked through; LevelService turns it into floor when a frost swing freezes it)
 	role: string,
 	box: Box,
 	look: string?,
@@ -685,7 +700,48 @@ function LevelGeometry.BareLobby(): Types.LevelLayout
 	}
 end
 
--- Every Part a layout becomes, in build order: the blocks; per camp its floor, fence, gates,
+-- L2-53: the ice cells of the ice block at `index` of `blocks` (built at `box`): WorldReact.Cells of
+-- its footprint, each a piece `thickness` deep whose top is `lift` over the water's top, named
+-- Ice_<block>_<k> with k the cell's place in Cells' order. A cell whose centre lies in the
+-- footprint (its edges included) of a colliding block or a secret that reaches above the water's
+-- top (a bridge over the creek, the island in the pond) is not built: that water is never walked on.
+local function iceCells(name: string, box: Box, ice: IceSize, covers: { Box }): { Piece }
+	local top = box.y + box.sy / 2
+	local pieces: { Piece } = {}
+	for k, cell in WorldReact.Cells(box, ice.cell) do
+		local covered = false
+		for _, other in covers do
+			if
+				other.y + other.sy / 2 > top
+				and math.abs(cell.x - other.x) <= other.sx / 2
+				and math.abs(cell.z - other.z) <= other.sz / 2
+			then
+				covered = true
+				break
+			end
+		end
+		if not covered then
+			table.insert(pieces, {
+				name = `Ice_{name}_{k}`,
+				role = "ice",
+				box = {
+					x = cell.x,
+					y = top + ice.lift - ice.thickness / 2,
+					z = cell.z,
+					sx = cell.sx,
+					sy = ice.thickness,
+					sz = cell.sz,
+				},
+				look = "ice",
+				collide = false,
+			})
+		end
+	end
+	return pieces
+end
+
+-- Every Part a layout becomes, in build order: the blocks; the ice cells of every ice block, in
+-- the blocks' order (L2-53); per camp its floor, fence, gates,
 -- cover, checkpoint marker, fire markers, tent marker and invisible wall; per secret its marked
 -- block and its sign. Only a camp that locks (L1b-12) has gates and a wall: an open camp's fence
 -- is cut at its gates and the road runs through. A marker or a sign whose size `sizes` does not
@@ -727,7 +783,8 @@ function LevelGeometry.Pieces(
 		measured.blocks = kept
 		blocks = kept
 	end
-	for index, box in LevelGeometry.BlockBoxes(measured, depth) do
+	local built = LevelGeometry.BlockBoxes(measured, depth)
+	for index, box in built do
 		local block = blocks[index]
 		table.insert(pieces, {
 			name = block.name or `Block_{index}`,
@@ -739,6 +796,35 @@ function LevelGeometry.Pieces(
 			react = block.react,
 			opens = block.opens,
 		})
+	end
+	local ice = sizes.ice
+	if ice ~= nil then
+		-- What may cover the water: every colliding block as built, and every secret.
+		local covers: { Box } = {}
+		for index, box in built do
+			if blocks[index].collide ~= false then
+				table.insert(covers, box)
+			end
+		end
+		for _, secret in listOf(layout.secrets) do
+			table.insert(covers, LevelGeometry.SecretBox(secret))
+		end
+		for index, box in built do
+			local block = blocks[index]
+			if block.react ~= "ice" then
+				continue
+			end
+			-- Counted before any cell is made: a cell size far below the water's would otherwise
+			-- build a list of millions before the Part count below refuses it.
+			local nx, nz = WorldReact.CellGrid(box, ice.cell)
+			if nx * nz > maxParts then
+				return nil,
+					`the ice of {block.name or `Block_{index}`} is {nx * nz} cells, over levels.maxParts ({maxParts})`
+			end
+			for _, piece in iceCells(block.name or `Block_{index}`, box, ice, covers) do
+				table.insert(pieces, piece)
+			end
+		end
 	end
 	local barrier = layout.barrier
 	for _, camp in listOf(layout.camps) do

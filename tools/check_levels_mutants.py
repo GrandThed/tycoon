@@ -6,7 +6,9 @@ chain of keys, R8's sight, the bend) and its fix round (d-M1: no carrying abilit
 d-m1: the walk-off grace in the ridge's reach; d-m2: the bend's known limit; s-m3: a shortcut's size)
 and its second fix round (m1: shooting.originWallChord under every tall piece's thickness, a camp's own
 fence.thickness, mirrored by sim_range.fence_thickness; the L1c sight cases calibrated on the 1-stud
-wall now run on it through l1c_wall, each with a twin on the shipped 2.5-stud wall),
+wall now run on it through l1c_wall, each with a twin on the shipped 2.5-stud wall), and of L2 Wave 3
+(L2-51 to L2-60: deep water, the landing, the island behind ice with the water as built (g) and frozen
+(h), the frozen layout's walls, ledge, sniper spots, the found family and the shrine's pay),
 shown red on a mutated copy of the shipped data, and green again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
@@ -94,6 +96,23 @@ REACT = "Combat.json levels.react (L2-34)"
 # The L2 W2 second fix round (docs/prompts/l2-w2-fix2.md: m1).
 CHORD = "ForestRoad: shooting.originWallChord"
 THICKNESS = "camp C: its fence.thickness, when it names one"
+# L2 Wave 3 (docs/prompts/l2-w3-contract.md, L2-51 to L2-60).
+DEEP = "ForestRoad: deep water: every water block is deep"
+LANDING = "every water landing stands on solid ground"
+ICE_JUMPS = "behind ice, the water as built: no jump"
+ICE_LIFT = "behind ice, the water as built: no lifting ability"
+ICE_DASH = "behind ice, the water as built: no air dash"
+ICE_GAP = "behind ice: the shrine's island lies at least ICE_MARGIN"
+ICE_TRIGGER = "the shrine's trigger (needs ice) is met from its island"
+ICE_FROZEN = "with the ice frozen, the shrine's island is reached"
+ICE_SWING = "with the ice: every ice family's swing"
+ICE_CHAIN = "with the ice: the open cells of the ice blocks form one"
+ICE_WALLS = "with the ice frozen every unclimbable wall stays"
+FROZEN_LEDGE = "forestRoad (frozen): the lookout needs the double jump: no surface"
+FROZEN_SNIPER = "with the ice frozen, the unreachable sniper spots"
+FROZEN_SNIPER_OPEN = "with the ice frozen and the brambles burnt, the unreachable sniper spots"
+FOUND = "map: every family Expeditions.json `found` names"
+ICE_CONFIG = "Combat.json levels.react.ice (L2-53)"
 
 
 def layout(data):
@@ -155,6 +174,31 @@ def l1c_wall(data):
 
 def levels(data):
     return data["combat"]["levels"]
+
+
+def ice(data):
+    return data["combat"]["levels"]["react"]["ice"]
+
+
+def island_at(data, gap):
+    """The island and its chest moved north up the creek until the island's flat gap to
+    ShrineSignPad (x -390..-380, z 8..18; the island is x -408..-392, 2 studs west of it) is `gap`."""
+    centre = 26 + (gap * gap - 4) ** 0.5
+    block(data, "ShrineIsland")["z"] = centre
+    secret(data, "shrine")["z"] = centre
+
+
+def water_tops(data, top):
+    """Every water block's top moved to `top`, its foot kept."""
+    for b in layout(data)["blocks"]:
+        if b["look"] == "water":
+            top_at(data, b["name"], top)
+
+
+def ice_block(data, name, x0, x1, z0, z1, top):
+    """A deep water block that freezes (no collision, react ice), 4 deep under `top`."""
+    add_block(data, name, "water", x0, x1, z0, z1, top, top - 4)
+    layout(data)["blocks"][-1].update({"collide": False, "react": "ice"})
 
 
 def secret(data, sid):
@@ -379,7 +423,8 @@ CASES = (
      lambda d: secret(d, "cache").__setitem__("y", 18), {}, TRIGGER_CACHE, True),
     # L2-18 (e) and L2-13: rewards follow keys.
     ("L2-18e: the cache pays 1 Valor", lambda d: secret_entry(d, "cache").__setitem__("valor", 1), {}, REWARDS, True),
-    ("L2-18e: the shrine names a family", lambda d: secret_entry(d, "shrine").__setitem__("family", "frostHammer"), {},
+    ("L2-18e: the shrine names a family and no map node gives the Frost Hammer (W3: ice in a cycle)",
+     lambda d: (secret_entry(d, "shrine").__setitem__("family", "frostHammer"), d["expeditions"].pop("found")), {},
      REWARDS, True),
     ("L2-13: the lookout pays 10 Valor (its key's price)", lambda d: secret_entry(d, "lookout").__setitem__("valor", 10),
      {}, REWARDS, True),
@@ -503,6 +548,103 @@ CASES = (
      lambda d: block(d, "BendWall").update({"z": -30, "sz": 44}), {}, BEND, True),
     ("L2-47 control: the bend wall 4 short of the ridge (z -78..-8: the way round is 58)",
      lambda d: block(d, "BendWall").update({"z": -43, "sz": 70}), {}, BEND, False),
+    # L2 W3: deep water (L2-52, L2-57, L2-60) and Validate's ice and landing lines (the mirror's).
+    ("W3 deep: the Creek solid again", lambda d: block(d, "Creek").pop("collide"), {}, DEEP, True),
+    ("W3 deep: the Pond reacts to nothing", lambda d: block(d, "Pond").pop("react"), {}, DEEP, True),
+    ("W3 deep: the water's tops at -0.25 (0.25 under the bridge)", lambda d: water_tops(d, -0.25), {}, DEEP, True),
+    ("W3 deep control: the water's tops at -0.5 (0.5 under the bridge)", lambda d: water_tops(d, -0.5), {}, DEEP, False),
+    ("W3 deep: the pond's top 1 under the creek's", lambda d: top_at(d, "Pond", -2), {}, DEEP, True),
+    ("W3 L2-52: an ice block that collides", lambda d: block(d, "Creek").pop("collide"), {}, PROBLEMS, True),
+    ("W3 L2-52: an ice block that opens the cave", lambda d: block(d, "Creek").__setitem__("opens", "cave"), {}, PROBLEMS,
+     True),
+    ("W3 L2-58: a landing on a block that is not ice (CreekUp)",
+     lambda d: block(d, "CreekUp").__setitem__("landing", {"x": -385, "y": 0, "z": 2}), {}, PROBLEMS, True),
+    ("W3 L2-58: a landing whose y is a string", lambda d: block(d, "Pond")["landing"].__setitem__("y", "0"), {}, PROBLEMS,
+     True),
+    ("W3 L2-58: the Creek's landing over the void (-385, 0, 30)",
+     lambda d: block(d, "Creek")["landing"].__setitem__("z", 30), {}, LANDING, True),
+    ("W3 L2-58: the Pond's landing a stud over Road2", lambda d: block(d, "Pond")["landing"].__setitem__("y", 1), {},
+     LANDING, True),
+    ("W3 L2-58: the Creek's landing on camp A's floor",
+     lambda d: block(d, "Creek").__setitem__("landing", {"x": -221.5, "y": 8, "z": -16}), {}, LANDING, True),
+    ("W3 L2-58 control: the landing on ShrineSignPad (-385, 0, 13)",
+     lambda d: block(d, "Creek")["landing"].__setitem__("z", 13), {}, LANDING, False),
+    # L2-60 (g): the island behind ice with the water as built. The reaches (ForestRoad, today's
+    # movement): the jumps 49.3, Leap Smash after the jumps and a dash 71.0, Impale Dash held in the
+    # air 80.6; the gap must be that and ICE_MARGIN 15 more (95.6); today it is 102.
+    ("W3 g: the island 45 from the sign pad (the jumps)", lambda d: island_at(d, 45), {}, ICE_JUMPS, True),
+    ("W3 g control: the island 52 from the sign pad (beyond the jumps' 49.3)", lambda d: island_at(d, 52), {}, ICE_JUMPS,
+     False),
+    ("W3 g: no air dash, the island 65 from the sign pad (Leap Smash after the jumps and a dash)",
+     lambda d: (d["ctx"].__setitem__("dashes", []), island_at(d, 65)), {}, ICE_LIFT, True),
+    ("W3 g control: no air dash, the island 75 from the sign pad",
+     lambda d: (d["ctx"].__setitem__("dashes", []), island_at(d, 75)), {}, ICE_LIFT, False),
+    ("W3 g: the island 75 from the sign pad (the Spear's Impale Dash held in the air)", lambda d: island_at(d, 75), {},
+     ICE_DASH, True),
+    ("W3 g control: the island 85 from the sign pad (beyond the air dash's 80.6)", lambda d: island_at(d, 85), {},
+     ICE_DASH, False),
+    ("W3 g: the island 85 from the sign pad (inside the air dash + ICE_MARGIN)", lambda d: island_at(d, 85), {}, ICE_GAP,
+     True),
+    ("W3 g control: the island 96 from the sign pad", lambda d: island_at(d, 96), {}, ICE_GAP, False),
+    ("W3 a/d: the chest 6 east on the island (its trigger reaches off it)",
+     lambda d: secret(d, "shrine").__setitem__("x", -394), {}, ICE_TRIGGER, True),
+    ("W3 a/d control: the chest 1.5 east (its trigger's edge 0.5 inside the island's)",
+     lambda d: secret(d, "shrine").__setitem__("x", -398.5), {}, ICE_TRIGGER, False),
+    # L2-60 (h): frozen, the swing and the chain.
+    ("W3 h: ice.cell 12 (one swing no longer freezes 1.5 rows)", lambda d: ice(d).__setitem__("cell", 12), {}, ICE_SWING,
+     True),
+    ("W3 h control: ice.cell 8 ((9 + 4 - 1) / 1.5)", lambda d: ice(d).__setitem__("cell", 8), {}, ICE_SWING, False),
+    ("W3 h: ice.reachDown 3.5 (under Road2's root over the water, 4)", lambda d: ice(d).__setitem__("reachDown", 3.5), {},
+     ICE_SWING, True),
+    ("W3 h control: ice.reachDown 4", lambda d: ice(d).__setitem__("reachDown", 4), {}, ICE_SWING, False),
+    ("W3 h: the Frost Hammer carries no element (no family freezes)",
+     lambda d: d["ctx"]["weapons"]["frostHammer"].pop("element"), {}, ICE_SWING, True),
+    ("W3 h: a gap in the cell chain (the creek ends at z 80, 16 short of the pond)",
+     lambda d: block(d, "Creek").update({"z": 44, "sz": 72}), {}, ICE_CHAIN, True),
+    ("W3 h: a wall across the creek covers a row of cells (z 50..54, top 0.5)",
+     lambda d: add_block(d, "MutantDam", "wall", -412, -388, 50, 54, 0.5, -1.5), {}, ICE_CHAIN, True),
+    ("W3 h: the island 66 south of the pond (no ice reaches it)",
+     lambda d: (block(d, "ShrineIsland").__setitem__("z", 230), secret(d, "shrine").__setitem__("z", 230)), {}, ICE_FROZEN,
+     True),
+    # The W2 lessons on the frozen layout: no new ledge route, wall or sniper spot.
+    ("W3 frozen: a pond 17 high beside the lookout ledge (one jump onto it once frozen)",
+     lambda d: ice_block(d, "MutantIce", -295, -271, -80, -68, 17), {}, FROZEN_LEDGE, True),
+    ("W3 frozen control: the same pond 6 high", lambda d: ice_block(d, "MutantIce", -295, -271, -80, -68, 6), {},
+     FROZEN_LEDGE, False),
+    ("W3 frozen: a pond 42 high 4 off CaveWallS1 (the ridge climbable once frozen)",
+     lambda d: ice_block(d, "MutantIce", -255, -245, -78, -70, 42), {}, ICE_WALLS, True),
+    ("W3 frozen: a pond south of Road4 (a new sniper spot once frozen)",
+     lambda d: ice_block(d, "MutantPond", -330, -310, -30, -12, -1), {}, FROZEN_SNIPER, True),
+    ("W3 frozen: the same pond, the brambles burnt",
+     lambda d: ice_block(d, "MutantPond", -330, -310, -30, -12, -1), {}, FROZEN_SNIPER_OPEN, True),
+    # L2-51: the family found on a map node; L2-59: the shrine's pay under the chain's cap.
+    ("W3 L2-51: found names no node", lambda d: d["expeditions"]["found"]["frostHammer"].__setitem__("node", "volcano"),
+     {}, FOUND, True),
+    ("W3 L2-51: found's text 41 characters",
+     lambda d: d["expeditions"]["found"]["frostHammer"].__setitem__("text", "x" * 41), {}, FOUND, True),
+    ("W3 L2-51 control: found's text 40 characters",
+     lambda d: d["expeditions"]["found"]["frostHammer"].__setitem__("text", "x" * 40), {}, FOUND, False),
+    ("W3 L2-51: the Broadsword found (a starter)",
+     lambda d: d["expeditions"]["found"].__setitem__("broadsword", {"node": "castle", "text": "Found in the Castle"}), {},
+     FOUND, True),
+    ("W3 L2-51: found names a family no weapon has",
+     lambda d: d["expeditions"]["found"].__setitem__("iceBow", {"node": "castle", "text": "Found in the Castle"}), {},
+     FOUND, True),
+    ("W3 L2-51: the cache also pays the Frost Hammer",
+     lambda d: secret_entry(d, "cache").__setitem__("family", "frostHammer"), {}, FOUND, True),
+    ("W3 L2-59: the shrine pays 10 Valor (the dearest sold ability's price)",
+     lambda d: secret_entry(d, "shrine").__setitem__("valor", 10), {}, REWARDS, True),
+    ("W3 L2-59 control: the shrine pays 9 Valor", lambda d: secret_entry(d, "shrine").__setitem__("valor", 9), {}, REWARDS,
+     False),
+    ("W3 L2-59: the shrine pays 67 Timber (over 30% of the Normal stock 220)",
+     lambda d: secret_entry(d, "shrine").__setitem__("materials", 67), {}, REWARDS, True),
+    ("W3 L2-51: no found entry, the shrine pays (nothing holds ice)", lambda d: d["expeditions"].pop("found"), {}, REWARDS,
+     True),
+    # L2-53: the ice config.
+    ("W3 L2-53: levels.react.ice.cell 0", lambda d: ice(d).__setitem__("cell", 0), {}, ICE_CONFIG, True),
+    ("W3 L2-53: levels.react.ice missing", lambda d: levels(d)["react"].pop("ice"), {}, ICE_CONFIG, True),
+    ("W3 L2-53: iceHits back in levels.react", lambda d: levels(d)["react"].__setitem__("iceHits", 6), {}, ICE_CONFIG,
+     True),
 )
 
 
@@ -567,6 +709,16 @@ MIRROR_CASES = (
     # (the Luau side's mutants are tools/crowd_harness/mutate.py's).
     ("fix2 m1: sim_range's fence_thickness ignores the camp's own (the mirror alone)", None,
      ("        return own\n", "        return default\n"), "LevelGeometry.FenceThickness"),
+    # L2 W3 (L2-52): an ice block that collides, accepted by the Python mirror alone (the Luau side's
+    # mutants are tools/crowd_harness/mutate.py's). The mirror's refusal case carries this label.
+    ("W3 L2-52: sim_range's react_problems takes an ice block that collides (the mirror alone)", None,
+     ('                if block.get("collide") is not False:\n                    problem(f"{where} is ice and collides")',
+      '                if False:\n                    problem(f"{where} is ice and collides")'),
+     "a pool that collides"),
+    ("W3 L2-58: sim_range's react_problems takes a landing on a block that is not ice (the mirror alone)", None,
+     ('            if react != "ice":\n                problem(f"{where} has a landing and is not ice")',
+      '            if False:\n                problem(f"{where} has a landing and is not ice")'),
+     "plain water with a landing"),
 )
 
 

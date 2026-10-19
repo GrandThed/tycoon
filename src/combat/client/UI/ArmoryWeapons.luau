@@ -9,8 +9,10 @@
 --    nothing when pressed.
 --  * Owned = a starter (the config `loadout`) or a family the profile's `families` holds
 --    (Unlocks.OwnsFamily, the server's own rule). An unowned family is listed only when a level's
---    secret pays it, locked, with where it hides ("Hidden on Forest Road": a secret is seen before
---    it is reached, MISSIONS_DESIGN section 7). Today that is the Flamethrower alone.
+--    secret pays it or Expeditions.json `found` names it (L2-51), locked, with where it is found:
+--    "Hidden on Forest Road" for a secret (a secret is seen before it is reached, MISSIONS_DESIGN
+--    section 7), the entry's own text for `found` ("Found in the Castle": the Frost Hammer, owned
+--    only by the Studio lever until the Castle exists).
 --  * A press sends RequestSetFamily(slot, family, variant) through the host and greys every
 --    button until the `setFamily` ActionResult that names its family (or
 --    Theme.ABILITIES_RESULT_TIMEOUT_SECONDS, the one Armory timeout). An ok shows the pick as held
@@ -47,7 +49,8 @@ export type Deps = {
 
 export type VariantModel = { key: string, label: string }
 
--- One card: a family as the tab shows it. `hidden` = where an unowned family hides (locked).
+-- One card: a family as the tab shows it. `hidden` = the line that says where an unowned family
+-- is found (locked).
 export type CardModel = {
 	family: string,
 	name: string,
@@ -102,8 +105,9 @@ local REFUSAL_FALLBACK = "Try again"
 
 local ArmoryWeapons = {}
 
--- Every family a level's secret pays, and the name of that level: where it hides. Read from
--- Config/Levels (the first level in id order that pays it).
+-- Where each unowned family can be found, as its locked card says it: every family a level's
+-- secret pays, "Hidden on <level>" (Config/Levels, the first level in id order that pays it),
+-- then every family Expeditions.json `found` names that no secret pays, the entry's own text.
 function ArmoryWeapons.HiddenWhere(): { [string]: string }
 	local where: { [string]: string } = {}
 	local ids = table.clone(Catalog.GetLevelIds())
@@ -117,7 +121,22 @@ function ArmoryWeapons.HiddenWhere(): { [string]: string }
 		for _, secret in secrets do
 			local family = secret.family
 			if typeof(family) == "string" and family ~= "" and where[family] == nil then
-				where[family] = file.name
+				where[family] = HIDDEN_PREFIX .. file.name
+			end
+		end
+	end
+	local expeditions = Catalog.GetExpeditionsConfig()
+	local found = if expeditions ~= nil then expeditions.found else nil
+	if typeof(found) == "table" then
+		for family, entry in found do
+			if
+				typeof(family) == "string"
+				and where[family] == nil
+				and typeof(entry) == "table"
+				and typeof(entry.text) == "string"
+				and entry.text ~= ""
+			then
+				where[family] = entry.text
 			end
 		end
 	end
@@ -463,9 +482,7 @@ function ArmoryWeapons.new(parent: Instance, width: number, deps: Deps): Page
 			line.Size = UDim2.fromOffset(inner, Theme.ABILITIES_BUTTON_HEIGHT)
 			line.TextXAlignment = Enum.TextXAlignment.Center
 			line.TextWrapped = true
-			line.Text = if model.hidden ~= nil
-				then HIDDEN_PREFIX .. model.hidden
-				else HIDDEN_FALLBACK
+			line.Text = model.hidden or HIDDEN_FALLBACK
 			rounded(line, Theme.ROW_CORNER_RADIUS)
 			return card
 		end

@@ -1139,7 +1139,8 @@ end
 -- Ruling 19: a human whose root is under the kill height or outside the box is put back on the
 -- ground with the get-up i-frames, none while they are engaged in a resident fight (L1b-20).
 -- Never a down, no cost, in every phase: falling out is the level's fault. Which box judges them, and whether they go to the run's safe point or to the
--- lobby camp, is StageFlow.Rescue's (once a run is over nobody is put into its level). A member
+-- lobby camp, is StageFlow.Rescue's (once a run is over nobody is put into its level); a fall
+-- through deep water goes to its landing instead (StageFlow.FallLanding, L2-58). A member
 -- just rescued is left alone for the length of those i-frames: their client still reports the
 -- old place for a frame or two, and a second rescue would only move them again. Without
 -- Combat.json player.rescue nobody is rescued.
@@ -1181,8 +1182,15 @@ local function rescueFallen(combatConfig: Types.CombatConfig): ()
 		if verdict == "lobby" then
 			target = LevelService.LobbyPoint()
 		elseif verdict == "level" and plan ~= nil and flow ~= nil then
-			safe = safe or safePoint(plan, flow)
-			target = safe
+			-- L2-58: a fall through deep water comes back to that water's landing (outside a
+			-- closed camp's fight), not to a checkpoint a camp or two away.
+			local landing = StageFlow.FallLanding(plan, flow, root.Position, rescue.outside)
+			if landing ~= nil then
+				target = landing
+			else
+				safe = safe or safePoint(plan, flow)
+				target = safe
+			end
 		end
 		if target ~= nil and ArenaService.MoveMember(member, target) then
 			boot.rescuedAt[member.userId] = now

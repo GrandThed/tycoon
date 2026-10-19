@@ -135,6 +135,13 @@
 			},
 			"ability": {"id": "impaleDash", "name": "Impale Dash", "cooldownSeconds": 8, "minCooldownSeconds": 3, "killRefundSeconds": 0.35, "damage": 125, "range": 30, "width": 7, "delaySeconds": 0.25, "pad": 1.0, "cap": 0, "knockback": 34, "launch": 4}
 		},
+		"frostHammer": {
+			"name": "Frost Hammer", "slot": "melee", "era": 1, "default": "A", "element": "ice",
+			"variants": {
+				"A": {"label": "Frost swing", "kind": "melee", "shape": "arc", "range": 9, "arcDegrees": 120, "pad": 1.5, "cap": 8, "damage": 38, "rate": 1.55, "knockback": 22, "launch": 6, "chain": [1.0, 1.0, 1.8]}
+			},
+			"ability": {"id": "frostQuake", "name": "Frost Quake", "cooldownSeconds": 12, "minCooldownSeconds": 5, "killRefundSeconds": 0.25, "damage": 30, "delaySeconds": 0.25, "count": 1, "radius": 32, "spacing": 6, "tickSeconds": 0.3, "falloff": 0.85, "pad": 1.0, "cap": 0, "knockback": 18, "launch": 8}
+		},
 		"longbow": {
 			"name": "Longbow", "slot": "ranged", "era": 1, "default": "A",
 			"variants": {

@@ -1704,7 +1704,13 @@ function L1.real.sizes(): any
 		return if type(value) == "number" and value > 0 and value < math.huge then value else nil
 	end
 	local rules = L1.real.rules
-	return { fence = length(rules.fenceThickness) or 0, floor = length(rules.floorThickness), checkpoint = size(rules.checkpointSize), fire = size(rules.fireMarkerSize), sign = size(L1.real.map.sign.size) }
+	-- L2-53: LevelService.iceOf, levels.react.ice's cell, lift and thickness.
+	local frost = if type(rules.react) == "table" then rules.react.ice else nil
+	local ice = nil
+	if type(frost) == "table" and length(frost.cell) ~= nil and length(frost.thickness) ~= nil and type(frost.lift) == "number" and math.abs(frost.lift) < math.huge then
+		ice = { cell = frost.cell, lift = frost.lift, thickness = frost.thickness }
+	end
+	return { fence = length(rules.fenceThickness) or 0, floor = length(rules.floorThickness), checkpoint = size(rules.checkpointSize), fire = size(rules.fireMarkerSize), sign = size(L1.real.map.sign.size), ice = ice }
 end
 
 -- A layout's box as WaveService.startLevel and LevelService ask for it: with the floors as deep

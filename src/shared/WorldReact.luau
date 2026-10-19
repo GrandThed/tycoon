@@ -10,7 +10,13 @@
 --
 -- Only a segment burns: a `capsule` (a flame stream, its reach cut at the first wall, so a stream
 -- stopped by a bramble ends on its face) and a `ray`. Every other shape (arcs, spheres, cones:
--- Dragon's Breath's cones among them) touches nothing in W2; W3 adds the frost hammer's arc.
+-- Dragon's Breath's cones among them) touches nothing of fire.
+--
+-- L2 W3 (docs/prompts/l2-w3-contract.md, L2-53 and L2-54): only an arc freezes. Deep water is cut
+-- into cells built with the level (Cells); a frost swing freezes each cell whose top it reaches
+-- down to and whose centre lies in its sector, a patch ahead of the swinger (Chills, Freeze). The
+-- server runs Freeze on every resolved strike; the phone's auto-swing and the swinger's predicted
+-- ghost ask Chills of the same cells, so the three never disagree on which water a swing takes.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -24,13 +30,18 @@ export type Strike = {
 	origin: Vector3,
 	direction: Vector3,
 	size: number,
+	-- An arc's whole sweep, degrees (360 or more = all round); nil for the other shapes.
+	arcDegrees: number?,
 	width: number?,
 	endPoint: Vector3?,
 }
 -- An axis-aligned block: its centre and its size, studs.
 export type Box = { x: number, y: number, z: number, sx: number, sy: number, sz: number }
 -- Combat.json levels.react (Types.CombatReactConfig), as the rules read it.
-export type Rules = { fireHits: number?, iceHits: number?, pad: number? }
+export type Rules = Types.CombatReactConfig
+-- L2-53: one ice cell of the built level as Freeze reads it: its piece's box and whether it has
+-- frozen (Freeze writes it; it stays frozen until the run ends).
+export type IceCell = { box: Box, frozen: boolean }
 -- One reactive block as Apply reads it: the element that takes it away, its box, and how many
 -- strikes of that element it has taken (Apply writes the new count back).
 export type Entry = { react: string, box: Box, heat: number }
@@ -146,17 +157,14 @@ function WorldReact.Touches(fx: Strike, box: Box, pad: number): boolean
 	return true
 end
 
--- How many strikes of `element` take a block of that element away: Combat.json levels.react's
--- fireHits or iceHits, when it is a whole number of at least 1; nil otherwise (that element then
--- changes nothing), and for a word that is not an element.
+-- How many strikes of fire take a fire block away: Combat.json levels.react's fireHits, when it
+-- is a whole number of at least 1; nil otherwise (fire then changes nothing), and for every other
+-- word: ice is never counted (L2-54, Freeze takes a cell at its first chill).
 function WorldReact.Need(rules: Rules?, element: string): number?
 	if rules == nil then
 		return nil
 	end
-	local hits: any = if element == "fire"
-		then rules.fireHits
-		elseif element == "ice" then rules.iceHits
-		else nil
+	local hits: any = if element == "fire" then rules.fireHits else nil
 	if finite(hits) and hits >= 1 and hits % 1 == 0 then
 		return hits
 	end
@@ -234,6 +242,127 @@ function WorldReact.Apply(
 		table.insert(if done then gone else heated, index)
 	end
 	return gone, heated
+end
+
+-- L2-53: how many cells a block's footprint is cut into, along X and along Z: ceil(side / cell)
+-- each, so no cell is wider than `cell`. 0, 0 for a cell that is not a finite number above 0, or a
+-- footprint whose size is not.
+function WorldReact.CellGrid(box: Box, cell: number): (number, number)
+	if
+		not (
+			finite(cell)
+			and cell > 0
+			and finite(box.sx)
+			and finite(box.sz)
+			and box.sx > 0
+			and box.sz > 0
+		)
+	then
+		return 0, 0
+	end
+	return math.ceil(box.sx / cell), math.ceil(box.sz / cell)
+end
+
+-- L2-53: the block's footprint divided evenly into CellGrid's cells, X fastest then Z (the k-th
+-- cell is the piece Ice_<block>_<k>). Each keeps the block's y and sy; LevelGeometry sets the
+-- piece's own height. Empty for no grid, or a centre that is not finite.
+function WorldReact.Cells(box: Box, cell: number): { Box }
+	local cells: { Box } = {}
+	local nx, nz = WorldReact.CellGrid(box, cell)
+	if nx == 0 or nz == 0 or not (finite(box.x) and finite(box.z)) then
+		return cells
+	end
+	local wide, deep = box.sx / nx, box.sz / nz
+	local west, north = box.x - box.sx / 2, box.z - box.sz / 2
+	for j = 1, nz do
+		for i = 1, nx do
+			table.insert(cells, {
+				x = west + (i - 0.5) * wide,
+				y = box.y,
+				z = north + (j - 0.5) * deep,
+				sx = wide,
+				sy = box.sy,
+				sz = deep,
+			})
+		end
+	end
+	return cells
+end
+
+-- L2-54: does this resolved strike freeze the ice cell `box`? Only an `arc` (a melee swing) does,
+-- when the cell's top lies from the swing's origin down to `reachDown` under it (a swing from
+-- the bank reaches over the edge; one from a high jump or a plateau does not), and the cell's
+-- centre lies, in plan, within the swing's size + `ahead` of the origin and within half its
+-- arcDegrees of its flat direction (360 or more = all round; a centre right under the origin is
+-- in every sector). An arc of 0 or less, no arcDegrees, a direction with no flat part and any
+-- number that is not finite: false.
+function WorldReact.Chills(fx: Strike, box: Box, reachDown: number, ahead: number): boolean
+	if fx.shape ~= "arc" then
+		return false
+	end
+	local origin, direction, arc = fx.origin, fx.direction, fx.arcDegrees
+	if
+		not (
+			finitePoint(origin)
+			and finitePoint(direction)
+			and finite(fx.size)
+			and finite(arc)
+			and finite(reachDown)
+			and finite(ahead)
+			and finite(box.x)
+			and finite(box.y)
+			and finite(box.z)
+			and finite(box.sy)
+		)
+	then
+		return false
+	end
+	local sweep = arc :: number
+	if not (sweep > 0) then
+		return false
+	end
+	local top = box.y + box.sy / 2
+	if not (top <= origin.Y and top >= origin.Y - reachDown) then
+		return false
+	end
+	local dx, dz = box.x - origin.X, box.z - origin.Z
+	local distance = math.sqrt(dx * dx + dz * dz)
+	if not (distance <= fx.size + ahead) then
+		return false
+	end
+	if sweep >= 360 or distance == 0 then
+		return true
+	end
+	local hx, hz = direction.X, direction.Z
+	local heading = math.sqrt(hx * hx + hz * hz)
+	if not (heading > 0) then
+		return false
+	end
+	local cosine = (dx * hx + dz * hz) / (distance * heading)
+	return cosine >= math.cos(math.rad(sweep / 2))
+end
+
+-- L2-54: one strike of `element` on the level's ice cells. With "ice", every cell not yet frozen
+-- that Chills names is set frozen; returns their indices, ascending. Any other element, or none
+-- (an ability's strike: StrikeElement), changes nothing and returns none.
+function WorldReact.Freeze(
+	cells: { IceCell },
+	element: string?,
+	fx: Strike,
+	reachDown: number,
+	ahead: number
+): { number }
+	local frozen: { number } = {}
+	if element ~= "ice" then
+		return frozen
+	end
+	for index, cell in cells do
+		if not cell.frozen and WorldReact.Chills(fx, cell.box, reachDown, ahead) then
+			cell.frozen = true
+			table.insert(frozen, index)
+		end
+	end
+	return frozen
 end
 
 -- An axis-aligned Part's box (level blocks are never turned, LevelGeometry).

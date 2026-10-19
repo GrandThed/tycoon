@@ -716,6 +716,10 @@ local MECHANICS: { [string]: Mechanic } = {
 -- L2-29: the Flamethrower's Dragon's Breath is the Slug Burst launcher (four flame cones from the
 -- muzzle): the same entry, so its busy window, target and launch can never drift apart.
 MECHANICS.dragonBreath = MECHANICS.slugBurst
+-- L2-50: the Frost Hammer's Frost Quake is the Earthquake launcher (rings round the caster's
+-- floor, no lift, no dash): the same entry, for the same reason. Abilities never freeze
+-- (WorldReact.StrikeElement), so it is Earthquake in all but its numbers.
+MECHANICS.frostQuake = MECHANICS.earthquake
 
 -- Timelines ----------------------------------------------------------------------------------------
 

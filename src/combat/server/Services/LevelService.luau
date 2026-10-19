@@ -26,6 +26,13 @@
 -- build so the client knows the block), and destroys it once it has taken its count, telling the
 -- OnReacted listeners (WaveService). A block whose `opens` names a shortcut the leader has found
 -- is never built (LevelGeometry.Pieces' `open`).
+--
+-- L2 W3 (docs/prompts/l2-w3-contract.md, L2-53 and L2-54): deep water (`react = "ice"`) is built
+-- with its ice cells, hidden Parts nothing meets, attribute `Ice` false. React hands a strike of
+-- ice to WorldReact.Freeze, and each cell it names turns into floor where it lies (shown in its
+-- look, collidable, met by rays and the camera), `Ice` true, and the OnReacted listeners are told
+-- (event "frozen"). No Part is made mid-run; the ice stays until Clear. Ice blocks are not in the
+-- reactive list (no `React`/`Heat` attribute), so nothing of W2's fire path sees them.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -61,6 +68,14 @@ type Reactive = {
 }
 -- What OnReacted's listeners are told: the block's name, its element and its box as it stood.
 export type Reacted = { name: string, react: string, box: LevelGeometry.Box }
+-- L2-53: one ice cell of the level that is built: its Part's name, the Part, the transparency of
+-- its look (what it shows once frozen) and what WorldReact.Freeze reads and writes.
+type Ice = {
+	name: string,
+	part: BasePart,
+	shown: number,
+	cell: WorldReact.IceCell,
+}
 
 local CONST = {
 	LOBBY_FOLDER = "Lobby",
@@ -74,6 +89,9 @@ local CONST = {
 	-- attributes, the element (set at build) and the share of the way it has gone (0 to 1).
 	REACT_ATTRIBUTE = "React",
 	HEAT_ATTRIBUTE = "Heat",
+	-- L2-53: an ice cell's Part attribute, false as built and true once frozen (ReactFx and the
+	-- phone's auto-swing read it).
+	ICE_ATTRIBUTE = "Ice",
 	TEXT_FACES = table.freeze({
 		Enum.NormalId.Front,
 		Enum.NormalId.Back,
@@ -99,6 +117,8 @@ local state = {
 	-- L2-35: the built level's reactive blocks (emptied by Clear) and who hears one go.
 	reactive = {} :: { Reactive },
 	reactedListeners = {} :: { (Reacted) -> () },
+	-- L2-53: the built level's ice cells (emptied by Clear).
+	ice = {} :: { Ice },
 }
 
 local LevelService = {}
@@ -181,6 +201,33 @@ local function sizeOf(value: { number }?): LevelGeometry.Size?
 	return nil
 end
 
+-- L2-53: Combat.json levels.react.ice as LevelGeometry builds the cells: a cell and a thickness that
+-- are positive finite numbers and a finite lift. nil (one warn when the key is there) for
+-- anything else: an ice block is then deep water with no cells.
+local function iceOf(react: Types.CombatReactConfig?): LevelGeometry.IceSize?
+	local ice: any = if type(react) == "table" then react.ice else nil
+	if ice == nil then
+		return nil
+	end
+	local lift = if type(ice) == "table" then ice.lift else nil
+	local cell = if type(ice) == "table" then lengthOf(ice.cell) else nil
+	local thickness = if type(ice) == "table" then lengthOf(ice.thickness) else nil
+	if
+		cell ~= nil
+		and thickness ~= nil
+		and type(lift) == "number"
+		and math.abs(lift) < math.huge
+	then
+		return { cell = cell, lift = lift, thickness = thickness }
+	end
+	warnOnce(
+		"size:ice",
+		"[LevelService] Combat.json levels.react.ice has no positive cell and thickness and a "
+			.. "finite lift; deep water is built with no ice"
+	)
+	return nil
+end
+
 -- What LevelGeometry needs beyond the layout, all of it from the config: the fence's thickness,
 -- the ground's depth, a checkpoint marker's and a fire marker's size (Combat.json levels), a
 -- secret's sign's size (Expeditions.json sign). A length the config does not give is left out: with no
@@ -197,6 +244,7 @@ local function sizesOf(
 		checkpoint = sizeOf(if rules ~= nil then rules.checkpointSize else nil),
 		fire = sizeOf(if rules ~= nil then rules.fireMarkerSize else nil),
 		sign = sizeOf(if type(sign) == "table" then sign.size else nil),
+		ice = iceOf(if rules ~= nil then rules.react else nil),
 	}
 end
 
@@ -305,7 +353,8 @@ local function construct(
 	folder: Folder,
 	pieces: { LevelGeometry.Piece },
 	expeditions: Types.ExpeditionsConfig?,
-	reactive: { Reactive }
+	reactive: { Reactive },
+	ice: { Ice }
 ): { [string]: CampParts }
 	local looks: Looks? = if expeditions ~= nil then expeditions.looks else nil
 	local camps: { [string]: CampParts } = {}
@@ -378,8 +427,23 @@ local function construct(
 		if text ~= nil and text ~= "" and expeditions ~= nil then
 			addText(part, text, expeditions)
 		end
+		if piece.role == "ice" then
+			-- Hidden and walked through until a frost swing freezes it (the `collide = false`
+			-- above already let bodies, rays and touches through).
+			local shown = part.Transparency
+			part.Transparency = 1
+			part.CastShadow = false
+			part:SetAttribute(CONST.ICE_ATTRIBUTE, false)
+			table.insert(ice, {
+				name = piece.name,
+				part = part :: BasePart,
+				shown = shown,
+				cell = { box = box, frozen = false },
+			})
+		end
 		local react = piece.react
-		if react ~= nil and piece.role == "block" then
+		-- L2-53: an ice block is water; its cells are what freezes, so it is not reactive.
+		if react ~= nil and react ~= "ice" and piece.role == "block" then
 			part:SetAttribute(CONST.REACT_ATTRIBUTE, react)
 			part:SetAttribute(CONST.HEAT_ATTRIBUTE, 0)
 			table.insert(reactive, {
@@ -405,17 +469,20 @@ local function raise(
 	maxParts: number,
 	expeditions: Types.ExpeditionsConfig?,
 	open: { [string]: boolean }?,
-	reactive: { Reactive }?
+	reactive: { Reactive }?,
+	ice: { Ice }?
 ): ({ [string]: CampParts }?, string?)
 	local pieces, problem = piecesOf(layout, sizes, maxParts, open)
 	if pieces == nil then
 		return nil, problem
 	end
 	local made: { Reactive } = reactive or {}
-	local ok, camps = pcall(construct, folder, pieces, expeditions, made)
+	local cells: { Ice } = ice or {}
+	local ok, camps = pcall(construct, folder, pieces, expeditions, made, cells)
 	if not ok then
 		folder:ClearAllChildren()
 		table.clear(made)
+		table.clear(cells)
 		return nil, `a Part could not be made ({tostring(camps)})`
 	end
 	return camps, nil
@@ -552,12 +619,15 @@ function LevelService.Build(
 	end
 	local sizes = sizesOf(expeditions, rules)
 	local reactive: { Reactive } = {}
-	local camps, problem = raise(folder, layout, sizes, rules.maxParts, expeditions, open, reactive)
+	local ice: { Ice } = {}
+	local camps, problem =
+		raise(folder, layout, sizes, rules.maxParts, expeditions, open, reactive, ice)
 	if camps == nil then
 		warn(`[LevelService] the level was not built: {problem}`)
 		return false
 	end
 	state.reactive = reactive
+	state.ice = ice
 	warnUnsized(layout, sizes)
 	state.camps = camps
 	state.looks = expeditions.looks
@@ -575,16 +645,56 @@ function LevelService.Clear(): ()
 	state.looks = nil
 	state.built = false
 	state.reactive = {}
+	state.ice = {}
 end
 
 function LevelService.IsBuilt(): boolean
 	return state.built
 end
 
--- L2-35: `callback` hears every reactive block that goes, after its Part is destroyed. Called
--- inside the strike's frame: it must not yield.
+-- L2-35: `callback` hears every reactive block that goes, after its Part is destroyed, and (L2-54)
+-- every ice cell that freezes, after its Part has turned to floor. Called inside the strike's
+-- frame: it must not yield.
 function LevelService.OnReacted(callback: (Reacted) -> ()): ()
 	table.insert(state.reactedListeners, callback)
+end
+
+-- L2-54: a strike of `element` on the built level's ice cells. WorldReact.Freeze decides which
+-- freeze (Combat.json levels.react.ice's reachDown and ahead); each one shows its look, collides
+-- and is met by rays and the camera (the Default group: players stand on it; the crowd never
+-- comes here), its `Ice` attribute turns true and the OnReacted listeners are told. Never yields.
+local function freeze(element: string, fx: WorldReact.Strike, rules: Types.CombatReactConfig?): ()
+	local ice = state.ice
+	if #ice == 0 then
+		return
+	end
+	local frost: any = if rules ~= nil then rules.ice else nil
+	local reachDown = if type(frost) == "table" then frost.reachDown else nil
+	local ahead = if type(frost) == "table" then frost.ahead else nil
+	if type(reachDown) ~= "number" or type(ahead) ~= "number" then
+		warnOnce(
+			"react:ice",
+			"[LevelService] Combat.json levels.react.ice has no reachDown or ahead; nothing freezes"
+		)
+		return
+	end
+	local cells: { WorldReact.IceCell } = table.create(#ice)
+	for index, entry in ice do
+		cells[index] = entry.cell
+	end
+	for _, index in WorldReact.Freeze(cells, element, fx, reachDown, ahead) do
+		local entry = ice[index]
+		local part = entry.part
+		part.Transparency = entry.shown
+		part.CastShadow = true
+		part.CanCollide = true
+		part.CanQuery = true
+		part:SetAttribute(CONST.ICE_ATTRIBUTE, true)
+		local event: Reacted = { name = entry.name, react = element, box = entry.cell.box }
+		for _, listener in state.reactedListeners do
+			listener(event)
+		end
+	end
 end
 
 -- L2-35, WeaponService's strike listener (Main wires it): `player`'s strike with `weapon`
@@ -594,7 +704,8 @@ end
 -- touching the box grown by Combat.json levels.react.pad) and which go (WorldReact.Need). This
 -- only executes: the heated show it on their Part's `Heat` attribute, the gone are destroyed and
 -- the OnReacted listeners told. No "in play" rule (a bramble is not loot). Never yields, never
--- throws on what the config says.
+-- throws on what the config says. L2-54: a strike of ice goes to `freeze` instead (the ice cells
+-- WorldReact.Freeze names), and never down the fire path.
 function LevelService.React(
 	_player: Player,
 	weapon: string,
@@ -602,7 +713,7 @@ function LevelService.React(
 	abilityId: string?
 ): ()
 	local reactive = state.reactive
-	if #reactive == 0 then
+	if #reactive == 0 and #state.ice == 0 then
 		return
 	end
 	local config: any = Tuning.Get()
@@ -612,6 +723,13 @@ function LevelService.React(
 	end
 	local combat = Catalog.GetCombatConfig()
 	local rules = if combat ~= nil then combat.levels.react else nil
+	if element == "ice" then
+		freeze(element, fx, rules)
+		return
+	end
+	if #reactive == 0 then
+		return
+	end
 	local need = WorldReact.Need(rules, element)
 	if need == nil then
 		warnOnce(
