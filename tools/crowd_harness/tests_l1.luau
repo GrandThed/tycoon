@@ -1688,29 +1688,12 @@ function L1.real.resolve(levelId: string): any
 	return { file = file, mission = mission, level = if read then level else nil, layout = layout, why = why }
 end
 
--- LevelService.sizesOf: what a layout does not say and the config does.
+-- LevelService.sizesOf: what a layout does not say and the config does. The L2 W3 fix round's
+-- s-m1: LevelGeometry.SizesOf itself (LevelService only warns on its second answer), so the real
+-- files are built with the very sizes the game builds them with.
 function L1.real.sizes(): any
-	local function size(value: any): any
-		if value == nil then
-			return nil
-		end
-		local sx, sy, sz = value[1], value[2], value[3]
-		if sx ~= nil and sy ~= nil and sz ~= nil and sx > 0 and sy > 0 and sz > 0 then
-			return { sx = sx, sy = sy, sz = sz }
-		end
-		return nil
-	end
-	local function length(value: any): any
-		return if type(value) == "number" and value > 0 and value < math.huge then value else nil
-	end
-	local rules = L1.real.rules
-	-- L2-53: LevelService.iceOf, levels.react.ice's cell, lift and thickness.
-	local frost = if type(rules.react) == "table" then rules.react.ice else nil
-	local ice = nil
-	if type(frost) == "table" and length(frost.cell) ~= nil and length(frost.thickness) ~= nil and type(frost.lift) == "number" and math.abs(frost.lift) < math.huge then
-		ice = { cell = frost.cell, lift = frost.lift, thickness = frost.thickness }
-	end
-	return { fence = length(rules.fenceThickness) or 0, floor = length(rules.floorThickness), checkpoint = size(rules.checkpointSize), fire = size(rules.fireMarkerSize), sign = size(L1.real.map.sign.size), ice = ice }
+	local sizes = L1.Geo.SizesOf(L1.real.map, L1.real.rules)
+	return sizes
 end
 
 -- A layout's box as WaveService.startLevel and LevelService ask for it: with the floors as deep

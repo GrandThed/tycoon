@@ -152,8 +152,10 @@ FAMILY_TARGETS = {
     "chaingun": {"crowd6": 240},  # lightning through a pack
     # L2-29: a crowd weapon you must stand close to (the Shotgun's role), the Beam's single-target rate.
     "flamethrower": {"single": 50, "crowd6": 280},
-    # L2-49: the frost hammer, a slower Broadsword (36 x 1.27 x 1.5 = 68 against its 76; crowd6 410 against 456).
-    "frostHammer": {"single": 68, "crowd6": 410},
+    # L2-49 with the L2 W3 lead's ruling (section 14): the frost hammer, a slower Broadsword, at the
+    # shipped swing 38 x 1.267 (the chain's mean) x 1.55 = 75 against its 76; crowd6 439 against 456
+    # (measured rows, the W3 fix round's d-m2: the contract's 68 / 410 were the 36-at-1.5 draft).
+    "frostHammer": {"single": 75, "crowd6": 439},
 }
 # A and B of one family sit at similar crowd DPS: |A - B| / mean at most this.
 AB_SPREAD = 0.20
@@ -5425,14 +5427,20 @@ def secret_problems(level, layout, problem):
 
 # L2-34: the words a block's `react` may say (StageFlow.reactProblems).
 REACT_WORDS = ("fire", "ice")
+# LevelGeometry's SEAM: what two footprints may share and still only touch (the W3 fix round's
+# s-s2 overlap) and how far a cover's edge may miss a cell it holds whole (d-m1).
+GEOMETRY_SEAM = 1e-6
 SHORTCUT_ID_MAX = unlocks_cap("MAX_ID_LENGTH")
 
 
 def react_problems(layout, problem):
     """StageFlow.reactProblems (L2-34, L2-36), after the secrets: `shortcuts` is a list whose
     entries have a unique id of at most Unlocks.MAX_ID_LENGTH bytes and finite x, y, z, sx, sy, sz,
-    the sizes above 0 (the L2 W2 fix round's s-m3); a block's `react` is "fire" or "ice" and the
-    block collides; its `opens` names a shortcut."""
+    the sizes above 0 (the L2 W2 fix round's s-m3); a block's `react` is "fire" or "ice", a fire
+    block collides and an ice block does not and opens nothing (L2-52); its `opens` names a
+    shortcut; only a block that does not collide (deep water, ice or not: the W3 fix round's Q3)
+    has a `landing`, a point (L2-58); and two ice blocks' footprints may touch but not overlap (s-s2,
+    LevelGeometry.Overlap), each pair once in the layout's order, after every block's own lines."""
     ids = set()
     shortcuts = layout.get("shortcuts")
     if shortcuts is not None and not isinstance(shortcuts, list):
@@ -5475,34 +5483,53 @@ def react_problems(layout, problem):
                 problem(f"{where} reacts and does not collide")
         if opens is not None and (not isinstance(opens, str) or opens not in ids):
             problem(f"{where} opens {opens}, which names no shortcut")
-        # L2-58: a deep water block's landing, where a fall into it comes back.
+        # L2-58: a deep water block's landing, where a fall through it comes back (Q3: CreekUp too).
         landing = block.get("landing")
         if landing is not None:
-            if react != "ice":
-                problem(f"{where} has a landing and is not ice")
+            if block.get("collide") is not False:
+                problem(f"{where} has a landing and collides")
             if not isinstance(landing, dict):
                 problem(f"{where}: landing is {landing}, not a point")
             else:
                 for key in ("x", "y", "z"):
                     if not finite(landing.get(key)):
                         problem(f"{where}: landing.{key} is {landing.get(key)}, not a number")
+    # s-s2: a block whose footprint is not finite numbers is LevelGeometry's to refuse.
+    seen = []
+    for index, block in enumerate(blocks, 1):
+        if not isinstance(block, dict) or block.get("react") != "ice":
+            continue
+        if not all(finite(block.get(key)) for key in ("x", "z", "sx", "sz")):
+            continue
+        where = f"block {block['name'] if isinstance(block.get('name'), str) else index}"
+        for other, other_where in seen:
+            if ice_overlap(other, block):
+                problem(f"{other_where} and {where} are ice and overlap")
+        seen.append((block, where))
+
+
+def ice_overlap(a, b):
+    """LevelGeometry.Overlap: two footprints share an area (more than GEOMETRY_SEAM on both axes);
+    touching along an edge or at a corner is not overlapping."""
+    return (abs(a["x"] - b["x"]) < (a["sx"] + b["sx"]) / 2 - GEOMETRY_SEAM
+            and abs(a["z"] - b["z"]) < (a["sz"] + b["sz"]) / 2 - GEOMETRY_SEAM)
 
 
 def ice_cells(layout, ice):
     """L2-53, LevelGeometry.Pieces' ice pieces: every block whose `react` is "ice" divided evenly
-    into ceil(side / ice.cell) cells per axis (WorldReact.Cells); a cell whose centre lies under a
-    colliding block or a secret whose top stands over the water's top (Road2, the island: the
-    footprint holds the centre, edges included) gets no piece. [{block, i, k, box (x0, x1, z0, z1),
-    top (the water's top + ice.lift), water (the water's top)}] in the layout's block order, i
-    across x, k across z. `ice` nil (Combat.json levels.react.ice absent): no cells."""
+    into ceil(side / ice.cell) cells per axis (WorldReact.Cells); a cell the footprint of ONE
+    colliding block or secret whose top stands over the water's top holds whole (its edges
+    included, to GEOMETRY_SEAM: the W3 fix round's d-m1) gets no piece; a cell it holds in part is
+    built (its top lies inside the cover where they meet). [{block, i, k, box (x0, x1, z0, z1), top
+    (the water's top + ice.lift), water (the water's top)}] in the layout's block order, i across x,
+    k across z. `ice` nil (Combat.json levels.react.ice absent): no cells."""
     if not isinstance(ice, dict) or not finite(ice.get("cell")) or ice["cell"] <= 0:
         return []
     size, lift = ice["cell"], ice.get("lift") or 0
     blocks = [b for b in layout.get("blocks") or [] if isinstance(b, dict)]
-    covers = [(b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2, b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2,
-               b["y"] + b["sy"] / 2, b) for b in blocks if b.get("collide") is not False]
-    covers += [(s["x"] - s["sx"] / 2, s["x"] + s["sx"] / 2, s["z"] - s["sz"] / 2, s["z"] + s["sz"] / 2,
-                s["y"] + s["sy"] / 2, s) for s in layout.get("secrets") or []]
+    # (x, z, sx, sz, top) as LevelGeometry builds them: every colliding block, every secret.
+    covers = [(b["x"], b["z"], b["sx"], b["sz"], b["y"] + b["sy"] / 2) for b in blocks if b.get("collide") is not False]
+    covers += [(s["x"], s["z"], s["sx"], s["sz"], s["y"] + s["sy"] / 2) for s in layout.get("secrets") or []]
     found = []
     for b in blocks:
         if b.get("react") != "ice":
@@ -5514,7 +5541,8 @@ def ice_cells(layout, ice):
         for i in range(nx):
             for k in range(nz):
                 cx, cz = x0 + wx * (i + 0.5), z0 + wz * (k + 0.5)
-                if any(c[5] is not b and c[0] <= cx <= c[1] and c[2] <= cz <= c[3] and c[4] > water for c in covers):
+                if any(c[4] > water and abs(cx - c[0]) + wx / 2 <= c[2] / 2 + GEOMETRY_SEAM
+                       and abs(cz - c[1]) + wz / 2 <= c[3] / 2 + GEOMETRY_SEAM for c in covers):
                     continue
                 found.append({"block": b.get("name") or b["look"], "i": i, "k": k,
                               "box": (x0 + wx * i, x0 + wx * (i + 1), z0 + wz * k, z0 + wz * (k + 1)),
@@ -5525,9 +5553,11 @@ def ice_cells(layout, ice):
 def frozen_layout(layout, ice):
     """L2-60 (h): the layout with every ice block frozen whole, as a reach model sees it: a colliding
     block of the same footprint and name, look "ice", its top at the water's top + ice.lift and
-    ice.thickness deep (its react and landing gone). The cells a colliding block or secret covers
-    lie under that solid, so the whole block stands for its cells. The layout itself when `ice` is
-    not a table (no ice: the water stays deep)."""
+    ice.thickness deep (its react and landing gone). A cell is left unbuilt only where one colliding
+    block or secret holds it whole (ice_cells, the W3 fix round's d-m1), so the built pieces and
+    those covers fill the block; check_levels' check_ice holds that (its "fill" line), and only then
+    does the whole block stand for its cells. The layout itself when `ice` is not a table (no ice:
+    the water stays deep)."""
     if not isinstance(ice, dict):
         return layout
     lift, deep = ice.get("lift") or 0, ice.get("thickness") or 1

@@ -254,13 +254,106 @@ RESCUE_BODY = re.compile(r"(?ms)^local function rescueFallen\(.*?^end$")
 W3_LINES = {
     "reactIce": '\tif element == "ice" then\n\t\tfreeze(element, fx, rules)\n\t\treturn\n\tend\n',
     "reactFreeze": "freeze(element, fx, rules)",
+    # The fix round's d-m5: the two numbers come from WorldReact.IceReach, and go to Freeze in
+    # that order.
+    "freezeReach": "local reachDown, ahead = WorldReact.IceReach(if rules ~= nil then rules.ice else nil)",
     "freezeCall": "WorldReact.Freeze(cells, element, fx, reachDown, ahead)",
     "freezeTold": "\t\tfor _, listener in state.reactedListeners do\n\t\t\tlistener(event)\n",
-    "rescueLanding": "local landing = StageFlow.FallLanding(plan, flow, root.Position, rescue.outside)",
+    # The fix round's s-M1: where the body last stood goes with where it is.
+    "rescueStood": "local stood = WeaponService.LastGround(player)",
+    "rescueLanding": "local landing = StageFlow.FallLanding(plan, flow, root.Position, stood, rescue.outside)",
     "rescueTarget": "\t\t\tif landing ~= nil then\n\t\t\t\ttarget = landing\n",
     "quakeAlias": "MECHANICS.frostQuake = MECHANICS.earthquake",
 }
-FREEZE_FLOOR = ("\t\tpart.CanCollide = true\n", "\t\tpart.CanQuery = true\n", "part:SetAttribute(CONST.ICE_ATTRIBUTE, true)")
+# The fix round's s-m1: a frozen cell is shown by `showIce` with WorldReact.IceLook's floor.
+FREEZE_SHOW = "showIce(entry.part, WorldReact.IceLook(true, entry.shown))"
+# The W3 fix round (s-m1, s-s3, d-m5, s-M1, c-m3, Q2): the lines that apply the pure answers
+# (WorldReact.IceLook, Reactive, ICE_ATTRIBUTE, SwingStrike; LevelGeometry.SizesOf), read in the one
+# function each belongs to. showIce sets the five properties from the look; construct shows a cell
+# as water, gives it the ground's grip and lists a block by WorldReact.Reactive; React reads no
+# count before its element; LevelService's sizesOf is LevelGeometry.SizesOf's first answer and both
+# builds use it; trackAir records the stood point on the footprint floor's grounded verdict,
+# ForgetMotion and resetAir clear it and LastGround answers it; resolveMelee builds its strike with
+# WorldReact.SwingStrike and sends it to finish() as built.
+SHOW_ICE_BODY = re.compile(r"(?ms)^local function showIce\(.*?^end$")
+SHOW_ICE_LINES = (
+    "\tpart.Transparency = look.transparency\n",
+    "\tpart.CanCollide = look.collide\n",
+    "\tpart.CanQuery = look.collide\n",
+    "\tpart.CastShadow = look.shadow\n",
+    "\tpart:SetAttribute(WorldReact.ICE_ATTRIBUTE, look.frozen)\n",
+)
+CONSTRUCT_BODY = re.compile(r"(?ms)^local function construct\(.*?^end$")
+GRIP_BODY = re.compile(r"(?ms)^local function gripOf\(.*?^end$")
+SIZES_BODY = re.compile(r"(?ms)^local function sizesOf\(.*?^end$")
+OWN_ICE_ATTRIBUTE = re.compile(r'"Ice"|\bICE_ATTRIBUTE\s*=')
+W3_FIX_LINES = {
+    "constructWater": "showIce(part, WorldReact.IceLook(false, shown))",
+    "constructGripAsk": "grip = gripOf(looks)",
+    "constructGrip": "part.CustomPhysicalProperties = grip",
+    "constructReactive": 'if react ~= nil and piece.role == "block" and WorldReact.Reactive(react) then',
+    "gripLook": "looks[CONST.GRIP_LOOK]",
+    "gripReturn": "return PhysicalProperties.new(material)",
+    "gripConst": 'GRIP_LOOK = "ground",',
+    "sizesCall": "local sizes, iceRefused = LevelGeometry.SizesOf(expeditions, rules)",
+    "sizesReturn": "\treturn sizes\n",
+    "sizesUsed": "= sizesOf(expeditions, rules)",
+    "trackStood": "\t\tif footing ~= nil and not SwingGate.IsAir(position.Y - footing, offset) then\n\t\t\tshooter.stood = position\n",
+    "stoodCleared": "shooter.stood = nil",
+    "lastGround": "return if shooter ~= nil then shooter.stood else nil",
+    "meleeSwing": "local swing = WorldReact.SwingStrike(variant, step, origin, heading)",
+}
+TRACK_AIR_BODY = re.compile(r"(?ms)^local function trackAir\(.*?^end$")
+RESET_AIR_BODY = re.compile(r"(?ms)^local function resetAir\(.*?^end$")
+FORGET_BODY = re.compile(r"(?ms)^function WeaponService\.ForgetMotion\(.*?^end$")
+LAST_GROUND_BODY = re.compile(r"(?ms)^function WeaponService\.LastGround\(.*?^end$")
+MELEE_BODY = re.compile(r"(?ms)^local function resolveMelee\(.*?^end$")
+# The fix round's c-m3, client half (the client agent's report, fix-client.md): the three client
+# copies of a swing's strike are WorldReact.SwingStrike's, read inside the function each lives in,
+# and handed on as built (the frost ghost and puff, the phone's auto-swing at water with only its
+# arc cut to controls.iceAutoDegrees, the early hitbox effect).
+FROST_FX = "src/combat/client/Controllers/FrostFx.luau"
+FEEDBACK = "src/combat/client/Controllers/FeedbackController.luau"
+CLIENT_STRIKES = {
+    "frost": (
+        FROST_FX,
+        re.compile(r"(?ms)^function FrostFx\.OnSwing\(.*?^end$"),
+        "local strike = WorldReact.SwingStrike(swing.variant, swing.step, swing.origin, swing.heading)",
+        ("ReactFx.PredictFreeze(strike, swing.seq)",),
+    ),
+    "phone": (
+        INPUT_CONTROLLER,
+        re.compile(r"(?ms)^local function autoIceStrike\(.*?^end$"),
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading)",
+        ("strike.arcDegrees = math.min(arc, cone)", "\treturn strike\n"),
+    ),
+    "hitbox": (
+        FEEDBACK,
+        re.compile(r"(?ms)^function FeedbackController\.PredictSwing\(.*?^end$"),
+        "local predicted = WorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading)",
+        (
+            "local shape = predicted.shape\n",
+            "origin = predicted.origin,",
+            "direction = predicted.direction,",
+            "size = predicted.size,",
+            "arcDegrees = predicted.arcDegrees,",
+            "width = predicted.width,",
+        ),
+    ),
+}
+# The strike's geometry, each line once: the locals the candidates use and finish()'s fields.
+MELEE_FX_LINES = (
+    "local arcDegrees = swing.arcDegrees\n",
+    "local range = swing.size\n",
+    "local shape: Types.HitShape = swing.shape\n",
+    "width = swing.width or 0,",
+    "shape = swing.shape,",
+    "origin = swing.origin,",
+    "direction = swing.direction,",
+    "size = swing.size,",
+    "arcDegrees = swing.arcDegrees,",
+    "width = swing.width,",
+)
 COMBAT_PROJECT = "combat.project.json"
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
@@ -337,11 +430,12 @@ def source_reading(repo: Path) -> dict:
         "reactIce": react_text.count(W3_LINES["reactIce"]),
         "reactFreeze": react_text.count(W3_LINES["reactFreeze"]),
         "freezeFound": freeze is not None,
+        "freezeReach": freeze_text.count(W3_LINES["freezeReach"]),
         "freezeCall": freeze_text.count(W3_LINES["freezeCall"]),
         "freezeTold": freeze_text.count(W3_LINES["freezeTold"]),
-        # Each of the three once: the smallest count times three, so one missing reads short.
-        "freezeFloor": 3 * min(freeze_text.count(line) for line in FREEZE_FLOOR),
+        "freezeShow": freeze_text.count(FREEZE_SHOW),
         "rescueFound": rescue is not None,
+        "rescueStood": rescue_text.count(W3_LINES["rescueStood"]),
         "rescueLanding": rescue_text.count(W3_LINES["rescueLanding"]),
         "rescueTarget": rescue_text.count(W3_LINES["rescueTarget"]),
         "quakeAlias": text(ABILITY_SERVICE).count(W3_LINES["quakeAlias"]),
@@ -353,6 +447,74 @@ def source_reading(repo: Path) -> dict:
         "groundFloor": ground_floor,
         "wiring": wiring,
         "w3": w3,
+        "w3fix": w3_fix_reading(text, react_text, freeze_text),
+    }
+
+
+def w3_fix_reading(text, react_text: str, freeze_text: str) -> dict:
+    """The W3 fix round's lines (W3_FIX_LINES and the bodies above), counted in the function each
+    belongs to. `text` reads a repo file (empty when missing); React's and freeze's bodies are
+    source_reading's."""
+    level = text(LEVEL_SERVICE)
+    weapon = text(WEAPON_SERVICE)
+
+    def body(pattern, source: str) -> str:
+        found = pattern.search(source)
+        return found.group(0) if found else ""
+
+    show = body(SHOW_ICE_BODY, level)
+    construct = body(CONSTRUCT_BODY, level)
+    grip = body(GRIP_BODY, level)
+    sizes = body(SIZES_BODY, level)
+    track = body(TRACK_AIR_BODY, weapon)
+    reset = body(RESET_AIR_BODY, weapon)
+    forget = body(FORGET_BODY, weapon)
+    last = body(LAST_GROUND_BODY, weapon)
+    melee = body(MELEE_BODY, weapon)
+    lines = W3_FIX_LINES
+    ice_branch = react_text.find(W3_LINES["reactIce"])
+    # Per client copy: its function found, the SwingStrike line in it (and in the whole file, so a
+    # second hand-built copy elsewhere in the file reads 2 calls or 0), and the smallest count of the
+    # lines that pass the strike on.
+    client = {}
+    for name, (rel, pattern, call, uses) in CLIENT_STRIKES.items():
+        source = text(rel)
+        inside = body(pattern, source)
+        client[name] = {
+            "found": bool(inside),
+            "call": inside.count(call),
+            "calls": len(re.findall(r"\bWorldReact\.SwingStrike\(", source)),
+            "uses": min(inside.count(line) for line in uses),
+        }
+    return {
+        "client": client,
+        "reactFound": bool(react_text) and ice_branch >= 0,
+        # React's text before its ice branch: no `#` (no count of the reactive list or the ice).
+        "reactCounted": react_text[: max(ice_branch, 0)].count("#") if ice_branch >= 0 else -1,
+        "showFound": bool(show),
+        "showLines": min(show.count(line) for line in SHOW_ICE_LINES),
+        "showLinesMost": max(show.count(line) for line in SHOW_ICE_LINES),
+        # Every call of showIce in the file (its own definition is `showIce(part: BasePart, ...`).
+        "showCalls": len(re.findall(r"\bshowIce\((?!part: )", level)),
+        "attributeOwn": len(OWN_ICE_ATTRIBUTE.findall(level)),
+        "constructWater": construct.count(lines["constructWater"]),
+        "constructGripAsk": construct.count(lines["constructGripAsk"]),
+        "constructGrip": construct.count(lines["constructGrip"]),
+        "constructReactive": construct.count(lines["constructReactive"]),
+        "gripLook": grip.count(lines["gripLook"]),
+        "gripReturn": grip.count(lines["gripReturn"]),
+        "gripConst": level.count(lines["gripConst"]),
+        "freezeShow": freeze_text.count(FREEZE_SHOW),
+        "sizesCall": sizes.count(lines["sizesCall"]),
+        "sizesReturn": sizes.count(lines["sizesReturn"]),
+        "sizesUsed": level.count(lines["sizesUsed"]),
+        "trackStood": track.count(lines["trackStood"]),
+        "forgetStood": forget.count(lines["stoodCleared"]),
+        "resetStood": reset.count(lines["stoodCleared"]),
+        "lastGround": last.count(lines["lastGround"]),
+        "meleeSwing": melee.count(lines["meleeSwing"]),
+        "meleeFx": min(melee.count(line) for line in MELEE_FX_LINES),
+        "meleeFxMost": max(melee.count(line) for line in MELEE_FX_LINES),
     }
 
 

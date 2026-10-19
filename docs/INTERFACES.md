@@ -15638,3 +15638,11 @@ The aim rule's lead goes along `PositionRing.Motion`'s way (the server's measure
 
 Decisions: `docs/MISSIONS_DESIGN.md` §22 (W3 paragraph). Contract of record: `docs/prompts/l2-w3-contract.md`
 (rulings L2-48 onward, §13 Ben's answers and the lead's rulings), on branch `l2-w3`. No `Main.server.luau` change.
+
+As built after the W3 fix round (lead, 2026-10-19): `WorldReact.ICE_ATTRIBUTE` ("Ice"), `SwingStrike(variant, step,
+origin, heading)` (one strike shape for the server's melee and every client copy), `IceReach`, `IceLook`,
+`Reactive`; `LevelGeometry.SizesOf/IceOf/Length/Overlap`; `StageFlow.Landing/FallLanding(plan, [state,] position,
+stood, margin)` judge a fall by where the body last stood (`WeaponService.LastGround`) and by where it is, against
+every deep (non-colliding) block with a `landing` grown by `rescue.outside`; ice blocks may touch but not overlap;
+a cell is skipped only when a cover holds all of it; frozen cells keep ground grip; `controls.iceAutoDegrees` 34
+(phone auto-swing at water only, never airborne).

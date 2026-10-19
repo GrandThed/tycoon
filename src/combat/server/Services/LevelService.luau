@@ -32,7 +32,11 @@
 -- ice to WorldReact.Freeze, and each cell it names turns into floor where it lies (shown in its
 -- look, collidable, met by rays and the camera), `Ice` true, and the OnReacted listeners are told
 -- (event "frozen"). No Part is made mid-run; the ice stays until Clear. Ice blocks are not in the
--- reactive list (no `React`/`Heat` attribute), so nothing of W2's fire path sees them.
+-- reactive list (no `React`/`Heat` attribute), so nothing of W2's fire path sees them. The W3 fix
+-- round (s-m1, d-m5): what a cell shows, which numbers freeze reads, which blocks are reactive and
+-- the sizes the level is built with are WorldReact's and LevelGeometry's pure answers, which the
+-- harness loads; this file only applies them. A frozen cell grips like the ground (Q2): it keeps
+-- the Ice look, not the Ice material's slide.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -89,9 +93,10 @@ local CONST = {
 	-- attributes, the element (set at build) and the share of the way it has gone (0 to 1).
 	REACT_ATTRIBUTE = "React",
 	HEAT_ATTRIBUTE = "Heat",
-	-- L2-53: an ice cell's Part attribute, false as built and true once frozen (ReactFx and the
-	-- phone's auto-swing read it).
-	ICE_ATTRIBUTE = "Ice",
+	-- The fix round's Q2: the look whose material's grip a frozen cell takes (its own look's Ice
+	-- material slides). Without that look, or with a material the engine does not know, the cell
+	-- keeps its look's own grip (one warn).
+	GRIP_LOOK = "ground",
 	TEXT_FACES = table.freeze({
 		Enum.NormalId.Front,
 		Enum.NormalId.Back,
@@ -180,72 +185,46 @@ local function applyLook(part: BasePart, looks: Looks?, name: string): ()
 	part.Transparency = if type(transparency) == "number" then transparency else 0
 end
 
--- A length the config gave: a positive, finite number. nil for anything else.
-local function lengthOf(value: number?): number?
-	if type(value) == "number" and value > 0 and value < math.huge then
-		return value
-	end
-	return nil
-end
-
--- A config size, { x, y, z } studs. nil when the key is absent or is not three positive
--- numbers: no size lives in code, so the Part it sizes is then not built.
-local function sizeOf(value: { number }?): LevelGeometry.Size?
-	if type(value) ~= "table" then
-		return nil
-	end
-	local sx, sy, sz = lengthOf(value[1]), lengthOf(value[2]), lengthOf(value[3])
-	if sx ~= nil and sy ~= nil and sz ~= nil then
-		return { sx = sx, sy = sy, sz = sz }
-	end
-	return nil
-end
-
--- L2-53: Combat.json levels.react.ice as LevelGeometry builds the cells: a cell and a thickness that
--- are positive finite numbers and a finite lift. nil (one warn when the key is there) for
--- anything else: an ice block is then deep water with no cells.
-local function iceOf(react: Types.CombatReactConfig?): LevelGeometry.IceSize?
-	local ice: any = if type(react) == "table" then react.ice else nil
-	if ice == nil then
-		return nil
-	end
-	local lift = if type(ice) == "table" then ice.lift else nil
-	local cell = if type(ice) == "table" then lengthOf(ice.cell) else nil
-	local thickness = if type(ice) == "table" then lengthOf(ice.thickness) else nil
-	if
-		cell ~= nil
-		and thickness ~= nil
-		and type(lift) == "number"
-		and math.abs(lift) < math.huge
-	then
-		return { cell = cell, lift = lift, thickness = thickness }
-	end
-	warnOnce(
-		"size:ice",
-		"[LevelService] Combat.json levels.react.ice has no positive cell and thickness and a "
-			.. "finite lift; deep water is built with no ice"
-	)
-	return nil
-end
-
--- What LevelGeometry needs beyond the layout, all of it from the config: the fence's thickness,
--- the ground's depth, a checkpoint marker's and a fire marker's size (Combat.json levels), a
--- secret's sign's size (Expeditions.json sign). A length the config does not give is left out: with no
--- fenceThickness a camp has no fence, and with no floorThickness LevelGeometry refuses a
--- layout that has a camp (and says so) and builds a lobby's blocks as its layout writes them.
+-- What LevelGeometry needs beyond the layout, all of it from the config (LevelGeometry.SizesOf:
+-- the fence's thickness, the ground's depth, the markers', a sign's and the ice cells' sizes).
+-- Says once when levels.react.ice is there and refused: deep water is then built with no ice.
 local function sizesOf(
 	expeditions: Types.ExpeditionsConfig?,
 	rules: Types.CombatLevelsConfig?
 ): LevelGeometry.Sizes
-	local sign = if expeditions ~= nil then expeditions.sign else nil
-	return {
-		fence = (if rules ~= nil then lengthOf(rules.fenceThickness) else nil) or 0,
-		floor = if rules ~= nil then lengthOf(rules.floorThickness) else nil,
-		checkpoint = sizeOf(if rules ~= nil then rules.checkpointSize else nil),
-		fire = sizeOf(if rules ~= nil then rules.fireMarkerSize else nil),
-		sign = sizeOf(if type(sign) == "table" then sign.size else nil),
-		ice = iceOf(if rules ~= nil then rules.react else nil),
-	}
+	local sizes, iceRefused = LevelGeometry.SizesOf(expeditions, rules)
+	if iceRefused then
+		warnOnce(
+			"size:ice",
+			"[LevelService] Combat.json levels.react.ice has no positive cell and thickness and a "
+				.. "finite lift; deep water is built with no ice"
+		)
+	end
+	return sizes
+end
+
+-- The fix round's Q2: the grip a frozen cell has, the CONST.GRIP_LOOK look's material's (nil =
+-- none known: the cell keeps its own look's, with one warn).
+local function gripOf(looks: Looks?): PhysicalProperties?
+	local look = if looks ~= nil then looks[CONST.GRIP_LOOK] else nil
+	local material = if type(look) == "table" then materialOf(look.material) else nil
+	if material == nil then
+		warnOnce(
+			"grip",
+			`[LevelService] Expeditions.json has no look "{CONST.GRIP_LOOK}" with a known material; frozen ice keeps its own grip`
+		)
+		return nil
+	end
+	return PhysicalProperties.new(material)
+end
+
+-- L2-53, L2-54: an ice cell's Part shown as WorldReact.IceLook says (water or floor).
+local function showIce(part: BasePart, look: WorldReact.IceLook): ()
+	part.Transparency = look.transparency
+	part.CanCollide = look.collide
+	part.CanQuery = look.collide
+	part.CastShadow = look.shadow
+	part:SetAttribute(WorldReact.ICE_ATTRIBUTE, look.frozen)
 end
 
 -- Says once which Parts a layout asks for and the config gives no size for.
@@ -302,7 +281,7 @@ local function addText(part: BasePart, text: string, expeditions: Types.Expediti
 	local density: number? = nil
 	local textColor: Color3? = nil
 	if type(sign) == "table" then
-		density = lengthOf(sign.pixelsPerStud)
+		density = LevelGeometry.Length(sign.pixelsPerStud)
 		textColor = colorOf(sign.textColor, "Expeditions.json sign.textColor")
 	else
 		warnOnce("sign", "[LevelService] Expeditions.json has no sign block; texts are unstyled")
@@ -359,6 +338,9 @@ local function construct(
 	local looks: Looks? = if expeditions ~= nil then expeditions.looks else nil
 	local camps: { [string]: CampParts } = {}
 	local walls = BarrierGroups.Ensure()
+	-- Asked once, and only of a level with ice (a lobby has none, and no warn is owed for it).
+	local grip: PhysicalProperties? = nil
+	local gripAsked = false
 	for _, piece in pieces do
 		local isBarrier = piece.role == "barrier"
 		if isBarrier and not walls then
@@ -428,12 +410,16 @@ local function construct(
 			addText(part, text, expeditions)
 		end
 		if piece.role == "ice" then
-			-- Hidden and walked through until a frost swing freezes it (the `collide = false`
-			-- above already let bodies, rays and touches through).
+			-- Water until a frost swing freezes it: its look's transparency is what it shows then.
 			local shown = part.Transparency
-			part.Transparency = 1
-			part.CastShadow = false
-			part:SetAttribute(CONST.ICE_ATTRIBUTE, false)
+			showIce(part, WorldReact.IceLook(false, shown))
+			if not gripAsked then
+				gripAsked = true
+				grip = gripOf(looks)
+			end
+			if grip ~= nil then
+				part.CustomPhysicalProperties = grip
+			end
 			table.insert(ice, {
 				name = piece.name,
 				part = part :: BasePart,
@@ -443,7 +429,7 @@ local function construct(
 		end
 		local react = piece.react
 		-- L2-53: an ice block is water; its cells are what freezes, so it is not reactive.
-		if react ~= nil and react ~= "ice" and piece.role == "block" then
+		if react ~= nil and piece.role == "block" and WorldReact.Reactive(react) then
 			part:SetAttribute(CONST.REACT_ATTRIBUTE, react)
 			part:SetAttribute(CONST.HEAT_ATTRIBUTE, 0)
 			table.insert(reactive, {
@@ -660,18 +646,17 @@ function LevelService.OnReacted(callback: (Reacted) -> ()): ()
 end
 
 -- L2-54: a strike of `element` on the built level's ice cells. WorldReact.Freeze decides which
--- freeze (Combat.json levels.react.ice's reachDown and ahead); each one shows its look, collides
--- and is met by rays and the camera (the Default group: players stand on it; the crowd never
--- comes here), its `Ice` attribute turns true and the OnReacted listeners are told. Never yields.
+-- freeze (Combat.json levels.react.ice's reachDown and ahead, read by WorldReact.IceReach); each
+-- one shows as WorldReact.IceLook's floor: its look, collides and is met by rays and the camera
+-- (the Default group: players stand on it; the crowd never comes here), its `Ice` attribute turns
+-- true; and the OnReacted listeners are told. Never yields.
 local function freeze(element: string, fx: WorldReact.Strike, rules: Types.CombatReactConfig?): ()
 	local ice = state.ice
 	if #ice == 0 then
 		return
 	end
-	local frost: any = if rules ~= nil then rules.ice else nil
-	local reachDown = if type(frost) == "table" then frost.reachDown else nil
-	local ahead = if type(frost) == "table" then frost.ahead else nil
-	if type(reachDown) ~= "number" or type(ahead) ~= "number" then
+	local reachDown, ahead = WorldReact.IceReach(if rules ~= nil then rules.ice else nil)
+	if reachDown == nil or ahead == nil then
 		warnOnce(
 			"react:ice",
 			"[LevelService] Combat.json levels.react.ice has no reachDown or ahead; nothing freezes"
@@ -684,12 +669,7 @@ local function freeze(element: string, fx: WorldReact.Strike, rules: Types.Comba
 	end
 	for _, index in WorldReact.Freeze(cells, element, fx, reachDown, ahead) do
 		local entry = ice[index]
-		local part = entry.part
-		part.Transparency = entry.shown
-		part.CastShadow = true
-		part.CanCollide = true
-		part.CanQuery = true
-		part:SetAttribute(CONST.ICE_ATTRIBUTE, true)
+		showIce(entry.part, WorldReact.IceLook(true, entry.shown))
 		local event: Reacted = { name = entry.name, react = element, box = entry.cell.box }
 		for _, listener in state.reactedListeners do
 			listener(event)
@@ -705,17 +685,15 @@ end
 -- only executes: the heated show it on their Part's `Heat` attribute, the gone are destroyed and
 -- the OnReacted listeners told. No "in play" rule (a bramble is not loot). Never yields, never
 -- throws on what the config says. L2-54: a strike of ice goes to `freeze` instead (the ice cells
--- WorldReact.Freeze names), and never down the fire path.
+-- WorldReact.Freeze names), and never down the fire path. The fix round's s-m1: nothing is
+-- counted before the element is known, so no early return can stop the ice while no fire block
+-- stands (both brambles burnt, or left out once the cave is found).
 function LevelService.React(
 	_player: Player,
 	weapon: string,
 	fx: WorldReact.Strike,
 	abilityId: string?
 ): ()
-	local reactive = state.reactive
-	if #reactive == 0 and #state.ice == 0 then
-		return
-	end
 	local config: any = Tuning.Get()
 	local element = WorldReact.StrikeElement(config.weapons, weapon, abilityId)
 	if element == nil then
@@ -727,6 +705,7 @@ function LevelService.React(
 		freeze(element, fx, rules)
 		return
 	end
+	local reactive = state.reactive
 	if #reactive == 0 then
 		return
 	end

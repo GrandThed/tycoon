@@ -21,9 +21,12 @@ and compares what they answer, value by value:
     each line broken once in it is refused alike (the L2 W2 fix round's s-m3 adds a shortcut size
     of 0 or below). L2 W3 (L2-52, L2-58): the same copy given a test pool of deep water (an ice
     block that does not collide, with a landing) is accepted alike, and each of the ice and
-    landing lines broken once in it (it collides, opens a shortcut, a landing on a fire block or on
-    plain water, a landing whose numbers are not finite or that is no point) is refused alike;
+    landing lines broken once in it (it collides, opens a shortcut, a landing on a fire block,
+    a landing whose numbers are not finite or that is no point) is refused alike;
     the W2 case "a bramble that reacts to ice" became a refusal (it collides and opens a shortcut).
+    The W3 fix round: a landing on plain deep water is accepted (Q3) and one on a block that
+    collides refused; a second pool touching the first, or plain deep water overlapping it, is
+    accepted, and a second pool overlapping it refused (s-s2), alike.
   * `StageFlow.Validate`'s L1b lines: the residents, the spots, which camps lock, the population
     gate and the three new `levels` numbers, each broken once in a copy of the shipped level, its
     layout or Combat.json, refused alike; and (the L1c fix round's data m2) every broken copy of
@@ -433,22 +436,47 @@ def pool_change(change):
     return apply
 
 
+def second_pool(dx, dz, react="ice"):
+    """The W3 fix round's s-s2: a second test pool of the first's size, `dx`, `dz` from its centre,
+    reacting to `react` (None = plain deep water)."""
+    def change(l, p, s):
+        extra = {"name": "TestPool2", "look": "water", "x": p["x"] + dx, "y": 400, "z": p["z"] + dz, "sx": 14,
+                 "sy": 2, "sz": 14, "collide": False}
+        if react is not None:
+            extra["react"] = react
+        l["blocks"].append(extra)
+    return pool_change(change)
+
+
 L2W3_ACCEPTED = (
     ("a test pool of deep water with a landing", pool_change(lambda l, p, s: None)),
     ("a pool with no landing", pool_change(lambda l, p, s: p.pop("landing"))),
     ("deep water that reacts to nothing", pool_change(lambda l, p, s: (p.pop("react"), p.pop("landing")))),
+    # The W3 fix round's Q3: any block a body falls through may carry a landing (CreekUp's).
+    ("plain deep water with a landing", pool_change(lambda l, p, s: p.pop("react"))),
+    # s-s2: ice footprints may touch; only ice builds a frozen top.
+    ("a second pool touching the first along an edge", second_pool(14, 0)),
+    ("a second pool touching the first at a corner", second_pool(14, 14)),
+    ("plain deep water overlapping a pool", second_pool(7, 0, None)),
 )
 L2W3_REFUSALS = (
-    ("a pool that collides", pool_change(lambda l, p, s: p.pop("collide"))),
-    ("a pool with collide true", pool_change(lambda l, p, s: p.__setitem__("collide", True))),
+    # No landing on these two: since the W3 fix round's Q3 a landing on a colliding block is a line of
+    # its own, and with one each case would be refused without the "is ice and collides" line.
+    ("a pool that collides, with no landing", pool_change(lambda l, p, s: (p.pop("collide"), p.pop("landing")))),
+    ("a pool with collide true, with no landing",
+     pool_change(lambda l, p, s: (p.__setitem__("collide", True), p.pop("landing")))),
     ("a pool that opens a shortcut", pool_change(lambda l, p, s: p.__setitem__("opens", s["id"]))),
     ("a fire block with a landing", pool_change(lambda l, p, s: (p.__setitem__("react", "fire"),
                                                                  p.__setitem__("collide", True)))),
-    ("plain water with a landing", pool_change(lambda l, p, s: p.pop("react"))),
+    # The W3 fix round's Q3: a landing on a block that collides (no body falls through it).
+    ("a plain block that collides, with a landing", pool_change(lambda l, p, s: (p.pop("react"), p.pop("collide")))),
     ("a landing whose y is null", pool_change(lambda l, p, s: p["landing"].__setitem__("y", None))),
     ("a landing with no z", pool_change(lambda l, p, s: p["landing"].pop("z"))),
     ("a landing whose x is a string", pool_change(lambda l, p, s: p["landing"].__setitem__("x", "0"))),
     ("a landing that is a string", pool_change(lambda l, p, s: p.__setitem__("landing", "Road2"))),
+    # s-s2: two ice blocks whose footprints overlap.
+    ("a second pool overlapping the first", second_pool(13, 0)),
+    ("a second pool on the first's footprint", second_pool(0, 0)),
 )
 
 

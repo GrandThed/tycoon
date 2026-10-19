@@ -231,14 +231,23 @@ MUTANTS = [
     ("L2 W3: an ice block may open a shortcut", "StageFlow",
      "\t\t\tif opens ~= nil then\n\t\t\t\tproblem(`{where} is ice and opens",
      "\t\t\tif false then\n\t\t\t\tproblem(`{where} is ice and opens"),
+    # Re-aimed by the W3 fix round's Q3: a landing on any block a body falls through.
     ("L2 W3: any block may have a landing", "StageFlow",
-     "\t\t\tif react ~= \"ice\" then\n\t\t\t\tproblem(`{where} has a landing and is not ice`)",
-     "\t\t\tif false then\n\t\t\t\tproblem(`{where} has a landing and is not ice`)"),
+     "\t\t\tif block.collide ~= false then\n\t\t\t\tproblem(`{where} has a landing and collides`)",
+     "\t\t\tif false then\n\t\t\t\tproblem(`{where} has a landing and collides`)"),
     ("L2 W3: a landing's numbers are not checked", "StageFlow",
      "\t\t\t\t\tif not isFinite(landing[key]) then", "\t\t\t\t\tif false then"),
     ("L2 W3: a landing that is no table passes", "StageFlow",
      "\t\t\tif type(landing) ~= \"table\" then\n\t\t\t\tproblem(`{where}: landing is {tostring(landing)}, not a point`)\n\t\t\telse",
      "\t\t\tif false then\n\t\t\telseif type(landing) == \"table\" then"),
+    # The W3 fix round's s-s2: ice footprints may touch but not overlap.
+    ("L2 W3 fix s-s2: ice blocks may overlap", "StageFlow",
+     "if LevelGeometry.Overlap(other.block, block) then", "if false then"),
+    ("L2 W3 fix s-s2: any blocks may overlap", "StageFlow",
+     "\t\tif type(block) ~= \"table\" or block.react ~= \"ice\" then\n\t\t\tcontinue\n\t\tend\n\t\tif\n",
+     "\t\tif type(block) ~= \"table\" then\n\t\t\tcontinue\n\t\tend\n\t\tif\n"),
+    ("L2 W3 fix s-s2: Overlap counts touching", "LevelGeometry",
+     "return math.abs(a.x - b.x) < (a.sx + b.sx) / 2 - SEAM", "return math.abs(a.x - b.x) <= (a.sx + b.sx) / 2 + SEAM"),
 ]
 
 

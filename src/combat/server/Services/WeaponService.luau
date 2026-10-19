@@ -180,6 +180,10 @@ type Shooter = {
 	lastDiveSpeed: number,
 	-- Root Y last frame, for the fall speed measured from positions.
 	lastY: number?,
+	-- The L2 W3 fix round's s-M1: the root where the server last saw this body grounded (its
+	-- footprint's floor within the standing band, SwingGate.IsAir); nil after a server move or
+	-- for a fresh body. The rescue lands a fall by it (LastGround).
+	stood: Vector3?,
 	-- Server-only: draws every pattern seed, so a client can neither pick nor predict one.
 	seedRandom: Random,
 	damageLog: { DamageEntry },
@@ -1110,14 +1114,14 @@ local function resolveMelee(
 	step = if chain ~= nil and #chain > 0 then step % #chain + 1 else 1
 	shooter.combo[weapon] = step
 	local multiplier = if chain ~= nil and chain[step] ~= nil then chain[step] else 1
-	-- Lead ruling: the chain's LAST hit may sweep a different arc (360 = a spin round the root).
-	local arcDegrees = variant.arcDegrees
-	if chain ~= nil and step == #chain and variant.finisherArcDegrees ~= nil then
-		arcDegrees = variant.finisherArcDegrees
-	end
+	-- The L2 W3 fix round's c-m3: the swing's geometry is WorldReact.SwingStrike's, the one the
+	-- client's frost ghost and phone auto-swing build too. Lead ruling: the chain's LAST hit may
+	-- sweep a different arc (finisherArcDegrees; 360 = a spin round the root).
+	local swing = WorldReact.SwingStrike(variant, step, origin, heading)
+	local arcDegrees = swing.arcDegrees
 	local damage = variant.damage * multiplier
-	local range = variant.range
-	local shape: Types.HitShape = variant.shape
+	local range = swing.size
+	local shape: Types.HitShape = swing.shape
 	-- Lead ruling: an airborne swing's arc reaches down to the crowd below (HitShapes.Arc band).
 	-- The tracked flag reads the server's copy, which is still on the ground for a frame or two
 	-- after a take-off the claim already shows: a claim lifted above that copy is airborne too,
@@ -1138,7 +1142,7 @@ local function resolveMelee(
 			range = range,
 			tip = origin + heading * range,
 			arcDegrees = arcDegrees,
-			width = variant.width or 0,
+			width = swing.width or 0,
 			pad = variant.pad,
 			reachDown = reachDown,
 		})
@@ -1160,12 +1164,12 @@ local function resolveMelee(
 		end
 	end
 	finish(shooter.player, weapon, variantKey, tally, {
-		shape = shape,
-		origin = origin,
-		direction = heading,
-		size = range,
-		arcDegrees = arcDegrees,
-		width = variant.width,
+		shape = swing.shape,
+		origin = swing.origin,
+		direction = swing.direction,
+		size = swing.size,
+		arcDegrees = swing.arcDegrees,
+		width = swing.width,
 		-- An airborne arc carries the bottom of its band (origin - airSwingReachDown); nil on
 		-- the ground, so a client knows which band to draw.
 		endPoint = if shape == "arc" and reachDown > 0
@@ -1919,19 +1923,27 @@ local function trackAir(now: number, deltaTime: number): ()
 		if root == nil or humanoid == nil then
 			shooter.airborne = false
 			shooter.lastY = nil
+			shooter.stood = nil
 			PositionRing.Clear(shooter.history)
 			continue
 		end
-		PositionRing.Record(shooter.history, now, root.Position)
+		local position = root.Position
+		PositionRing.Record(shooter.history, now, position)
 		-- Fix round A-1: the air-swing gate's own sample, the one AirSwing feeds on the client.
+		local footing = footprintFloor(position, root, params)
+		local offset = standingOffset(root, humanoid)
 		SwingGate.Observe(
 			shooter.airSwing,
-			root.Position.Y,
+			position.Y,
 			root.AssemblyLinearVelocity.Y,
-			footprintFloor(root.Position, root, params),
-			standingOffset(root, humanoid),
+			footing,
+			offset,
 			VitalsService.IsDown(player)
 		)
+		-- The L2 W3 fix round's s-M1: where the body last stood, on the same footprint floor.
+		if footing ~= nil and not SwingGate.IsAir(position.Y - footing, offset) then
+			shooter.stood = position
+		end
 		local floorY = floorBelow(root, params)
 		local height = if floorY ~= nil then root.Position.Y - floorY else math.huge
 		local airborne = height > standingOffset(root, humanoid) + CONST.AIRBORNE_MARGIN_STUDS
@@ -1970,6 +1982,7 @@ local function resetAir(shooter: Shooter): ()
 	shooter.diveSpeed = 0
 	shooter.lastDiveSpeed = 0
 	shooter.lastY = nil
+	shooter.stood = nil
 	shooter.airSwing = SwingGate.New()
 	PositionRing.Clear(shooter.history)
 end
@@ -2124,6 +2137,7 @@ function WeaponService.AddPlayer(player: Player): ()
 		diveSpeed = 0,
 		lastDiveSpeed = 0,
 		lastY = nil,
+		stood = nil,
 		seedRandom = Random.new(),
 		damageLog = {},
 		lastHits = 0,
@@ -2219,14 +2233,24 @@ end
 
 -- The server itself just moved this player's body (a rescue, a release from the lobby pad):
 -- the jump is not the player's motion, and left in the position ring it would read as up to
--- originLagMaxSeconds of capped claim slack. Clears that history and nothing else. A fresh
--- character needs no call: PrepareCharacter already clears it. No-op for a player without
--- weapons, and so before any player has been added.
+-- originLagMaxSeconds of capped claim slack. Clears that history, and (the L2 W3 fix round's
+-- s-M1) where the body last stood, which is not where it now is: a fall before it stands again
+-- is judged by where it is. A fresh character needs no call: PrepareCharacter already clears
+-- both. No-op for a player without weapons, and so before any player has been added.
 function WeaponService.ForgetMotion(player: Player): ()
 	local shooter = state.shooters[player]
 	if shooter ~= nil then
 		PositionRing.Clear(shooter.history)
+		shooter.stood = nil
 	end
+end
+
+-- The L2 W3 fix round's s-M1: the root where the server last saw `player`'s body grounded (on
+-- the air tracking's footprint floor), for the rescue's landing (StageFlow.FallLanding). nil for a
+-- player without weapons, a fresh body that has not stood yet, or one the server just moved.
+function WeaponService.LastGround(player: Player): Vector3?
+	local shooter = state.shooters[player]
+	return if shooter ~= nil then shooter.stood else nil
 end
 
 -- Every live projectile ends where it is (an empty end strike, so clients stop their flights):

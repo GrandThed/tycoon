@@ -7,6 +7,15 @@
 -- round each ring and sink away. Feedback draws each ring's sphere strike on top. Abilities never
 -- freeze water (WorldReact.StrikeElement): this is a look only. Returns its builder; the parent
 -- module explains the timing rule and the low-end gate.
+--
+-- Fix round (Q4, c-s1): it draws the configured `count` of rings, whatever their radius (one at
+-- 32 studs as tuned), so its shards are spaced along each ring (LOOK.shardGap studs apart, capped
+-- for all rings together) rather than counted per ring, and a shard stands only where a floor
+-- lies under it: one downward ray per shard at build (on Forest Road's 16-wide road most of a
+-- 32-stud ring is over the void or the creek's open water, which no ray meets). The rings and the
+-- front still draw whole, because they are the strike's area.
+
+local Workspace = game:GetService("Workspace")
 
 local uiFolder = script.Parent.Parent.Parent:WaitForChild("UI")
 local Theme = require(uiFolder:WaitForChild("Theme"))
@@ -43,7 +52,10 @@ local positive = Shared.positive
 local nonNegative = Shared.nonNegative
 local particles = Shared.particles
 local bigSegments = Shared.bigSegments
+local LIFT = Shared.LIFT
+local FLOOR_PROBE_UP = Shared.FLOOR_PROBE_UP
 local groundOf = Pool.groundOf
+local worldParams = Pool.worldParams
 local takePart = Pool.takePart
 local takeParts = Pool.takeParts
 local takeEmitter = Pool.takeEmitter
@@ -63,11 +75,18 @@ local LOOK = {
 	markWidth = 0.4,
 	markTransparency = 0.05,
 	markSeconds = 0.5,
-	shardsPerRing = 10,
-	shardsPerRingLowEnd = 5,
+	-- Studs of ring between two shards (Earthquake's ten cracks round its 9-stud ring); a
+	-- low-end device draws half as many.
+	shardGap = 5.6,
+	shardGapLowEnd = 11.2,
+	shardsMin = 4, -- per ring
+	shardsMax = 40, -- all rings together
+	shardsMaxLowEnd = 20,
+	shardSpread = 0.4, -- a share of the gap a shard may stray along the ring
+	shardFloorDrop = 3, -- studs a shard's foot may sit under the ring (a step down); deeper = none
 	shardWidth = 0.5,
 	shardHeight = 2.2,
-	shardJitter = 0.35, -- radians round the ring, and a share of the height
+	shardJitter = 0.35, -- a share of the height
 	shardTilt = 0.35, -- radians outward
 	shardRise = 0.1,
 	shardHold = 0.7,
@@ -81,6 +100,21 @@ local LOOK = {
 	mistPoints = 16,
 	mistPerPoint = 2,
 }
+
+-- Where a shard planted at `point` (on the ring, at the cast's floor height) stands: the floor
+-- found from FLOOR_PROBE_UP above it down to LOOK.shardFloorDrop under it, lifted; nil when
+-- there is none (the void, open water, a drop).
+local function footAt(point: Vector3, params: RaycastParams): Vector3?
+	local hit = Workspace:Raycast(
+		point + UP * FLOOR_PROBE_UP,
+		Vector3.new(0, -(FLOOR_PROBE_UP + LOOK.shardFloorDrop), 0),
+		params
+	)
+	if hit == nil then
+		return nil
+	end
+	return Vector3.new(point.X, hit.Position.Y + LIFT, point.Z)
+end
 
 local function buildFrostQuake(cast: Cast, def: Def, kit: Kit): (Step?, StrikeHook?)
 	local delay = nonNegative(def.delaySeconds)
@@ -130,19 +164,28 @@ local function buildFrostQuake(cast: Cast, def: Def, kit: Kit): (Step?, StrikeHo
 
 	local shards: { Shard } = {}
 	local rng = Random.new(cast.seq)
-	local perRing = if lowEnd then LOOK.shardsPerRingLowEnd else LOOK.shardsPerRing
+	local shardGap = if lowEnd then LOOK.shardGapLowEnd else LOOK.shardGap
+	local budget = math.max((if lowEnd then LOOK.shardsMaxLowEnd else LOOK.shardsMax) // rings, 1)
+	local params = worldParams()
 	for ring = 1, rings do
+		local spaced = math.max(math.round(TAU * radii[ring] / shardGap), LOOK.shardsMin)
+		local perRing = math.min(spaced, budget)
+		local spread = LOOK.shardSpread * TAU / perRing
 		for index = 1, perRing do
-			local angle = TAU * (index - 1) / perRing
-				+ rng:NextNumber(-LOOK.shardJitter, LOOK.shardJitter)
-			local outward = around(angle)
+			-- Both draws come before the floor test, so every client strays each shard alike.
+			local angle = TAU * (index - 1) / perRing + rng:NextNumber(-spread, spread)
 			local height = LOOK.shardHeight
 				* (1 + rng:NextNumber(-LOOK.shardJitter, LOOK.shardJitter))
+			local outward = around(angle)
+			local foot = footAt(centre + outward * radii[ring], params)
+			if foot == nil then
+				continue
+			end
 			local part = takePart(kit, Enum.PartType.Block, shardColor, Enum.Material.Ice)
 			table.insert(shards, {
 				part = part,
 				ring = ring,
-				base = centre + outward * radii[ring],
+				base = foot,
 				outward = outward,
 				height = height,
 			})

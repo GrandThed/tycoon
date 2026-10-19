@@ -3,10 +3,13 @@
 -- LevelGeometry.Pieces' ice pieces, StageFlow.Validate's ice and landing lines (L2-52, L2-58),
 -- Plan's waters with Landing and FallLanding (L2-58), the shipped Forest Road (a crossing frozen
 -- swing by swing to the island, the shrine behind ice) and the lines that act on these, read as
--- text (LevelService.React's ice branch, the rescue's landing, Frost Quake's launcher). Appended
+-- text (LevelService.React's ice branch, the rescue's landing, Frost Quake's launcher). The fix
+-- round (docs/prompts/l2-w3-fix-round.md) adds LevelGeometry.SizesOf and Overlap, WorldReact's
+-- SwingStrike, IceReach, IceLook, Reactive and ICE_ATTRIBUTE, the whole-cell cover rule, the
+-- landing judged by where the body last stood, and the lines that apply all of them. Appended
 -- last by run_harness.py, so every local of the earlier files is in scope (vec, check, load, L1,
 -- W2). Everything hangs off the W3 table (the 200-local limit) and every group runs behind
--- L1.group. LevelService, WaveService and AbilityService cannot be loaded here: they execute what
+-- L1.group. LevelService, WaveService and WeaponService cannot be loaded here: they execute what
 -- these decide.
 
 print("L2 W3: ice, the frost hammer, deep water and the island shrine (WorldReact, Pieces, Landing)")
@@ -33,6 +36,11 @@ end
 -- An ice cell's piece box whose centre is (x, z) and whose top is `top`, 1 deep.
 function W3.cell(x: number, z: number, top: number): any
 	return { x = x, y = top - 0.5, z = z, sx = 6, sy = 1, sz = 6 }
+end
+
+-- Does `cover`'s footprint hold all of `box`'s (edges included, to 1e-6)?
+function W3.holds(cover: any, box: any): boolean
+	return math.abs(box.x - cover.x) + box.sx / 2 <= cover.sx / 2 + 1e-6 and math.abs(box.z - cover.z) + box.sz / 2 <= cover.sz / 2 + 1e-6
 end
 
 function W3.cellsTests(): ()
@@ -71,9 +79,9 @@ end
 L1.group("l2w3 cellsTests", W3.cellsTests)
 
 -- A layout with deep water: Water (react ice) 21 x 14 at top -1, a bridge over its west column
--- (top 0), a sunk block under its east column (top -2: below the water's top), a secret on the
--- middle of its second row, a fire bramble, Mist (walked through, over the water's top) on the
--- first row's middle, and Pool, deep water with no react.
+-- (top 0), a sunk block under its east column (top -2: below the water's top), a chest (a secret)
+-- exactly over the middle of its second row, a fire bramble, Mist (walked through, over the
+-- water's top) holding the first row's middle cell whole, and Pool, deep water with no react.
 function W3.layout(): any
 	return {
 		version = 1,
@@ -87,17 +95,32 @@ function W3.layout(): any
 			{ name = "Sunk", look = "ground", x = 7, y = -4, z = 0, sx = 7, sy = 4, sz = 14 },
 			{ name = "Bramble", look = "bramble", x = 0, y = 4, z = -12, sx = 12, sy = 8, sz = 2, react = "fire" },
 			{ name = "Pool", look = "water", x = 40, y = -3, z = 0, sx = 14, sy = 4, sz = 14, collide = false },
-			{ name = "Mist", look = "water", x = 0, y = 2, z = -3.5, sx = 2, sy = 2, sz = 2, collide = false },
+			{ name = "Mist", look = "water", x = 0, y = 2, z = -3.5, sx = 7, sy = 2, sz = 7, collide = false },
 		},
 		secrets = {
-			{ id = "chest", needs = "ice", x = 0, y = 1, z = 3.5, sx = 2, sy = 2, sz = 2, sign = { x = 0, y = 0, z = -20, text = "" } },
+			{ id = "chest", needs = "ice", x = 0, y = 1, z = 3.5, sx = 7, sy = 2, sz = 7, sign = { x = 0, y = 0, z = -20, text = "" } },
 		},
 		route = {},
 	}
 end
 
+-- The names of the ice pieces Pieces builds of `layout` (nil when it refuses).
+function W3.iceNames(layout: any, sizes: any): any
+	local pieces = W3.Geo.Pieces(layout, sizes, 600)
+	if pieces == nil then
+		return nil
+	end
+	local names = {}
+	for _, piece in pieces do
+		if piece.role == "ice" then
+			names[piece.name] = true
+		end
+	end
+	return names
+end
+
 function W3.piecesTests(): ()
-	print(" LevelGeometry.Pieces: an ice block's cells (L2-53)")
+	print(" LevelGeometry.Pieces: an ice block's cells (L2-53; the fix round's d-m1: a whole cell covered)")
 	local Geo = W3.Geo
 	local sizes = { fence = 1, floor = 4, ice = { cell = 7, lift = 0.2, thickness = 1 } }
 	local pieces, refusal = Geo.Pieces(W3.layout(), sizes, 600)
@@ -117,12 +140,12 @@ function W3.piecesTests(): ()
 			end
 		end
 	end
-	-- 3 x 2 cells: column 1 under the bridge (top 0 > -1), column 3 over the sunk block (top -2),
-	-- row 2's middle cell under the chest (top 2).
+	-- 3 x 2 cells: column 1 under the bridge (top 0 > -1, exactly its footprint), column 3 over the
+	-- sunk block (top -2), row 2's middle cell exactly under the chest (top 2).
 	check(#ice == 3, `six cells, three covered: three pieces ({#ice})`)
-	check(byName.Ice_Water_1 == nil and byName.Ice_Water_4 == nil, "no cell under the bridge (a colliding block over the water's top)")
+	check(byName.Ice_Water_1 == nil and byName.Ice_Water_4 == nil, "no cell under the bridge (a colliding block over the water's top, holding each cell whole, its edges included)")
 	check(byName.Ice_Water_3 ~= nil and byName.Ice_Water_6 ~= nil, "a block below the water's top covers nothing")
-	check(byName.Ice_Water_5 == nil and byName.Ice_Water_2 ~= nil, "a secret over the water's top covers its cell")
+	check(byName.Ice_Water_5 == nil and byName.Ice_Water_2 ~= nil, "a secret over the water's top that holds a whole cell covers it")
 	check(byName.Ice_Water_2 ~= nil, "a block nothing meets (Mist) covers nothing, however high")
 	local piece = byName.Ice_Water_2
 	if piece ~= nil then
@@ -141,16 +164,29 @@ function W3.piecesTests(): ()
 	check(others == 0, "only the ice block has cells (not Pool's deep water, not the fire bramble)")
 	check(byName.Water ~= nil and byName.Water.collide == false and byName.Water.react == "ice", "the water itself is a block that does not collide and keeps its react")
 
-	-- The bridge's edge holds a centre on it (edges included, as sim_range.ice_cells).
-	local edge = W3.layout()
-	edge.blocks[3].sx = 0.5
-	edge.blocks[3].x = -3.5 - 0.25 - 3.5
-	local onEdge = Geo.Pieces(edge, sizes, 600)
-	local edgeNames = {}
-	for _, each in onEdge or {} do
-		edgeNames[each.name] = true
+	-- d-m1: a cover that holds a cell's centre but not all of it leaves the cell built (a slit of
+	-- water no swing could close otherwise); a cover exactly the cell's footprint, or short of it by
+	-- less than a seam, covers it; one short by a thousandth of a stud does not.
+	local function bridged(x: number, sx: number): any
+		local layout = W3.layout()
+		layout.blocks[3].x = x
+		layout.blocks[3].sx = sx
+		return W3.iceNames(layout, sizes) or {}
 	end
-	check(onEdge ~= nil and edgeNames.Ice_Water_1 == nil, "a cell centre on a cover's edge is covered")
+	local strip = bridged(-7.25, 0.5)
+	check(strip.Ice_Water_1 and strip.Ice_Water_4, "a cover holding only the cell's centre covers nothing: the cell is built")
+	local exact = bridged(-7, 7)
+	check(not exact.Ice_Water_1 and not exact.Ice_Water_4, "a cover exactly the cell's footprint covers it (its edges included)")
+	local seam = bridged(-7 + 5e-8, 7 - 1e-7)
+	check(not seam.Ice_Water_1, "a cover short of the cell by less than a seam (1e-6) covers it")
+	local short = bridged(-7 + 0.0005, 7 - 0.001)
+	check(short.Ice_Water_1 and short.Ice_Water_4, "a cover a thousandth of a stud short of the cell's west edge covers nothing")
+	local wide = bridged(-7, 9)
+	check(not wide.Ice_Water_1 and not wide.Ice_Water_4 and wide.Ice_Water_2, "a cover wider than the cell covers it, and not the next cell it only reaches into")
+	local shallow = W3.layout()
+	shallow.secrets[1].sz = 6.99
+	local shallowNames = W3.iceNames(shallow, sizes) or {}
+	check(shallowNames.Ice_Water_5, "a cover that holds the cell across X but not along Z covers nothing (Z judged whole too)")
 
 	local plain = Geo.Pieces(W3.layout(), { fence = 1, floor = 4 }, 600)
 	local none = 0
@@ -168,6 +204,109 @@ function W3.piecesTests(): ()
 	check(tiny == nil and said ~= nil and string.find(said, "Water", 1, true) ~= nil and string.find(said, "maxParts", 1, true) ~= nil, `a cell far under the water's size is refused before a cell is made, by name ({tostring(said)})`)
 end
 L1.group("l2w3 piecesTests", W3.piecesTests)
+
+-- The fix round's s-m1: the sizes a level is built with, LevelGeometry.SizesOf (LevelService asks
+-- it and warns on its second answer).
+function W3.sizesTests(): ()
+	print(" LevelGeometry.SizesOf: the sizes a level is built with (the fix round's s-m1)")
+	local Geo = W3.Geo
+	local expeditions = { sign = { size = { 6, 2, 0.5 } } }
+	local function rules(ice: any): any
+		return { fenceThickness = 1, floorThickness = 4, checkpointSize = { 2, 6, 2 }, fireMarkerSize = { 3, 1, 3 }, react = { fireHits = 6, pad = 0.5, ice = ice } }
+	end
+	local sizes, refused = Geo.SizesOf(expeditions, rules({ cell = 7, lift = 0.2, thickness = 4, reachDown = 6, ahead = 4 }))
+	local ice = sizes.ice
+	check(ice ~= nil and ice.cell == 7 and ice.lift == 0.2 and ice.thickness == 4 and refused == false, "levels.react.ice: its cell, lift and thickness; nothing refused")
+	check(sizes.fence == 1 and sizes.floor == 4 and sizes.checkpoint ~= nil and sizes.checkpoint.sy == 6 and sizes.fire ~= nil and sizes.fire.sx == 3 and sizes.sign ~= nil and sizes.sign.sz == 0.5, "the fence, the floor, the markers and the sign, from the config")
+	local zeroLift = Geo.SizesOf(expeditions, rules({ cell = 7, lift = 0, thickness = 1 }))
+	local belowLift = Geo.SizesOf(expeditions, rules({ cell = 7, lift = -0.5, thickness = 1 }))
+	check(zeroLift.ice ~= nil and zeroLift.ice.lift == 0 and belowLift.ice ~= nil and belowLift.ice.lift == -0.5, "a lift of 0 or under 0 (finite) is a lift")
+	local bad = {
+		{ "a cell of 0", { cell = 0, lift = 0.2, thickness = 1 } },
+		{ "an endless cell", { cell = math.huge, lift = 0.2, thickness = 1 } },
+		{ "no thickness", { cell = 7, lift = 0.2 } },
+		{ "a thickness under 0", { cell = 7, lift = 0.2, thickness = -1 } },
+		{ "a NaN lift", { cell = 7, lift = W3.NAN, thickness = 1 } },
+		{ "an endless lift", { cell = 7, lift = math.huge, thickness = 1 } },
+		{ "a lift that is a word", { cell = 7, lift = "0.2", thickness = 1 } },
+		{ "ice that is a word", "ice" },
+	}
+	for _, case in bad do
+		local got, said = Geo.SizesOf(expeditions, rules(case[2]))
+		check(got.ice == nil and said == true, `{case[1]}: no cells, and refused (LevelService says so once)`)
+	end
+	local absent, quiet = Geo.SizesOf(expeditions, rules(nil))
+	check(absent.ice == nil and quiet == false, "no levels.react.ice: no cells, nothing refused")
+	local noReact, still = Geo.SizesOf(expeditions, { floorThickness = 4 })
+	check(noReact.ice == nil and still == false and noReact.fence == 0 and noReact.floor == 4 and noReact.checkpoint == nil, "no react: no cells; no fenceThickness: 0; no checkpointSize: none")
+	local bare, said = Geo.SizesOf(nil, nil)
+	check(bare.fence == 0 and bare.floor == nil and bare.sign == nil and bare.ice == nil and said == false, "no config at all: nothing sized, nothing refused")
+	local words = Geo.SizesOf({ sign = { size = { 6, "2", 0.5 } } }, { floorThickness = W3.NAN, checkpointSize = { 2, 0, 2 } })
+	check(words.sign == nil and words.floor == nil and words.checkpoint == nil, "a size with a word, a NaN or a 0 in it: none")
+	check(Geo.Length(4) == 4 and Geo.Length(0) == nil and Geo.Length(-1) == nil and Geo.Length(W3.NAN) == nil and Geo.Length(math.huge) == nil and Geo.Length("4") == nil, "Length: a positive finite number, else none")
+	local real = Geo.SizesOf(L1.real.map, L1.real.rules)
+	local frost = L1.real.rules.react ~= nil and L1.real.rules.react.ice or nil
+	check(real.ice ~= nil and frost ~= nil and real.ice.cell == frost.cell and real.ice.lift == frost.lift and real.ice.thickness == frost.thickness, "the shipped Combat.json: its ice sizes as written")
+end
+L1.group("l2w3 sizesTests", W3.sizesTests)
+
+-- The fix round's c-m3, d-m5, s-m1 and s-s3: the pure answers the server and the client share.
+function W3.sharedTests(): ()
+	print(" WorldReact: SwingStrike, IceReach, IceLook, Reactive, ICE_ATTRIBUTE (the fix round)")
+	local R = W3.React
+	check(R.ICE_ATTRIBUTE == "Ice", `the ice cell attribute is "Ice" ({tostring(R.ICE_ATTRIBUTE)})`)
+	-- SwingStrike (c-m3).
+	local variant = { label = "Test", kind = "melee", shape = "arc", range = 9, arcDegrees = 120, pad = 1.5, width = 2, cap = 8, damage = 38, rate = 1.5, knockback = 22, launch = 6, chain = { 1, 1, 1.8 }, finisherArcDegrees = 360 }
+	local origin, heading = vec(1, 3, 2), vec(0, 0, -1)
+	for step = 1, 3 do
+		local strike = R.SwingStrike(variant, step, origin, heading)
+		local arc = if step == 3 then 360 else 120
+		check(strike.shape == "arc" and L1.same(strike.origin, origin) and L1.same(strike.direction, heading) and strike.size == 9 and strike.width == 2 and strike.arcDegrees == arc, `step {step}: an arc at the origin along the heading, size = range (not range + pad), width, {arc} degrees`)
+	end
+	local plain = table.clone(variant)
+	plain.finisherArcDegrees = nil
+	check(R.SwingStrike(plain, 3, origin, heading).arcDegrees == 120, "no finisherArcDegrees: the chain's last step sweeps the arc too")
+	local single = table.clone(variant)
+	single.chain = nil
+	check(R.SwingStrike(single, 1, origin, heading).arcDegrees == 120, "no chain: never the finisher (step 1 is not the last of none)")
+	local empty = table.clone(variant)
+	empty.chain = {}
+	check(R.SwingStrike(empty, 1, origin, heading).arcDegrees == 120, "an empty chain: never the finisher")
+	local spear = { label = "Test", kind = "melee", shape = "capsule", range = 12, width = 3, pad = 1, cap = 4, damage = 30, rate = 1, knockback = 10, launch = 2 }
+	local thrust = R.SwingStrike(spear, 1, origin, heading)
+	check(thrust.shape == "capsule" and thrust.size == 12 and thrust.width == 3 and thrust.arcDegrees == nil, "a capsule swing: its shape, range and width, no arc")
+	local hammer = FIXTURES.proving.weapons.frostHammer.variants.A
+	local frost = R.SwingStrike(hammer, 1, origin, heading)
+	check(frost.shape == "arc" and frost.size == hammer.range and frost.arcDegrees == hammer.arcDegrees, "the shipped Frost Hammer's first swing: its range and its arc")
+	local spin = FIXTURES.proving.weapons.spinblade
+	local spinA = spin ~= nil and spin.variants.A or nil
+	if spinA ~= nil and spinA.finisherArcDegrees ~= nil and spinA.chain ~= nil then
+		check(R.SwingStrike(spinA, #spinA.chain, origin, heading).arcDegrees == spinA.finisherArcDegrees and R.SwingStrike(spinA, 1, origin, heading).arcDegrees == spinA.arcDegrees, "the shipped Spinblade: its finisher's spin on the last step only")
+	end
+	-- IceReach (d-m5).
+	local reachDown, ahead = R.IceReach({ cell = 7, lift = 0.2, thickness = 4, reachDown = 6, ahead = 4 })
+	check(reachDown == 6 and ahead == 4, `reachDown then ahead, read from their own keys ({tostring(reachDown)}, {tostring(ahead)})`)
+	local onlyDown, noAhead = R.IceReach({ reachDown = 6, lift = 0.2 })
+	check(onlyDown == 6 and noAhead == nil, "no ahead: none (not lift or another key)")
+	local wordDown, stillAhead = R.IceReach({ reachDown = "6", ahead = 4 })
+	check(wordDown == nil and stillAhead == 4, "a reachDown that is a word: none")
+	local a, b = R.IceReach(nil)
+	local c, d = R.IceReach("ice")
+	check(a == nil and b == nil and c == nil and d == nil, "no table: none")
+	local shipped = L1.real.rules.react ~= nil and L1.real.rules.react.ice or nil
+	local realDown, realAhead = R.IceReach(shipped)
+	check(shipped ~= nil and realDown == shipped.reachDown and realAhead == shipped.ahead, "the shipped Combat.json: its reachDown and ahead")
+	-- IceLook (s-m1).
+	local water = R.IceLook(false, 0.3)
+	check(water.transparency == 1 and water.collide == false and water.shadow == false and water.frozen == false, "water: hidden, met by nothing, no shadow, Ice false")
+	local floor = R.IceLook(true, 0.3)
+	check(floor.transparency == 0.3 and floor.collide == true and floor.shadow == true and floor.frozen == true, "frozen: its look's transparency, met by bodies, rays and the camera, a shadow, Ice true")
+	check(R.IceLook(true, 0).transparency == 0, "an opaque look stays opaque once frozen")
+	-- Reactive (s-m1).
+	check(R.Reactive("fire") and not R.Reactive("ice") and not R.Reactive(nil), "fire is reactive; ice (water whose cells freeze) and no react are not")
+	check(R.Reactive("lava"), "another word is listed as before (Validate refuses it; Need gives it no count)")
+end
+L1.group("l2w3 sharedTests", W3.sharedTests)
 
 function W3.chillsTests(): ()
 	print(" WorldReact.Chills: which ice cell a swing freezes (L2-54)")
@@ -262,10 +401,28 @@ function W3.freezeTests(): ()
 end
 L1.group("l2w3 freezeTests", W3.freezeTests)
 
+-- The fix round's s-s2: two footprints overlap over an area, never by touching.
+function W3.overlapTests(): ()
+	print(" LevelGeometry.Overlap: footprints that touch do not overlap (the fix round's s-s2)")
+	local Geo = W3.Geo
+	local a = { x = 0, y = 0, z = 0, sx = 10, sy = 1, sz = 10 }
+	local function box(x: number, z: number, sx: number?, sz: number?): any
+		return { x = x, y = 5, z = z, sx = sx or 10, sy = 1, sz = sz or 10 }
+	end
+	check(not Geo.Overlap(a, box(10, 0)) and not Geo.Overlap(a, box(0, -10)), "touching along an edge: no")
+	check(not Geo.Overlap(a, box(10, 10)), "touching at a corner: no")
+	check(Geo.Overlap(a, box(9.99, 0)) and Geo.Overlap(box(9.99, 0), a), "a hundredth of a stud over: yes, either way round")
+	check(not Geo.Overlap(a, box(10 - 1e-7, 0)), "less than a seam over: no (rounding)")
+	check(Geo.Overlap(a, box(0, 0, 2, 2)) and Geo.Overlap(a, box(3, 4)), "one inside the other, or crossing: yes")
+	check(not Geo.Overlap(a, box(4, 10.5)) and not Geo.Overlap(a, box(11, 4)), "apart on one axis: no")
+	check(Geo.Overlap(a, { x = 4, y = -50, z = 4, sx = 4, sy = 1, sz = 4 }), "heights are not judged (a footprint is in plan)")
+end
+L1.group("l2w3 overlapTests", W3.overlapTests)
+
 -- Validate's lines on a copy of Forest Road with one test block of its own at the end: every line
 -- that names it.
 function W3.validateTests(): ()
-	print(" StageFlow.Validate: ice and landing lines (L2-52, L2-58)")
+	print(" StageFlow.Validate: ice, landing and overlap lines (L2-52, L2-58; the fix round's Q3, s-s2)")
 	local got = L1.real.resolve("forestRoad")
 	local level, layout = got.level, got.layout
 	if level == nil or layout == nil then
@@ -316,6 +473,7 @@ function W3.validateTests(): ()
 		{ "an ice block that does not collide, with a landing", water() },
 		{ "an ice block with no landing (its falls go to the safe point)", water({ landing = W3.NONE }) },
 		{ "deep water with no react (decorative)", water({ react = W3.NONE, landing = W3.NONE }) },
+		{ "deep water with no react and a landing (the fix round's Q3: CreekUp)", water({ react = W3.NONE }) },
 		{ "an ice block with collide false written", water({ collide = false }) },
 	}
 	for _, case in accepted do
@@ -323,11 +481,11 @@ function W3.validateTests(): ()
 		check(#found == 0, `{case[1]}: accepted ({said(found)})`)
 	end
 	local refused = {
-		{ "an ice block that collides (collide left out)", water({ collide = W3.NONE }), { "block TestWater is ice and collides" } },
-		{ "an ice block with collide true", water({ collide = true }), { "block TestWater is ice and collides" } },
+		{ "an ice block that collides (collide left out)", water({ collide = W3.NONE, landing = W3.NONE }), { "block TestWater is ice and collides" } },
+		{ "an ice block with collide true", water({ collide = true, landing = W3.NONE }), { "block TestWater is ice and collides" } },
 		{ "an ice block that opens a shortcut", water({ opens = "testHole" }), { "block TestWater is ice and opens testHole" } },
-		{ "a fire block with a landing", water({ react = "fire", collide = true }), { "block TestWater has a landing and is not ice" } },
-		{ "deep water with no react and a landing", water({ react = W3.NONE }), { "block TestWater has a landing and is not ice" } },
+		{ "a fire block with a landing", water({ react = "fire", collide = true }), { "block TestWater has a landing and collides" } },
+		{ "a plain block that collides, with a landing", water({ react = W3.NONE, collide = W3.NONE }), { "block TestWater has a landing and collides" } },
 		{ "a fire block that does not collide (W2's line, unchanged)", water({ react = "fire", landing = W3.NONE }), { "block TestWater reacts and does not collide" } },
 		{ "a word that is no element (W2's line)", water({ react = "lava", collide = true, landing = W3.NONE }), { 'block TestWater: react is lava, neither "fire" nor "ice"' } },
 		{ "a landing with a NaN y", water({ landing = { x = 0, y = W3.NAN, z = 0 } }), { "block TestWater: landing.y is ", ", not a number" } },
@@ -340,15 +498,30 @@ function W3.validateTests(): ()
 		local found = lines(case[2])
 		check(says(found, table.unpack(case[3])), `{case[1]}: one line ({said(found)})`)
 	end
-	local both = lines(water({ collide = true, opens = "testHole" }))
+	local both = lines(water({ collide = true, opens = "testHole", landing = W3.NONE }))
 	check(#both == 2, `an ice block that collides and opens a shortcut: both lines ({said(both)})`)
-	local fireBoth = lines(water({ react = "fire" }))
-	check(#fireBoth == 2, `a fire block that does not collide, with a landing: both lines ({said(fireBoth)})`)
+	local landed = lines(water({ collide = true }))
+	check(#landed == 2, `an ice block that collides, with a landing: both lines ({said(landed)})`)
+	local fireLanding = lines(water({ react = "fire" }))
+	check(says(fireLanding, "block TestWater reacts and does not collide"), `a fire block that does not collide, with a landing: one line, the landing is a deep block's ({said(fireLanding)})`)
+
+	-- s-s2: a second ice block beside the test water. Overlapping by a stud: one line naming both;
+	-- touching along an edge or at a corner, or deep water with no react overlapping: none.
+	local function beside(x: number, z: number, react: string?): { string }
+		return lines(water(), function(copyLayout: any)
+			table.insert(copyLayout.blocks, { name = "TestWater2", look = "water", x = x, y = 400, z = z, sx = 14, sy = 2, sz = 14, collide = false, react = react })
+		end)
+	end
+	check(says(beside(13, 20, "ice"), "block TestWater and block TestWater2 are ice and overlap"), `two ice blocks overlapping by a stud: one line ({said(beside(13, 20, "ice"))})`)
+	check(says(beside(0, 20, "ice"), "are ice and overlap"), "two ice blocks on one footprint: one line")
+	check(#beside(14, 20, "ice") == 0 and #beside(0, 34, "ice") == 0, "two ice blocks touching along an edge (the creek into the pond): accepted")
+	check(#beside(14, 34, "ice") == 0, "touching at a corner: accepted")
+	check(#beside(13, 20, nil) == 0, "deep water with no react overlapping an ice block: accepted (only ice builds a frozen top)")
 end
 L1.group("l2w3 validateTests", W3.validateTests)
 
 function W3.landingTests(): ()
-	print(" StageFlow: Plan's waters, Landing and FallLanding (L2-58)")
+	print(" StageFlow: Plan's waters, Landing and FallLanding (L2-58; the fix round's s-M1: where the body stood)")
 	local Flow = W3.Flow
 	local plan: any = {
 		waters = {
@@ -358,7 +531,7 @@ function W3.landingTests(): ()
 		},
 	}
 	local function at(x: number, z: number, margin: number?): any
-		return Flow.Landing(plan, vec(x, -20, z), margin or 4)
+		return Flow.Landing(plan, vec(x, -20, z), nil, margin or 4)
 	end
 	local inside = at(0, 0)
 	check(inside ~= nil and inside.X == 0 and inside.Z == -30, "a fall inside the footprint: its landing")
@@ -369,18 +542,42 @@ function W3.landingTests(): ()
 	check(at(100, 106.01) == nil and at(100, 106) ~= nil, "the margin's edge holds; past it, none")
 	check(at(100, 102.5, -3) == nil and at(100, 102, -3) ~= nil, "a margin under 0 counts as 0")
 	check(at(100, 102.5, W3.NAN) == nil and at(100, 102.5, math.huge) == nil and at(100, 102, W3.NAN) ~= nil, "a margin that is not finite counts as 0")
-	check(Flow.Landing(plan, vec(W3.NAN, -20, 0), 4) == nil and Flow.Landing(plan, vec(0, -20, math.huge), 4) == nil, "a position that is not finite: none")
+	check(Flow.Landing(plan, vec(W3.NAN, -20, 0), nil, 4) == nil and Flow.Landing(plan, vec(0, -20, math.huge), nil, 4) == nil, "a position that is not finite: none")
 	check(at(50, 50) == nil, "over no water: none (the safe point)")
-	check(Flow.Landing({ waters = {} }, vec(0, -20, 0), 4) == nil, "a plan with no waters: none")
+	check(Flow.Landing({ waters = {} }, vec(0, -20, 0), vec(0, 3, 0), 4) == nil, "a plan with no waters: none")
+
+	-- s-M1: judged by where the body last stood, then by where it is.
+	local function from(stood: any, x: number, z: number): any
+		return Flow.Landing(plan, vec(x, -20, z), stood, 4)
+	end
+	local onIce = vec(100, 3, 101.5)
+	local walked = from(onIce, 100, 101.5 + 9)
+	check(walked ~= nil and walked.Z == 90 and from(nil, 100, 101.5 + 9) == nil, "a walk-off 9 studs past the edge: the landing of the water it stood on (by its position alone: none)")
+	local dashed = from(onIce, 129, 101.5)
+	check(dashed ~= nil and dashed.Z == 90, "a dash-off 29 studs out: that landing")
+	local bank = from(vec(103.5, 3, 100), 130, 100)
+	check(bank ~= nil and bank.Z == 90, "a dash off the bank (within the margin of the water): that landing")
+	check(from(vec(106.5, 3, 100), 130, 100) == nil, "off ground further from the water than the margin, falling far from it: none")
+	check(from(vec(50, 3, 50), 50, 60) == nil, "a fall far from any water: none (the safe point)")
+	local stoodFirst = from(onIce, 0, 0)
+	check(stoodFirst ~= nil and stoodFirst.Z == 90, "it stood by one water and fell into another: where it stood decides")
+	local byPosition = from(vec(50, 3, 50), 0, 0)
+	check(byPosition ~= nil and byPosition.Z == -30, "it stood far from any water and fell into one: that water's")
+	local nanStood = from(vec(W3.NAN, 3, 0), 0, 0)
+	check(nanStood ~= nil and nanStood.Z == -30 and from(vec(0, 3, math.huge), 50, 50) == nil, "a stood point that is not finite: judged by the position alone")
+	check(Flow.Landing(plan, vec(W3.NAN, -20, 0), onIce, 4) ~= nil, "a position that is not finite, from where it stood: that landing")
+
 	for _, step in { "fight", "breather" } do
-		check(Flow.FallLanding(plan, { step = step }, vec(0, -20, 0), 4) == nil, `FallLanding in a closed camp's {step}: none (its entry, as before)`)
+		check(Flow.FallLanding(plan, { step = step }, vec(0, -20, 0), onIce, 4) == nil, `FallLanding in a closed camp's {step}: none, wherever it stood (its entry, as before)`)
 	end
 	for _, step in { "travel", "armed", "gate", "over" } do
-		local landed = Flow.FallLanding(plan, { step = step }, vec(0, -20, 0), 4)
+		local landed = Flow.FallLanding(plan, { step = step }, vec(0, -20, 0), nil, 4)
 		check(landed ~= nil and landed.Z == -30, `FallLanding in "{step}": the landing`)
 	end
+	local stoodLanding = Flow.FallLanding(plan, { step = "travel" }, vec(50, -20, 60), onIce, 4)
+	check(stoodLanding ~= nil and stoodLanding.Z == 90, "FallLanding hands where it stood through")
 
-	-- Plan on the fixture layout: the ice block with a landing is a water, nothing else is.
+	-- Plan on the fixture layout: every block a body falls through with a landing is a water.
 	local level = L1.level()
 	local layout = L1.layout()
 	local extra = W3.layout()
@@ -394,14 +591,19 @@ function W3.landingTests(): ()
 	local fireLanding = L1.copy(extra.blocks[5])
 	fireLanding.landing = { x = 1, y = 2, z = 3 }
 	table.insert(layout.blocks, fireLanding)
+	local deep = L1.copy(extra.blocks[6])
+	deep.name = "DeepLanding"
+	deep.landing = { x = 40, y = 0, z = -30 }
+	table.insert(layout.blocks, deep)
 	local made = L1.plan(level, layout, "normal")
 	local waters = made ~= nil and made.waters or {}
-	check(#waters == 1, `one water: the ice block with a landing (not one without, not a fire block with one) ({#waters})`)
-	local one = waters[1]
+	check(#waters == 2, `two waters: the ice block and the deep block with a landing (not one without, not a fire block with one) ({#waters})`)
+	local one, two = waters[1], waters[2]
 	if one ~= nil then
 		check(one.rect.x == 0 and one.rect.z == 0 and one.rect.hx == 10.5 and one.rect.hz == 7, "its rect is the block's footprint")
 		check(one.landing.X == 0 and one.landing.Y == 0 and one.landing.Z == -30, "its landing is the block's")
 	end
+	check(two ~= nil and two.rect.x == 40 and two.landing.X == 40, "deep water with no react and a landing is a water too (the fix round's Q3), in the layout's order")
 	local bare = L1.plan(L1.level(), L1.layout(), "normal")
 	check(bare ~= nil and bare.waters ~= nil and #bare.waters == 0, "a layout with no water: an empty list")
 end
@@ -423,7 +625,7 @@ function W3.realTests(): ()
 	check(type(frost) == "table" and type(frost.reachDown) == "number" and type(frost.ahead) == "number", "Combat.json levels.react.ice has cell, lift, thickness, reachDown and ahead")
 	check(L1.real.rules.react.iceHits == nil, "and no iceHits (L2-54)")
 	local sizes = L1.real.sizes()
-	check(sizes.ice ~= nil, "LevelService builds its cells (sizesOf)")
+	check(sizes.ice ~= nil, "the level is built with its cells (LevelGeometry.SizesOf, as LevelService asks it)")
 	if type(frost) ~= "table" or sizes.ice == nil then
 		return
 	end
@@ -444,8 +646,9 @@ function W3.realTests(): ()
 		check(false, "the shipped layout builds")
 		return
 	end
-	-- Every cell lies in its water, at the ice's height; none under the bridge or the island.
-	local cells, covered, misplaced = {}, {}, {}
+	-- Every cell lies in its water, at the ice's height; none wholly under the bridge or the island
+	-- (the fix round's d-m1: a cell they hold in part is built).
+	local cells, covered, misplaced, byBlock = {}, {}, {}, {}
 	for _, piece in pieces do
 		if piece.role ~= "ice" then
 			continue
@@ -453,34 +656,89 @@ function W3.realTests(): ()
 		local name = string.match(piece.name, "^Ice_(.-)_%d+$")
 		local water = blocks[name or ""]
 		local box = piece.box
-		if water == nil or math.abs(box.x - water.x) > water.sx / 2 or math.abs(box.z - water.z) > water.sz / 2 or not near(box.y + box.sy / 2, water.y + water.sy / 2 + frost.lift) then
+		if water == nil or math.abs(box.x - water.x) > water.sx / 2 or math.abs(box.z - water.z) > water.sz / 2 or not near(box.y + box.sy / 2, water.y + water.sy / 2 + frost.lift) or not near(box.sy, frost.thickness) then
 			table.insert(misplaced, piece.name)
 		end
 		for _, cover in { blocks.Road2, island } do
-			if cover ~= nil and math.abs(box.x - cover.x) <= cover.sx / 2 and math.abs(box.z - cover.z) <= cover.sz / 2 then
+			if cover ~= nil and W3.holds(cover, box) then
 				table.insert(covered, piece.name)
 			end
 		end
 		table.insert(cells, { box = box, frozen = false })
+		if name ~= nil then
+			byBlock[name] = byBlock[name] or {}
+			table.insert(byBlock[name], box)
+		end
 	end
-	check(#cells > 0 and #misplaced == 0, `{#cells} ice cells, each in its water at the ice's height{L1.real.list(misplaced)}`)
-	check(#covered == 0, `none under Road2 or the island{L1.real.list(covered)}`)
+	check(#cells > 0 and #misplaced == 0, `{#cells} ice cells, each in its water at the ice's height and thickness{L1.real.list(misplaced)}`)
+	check(#covered == 0, `none wholly under Road2 or the island{L1.real.list(covered)}`)
+
+	-- d-m1: the ice pieces and the covers (colliding blocks and secrets over the water's top) fill
+	-- each ice block's footprint: sampled every half stud, no point of open water is left that no
+	-- swing could freeze.
+	local covers = {}
+	for _, block in layout.blocks do
+		if block.collide ~= false then
+			table.insert(covers, block)
+		end
+	end
+	for _, secret in layout.secrets or {} do
+		table.insert(covers, secret)
+	end
+	for _, water in ice do
+		local top = water.y + water.sy / 2
+		local own = byBlock[water.name] or {}
+		local over: { any } = {}
+		for _, cover in covers do
+			if cover.y + cover.sy / 2 > top and W3.Geo.Overlap(cover, water) then
+				table.insert(over, cover)
+			end
+		end
+		local holes, first = 0, nil
+		local x0, z0 = water.x - water.sx / 2, water.z - water.sz / 2
+		for i = 0, math.floor(water.sx / 0.5) - 1 do
+			for j = 0, math.floor(water.sz / 0.5) - 1 do
+				local x, z = x0 + 0.25 + i * 0.5, z0 + 0.25 + j * 0.5
+				local filled = false
+				for _, box in own do
+					if math.abs(x - box.x) <= box.sx / 2 and math.abs(z - box.z) <= box.sz / 2 then
+						filled = true
+						break
+					end
+				end
+				if not filled then
+					for _, cover in over do
+						if math.abs(x - cover.x) <= cover.sx / 2 and math.abs(z - cover.z) <= cover.sz / 2 then
+							filled = true
+							break
+						end
+					end
+				end
+				if not filled then
+					holes += 1
+					first = first or `({x}, {z})`
+				end
+			end
+		end
+		check(holes == 0, `{water.name}: its cells and covers fill it ({holes} open points{if first ~= nil then ", the first at " .. first else ""})`)
+	end
 
 	-- The crossing: from Road2's south edge above the creek, swing toward the island, step onto
 	-- the frozen cell nearest it, swing again; the ice must reach the island's edge.
 	local root = L1.real.ROOT
-	local range = FIXTURES.proving.weapons.frostHammer.variants.A.range
-	local arc = FIXTURES.proving.weapons.frostHammer.variants.A.arcDegrees
+	local hammer = FIXTURES.proving.weapons.frostHammer.variants.A
 	local goal = vec(island.x, 0, island.z)
 	local feet = vec(blocks.Creek.x, blocks.Road2.y + blocks.Road2.sy / 2, blocks.Road2.z + blocks.Road2.sz / 2)
 	local swings, reached, firstSwing = 0, false, 0
 	local function touchesIsland(box: any): boolean
 		return math.abs(box.x - island.x) <= island.sx / 2 + box.sx / 2 + 1e-6 and math.abs(box.z - island.z) <= island.sz / 2 + box.sz / 2 + 1e-6
 	end
+	local reachDown, ahead = R.IceReach(frost)
 	for _ = 1, 40 do
 		local origin = feet + vec(0, root, 0)
 		local way = goal - feet
-		local frozen = R.Freeze(cells, "ice", W3.arc(origin, vec(way.X, 0, way.Z), range, arc), frost.reachDown, frost.ahead)
+		-- The swing the server builds (WorldReact.SwingStrike), its first step.
+		local frozen = R.Freeze(cells, "ice", R.SwingStrike(hammer, 1, origin, vec(way.X, 0, way.Z)), reachDown, ahead)
 		swings += 1
 		if swings == 1 then
 			firstSwing = #frozen
@@ -514,14 +772,26 @@ function W3.realTests(): ()
 		return
 	end
 	local margin = L1.real.rescue.outside
-	local pond = blocks.Pond
-	local landing = pond.landing
-	local back = Flow.Landing(plan, vec(pond.x + pond.sx / 2 - 1, layout.killY - 1, pond.z), margin)
-	check(landing ~= nil and back ~= nil and back.X == landing.x and back.Y == landing.y and back.Z == landing.z, "a fall into the pond comes back to its landing")
-	local creekFall = Flow.Landing(plan, vec(blocks.Creek.x, layout.killY - 1, blocks.Creek.z), margin)
-	check(creekFall ~= nil and blocks.Creek.landing ~= nil and creekFall.Z == blocks.Creek.landing.z, "and one into the creek to the creek's")
-	check(Flow.Landing(plan, vec(-447, layout.killY - 1, 0), margin) == nil, "a fall from Road1's gap (the void) goes to the safe point")
-	local footing = landing ~= nil and L1.real.footing(pieces, vec(landing.x, landing.y, landing.z)) or nil
+	local below = layout.killY - 1
+	local function same(point: any, landing: any): boolean
+		return point ~= nil and landing ~= nil and point.X == landing.x and point.Y == landing.y and point.Z == landing.z
+	end
+	local pond, creek, up = blocks.Pond, blocks.Creek, blocks.CreekUp
+	check(same(Flow.Landing(plan, vec(pond.x + pond.sx / 2 - 1, below, pond.z), nil, margin), pond.landing), "a fall into the pond comes back to its landing")
+	check(same(Flow.Landing(plan, vec(creek.x, below, creek.z), nil, margin), creek.landing), "and one into the creek to the creek's")
+	check(up ~= nil and up.landing ~= nil and same(Flow.Landing(plan, vec(up.x, below, up.z - up.sz / 2 + 4), nil, margin), up.landing), "and one into CreekUp, under the bridge, to Road2 by the creek (the fix round's Q3)")
+	check(Flow.Landing(plan, vec(-447, below, 0), nil, margin) == nil and Flow.Landing(plan, vec(-447, below, 12), vec(-436.5, 3, 0), margin) == nil, "a fall from Road1's gap (the void) goes to the safe point, wherever on Road1 it stood")
+	-- s-M1 on the shipped creek: off the frozen creek's east side at walking and at dashing speed.
+	local iceTop = creek.y + creek.sy / 2 + frost.lift
+	local onIce = vec(creek.x + creek.sx / 2 - 0.5, iceTop + root, 50)
+	check(Flow.Landing(plan, vec(creek.x + creek.sx / 2 + 9, below, 50), nil, margin) == nil, `a walk-off 9 studs past the creek's side is outside its margin ({margin}) by its position alone`)
+	check(same(Flow.Landing(plan, vec(creek.x + creek.sx / 2 + 9, below, 50), onIce, margin), creek.landing), "so where it stood on the ice brings it back to the creek's landing")
+	check(same(Flow.Landing(plan, vec(creek.x + creek.sx / 2 + 29, below, 50), onIce, margin), creek.landing), "and a dash-off 29 studs out too")
+	local bridge = vec(up.x, blocks.Road2.y + blocks.Road2.sy / 2 + root, blocks.Road2.z - blocks.Road2.sz / 2 + 0.5)
+	check(same(Flow.Landing(plan, vec(up.x, below, bridge.Z - 29), bridge, margin), up.landing), "a dash off the bridge, north over CreekUp and past it: CreekUp's landing")
+	local farRoad = vec(blocks.Road2.x + blocks.Road2.sx / 2 - 3, blocks.Road2.y + blocks.Road2.sy / 2 + root, 7)
+	check(Flow.Landing(plan, vec(farRoad.X, below, 16), farRoad, margin) == nil, "a walk-off Road2's far end, by no water: the safe point")
+	local footing = pond.landing ~= nil and L1.real.footing(pieces, vec(pond.landing.x, pond.landing.y, pond.landing.z)) or nil
 	check(footing ~= nil, `the landing stands on a solid top ({footing and footing.name})`)
 
 	-- The shrine pays behind ice; the Frost Hammer is found later.
@@ -555,7 +825,7 @@ end
 L1.group("l2w3 realTests", W3.realTests)
 
 -- The lines that act on these verdicts (none of their files loads here), read as text by
--- run_harness.py (FIXTURES.source.w3).
+-- run_harness.py (FIXTURES.source.w3 and .w3fix).
 function W3.wiringTests(): ()
 	print(" The lines that act on Freeze, FallLanding and Frost Quake, read as text")
 	local w = FIXTURES.source.w3
@@ -564,10 +834,36 @@ function W3.wiringTests(): ()
 		return
 	end
 	check(w.reactIce == 1 and w.reactFreeze == 1, `LevelService.React sends a strike of ice to freeze, once ({w.reactIce}, {w.reactFreeze})`)
-	check(w.freezeFound and w.freezeCall == 1, `freeze hands the cells to WorldReact.Freeze with levels.react.ice's reachDown and ahead ({w.freezeFound}, {w.freezeCall})`)
-	check(w.freezeFloor == 3 and w.freezeTold == 1, `each frozen cell collides, is met by rays and says Ice, and the listeners are told ({w.freezeFloor}, {w.freezeTold})`)
-	check(w.rescueFound and w.rescueLanding == 1 and w.rescueTarget == 1, `the rescue asks StageFlow.FallLanding with player.rescue's outside and goes there ({w.rescueFound}, {w.rescueLanding}, {w.rescueTarget})`)
+	check(w.freezeFound and w.freezeCall == 1 and w.freezeReach == 1, `freeze reads reachDown and ahead with WorldReact.IceReach and hands them to WorldReact.Freeze in that order ({w.freezeFound}, {w.freezeCall}, {w.freezeReach})`)
+	check(w.freezeShow == 1 and w.freezeTold == 1, `each frozen cell shows as IceLook's floor, and the listeners are told ({w.freezeShow}, {w.freezeTold})`)
+	check(w.rescueFound and w.rescueStood == 1 and w.rescueLanding == 1 and w.rescueTarget == 1, `the rescue asks StageFlow.FallLanding with where the body stood and player.rescue's outside, and goes there ({w.rescueFound}, {w.rescueStood}, {w.rescueLanding}, {w.rescueTarget})`)
 	check(w.quakeAlias == 1, `Frost Quake is the Earthquake launcher's entry ({w.quakeAlias})`)
+
+	print(" The fix round's lines that apply WorldReact's and LevelGeometry's answers, read as text")
+	local f = FIXTURES.source.w3fix
+	if f == nil then
+		check(false, "the source reading has a w3fix entry")
+		return
+	end
+	check(f.reactCounted == 0 and f.reactFound, `React counts nothing before it knows the element, so no guard can stop the ice (s-m1) ({f.reactCounted})`)
+	check(f.showFound and f.showLines == 1 and f.showLinesMost == 1, `showIce sets the transparency, CanCollide, CanQuery, the shadow and the Ice attribute from IceLook, once each ({f.showLines}, {f.showLinesMost})`)
+	check(f.showCalls == 2 and f.constructWater == 1 and f.freezeShow == 1, `showIce is called as built (water) and on a freeze (floor), and nowhere else ({f.showCalls}, {f.constructWater}, {f.freezeShow})`)
+	check(f.attributeOwn == 0, `LevelService names no ice attribute of its own: WorldReact.ICE_ATTRIBUTE (s-s3) ({f.attributeOwn})`)
+	check(f.constructReactive == 1, `a block is listed as reactive by WorldReact.Reactive ({f.constructReactive})`)
+	check(f.constructGripAsk == 1 and f.constructGrip == 1 and f.gripLook == 1 and f.gripReturn == 1 and f.gripConst == 1, `a frozen cell grips like the ground look's material, not the Ice material (Q2) ({f.constructGripAsk}, {f.constructGrip}, {f.gripLook}, {f.gripReturn}, {f.gripConst})`)
+	check(f.sizesCall == 1 and f.sizesReturn == 1 and f.sizesUsed == 2, `LevelService builds the lobby and the level with LevelGeometry.SizesOf's sizes ({f.sizesCall}, {f.sizesReturn}, {f.sizesUsed})`)
+	check(f.trackStood == 1 and f.forgetStood == 1 and f.resetStood == 1 and f.lastGround == 1, `WeaponService records where a body stood on its footprint floor, forgets it on a server move and a fresh body, and answers it (s-M1) ({f.trackStood}, {f.forgetStood}, {f.resetStood}, {f.lastGround})`)
+	check(f.meleeSwing == 1 and f.meleeFx == 1 and f.meleeFxMost == 1, `resolveMelee's strike is WorldReact.SwingStrike's, sent to finish() as built (c-m3) ({f.meleeSwing}, {f.meleeFx}, {f.meleeFxMost})`)
+	-- c-m3's client half: the three client copies.
+	local said = {
+		frost = "FrostFx.OnSwing: the frost ghost and puff",
+		phone = "InputController.autoIceStrike: the phone's auto-swing at water (only its arc cut to iceAutoDegrees)",
+		hitbox = "FeedbackController.PredictSwing: the early hitbox effect",
+	}
+	for name, label in said do
+		local c = f.client ~= nil and f.client[name] or nil
+		check(c ~= nil and c.found and c.call == 1 and c.calls == 1 and c.uses >= 1, `{label} builds its strike with WorldReact.SwingStrike, the file's only one, and hands it on as built ({c and c.found}, {c and c.call}, {c and c.calls}, {c and c.uses})`)
+	end
 end
 L1.group("l2w3 wiringTests", W3.wiringTests)
 

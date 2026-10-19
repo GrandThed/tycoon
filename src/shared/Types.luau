@@ -2048,6 +2048,9 @@ export type RangeControlsConfig = {
 	touchMode: "autoFire" | "tapFire",
 	autoFireAssistDegrees: number,
 	autoSwingPad: number,
+	-- L2 W3 fix round Q1: the widest arc (degrees) touch auto-swing at water sweeps, cut from the
+	-- swing's own, so it can only remove swings. nil = no cut.
+	iceAutoDegrees: number?,
 	tapMaxSeconds: number,
 	tapMaxPixels: number,
 	tapBufferSeconds: number,
@@ -2625,8 +2628,9 @@ export type LevelBlock = {
 	-- `layout.shortcuts` entry a found shortcut leaves this block out for (the leader's save, L2-36).
 	react: string?,
 	opens: string?,
-	-- L2-58, an "ice" block only: where a body that fell through this water is put back (feet,
-	-- world studs; StageFlow.Landing), outside a closed camp's fight. nil = the run's safe point.
+	-- L2-58, a block that does not collide only (deep water, ice or not: the W3 fix round's Q3):
+	-- where a body that fell through this water, or off ground beside it, is put back (feet, world
+	-- studs; StageFlow.Landing), outside a closed camp's fight. nil = the run's safe point.
 	landing: { x: number, y: number, z: number }?,
 }
 -- L2-36: a shortcut's trigger box (world centre and size, studs). A standing fighter's root inside

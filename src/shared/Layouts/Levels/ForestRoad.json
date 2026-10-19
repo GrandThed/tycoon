@@ -280,7 +280,18 @@
 		},
 		{ "name": "Road1", "look": "path", "x": -447, "y": -2, "z": 0, "sx": 22, "sy": 4, "sz": 16 },
 		{ "name": "Road2", "look": "path", "x": -382, "y": -2, "z": 0, "sx": 84, "sy": 4, "sz": 16 },
-		{ "name": "CreekUp", "look": "water", "x": -400, "y": -3, "z": -11, "sx": 20, "sy": 4, "sz": 38, "collide": false },
+		{
+			"name": "CreekUp",
+			"look": "water",
+			"x": -400,
+			"y": -3,
+			"z": -11,
+			"sx": 20,
+			"sy": 4,
+			"sz": 38,
+			"collide": false,
+			"landing": { "x": -385, "y": 0, "z": -2 }
+		},
 		{
 			"name": "Creek",
 			"look": "water",

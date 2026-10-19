@@ -129,6 +129,72 @@ local function depthOf(value: number?): number?
 	return nil
 end
 
+-- A length the config gave: a positive, finite number. nil for anything else (a word, NaN).
+function LevelGeometry.Length(value: any): number?
+	if type(value) == "number" and value > 0 and value < math.huge then
+		return value
+	end
+	return nil
+end
+
+-- A config size, { x, y, z } studs. nil when the key is absent or is not three positive
+-- numbers: no size lives in code, so the Part it sizes is then not built.
+local function sizeOf(value: any): Size?
+	if type(value) ~= "table" then
+		return nil
+	end
+	local sx = LevelGeometry.Length(value[1])
+	local sy = LevelGeometry.Length(value[2])
+	local sz = LevelGeometry.Length(value[3])
+	if sx ~= nil and sy ~= nil and sz ~= nil then
+		return { sx = sx, sy = sy, sz = sz }
+	end
+	return nil
+end
+
+-- L2-53: Combat.json levels.react.ice as the cells are built: a cell and a thickness that are
+-- positive finite numbers and a finite lift. nil for anything else, and then true when the key
+-- was there (LevelService says so once): an ice block is then deep water with no cells.
+function LevelGeometry.IceOf(react: any): (IceSize?, boolean)
+	local ice: any = if type(react) == "table" then react.ice else nil
+	if ice == nil then
+		return nil, false
+	end
+	if type(ice) ~= "table" then
+		return nil, true
+	end
+	local cell = LevelGeometry.Length(ice.cell)
+	local thickness = LevelGeometry.Length(ice.thickness)
+	local lift = ice.lift
+	if cell ~= nil and thickness ~= nil and type(lift) == "number" and isFinite(lift) then
+		return { cell = cell, lift = lift, thickness = thickness }, false
+	end
+	return nil, true
+end
+
+-- What the config says of the Parts a layout does not size (Sizes), from Expeditions.json `sign`
+-- and Combat.json `levels`; and true when levels.react.ice is there and refused (IceOf). The fix
+-- round's s-m1: here, not in LevelService, so the harness builds the shipped level with the very
+-- sizes the game does (an ice size dropped on the way would leave every pond unfreezable and
+-- every gate green). A length the config does not give is left out: with no fenceThickness a
+-- camp has no fence, and with no floorThickness Pieces refuses a layout that has a camp.
+function LevelGeometry.SizesOf(
+	expeditions: Types.ExpeditionsConfig?,
+	rules: Types.CombatLevelsConfig?
+): (Sizes, boolean)
+	local sign: any = if expeditions ~= nil then expeditions.sign else nil
+	local ice, refused = LevelGeometry.IceOf(if rules ~= nil then rules.react else nil)
+	return {
+		fence = (if rules ~= nil then LevelGeometry.Length(rules.fenceThickness) else nil) or 0,
+		floor = if rules ~= nil then LevelGeometry.Length(rules.floorThickness) else nil,
+		checkpoint = sizeOf(if rules ~= nil then rules.checkpointSize else nil),
+		fire = sizeOf(if rules ~= nil then rules.fireMarkerSize else nil),
+		sign = sizeOf(if type(sign) == "table" then sign.size else nil),
+		ice = ice,
+	},
+		refused
+end
+
 -- Whether the boxes of `under` hold up the whole of `box`, seen from above: its footprint is
 -- cut along every edge of theirs that crosses it, and each cell must lie in one of them. A
 -- block that only rests on something at one end hangs over the void for the rest.
@@ -702,9 +768,12 @@ end
 
 -- L2-53: the ice cells of the ice block at `index` of `blocks` (built at `box`): WorldReact.Cells of
 -- its footprint, each a piece `thickness` deep whose top is `lift` over the water's top, named
--- Ice_<block>_<k> with k the cell's place in Cells' order. A cell whose centre lies in the
--- footprint (its edges included) of a colliding block or a secret that reaches above the water's
--- top (a bridge over the creek, the island in the pond) is not built: that water is never walked on.
+-- Ice_<block>_<k> with k the cell's place in Cells' order. A cell the footprint of one colliding
+-- block or secret that reaches above the water's top holds WHOLE (its edges included, to SEAM) is
+-- not built: that water is never walked on. The fix round's d-m1: a cover that holds only the
+-- cell's centre (the island over the pond's columns beside it) left a slit of water between its
+-- face and the next cell that no swing could close; a cell it holds in part is built, and its top
+-- lies inside the cover where they meet.
 local function iceCells(name: string, box: Box, ice: IceSize, covers: { Box }): { Piece }
 	local top = box.y + box.sy / 2
 	local pieces: { Piece } = {}
@@ -713,8 +782,8 @@ local function iceCells(name: string, box: Box, ice: IceSize, covers: { Box }): 
 		for _, other in covers do
 			if
 				other.y + other.sy / 2 > top
-				and math.abs(cell.x - other.x) <= other.sx / 2
-				and math.abs(cell.z - other.z) <= other.sz / 2
+				and math.abs(cell.x - other.x) + cell.sx / 2 <= other.sx / 2 + SEAM
+				and math.abs(cell.z - other.z) + cell.sz / 2 <= other.sz / 2 + SEAM
 			then
 				covered = true
 				break
@@ -738,6 +807,14 @@ local function iceCells(name: string, box: Box, ice: IceSize, covers: { Box }): 
 		end
 	end
 	return pieces
+end
+
+-- Do two footprints overlap over an area (more than SEAM on both axes)? Touching along an edge
+-- or at a corner is not overlapping. The fix round's s-s2: two ice blocks that overlap would
+-- build two frozen tops at one height on the same ground (StageFlow.Validate refuses them).
+function LevelGeometry.Overlap(a: Box, b: Box): boolean
+	return math.abs(a.x - b.x) < (a.sx + b.sx) / 2 - SEAM
+		and math.abs(a.z - b.z) < (a.sz + b.sz) / 2 - SEAM
 end
 
 -- Every Part a layout becomes, in build order: the blocks; the ice cells of every ice block, in

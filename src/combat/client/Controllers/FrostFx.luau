@@ -9,11 +9,14 @@
 --    none (spec section 10; never gated on Theme.reducedMotion, which every touch device has):
 --    the hitbox colour still says ice.
 --  * The local player's swing also asks ReactFx for its ghosts of ice (ReactFx.PredictFreeze),
---    with the strike the server will build from it: the swing's origin and flat heading, the
---    variant's range, and the arc the server sweeps for that combo step.
+--    with the strike the server will build from it: WorldReact.SwingStrike, the one pure rule
+--    WeaponService.resolveMelee builds its strike with (fix round c-m3), on the swing's origin,
+--    flat heading and predicted combo step. The ghosts are that swing's (by seq): its answering
+--    strike starts their grace (OnAnswered), its refusal takes them (OnRefused).
 --
--- FeedbackController owns the wiring (its swing handler, its strike listener, Destroy): it is the
--- one strike listener and InputController's one swing handler. No sound (combat has none).
+-- FeedbackController owns the wiring (its swing handler, its strike listener, its refusals,
+-- Destroy): it is the one strike listener and InputController's one swing handler. No sound
+-- (combat has none).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -22,6 +25,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Theme = require(uiFolder:WaitForChild("Theme"))
@@ -30,6 +34,7 @@ local ReactFx = require(script.Parent:WaitForChild("ReactFx"))
 -- What OnSwing reads of InputController's PredictedSwing (that module is not required here:
 -- FeedbackController hands the swing over).
 export type Swing = {
+	seq: number,
 	family: string,
 	variant: Types.RangeWeaponVariant,
 	origin: Vector3,
@@ -38,7 +43,7 @@ export type Swing = {
 }
 
 -- What OnStrike reads of a strike from the network (FeedbackController's parsed Strike).
-export type SwingStrike = {
+export type ResolvedSwing = {
 	weapon: string,
 	shape: string,
 	origin: Vector3,
@@ -65,16 +70,6 @@ function FrostFx.IsIce(weapon: string?): boolean
 	end
 	local config = Catalog.GetProvingGroundsConfig()
 	return config ~= nil and Unlocks.ElementOf(config.weapons, weapon) == ICE
-end
-
--- The arc the server sweeps for a swing at `step` (WeaponService.resolveMelee): the chain's last
--- hit may sweep the variant's finisher arc.
-local function arcOf(variant: Types.RangeWeaponVariant, step: number): number?
-	local chain = variant.chain
-	if chain ~= nil and step == #chain and variant.finisherArcDegrees ~= nil then
-		return variant.finisherArcDegrees
-	end
-	return variant.arcDegrees
 end
 
 -- One emitter for every puff: moved to each point along the arc and told to emit there.
@@ -143,22 +138,24 @@ function FrostFx.OnSwing(swing: Swing): ()
 	if not FrostFx.IsIce(swing.family) then
 		return
 	end
-	local variant = swing.variant
-	local arcDegrees = arcOf(variant, swing.step)
-	puff(swing.origin, swing.heading, variant.range, arcDegrees)
-	ReactFx.PredictFreeze({
-		shape = variant.shape,
-		origin = swing.origin,
-		direction = swing.heading,
-		size = variant.range,
-		width = variant.width,
-		arcDegrees = arcDegrees,
-	})
+	local strike = WorldReact.SwingStrike(swing.variant, swing.step, swing.origin, swing.heading)
+	puff(strike.origin, strike.direction, strike.size, strike.arcDegrees)
+	ReactFx.PredictFreeze(strike, swing.seq)
+end
+
+-- c-m2: the strike that answers the local player's swing `seq` has come (FeedbackController).
+function FrostFx.OnAnswered(seq: number): ()
+	ReactFx.AnswerFreeze(seq)
+end
+
+-- c-m2: the server refused the local player's attack `seq` (FeedbackController.OnRefused).
+function FrostFx.OnRefused(seq: number): ()
+	ReactFx.RefuseFreeze(seq)
 end
 
 -- Someone else's melee swing, as the server resolved it (FeedbackController's strike listener;
 -- the local player's own swing puffed on its press).
-function FrostFx.OnStrike(strike: SwingStrike): ()
+function FrostFx.OnStrike(strike: ResolvedSwing): ()
 	if strike.shape ~= "arc" or not FrostFx.IsIce(strike.weapon) then
 		return
 	end

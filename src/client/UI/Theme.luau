@@ -1459,7 +1459,11 @@ local Theme = {
 	-- FrostFx (L2-49, L2-56): an ice family's swing draws its hitbox effect in the frost colour and
 	-- throws a frost puff along its arc (no puff on low-end devices). On the local player's own
 	-- swing, every unfrozen water cell the server's rule (WorldReact.Chills) names shows a ghost
-	-- of ice at once; the real cell replaces it, or it goes after COMBAT_FROST_GHOST_SECONDS.
+	-- of ice at once; the real cell replaces it. Otherwise (fix round c-m2) the swing's answer
+	-- decides: a refusal takes it at once, the answering strike lets it stand
+	-- COMBAT_FROST_GHOST_GRACE_SECONDS more (the server freezes right after it broadcasts the
+	-- strike, so `Ice` replicates within a step), and an unanswered swing loses it after
+	-- COMBAT_RANGE_SWING_ANSWER_SECONDS.
 	COMBAT_FROST_HITBOX_COLOR = Color3.fromRGB(140, 214, 255),
 	COMBAT_FROST_PUFF_COLOR = Color3.fromRGB(214, 240, 255),
 	COMBAT_FROST_PUFF_POINTS = 7, -- along the arc
@@ -1469,7 +1473,7 @@ local Theme = {
 	COMBAT_FROST_PUFF_DROP = 1, -- studs under the swing's origin (toward the ground)
 	COMBAT_FROST_GHOST_COLOR = Color3.fromRGB(176, 224, 250),
 	COMBAT_FROST_GHOST_TRANSPARENCY = 0.5,
-	COMBAT_FROST_GHOST_SECONDS = 0.5,
+	COMBAT_FROST_GHOST_GRACE_SECONDS = 0.3,
 	-- Frost Quake (AbilityFx/FrostQuake): Earthquake's rings in ice, with shards for cracks.
 	COMBAT_FROST_QUAKE_RING_COLOR = Color3.fromRGB(120, 200, 255),
 	COMBAT_FROST_QUAKE_SHARD_COLOR = Color3.fromRGB(196, 236, 255),

@@ -17,6 +17,10 @@
 -- down to and whose centre lies in its sector, a patch ahead of the swinger (Chills, Freeze). The
 -- server runs Freeze on every resolved strike; the phone's auto-swing and the swinger's predicted
 -- ghost ask Chills of the same cells, so the three never disagree on which water a swing takes.
+-- The W3 fix round puts the rest of that agreement here too: the strike a swing makes
+-- (SwingStrike, c-m3), the two config numbers Freeze reads (IceReach, d-m5), how a cell shows
+-- (IceLook), which blocks are reactive (Reactive) and the cell's attribute name (ICE_ATTRIBUTE,
+-- s-s3), so a copy on one side cannot drift from the other unseen (s-m1).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -48,8 +52,16 @@ export type Entry = { react: string, box: Box, heat: number }
 -- AimClear's world: the first solid on the segment from `from` to `to`, as a distance from `from`
 -- (nil = none). Like a Roblox ray, it does not see a part that holds `from`.
 export type Cast = (from: Vector3, to: Vector3) -> number?
+-- How an ice cell's Part shows (IceLook): its transparency, whether bodies, rays and the camera
+-- meet it (CanCollide and CanQuery), whether it casts a shadow, and its ICE_ATTRIBUTE.
+export type IceLook = { transparency: number, collide: boolean, shadow: boolean, frozen: boolean }
 
 local WorldReact = {}
+
+-- The fix round's s-s3: an ice cell Part's attribute, false as built and true once frozen. Infrastructure,
+-- like a remote's name: LevelService writes it, ReactFx and the phone's auto-swing find the cells by it,
+-- and both read it from here, so a rename on one side cannot hide every cell from the other.
+WorldReact.ICE_ATTRIBUTE = "Ice"
 
 -- Studs a carried head (AimClear) stops short of the first solid on its way: under the R15 head's
 -- half width (0.6), so it is a place a head can be and a ray from it still sees that solid.
@@ -210,6 +222,14 @@ function WorldReact.StrikeElement(
 	return Unlocks.ElementOf(weapons, weapon)
 end
 
+-- The fix round's s-m1: is a block with this `react` one LevelService lists as reactive (a Part
+-- with `React` and `Heat`, taken away strike by strike: Apply)? Any word but "ice": an ice block is
+-- deep water, and its cells are what freezes (L2-53), so ReactFx and the phone's stream never see
+-- it as a block to burn. No react: none.
+function WorldReact.Reactive(react: string?): boolean
+	return react ~= nil and react ~= "ice"
+end
+
 -- One strike of `element` on the level's reactive blocks (fix round s-m1: LevelService.React's
 -- loop, here so the harness holds it). Every entry whose `react` is that element and whose box
 -- the strike touches (Touches, grown by `pad`) takes one strike (Heat with `need`), written back
@@ -287,6 +307,56 @@ function WorldReact.Cells(box: Box, cell: number): { Box }
 		end
 	end
 	return cells
+end
+
+-- The fix round's c-m3: the strike a melee swing hands to WeaponService's finish() and its
+-- listeners, built in one place for the server (resolveMelee) and for the two client copies that
+-- predict it (the frost ghost and the phone's auto-swing at water): the variant's shape, the
+-- origin, `heading` as given (the server's is flat), `size` = the variant's range (never range +
+-- pad: the pad forgives a body, the water's reach is Chills' `ahead`), its width, and the arc of
+-- combo `step`: the chain's last step sweeps finisherArcDegrees when the variant has one, every
+-- other step (and a variant with no chain) its arcDegrees.
+function WorldReact.SwingStrike(
+	variant: Types.RangeWeaponVariant,
+	step: number,
+	origin: Vector3,
+	heading: Vector3
+): Strike
+	local chain = variant.chain
+	local arcDegrees = variant.arcDegrees
+	if chain ~= nil and step == #chain and variant.finisherArcDegrees ~= nil then
+		arcDegrees = variant.finisherArcDegrees
+	end
+	return {
+		shape = variant.shape,
+		origin = origin,
+		direction = heading,
+		size = variant.range,
+		arcDegrees = arcDegrees,
+		width = variant.width,
+	}
+end
+
+-- The fix round's d-m5: the two numbers of Combat.json levels.react.ice that Freeze and Chills
+-- read, `reachDown` then `ahead`, each only when it is a number (nil otherwise: nothing freezes).
+-- One reading for the server's freeze and the client's copies, so no caller can swap them.
+function WorldReact.IceReach(ice: any): (number?, number?)
+	if type(ice) ~= "table" then
+		return nil, nil
+	end
+	local reachDown: number? = if type(ice.reachDown) == "number" then ice.reachDown else nil
+	local ahead: number? = if type(ice.ahead) == "number" then ice.ahead else nil
+	return reachDown, ahead
+end
+
+-- The fix round's s-m1: how an ice cell's Part shows. Water (as built): hidden, met by nothing,
+-- no shadow, ICE_ATTRIBUTE false. Frozen: floor in its look's transparency `shown`, met by bodies,
+-- rays and the camera, a shadow, ICE_ATTRIBUTE true.
+function WorldReact.IceLook(frozen: boolean, shown: number): IceLook
+	if frozen then
+		return { transparency = shown, collide = true, shadow = true, frozen = true }
+	end
+	return { transparency = 1, collide = false, shadow = false, frozen = false }
 end
 
 -- L2-54: does this resolved strike freeze the ice cell `box`? Only an `arc` (a melee swing) does,

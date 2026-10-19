@@ -9,7 +9,7 @@
 	"secrets": {
 		"lookout": { "name": "The Lookout", "valor": 3, "materials": 50, "family": "flamethrower" },
 		"cache": { "name": "Raiders' Cache", "valor": 4, "materials": 60 },
-		"shrine": { "name": "Island Shrine", "valor": 6, "materials": 63 }
+		"shrine": { "name": "Island Shrine", "valor": 6, "materials": 60 }
 	},
 	"difficulties": {
 		"normal": {

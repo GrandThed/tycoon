@@ -27,7 +27,11 @@ air dash reaches it, and it lies ICE_MARGIN beyond the farthest of them) and fro
 the swing extends the ice, one chain of cells from a bank to the island); with the ice frozen, the
 unclimbable walls, the lookout's rules, R8's pinned lists, the shot-origin chord and killY again; the family
 a map node gives (`found`), the shrine's pay under the dearest sold ability, the ice look,
-`levels.react.ice`, and the ice pieces in the Part count.
+`levels.react.ice`, and the ice pieces in the Part count. Its fix round: every deep water a body falls
+into has a landing and `player.rescue.outside` covers a server frame of the dash where a top meets it
+(s-M1, Q3); no two ice blocks overlap (s-s2); the pieces and the covers fill every ice block (d-m1); Leap
+Smash's fall in (g) (d-m3); a frozen sheet as deep as a floor (d-m6); a dash found through a MECHANICS
+alias (s1); and the bend rule, the cave's closed half and the walled camp on the frozen layout (s2).
 
 A level is built in Studio from `src/shared/Layouts/Levels/<Name>.json`, and nobody sees it there
 before the owner does. This tool proves the layout on paper instead: it walks the level's `route`
@@ -169,7 +173,9 @@ KILL_FLOOR = -450.0
 # a shape with a `height` misses feet more than that far above the floor).
 COVER_MAX = 3.5
 COVER_MARGIN = 0.5
-GROUND_LOOKS = ("ground", "path", "lobby", "water")  # blocks a body lands on
+# Blocks a body lands on; "ice" is a frozen sheet (sim_range.frozen_layout: the W3 fix round's d-m6
+# holds it to the floor-depth rule in check_ice's frozen run).
+GROUND_LOOKS = ("ground", "path", "lobby", "water", "ice")
 LOBBY_CLEARANCE = 150.0
 DENSITY_AREA = 200.0  # a camp's maxAlive is at most its floor area over this (the arena: 60 on 110 x 110)
 BAND_SHARE = 0.45  # a keepAway kind's bandMin is at most this share of the camp's shorter side
@@ -300,6 +306,9 @@ ICE_MARGIN = 15.0
 # range + ahead from the origin, a body's radius behind the edge), so the ice can always be extended.
 ICE_ROWS = 1.5
 ICE_KEYS = ("cell", "lift", "thickness", "reachDown", "ahead")  # Combat.json levels.react.ice (L2-53)
+# The W3 fix round's s-M1: WeaponService.trackAir records where a body last stood once a Heartbeat;
+# a body leaving a bank is at most this many frames' flat travel back from its edge when last seen.
+SERVER_FRAME_HZ = 60
 THEME_PATH = REPO_ROOT / "src" / "client" / "UI" / "Theme.luau"
 # The Theme numbers the highest camera is built from (the client's; read from the file, never copied).
 THEME_KEYS = ("COMBAT_CAMERA_PIVOT_HEIGHT", "COMBAT_CAMERA_MIN_PITCH_DEGREES", "COMBAT_SHAKE_MAX_STUDS")
@@ -870,14 +879,25 @@ def fielded_lifts(proving):
     return [family for family, _ability in lifting_abilities(proving)]
 
 
-def dashing_abilities(proving):
+def dashing_abilities(proving, text=None):
     """Every family's ability that carries its caster along the flat, holding his height in the air
     (AbilityService MECHANICS `target = "dash"`: Impale Dash, MovementController.Lunge over its
-    `range`): [(family, ability)]."""
+    `range`), and every id an alias line `MECHANICS.<id> = MECHANICS.<other>` gives a dash's entry
+    (as W2's dragonBreath and W3's frostQuake alias theirs; the W3 fix round's s1): [(family,
+    ability)]. `text` stands for AbilityService.luau's (the mutants' copy)."""
     import re
 
-    text = ABILITY_SERVICE_PATH.read_text(encoding="utf-8") if ABILITY_SERVICE_PATH.exists() else ""
+    if text is None:
+        text = ABILITY_SERVICE_PATH.read_text(encoding="utf-8") if ABILITY_SERVICE_PATH.exists() else ""
     ids = set(re.findall(r'^\s*(\w+)\s*=\s*\{\s*target\s*=\s*"dash"', text, re.MULTILINE))
+    aliases = re.findall(r'^\s*MECHANICS\.(\w+)\s*=\s*MECHANICS\.(\w+)\s*$', text, re.MULTILINE)
+    grew = True
+    while grew:  # an alias of an alias resolves too
+        grew = False
+        for alias, base in aliases:
+            if base in ids and alias not in ids:
+                ids.add(alias)
+                grew = True
     return [(family, w["ability"]) for family, w in sorted(proving["weapons"].items())
             if (w.get("ability") or {}).get("id") in ids and is_number(w["ability"].get("range"))]
 
@@ -1702,8 +1722,16 @@ def check_deep_water(name, layout, ctx, expect, solids, deep):
     deep (it does not collide, so a fall goes through it to killY and the free rescue); the named ice
     blocks react to ice; every walked route sample over a water footprint stands on a solid top at
     the route's height (the bridge), the water's top at least WATER_UNDER under it; the water's tops
-    lie at one height. And L2-58: every landing stands on solid ground at its height, outside every
-    camp's fenced rectangle, on a surface a player reaches from the start."""
+    lie at one height; no two ice blocks overlap (they may touch: the W3 fix round's s-s2, as
+    StageFlow.Validate). And L2-58: every landing stands on solid ground at its height, outside every
+    camp's fenced rectangle, on a surface a player reaches from the start. And the W3 fix round's s-M1 and Q3: a fall
+    through deep water comes back to a landing, judged by where the body last stood (the server's
+    frame: WeaponService.LastGround) and by where it is: every deep water block whose footprint lies
+    within a dash-off's carry (dashDistance + walkSpeed over the fall from the top to killY + a
+    body's radius) of a top a player stands on, the water as built or frozen, has a landing; and
+    where such a top meets a landing water's footprint (the bridge over it, the bank beside it, its
+    frozen sheets), player.rescue.outside is at least one server frame of the dash, the most a body
+    leaving that edge was last seen back from it."""
     tag = f"{name}:"
     waters = [b for b in layout["blocks"] if b["look"] == "water"]
     solid = [b.get("name") for b in waters if b.get("collide") is not False]
@@ -1732,6 +1760,17 @@ def check_deep_water(name, layout, ctx, expect, solids, deep):
            + (f"; solid: {', '.join(map(str, solid))}" if solid else "") + (f"; not ice: {', '.join(cold)}" if cold else "")
            + (f"; tops {sorted(tops)}" if len(tops) != 1 else "") + (f"; {'; '.join(under[:3])}" if under else "")
            + ("; the route never crosses it" if not wet else ""))
+    # s-s2: ice footprints touch, never overlap (two frozen tops at one height on one ground).
+    ices = [b for b in layout["blocks"] if b.get("react") == "ice"]
+    crossed = [f"{a.get('name')} and {b.get('name')}" for i, a in enumerate(ices) for b in ices[i + 1:]
+               if sr.ice_overlap(a, b)]
+    touching = [f"{a.get('name')} and {b.get('name')}" for i, a in enumerate(ices) for b in ices[i + 1:]
+                if not sr.ice_overlap(a, b) and rect_gap(*(((x["x"] - x["sx"] / 2, x["x"] + x["sx"] / 2, x["z"] - x["sz"] / 2,
+                                                             x["z"] + x["sz"] / 2) for x in (a, b)))) <= EPS]
+    expect(not crossed, f"{tag} no two ice blocks overlap, so no two frozen tops lie at one height on the same ground "
+           f"(they may touch; the W3 fix round's s-s2, StageFlow.Validate): "
+           + (f"overlap: {', '.join(crossed)}" if crossed else f"{len(ices)} ice blocks"
+              + (f", touching: {', '.join(touching)}" if touching else "")))
     # L2-58: where a fall into the water comes back.
     levels, move = ctx["levels"], ctx["move"]
     tall = unclimbable(solids, move, ctx["abilityHeight"])
@@ -1761,6 +1800,45 @@ def check_deep_water(name, layout, ctx, expect, solids, deep):
             told.append(f"{where} -> ({point['x']:g}, {point['y']:g}, {point['z']:g}) on {base.name}")
     expect(not bad, f"{tag} every water landing stands on solid ground at its height, outside every camp, on a surface a "
            f"player reaches from the start (L2-58): " + ("; ".join(bad) if bad else "; ".join(told) or "none"))
+    # s-M1 and Q3: every deep water a body falls into from where it stood has a landing, and the
+    # stood test reaches the edge it left from.
+    outside = (ctx.get("rescue") or {}).get("outside")
+    ice = ice_config(levels)
+    views = [(layout, solids, reached)]
+    if ice is not None and any(b.get("react") == "ice" for b in layout["blocks"]):
+        frozen = sr.frozen_layout(layout, ice)
+        fsolids = solids_of(frozen, thickness, levels["floorThickness"])
+        ftall = unclimbable(fsolids, move, ctx["abilityHeight"])
+        views.append((frozen, fsolids, {s.name for s in reachable_solids(frozen, fsolids, move, ctx["abilityHeight"], (),
+                                                                            ftall)}))
+    deep_water = [b for b in waters if b.get("collide") is False]
+    frame = (move["dashDistance"] / move["dashSeconds"] / SERVER_FRAME_HZ
+             if is_number(move.get("dashSeconds")) and move["dashSeconds"] > 0 else math.inf)
+    lacking, edges = {}, {}
+    for _view, vsolids, vreached in views:
+        for s in vsolids:
+            if s.name not in vreached:
+                continue
+            carry = (move["dashDistance"] + BODY_RADIUS + move["walkSpeed"]
+                     * math.sqrt(2 * max(s.top + sr.ROOT_HEIGHT - layout["killY"], 0.0) / sr.GRAVITY))
+            for w in deep_water:
+                rect = (w["x"] - w["sx"] / 2, w["x"] + w["sx"] / 2, w["z"] - w["sz"] / 2, w["z"] + w["sz"] / 2)
+                gap = rect_gap((s.x0, s.x1, s.z0, s.z1), rect)
+                if gap > carry + EPS:
+                    continue
+                wname = w.get("name") or w["look"]
+                if w.get("landing") is None:
+                    lacking.setdefault(wname, set()).add(f"{s.name} {gap:.1f} off")
+                elif gap <= EPS:
+                    edges.setdefault(wname, set()).add(s.name)
+    short = is_number(outside) and bool(edges) and outside < frame - EPS
+    expect(not lacking and is_number(outside) and not short,
+           f"{tag} a fall through deep water comes back to a landing, judged by where the body last stood and where it is "
+           f"(the W3 fix round's s-M1 and Q3): every deep water block within a dash-off's carry of a top a player stands on, "
+           f"the water as built or frozen, has a landing, and player.rescue.outside ({outside}) is at least one server frame "
+           f"of the dash ({frame:.2f}) where such a top meets it: "
+           + ("; ".join(f"{n} has no landing (from {', '.join(sorted(v)[:3])})" for n, v in sorted(lacking.items()))
+              if lacking else "; ".join(f"{n} met by {', '.join(sorted(v))}" for n, v in sorted(edges.items())) or "none"))
 
 
 def check_kill_height(tag, layout, solids, levels, expect):
@@ -3110,7 +3188,7 @@ def edge_lines(rects, by):
     return xs, zs
 
 
-def sight_points(layout, solids, ctx, camp, gates, walls, tall, clip):
+def sight_points(layout, solids, ctx, camp, gates, walls, tall, clip, fresh=None):
     """The plan-view points a walled camp is looked at from (the L1c fix round's C1 and m1):
     ({eye: it stands inside the clip}, {camera}, {camera whose reach is unproved}, reached).
 
@@ -3127,7 +3205,12 @@ def sight_points(layout, solids, ctx, camp, gates, walls, tall, clip):
     spherecast's radius less the shake. SIGHT_STEP everywhere; in a gate's zone also SIGHT_FINE,
     every keep-out edge at SIGHT_EDGE and their corners. Those zone points come back unproved
     (`lazy`); `reached(x, z)` proves one, and check_walled asks only for the ones it needs, least
-    margin first."""
+    margin first.
+
+    `fresh` (a set of names; check_ice's run on the frozen layout): eyes stand only on the reached
+    tops it names (the ones the frozen sheets add). A sheet is no wall and no keep-out, so every
+    other eye's cameras and lines are the dry run's, already judged; a point a sheet covers can only
+    drop out."""
     thickness = ctx["levels"]["fenceThickness"]
     boom = (ctx.get("camera") or {}).get("maxZoom", 0) + CAMERA_SPARE
     outsides = [gate_faces(camp, g, thickness)[2] for g in gates]
@@ -3143,6 +3226,8 @@ def sight_points(layout, solids, ctx, camp, gates, walls, tall, clip):
         return False
 
     reach = reachable_solids(layout, solids, ctx["move"], ctx["abilityHeight"], f"Camp_{camp['id']}_", tall)
+    if fresh is not None:
+        reach = [s for s in reach if s.name in fresh]
     standable = [o for o in solids if o.kind in ("block", "floor", "secret", "fence", "obstacle")]
 
     def stands(x, z):
@@ -3189,7 +3274,7 @@ def sight_points(layout, solids, ctx, camp, gates, walls, tall, clip):
                 cams.add((cx, cz))
     lazy = set()
     kxs, kzs = edge_lines(keeps, EDGE_IN)
-    for zone in zones if SIGHT_ZONES else []:
+    for zone in zones if SIGHT_ZONES and booms else []:  # with no boom, reached() proves none
         for x, z in zone_points(zone, kxs, kzs):
             if (x, z) not in cams and any(out(x, z) for out in outsides) and not kept_out(x, z):
                 lazy.add((x, z))
@@ -3224,15 +3309,19 @@ def far_reach(rect, floor):
     return max(rect_gap(rect, (x, x, z, z)) for x in floor[:2] for z in floor[2:])
 
 
-def check_walled(name, level, layout, ctx, expect, solids):
+def check_walled(name, level, layout, ctx, expect, solids, facts=True, dry=None):
     """L1c-1, L1c-3 and L1c-6: a walled camp hides everything inside it from every place a player
-    reaches outside it, at the top of any jump, with the camera at its highest and farthest."""
+    reaches outside it, at the top of any jump, with the camera at its highest and farthest.
+    `facts` False (check_ice's run on the frozen layout) adds no gate-16 rows. `dry` (that run's
+    (layout, solids) as built): the sight lines judge only the eye points on the tops the frozen
+    layout reaches and the dry one does not (sight_points' `fresh`; exact, given the dry run's own
+    lines), and pass when there are none."""
     walled = (EXPECTED.get(level["layout"]) or {}).get("walled") or []
     if not walled:
         return
     move, levels = ctx["move"], ctx["levels"]
     thickness = levels["fenceThickness"]
-    rows = ctx["gate16"].setdefault(level["layout"], {}).setdefault("walled", [])
+    rows = ctx["gate16"].setdefault(level["layout"], {}).setdefault("walled", []) if facts else []
     tall = unclimbable(solids, move, ctx["abilityHeight"])
     top_cam, parts = camera_top(ctx)
     reach = wall_reach_of(move)
@@ -3354,7 +3443,13 @@ def check_walled(name, level, layout, ctx, expect, solids):
         lockers = [grown(camp_rect(c), fence_thickness(c, thickness)) for c in layout["camps"] if c.get("locks") is True]
         clip = {"fenced": fenced, "grown": grown(fenced, clear), "keeps": [grown(r, keep) for r in lockers],
                 "standoff": sphere - shake}
-        inside, cams, lazy, reached = sight_points(layout, solids, ctx, camp, gates, walls, tall, clip)
+        fresh = None
+        if dry is not None:
+            dry_tall = unclimbable(dry[1], move, ctx["abilityHeight"])
+            before = {s.name for s in reachable_solids(dry[0], dry[1], move, ctx["abilityHeight"], f"Camp_{cid}_", dry_tall)}
+            fresh = {s.name for s in reachable_solids(layout, solids, move, ctx["abilityHeight"], f"Camp_{cid}_", tall)
+                     } - before
+        inside, cams, lazy, reached = sight_points(layout, solids, ctx, camp, gates, walls, tall, clip, fresh)
         drawn = {at: (radius * factor, label) for at, (radius, label) in bodies.items()}
 
         def judge(px, pz):
@@ -3434,7 +3529,10 @@ def check_walled(name, level, layout, ctx, expect, solids):
             rows.append(f"{cid} doorway (exempt eyes: within {DOORWAY:g} of the fence in a gate's lane): {glimpse[0]:+.2f} "
                         f"at ({glimpse[1]:g}, {glimpse[2]:g}) to {glimpse[3]}")
         least = min((t for t in tight.values() if t is not None), default=None, key=lambda t: t[0])
-        expect(not seen and bool(inside), f"{tag} from no eye point on an outside top a player reaches and no camera "
+        added = "" if fresh is None else (f" (the points on the {len(fresh)} top(s) the frozen sheets add: "
+                                           f"{', '.join(sorted(fresh)) or 'none'})")
+        expect(not seen and (bool(inside) or fresh is not None), f"{tag}{added} from no eye point on an outside top a "
+               f"player reaches and no camera "
                f"point its boom reaches (kept {keep:g} off the fence by the clip, levels.cameraClear {clear:g} "
                f"less the shake), is any part of a drawn resident (radius x {factor:.3f}) seen through a gate, every "
                f"difficulty (in plan: the walls are over every camera; only eyes in the doorway, {DOORWAY:g} from the "
@@ -3449,8 +3547,8 @@ def check_walled(name, level, layout, ctx, expect, solids):
         want = camp.get("sightMargin")
         short = [f"{what} {t[0]:+.2f} at ({t[1]:g}, {t[2]:g}) to {t[3]}" for what, t in tight.items()
                  if t is not None and is_number(want) and t[0] < want - EPS]
-        expect(is_number(want) and want >= 0 and not short and least is not None,
-               f"{tag} every eye's and every camera's sight margin is at least its sightMargin ({want}): "
+        expect(is_number(want) and want >= 0 and not short and (least is not None or fresh is not None),
+               f"{tag}{added} every eye's and every camera's sight margin is at least its sightMargin ({want}): "
                + ("; ".join(short) if short else
                   ", ".join(f"{what}s {t[0]:+.2f}" for what, t in tight.items() if t is not None) or "none measured"))
 
@@ -3916,7 +4014,7 @@ def clearance(solids, x, z, floor, along):
     return width, min(over, default=math.inf)
 
 
-def check_cave(name, level, layout, ctx, expect, solids):
+def check_cave(name, level, layout, ctx, expect, solids, closed_only=False):
     """L2-36 and L2-37 (f), (a) for a fire secret, and R8 on the open variant. Run on a layout with
     `shortcuts` only.
       closed (the brambles stand): every floor the shortcut route crosses off the main route, and
@@ -3929,7 +4027,10 @@ def check_cave(name, level, layout, ctx, expect, solids):
         with one jump (the route's climbs and gaps), at least ROAD_MIN_WIDTH between walls and a
         body's headroom (a climb's own rise more), every point farther than every open-camp group's
         sight (the sneak rule); the chest's alcove opens onto a floor the route walks; and the
-        unreachable sniper spots are the pinned open list."""
+        unreachable sniper spots are the pinned open list.
+    `closed_only` (check_ice's run on the frozen layout, the W3 fix round's s2): the closed half
+    alone (the sealed air, the ridge's walls and every carry onto them, the chest's trigger); the
+    frozen open variant's sniper spots are check_ice's own list."""
     shortcuts = layout.get("shortcuts") or []
     if not shortcuts:
         return
@@ -4053,6 +4154,8 @@ def check_cave(name, level, layout, ctx, expect, solids):
                f"{tag} the {secret['id']}'s trigger (needs {secret['needs']}) is met from its alcove floor and its own top "
                f"only (L2-37 a): " + (", ".join(sorted(set(held))) or "none")
                + (f" (its floor: {base.name})" if base is not None else " (it stands on no floor)"))
+    if closed_only:
+        return
     # (f) open: the shortcut route, walked.
     problems, facts = walk_route({**opened, "route": path, "start": path[0] if path else layout["start"], "camps": []},
                                  open_solids, move)
@@ -4158,7 +4261,10 @@ def island_reach(move, o, kr, lifts, dashes):
     a dash and the walk-off grace (falling the drop between them; only when the jumps rise high
     enough); an air dash held over its range after the jumps' carry (air_carry); a lift cast at the
     top of the jumps off an edge, after their carry and a dash, over its castRange (when its height
-    on top of the jumps gets the feet that high). (studs, the means)."""
+    on top of the jumps gets the feet that high), and then the fall at walk speed from where it
+    lands (WallClip.CasterFloor: over a void, the take-off top) down to the key top less a step up
+    (the W3 fix round's d-m3; 3.5 studs from a top at 0, 12.3 from LookoutLedge's 34). (studs,
+    the means)."""
     coyote = move.get("coyoteSeconds") or 0
     need = kr[4] - STEP_UP - o.top
     best = (0.0, "nothing")
@@ -4171,8 +4277,9 @@ def island_reach(move, o, kr, lifts, dashes):
             best = max(best, (carry + float(a["range"]) + BODY_RADIUS, f"{family}'s {a.get('name')} held in the air"))
     for family, a in lifts:
         if need <= lift_rise(move, True) + float(a["height"]) + EPS:
-            span = lift_carry(move, True) + move["dashDistance"] + float(a["castRange"]) + BODY_RADIUS
-            best = max(best, (span, f"{family}'s {a.get('name')} after the jumps and a dash"))
+            fall = move["walkSpeed"] * math.sqrt(2 * max(o.top - (kr[4] - STEP_UP), 0.0) / sr.GRAVITY)
+            span = lift_carry(move, True) + move["dashDistance"] + float(a["castRange"]) + BODY_RADIUS + fall
+            best = max(best, (span, f"{family}'s {a.get('name')} after the jumps and a dash, and its fall"))
     return best
 
 
@@ -4199,6 +4306,40 @@ def ice_crossing_cells(layout, solids, ice, reached, island):
     return cells, starts, goals, (min(joined) + 1 if joined else None)
 
 
+def ice_holes(layout, ice):
+    """The W3 fix round's d-m1: the water of each ice block that neither a built piece
+    (sim_range.ice_cells) nor a cover (a colliding block or secret whose top stands over the
+    water's top, as LevelGeometry reads them) lies over: {block name: (area in studs², [(x0, x1,
+    z0, z1), ...] the holes)}, empty when every block is filled. Exact: the block is cut along
+    every edge of every piece and cover that crosses it, and each part's centre is tested."""
+    cells = sr.ice_cells(layout, ice)
+    blocks = [b for b in layout["blocks"] if b.get("react") == "ice"]
+    covers = [(b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2, b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2, b["y"] + b["sy"] / 2)
+              for b in layout["blocks"] if b.get("collide") is not False]
+    covers += [(s["x"] - s["sx"] / 2, s["x"] + s["sx"] / 2, s["z"] - s["sz"] / 2, s["z"] + s["sz"] / 2, s["y"] + s["sy"] / 2)
+               for s in layout.get("secrets") or []]
+    found = {}
+    for b in blocks:
+        name = b.get("name") or b["look"]
+        water = b["y"] + b["sy"] / 2
+        box = (b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2, b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2)
+        held = [c["box"] for c in cells if c["block"] == name] + [c[:4] for c in covers if c[4] > water]
+        xs = sorted({box[0], box[1]} | {min(max(v, box[0]), box[1]) for r in held for v in r[:2]})
+        zs = sorted({box[2], box[3]} | {min(max(v, box[2]), box[3]) for r in held for v in r[2:4]})
+        holes, area = [], 0.0
+        for i in range(len(xs) - 1):
+            for k in range(len(zs) - 1):
+                if xs[i + 1] - xs[i] <= EPS or zs[k + 1] - zs[k] <= EPS:
+                    continue
+                cx, cz = (xs[i] + xs[i + 1]) / 2, (zs[k] + zs[k + 1]) / 2
+                if not any(r[0] <= cx <= r[1] and r[2] <= cz <= r[3] for r in held):
+                    holes.append((xs[i], xs[i + 1], zs[k], zs[k + 1]))
+                    area += (xs[i + 1] - xs[i]) * (zs[k + 1] - zs[k])
+        if holes:
+            found[name] = (area, holes)
+    return found
+
+
 def check_ice(name, level, layout, ctx, expect, solids):
     """L2-60, for every secret whose key is "ice" (the island shrine), and the W2 lessons on the
     frozen layout (sim_range.frozen_layout: every ice block standable at its top + lift).
@@ -4212,9 +4353,14 @@ def check_ice(name, level, layout, ctx, expect, solids):
         family's variants extend the ice (cell at most (range + ahead - a body's radius) / ICE_ROWS,
         reachDown at least the highest bank's root over the water's top); the open cells of the ice
         blocks form one 4-connected chain from a cell beside a reached bank to one beside the island;
+        the built pieces and the covers fill every ice block (ice_holes: no water is left that no
+        swing can close, so the frozen layout's whole block stands for them; the W3 fix round's d-m1);
       and with the ice frozen: every unclimbable wall stays so, the secrets' (a) to (d) hold
         (check_secret_reach), R8's lists are the pinned frozen lists (both brambles' variants), the
-        shot-origin chord holds (the sheets are floor, not walls) and killY is still a short fall."""
+        shot-origin chord holds (the sheets are floor, not walls), killY is still a short fall and
+        every sheet is levels.floorThickness deep (look "ice" in GROUND_LOOKS: the W3 fix round's
+        d-m6), and the bend rule (the sheets walked ground), the cave's closed half and the walled
+        camps hold (s2)."""
     secrets = [x for x in layout["secrets"] if x["needs"] == "ice"]
     if not secrets:
         return
@@ -4335,6 +4481,13 @@ def check_ice(name, level, layout, ctx, expect, solids):
            f"island" + (f", the shortest chain {chain} cells" if chain is not None else ", no chain"))
     facts.append(f"{len(cells)} ice cells in {', '.join(str(w.get('name')) for w in waters)}; the shortest chain from a bank "
                  f"to the island {chain} cells")
+    holes = ice_holes(layout, ice) if ice is not None else {}
+    expect(bool(cells) and not holes,
+           f"{tag} with the ice: the built pieces and the colliding blocks and secrets over the water fill every ice block "
+           f"(a cell is left out only where one cover holds it whole: no water is left that no swing can close, and the "
+           f"frozen layout's whole block stands for its pieces; the W3 fix round's d-m1)"
+           + ("".join(f"; {n}: {area:.1f} studs² open, e.g. x {h[0][0]:.2f}..{h[0][1]:.2f}, z {h[0][2]:.2f}..{h[0][3]:.2f}"
+                      for n, (area, h) in sorted(holes.items())) if holes else f" ({len(cells)} pieces)"))
     # The W2 lessons, with the ice frozen: no new ledge route, perch or wall.
     gone = sorted(n for n in tall if n not in ftall)
     expect(not gone, f"{tag} with the ice frozen every unclimbable wall stays unclimbable (L2-60, L1c-3)"
@@ -4342,6 +4495,11 @@ def check_ice(name, level, layout, ctx, expect, solids):
     check_secret_reach(f"{name} (frozen)", frozen, ctx, expect, fsolids, ftall)
     check_origin_chord(f"{name} (frozen)", frozen, ctx, expect)
     check_kill_height(f"{tag} with the ice frozen,", frozen, fsolids, levels, expect)
+    # The W3 fix round's s2: the bend rule (the frozen sheets walked ground), the cave's closed half
+    # and the walled camps, on the frozen layout too.
+    check_route_skips(f"{level['layout']} (frozen)", frozen, ctx, expect, fsolids, ftall, ice=True)
+    check_cave(f"{name} (frozen)", level, frozen, ctx, expect, fsolids, closed_only=True)
+    check_walled(f"{name} (frozen)", level, frozen, ctx, expect, fsolids, facts=False, dry=(layout, solids))
     views = [("sniperSpotsFrozen", frozen, fsolids, "with the ice frozen")]
     if layout.get("shortcuts"):
         opened = sr.frozen_layout(open_layout(layout), ice)
@@ -4356,9 +4514,12 @@ def check_ice(name, level, layout, ctx, expect, solids):
                + (f" (pinned: {', '.join(sorted(pinned))})" if pinned is not None and found != sorted(pinned) else ""))
 
 
-def route_blocks(layout, solids, step):
+def route_blocks(layout, solids, step, ice=False):
     """The route's walked samples and how far along the route each lies, by the path or ground
-    block under it: {name: (the Solid, [(along, x, z)])}."""
+    block under it: {name: (the Solid, [(along, x, z)])}. `ice` (the frozen layout, the W3 fix
+    round's s2): every frozen sheet (look "ice") joined to a walked block, side to side and at most
+    a step up or down, or to another sheet so joined, is walked ground too, and carries the samples
+    of the walked blocks it joins (a hop from the ice is measured from where the road meets it)."""
     found = {}
     walked = 0.0
     route = layout["route"]
@@ -4375,6 +4536,17 @@ def route_blocks(layout, solids, step):
                             and sld.holds(x, z)):
                         found.setdefault(sld.name, (sld, []))[1].append((walked + run * f, x, z))
         walked += run
+    sheets = [s for s in solids if ice and s.kind == "block" and s.look == "ice"]
+    grew = True
+    while grew:
+        grew = False
+        for sheet in sheets:
+            joined = [entry[1] for name, entry in sorted(found.items()) if name != sheet.name
+                      and entry[0].gap_to(sheet) <= EPS and abs(entry[0].top - sheet.top) <= STEP_UP + EPS]
+            samples = sorted({point for points in joined for point in points})
+            if joined and samples != sorted(found.get(sheet.name, (None, []))[1]):
+                found[sheet.name] = (sheet, samples)
+                grew = True
     return found
 
 
@@ -4395,7 +4567,7 @@ def carrying_families(ctx):
     return found
 
 
-def check_route_skips(name, layout, ctx, expect, solids, tall):
+def check_route_skips(name, layout, ctx, expect, solids, tall, ice=False):
     """L2-47 (Ben: "close it now"): no hop cuts a bend of the road. For every two walked road
     blocks that do not touch, the shortest way through the air from the edge of one to the edge
     of the other (round every unclimbable wall: through their corners, in plan) is longer than a
@@ -4404,9 +4576,10 @@ def check_route_skips(name, layout, ctx, expect, solids, tall):
     block). The fix round's d-m2: the same with the longest flat travel of an ability that carries
     its caster (carrying_families) on top is a KNOWN LIMIT until L3 (reported; no camp is skipped)
     while no such family can be owned without a lever (ctx ownedFamilies: the loadout's starters and
-    every family a level's secret pays); once one can, it is red."""
+    every family a level's secret pays); once one can, it is red. `ice` (check_ice's run on the
+    frozen layout): the frozen sheets are walked ground (route_blocks), and no gate-16 rows."""
     move = ctx["move"]
-    blocks = route_blocks(layout, solids, SAMPLE * 4)
+    blocks = route_blocks(layout, solids, SAMPLE * 4, ice)
     walls = [(s.x0, s.x1, s.z0, s.z1) for s in solids if s.name in tall]
     grace = move["walkSpeed"] * (move.get("coyoteSeconds") or 0)
     carriers = carrying_families(ctx)
@@ -4418,7 +4591,7 @@ def check_route_skips(name, layout, ctx, expect, solids, tall):
             a, sa = blocks[an]
             b, sb = blocks[bn]
             gap = a.gap_to(b)
-            if gap <= EPS:
+            if gap <= EPS or (ice and a.look != "ice" and b.look != "ice"):  # the dry run judged two road blocks
                 continue
             lo, hi = (a, b) if a.top >= b.top else (b, a)
             reach = stray_reach(move, lo.top - hi.top) + grace
@@ -4494,8 +4667,9 @@ def check_route_skips(name, layout, ctx, expect, solids, tall):
         verdict = (f"KNOWN LIMIT until L3 (the fix round's d-m2): {len(lifted)} hop(s) with an ability's travel cut a bend, "
                    f"no camp skipped, and no family that carries can be owned without a lever (owned: "
                    f"{', '.join(owners) or 'none'}): {'; '.join(lifted[:2])}")
-        ctx["gate16"].setdefault(name, {}).setdefault("lifts", []).extend(
-            f"bend (known limit until L3, d-m2): {line}" for line in lifted)
+        if not ice:
+            ctx["gate16"].setdefault(name, {}).setdefault("lifts", []).extend(
+                f"bend (known limit until L3, d-m2): {line}" for line in lifted)
     elif lifted:
         verdict = f"{', '.join(owned)} can be owned without a lever: {'; '.join(lifted[:3])}"
     else:
@@ -4724,7 +4898,7 @@ def load_all():
            "abilityHeight": ability_height(proving), "camera": combat.get("camera"), "theme": theme_numbers(),
            "renderer": renderer_numbers(), "abilityIds": ability_ids(expeditions), "lifts": lifting_abilities(proving),
            "fieldedLifts": fielded_lifts(proving), "loadout": sorted((proving.get("loadout") or {}).values()),
-           "dashes": dashing_abilities(proving),
+           "dashes": dashing_abilities(proving), "rescue": combat["player"].get("rescue"),
            "weapons": proving["weapons"],
            "originWallChord": (proving.get("shooting") or {}).get("originWallChord")}
     return combat, expeditions, layouts, sr.load_level_files(), ctx

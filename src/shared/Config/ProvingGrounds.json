@@ -304,6 +304,7 @@
 		"touchMode": "autoFire",
 		"autoFireAssistDegrees": 5,
 		"autoSwingPad": 0.5,
+		"iceAutoDegrees": 34,
 		"tapMaxSeconds": 0.3,
 		"tapMaxPixels": 14,
 		"tapBufferSeconds": 0.25,

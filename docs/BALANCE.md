@@ -5980,3 +5980,118 @@ region is (−391, 9), 99.7 off it (the solid Creek reached z −30 and was near
 
 The full driver: 176 data cases, the 8 stage-mirror cases and the 1 simulator case, all as expected (about 1.5 h
 beside a full simulator run).
+
+## L2 W3 fix round: falls, the slits, the frozen gates and the shrine's pay (2026-10-19)
+
+Rulings: `docs/prompts/l2-w3-fix-round.md` (review findings in `docs/prompts/l2-w3-review/`). The server agent
+changed the rules in Luau (LevelGeometry's whole-cell cover, StageFlow's landing and overlap lines, the rescue's
+"where it last stood"); this section is the data and the tools' side. Gates: `py tools/check_levels.py` PASS (about
+42 s, was 34); `py -3.12 tools/sim_range.py --check` PASS (524 checks, exit 0); `py -3.12 tools/sim_combat.py --check`
+23 of 23; `py tools/check_stage_mirror.py` PASS; `py tools/check_levels_mutants.py`: every case as expected (below).
+
+### L2 W3 fix: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json controls.iceAutoDegrees` | — | **34** | Q1: a phone's auto-swing at water uses a cone narrower than the swing (120°), so it can only remove swings. The lead's figure from the client agent's measurement (`fix-client.md`, Q1): at 60 a phone on Road2's outer 2.5 studs still swings at the creek beside it; at 34 or less never, and a player facing the water from the sign pad's edge still swings |
+| `Combat.json levels.react.ice.thickness` | 1 | **4** | d-m6: a frozen sheet is the floor under a slam (140 studs/s) and under a fall from the jumps' apex, and E5's depth rule (`levels.floorThickness` 4) was written against 1-stud floors. Config only: the piece's top stays at −0.8 and it now reaches −4.8, inside the water block (−1..−5). check_levels now holds it to the rule (look `ice` in `GROUND_LOOKS`) |
+| `1_ForestRoad.json secrets.shrine.materials` | 63 | **60** | s3: 63 was 30.0% of a first Normal clear's 211 Timber, the band's very top (`SECRET_MATERIAL_SHARE` 15–30%), with 0.5% of slack, so any Timber change elsewhere would have turned the chest red. 60 is 28% (the cache's share) and 27% of the Normal stock of 220; still the biggest chest by Valor (6 against the cache's 4 and the lookout's 3) |
+| `ForestRoad.json CreekUp.landing` | — | **(−385, 0, −2)** | Q3: any deep water may carry a landing. On Road2 by the creek, 5 east of its line and 6 in from the road's north edge (the Creek's and the Pond's stay (−385, 0, 2)) |
+| `sim_range.py FAMILY_TARGETS.frostHammer` | single 68, crowd6 410 | **75, 439** | d-m2: the measured rows of the shipped swing, 38 × 1.267 (the chain's mean) × 1.55. Bands now 64–86 and 373–505 |
+| `sim_range.py ice_cells` | a cover holding a cell's centre | a cover holding the **whole** cell (to `GEOMETRY_SEAM` 1e-6) | d-m1, mirrors `LevelGeometry.iceCells` |
+| `sim_range.py react_problems` | a landing only on ice | a landing on any block that does not collide (`"<where> has a landing and collides"`); `"<a> and <b> are ice and overlap"` (`ice_overlap` = `LevelGeometry.Overlap`) | Q3 and s-s2, mirrors `StageFlow.reactProblems` |
+| `check_levels.py` | — | the fall line, the overlap line, the fill line, Leap Smash's fall, the alias reader, the frozen bend / cave / walled runs, `ice` a ground look | below |
+
+### L2 W3 fix: falls (s-M1, Q3)
+
+The rescue now asks two points (StageFlow.Landing): where the body last stood (`WeaponService.LastGround`, the
+root the server saw grounded, sampled every Heartbeat) and then where it is, each against a water's footprint
+grown by `player.rescue.outside` 4. A walk-off from the ice's side carries a body about 9 studs before it is
+judged and a dash-off about 29, so the stood point is what lands them.
+
+The data and the gate (check_levels' new line in `check_deep_water`, on the water as built and frozen):
+- every deep water block within a dash-off's carry of a top a player stands on has a landing (the carry is
+  `dashDistance` + `walkSpeed` over the fall from that top to killY + a body's radius: 29.1 from a top at 0);
+- where such a top meets a landing water's footprint, `rescue.outside` is at least one server frame of the dash
+  (20 / 0.15 / 60 = **2.22**; it is 4): a body leaving that edge was last seen no farther back than that.
+
+| Water | Landing | Met by (the stood test) | Within a dash-off |
+|---|---|---|---|
+| CreekUp | (−385, 0, −2) on Road2 | Road2 (over it), ShrineSignPad (corner), the frozen Creek | Road1, 26 off |
+| Creek | (−385, 0, 2) on Road2 | Road2, ShrineSignPad, its own and the Pond's sheets | — |
+| Pond | (−385, 0, 2) on Road2 | ShrineIsland, the chest, its own and the Creek's sheets | — |
+
+What the line does not promise: a dash-off from a top that does not meet the water, that crosses only a corner of a
+footprint and is more than 4 past it when judged, goes to the safe point as before (the position test is all it
+has). Nothing on Forest Road is shaped that way: Road1's dash-off into CreekUp ends inside it.
+
+### L2 W3 fix: the ice pieces (d-m1)
+
+| Measure | Before | Now |
+|---|---|---|
+| Pieces | 132 (6 skipped: every cell whose centre lay under the island) | **136**: Creek 39, Pond 97 (only the 2 cells of column 5 lie wholly under the island) |
+| Parts | 248 of 600 | **252** of 600 |
+| Water no swing can close | 48.5 studs², two slits 1.82 × 13.33 beside the island | **none** (check_levels' new fill line: the pieces and the covers fill every ice block, cut along every edge, exact) |
+| The crossing | 9 swings, 9.0 s human / 5.8 s ideal, 109 studs, 38 cells | 9 swings, **9.0 s / 5.8 s**, 109 studs, **39** cells (the part-covered cell beside the island now freezes too) |
+
+A built cell that a cover holds in part has its top (−0.8) inside the cover (the island's top is 0), so nothing is
+drawn twice and nothing z-fights. `frozen_layout` still freezes each block whole; the fill line is what makes that
+true.
+
+### L2 W3 fix: the island's reach (d-m3, d-m4)
+
+- **Leap Smash's fall (d-m3).** The lift branch of `island_reach` now adds the walk-speed carry of the fall from where
+  the leap lands (over a void: the take-off top) down to the key top less a step: from a top at 0 onto the island
+  +3.5 (74.5), from LookoutLedge's 34 +12.3. The worst is still the Spear's Impale Dash held in the air, **80.6**;
+  ShrineSignPad 102.0 away, margin **+21.5** (unchanged).
+- **The walk-off grace (d-m4).** The jumps reach 46.6 without the grace and 49.3 with it; a case at 48 now proves the
+  grace term (red only with it).
+- **Aliases (s1).** `dashing_abilities` also reads `MECHANICS.<id> = MECHANICS.<other>` lines (an alias of an alias
+  too), so a family whose ability aliases Impale Dash is an air dash for (g), the cave's carry and the bend. Today's
+  aliases (`dragonBreath` = slug burst, `frostQuake` = earthquake) carry nobody.
+
+### L2 W3 fix: the frozen layout (s2, d-m6)
+
+check_ice already ran the walls, the lookout, R8, the chord and killY on the frozen layout. It now also runs:
+
+| Gate | On the frozen layout | Forest Road |
+|---|---|---|
+| Floor depth (E5) | every frozen sheet ≥ `levels.floorThickness` | 4 deep: PASS |
+| The bend (L2-47) | the sheets are walked ground joined to the road they touch (side to side, at most a step), carrying its samples; only pairs with a sheet are judged (two road blocks are the dry run's, unchanged) | the most a hop from the ice saves: **20** (Creek to Road3, a hop of 48.1; rule 60) |
+| The cave, closed half | sealed air, the ridge's walls unclimbable, no carry onto them, the cache's trigger (the open variant's sniper list stays check_ice's) | as dry: 5 floors, 891 points, 22 walls |
+| The walled camp | the ceiling, the gatehouse, plates and the cameras over the walls run whole; the sight lines judge only the eye points on the tops the frozen layout reaches and the dry one does not (exact, given the dry run: a sheet is no wall and no keep-out, so every other eye's lines are the dry run's) | the new tops are Creek, Pond, ShrineIsland and the chest, none in a gate's outside half-plane: no eye |
+
+Cost: `check_levels.py` 34 s → about 42 s, so the full mutant driver grows with it. Judging every eye again on the
+frozen layout cost 11 s more a run; the incremental sight run costs under 2.
+
+**Known limit (the server review's s-s1, kept):** a cover is a colliding block or a secret judged by its top only.
+Camp floors, fences and cover never cover water, and a high bridge's bottom is not judged (water 30 under a bridge
+would stay unfrozen). Nothing on Forest Road is affected; a later level with a camp or a high bridge by water needs
+the rule (LevelGeometry and `sim_range.ice_cells` together).
+
+### L2 W3 fix: `check_levels_mutants.py`, new and changed cases
+
+| Case | Rule | Expected |
+|---|---|---|
+| CreekUp has no landing; `rescue.outside` 2 / control 2.5 | the fall line (s-M1, Q3) | red; red / green |
+| CreekUp's landing over the void | L2-58 | red |
+| a landing on Road2 (it collides) — replaces "a landing on CreekUp (not ice)" | Validate | red |
+| an ice block that collides now has its landing taken too (else the landing line alone keeps it red) | Validate | red |
+| the Pond 1 into the Creek (check_levels' line; Validate's mirror) / control 1 short | s-s2 | red ×2 / green |
+| `sim_range.ice_cells` on a copy with the old centre rule (the `sr` switch, `swapped_sim`) | the fill line (d-m1) | red |
+| no air dash, a 34-high tower 92 south of the island / control 99 | ICE_MARGIN with Leap Smash's fall (d-m3; +21.0 without the term) | red / green |
+| the island 48 from the sign pad | (g) the jumps' grace (d-m4) | red |
+| `ice.thickness` 1 | the frozen floor depth (d-m6) | red |
+| Frost Quake, range 70, aliased to Impale Dash / control on the Earthquake alias | (g) the air dash through an alias (s1) | red / green |
+| a frozen bay x −436..−356, z −60..−52 (a hop from it to Road1 saves 84) | the frozen bend (s2) | red |
+| a pond 42 high 4 off CaveWallS1 | the cave's frozen ridge (s2) | red |
+| a pond 40 high 26 north of the gatehouse | the walled camp's frozen cameras (s2) | red |
+| TrailEnd off the east gate's lane, reached over a frozen sheet only / control with no sheet | the walled camp's frozen sight, on the tops the ice adds (s2) | red / green |
+| sim_range's landing-collides line out; its overlap line out (the mirror alone) | check_stage_mirror | red ×2 |
+| sim_range's ice-collides line out now names the mirror case "a pool that collides, with no landing" | check_stage_mirror | red |
+| re-aimed by d-m1: the dam across the creek holds row 6 whole (z 48..56) and is 50 high (a low dam the row lies beside is a bank the chain starts from again) / control: the first dam (z 50..54) holds no cell whole | (h) the chain | red / green |
+
+The full driver (196 data cases, 9 stage-mirror cases, 1 simulator case; about 2 h 10 min): every case as
+expected but the old dam case, which d-m1 made green and which was re-aimed above; the re-aimed case and its new
+control were then run alone (red / green). The server agent named its stage-mirror refusal "a pool that
+collides, with no landing" for the ice-collides mirror case.

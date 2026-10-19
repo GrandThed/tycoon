@@ -5231,10 +5231,12 @@ L2W3_MUTATIONS = {
         "\t\t\t\tother.y + other.sy / 2 > top\n",
         "\t\t\t\tother.y + other.sy / 2 > -math.huge\n",
     ),
+    # Re-aimed by the fix round's d-m1 (a cover holds the WHOLE cell): a cover exactly the cell's
+    # footprint no longer covers it.
     "l2w3: a cover's edge is open": (
         GEOMETRY,
-        "and math.abs(cell.x - other.x) <= other.sx / 2",
-        "and math.abs(cell.x - other.x) < other.sx / 2",
+        "and math.abs(cell.x - other.x) + cell.sx / 2 <= other.sx / 2 + SEAM",
+        "and math.abs(cell.x - other.x) + cell.sx / 2 < other.sx / 2 - SEAM",
     ),
     "l2w3: secrets cover nothing": (
         GEOMETRY,
@@ -5274,10 +5276,11 @@ L2W3_MUTATIONS = {
         "\t\t\tif opens ~= nil then\n\t\t\t\tproblem(`{where} is ice and opens",
         "\t\t\tif false then\n\t\t\t\tproblem(`{where} is ice and opens",
     ),
+    # Re-aimed by the fix round's Q3: a landing on any block a body falls through.
     "l2w3: any block may have a landing": (
         FLOW,
-        '\t\t\tif react ~= "ice" then\n\t\t\t\tproblem(`{where} has a landing and is not ice`)',
-        "\t\t\tif false then\n\t\t\t\tproblem(`{where} has a landing and is not ice`)",
+        "\t\t\tif block.collide ~= false then\n\t\t\t\tproblem(`{where} has a landing and collides`)",
+        "\t\t\tif false then\n\t\t\t\tproblem(`{where} has a landing and collides`)",
     ),
     "l2w3: a landing's numbers are not checked": (FLOW, "\t\t\t\t\tif not isFinite(landing[key]) then", "\t\t\t\t\tif false then"),
     "l2w3: a landing that is no table passes": (
@@ -5286,16 +5289,16 @@ L2W3_MUTATIONS = {
         '\t\t\tif false then\n\t\t\telseif type(landing) == "table" then',
     ),
     # Plan's waters, Landing, FallLanding (L2-58).
-    "l2w3: Plan has no waters": (FLOW, '\t\tif block.react == "ice" and landing ~= nil then', "\t\tif false then"),
+    "l2w3: Plan has no waters": (FLOW, "\t\tif block.collide == false and landing ~= nil then", "\t\tif false then"),
     "l2w3: any block's landing is a water": (
         FLOW,
-        '\t\tif block.react == "ice" and landing ~= nil then',
+        "\t\tif block.collide == false and landing ~= nil then",
         "\t\tif landing ~= nil then",
     ),
     "l2w3: Landing ignores the margin": (
         FLOW,
-        "if inRect(grown(water.rect, grow), x, z) then",
-        "if inRect(water.rect, x, z) then",
+        "if inRect(grown(water.rect, grow), point.X, point.Z) then",
+        "if inRect(water.rect, point.X, point.Z) then",
     ),
     "l2w3: Landing takes a negative margin": (
         FLOW,
@@ -5329,12 +5332,13 @@ L2W3_MUTATIONS = {
         "WorldReact.Freeze(cells, element, fx, reachDown, ahead)",
         "WorldReact.Freeze(cells, element, fx, reachDown, 0)",
     ),
-    "l2w3: a frozen cell does not collide": (LEVEL_SERVICE, "\t\tpart.CanCollide = true\n", ""),
-    "l2w3: a frozen cell is not met by rays": (LEVEL_SERVICE, "\t\tpart.CanQuery = true\n", ""),
+    # Re-aimed by the fix round's s-m1: a cell shows as WorldReact.IceLook says, through showIce.
+    "l2w3: a frozen cell does not collide": (LEVEL_SERVICE, "\tpart.CanCollide = look.collide\n", "\tpart.CanCollide = false\n"),
+    "l2w3: a frozen cell is not met by rays": (LEVEL_SERVICE, "\tpart.CanQuery = look.collide\n", "\tpart.CanQuery = false\n"),
     "l2w3: a frozen cell keeps Ice false": (
-        LEVEL_SERVICE,
-        "part:SetAttribute(CONST.ICE_ATTRIBUTE, true)",
-        "part:SetAttribute(CONST.ICE_ATTRIBUTE, false)",
+        WORLD_REACT,
+        "collide = true, shadow = true, frozen = true }",
+        "collide = true, shadow = true, frozen = false }",
     ),
     "l2w3: nobody hears a freeze": (
         LEVEL_SERVICE,
@@ -5343,13 +5347,13 @@ L2W3_MUTATIONS = {
     ),
     "l2w3: the rescue ignores the landing": (
         WAVE_SERVICE,
-        "local landing = StageFlow.FallLanding(plan, flow, root.Position, rescue.outside)",
+        "local landing = StageFlow.FallLanding(plan, flow, root.Position, stood, rescue.outside)",
         "local landing = nil",
     ),
     "l2w3: the rescue's margin is rescue.below": (
         WAVE_SERVICE,
-        "StageFlow.FallLanding(plan, flow, root.Position, rescue.outside)",
-        "StageFlow.FallLanding(plan, flow, root.Position, rescue.below)",
+        "StageFlow.FallLanding(plan, flow, root.Position, stood, rescue.outside)",
+        "StageFlow.FallLanding(plan, flow, root.Position, stood, rescue.below)",
     ),
     "l2w3: Frost Quake has no launcher": (
         ABILITY,
@@ -5358,6 +5362,239 @@ L2W3_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L2W3_MUTATIONS)
+
+
+# The L2 W3 fix round (docs/prompts/l2-w3-fix-round.md), from the luau-engineer: the pure answers
+# moved out of the services (WorldReact's SwingStrike, IceReach, IceLook, Reactive, ICE_ATTRIBUTE;
+# LevelGeometry's SizesOf, IceOf, Overlap; StageFlow's Landing by where the body stood) and the
+# lines that apply them (tests_l2w3.luau's wiringTests read those as text). One mutant at least
+# for each of the server review's s-m1 lines and the data review's d-m5 reads. The client's three
+# copies of a swing's strike (c-m3's client half) are read as text too, so their files are copied.
+FROST_FX = "src/combat/client/Controllers/FrostFx.luau"
+FEEDBACK = "src/combat/client/Controllers/FeedbackController.luau"
+FILES += [FROST_FX, FEEDBACK]
+L2W3_FIX_MUTATIONS = {
+    # c-m3, client half: each copy builds its strike by hand again (a step of its own, a pad).
+    "l2w3 fix c-m3: the frost ghost's own step": (
+        FROST_FX,
+        "WorldReact.SwingStrike(swing.variant, swing.step, swing.origin, swing.heading)",
+        "WorldReact.SwingStrike(swing.variant, 1, swing.origin, swing.heading)",
+    ),
+    "l2w3 fix c-m3: the phone's own step": (
+        INPUT,
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading)",
+        "local strike = WorldReact.SwingStrike(variant, 1, origin, heading)",
+    ),
+    "l2w3 fix c-m3: the early hitbox's own step": (
+        FEEDBACK,
+        "local predicted = WorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading)",
+        "local predicted = WorldReact.SwingStrike(variant, 1, swing.origin, swing.heading)",
+    ),
+    "l2w3 fix c-m3: the early hitbox pads its size": (
+        FEEDBACK,
+        "\t\tsize = predicted.size,\n",
+        "\t\tsize = predicted.size + variant.pad,\n",
+    ),
+    # s-m1: the five lines that applied the ice unharnessed, as moved.
+    "l2w3 fix s-m1: SizesOf builds no ice": (GEOMETRY, "\t\tice = ice,\n", "\t\tice = nil,\n"),
+    "l2w3 fix s-m1: sizesOf drops SizesOf's config": (
+        LEVEL_SERVICE,
+        "local sizes, iceRefused = LevelGeometry.SizesOf(expeditions, rules)",
+        "local sizes, iceRefused = LevelGeometry.SizesOf(expeditions, nil)",
+    ),
+    "l2w3 fix s-m1: IceOf takes a lift that is not finite": (
+        GEOMETRY,
+        'type(lift) == "number" and isFinite(lift) then',
+        'type(lift) == "number" then',
+    ),
+    "l2w3 fix s-m1: IceOf refuses nothing": (GEOMETRY, "\treturn nil, true\nend", "\treturn nil, false\nend"),
+    "l2w3 fix s-m1: React's guard forgets the ice": (
+        LEVEL_SERVICE,
+        "\tlocal config: any = Tuning.Get()\n\tlocal element = WorldReact.StrikeElement(",
+        "\tif #state.reactive == 0 then\n\t\treturn\n\tend\n\tlocal config: any = Tuning.Get()\n\tlocal element = WorldReact.StrikeElement(",
+    ),
+    "l2w3 fix s-m1: a cell is built with no Ice attribute": (
+        LEVEL_SERVICE,
+        "\tpart:SetAttribute(WorldReact.ICE_ATTRIBUTE, look.frozen)\n",
+        "",
+    ),
+    "l2w3 fix s-m1: water is built frozen": (
+        LEVEL_SERVICE,
+        "showIce(part, WorldReact.IceLook(false, shown))",
+        "showIce(part, WorldReact.IceLook(true, shown))",
+    ),
+    "l2w3 fix s-m1: a frozen cell stays invisible (showIce)": (
+        LEVEL_SERVICE,
+        "\tpart.Transparency = look.transparency\n",
+        "\tpart.Transparency = 1\n",
+    ),
+    "l2w3 fix s-m1: a frozen cell stays invisible (IceLook)": (
+        WORLD_REACT,
+        "return { transparency = shown, collide = true",
+        "return { transparency = 1, collide = true",
+    ),
+    "l2w3 fix s-m1: water shows (IceLook)": (
+        WORLD_REACT,
+        "return { transparency = 1, collide = false",
+        "return { transparency = shown, collide = false",
+    ),
+    "l2w3 fix s-m1: water is met (IceLook)": (
+        WORLD_REACT,
+        "transparency = 1, collide = false, shadow = false",
+        "transparency = 1, collide = true, shadow = false",
+    ),
+    "l2w3 fix s-m1: ice blocks are reactive (Reactive)": (
+        WORLD_REACT,
+        'return react ~= nil and react ~= "ice"',
+        "return react ~= nil",
+    ),
+    "l2w3 fix s-m1: ice blocks are reactive (construct)": (
+        LEVEL_SERVICE,
+        'if react ~= nil and piece.role == "block" and WorldReact.Reactive(react) then',
+        'if react ~= nil and piece.role == "block" then',
+    ),
+    "l2w3 fix s-s3: the attribute is renamed": (
+        WORLD_REACT,
+        'WorldReact.ICE_ATTRIBUTE = "Ice"',
+        'WorldReact.ICE_ATTRIBUTE = "Frozen"',
+    ),
+    # d-m5: the two reads.
+    "l2w3 fix d-m5: IceReach swaps them": (WORLD_REACT, "\treturn reachDown, ahead\nend", "\treturn ahead, reachDown\nend"),
+    "l2w3 fix d-m5: IceReach reads lift for ahead": (
+        WORLD_REACT,
+        'local ahead: number? = if type(ice.ahead) == "number" then ice.ahead else nil',
+        'local ahead: number? = if type(ice.lift) == "number" then ice.lift else nil',
+    ),
+    "l2w3 fix d-m5: IceReach reads ahead for reachDown": (
+        WORLD_REACT,
+        'local reachDown: number? = if type(ice.reachDown) == "number" then ice.reachDown else nil',
+        'local reachDown: number? = if type(ice.ahead) == "number" then ice.ahead else nil',
+    ),
+    "l2w3 fix d-m5: freeze swaps the reads": (
+        LEVEL_SERVICE,
+        "WorldReact.Freeze(cells, element, fx, reachDown, ahead)",
+        "WorldReact.Freeze(cells, element, fx, ahead, reachDown)",
+    ),
+    "l2w3 fix d-m5: freeze reads the wrong table": (
+        LEVEL_SERVICE,
+        "WorldReact.IceReach(if rules ~= nil then rules.ice else nil)",
+        "WorldReact.IceReach(if rules ~= nil then rules else nil)",
+    ),
+    # Q2: the grip.
+    "l2w3 fix Q2: frozen ice slides": (LEVEL_SERVICE, "\t\t\t\tpart.CustomPhysicalProperties = grip\n", ""),
+    "l2w3 fix Q2: the grip is the ice look's": (
+        LEVEL_SERVICE,
+        "local look = if looks ~= nil then looks[CONST.GRIP_LOOK] else nil",
+        "local look = if looks ~= nil then looks.ice else nil",
+    ),
+    "l2w3 fix Q2: GRIP_LOOK names the ice": (LEVEL_SERVICE, 'GRIP_LOOK = "ground",', 'GRIP_LOOK = "ice",'),
+    # c-m3: one strike for a swing.
+    "l2w3 fix c-m3: SwingStrike pads the size": (WORLD_REACT, "size = variant.range,", "size = variant.range + variant.pad,"),
+    "l2w3 fix c-m3: the finisher on every step": (
+        WORLD_REACT,
+        "if chain ~= nil and step == #chain and variant.finisherArcDegrees ~= nil then",
+        "if chain ~= nil and variant.finisherArcDegrees ~= nil then",
+    ),
+    "l2w3 fix c-m3: never the finisher": (
+        WORLD_REACT,
+        "if chain ~= nil and step == #chain and variant.finisherArcDegrees ~= nil then",
+        "if false then",
+    ),
+    "l2w3 fix c-m3: SwingStrike drops the width": (WORLD_REACT, "\t\twidth = variant.width,\n", "\t\twidth = nil,\n"),
+    "l2w3 fix c-m3: SwingStrike points at its origin": (WORLD_REACT, "\t\tdirection = heading,\n", "\t\tdirection = origin,\n"),
+    "l2w3 fix c-m3: resolveMelee builds its own step": (
+        WEAPON,
+        "local swing = WorldReact.SwingStrike(variant, step, origin, heading)",
+        "local swing = WorldReact.SwingStrike(variant, 1, origin, heading)",
+    ),
+    "l2w3 fix c-m3: finish() sends a padded size": (WEAPON, "\t\tsize = swing.size,\n", "\t\tsize = range + variant.pad,\n"),
+    "l2w3 fix c-m3: the candidates sweep their own arc": (
+        WEAPON,
+        "local arcDegrees = swing.arcDegrees\n",
+        "local arcDegrees = variant.arcDegrees\n",
+    ),
+    # s-s2: overlapping ice.
+    "l2w3 fix s-s2: Overlap counts touching": (
+        GEOMETRY,
+        "return math.abs(a.x - b.x) < (a.sx + b.sx) / 2 - SEAM",
+        "return math.abs(a.x - b.x) <= (a.sx + b.sx) / 2 + SEAM",
+    ),
+    "l2w3 fix s-s2: Overlap ignores Z": (
+        GEOMETRY,
+        "\t\tand math.abs(a.z - b.z) < (a.sz + b.sz) / 2 - SEAM\n",
+        "\t\tand true\n",
+    ),
+    "l2w3 fix s-s2: ice blocks may overlap": (FLOW, "if LevelGeometry.Overlap(other.block, block) then", "if false then"),
+    "l2w3 fix s-s2: any blocks may overlap": (
+        FLOW,
+        '\t\tif type(block) ~= "table" or block.react ~= "ice" then\n\t\t\tcontinue\n\t\tend\n\t\tif\n',
+        '\t\tif type(block) ~= "table" then\n\t\t\tcontinue\n\t\tend\n\t\tif\n',
+    ),
+    # d-m1: a cover holds the whole cell.
+    "l2w3 fix d-m1: a cover holding the centre covers (x)": (
+        GEOMETRY,
+        "and math.abs(cell.x - other.x) + cell.sx / 2 <= other.sx / 2 + SEAM",
+        "and math.abs(cell.x - other.x) <= other.sx / 2",
+    ),
+    "l2w3 fix d-m1: a cover holding the centre covers (z)": (
+        GEOMETRY,
+        "and math.abs(cell.z - other.z) + cell.sz / 2 <= other.sz / 2 + SEAM",
+        "and math.abs(cell.z - other.z) <= other.sz / 2",
+    ),
+    # s-M1 and Q3: the landing by where the body stood, on any deep water.
+    "l2w3 fix s-M1: Landing ignores where the body stood": (
+        FLOW,
+        "return waterAt(plan, stood, grow) or waterAt(plan, position, grow)",
+        "return waterAt(plan, position, grow)",
+    ),
+    "l2w3 fix s-M1: Landing ignores where the body is": (
+        FLOW,
+        "return waterAt(plan, stood, grow) or waterAt(plan, position, grow)",
+        "return waterAt(plan, stood, grow)",
+    ),
+    "l2w3 fix s-M1: where the body is decides first": (
+        FLOW,
+        "return waterAt(plan, stood, grow) or waterAt(plan, position, grow)",
+        "return waterAt(plan, position, grow) or waterAt(plan, stood, grow)",
+    ),
+    "l2w3 fix s-M1: FallLanding drops where it stood": (
+        FLOW,
+        "return StageFlow.Landing(plan, position, stood, margin)",
+        "return StageFlow.Landing(plan, position, nil, margin)",
+    ),
+    "l2w3 fix s-M1: the rescue forgets where the body stood": (
+        WAVE_SERVICE,
+        "local stood = WeaponService.LastGround(player)",
+        "local stood = nil",
+    ),
+    "l2w3 fix s-M1: the air tracking never records where it stood": (WEAPON, "\t\t\tshooter.stood = position\n", ""),
+    "l2w3 fix s-M1: an airborne root counts as standing": (
+        WEAPON,
+        "if footing ~= nil and not SwingGate.IsAir(position.Y - footing, offset) then",
+        "if footing ~= nil then",
+    ),
+    "l2w3 fix s-M1: a server move keeps the stood point": (
+        WEAPON,
+        "PositionRing.Clear(shooter.history)\n\t\tshooter.stood = nil\n",
+        "PositionRing.Clear(shooter.history)\n",
+    ),
+    "l2w3 fix s-M1: a fresh body keeps the stood point": (
+        WEAPON,
+        "\tshooter.stood = nil\n\tshooter.airSwing = SwingGate.New()",
+        "\tshooter.airSwing = SwingGate.New()",
+    ),
+    "l2w3 fix s-M1: LastGround answers nothing": (
+        WEAPON,
+        "return if shooter ~= nil then shooter.stood else nil",
+        "return nil",
+    ),
+    "l2w3 fix Q3: only ice's landing is a water": (
+        FLOW,
+        "\t\tif block.collide == false and landing ~= nil then",
+        '\t\tif block.collide == false and block.react == "ice" and landing ~= nil then',
+    ),
+}
+MUTATIONS.update(L2W3_FIX_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

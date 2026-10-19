@@ -76,7 +76,10 @@
 --
 -- L2 W3 (docs/prompts/l2-w3-contract.md, L2-49 and L2-56): an ice family's swing is routed to
 -- FrostFx (the frost puff, and on the local swing ReactFx's ghosts of ice) and its hitbox effect
--- takes the frost colour; nothing else changes here.
+-- takes the frost colour; nothing else changes here. Its fix round: the early swing effect is
+-- built by WorldReact.SwingStrike, the very rule resolveMelee builds the server's strike with
+-- (c-m3), and the answer or refusal of a swing reaches FrostFx too (the ghosts are the swing's:
+-- c-m2).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -89,6 +92,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
+local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -2866,6 +2870,9 @@ local function onStrike(strike: Strike): ()
 		if step ~= nil then
 			InputController.ConfirmSwing(strike.weapon, seq, step)
 		end
+		-- L2 W3 fix round c-m2: the ghosts of ice this swing predicted wait for `Ice` no longer
+		-- than a short grace from here.
+		FrostFx.OnAnswered(seq)
 	elseif swing and not mine then
 		-- L2-56: someone else's ice swing puffs frost (the local one did on its press).
 		FrostFx.OnStrike(strike)
@@ -3509,6 +3516,10 @@ function FeedbackController.OnRefused(seq: number?): ()
 	if early ~= nil then
 		swings.cancel(early.effect)
 	end
+	-- L2 W3 fix round c-m2: a refused ice swing's ghosts of ice go with its effect.
+	if seq ~= nil then
+		FrostFx.OnRefused(seq)
+	end
 end
 
 -- P3.1 ruling 3: the local player's swing, drawn on the frame it is sent (InputController's
@@ -3523,13 +3534,9 @@ function FeedbackController.PredictSwing(swing: InputController.PredictedSwing):
 	-- L2-56: an ice swing's frost and ghosts of ice are information, drawn whatever hitboxEffect is.
 	FrostFx.OnSwing(swing)
 	local variant = swing.variant
-	local shape = variant.shape
-	local chain = variant.chain
-	-- The chain's last hit may sweep its own arc (360 = a spin).
-	local arcDegrees = variant.arcDegrees
-	if chain ~= nil and swing.step == #chain and variant.finisherArcDegrees ~= nil then
-		arcDegrees = variant.finisherArcDegrees
-	end
+	-- The server's own strike for this step (the chain's last hit may sweep its own arc).
+	local predicted = WorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading)
+	local shape = predicted.shape
 	-- An airborne arc reaches down to the crowd below; its end point is the band's bottom.
 	local reachDown = if swing.airborne then math.max(config().movement.airSwingReachDown, 0) else 0
 	local strike: Strike = {
@@ -3539,13 +3546,13 @@ function FeedbackController.PredictSwing(swing: InputController.PredictedSwing):
 		-- the variant itself.
 		variant = "",
 		shape = shape,
-		origin = swing.origin,
-		direction = swing.heading,
-		size = variant.range,
-		arcDegrees = arcDegrees,
-		width = variant.width,
+		origin = predicted.origin,
+		direction = predicted.direction,
+		size = predicted.size,
+		arcDegrees = predicted.arcDegrees,
+		width = predicted.width,
 		endPoint = if shape == "arc" and reachDown > 0
-			then swing.origin - Vector3.new(0, reachDown, 0)
+			then predicted.origin - Vector3.new(0, reachDown, 0)
 			else nil,
 		seq = swing.seq,
 		step = swing.step,

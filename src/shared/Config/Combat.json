@@ -160,7 +160,7 @@
 		"react": {
 			"fireHits": 6,
 			"pad": 0.5,
-			"ice": { "cell": 7, "lift": 0.2, "thickness": 1, "reachDown": 6, "ahead": 4 }
+			"ice": { "cell": 7, "lift": 0.2, "thickness": 4, "reachDown": 6, "ahead": 4 }
 		}
 	},
 	"camps": {

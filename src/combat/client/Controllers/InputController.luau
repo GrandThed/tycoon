@@ -1386,11 +1386,35 @@ local function reactOnAuto(
 	return found
 end
 
+-- The strike the server builds for an ice swing at `step` (WorldReact.SwingStrike), its arc cut
+-- to touch auto-swing's `cone` (nil = uncut).
+local function autoIceStrike(
+	variant: Types.RangeWeaponVariant,
+	step: number,
+	origin: Vector3,
+	heading: Vector3,
+	cone: number?
+): WorldReact.Strike
+	local strike = WorldReact.SwingStrike(variant, step, origin, heading)
+	local arc = strike.arcDegrees
+	if arc ~= nil and cone ~= nil then
+		strike.arcDegrees = math.min(arc, cone)
+	end
+	return strike
+end
+
 -- L2-55: with no body in the swing's shape, an ice family swings at water it would freeze: an
 -- unfrozen ice cell (ReactFx.ForEachIce) that WorldReact.Chills, the server's own rule, names for
--- the strike the server builds from this swing (the root, the flat camera look, the variant's
--- range and arc). Of two arcs (a finisher's own) the narrower is asked, so a swing that would
--- freeze nothing at its step never fires. A frozen cell never triggers.
+-- the strike the server builds from this swing (WorldReact.SwingStrike on the root and the flat
+-- camera look: fix round c-m3). The L2 W3 fix round narrows it; each rule can only remove a
+-- swing, never add one:
+--  * Q1: every step's arc is cut to controls.iceAutoDegrees, so walking along water (Road2's
+--    south half beside the creek) does not swing at it; only water ahead does.
+--  * The combo step the swing will get is the server's to decide, so a cell triggers only when
+--    the strike of every step of the chain chills it.
+--  * c-m4: never while airborne. The freeze band was sized for a grounded origin (L2-54), and an
+--    air swing would spend the jump's one swing and hang the body (AirSwing, AirHang).
+-- A frozen cell never triggers. Far from the water this costs one rectangle test (c-m1).
 local function iceOnAuto(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
@@ -1400,29 +1424,45 @@ local function iceOnAuto(
 	if Unlocks.ElementOf(cfg.weapons, (activeFamily(cfg))) ~= "ice" then
 		return false
 	end
+	if MovementController.IsAirborne() then
+		return false
+	end
 	local reachDown, ahead = ReactFx.IceReach()
 	if reachDown == nil or ahead == nil then
 		return false
 	end
-	-- No arc on the variant is no arc on the server's strike either (Chills then says no).
-	local arc = variant.arcDegrees
-	local finisher = variant.finisherArcDegrees
-	local swing: WorldReact.Strike = {
-		shape = variant.shape,
-		origin = origin,
-		direction = heading,
-		size = variant.range,
-		width = variant.width,
-		arcDegrees = if arc ~= nil and finisher ~= nil then math.min(arc, finisher) else arc,
-	}
-	local found = false
-	ReactFx.ForEachIce(function(part: BasePart)
-		if not found then
-			local box = WorldReact.BoxOf(part.Position, part.Size)
-			found = WorldReact.Chills(swing, box, reachDown, ahead)
+	local coneValue = (cfg.controls :: any).iceAutoDegrees
+	local cone: number? = if type(coneValue) == "number" then coneValue else nil
+	-- A cell every step chills is one step 1 chills, so step 1's reach picks the cells asked.
+	local first = autoIceStrike(variant, 1, origin, heading, cone)
+	local strikes: { WorldReact.Strike }? = nil
+	return ReactFx.ForEachIce(
+		first.origin,
+		first.size + ahead,
+		reachDown,
+		function(_part: BasePart, box: WorldReact.Box): boolean
+			if not WorldReact.Chills(first, box, reachDown, ahead) then
+				return false
+			end
+			-- The other steps' strikes are built only once a cell is within reach.
+			local others = strikes
+			if others == nil then
+				local made: { WorldReact.Strike } = {}
+				local chain = variant.chain
+				for step = 2, if chain ~= nil then #chain else 1 do
+					table.insert(made, autoIceStrike(variant, step, origin, heading, cone))
+				end
+				strikes = made
+				others = made
+			end
+			for _, strike in others :: { WorldReact.Strike } do
+				if not WorldReact.Chills(strike, box, reachDown, ahead) then
+					return false
+				end
+			end
+			return true
 		end
-	end)
-	return found
+	)
 end
 
 local function autoFireOn(cfg: Types.ProvingGroundsConfig): boolean

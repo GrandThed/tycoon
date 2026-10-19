@@ -8,12 +8,18 @@ and its second fix round (m1: shooting.originWallChord under every tall piece's 
 fence.thickness, mirrored by sim_range.fence_thickness; the L1c sight cases calibrated on the 1-stud
 wall now run on it through l1c_wall, each with a twin on the shipped 2.5-stud wall), and of L2 Wave 3
 (L2-51 to L2-60: deep water, the landing, the island behind ice with the water as built (g) and frozen
-(h), the frozen layout's walls, ledge, sniper spots, the found family and the shrine's pay),
-shown red on a mutated copy of the shipped data, and green again on the data as it ships.
+(h), the frozen layout's walls, ledge, sniper spots, the found family and the shrine's pay) and its
+fix round (s-M1 and Q3: every deep water a body falls into has a landing, the stood test reaches the
+edge; s-s2: no two ice blocks overlap; d-m1: the pieces and covers fill every ice block, shown red on
+a copy of sim_range with the old centre rule (SWAPPED_SIM); d-m3: Leap Smash's fall; d-m4: the
+walk-off grace; d-m6: a frozen sheet as deep as a floor; s1: an alias of a dash; s2: the bend rule,
+the cave's closed half and the walled camp on the frozen layout, its sight run on the tops the ice
+adds), shown red on a mutated copy of the shipped data, and green again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
-FLOOR_WALLS, WALLED_CEILING, LIFT_MODEL, TRIGGER_MODEL, SIGHT_WALLS), runs every gate
+FLOOR_WALLS, WALLED_CEILING, LIFT_MODEL, TRIGGER_MODEL, SIGHT_WALLS, or `sr`: a copy of
+sim_range.py with one line swapped, made when the case runs), runs every gate
 (check_levels.run_gates) and expects the named rule red, or green for a control. A rule is named by text its line always carries. Nothing on disk is written,
 except for the stage-mirror cases (MIRROR_CASES), which run tools/check_stage_mirror.py with a line
 of StageFlow.luau and/or sim_range.py broken, from copies in a temporary folder, and expect it red:
@@ -40,6 +46,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent
@@ -113,6 +120,15 @@ FROZEN_SNIPER = "with the ice frozen, the unreachable sniper spots"
 FROZEN_SNIPER_OPEN = "with the ice frozen and the brambles burnt, the unreachable sniper spots"
 FOUND = "map: every family Expeditions.json `found` names"
 ICE_CONFIG = "Combat.json levels.react.ice (L2-53)"
+# The L2 W3 fix round (docs/prompts/l2-w3-fix-round.md: s-M1, Q3, s-s2, d-m1, d-m3, d-m4, d-m6, s1, s2).
+FALLS = "ForestRoad: a fall through deep water comes back to a landing"
+OVERLAP = "ForestRoad: no two ice blocks overlap"
+FILL = "with the ice: the built pieces and the colliding blocks and secrets over the water fill every ice block"
+FROZEN_DEPTH = "with the ice frozen, every block a body lands on"
+FROZEN_BEND = "ForestRoad (frozen): no hop cuts a bend"
+FROZEN_RIDGE = "forestRoad (frozen): behind fire: every wall that faces the sealed air is unclimbable"
+FROZEN_FLOORS = "forestRoad (frozen) camp C (walled): from every outside surface"
+FROZEN_SIGHT = re.compile(r"forestRoad \(frozen\) camp C \(walled\): \(the points on .*\) from no eye point")
 
 
 def layout(data):
@@ -199,6 +215,40 @@ def ice_block(data, name, x0, x1, z0, z1, top):
     """A deep water block that freezes (no collision, react ice), 4 deep under `top`."""
     add_block(data, name, "water", x0, x1, z0, z1, top, top - 4)
     layout(data)["blocks"][-1].update({"collide": False, "react": "ice"})
+
+
+def swapped_sim(old, new):
+    """A switch value: tools/sim_range.py with `old` swapped for `new`, as a module of its own,
+    made (once) when the case that names it runs; a swap whose text is not found exactly once
+    raises ValueError (the mutant is stale)."""
+    made = {}
+
+    def build():
+        if "module" not in made:
+            path = TOOLS / "sim_range.py"
+            text = path.read_text(encoding="utf-8")
+            if text.count(old) != 1:
+                raise ValueError(f"the line {old!r} is not found exactly once in sim_range.py (the mutant is stale)")
+            module = types.ModuleType("sim_range_swapped")
+            module.__file__ = str(path)
+            exec(compile(text.replace(old, new), str(path), "exec"), module.__dict__)
+            made["module"] = module
+        return made["module"]
+
+    build.lazy = True
+    return build
+
+
+def frost_quake_dash(data, alias):
+    """The Frost Hammer's Frost Quake given a range of 70 and AbilityService's alias line for it
+    pointed at `alias` (the shipped line says earthquake): ctx dashes read again from that text."""
+    text = cl.ABILITY_SERVICE_PATH.read_text(encoding="utf-8")
+    line = "MECHANICS.frostQuake = MECHANICS.earthquake"
+    if text.count(line) != 1:
+        raise ValueError(f"the line {line!r} is not found exactly once in AbilityService.luau (the mutant is stale)")
+    data["ctx"]["weapons"]["frostHammer"]["ability"]["range"] = 70
+    data["ctx"]["dashes"] = cl.dashing_abilities({"weapons": data["ctx"]["weapons"]},
+                                                 text.replace(line, f"MECHANICS.frostQuake = MECHANICS.{alias}"))
 
 
 def secret(data, sid):
@@ -554,11 +604,15 @@ CASES = (
     ("W3 deep: the water's tops at -0.25 (0.25 under the bridge)", lambda d: water_tops(d, -0.25), {}, DEEP, True),
     ("W3 deep control: the water's tops at -0.5 (0.5 under the bridge)", lambda d: water_tops(d, -0.5), {}, DEEP, False),
     ("W3 deep: the pond's top 1 under the creek's", lambda d: top_at(d, "Pond", -2), {}, DEEP, True),
-    ("W3 L2-52: an ice block that collides", lambda d: block(d, "Creek").pop("collide"), {}, PROBLEMS, True),
+    # With its landing gone too: since the fix round's Q3 a landing on a block that collides is
+    # refused on its own line, which would keep this case red without the ice line.
+    ("W3 L2-52: an ice block that collides (no landing)",
+     lambda d: (block(d, "Creek").pop("collide"), block(d, "Creek").pop("landing")), {}, PROBLEMS, True),
     ("W3 L2-52: an ice block that opens the cave", lambda d: block(d, "Creek").__setitem__("opens", "cave"), {}, PROBLEMS,
      True),
-    ("W3 L2-58: a landing on a block that is not ice (CreekUp)",
-     lambda d: block(d, "CreekUp").__setitem__("landing", {"x": -385, "y": 0, "z": 2}), {}, PROBLEMS, True),
+    # The W3 fix round's Q3: any deep water may carry a landing (CreekUp does); a block that collides may not.
+    ("W3 L2-58: a landing on a block that collides (Road2)",
+     lambda d: block(d, "Road2").__setitem__("landing", {"x": -385, "y": 0, "z": 2}), {}, PROBLEMS, True),
     ("W3 L2-58: a landing whose y is a string", lambda d: block(d, "Pond")["landing"].__setitem__("y", "0"), {}, PROBLEMS,
      True),
     ("W3 L2-58: the Creek's landing over the void (-385, 0, 30)",
@@ -601,8 +655,13 @@ CASES = (
      lambda d: d["ctx"]["weapons"]["frostHammer"].pop("element"), {}, ICE_SWING, True),
     ("W3 h: a gap in the cell chain (the creek ends at z 80, 16 short of the pond)",
      lambda d: block(d, "Creek").update({"z": 44, "sz": 72}), {}, ICE_CHAIN, True),
-    ("W3 h: a wall across the creek covers a row of cells (z 50..54, top 0.5)",
-     lambda d: add_block(d, "MutantDam", "wall", -412, -388, 50, 54, 0.5, -1.5), {}, ICE_CHAIN, True),
+    # The fix round's d-m1: a cover skips only the cells it holds whole, so the dam holds row 6
+    # (z 48.62..55.38) whole; the first dam (z 50..54) left every cell built under it. It is 50
+    # high, unclimbable: a low dam that whole row lies beside is a bank the chain starts from again.
+    ("W3 h: a wall across the creek covers a row of cells whole (z 48..56, top 50)",
+     lambda d: add_block(d, "MutantDam", "wall", -412, -388, 48, 56, 50, -1.5), {}, ICE_CHAIN, True),
+    ("W3 fix d-m1 control: the first dam, z 50..54, holds no cell whole (every cell built, the chain whole)",
+     lambda d: add_block(d, "MutantDam", "wall", -412, -388, 50, 54, 0.5, -1.5), {}, ICE_CHAIN, False),
     ("W3 h: the island 66 south of the pond (no ice reaches it)",
      lambda d: (block(d, "ShrineIsland").__setitem__("z", 230), secret(d, "shrine").__setitem__("z", 230)), {}, ICE_FROZEN,
      True),
@@ -645,6 +704,63 @@ CASES = (
     ("W3 L2-53: levels.react.ice missing", lambda d: levels(d)["react"].pop("ice"), {}, ICE_CONFIG, True),
     ("W3 L2-53: iceHits back in levels.react", lambda d: levels(d)["react"].__setitem__("iceHits", 6), {}, ICE_CONFIG,
      True),
+    # The W3 fix round (docs/prompts/l2-w3-fix-round.md). s-M1 and Q3: a fall comes back to a landing.
+    ("W3 fix Q3: CreekUp has no landing (Road2's north edge falls into it)",
+     lambda d: block(d, "CreekUp").pop("landing"), {}, FALLS, True),
+    ("W3 fix Q3: CreekUp's landing over the void (-400, 0, -20)",
+     lambda d: block(d, "CreekUp")["landing"].__setitem__("z", -20), {}, LANDING, True),
+    ("W3 fix s-M1: player.rescue.outside 2 (under one server frame of the dash, 2.22)",
+     lambda d: d["ctx"]["rescue"].__setitem__("outside", 2), {}, FALLS, True),
+    ("W3 fix s-M1 control: player.rescue.outside 2.5",
+     lambda d: d["ctx"]["rescue"].__setitem__("outside", 2.5), {}, FALLS, False),
+    # s-s2: ice footprints touch, never overlap (Validate's mirror and check_levels' own line).
+    ("W3 fix s-s2: the Pond 1 stud into the Creek (z 95..156)",
+     lambda d: block(d, "Pond").update({"z": 125.5, "sz": 61}), {}, OVERLAP, True),
+    ("W3 fix s-s2: the same overlap, Validate's mirror", lambda d: block(d, "Pond").update({"z": 125.5, "sz": 61}), {},
+     PROBLEMS, True),
+    ("W3 fix s-s2 control: the Pond 1 stud short of the Creek (z 97..156)",
+     lambda d: block(d, "Pond").update({"z": 126.5, "sz": 59}), {}, OVERLAP, False),
+    # d-m1: a cell is left out only where one cover holds it whole; the old centre rule leaves two
+    # slits beside the island (48.5 studs² of the Pond) that the fill line sees.
+    ("W3 fix d-m1: sim_range.ice_cells back on the centre rule (the island's two slits)", None,
+     {"sr": swapped_sim(
+         "if any(c[4] > water and abs(cx - c[0]) + wx / 2 <= c[2] / 2 + GEOMETRY_SEAM\n"
+         "                       and abs(cz - c[1]) + wz / 2 <= c[3] / 2 + GEOMETRY_SEAM for c in covers):",
+         "if any(c[4] > water and abs(cx - c[0]) <= c[2] / 2\n"
+         "                       and abs(cz - c[1]) <= c[3] / 2 for c in covers):")},
+     FILL, True),
+    # d-m3: Leap Smash's fall from a high top. With no air dash, a 34-high tower 92 south of the
+    # island: the Leap reaches 71.0 and its fall 12.3 more (83.2 + 15 > 92); without the fall term
+    # the margin would read +21.0.
+    ("W3 fix d-m3: no air dash, a 34-high tower 92 south of the island (Leap Smash and its fall)",
+     lambda d: (d["ctx"].__setitem__("dashes", []), add_block(d, "MutantTower", "ground", -404, -396, 228, 236, 34, 30)),
+     {}, ICE_GAP, True),
+    ("W3 fix d-m3 control: the same tower 99 south (83.2 + 15 < 99)",
+     lambda d: (d["ctx"].__setitem__("dashes", []), add_block(d, "MutantTower", "ground", -404, -396, 235, 243, 34, 30)),
+     {}, ICE_GAP, False),
+    # d-m4: the walk-off grace in the jumps' rule: 46.6 without it, 49.3 with it.
+    ("W3 fix d-m4: the island 48 from the sign pad (inside the walk-off grace: 46.6 < 48 < 49.3)",
+     lambda d: island_at(d, 48), {}, ICE_JUMPS, True),
+    # d-m6: a frozen sheet is a floor, levels.floorThickness deep.
+    ("W3 fix d-m6: ice.thickness 1 (a frozen sheet thinner than levels.floorThickness 4)",
+     lambda d: ice(d).__setitem__("thickness", 1), {}, FROZEN_DEPTH, True),
+    # s1: an ability whose MECHANICS line aliases a dash's is a dash.
+    ("W3 fix s1: Frost Quake (range 70) aliased to Impale Dash: an air dash onto the island",
+     lambda d: frost_quake_dash(d, "impaleDash"), {}, ICE_DASH, True),
+    ("W3 fix s1 control: the same range on the Earthquake alias it ships with (no dash)",
+     lambda d: frost_quake_dash(d, "earthquake"), {}, ICE_DASH, False),
+    # s2: the bend rule, the cave's closed half and the walled camp on the frozen layout.
+    ("W3 fix s2: a frozen bay south of Road1 to Road3 (x -436..-356, z -60..-52): a hop from it cuts the gap",
+     lambda d: ice_block(d, "MutantBay", -436, -356, -60, -52, -1), {}, FROZEN_BEND, True),
+    ("W3 fix s2: a pond 42 high 4 off CaveWallS1 (the ridge climbable once frozen), the cave's frozen run",
+     lambda d: ice_block(d, "MutantIce", -255, -245, -78, -70, 42), {}, FROZEN_RIDGE, True),
+    ("W3 fix s2: a pond 40 high 26 north of the gatehouse (a camera over it once frozen)",
+     lambda d: ice_block(d, "MutantPond", 300, 310, -84, -80, 40), {}, FROZEN_FLOORS, True),
+    ("W3 fix s2: TrailEnd off the east gate's lane, reached over a frozen sheet only (its eyes see in)",
+     lambda d: (block(d, "TrailEnd").__setitem__("z", 10), ice_block(d, "MutantSheet", 325, 360, -50, -30, 12)), {},
+     FROZEN_SIGHT, True),
+    ("W3 fix s2 control: TrailEnd off the lane with no sheet (nobody reaches it, frozen or not)",
+     lambda d: block(d, "TrailEnd").__setitem__("z", 10), {}, FROZEN_SIGHT, False),
 )
 
 
@@ -665,7 +781,7 @@ def run(base, change=None, switches=None):
     saved = {key: getattr(cl, key) for key in (switches or {})}
     try:
         for key, value in (switches or {}).items():
-            setattr(cl, key, value)
+            setattr(cl, key, value() if getattr(value, "lazy", False) else value)
         with contextlib.redirect_stdout(io.StringIO()):
             cl.run_gates(data["combat"], data["expeditions"], data["layouts"], data["files"], data["ctx"], expect)
     finally:
@@ -710,15 +826,21 @@ MIRROR_CASES = (
     ("fix2 m1: sim_range's fence_thickness ignores the camp's own (the mirror alone)", None,
      ("        return own\n", "        return default\n"), "LevelGeometry.FenceThickness"),
     # L2 W3 (L2-52): an ice block that collides, accepted by the Python mirror alone (the Luau side's
-    # mutants are tools/crowd_harness/mutate.py's). The mirror's refusal case carries this label.
+    # mutants are tools/crowd_harness/mutate.py's). The mirror's refusal case carries this label; it
+    # has no landing, since the fix round's Q3 refuses a landing on a block that collides on its own.
     ("W3 L2-52: sim_range's react_problems takes an ice block that collides (the mirror alone)", None,
      ('                if block.get("collide") is not False:\n                    problem(f"{where} is ice and collides")',
       '                if False:\n                    problem(f"{where} is ice and collides")'),
-     "a pool that collides"),
-    ("W3 L2-58: sim_range's react_problems takes a landing on a block that is not ice (the mirror alone)", None,
-     ('            if react != "ice":\n                problem(f"{where} has a landing and is not ice")',
-      '            if False:\n                problem(f"{where} has a landing and is not ice")'),
-     "plain water with a landing"),
+     "a pool that collides, with no landing"),
+    # The W3 fix round's Q3: a landing on any block that does not collide; s-s2: ice footprints
+    # that overlap. Each out of the Python mirror alone (the Luau side's are mutate.py's).
+    ("W3 fix Q3: sim_range's react_problems takes a landing on a block that collides (the mirror alone)", None,
+     ('            if block.get("collide") is not False:\n                problem(f"{where} has a landing and collides")',
+      '            if False:\n                problem(f"{where} has a landing and collides")'),
+     "a plain block that collides, with a landing"),
+    ("W3 fix s-s2: sim_range's react_problems takes two ice blocks that overlap (the mirror alone)", None,
+     ("            if ice_overlap(other, block):", "            if False:"),
+     "a second pool overlapping the first"),
 )
 
 
@@ -809,7 +931,12 @@ def main():
     for label, change, switches, rule, red in CASES:
         if args.only and args.only not in label:
             continue
-        failed, passed = run(base, change, switches)
+        try:
+            failed, passed = run(base, change, switches)
+        except ValueError as stale:
+            print(f"  NOT   {label}: {stale}")
+            wrong.append(label)
+            continue
         hit = [text for text in failed if matches(rule, text)]
         seen = [text for text in passed if matches(rule, text)]
         good = bool(hit) if red else (not hit and bool(seen))
