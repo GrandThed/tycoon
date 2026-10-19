@@ -1,6 +1,6 @@
 ---
 name: l2-secrets-review
-description: L2 W1 review (bought Double Jump, lookout chest, v7) - server slice 2026-10-17 0C/0M/4m (v7 forward-compat recipe, trigger-from-centre vs a big solid, unharnessed verdict-acting lines); client slice 0C/0M/7m (HUD-row overlap across ScreenGuis, proving hides Return, lost walk-off forgiveness, unmirrored client copy); fix diff 0C/1M/3m (AbsolutePosition origin trap undoes c1; shared call with copied args); L2 W2 slices 2026-10-18 (server, client, data-tools: stray_reach lacks ability travel, roof reachable by a mid-air Leap Smash); W2 fix diffs (origin chord vs generated fence; lag lead pointed by client velocity passes wall ends)
+description: L2 W1 review (bought Double Jump, lookout chest, v7) - server slice 2026-10-17 0C/0M/4m (v7 forward-compat recipe, trigger-from-centre vs a big solid, unharnessed verdict-acting lines); client slice 0C/0M/7m (HUD-row overlap across ScreenGuis, proving hides Return, lost walk-off forgiveness, unmirrored client copy); fix diff 0C/1M/3m (AbsolutePosition origin trap undoes c1; shared call with copied args); L2 W2 slices 2026-10-18 (server, client, data-tools: stray_reach lacks ability travel, roof reachable by a mid-air Leap Smash); W2 fix diffs (origin chord vs generated fence; lag lead pointed by client velocity passes wall ends); L2 W3 slices 2026-10-19 (ice, frost hammer, island shrine: client, server, data-tools - centre-under-cover ice slits, reach-branch drop terms); W3 fix diff 2026-10-19 0C/0M/2m (part-covered cell faces on the cover's face; body rule on the lagged server copy vs a thicker sheet)
 metadata:
   type: project
 ---
@@ -257,5 +257,146 @@ Findings: `docs/prompts/l2-w2-review/fix2-diff.md`.
   Run `mutate.py <copy> <luau> "probe:"`. It needs its own copy, because `mutant/` is per checkout.
 - Port WorldReact's AimClear to Python with the harness's box caster (`firstHit` slab test, skipping a box
   that holds `from`). It answers forged and honest cases on real layout boxes in seconds.
+
+## L2 W3 client slice (2026-10-19, 6db63ae on `l2-w3`): 0 Critical, 0 Major, 4 Minor, 2 Suggestions
+
+Findings: `docs/prompts/l2-w3-review/client.md` (frost hammer, ice cells, ghost ice, phone auto-swing at water).
+
+**Patterns:**
+- **A per-frame phone scan over world objects needs a distance gate and cached boxes.** `iceOnAuto` runs every
+  frame on touch over all 132 cells (4 bridge reads + a `BoxOf` table + `Chills` each), anywhere in the level.
+  The pure part alone costs 143 µs a frame in the Luau CLI (bench: copy `Chills` + `BoxOf`, 132 cells, 2000 loops),
+  so a phone pays about 0.5 to 1 ms. Ask for: boxes cached at adopt, an unfrozen list kept by the signal, and a
+  bounding-rect early-out.
+- **A predicted effect timed by a clock, not by the answer to its seq, lies twice.** On a refusal it lasts the
+  full timeout. On a slow link it goes before the real thing arrives (a flicker). Key the effect to the seq:
+  `OnRefused(seq)` exists.
+- **The W1 shared-call pattern again:** the client rebuilds `resolveMelee`'s fx (size, arc per step) in 2 to 3
+  places and no tool reads client files. Ask for one pure `SwingStrike` that both sides call.
+- **A band rule sized for a grounded origin also holds for the first studs of a jump and during a fall.** On a
+  phone, an auto-swing there spends the one air swing and triggers `AirHang` (a 0.3 s zero-velocity mover).
+- **An Earthquake-style visual re-tuned to a big radius (32) needs its look counts scaled.** The floor height is
+  sampled at the centre only, so on a 16-wide road most of the ring hangs over the void.
+
+**Verified, safe to reuse:**
+- `combat.project.json` has `StreamingEnabled` false, so client part lists equal the server's.
+- `finish` broadcasts the strike, then runs the listeners. Melee never sets `fx.abandoned`.
+- `enemyInReach` (pad + autoSwingPad + lagPad) is a superset of the server's melee hit shape.
+- The client melee claim is `rig.root.Position` plus `flatCameraLook()`. The server keeps it unless it is past the
+  slack.
+
+## L2 W3 server slice (2026-10-19, 6db63ae on `l2-w3`): 0 Critical, 1 Major, 1 Minor, 3 Suggestions
+
+Findings: `docs/prompts/l2-w3-review/server.md` (WorldReact Cells/Chills/Freeze, ice pieces, React's ice
+branch, the water landing).
+
+**Patterns:**
+- **A rescue margin borrowed from another rule must cover the carry of a fall.**
+  - `StageFlow.Landing` grows the water rect by `rescue.outside` 4, the camp margin.
+  - A walk-off at `walkSpeed` 20 carries the root `20·√(2·(top+3−killY)/196.2) + 1` ≈ 8.9 studs past the
+    edge before it crosses killY. A dash carries about 29.
+  - The frozen creek is a 20-wide lane over void, so a side slip goes to a checkpoint 267 to 716 studs away.
+    A slow sidestep in the same spot lands on the road.
+  - For any "comes back to X" rule, compute the carry and check what borders the lane.
+- **The W2 pattern a third time: the service lines are unharnessed.**
+  - `sizesOf`'s `ice = iceOf(...)` set to nil means no ice in the game, and every gate stays green, because
+    the harness and check_levels pass their own sizes.
+  - React's early guard reverted to `#reactive == 0` stops all freezing once the leader has found the cave:
+    both brambles are `opens: "cave"`, so no fire block is built. It also stops once they burn in the run.
+  - The client finds cells by `typeof(attr) == "boolean"`, so dropping the server's `SetAttribute(Ice, false)`
+    hides every cell from phones.
+  - Always probe: (1) the line that loads the config into the pure rule; (2) early-return guards that
+    combine two lists; (3) attributes the client keys on.
+- **A cover rule judged on the cover's top only** treats a high bridge as sitting on the water. Ask for the
+  cover's bottom to be judged too.
+
+**Verified, safe to reuse:**
+- Every ability strike reaches `finish()` tagged (`Strike` :2803, projectile `ability`).
+- The movement slam is weapon `"slam"`, which has no element.
+- `resolveMelee` calls `finish` unconditionally.
+- `rescueFallen` runs every Heartbeat.
+- `SafePoint` returns the camp entry for the gate, fight and breather steps.
+- `IsOut` uses the camp box for fight and breather only.
+- `LevelGeometry.Bounds` includes non-colliding blocks, so the pond is in bounds.
+- Probe recipe (W2) works unchanged:
+  - Append a `PROBE_MUTATIONS` dict after the last `MUTATIONS.update` in a second archive copy.
+  - Write it with a Python script that builds the backslashes from `"\\"`. A heredoc'd `'''` string turned
+    `\\n` into a real newline.
+
+## L2 W3 data-tools slice (2026-10-19, 6db63ae on `l2-w3`): 0 Critical, 0 Major, 6 Minor, 3 Suggestions
+
+Findings: `docs/prompts/l2-w3-review/data-tools.md`.
+
+**Patterns:**
+- **"No piece where a cover holds the cell's CENTRE" leaves a slit at the cover's edge.** A cell can stick out up
+  to half a cell past the cover. At the island it leaves two water slits, each 1.82 × 13.3, that never freeze.
+  - The checker's `frozen_layout` freezes the block WHOLE, so it cannot see them. Neither can a walker that stands
+    on cell centres.
+  - For any grid that skips covered cells, rasterise the union of the built pieces and the covers over the block.
+    The probe is `w3dt_probe/holes.py`.
+- **A reach model's branch with no drop term.** The jumps and the air-dash branches add the fall below the
+  take-off. The Leap Smash branch (`lift_carry + dash + castRange`) does not.
+  - Over a void the leap ends at the caster's floor, which is the take-off top. The walk-speed fall from there to
+    key − STEP_UP is lost: 3.5 studs at equal height, 12 from a 34-high ledge.
+- **An air dash over deep water or the void is a SLAM.** `heightAboveGround` returns GROUND_PROBE 256 when the ray
+  hits nothing, because water is CanQuery false. `canSlam` then wins.
+  - So every "air dash" term in check_levels is conservative over water, and a second dash late in a flight cannot
+    happen.
+- **The frozen check's depth rule is vacuous for the new floor.** `GROUND_LOOKS` has no "ice", so the 1-stud
+  sheet is never judged.
+  - When a variant layout gives new floors a new look, check which rules key on look.
+- The usual pattern again: `freeze` reads `reachDown`/`ahead` from config on lines no mutant covers. The text
+  check matches only the call.
+- `dashing_abilities` finds dashes by regex and does not follow `MECHANICS.x = MECHANICS.y` aliases. W3 made
+  aliasing normal (frostQuake → earthquake).
+
+**Verified, safe to reuse:**
+- Forest Road's island: every top within 150 studs is at height 0. The sign pad is 102 away against a worst means
+  of 80.6 (Impale Dash held in the air). Enemy knocks slide v²/(2·75), only 6 studs at knockback 30.
+- `ice_cells` matches `LevelGeometry.iceCells`: same grid, centre rule, strict top and covers. Only the order
+  differs, and only the names carry it.
+- L2-39 pairs ability with ability. The Broadsword's "with ability" boss rows equal its plain ones.
+- Shrine chest share: 63 / 211 is 29.86%, against the 30% top. Two Timber of slack.
+
+**Recipes:**
+- To prove a reach term is not vacuous, put the target between the reach with the term and without it. Example:
+  the island at 48 for the walk-off grace (46.6 < 48 < 49.3). The `island_at` helper in
+  check_levels_mutants moves it.
+- A session cut-off does NOT kill a backgrounded `sim_range` run. A rerun into the same log interleaves two
+  outputs. Check for a live run (by command line, then kill by PID) before rerunning.
+
+## L2 W3 fix-diff review (2026-10-19, 8112ff3..25528b7 in `tycoon-p5b`): 0 Critical, 0 Major, 2 Minor, 2 Suggestions
+
+Findings: `docs/prompts/l2-w3-review/fix-diff.md`. All 3 slices' findings were really fixed in code. Both Minors
+are side effects of the fixes.
+
+**Patterns:**
+- **A "skip only when wholly covered" rule builds part-covered pieces, and their faces can land on the cover's
+  face.** ShrineIsland's south face (z 136) sits on a pond row line, so two built cells z-fight with it. That is
+  Q6's shimmer, moved to the island.
+  - The fill line (area) and the mirror (boxes) cannot see faces.
+  - Probe: compare every built piece's 6 faces with every block's and secret's, same plane AND same facing, with
+    overlap on both other axes (`w3fd/probe/coplanar.py`, 40 lines over `sim_range.ice_cells`).
+  - Insetting that face in code opens a slit where the cell runs past the cover. Move the cover off the grid line
+    instead.
+- **A body rule judged on the server's copy trails each body's own screen by its round trip.** A fix that
+  thickens a sheet (d-m6: 1 → 4) turns "legs in the ice" into "root wholly inside" at a 0.15–0.25 s round trip,
+  for a teammate or for the swinger walking onto his own non-colliding ghost.
+  - Quantify with a fall-versus-lag table (`embed.py`).
+  - A velocity lead closes only the already-falling window. A body still standing on the server when the swing
+    lands cannot be led.
+- **A client gate that asks a different "airborne?" than the server** (Humanoid FloorMaterial vs SwingGate's
+  footprint) only removes swings if one question contains the other. `AirSwing.Judge` is side-effect-free at the
+  client's lag of 0, so ask it directly.
+
+**Verified, safe to reuse:**
+- `ArenaService.MoveMember` is the one body mover, and its moved hook is `WeaponService.ForgetMotion`. GateNudge
+  calls ForgetMotion itself. `RangeService` moves bodies only in the range. Grep `PivotTo` in `src/combat/server`
+  to re-prove this.
+- `SwingGate.Judge`'s returned `airborne` is purely geometric (IsAir at the claim, over the footprint floor). Only
+  `allowed` uses the "landing ahead" lag branch.
+- Water blocks and unfrozen cells are CanQuery false (LevelService builds every non-colliding piece that way).
+- Only RangeStats carries a melee refusal seq. AbilityService's refusedSeq is on its own remote.
+- `sim_range --check` on the archive took about 20 min this time (524 PASS lines).
 
 See [[l1c-chief-clearing-review]] and [[l1b-living-road-review]].
