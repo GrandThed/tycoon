@@ -203,10 +203,11 @@ GROUND_POINT_BODY = {
 # LevelService.React takes its element from WorldReact.StrikeElement (with the ability id, so an
 # ability's strike burns nothing) and hands the loop to WorldReact.Apply, with no loop of its
 # own; aimAllowed answers with WorldReact.AimClear (the second fix round's m1 and m2): from the
-# head, and from the head carried by claimSlack's own speed and lag (WorldReact.LeadHead on the
-# root's velocity), with shooting.originWallChord as the tolerance (its argument is read too: a
-# copy of another number there left every gate green) and worldHit, whose ray goes through the
-# world query every other one uses.
+# head, and from the head carried by claimSlack's own speed and lag along its ring's way
+# (WorldReact.LeadHead, the root's velocity only shortening it: the third fix round's m1), with
+# shooting.originWallChord as the tolerance (its argument is read too: a copy of another number
+# there left every gate green) and worldHit, whose ray goes through the world query every other
+# one uses. claimSlack hands back PositionRing.Motion's way as it came.
 MAIN_SERVER = "src/combat/server/Main.server.luau"
 LEVEL_SERVICE = "src/combat/server/Services/LevelService.luau"
 # A live line at the top level of Main (a commented-out one does not count).
@@ -219,11 +220,16 @@ REACT_APPLY = "WorldReact.Apply(cells, element, fx, pad, need)"
 REACT_OWN_LOOP = re.compile(r"\bWorldReact\.(?:Touches|Heat)\(|\.react\s*[~=]=")
 AIM_BODY = re.compile(r"(?ms)^local function aimAllowed\(.*?^end$")
 AIM_RAYS = (
-    "local slack, speed, lag = claimSlack(shooter, root, config.shooting.originPad, config)",
+    "local slack, speed, lag, motion = claimSlack(shooter, root, config.shooting.originPad, config)",
     "if distance > slack then",
-    "local lead = WorldReact.LeadHead(anchor, root.AssemblyLinearVelocity, speed, lag)",
+    "local lead = WorldReact.LeadHead(anchor, motion, root.AssemblyLinearVelocity, speed, lag)",
     "WorldReact.AimClear(anchor, lead, origin, config.shooting.originWallChord, worldHit)",
     "\treturn clear\n",
+)
+CLAIM_BODY = re.compile(r"(?ms)^local function claimSlack\(.*?^end$")
+CLAIM_LINES = (
+    "local speed, motion = PositionRing.Motion(",
+    "return math.max(pad, 0) + speed * lag, speed, lag, motion\n",
 )
 WORLD_HIT_BODY = re.compile(r"(?ms)^local function worldHit\(.*?^end$")
 WORLD_HIT_LINES = (
@@ -276,6 +282,8 @@ def source_reading(repo: Path) -> dict:
     aim_text = aim.group(0) if aim else ""
     hit = WORLD_HIT_BODY.search(text(WEAPON_SERVICE))
     hit_text = hit.group(0) if hit else ""
+    claim = CLAIM_BODY.search(text(WEAPON_SERVICE))
+    claim_text = claim.group(0) if claim else ""
     wiring = {
         "main": len(REACT_WIRING.findall(text(MAIN_SERVER))),
         "finishFound": finish is not None,
@@ -291,6 +299,10 @@ def source_reading(repo: Path) -> dict:
         "aimRayMost": max(aim_text.count(line) for line in AIM_RAYS),
         "hitFound": hit is not None,
         "hitLines": min(hit_text.count(line) for line in WORLD_HIT_LINES),
+        # Each line once, and `motion` only in them (taken, then returned).
+        "claimFound": claim is not None,
+        "claimLines": min(claim_text.count(line) for line in CLAIM_LINES),
+        "claimMotion": claim_text.count("motion"),
     }
     return {
         "groundClient": client,

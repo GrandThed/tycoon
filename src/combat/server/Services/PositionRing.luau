@@ -62,23 +62,28 @@ end
 -- never its 133, so a swing made mid-dash was pulled back behind the player.
 -- Why the fastest stretch and not only the one ending now: the reading then holds through a
 -- replication stall of a few frames (and for `window` after a burst ends).
--- 0 for an empty history or a window that is not positive.
-function PositionRing.Speed(
+-- Also returns the way that fastest stretch went: the unit vector of its displacement
+-- (Vector3.zero when no stretch moved). The L2 W2 third fix round's m1: the aim rule leads the
+-- head along it, the server's own measure of the motion, never along the velocity a client
+-- replicates for its character.
+-- 0 (and no way) for an empty history or a window that is not positive.
+function PositionRing.Motion(
 	history: History,
 	now: number,
 	position: Vector3,
 	window: number,
 	span: number
-): number
+): (number, Vector3)
 	local count = history.count
 	-- Written so that a NaN window, which fails every comparison, also returns 0.
 	if not (window > 0) or count == 0 then
-		return 0
+		return 0, Vector3.zero
 	end
 	-- A span that is not a positive number (or NaN, which fails the comparison) or is longer
 	-- than the window falls back to the whole window, the most cautious reading.
 	local stretch = if span > 0 and span < window then span else window
 	local fastest = 0
+	local way = Vector3.zero
 	local endAt = now
 	local endPosition = position
 	local anchorOrder = 1
@@ -101,14 +106,16 @@ function PositionRing.Speed(
 			anchor = indexOf(history, anchorOrder)
 		end
 		local elapsed = endAt - history.times[anchor]
-		local speed = (endPosition - history.positions[anchor]).Magnitude
-			/ math.max(elapsed, stretch)
-		-- A NaN fails the comparison and is dropped.
+		local moved = endPosition - history.positions[anchor]
+		local distance = moved.Magnitude
+		local speed = distance / math.max(elapsed, stretch)
+		-- A NaN fails the comparison and is dropped. A speed above 0 has a distance above 0.
 		if speed > fastest then
 			fastest = speed
+			way = moved / distance
 		end
 	end
-	return fastest
+	return fastest, way
 end
 
 return PositionRing

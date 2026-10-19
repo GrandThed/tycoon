@@ -268,20 +268,32 @@ end
 
 -- The L2 W2 second fix round's m2: the server's copy of the head trails a fast player by the lag
 -- the aim rule's distance test excuses, so round a corner or off an edge an honest origin's line
--- from it crossed the wall. LeadHead carries the head along the root's `velocity` (the server's
--- copy, which trails the same lag) for `lag` seconds, its speed held to `speed`: claimSlack's, the
--- fastest stretch of the position ring capped at Tuning.FastestMove. So the lead never lies further
--- from the head than the slack the distance test grants. A head or velocity that is not finite, or
--- a speed or lag that is not a finite number above 0, leads nowhere: the head itself.
-function WorldReact.LeadHead(head: Vector3, velocity: Vector3, speed: number, lag: number): Vector3
-	if not (finitePoint(head) and finitePoint(velocity)) then
+-- from it crossed the wall. LeadHead carries the head `lag` seconds along `motion`, the way the
+-- position ring's fastest stretch went (PositionRing.Motion), at `speed`: claimSlack's, that
+-- stretch's speed capped at Tuning.FastestMove. So the lead never lies further from the head than
+-- the slack the distance test grants. The third fix round's m1: the way is the server's own
+-- measure, never the client's: a character's replicated `velocity` is whatever its client says,
+-- and led along it a forger reached round a wall's end. That velocity may only shorten the lead
+-- (its part along `motion`, floored at 0), so a player who has stopped is not carried on. A head,
+-- way or velocity that is not finite, no way at all, or a speed or lag that is not a finite
+-- number above 0, leads nowhere: the head itself.
+function WorldReact.LeadHead(
+	head: Vector3,
+	motion: Vector3,
+	velocity: Vector3,
+	speed: number,
+	lag: number
+): Vector3
+	if not (finitePoint(head) and finitePoint(motion) and finitePoint(velocity)) then
 		return head
 	end
-	local magnitude = velocity.Magnitude
+	local magnitude = motion.Magnitude
 	if not (magnitude > 0) then
 		return head
 	end
-	return head + velocity * (math.min(magnitude, length(speed)) / magnitude * length(lag))
+	local way = motion / magnitude
+	local along = math.max(velocity:Dot(way), 0)
+	return head + way * (math.min(along, length(speed)) * length(lag))
 end
 
 -- OriginClear on the line from `from` to `to`: the ray forward and, only when it hit, the ray back.

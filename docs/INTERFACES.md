@@ -15632,3 +15632,4 @@ tool; `RunFloor.fence: number?` carries it to the client's camera clip. The shot
 then from the head led by the lag slack; check_levels keeps the tolerance under every tall colliding piece.
 Phone auto-fire also targets a reactive Part it can burn (`WorldReact.Wants`); ability strikes never burn
 (`WorldReact.StrikeElement`). Stream families take no bloom.
+The aim rule's lead goes along `PositionRing.Motion`'s way (the server's measure); the replicated velocity only shortens it (W2 fix 3, m1).

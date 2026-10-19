@@ -553,8 +553,9 @@ function W2.wiringTests(): ()
 	check(w.finishFound and w.finishListeners == 1 and w.finishGuarded, `finish() tells its strike listeners once, inside "if not fx.abandoned" ({w.finishFound}, {w.finishListeners}, {w.finishGuarded})`)
 	check(w.reactFound and w.reactElement == 1, `LevelService.React takes its element from WorldReact.StrikeElement with the ability id ({w.reactElement})`)
 	check(w.reactApply == 1 and w.reactOwnLoop == 0, `and hands the loop to WorldReact.Apply, with none of its own (Apply {w.reactApply}, own {w.reactOwnLoop})`)
-	check(w.aimFound and w.aimRay == 1 and w.aimRayMost == 1, `aimAllowed answers with WorldReact.AimClear from the head and from the head led by claimSlack's own speed and lag, with shooting.originWallChord as the tolerance, each line once ({w.aimRay} to {w.aimRayMost})`)
+	check(w.aimFound and w.aimRay == 1 and w.aimRayMost == 1, `aimAllowed answers with WorldReact.AimClear from the head and from the head led by claimSlack's own speed, lag and way, with shooting.originWallChord as the tolerance, each line once ({w.aimRay} to {w.aimRayMost})`)
 	check(w.hitFound and w.hitLines == 1, `its caster, worldHit, casts through worldParams and answers with the hit's distance ({w.hitFound}, {w.hitLines})`)
+	check(w.claimFound and w.claimLines == 1 and w.claimMotion == 2, `claimSlack takes its speed and way from PositionRing.Motion and hands the way back untouched (the third fix round's m1) ({w.claimFound}, {w.claimLines}, {w.claimMotion})`)
 end
 L1.group("l2w2 wiringTests", W2.wiringTests)
 
@@ -637,21 +638,32 @@ function W2.aimClear(head: any, lead: any, origin: any, walls: { any }, toleranc
 end
 
 function W2.leadTests(): ()
-	print(" WorldReact.LeadHead and AimClear: an honest origin on fast travel (the second fix round's m2)")
+	print(" WorldReact.LeadHead and AimClear: an honest origin on fast travel (the second fix round's m2; the third's m1 and s1)")
 	local R = W2.React
 	local head = vec(1, 3, -7.7)
-	local lead = R.LeadHead(head, vec(0, 0, 60), 60, 0.11)
-	check(near(lead.X, 1) and near(lead.Y, 3) and near(lead.Z, -1.1), `the head carried along the root's velocity for the lag: 6.6 studs at 60 for 0.11 s ({lead.X}, {lead.Y}, {lead.Z})`)
-	local capped = R.LeadHead(head, vec(0, 0, 200), 60, 0.11)
+	local north = vec(0, 0, 1)
+	local lead = R.LeadHead(head, north, vec(0, 0, 60), 60, 0.11)
+	check(near(lead.X, 1) and near(lead.Y, 3) and near(lead.Z, -1.1), `the head carried along the ring's way for the lag: 6.6 studs at 60 for 0.11 s ({lead.X}, {lead.Y}, {lead.Z})`)
+	local capped = R.LeadHead(head, north, vec(0, 0, 200), 60, 0.11)
 	check(near(capped.Z, -1.1), `a velocity over the ring's speed is held to it: the lead never runs past the slack the distance test grants ({capped.Z})`)
+	local long = R.LeadHead(head, vec(0, 0, 5), vec(0, 0, 60), 60, 0.11)
+	check(near(long.Z, -1.1), `the way is a direction only: a longer one leads no further ({long.Z})`)
+	-- The third fix round's m1: the velocity is the client's word, so it only shortens the lead.
+	local slow = R.LeadHead(head, north, vec(40, 0, 30), 60, 0.11)
+	check(near(slow.X, 1) and near(slow.Z, -7.7 + 3.3), `a velocity at a slant leads by its part along the ring's way only (30 of it: 3.3 studs north, none east) ({slow.X}, {slow.Z})`)
 	local nothing = {
-		R.LeadHead(head, vec(0, 0, 60), 0, 0.11),
-		R.LeadHead(head, vec(0, 0, 60), 60, 0),
-		R.LeadHead(head, vec(0, 0, 0), 60, 0.11),
-		R.LeadHead(head, vec(0, 0, W2.NAN), 60, 0.11),
-		R.LeadHead(head, vec(0, 0, 60), W2.NAN, 0.11),
-		R.LeadHead(head, vec(0, 0, 60), 60, -1),
-		R.LeadHead(head, vec(math.huge, 0, 0), 60, 0.11),
+		R.LeadHead(head, north, vec(0, 0, 60), 0, 0.11),
+		R.LeadHead(head, north, vec(0, 0, 60), 60, 0),
+		R.LeadHead(head, north, vec(0, 0, 0), 60, 0.11),
+		R.LeadHead(head, north, vec(0, 0, W2.NAN), 60, 0.11),
+		R.LeadHead(head, north, vec(0, 0, 60), W2.NAN, 0.11),
+		R.LeadHead(head, north, vec(0, 0, 60), 60, -1),
+		R.LeadHead(head, north, vec(0, 0, math.huge), 60, 0.11),
+		R.LeadHead(head, vec(0, 0, 0), vec(0, 0, 60), 60, 0.11),
+		R.LeadHead(head, vec(0, 0, W2.NAN), vec(0, 0, 60), 60, 0.11),
+		R.LeadHead(head, vec(0, 0, math.huge), vec(0, 0, 60), 60, 0.11),
+		R.LeadHead(head, north, vec(60, 0, 0), 60, 0.11),
+		R.LeadHead(head, north, vec(0, 0, -60), 60, 0.11),
 	}
 	local moved = 0
 	for _, point in nothing do
@@ -660,7 +672,7 @@ function W2.leadTests(): ()
 			moved += 1
 		end
 	end
-	check(moved == 0, `standing still, no lag, or a speed, lag or velocity that is not a finite number above 0 (an endless one included): the head itself ({moved} moved)`)
+	check(moved == 0, `standing still, no lag, no way the ring saw, a velocity at right angles to that way or against it, or a speed, lag, way or velocity that is not a finite number above 0 (an endless one included): the head itself ({moved} moved)`)
 
 	local walls = {
 		{ x = -1, y = 5, z = -10, sx = 2, sy = 20, sz = 20 },
@@ -673,15 +685,57 @@ function W2.leadTests(): ()
 	check(not W2.aimClear(head, head, origin, walls, tolerance), "with no lead (standing still on the server's copy): refused as before")
 	check(W2.aimClear(vec(1, 3, -1.2), vec(1, 3, -1.2), origin, walls, tolerance), "standing at the corner: allowed by the head's own line, lead or none")
 
-	-- Forged: the velocity claimed through a 2.5-stud wall, the origin beyond it.
+	-- Forged: the ring's way and the velocity both into a 2.5-stud wall, the origin beyond it.
 	local thick = { { x = -1.25, y = 5, z = -10, sx = 2.5, sy = 20, sz = 20 } }
 	local at = vec(1, 3, -5)
-	local through = R.LeadHead(at, vec(-60, 0, 0), 60, 0.11)
-	check(not W2.aimClear(at, through, vec(-3.5, 3, -5), thick, tolerance), "a velocity claimed through a 2.5-stud wall, the origin beyond it: refused (the carried head stops on this side)")
+	local through = R.LeadHead(at, vec(-1, 0, 0), vec(-60, 0, 0), 60, 0.11)
+	check(not W2.aimClear(at, through, vec(-3.5, 3, -5), thick, tolerance), "a lead through a 2.5-stud wall, the origin beyond it: refused (the carried head stops on this side)")
 	check(not W2.aimClear(at, through, vec(-1.2, 3, -5), thick, tolerance), "the origin inside that wall: refused")
 	check(not W2.aimClear(at, vec(-1.25, 3, -5), vec(-3.5, 3, -5), thick, tolerance), "a lead claimed inside the wall itself: refused")
-	local far = R.LeadHead(at, vec(0, 0, 60), 60, 0.11)
+	local far = R.LeadHead(at, north, vec(0, 0, 60), 60, 0.11)
 	check(not W2.aimClear(at, far, vec(-3.5, 3, -5), thick, tolerance) and W2.aimClear(at, far, vec(2, 3, 1), thick, tolerance), "led along the wall: the origin beyond it still refused, one on this side allowed")
+
+	-- The reviewer's probe (fix2-diff m1): a free-standing wall 20 long, 2.5 thick and 76 high; a
+	-- forger at its middle, 1.5 off its south face, hopping in place (the ring reads 74 studs/s,
+	-- straight up), claims an east velocity of 74 at a lag of 0.3. The origin lies beyond the wall
+	-- near its east end, inside the slack (6 + 74 x 0.3).
+	local free = { { x = 10, y = 38, z = 0, sx = 20, sy = 76, sz = 2.5 } }
+	local hopper = vec(10, 4.5, -2.75)
+	local behind = vec(18, 4.5, 3.5)
+	local east = vec(74, 0, 0)
+	check((behind - hopper).Magnitude <= 6 + 74 * 0.3 and not W2.originClear(hopper, behind, free, tolerance), "the probe: the origin is inside the slack and the head's own line is refused")
+	check(W2.aimClear(hopper, hopper + east * 0.3, behind, free, tolerance), "led along the claimed velocity (the second fix round's rule) it would be allowed round the wall's end")
+	local hopUp = R.LeadHead(hopper, vec(0, 1, 0), east, 74, 0.3)
+	local hopDown = R.LeadHead(hopper, vec(0, -1, 0), east + vec(0, -10, 0), 74, 0.3)
+	check(not W2.aimClear(hopper, hopUp, behind, free, tolerance) and not W2.aimClear(hopper, hopDown, behind, free, tolerance), `led along the ring's own way (up, or down with 10 of the velocity along it) it is refused ({hopUp.X}, {hopDown.X})`)
+
+	-- The honest gatehouse (fix2-diff s1), on Forest Road's own walls: dashing east at 133 along
+	-- the walk hugging GatehouseWallS, the server's head 1 stud off it with a lag of 0.3, the
+	-- client already turned north into the passage. The head's line cuts the corner of WallS and
+	-- WallW; the lead meets WallE about 22.5 on, is carried back LEAD_STANDOFF short of it, and
+	-- the line from there runs inside the turn.
+	local layout = L1.real.layouts.ForestRoad
+	local pieces = if layout ~= nil then L1.real.pieces(layout) else nil
+	local gatehouse = {}
+	for _, piece in pieces or {} do
+		if string.find(piece.name, "^GatehouseWall") ~= nil then
+			table.insert(gatehouse, piece.box)
+		end
+	end
+	if #gatehouse ~= 4 then
+		check(false, `Forest Road builds its four gatehouse walls ({#gatehouse})`)
+		return
+	end
+	local dasher = vec(299, 16.5, -37)
+	local turned = vec(306.7, 17, -33)
+	local dash = R.LeadHead(dasher, vec(1, 0, 0), vec(133, 0, 0), 133, 0.3)
+	local wallE = W2.firstHit(dasher, dash, gatehouse)
+	local carriedX = dasher.X + (wallE or 0) - 0.5
+	check(near(dash.X, 299 + 39.9, 1e-9), `the gatehouse: the lead runs 39.9 east ({dash.X})`)
+	check(not W2.originClear(dasher, turned, gatehouse, tolerance), "the head's own line across the corner of WallS and WallW: refused")
+	check(wallE ~= nil and near(wallE :: number, 22.5, 1e-6), `the lead meets WallE 22.5 on ({tostring(wallE)})`)
+	check(W2.originClear(vec(carriedX, 16.5, -37), turned, gatehouse, tolerance), `the line from the carried head (x {carriedX}, LEAD_STANDOFF short of WallE) runs inside the turn: clear`)
+	check(W2.aimClear(dasher, dash, turned, gatehouse, tolerance), "AimClear from the head led east along the walk: allowed")
 end
 L1.group("l2w2 leadTests", W2.leadTests)
 

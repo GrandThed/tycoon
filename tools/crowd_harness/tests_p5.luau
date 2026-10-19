@@ -413,6 +413,11 @@ P5.reviewTests()
 function P5.ringTests(): ()
 	print(" PositionRing: the server's own reading of a player's speed (ruling 7)")
 	local Ring = load("PositionRing")
+	-- The speed half of PositionRing.Motion.
+	local function speedOf(history: any, now: number, position: any, window: number, span: number): number
+		local speed = Ring.Motion(history, now, position, window, span)
+		return speed
+	end
 	local WINDOW = 0.3
 	local FRAME = 1 / 60
 	local T0 = 100
@@ -430,7 +435,7 @@ function P5.ringTests(): ()
 		for at = first, frame do
 			Ring.Record(ring, T0 + at * FRAME, place(at, still))
 		end
-		return Ring.Speed(ring, T0 + frame * FRAME, place(frame, still), WINDOW, span)
+		return speedOf(ring, T0 + frame * FRAME, place(frame, still), WINDOW, span)
 	end
 	-- Do the readings at `frames` match `wanted` (1e-3)? Also returns them, for the label.
 	local function match(capacity: number, first: number, span: number, frames: { number }, wanted: { number }, still: boolean?): (boolean, string)
@@ -456,7 +461,7 @@ function P5.ringTests(): ()
 
 	local young = Ring.New(120)
 	Ring.Record(young, T0, vec(0, 0, 0))
-	local early = Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), WINDOW, 0.1)
+	local early = speedOf(young, T0 + 0.01, vec(5, 0, 0), WINDOW, 0.1)
 	check(near(early, 50, 1e-3), `3: a history shorter than the span under-reads: 5 studs in 0.01 s is 50, the divisor floored at the span ({string.format("%.1f", early)})`)
 	ok, shown = match(120, 0, 0.1, AT, { 22.2222, 66.6667, 111.1111, 133.3333 })
 	check(ok, `3b: a dash with no history before it reads 22.22 / 66.67 / 111.11 / 133.33 ({shown})`)
@@ -479,11 +484,40 @@ function P5.ringTests(): ()
 	check(ok, `6: the reading holds for the window after the dash and is gone by frame 34 ({shown})`)
 
 	local blank = Ring.New(120)
-	check(Ring.Speed(blank, T0, vec(5, 0, 0), WINDOW, 0.1) == 0, "7: an empty history reads 0")
-	check(Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), 0, 0.1) == 0 and Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), -1, 0.1) == 0 and Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), 0 / 0, 0.1) == 0, "7b: a window of 0, -1 or NaN reads 0")
+	check(speedOf(blank, T0, vec(5, 0, 0), WINDOW, 0.1) == 0, "7: an empty history reads 0")
+	check(speedOf(young, T0 + 0.01, vec(5, 0, 0), 0, 0.1) == 0 and speedOf(young, T0 + 0.01, vec(5, 0, 0), -1, 0.1) == 0 and speedOf(young, T0 + 0.01, vec(5, 0, 0), 0 / 0, 0.1) == 0, "7b: a window of 0, -1 or NaN reads 0")
 	Ring.Clear(young)
-	check(Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), WINDOW, 0.1) == 0 and young.count == 0, "8: Clear forgets every sample")
+	check(speedOf(young, T0 + 0.01, vec(5, 0, 0), WINDOW, 0.1) == 0 and young.count == 0, "8: Clear forgets every sample")
 	check(Ring.New(0).capacity == 1 and Ring.New(2.9).capacity == 2, "9: the capacity is floored, and at least 1")
+
+	-- The L2 W2 third fix round's m1: the way the fastest stretch went, which the aim rule leads by.
+	local function wayAt(frame: number, still: boolean?): (number, any)
+		local ring = Ring.New(120)
+		for at = -60, frame do
+			Ring.Record(ring, T0 + at * FRAME, place(at, still))
+		end
+		return Ring.Motion(ring, T0 + frame * FRAME, place(frame, still), WINDOW, 0.1)
+	end
+	local dashSpeed, dashWay = wayAt(9)
+	check(near(dashSpeed, 133.3333, 1e-3) and near(dashWay.X, 1, 1e-9) and dashWay.Y == 0 and dashWay.Z == 0, `10: the dash's way is east, a unit vector, beside its 133.33 ({dashSpeed}; {dashWay.X}, {dashWay.Y}, {dashWay.Z})`)
+	local _, stillWay = wayAt(9, true)
+	local _, emptyWay = Ring.Motion(blank, T0, vec(5, 0, 0), WINDOW, 0.1)
+	local _, shutWay = Ring.Motion(young, T0 + 0.01, vec(5, 0, 0), 0 / 0, 0.1)
+	local function none(way: any): boolean
+		return way.X == 0 and way.Y == 0 and way.Z == 0
+	end
+	check(none(stillWay) and none(emptyWay) and none(shutWay), "10b: standing still, an empty history or a NaN window: no way at all")
+	-- A fast stretch east, then a slow one north: the way is the fast one's, the stretch the
+	-- speed was read on.
+	local turn = Ring.New(120)
+	for at = 0, 6 do
+		Ring.Record(turn, T0 + at * FRAME, vec(at * 2, 0, 0))
+	end
+	for at = 7, 12 do
+		Ring.Record(turn, T0 + at * FRAME, vec(12, 0, (at - 6) * 0.2))
+	end
+	local turnSpeed, turnWay = Ring.Motion(turn, T0 + 12 * FRAME, vec(12, 0, 1.2), WINDOW, 0.1)
+	check(turnSpeed > 100 and turnWay.X > 0.99 and math.abs(turnWay.Magnitude - 1) < 1e-9, `10c: east fast, then north slowly: the way is the fast stretch's, east ({turnSpeed}; {turnWay.X}, {turnWay.Z})`)
 
 	print(" Tuning: shooting.originSpeedSeconds")
 	config.shooting.originSpeedSeconds = 0.1

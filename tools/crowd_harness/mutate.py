@@ -5012,7 +5012,7 @@ L2W2_FIX2_MUTATIONS = {
     ),
     "fix2 m2: the aim leads nowhere": (
         WEAPON,
-        "local lead = WorldReact.LeadHead(anchor, root.AssemblyLinearVelocity, speed, lag)",
+        "local lead = WorldReact.LeadHead(anchor, motion, root.AssemblyLinearVelocity, speed, lag)",
         "local lead = anchor",
     ),
     "fix2 m2: worldHit ignores the world query": (
@@ -5022,17 +5022,17 @@ L2W2_FIX2_MUTATIONS = {
     ),
     "fix2 m2: the lead runs at the root's full speed": (
         WORLD_REACT,
-        "math.min(magnitude, length(speed)) / magnitude * length(lag)",
-        "length(lag)",
+        "math.min(along, length(speed)) * length(lag)",
+        "along * length(lag)",
     ),
     "fix2 m2: the lead ignores the lag": (
         WORLD_REACT,
-        "math.min(magnitude, length(speed)) / magnitude * length(lag)",
-        "math.min(magnitude, length(speed)) / magnitude",
+        "math.min(along, length(speed)) * length(lag)",
+        "math.min(along, length(speed))",
     ),
     "fix2 m2: an endless velocity leads": (
         WORLD_REACT,
-        "\tif not (finitePoint(head) and finitePoint(velocity)) then\n\t\treturn head\n\tend\n\tlocal magnitude",
+        "\tif not (finitePoint(head) and finitePoint(motion) and finitePoint(velocity)) then\n\t\treturn head\n\tend\n\tlocal magnitude",
         "\tlocal magnitude",
     ),
     "fix2 m2: the lead is carried through walls": (
@@ -5047,6 +5047,65 @@ L2W2_FIX2_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L2W2_FIX2_MUTATIONS)
+
+# The L2 W2 third fix round (docs/prompts/l2-w2-fix3.md): m1, the lead goes along the position
+# ring's own way (PositionRing.Motion through claimSlack, read by run_harness.py's source check),
+# the client's velocity only shortening it (WorldReact.LeadHead); s1, the honest gatehouse case
+# through AimClear's cut-back.
+L2W2_FIX3_MUTATIONS = {
+    "fix3 m1: the lead goes along the client's velocity": (
+        WORLD_REACT,
+        "local way = motion / magnitude",
+        "local way = if velocity.Magnitude > 0 then velocity / velocity.Magnitude else motion / magnitude",
+    ),
+    "fix3 m1: aimAllowed leads along the root's velocity": (
+        WEAPON,
+        "local lead = WorldReact.LeadHead(anchor, motion, root.AssemblyLinearVelocity, speed, lag)",
+        "local lead = WorldReact.LeadHead(anchor, root.AssemblyLinearVelocity, root.AssemblyLinearVelocity, speed, lag)",
+    ),
+    "fix3 m1: claimSlack hands back the root's velocity": (
+        WEAPON,
+        "return math.max(pad, 0) + speed * lag, speed, lag, motion\n",
+        "return math.max(pad, 0) + speed * lag, speed, lag, root.AssemblyLinearVelocity\n",
+    ),
+    "fix3 m1: the velocity does not shorten the lead": (
+        WORLD_REACT,
+        "math.min(along, length(speed)) * length(lag)",
+        "length(speed) * length(lag)",
+    ),
+    "fix3 m1: a velocity against the way is not floored": (
+        WORLD_REACT,
+        "local along = math.max(velocity:Dot(way), 0)",
+        "local along = velocity:Dot(way)",
+    ),
+    "fix3 m1: the way is taken at its length": (
+        WORLD_REACT,
+        "local way = motion / magnitude",
+        "local way = motion",
+    ),
+    "fix3 m1: a way that is not finite leads": (
+        WORLD_REACT,
+        "finitePoint(head) and finitePoint(motion) and finitePoint(velocity)",
+        "finitePoint(head) and finitePoint(velocity)",
+    ),
+    "fix3 m1: the ring's way is the first stretch's": (
+        RING,
+        "\t\t\tfastest = speed\n\t\t\tway = moved / distance\n",
+        "\t\t\tfastest = speed\n\t\t\tif way.Magnitude == 0 then\n\t\t\t\tway = moved / distance\n\t\t\tend\n",
+    ),
+    "fix3 m1: the ring's way is not a unit": (
+        RING,
+        "way = moved / distance",
+        "way = moved",
+    ),
+    "fix3 s1: a lead that meets a wall counts for nothing": (
+        WORLD_REACT,
+        "then head + reach * (math.max(hit - LEAD_STANDOFF, 0) / distance)",
+        "then head",
+    ),
+    "fix3 s1: LEAD_STANDOFF = 50": (WORLD_REACT, "local LEAD_STANDOFF = 0.5", "local LEAD_STANDOFF = 50"),
+}
+MUTATIONS.update(L2W2_FIX3_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

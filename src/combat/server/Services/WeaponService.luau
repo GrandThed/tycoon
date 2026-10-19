@@ -483,18 +483,19 @@ end
 -- own measure (ruling 7: the fastest stretch of shooting.originSpeedSeconds inside the last
 -- originLagMaxSeconds of its position ring) and the ping the client's word, so neither buys more
 -- slack than the fastest legal move over the longest lag the range excuses. Also returns that
--- speed and that lag: the aim rule carries the head by them (WorldReact.LeadHead, second fix
--- round m2), so its lead stays inside this slack.
+-- speed, that lag and the way that stretch went (PositionRing.Motion): the aim rule carries the
+-- head by them (WorldReact.LeadHead, second fix round m2, third fix round m1), so its lead stays
+-- inside this slack and goes only where the server saw the body go.
 local function claimSlack(
 	shooter: Shooter,
 	root: BasePart,
 	pad: number,
 	config: Types.ProvingGroundsConfig
-): (number, number, number)
+): (number, number, number, Vector3)
 	local shooting = config.shooting
 	local fastest = Tuning.FastestMove(config)
 	local window = math.max(shooting.originLagMaxSeconds, 0)
-	local speed = PositionRing.Speed(
+	local speed, motion = PositionRing.Motion(
 		shooter.history,
 		os.clock(),
 		root.Position,
@@ -504,7 +505,7 @@ local function claimSlack(
 	-- A NaN speed fails every comparison, math.min included.
 	speed = if speed == speed then math.min(speed, fastest) else 0
 	local lag = Tuning.CommitLag(shooting, shooter.player:GetNetworkPing())
-	return math.max(pad, 0) + speed * lag, speed, lag
+	return math.max(pad, 0) + speed * lag, speed, lag, motion
 end
 
 -- WorldReact.AimClear's world: the first solid between two points, through the parts every world
@@ -521,8 +522,9 @@ end
 -- them; WorldReact.OriginClear allows shooting.originWallChord of it, the edge an honest
 -- shoulder origin's line cuts at an inner corner (0.36 standing still, 0.97 with the server's
 -- head 1 stud behind, 1.25 at 1.5; tests_l2w2 "originTests"). The second fix round's m2: when
--- that line is not clear, the line from the head carried along the root's velocity by the lag
--- the distance test excuses (WorldReact.LeadHead, cut short of the first wall by AimClear) may
+-- that line is not clear, the line from the head carried by the lag the distance test excuses
+-- along the way the position ring saw the body go (WorldReact.LeadHead, cut short of the first
+-- wall by AimClear; the root's replicated velocity only shortens it, third fix round m1) may
 -- be, so a dash round a bend is judged from about where the player's own screen had him; a
 -- forged origin beyond a wall thicker than the chord is refused either way (check_levels "origin
 -- chord" holds every tall piece, walled camps' fences included, over it). In Studio a wall
@@ -538,11 +540,11 @@ local function aimAllowed(
 	local anchor = if head ~= nil and head:IsA("BasePart") then head.Position else root.Position
 	local offset = origin - anchor
 	local distance = offset.Magnitude
-	local slack, speed, lag = claimSlack(shooter, root, config.shooting.originPad, config)
+	local slack, speed, lag, motion = claimSlack(shooter, root, config.shooting.originPad, config)
 	if distance > slack then
 		return false
 	end
-	local lead = WorldReact.LeadHead(anchor, root.AssemblyLinearVelocity, speed, lag)
+	local lead = WorldReact.LeadHead(anchor, motion, root.AssemblyLinearVelocity, speed, lag)
 	local clear =
 		WorldReact.AimClear(anchor, lead, origin, config.shooting.originWallChord, worldHit)
 	if not clear and RunService:IsStudio() and not state.warnedAimWall[shooter.player] then
