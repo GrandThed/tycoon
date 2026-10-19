@@ -296,6 +296,9 @@ SHORTCUT_CASH_SHARE = 1.15
 # Modelling constants (the sim's stand-ins for Roblox and player facts, not game tunables).
 
 ROOT_HEIGHT = 3.0  # R15 root centre when standing: HipHeight 2 + half the 2-stud root
+# The R15 root's footprint (2 x 1), for WorldReact.BodyBox's mirror in the ice crossing (the W3
+# second fix round's Q5); the box takes the root's widest turn, as a walker faces any way.
+ROOT_FOOTPRINT = (2.0, 1.0)
 FRAME = 1 / 60  # Heartbeat: projectiles and the fight loop step at this rate
 MELEE_FRONT = (2.6, 3.6)  # P2: distance from the root to the crowd's first row
 RANGED_FRONT = 20.0  # P2: ranged fire from here...
@@ -5515,15 +5518,31 @@ def ice_overlap(a, b):
             and abs(a["z"] - b["z"]) < (a["sz"] + b["sz"]) / 2 - GEOMETRY_SEAM)
 
 
+def ice_inset(ice):
+    """LevelGeometry.IceOf's inset (the W3 second fix round's Q6): levels.react.ice.inset, 0 when
+    absent; None when it is not a finite number of at least 0 (the water then has no cells)."""
+    inset = ice.get("inset") if isinstance(ice, dict) else None
+    if inset is None:
+        return 0
+    return inset if finite(inset) and inset >= 0 else None
+
+
 def ice_cells(layout, ice):
     """L2-53, LevelGeometry.Pieces' ice pieces: every block whose `react` is "ice" divided evenly
     into ceil(side / ice.cell) cells per axis (WorldReact.Cells); a cell the footprint of ONE
     colliding block or secret whose top stands over the water's top holds whole (its edges
     included, to GEOMETRY_SEAM: the W3 fix round's d-m1) gets no piece; a cell it holds in part is
-    built (its top lies inside the cover where they meet). [{block, i, k, box (x0, x1, z0, z1), top
-    (the water's top + ice.lift), water (the water's top)}] in the layout's block order, i across x,
-    k across z. `ice` nil (Combat.json levels.react.ice absent): no cells."""
+    built (its top lies inside the cover where they meet). The second fix round's Q6: a cell's face
+    on one of the block's own faces (the first and last column and row) is built ice.inset inside it
+    (the cover test reads the whole cell), and a cell the inset leaves no width is not built.
+    [{block, i, k, box (x0, x1, z0, z1) as built, cell (x0, x1, z0, z1) its whole place in the grid,
+    top (the water's top + ice.lift), water (the water's top)}] in the layout's block order, i
+    across x, k across z. `ice` nil (Combat.json levels.react.ice absent), or an inset that is not
+    a finite number of at least 0: no cells."""
     if not isinstance(ice, dict) or not finite(ice.get("cell")) or ice["cell"] <= 0:
+        return []
+    inset = ice_inset(ice)
+    if inset is None:
         return []
     size, lift = ice["cell"], ice.get("lift") or 0
     blocks = [b for b in layout.get("blocks") or [] if isinstance(b, dict)]
@@ -5544,10 +5563,28 @@ def ice_cells(layout, ice):
                 if any(c[4] > water and abs(cx - c[0]) + wx / 2 <= c[2] / 2 + GEOMETRY_SEAM
                        and abs(cz - c[1]) + wz / 2 <= c[3] / 2 + GEOMETRY_SEAM for c in covers):
                     continue
+                west = cx - wx / 2 + (inset if i == 0 else 0)
+                east = cx + wx / 2 - (inset if i == nx - 1 else 0)
+                north = cz - wz / 2 + (inset if k == 0 else 0)
+                south = cz + wz / 2 - (inset if k == nz - 1 else 0)
+                if east - west <= GEOMETRY_SEAM or south - north <= GEOMETRY_SEAM:
+                    continue
                 found.append({"block": b.get("name") or b["look"], "i": i, "k": k,
-                              "box": (x0 + wx * i, x0 + wx * (i + 1), z0 + wz * k, z0 + wz * (k + 1)),
+                              "box": (west, east, north, south),
+                              "cell": (x0 + wx * i, x0 + wx * (i + 1), z0 + wz * k, z0 + wz * (k + 1)),
                               "top": water + lift, "water": water})
     return found
+
+
+def ice_holds(box, top, bottom, bodies, sink):
+    """WorldReact.Holds (the W3 second fix round's Q5): a body of `bodies` (x0, x1, z0, z1, feet,
+    head) stands in the cell `box` (x0, x1, z0, z1) whose top and bottom are given: in plan the two
+    overlap (touching is not), its feet lie more than `sink` under the top and its head over the
+    bottom. No bodies, or a sink that is not a finite number of at least 0, judge no body."""
+    if not bodies or not finite(sink) or sink < 0:
+        return False
+    return any(b[0] < box[1] and box[0] < b[1] and b[2] < box[3] and box[2] < b[3]
+               and b[4] < top - sink and b[5] > bottom for b in bodies)
 
 
 def frozen_layout(layout, ice):
@@ -5556,8 +5593,10 @@ def frozen_layout(layout, ice):
     ice.thickness deep (its react and landing gone). A cell is left unbuilt only where one colliding
     block or secret holds it whole (ice_cells, the W3 fix round's d-m1), so the built pieces and
     those covers fill the block; check_levels' check_ice holds that (its "fill" line), and only then
-    does the whole block stand for its cells. The layout itself when `ice` is not a table (no ice:
-    the water stays deep)."""
+    does the whole block stand for its cells. The second fix round's Q6: the cells stop ice.inset
+    short of the block's own faces; that seam (check_levels holds it to ICE_INSET_MOST) is one a
+    body walks across, so the whole block still stands for them. The layout itself when `ice` is
+    not a table (no ice: the water stays deep)."""
     if not isinstance(ice, dict):
         return layout
     lift, deep = ice.get("lift") or 0, ice.get("thickness") or 1
@@ -9258,7 +9297,11 @@ def mission_report(cfg, path=None, mission=None, careless=True):
 # cell's top between his root and reachDown under it), then he walks on to the far edge of the last
 # frozen cell of the chain and swings again once his swing is ready (1 / rate) and, with a lag, once
 # the server's answer has made the ice he swung at solid, and a human's reaction after that before he
-# steps onto it. The crossing is from his first swing to his root inside the chest's trigger
+# steps onto it. The W3 second fix round: his swings are grounded (Q5: an air swing chills nothing),
+# a cell his own body stands in stays water (Q5, ice_holds over WorldReact.BodyBox's mirror: his
+# feet on a top never hold it), the cells are judged as built (Q6: inset from the water's faces)
+# and joined by their places in the grid (the inset seam is walked across). The crossing is from
+# his first swing to his root inside the chest's trigger
 # (levels.secretReach from its footprint). The lead's band is ICE_CROSSING_SECONDS for that human
 # (a 0.15 s round trip and REACTION_SECONDS); the ideal (no lag, no reaction) is reported.
 ICE_CROSSING_SECONDS = (8.0, 20.0)
@@ -9297,15 +9340,15 @@ def ice_crossing(cfg, combat_cfg, layout, lag=ICE_CROSSING_LAG, react=REACTION_S
     if island is None:
         return None
     banks = [b for b in solid if b is not island and b["y"] + b["sy"] / 2 >= cells[0]["water"] - 1e-6]
-    starts = {i: next(b for b in banks if gap(c["box"], box_of(b)) <= 1e-6) for i, c in enumerate(cells)
-              if any(gap(c["box"], box_of(b)) <= 1e-6 for b in banks)}
-    goals = {i for i, c in enumerate(cells) if gap(c["box"], box_of(island)) <= 1e-6}
+    starts = {i: next(b for b in banks if gap(c["cell"], box_of(b)) <= 1e-6) for i, c in enumerate(cells)
+              if any(gap(c["cell"], box_of(b)) <= 1e-6 for b in banks)}
+    goals = {i for i, c in enumerate(cells) if gap(c["cell"], box_of(island)) <= 1e-6}
     back = {i: None for i in starts}
     queue = list(starts)
     while queue:
         here = queue.pop(0)
         for j, c in enumerate(cells):
-            if j not in back and touch(cells[here]["box"], c["box"]):
+            if j not in back and touch(cells[here]["cell"], c["cell"]):
                 back[j] = here
                 queue.append(j)
     ends = [g for g in goals if g in back]
@@ -9320,13 +9363,16 @@ def ice_crossing(cfg, combat_cfg, layout, lag=ICE_CROSSING_LAG, react=REACTION_S
 
     chain = min((chain_of(g) for g in ends), key=len)
     centre = [((cells[i]["box"][0] + cells[i]["box"][1]) / 2, (cells[i]["box"][2] + cells[i]["box"][3]) / 2) for i in chain]
-    first, bank = cells[chain[0]]["box"], box_of(starts[chain[0]])
+    first, bank = cells[chain[0]]["cell"], box_of(starts[chain[0]])
     # His root on the bank, at the middle of the edge the first cell shares with it.
     x = min(max(centre[0][0], max(first[0], bank[0])), min(first[1], bank[1]))
     z = min(max(centre[0][1], max(first[2], bank[2])), min(first[3], bank[3]))
     y = starts[chain[0]]["y"] + starts[chain[0]]["sy"] / 2 + ROOT_HEIGHT
     frozen, at, swings, studs, ready = set(), -1, 0, 0.0, 0.0
     t = 0.0
+    # Q5: his body (WorldReact.BodyBox at the root's widest turn) and levels.react.ice.sink.
+    body_half = math.hypot(ROOT_FOOTPRINT[0] / 2, ROOT_FOOTPRINT[1] / 2)
+    sink, deep = ice.get("sink"), ice.get("thickness") or 1
     while True:
         # The next unfrozen cell of the chain sets his facing.
         nxt = next((k for k in range(len(chain)) if chain[k] not in frozen), None)
@@ -9339,6 +9385,7 @@ def ice_crossing(cfg, combat_cfg, layout, lag=ICE_CROSSING_LAG, react=REACTION_S
         if swings > 200:
             return None
         ready = t + 1 / v["rate"]
+        body = [(x - body_half, x + body_half, z - body_half, z + body_half, y - ROOT_HEIGHT, y + ROOT_HEIGHT)]
         for i, c in enumerate(cells):
             if i in frozen:
                 continue
@@ -9346,7 +9393,8 @@ def ice_crossing(cfg, combat_cfg, layout, lag=ICE_CROSSING_LAG, react=REACTION_S
             dx, dz = cx - x, cz - z
             far = math.hypot(dx, dz)
             cos = 1.0 if far < 1e-9 else max(-1.0, min(1.0, (dx * fx + dz * fz) / (far * run)))
-            if far <= reach and (half >= 180 or math.degrees(math.acos(cos)) <= half) and y - ice["reachDown"] <= c["top"] <= y:
+            if (far <= reach and (half >= 180 or math.degrees(math.acos(cos)) <= half) and y - ice["reachDown"] <= c["top"] <= y
+                    and not ice_holds(c["box"], c["top"], c["top"] - deep, body, sink)):
                 frozen.add(i)
         t += lag + react
         # He walks along the chain to the far edge of its last frozen cell, his root a body's radius

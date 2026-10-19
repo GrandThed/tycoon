@@ -21,6 +21,10 @@
 -- (SwingStrike, c-m3), the two config numbers Freeze reads (IceReach, d-m5), how a cell shows
 -- (IceLook), which blocks are reactive (Reactive) and the cell's attribute name (ICE_ATTRIBUTE,
 -- s-s3), so a copy on one side cannot drift from the other unseen (s-m1).
+-- The second fix round's Q5 (a body lodged in ice): a swing made in the air freezes nothing (the
+-- strike carries SwingGate's verdict at its origin, `airborne`), and no cell freezes while a
+-- player's body stands in it (BodyBox, Holds, levels.react.ice.sink). The server, the ghost and
+-- the phone ask the same two rules.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -38,6 +42,9 @@ export type Strike = {
 	arcDegrees: number?,
 	width: number?,
 	endPoint: Vector3?,
+	-- The second fix round's Q5: a melee swing made in the air (SwingGate's verdict at its origin,
+	-- the one-swing-per-jump question); nil for every other strike.
+	airborne: boolean?,
 }
 -- An axis-aligned block: its centre and its size, studs.
 export type Box = { x: number, y: number, z: number, sx: number, sy: number, sz: number }
@@ -66,6 +73,8 @@ WorldReact.ICE_ATTRIBUTE = "Ice"
 -- Studs a carried head (AimClear) stops short of the first solid on its way: under the R15 head's
 -- half width (0.6), so it is a place a head can be and a ray from it still sees that solid.
 local LEAD_STANDOFF = 0.5
+-- BodyBox: a right vector whose flat part is shorter than this has none (a root tipped on its side).
+local FLAT_MIN = 1e-6
 
 local function finite(value: any): boolean
 	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
@@ -315,12 +324,15 @@ end
 -- origin, `heading` as given (the server's is flat), `size` = the variant's range (never range +
 -- pad: the pad forgives a body, the water's reach is Chills' `ahead`), its width, and the arc of
 -- combo `step`: the chain's last step sweeps finisherArcDegrees when the variant has one, every
--- other step (and a variant with no chain) its arcDegrees.
+-- other step (and a variant with no chain) its arcDegrees. The second fix round's Q5: `airborne`
+-- is the swing's own verdict (SwingGate.Judge at its origin: the server's in OnAttack, AirSwing's
+-- on the client), carried so Chills can refuse an air swing on every side alike.
 function WorldReact.SwingStrike(
 	variant: Types.RangeWeaponVariant,
 	step: number,
 	origin: Vector3,
-	heading: Vector3
+	heading: Vector3,
+	airborne: boolean
 ): Strike
 	local chain = variant.chain
 	local arcDegrees = variant.arcDegrees
@@ -334,6 +346,7 @@ function WorldReact.SwingStrike(
 		size = variant.range,
 		arcDegrees = arcDegrees,
 		width = variant.width,
+		airborne = airborne,
 	}
 end
 
@@ -347,6 +360,89 @@ function WorldReact.IceReach(ice: any): (number?, number?)
 	local reachDown: number? = if type(ice.reachDown) == "number" then ice.reachDown else nil
 	local ahead: number? = if type(ice.ahead) == "number" then ice.ahead else nil
 	return reachDown, ahead
+end
+
+-- The second fix round's Q5: Combat.json levels.react.ice's `sink`, how far under a cell's top a
+-- body's feet may lie and still stand on it (Holds), when it is a finite number of at least 0;
+-- nil otherwise (the callers then judge no body: a sink of 0 would hold the cell beside a player
+-- standing on the ice's edge, whose feet ride a hair under its top, and stop every crossing).
+function WorldReact.IceSink(ice: any): number?
+	local sink: any = if type(ice) == "table" then ice.sink else nil
+	if finite(sink) and sink >= 0 then
+		return sink
+	end
+	return nil
+end
+
+-- The second fix round's Q5: a character's body as the ice rules read it, from its root Part
+-- (`position`, its `right` vector and `size`) and its Humanoid's `hipHeight`. In plan, the box
+-- round the root's footprint turned by `right` on the flat (a right vector with no flat part reads
+-- as facing +X, as SwingGate.ProbePoint); in height, from its feet (hipHeight and half the root
+-- under the root's centre, where a standing Humanoid holds them) up as far again over it (an R15's
+-- head is a little lower: the excess only reaches cells a body deep under the ice touches).
+function WorldReact.BodyBox(
+	position: Vector3,
+	right: Vector3,
+	size: Vector3,
+	hipHeight: number
+): Box
+	local flat = math.sqrt(right.X * right.X + right.Z * right.Z)
+	local rx = if flat > FLAT_MIN then math.abs(right.X) / flat else 1
+	local rz = if flat > FLAT_MIN then math.abs(right.Z) / flat else 0
+	local halfX, halfZ = size.X / 2, size.Z / 2
+	local stand = hipHeight + size.Y / 2
+	return {
+		x = position.X,
+		y = position.Y,
+		z = position.Z,
+		sx = 2 * (rx * halfX + rz * halfZ),
+		sy = 2 * stand,
+		sz = 2 * (rz * halfX + rx * halfZ),
+	}
+end
+
+-- The second fix round's Q5: does a body of `bodies` stand in the ice cell `box`? One does when, in
+-- plan, its box and the cell's overlap (touching is not), its feet lie more than `sink` under the
+-- cell's top and its top over the cell's bottom: freezing that cell would set the ice round it.
+-- Feet on the cell's top (a player on the ice beside it) and a body over it (on the bank, on a
+-- bridge) hold nothing. A body or a cell whose numbers are not finite holds nothing; no bodies,
+-- or a sink that is not a finite number of at least 0 (IceSink's nil), judge no body at all.
+function WorldReact.Holds(box: Box, bodies: { Box }?, sink: number?): boolean
+	if bodies == nil or not (finite(sink) and (sink :: number) >= 0) then
+		return false
+	end
+	if
+		not (
+			finite(box.x)
+			and finite(box.y)
+			and finite(box.z)
+			and finite(box.sx)
+			and finite(box.sy)
+			and finite(box.sz)
+		)
+	then
+		return false
+	end
+	local top = box.y + box.sy / 2
+	local bottom = box.y - box.sy / 2
+	local below = top - (sink :: number)
+	for _, body in bodies do
+		if
+			finite(body.x)
+			and finite(body.y)
+			and finite(body.z)
+			and finite(body.sx)
+			and finite(body.sy)
+			and finite(body.sz)
+			and math.abs(body.x - box.x) < (body.sx + box.sx) / 2
+			and math.abs(body.z - box.z) < (body.sz + box.sz) / 2
+			and body.y - body.sy / 2 < below
+			and body.y + body.sy / 2 > bottom
+		then
+			return true
+		end
+	end
+	return false
 end
 
 -- The fix round's s-m1: how an ice cell's Part shows. Water (as built): hidden, met by nothing,
@@ -365,9 +461,10 @@ end
 -- centre lies, in plan, within the swing's size + `ahead` of the origin and within half its
 -- arcDegrees of its flat direction (360 or more = all round; a centre right under the origin is
 -- in every sector). An arc of 0 or less, no arcDegrees, a direction with no flat part and any
--- number that is not finite: false.
+-- number that is not finite: false. The second fix round's Q5: an arc swung in the air
+-- (`airborne`) chills nothing, so a swing in a fall never sets the ice round the faller.
 function WorldReact.Chills(fx: Strike, box: Box, reachDown: number, ahead: number): boolean
-	if fx.shape ~= "arc" then
+	if fx.shape ~= "arc" or fx.airborne == true then
 		return false
 	end
 	local origin, direction, arc = fx.origin, fx.direction, fx.arcDegrees
@@ -414,20 +511,28 @@ end
 
 -- L2-54: one strike of `element` on the level's ice cells. With "ice", every cell not yet frozen
 -- that Chills names is set frozen; returns their indices, ascending. Any other element, or none
--- (an ability's strike: StrikeElement), changes nothing and returns none.
+-- (an ability's strike: StrikeElement), changes nothing and returns none. The second fix round's
+-- Q5: a cell a body of `bodies` stands in (Holds, with `sink`) stays water for this strike; a
+-- later one freezes it once the body has gone (nil bodies = none).
 function WorldReact.Freeze(
 	cells: { IceCell },
 	element: string?,
 	fx: Strike,
 	reachDown: number,
-	ahead: number
+	ahead: number,
+	bodies: { Box }?,
+	sink: number?
 ): { number }
 	local frozen: { number } = {}
 	if element ~= "ice" then
 		return frozen
 	end
 	for index, cell in cells do
-		if not cell.frozen and WorldReact.Chills(fx, cell.box, reachDown, ahead) then
+		if
+			not cell.frozen
+			and WorldReact.Chills(fx, cell.box, reachDown, ahead)
+			and not WorldReact.Holds(cell.box, bodies, sink)
+		then
 			cell.frozen = true
 			table.insert(frozen, index)
 		end

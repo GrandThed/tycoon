@@ -305,7 +305,16 @@ ICE_MARGIN = 15.0
 # (h): a swing from the ice's edge freezes at least this many rows ahead (L2-54: the sector reaches
 # range + ahead from the origin, a body's radius behind the edge), so the ice can always be extended.
 ICE_ROWS = 1.5
-ICE_KEYS = ("cell", "lift", "thickness", "reachDown", "ahead")  # Combat.json levels.react.ice (L2-53)
+# Combat.json levels.react.ice (L2-53; the W3 second fix round's Q6 inset and Q5 sink).
+ICE_KEYS = ("cell", "lift", "thickness", "reachDown", "ahead", "inset", "sink")
+# Q6: the cells stop `inset` short of their water's own faces (against shimmer). The fill line allows
+# that rim and the chain walks across it, so it must stay a seam: at most this, and two touching ice
+# blocks leave at most twice it between their sheets.
+ICE_INSET_MOST = 0.25
+# Q5: a body whose feet lie less than `sink` under a cell's top does not stop its freeze. Under the
+# R15 HipHeight (2), the root and torso, which collide, stay over the ice; only the legs, which do not,
+# can be in it (the Humanoid then stands up onto it).
+ICE_SINK_MOST = 2.0
 # The W3 fix round's s-M1: WeaponService.trackAir records where a body last stood once a Heartbeat;
 # a body leaving a bank is at most this many frames' flat travel back from its edge when last seen.
 SERVER_FRAME_HZ = 60
@@ -4287,19 +4296,20 @@ def ice_crossing_cells(layout, solids, ice, reached, island):
     """(h)'s chain: the open cells (sim_range.ice_cells), the ones touching a bank a player reaches
     from the start without ice (a reached top at or over the water's top, not the island), and the
     ones touching the island; and the fewest cells of a 4-connected chain joining the two (None
-    when none does)."""
+    when none does). Judged by each cell's place in its block's grid (`cell`): the W3 second fix
+    round's inset seam (Q6, at most ICE_INSET_MOST) is walked across."""
     cells = sr.ice_cells(layout, ice)
     banks = [s for s in solids if s.name in reached and (island is None or s.name != island.name)]
     starts = [i for i, c in enumerate(cells)
-              if any(rect_gap(c["box"], (s.x0, s.x1, s.z0, s.z1)) <= EPS and s.top >= c["water"] - EPS for s in banks)]
+              if any(rect_gap(c["cell"], (s.x0, s.x1, s.z0, s.z1)) <= EPS and s.top >= c["water"] - EPS for s in banks)]
     goals = {i for i, c in enumerate(cells) if island is not None
-             and rect_gap(c["box"], (island.x0, island.x1, island.z0, island.z1)) <= EPS}
+             and rect_gap(c["cell"], (island.x0, island.x1, island.z0, island.z1)) <= EPS}
     seen = {i: 0 for i in starts}
     queue = list(starts)
     while queue:
         here = queue.pop(0)
         for j, c in enumerate(cells):
-            if j not in seen and cells_touch(cells[here]["box"], c["box"]):
+            if j not in seen and cells_touch(cells[here]["cell"], c["cell"]):
                 seen[j] = seen[here] + 1
                 queue.append(j)
     joined = [seen[g] for g in goals if g in seen]
@@ -4311,8 +4321,12 @@ def ice_holes(layout, ice):
     (sim_range.ice_cells) nor a cover (a colliding block or secret whose top stands over the
     water's top, as LevelGeometry reads them) lies over: {block name: (area in studs², [(x0, x1,
     z0, z1), ...] the holes)}, empty when every block is filled. Exact: the block is cut along
-    every edge of every piece and cover that crosses it, and each part's centre is tested."""
+    every edge of every piece and cover that crosses it, and each part's centre is tested. The W3
+    second fix round's Q6: the rim levels.react.ice.inset wide inside the block's own faces is the
+    inset the cells are built with, so only the block shrunk by it must be filled; a piece inset any
+    further, or a missing one, still leaves a hole."""
     cells = sr.ice_cells(layout, ice)
+    allow = sr.ice_inset(ice) or 0
     blocks = [b for b in layout["blocks"] if b.get("react") == "ice"]
     covers = [(b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2, b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2, b["y"] + b["sy"] / 2)
               for b in layout["blocks"] if b.get("collide") is not False]
@@ -4322,7 +4336,8 @@ def ice_holes(layout, ice):
     for b in blocks:
         name = b.get("name") or b["look"]
         water = b["y"] + b["sy"] / 2
-        box = (b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2, b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2)
+        box = (b["x"] - b["sx"] / 2 + allow, b["x"] + b["sx"] / 2 - allow,
+               b["z"] - b["sz"] / 2 + allow, b["z"] + b["sz"] / 2 - allow)
         held = [c["box"] for c in cells if c["block"] == name] + [c[:4] for c in covers if c[4] > water]
         xs = sorted({box[0], box[1]} | {min(max(v, box[0]), box[1]) for r in held for v in r[:2]})
         zs = sorted({box[2], box[3]} | {min(max(v, box[2]), box[3]) for r in held for v in r[2:4]})
@@ -4354,7 +4369,8 @@ def check_ice(name, level, layout, ctx, expect, solids):
         reachDown at least the highest bank's root over the water's top); the open cells of the ice
         blocks form one 4-connected chain from a cell beside a reached bank to one beside the island;
         the built pieces and the covers fill every ice block (ice_holes: no water is left that no
-        swing can close, so the frozen layout's whole block stands for them; the W3 fix round's d-m1);
+        swing can close, so the frozen layout's whole block stands for them; the W3 fix round's d-m1)
+        but the rim levels.react.ice.inset wide inside its own faces (the second fix round's Q6);
       and with the ice frozen: every unclimbable wall stays so, the secrets' (a) to (d) hold
         (check_secret_reach), R8's lists are the pinned frozen lists (both brambles' variants), the
         shot-origin chord holds (the sheets are floor, not walls), killY is still a short fall and
@@ -4485,8 +4501,9 @@ def check_ice(name, level, layout, ctx, expect, solids):
     expect(bool(cells) and not holes,
            f"{tag} with the ice: the built pieces and the colliding blocks and secrets over the water fill every ice block "
            f"(a cell is left out only where one cover holds it whole: no water is left that no swing can close, and the "
-           f"frozen layout's whole block stands for its pieces; the W3 fix round's d-m1)"
-           + ("".join(f"; {n}: {area:.1f} studs² open, e.g. x {h[0][0]:.2f}..{h[0][1]:.2f}, z {h[0][2]:.2f}..{h[0][3]:.2f}"
+           f"frozen layout's whole block stands for its pieces; the W3 fix round's d-m1), all but the rim of "
+           f"levels.react.ice.inset ({sr.ice_inset(ice)}) inside each block's faces (the second fix round's Q6)"
+           + ("".join(f"; {n}: {area:.2f} studs² open, e.g. x {h[0][0]:.2f}..{h[0][1]:.2f}, z {h[0][2]:.2f}..{h[0][3]:.2f}"
                       for n, (area, h) in sorted(holes.items())) if holes else f" ({len(cells)} pieces)"))
     # The W2 lessons, with the ice frozen: no new ledge route, perch or wall.
     gone = sorted(n for n in tall if n not in ftall)
@@ -4991,12 +5008,21 @@ def check_rules(combat, level_files, ctx, expect):
     odd = [] if isinstance(ice, dict) else ["levels.react.ice is missing"]
     for key in ICE_KEYS if isinstance(ice, dict) else ():
         value = ice.get(key)
-        if not is_number(value) or not math.isfinite(value) or (value < 0 if key in ("lift", "ahead") else value <= 0):
+        if (not is_number(value) or not math.isfinite(value)
+                or (value < 0 if key in ("lift", "ahead", "inset") else value <= 0)):
             odd.append(f"{key} {value}")
     expect(not odd and "iceHits" not in react,
-           "Combat.json levels.react.ice (L2-53): cell, thickness and reachDown over 0, lift and ahead 0 or more; iceHits "
-           "gone (a swing freezes cells, it does not count hits): " + ("; ".join(odd) if odd else ", ".join(
+           "Combat.json levels.react.ice (L2-53): cell, thickness, reachDown and sink over 0, lift, ahead and inset 0 or "
+           "more; iceHits gone (a swing freezes cells, it does not count hits): " + ("; ".join(odd) if odd else ", ".join(
                f"{key} {ice[key]:g}" for key in ICE_KEYS)) + ("; iceHits is still there" if "iceHits" in react else ""))
+    # The W3 second fix round's Q6 and Q5: the inset stays a seam, and the sink keeps a body's
+    # colliding root out of the ice it lets freeze.
+    inset, sink = (ice.get("inset"), ice.get("sink")) if isinstance(ice, dict) else (None, None)
+    expect(is_number(inset) and is_number(sink) and 0 <= inset <= ICE_INSET_MOST and 0 < sink < ICE_SINK_MOST,
+           f"Combat.json levels.react.ice's inset and sink (the W3 second fix round's Q6, Q5): inset from 0 to "
+           f"ICE_INSET_MOST {ICE_INSET_MOST:g} (a seam a body walks across, not a gap: {inset}), sink over 0 and under "
+           f"ICE_SINK_MOST {ICE_SINK_MOST:g} (a standing body's feet ride a hair under the top; deeper than the R15 "
+           f"HipHeight its root would be in the ice: {sink})")
     debug = combat.get("debug") or {}
     names = [debug.get(key) for key in DEBUG_UNLOCK_KEYS]
     taken = [v for k, v in debug.items() if k.endswith("Attribute") and k not in DEBUG_UNLOCK_KEYS]

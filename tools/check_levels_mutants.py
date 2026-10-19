@@ -14,7 +14,10 @@ edge; s-s2: no two ice blocks overlap; d-m1: the pieces and covers fill every ic
 a copy of sim_range with the old centre rule (SWAPPED_SIM); d-m3: Leap Smash's fall; d-m4: the
 walk-off grace; d-m6: a frozen sheet as deep as a floor; s1: an alias of a dash; s2: the bend rule,
 the cave's closed half and the walled camp on the frozen layout, its sight run on the tops the ice
-adds), shown red on a mutated copy of the shipped data, and green again on the data as it ships.
+adds) and its second fix round (Q6: the fill line allows the inset's rim and no more, the inset stays
+a seam, the chain is judged on the cells' places in the grid, and the inset out of sim_range's mirror;
+Q5: the sink's bounds), shown red on a mutated copy of the shipped data, and green again on the data
+as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
@@ -129,6 +132,8 @@ FROZEN_BEND = "ForestRoad (frozen): no hop cuts a bend"
 FROZEN_RIDGE = "forestRoad (frozen): behind fire: every wall that faces the sealed air is unclimbable"
 FROZEN_FLOORS = "forestRoad (frozen) camp C (walled): from every outside surface"
 FROZEN_SIGHT = re.compile(r"forestRoad \(frozen\) camp C \(walled\): \(the points on .*\) from no eye point")
+# The L2 W3 second fix round (docs/prompts/l2-w3-fix2.md: Q5 sink, Q6 inset).
+INSET_SINK = "Combat.json levels.react.ice's inset and sink"
 
 
 def layout(data):
@@ -761,6 +766,27 @@ CASES = (
      FROZEN_SIGHT, True),
     ("W3 fix s2 control: TrailEnd off the lane with no sheet (nobody reaches it, frozen or not)",
      lambda d: block(d, "TrailEnd").__setitem__("z", 10), {}, FROZEN_SIGHT, False),
+    # The W3 second fix round (docs/prompts/l2-w3-fix2.md). Q6: the fill line allows the inset's rim
+    # and no more; the inset stays a seam; the chain is judged on the cells' places in the grid.
+    ("W3 fix2 Q6: sim_range.ice_cells insets the west faces twice (a rim wider than the inset)", None,
+     {"sr": swapped_sim("west = cx - wx / 2 + (inset if i == 0 else 0)",
+                        "west = cx - wx / 2 + (2 * inset if i == 0 else 0)")},
+     FILL, True),
+    ("W3 fix2 Q6 control: ice.inset 0.25 (ICE_INSET_MOST): the fill line allows its rim",
+     lambda d: ice(d).__setitem__("inset", 0.25), {}, FILL, False),
+    ("W3 fix2 Q6: ice.inset 0.3 (over ICE_INSET_MOST)", lambda d: ice(d).__setitem__("inset", 0.3), {}, INSET_SINK, True),
+    ("W3 fix2 Q6 control: ice.inset 0.25", lambda d: ice(d).__setitem__("inset", 0.25), {}, INSET_SINK, False),
+    ("W3 fix2 Q6: ice.inset -0.05", lambda d: ice(d).__setitem__("inset", -0.05), {}, ICE_CONFIG, True),
+    ("W3 fix2 Q6: no ice.inset", lambda d: ice(d).pop("inset"), {}, ICE_CONFIG, True),
+    ("W3 fix2 Q6: the chain judged on the built boxes (the creek's and the pond's sheets a seam apart)", None,
+     {"sr": swapped_sim('"cell": (x0 + wx * i, x0 + wx * (i + 1), z0 + wz * k, z0 + wz * (k + 1)),',
+                        '"cell": (west, east, north, south),')},
+     ICE_CHAIN, True),
+    # Q5: the sink keeps a standing body's jitter out and a body's root out of the ice.
+    ("W3 fix2 Q5: ice.sink 0", lambda d: ice(d).__setitem__("sink", 0), {}, INSET_SINK, True),
+    ("W3 fix2 Q5: ice.sink 2 (the R15 HipHeight)", lambda d: ice(d).__setitem__("sink", 2), {}, INSET_SINK, True),
+    ("W3 fix2 Q5 control: ice.sink 1.9", lambda d: ice(d).__setitem__("sink", 1.9), {}, INSET_SINK, False),
+    ("W3 fix2 Q5: no ice.sink", lambda d: ice(d).pop("sink"), {}, ICE_CONFIG, True),
 )
 
 
@@ -841,6 +867,14 @@ MIRROR_CASES = (
     ("W3 fix s-s2: sim_range's react_problems takes two ice blocks that overlap (the mirror alone)", None,
      ("            if ice_overlap(other, block):", "            if False:"),
      "a second pool overlapping the first"),
+    # The W3 second fix round's Q6: the inset out of the Python mirror alone (the Luau side's are
+    # tools/crowd_harness/mirror_mutants.py's and mutate.py's).
+    ("W3 fix2 Q6: sim_range's ice_cells drops the inset on the west (the mirror alone)", None,
+     ("west = cx - wx / 2 + (inset if i == 0 else 0)", "west = cx - wx / 2"),
+     "LevelGeometry.Pieces: the ice cells"),
+    ("W3 fix2 Q6: sim_range's ice_cells builds a cell the inset leaves no width (the mirror alone)", None,
+     ("                if east - west <= GEOMETRY_SEAM or south - north <= GEOMETRY_SEAM:\n                    continue\n", ""),
+     "LevelGeometry.Pieces: the ice cells"),
 )
 
 

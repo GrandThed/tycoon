@@ -149,6 +149,9 @@ export type PredictedSwing = {
 	heading: Vector3,
 	step: number,
 	airborne: boolean,
+	-- The L2 W3 second fix round's Q5: AirSwing's verdict at the swing's origin, the server's own
+	-- SwingGate question (WeaponService.OnAttack): an air swing freezes no water.
+	airSwing: boolean,
 }
 
 -- L2-29: a shot of a continuous family as it left: family, variant, shot origin, direction.
@@ -1387,7 +1390,7 @@ local function reactOnAuto(
 end
 
 -- The strike the server builds for an ice swing at `step` (WorldReact.SwingStrike), its arc cut
--- to touch auto-swing's `cone` (nil = uncut).
+-- to touch auto-swing's `cone` (nil = uncut). A grounded swing's: iceOnAuto never asks in the air.
 local function autoIceStrike(
 	variant: Types.RangeWeaponVariant,
 	step: number,
@@ -1395,7 +1398,7 @@ local function autoIceStrike(
 	heading: Vector3,
 	cone: number?
 ): WorldReact.Strike
-	local strike = WorldReact.SwingStrike(variant, step, origin, heading)
+	local strike = WorldReact.SwingStrike(variant, step, origin, heading, false)
 	local arc = strike.arcDegrees
 	if arc ~= nil and cone ~= nil then
 		strike.arcDegrees = math.min(arc, cone)
@@ -1414,6 +1417,8 @@ end
 --    the strike of every step of the chain chills it.
 --  * c-m4: never while airborne. The freeze band was sized for a grounded origin (L2-54), and an
 --    air swing would spend the jump's one swing and hang the body (AirSwing, AirHang).
+--  * The second fix round's Q5: never at a cell a player's body stands in (WorldReact.Holds, the
+--    server's rule; the bodies are read only once a cell has passed every other test).
 -- A frozen cell never triggers. Far from the water this costs one rectangle test (c-m1).
 local function iceOnAuto(
 	cfg: Types.ProvingGroundsConfig,
@@ -1436,6 +1441,7 @@ local function iceOnAuto(
 	-- A cell every step chills is one step 1 chills, so step 1's reach picks the cells asked.
 	local first = autoIceStrike(variant, 1, origin, heading, cone)
 	local strikes: { WorldReact.Strike }? = nil
+	local bodies: { WorldReact.Box }? = nil
 	return ReactFx.ForEachIce(
 		first.origin,
 		first.size + ahead,
@@ -1460,7 +1466,12 @@ local function iceOnAuto(
 					return false
 				end
 			end
-			return true
+			local around = bodies
+			if around == nil then
+				around = ReactFx.Bodies()
+				bodies = around
+			end
+			return not WorldReact.Holds(box, around, ReactFx.IceSink())
 		end
 	)
 end
@@ -1739,6 +1750,7 @@ local function rangeAttack(
 			heading = forward,
 			step = step,
 			airborne = airborne,
+			airSwing = swingAirborne,
 		})
 	end
 	if airborne then

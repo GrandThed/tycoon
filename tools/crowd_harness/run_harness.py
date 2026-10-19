@@ -257,7 +257,8 @@ W3_LINES = {
     # The fix round's d-m5: the two numbers come from WorldReact.IceReach, and go to Freeze in
     # that order.
     "freezeReach": "local reachDown, ahead = WorldReact.IceReach(if rules ~= nil then rules.ice else nil)",
-    "freezeCall": "WorldReact.Freeze(cells, element, fx, reachDown, ahead)",
+    # The second fix round's Q5: every body and the sink go with them.
+    "freezeCall": "WorldReact.Freeze(cells, element, fx, reachDown, ahead, held, sink)",
     "freezeTold": "\t\tfor _, listener in state.reactedListeners do\n\t\t\tlistener(event)\n",
     # The fix round's s-M1: where the body last stood goes with where it is.
     "rescueStood": "local stood = WeaponService.LastGround(player)",
@@ -301,7 +302,7 @@ W3_FIX_LINES = {
     "trackStood": "\t\tif footing ~= nil and not SwingGate.IsAir(position.Y - footing, offset) then\n\t\t\tshooter.stood = position\n",
     "stoodCleared": "shooter.stood = nil",
     "lastGround": "return if shooter ~= nil then shooter.stood else nil",
-    "meleeSwing": "local swing = WorldReact.SwingStrike(variant, step, origin, heading)",
+    "meleeSwing": "local swing = WorldReact.SwingStrike(variant, step, origin, heading, airSwing)",
 }
 TRACK_AIR_BODY = re.compile(r"(?ms)^local function trackAir\(.*?^end$")
 RESET_AIR_BODY = re.compile(r"(?ms)^local function resetAir\(.*?^end$")
@@ -318,19 +319,20 @@ CLIENT_STRIKES = {
     "frost": (
         FROST_FX,
         re.compile(r"(?ms)^function FrostFx\.OnSwing\(.*?^end$"),
-        "local strike = WorldReact.SwingStrike(swing.variant, swing.step, swing.origin, swing.heading)",
+        "local strike = WorldReact.SwingStrike(\n\t\tswing.variant,\n\t\tswing.step,\n\t\tswing.origin,\n"
+        "\t\tswing.heading,\n\t\tswing.airSwing\n\t)",
         ("ReactFx.PredictFreeze(strike, swing.seq)",),
     ),
     "phone": (
         INPUT_CONTROLLER,
         re.compile(r"(?ms)^local function autoIceStrike\(.*?^end$"),
-        "local strike = WorldReact.SwingStrike(variant, step, origin, heading)",
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, false)",
         ("strike.arcDegrees = math.min(arc, cone)", "\treturn strike\n"),
     ),
     "hitbox": (
         FEEDBACK,
         re.compile(r"(?ms)^function FeedbackController\.PredictSwing\(.*?^end$"),
-        "local predicted = WorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading)",
+        "local predicted =\n\t\tWorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading, swing.airSwing)",
         (
             "local shape = predicted.shape\n",
             "origin = predicted.origin,",
@@ -354,6 +356,45 @@ MELEE_FX_LINES = (
     "arcDegrees = swing.arcDegrees,",
     "width = swing.width,",
 )
+# The W3 second fix round (docs/prompts/l2-w3-fix2.md, Q5): the lines that hand the pure rules a
+# swing's air verdict and every body, read in the one function each belongs to. OnAttack passes
+# SwingGate's own verdict to resolveMelee, which builds its strike with it and sends it on; freeze
+# reads the sink and hands every body and it to Freeze; LevelService's bodies and ReactFx.Bodies
+# read each player's character through WorldReact.BodyBox; the ghost (ReactFx.PredictFreeze) and
+# the phone (InputController.iceOnAuto) skip a held cell with the server's sink; the predicted
+# swing carries AirSwing's verdict to the ghost and the early hitbox.
+REACT_FX = "src/combat/client/Controllers/ReactFx.luau"
+ATTACK_BODY = re.compile(r"(?ms)^function WeaponService\.OnAttack\(.*?^end$")
+ATTACK_PASS = re.compile(
+    r"resolveMelee\(\s*config,\s*shooter,\s*weapon,\s*variantKey,\s*variant,\s*root,\s*seq,\s*swingAt,\s*direction,"
+    r"\s*airSwing\s*\)"
+)
+BODY_BOX_CALL = re.compile(
+    r"WorldReact\.BodyBox\(\s*root\.Position,\s*root\.CFrame\.RightVector,\s*root\.Size,\s*humanoid\.HipHeight\s*\)"
+)
+BODIES_BODY = {
+    "server": (LEVEL_SERVICE, re.compile(r"(?ms)^local function bodies\(.*?^end$")),
+    "client": (REACT_FX, re.compile(r"(?ms)^function ReactFx\.Bodies\(.*?^end$")),
+}
+GHOST_BODY = re.compile(r"(?ms)^function ReactFx\.PredictFreeze\(.*?^end$")
+SINK_BODY = re.compile(r"(?ms)^function ReactFx\.IceSink\(.*?^end$")
+PHONE_BODY = re.compile(r"(?ms)^local function iceOnAuto\(.*?^end$")
+RANGE_ATTACK_BODY = re.compile(r"(?ms)^local function rangeAttack\(.*?^end$")
+W3_FIX2_LINES = {
+    "attackJudge": "allowed, airSwing = SwingGate.Judge(shooter.airSwing, swingAt.Y, floorY, standOffset, lag)",
+    "meleeAir": "\tairSwing: boolean\n): ()",
+    "finishAir": "\t\tairborne = swing.airborne,\n",
+    "freezeSink": "local sink = WorldReact.IceSink(if rules ~= nil then rules.ice else nil)",
+    "freezeHeld": "local held = if sink ~= nil then bodies() else nil",
+    "players": "for _, player in Players:GetPlayers() do",
+    "ghostSink": "local sink = ReactFx.IceSink()",
+    "ghostHolds": "if not WorldReact.Holds(box, around, sink) then",
+    "phoneHolds": "return not WorldReact.Holds(box, around, ReactFx.IceSink())",
+    "phoneGround": "WorldReact.SwingStrike(variant, step, origin, heading, false)",
+    "predictedAir": "airSwing = swingAirborne,",
+    "swingAir": "swing.airSwing",
+    "sinkReader": "return WorldReact.IceSink(if react ~= nil then react.ice else nil)",
+}
 COMBAT_PROJECT = "combat.project.json"
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
@@ -448,6 +489,54 @@ def source_reading(repo: Path) -> dict:
         "wiring": wiring,
         "w3": w3,
         "w3fix": w3_fix_reading(text, react_text, freeze_text),
+        "w3fix2": w3_fix2_reading(text, freeze_text),
+    }
+
+
+def w3_fix2_reading(text, freeze_text: str) -> dict:
+    """The W3 second fix round's lines (W3_FIX2_LINES and the bodies above), counted in the function
+    each belongs to. `text` reads a repo file (empty when missing); freeze's body is source_reading's."""
+    weapon = text(WEAPON_SERVICE)
+    lines = W3_FIX2_LINES
+
+    def body(pattern, source: str) -> str:
+        found = pattern.search(source)
+        return found.group(0) if found else ""
+
+    attack = body(ATTACK_BODY, weapon)
+    melee = body(MELEE_BODY, weapon)
+    bodies = {}
+    for side, (rel, pattern) in BODIES_BODY.items():
+        inside = body(pattern, text(rel))
+        bodies[side] = {
+            "found": bool(inside),
+            "players": inside.count(lines["players"]),
+            "box": len(BODY_BOX_CALL.findall(inside)),
+        }
+    ghost = body(GHOST_BODY, text(REACT_FX))
+    sink = body(SINK_BODY, text(REACT_FX))
+    phone = body(PHONE_BODY, text(INPUT_CONTROLLER))
+    strike = body(CLIENT_STRIKES["phone"][1], text(INPUT_CONTROLLER))
+    attack_input = body(RANGE_ATTACK_BODY, text(INPUT_CONTROLLER))
+    frost = body(CLIENT_STRIKES["frost"][1], text(FROST_FX))
+    hitbox = body(CLIENT_STRIKES["hitbox"][1], text(FEEDBACK))
+    return {
+        "attackJudge": attack.count(lines["attackJudge"]),
+        "attackPass": len(ATTACK_PASS.findall(attack)),
+        "meleeAir": melee.count(lines["meleeAir"]),
+        "finishAir": melee.count(lines["finishAir"]),
+        "freezeSink": freeze_text.count(lines["freezeSink"]),
+        "freezeHeld": freeze_text.count(lines["freezeHeld"]),
+        "freezeCall": freeze_text.count(W3_LINES["freezeCall"]),
+        "bodies": bodies,
+        "ghostSink": ghost.count(lines["ghostSink"]),
+        "ghostHolds": ghost.count(lines["ghostHolds"]),
+        "phoneHolds": phone.count(lines["phoneHolds"]),
+        "phoneGround": strike.count(lines["phoneGround"]),
+        "predictedAir": attack_input.count(lines["predictedAir"]),
+        "frostAir": frost.count(lines["swingAir"]),
+        "hitboxAir": hitbox.count(lines["swingAir"]),
+        "sinkReader": sink.count(lines["sinkReader"]),
     }
 
 

@@ -25,6 +25,8 @@ local W3: any = {
 	NONE = {},
 	-- The contract's numbers: cell 7, lift 0.2, thickness 1, reachDown 6, ahead 4.
 	ice = { cell = 7, lift = 0.2, thickness = 1, reachDown = 6, ahead = 4 },
+	-- The second fix round's Q5: an R15 character's root Part (2 x 2 x 1) and HipHeight (2).
+	R15 = { size = vec(2, 2, 1), hip = 2 },
 }
 
 -- A frost swing as WeaponService.resolveMelee hands it to the listeners: an arc at `origin` along
@@ -122,7 +124,7 @@ end
 function W3.piecesTests(): ()
 	print(" LevelGeometry.Pieces: an ice block's cells (L2-53; the fix round's d-m1: a whole cell covered)")
 	local Geo = W3.Geo
-	local sizes = { fence = 1, floor = 4, ice = { cell = 7, lift = 0.2, thickness = 1 } }
+	local sizes = { fence = 1, floor = 4, ice = { cell = 7, lift = 0.2, thickness = 1, inset = 0 } }
 	local pieces, refusal = Geo.Pieces(W3.layout(), sizes, 600)
 	check(pieces ~= nil and refusal == nil, `the layout builds ({tostring(refusal)})`)
 	if pieces == nil then
@@ -200,7 +202,7 @@ function W3.piecesTests(): ()
 	check(tight ~= nil, "exactly maxParts Parts builds")
 	local over, why = Geo.Pieces(W3.layout(), sizes, #pieces - 1)
 	check(over == nil and why ~= nil, `one Part over refuses ({tostring(why)})`)
-	local tiny, said = Geo.Pieces(W3.layout(), { fence = 1, floor = 4, ice = { cell = 0.001, lift = 0.2, thickness = 1 } }, 600)
+	local tiny, said = Geo.Pieces(W3.layout(), { fence = 1, floor = 4, ice = { cell = 0.001, lift = 0.2, thickness = 1, inset = 0 } }, 600)
 	check(tiny == nil and said ~= nil and string.find(said, "Water", 1, true) ~= nil and string.find(said, "maxParts", 1, true) ~= nil, `a cell far under the water's size is refused before a cell is made, by name ({tostring(said)})`)
 end
 L1.group("l2w3 piecesTests", W3.piecesTests)
@@ -722,6 +724,28 @@ function W3.realTests(): ()
 		end
 		check(holes == 0, `{water.name}: its cells and covers fill it ({holes} open points{if first ~= nil then ", the first at " .. first else ""})`)
 	end
+	-- The second fix round's Q6: no cell's side lies on its water's own face (the frozen side and
+	-- the water's shared a plane and shimmered); every side within a stud of that face lies exactly
+	-- the shipped inset inside it, and every other side is a cell's or a cover's.
+	local inset = frost.inset
+	check(type(inset) == "number" and inset > 0 and inset < 1, `Combat.json levels.react.ice has an inset under a stud ({tostring(inset)})`)
+	local onFace, inner = {}, 0
+	for _, water in ice do
+		local faces = { water.x - water.sx / 2, water.x + water.sx / 2, water.z - water.sz / 2, water.z + water.sz / 2 }
+		for _, box in byBlock[water.name] or {} do
+			local sides = { box.x - box.sx / 2, box.x + box.sx / 2, box.z - box.sz / 2, box.z + box.sz / 2 }
+			for side = 1, 4 do
+				local away = math.abs(sides[side] - faces[side])
+				if away < 1 then
+					inner += 1
+					if math.abs(away - (inset or 0)) > 1e-9 then
+						table.insert(onFace, `{water.name} ({box.x}, {box.z}) side {side} {away}`)
+					end
+				end
+			end
+		end
+	end
+	check(inner > 0 and #onFace == 0, `{inner} cell sides by their water's faces, each the inset inside it{L1.real.list(onFace)}`)
 
 	-- The crossing: from Road2's south edge above the creek, swing toward the island, step onto
 	-- the frozen cell nearest it, swing again; the ice must reach the island's edge.
@@ -734,11 +758,17 @@ function W3.realTests(): ()
 		return math.abs(box.x - island.x) <= island.sx / 2 + box.sx / 2 + 1e-6 and math.abs(box.z - island.z) <= island.sz / 2 + box.sz / 2 + 1e-6
 	end
 	local reachDown, ahead = R.IceReach(frost)
+	-- The second fix round's Q5: the walker's own body goes to Freeze with the shipped sink, as
+	-- LevelService hands it every body; on the bank or on the ice it holds no cell it swings at.
+	local sink = R.IceSink(frost)
+	check(sink ~= nil, `Combat.json levels.react.ice has a sink ({tostring(frost.sink)})`)
+	local bodies = {}
 	for _ = 1, 40 do
 		local origin = feet + vec(0, root, 0)
 		local way = goal - feet
-		-- The swing the server builds (WorldReact.SwingStrike), its first step.
-		local frozen = R.Freeze(cells, "ice", R.SwingStrike(hammer, 1, origin, vec(way.X, 0, way.Z)), reachDown, ahead)
+		bodies[1] = R.BodyBox(origin, vec(-way.Z, 0, way.X), W3.R15.size, W3.R15.hip)
+		-- The swing the server builds (WorldReact.SwingStrike), its first step, on the ground.
+		local frozen = R.Freeze(cells, "ice", R.SwingStrike(hammer, 1, origin, vec(way.X, 0, way.Z), false), reachDown, ahead, bodies, sink)
 		swings += 1
 		if swings == 1 then
 			firstSwing = #frozen
@@ -866,5 +896,189 @@ function W3.wiringTests(): ()
 	end
 end
 L1.group("l2w3 wiringTests", W3.wiringTests)
+
+-- The second fix round (docs/prompts/l2-w3-fix2.md), Q5: a swing in the air freezes nothing, and no
+-- cell freezes while a player's body stands in it (WorldReact.SwingStrike's `airborne`, Chills,
+-- BodyBox, Holds, Freeze's bodies and sink, IceSink).
+function W3.bodyTests(): ()
+	print(" WorldReact: air swings, BodyBox, Holds and Freeze's bodies (the second fix round's Q5)")
+	local R = W3.React
+	local hammer = FIXTURES.proving.weapons.frostHammer.variants.A
+	local origin, east = vec(0, 3, 0), vec(1, 0, 0)
+	-- SwingStrike carries the verdict; Chills refuses an air swing whatever else it reaches.
+	check(R.SwingStrike(hammer, 1, origin, east, true).airborne == true and R.SwingStrike(hammer, 1, origin, east, false).airborne == false, "SwingStrike carries whether the swing was made in the air")
+	local cell = W3.cell(5, 0, -0.8)
+	check(R.Chills(R.SwingStrike(hammer, 1, origin, east, false), cell, 6, 4), "a grounded swing chills the cell ahead")
+	check(not R.Chills(R.SwingStrike(hammer, 1, origin, east, true), cell, 6, 4), "the same swing made in the air chills nothing")
+	local spin = W3.arc(origin, east, 9, 360)
+	spin.airborne = true
+	check(not R.Chills(spin, W3.cell(0, 0, -0.8), 6, 4), "not even a spin over the cell under it")
+	spin.airborne = nil
+	check(R.Chills(spin, W3.cell(0, 0, -0.8), 6, 4), "a strike that says nothing of the air (nil) is judged as before")
+
+	-- BodyBox: an R15 at (0, 3, 0), its feet on y 0.
+	local size, hip = W3.R15.size, W3.R15.hip
+	local facing = R.BodyBox(vec(0, 3, 0), vec(1, 0, 0), size, hip)
+	check(near(facing.sx, 2) and near(facing.sz, 1) and near(facing.y - facing.sy / 2, 0) and near(facing.y + facing.sy / 2, 6) and facing.x == 0 and facing.z == 0, `facing -Z: 2 across X, 1 along Z, feet at 0, up to 6 ({facing.sx}, {facing.sz}, {facing.y}, {facing.sy})`)
+	local turned = R.BodyBox(vec(0, 3, 0), vec(0, 0, 1), size, hip)
+	check(near(turned.sx, 1) and near(turned.sz, 2), "turned a quarter: 1 across X, 2 along Z")
+	local half = math.sqrt(0.5)
+	local slant = R.BodyBox(vec(0, 3, 0), vec(half, 0, -half), size, hip)
+	check(near(slant.sx, 3 * half) and near(slant.sz, 3 * half), `turned an eighth: the box round the turned footprint ({slant.sx}, {slant.sz})`)
+	local long = R.BodyBox(vec(0, 3, 0), vec(5, 0, 0), size, hip)
+	check(near(long.sx, 2) and near(long.sz, 1), "a right vector that is not a unit reads as its direction")
+	local tipped = R.BodyBox(vec(0, 3, 0), vec(0, 1, 0), size, hip)
+	check(near(tipped.sx, 2) and near(tipped.sz, 1), "a right vector with no flat part reads as facing +X")
+	local tall = R.BodyBox(vec(0, 10, 0), vec(1, 0, 0), vec(2, 4, 1), 3)
+	check(near(tall.y - tall.sy / 2, 5) and near(tall.y + tall.sy / 2, 15), "the feet are hipHeight and half the root under it")
+
+	-- Holds: a cell 7 x 7 x 4 whose top is -0.8, and a sink of 0.5.
+	local box = { x = 0, y = -2.8, z = 0, sx = 7, sy = 4, sz = 7 }
+	local function at(x: number, feet: number, z: number?): any
+		return R.BodyBox(vec(x, feet + 3, z or 0), vec(1, 0, 0), size, hip)
+	end
+	check(not R.Holds(box, { at(0, -0.8) }, 0.5), "feet on the cell's top: standing on it, not in it")
+	check(not R.Holds(box, { at(0, -1.29) }, 0.5) and R.Holds(box, { at(0, -1.31) }, 0.5), "feet 0.49 under the top: on it; 0.51 under: in it")
+	check(R.Holds(box, { at(0, -6) }, 0.5), "a body falling through the cell is in it")
+	check(not R.Holds(box, { at(0, -10.8) }, 0.5) and R.Holds(box, { at(0, -10.79) }, 0.5), "a body whose top is the cell's bottom is under it; a hair higher, in it")
+	check(not R.Holds(box, { at(0, 0) }, 0.5), "a body on the bank over the cell holds nothing")
+	check(not R.Holds(box, { at(4.5, -3) }, 0.5) and R.Holds(box, { at(4.49, -3) }, 0.5), "beside it in plan (touching): not in it; 0.01 over: in it")
+	check(not R.Holds(box, { at(0, -3, 4) }, 0.5) and R.Holds(box, { at(0, -3, 3.99) }, 0.5), "and along Z")
+	check(not R.Holds(box, { at(0, -3) }, nil) and not R.Holds(box, { at(0, -3) }, -1) and not R.Holds(box, { at(0, -3) }, W3.NAN) and not R.Holds(box, { at(0, -3) }, math.huge), "no sink, or one under 0 or not finite: no body is judged")
+	check(R.Holds(box, { at(0, -0.81) }, 0) and not R.Holds(box, { at(0, -0.8) }, 0), "a sink of 0: any depth under the top is in it")
+	check(not R.Holds(box, nil, 0.5) and not R.Holds(box, {}, 0.5), "no bodies: none")
+	local nan = { x = W3.NAN, y = -3, z = 0, sx = 2, sy = 6, sz = 1 }
+	check(not R.Holds(box, { nan }, 0.5) and R.Holds(box, { nan, at(0, -3) }, 0.5), "a body that is not finite is no body; any other one in the cell holds it")
+	check(not R.Holds(box, { { x = 0, y = -3, z = 0, sx = 2, sy = math.huge, sz = 1 } }, 0.5), "a body of endless height is no body")
+	check(not R.Holds({ x = W3.NAN, y = -2.8, z = 0, sx = 7, sy = 4, sz = 7 }, { at(0, -3) }, 0.5) and not R.Holds({ x = 0, y = -2.8, z = 0, sx = 7, sy = math.huge, sz = 7 }, { at(0, -3) }, 0.5), "a cell that is not finite is held by nothing")
+
+	-- Freeze with bodies: the fixture's cells (tops -0.8, 1 deep) and a swing east from (0, 3, 0).
+	local function cells(): any
+		return {
+			{ box = W3.cell(4, 0, -0.8), frozen = false },
+			{ box = W3.cell(-4, 0, -0.8), frozen = false },
+			{ box = W3.cell(11, 3, -0.8), frozen = false },
+		}
+	end
+	local swing = W3.arc(vec(0, 3, 0), east)
+	local list = cells()
+	local frozen = R.Freeze(list, "ice", swing, 6, 4, { at(4, -1.5) }, 0.5)
+	check(#frozen == 1 and frozen[1] == 3 and not list[1].frozen, `a body in the first cell keeps it water; the other cell ahead freezes ({table.concat(frozen, ", ")})`)
+	local later = R.Freeze(list, "ice", swing, 6, 4, {}, 0.5)
+	check(#later == 1 and later[1] == 1 and list[1].frozen, "once the body has gone the next swing freezes it")
+	list = cells()
+	check(#R.Freeze(list, "ice", swing, 6, 4, { at(4, -1.5) }, 1) == 2, "the sink is handed through (1: feet 0.7 under the top stand on it)")
+	list = cells()
+	check(#R.Freeze(list, "ice", swing, 6, 4, { at(4, -1.5) }, nil) == 2, "with no sink no body is judged")
+	list = cells()
+	check(#R.Freeze(list, "ice", swing, 6, 4, { at(0, 0) }, 0.5) == 2, "the swinger's own body on the bank holds nothing")
+	list = cells()
+	local air = W3.arc(vec(0, 3, 0), east)
+	air.airborne = true
+	check(#R.Freeze(list, "ice", air, 6, 4, {}, 0.5) == 0 and not list[1].frozen, "a swing made in the air freezes nothing")
+
+	-- IceSink.
+	check(R.IceSink({ sink = 0.5 }) == 0.5 and R.IceSink({ sink = 0 }) == 0, "IceSink: a finite number of at least 0")
+	check(R.IceSink({ sink = -0.1 }) == nil and R.IceSink({ sink = W3.NAN }) == nil and R.IceSink({ sink = math.huge }) == nil and R.IceSink({ sink = "0.5" }) == nil and R.IceSink({}) == nil and R.IceSink(nil) == nil and R.IceSink("ice") == nil, "under 0, not finite, a word, absent or no table: none")
+	local shipped = L1.real.rules.react ~= nil and L1.real.rules.react.ice or nil
+	check(shipped ~= nil and R.IceSink(shipped) == shipped.sink and type(shipped.sink) == "number", "the shipped Combat.json: its sink")
+end
+L1.group("l2w3 bodyTests", W3.bodyTests)
+
+-- The second fix round, Q6: the cells' faces on the water block's own faces are built inset.
+function W3.insetTests(): ()
+	print(" LevelGeometry: the ice cells inset from their water's faces (the second fix round's Q6)")
+	local Geo = W3.Geo
+	local function names(inset: any, layout: any?): any
+		local found = {}
+		local pieces = Geo.Pieces(layout or W3.layout(), { fence = 1, floor = 4, ice = { cell = 7, lift = 0.2, thickness = 1, inset = inset } }, 600)
+		for _, piece in pieces or {} do
+			if piece.role == "ice" then
+				found[piece.name] = piece.box
+			end
+		end
+		return found
+	end
+	-- The fixture's Water: x -10.5..10.5, z -7..7, cells 2, 3 and 6 built.
+	local plain, set = names(0), names(0.5)
+	local two, three, six = set.Ice_Water_2, set.Ice_Water_3, set.Ice_Water_6
+	check(two ~= nil and three ~= nil and six ~= nil and set.Ice_Water_1 == nil and set.Ice_Water_5 == nil, "the same cells are built (the cover test reads the whole cell)")
+	if two ~= nil and three ~= nil and six ~= nil then
+		local function edges(b: any): (number, number, number, number)
+			return b.x - b.sx / 2, b.x + b.sx / 2, b.z - b.sz / 2, b.z + b.sz / 2
+		end
+		local w2, e2, n2, s2 = edges(two)
+		local w3, e3, n3, s3 = edges(three)
+		local w6, e6, n6, s6 = edges(six)
+		check(near(n2, -6.5) and near(s2, 0) and near(w2, -3.5) and near(e2, 3.5), `the middle cell of the first row: its north face inset, its sides and south face whole ({w2}, {e2}, {n2}, {s2})`)
+		check(near(e3, 10) and near(n3, -6.5) and near(w3, 3.5) and near(s3, 0), `the north-east cell: its east and north faces inset ({w3}, {e3}, {n3}, {s3})`)
+		check(near(e6, 10) and near(s6, 6.5) and near(n6, 0) and near(w6, 3.5), `the south-east cell: its east and south faces inset ({w6}, {e6}, {n6}, {s6})`)
+		check(near(e2, w3, 1e-12) and near(s3, n6, 1e-12), "the faces between two cells are not inset: neighbours still touch")
+		check(near(two.y + two.sy / 2, -0.8) and near(two.sy, 1), "the top and the thickness are untouched")
+	end
+	local zero = plain.Ice_Water_3
+	check(zero ~= nil and near(zero.x, 7, 1e-12) and near(zero.sx, 7, 1e-12) and near(zero.z, -3.5, 1e-12) and near(zero.sz, 7, 1e-12), "an inset of 0: the whole cell, as before")
+	-- A water narrower than twice the inset: its one column is left no width, and no cell is built
+	-- (a Part of no width would have the whole level refused: Pieces judges every box it lists).
+	local thin = W3.layout()
+	table.insert(thin.blocks, { name = "Thin", look = "water", x = 60, y = -3, z = 0, sx = 0.8, sy = 4, sz = 14, collide = false, react = "ice" })
+	local thinBuilt, thinWhy = Geo.Pieces(thin, { fence = 1, floor = 4, ice = { cell = 7, lift = 0.2, thickness = 1, inset = 0.5 } }, 600)
+	check(thinBuilt ~= nil, `a water 0.8 wide with an inset of 0.5: the level still builds ({tostring(thinWhy)})`)
+	local thinNames = names(0.5, thin)
+	local thinOnes = 0
+	for name in thinNames do
+		if string.find(name, "^Ice_Thin_") then
+			thinOnes += 1
+		end
+	end
+	check(thinOnes == 0 and thinNames.Ice_Water_2 ~= nil, `and that water has no cell, the others theirs ({thinOnes})`)
+	local thinZero = names(0, thin)
+	check(thinZero.Ice_Thin_1 ~= nil and thinZero.Ice_Thin_2 ~= nil, "with an inset of 0 it has its cells")
+	-- Two ice blocks touching: each one's faces on the shared plane are inset, a seam of twice it.
+	local pair = W3.layout()
+	table.insert(pair.blocks, { name = "Next", look = "water", x = 0, y = -3, z = 14, sx = 21, sy = 4, sz = 14, collide = false, react = "ice" })
+	local paired = names(0.25, pair)
+	local south, north = paired.Ice_Water_6, paired.Ice_Next_3
+	check(south ~= nil and north ~= nil and near((north.z - north.sz / 2) - (south.z + south.sz / 2), 0.5), "two ice blocks touching: a seam of twice the inset between their cells")
+	-- IceOf.
+	local react = { ice = { cell = 7, lift = 0.2, thickness = 4 } }
+	local got, refused = Geo.IceOf(react)
+	check(got ~= nil and got.inset == 0 and refused == false, "no inset: 0")
+	react.ice.inset = 0.05
+	got, refused = Geo.IceOf(react)
+	check(got ~= nil and got.inset == 0.05 and refused == false, "an inset of 0.05: kept")
+	for _, bad in { -0.01, W3.NAN, math.huge, "0.05" } do
+		react.ice.inset = bad
+		got, refused = Geo.IceOf(react)
+		check(got == nil and refused == true, `an inset of {tostring(bad)}: refused (deep water with no cells, said once)`)
+	end
+	local real = Geo.SizesOf(L1.real.map, L1.real.rules)
+	local frost = L1.real.rules.react ~= nil and L1.real.rules.react.ice or nil
+	check(real.ice ~= nil and frost ~= nil and real.ice.inset == frost.inset and type(frost.inset) == "number", "the shipped Combat.json: its inset as written")
+end
+L1.group("l2w3 insetTests", W3.insetTests)
+
+-- The second fix round's lines that apply Q5, read as text (FIXTURES.source.w3fix2): the server
+-- passes the swing's air verdict and every body to the freeze, the client its ghost and phone.
+function W3.fix2WiringTests(): ()
+	print(" The second fix round's lines that apply the air swing and the bodies, read as text")
+	local f = FIXTURES.source.w3fix2
+	if f == nil then
+		check(false, "the source reading has a w3fix2 entry")
+		return
+	end
+	check(f.attackJudge == 1 and f.attackPass == 1, `OnAttack hands resolveMelee SwingGate's own verdict for the swing ({f.attackJudge}, {f.attackPass})`)
+	check(f.meleeAir == 1 and f.finishAir == 1, `resolveMelee builds its strike with that verdict and sends it to finish() as built ({f.meleeAir}, {f.finishAir})`)
+	check(f.freezeSink == 1 and f.freezeHeld == 1 and f.freezeCall == 1, `freeze reads the sink with WorldReact.IceSink and hands every body and it to WorldReact.Freeze ({f.freezeSink}, {f.freezeHeld}, {f.freezeCall})`)
+	for name, label in { server = "LevelService's bodies", client = "ReactFx.Bodies" } do
+		local b = f.bodies ~= nil and f.bodies[name] or nil
+		check(b ~= nil and b.found and b.players == 1 and b.box == 1, `{label}: every player's character as WorldReact.BodyBox of its root and Humanoid ({b and b.found}, {b and b.players}, {b and b.box})`)
+	end
+	check(f.ghostSink == 1 and f.ghostHolds == 1, `the frost ghost skips a cell a body stands in, with the server's sink ({f.ghostSink}, {f.ghostHolds})`)
+	check(f.phoneHolds == 1 and f.phoneGround == 1, `the phone's auto-swing at water skips a cell a body stands in, and judges a grounded swing ({f.phoneHolds}, {f.phoneGround})`)
+	check(f.predictedAir == 1 and f.frostAir == 1 and f.hitboxAir == 1, `the predicted swing carries AirSwing's verdict, and the ghost and the early hitbox build their strike with it ({f.predictedAir}, {f.frostAir}, {f.hitboxAir})`)
+	check(f.sinkReader == 1, `ReactFx reads the sink with the server's reader ({f.sinkReader})`)
+end
+L1.group("l2w3 fix2WiringTests", W3.fix2WiringTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

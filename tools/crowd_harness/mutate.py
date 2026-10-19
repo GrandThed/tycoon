@@ -8,7 +8,9 @@ and a mutant is caught only by a failing check. A harness with no verdict and no
 has run nothing and is listed as not caught.
 Exits 1 when a mutation is out of date, the baseline does not pass, or one is not caught.
 Usage: py tools/crowd_harness/mutate.py <repo root> <luau.exe> [filter] [from:to]
-(`filter` = only the mutations whose label holds that text; "" = all of them.)"""
+(`filter` = only the mutations whose label holds that text; "" = all of them; "files:<a>,<b>" =
+only the mutations of the files whose repo path ends with one of those names, the run a fix round
+owes for the files it changed.)"""
 import shutil
 import subprocess
 import sys
@@ -4752,7 +4754,14 @@ L2W2_MUTATIONS = {
         "\t\t\tand box.sx > 0\n\t\t\tand box.sy > 0\n",
         "\t\t\tand box.sy > 0\n",
     ),
-    "l2w2: a block that is not finite is met": (WORLD_REACT, "\t\t\tfinite(box.x)\n", "\t\t\ttrue\n"),
+    # Re-aimed by the second fix round: Holds checks a cell with the same first line.
+    "l2w2: a block that is not finite is met": (
+        WORLD_REACT,
+        "\t\t\tfinite(box.x)\n\t\t\tand finite(box.y)\n\t\t\tand finite(box.z)\n\t\t\tand finite(box.sx)\n"
+        "\t\t\tand finite(box.sy)\n\t\t\tand finite(box.sz)\n\t\t\tand box.sx > 0\n",
+        "\t\t\ttrue\n\t\t\tand finite(box.y)\n\t\t\tand finite(box.z)\n\t\t\tand finite(box.sx)\n"
+        "\t\t\tand finite(box.sy)\n\t\t\tand finite(box.sz)\n\t\t\tand box.sx > 0\n",
+    ),
     "l2w2: fire takes iceHits": (WORLD_REACT, "then rules.fireHits", "then rules.iceHits"),
     "l2w2: a fractional count reacts": (WORLD_REACT, "hits >= 1 and hits % 1 == 0 then", "hits >= 1 then"),
     "l2w2: a count of 0 reacts": (WORLD_REACT, "hits >= 1 and hits % 1 == 0 then", "hits >= 0 and hits % 1 == 0 then"),
@@ -5153,8 +5162,8 @@ L2W3_MUTATIONS = {
     # Chills (L2-54).
     "l2w3: any shape chills": (
         WORLD_REACT,
-        '\tif fx.shape ~= "arc" then\n\t\treturn false\n\tend\n\tlocal origin, direction, arc',
-        "\tlocal origin, direction, arc",
+        '\tif fx.shape ~= "arc" or fx.airborne == true then\n\t\treturn false\n\tend\n\tlocal origin, direction, arc',
+        '\tif fx.airborne == true then\n\t\treturn false\n\tend\n\tlocal origin, direction, arc',
     ),
     "l2w3: the band has no floor": (
         WORLD_REACT,
@@ -5199,19 +5208,19 @@ L2W3_MUTATIONS = {
     ),
     "l2w3: Freeze freezes the frozen again": (
         WORLD_REACT,
-        "if not cell.frozen and WorldReact.Chills(fx, cell.box, reachDown, ahead) then",
-        "if WorldReact.Chills(fx, cell.box, reachDown, ahead) then",
+        "\t\t\tnot cell.frozen\n\t\t\tand WorldReact.Chills(fx, cell.box, reachDown, ahead)\n",
+        "\t\t\tWorldReact.Chills(fx, cell.box, reachDown, ahead)\n",
     ),
     "l2w3: Freeze does not write frozen": (WORLD_REACT, "\t\t\tcell.frozen = true\n", ""),
     "l2w3: Freeze drops ahead": (
         WORLD_REACT,
-        "WorldReact.Chills(fx, cell.box, reachDown, ahead) then",
-        "WorldReact.Chills(fx, cell.box, reachDown, 0) then",
+        "\t\t\tand WorldReact.Chills(fx, cell.box, reachDown, ahead)\n",
+        "\t\t\tand WorldReact.Chills(fx, cell.box, reachDown, 0)\n",
     ),
     "l2w3: Freeze answers highest first": (
         WORLD_REACT,
-        "\tfor index, cell in cells do\n\t\tif not cell.frozen",
-        "\tfor index = #cells, 1, -1 do\n\t\tlocal cell = cells[index]\n\t\tif not cell.frozen",
+        "\tfor index, cell in cells do\n\t\tif\n\t\t\tnot cell.frozen",
+        "\tfor index = #cells, 1, -1 do\n\t\tlocal cell = cells[index]\n\t\tif\n\t\t\tnot cell.frozen",
     ),
     "l2w3: ice counts iceHits again": (
         WORLD_REACT,
@@ -5329,8 +5338,8 @@ L2W3_MUTATIONS = {
     "l2w3: React sends ice down the fire path": (LEVEL_SERVICE, ICE_BRANCH, ""),
     "l2w3: freeze asks no Freeze": (
         LEVEL_SERVICE,
-        "WorldReact.Freeze(cells, element, fx, reachDown, ahead)",
-        "WorldReact.Freeze(cells, element, fx, reachDown, 0)",
+        "WorldReact.Freeze(cells, element, fx, reachDown, ahead, held, sink)",
+        "WorldReact.Freeze(cells, element, fx, reachDown, 0, held, sink)",
     ),
     # Re-aimed by the fix round's s-m1: a cell shows as WorldReact.IceLook says, through showIce.
     "l2w3: a frozen cell does not collide": (LEVEL_SERVICE, "\tpart.CanCollide = look.collide\n", "\tpart.CanCollide = false\n"),
@@ -5377,18 +5386,18 @@ L2W3_FIX_MUTATIONS = {
     # c-m3, client half: each copy builds its strike by hand again (a step of its own, a pad).
     "l2w3 fix c-m3: the frost ghost's own step": (
         FROST_FX,
-        "WorldReact.SwingStrike(swing.variant, swing.step, swing.origin, swing.heading)",
-        "WorldReact.SwingStrike(swing.variant, 1, swing.origin, swing.heading)",
+        "\t\tswing.variant,\n\t\tswing.step,\n\t\tswing.origin,\n",
+        "\t\tswing.variant,\n\t\t1,\n\t\tswing.origin,\n",
     ),
     "l2w3 fix c-m3: the phone's own step": (
         INPUT,
-        "local strike = WorldReact.SwingStrike(variant, step, origin, heading)",
-        "local strike = WorldReact.SwingStrike(variant, 1, origin, heading)",
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, false)",
+        "local strike = WorldReact.SwingStrike(variant, 1, origin, heading, false)",
     ),
     "l2w3 fix c-m3: the early hitbox's own step": (
         FEEDBACK,
-        "local predicted = WorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading)",
-        "local predicted = WorldReact.SwingStrike(variant, 1, swing.origin, swing.heading)",
+        "WorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading, swing.airSwing)",
+        "WorldReact.SwingStrike(variant, 1, swing.origin, swing.heading, swing.airSwing)",
     ),
     "l2w3 fix c-m3: the early hitbox pads its size": (
         FEEDBACK,
@@ -5404,8 +5413,8 @@ L2W3_FIX_MUTATIONS = {
     ),
     "l2w3 fix s-m1: IceOf takes a lift that is not finite": (
         GEOMETRY,
-        'type(lift) == "number" and isFinite(lift) then',
-        'type(lift) == "number" then',
+        '\t\tand type(lift) == "number"\n\t\tand isFinite(lift)\n',
+        '\t\tand type(lift) == "number"\n',
     ),
     "l2w3 fix s-m1: IceOf refuses nothing": (GEOMETRY, "\treturn nil, true\nend", "\treturn nil, false\nend"),
     "l2w3 fix s-m1: React's guard forgets the ice": (
@@ -5472,8 +5481,8 @@ L2W3_FIX_MUTATIONS = {
     ),
     "l2w3 fix d-m5: freeze swaps the reads": (
         LEVEL_SERVICE,
-        "WorldReact.Freeze(cells, element, fx, reachDown, ahead)",
-        "WorldReact.Freeze(cells, element, fx, ahead, reachDown)",
+        "WorldReact.Freeze(cells, element, fx, reachDown, ahead, held, sink)",
+        "WorldReact.Freeze(cells, element, fx, ahead, reachDown, held, sink)",
     ),
     "l2w3 fix d-m5: freeze reads the wrong table": (
         LEVEL_SERVICE,
@@ -5504,8 +5513,8 @@ L2W3_FIX_MUTATIONS = {
     "l2w3 fix c-m3: SwingStrike points at its origin": (WORLD_REACT, "\t\tdirection = heading,\n", "\t\tdirection = origin,\n"),
     "l2w3 fix c-m3: resolveMelee builds its own step": (
         WEAPON,
-        "local swing = WorldReact.SwingStrike(variant, step, origin, heading)",
-        "local swing = WorldReact.SwingStrike(variant, 1, origin, heading)",
+        "local swing = WorldReact.SwingStrike(variant, step, origin, heading, airSwing)",
+        "local swing = WorldReact.SwingStrike(variant, 1, origin, heading, airSwing)",
     ),
     "l2w3 fix c-m3: finish() sends a padded size": (WEAPON, "\t\tsize = swing.size,\n", "\t\tsize = range + variant.pad,\n"),
     "l2w3 fix c-m3: the candidates sweep their own arc": (
@@ -5597,6 +5606,201 @@ L2W3_FIX_MUTATIONS = {
 MUTATIONS.update(L2W3_FIX_MUTATIONS)
 
 
+# The L2 W3 second fix round (docs/prompts/l2-w3-fix2.md). Q5: an air swing freezes nothing and no
+# cell freezes while a body stands in it (WorldReact's SwingStrike `airborne`, Chills, BodyBox,
+# Holds, Freeze's bodies, IceSink; the lines on both sides that hand them the verdict and the
+# bodies). Q6: the cells inset from their water's faces (LevelGeometry's IceOf and iceCells).
+# Proved by tests_l2w3.luau's bodyTests, insetTests, realTests and fix2WiringTests. ReactFx is read
+# as text for the ghost's and the bodies' lines, so it is copied.
+REACT_FX = "src/combat/client/Controllers/ReactFx.luau"
+FILES.append(REACT_FX)
+BODY_FINITE = (
+    "\t\t\tfinite(body.x)\n\t\t\tand finite(body.y)\n\t\t\tand finite(body.z)\n\t\t\tand finite(body.sx)\n"
+    "\t\t\tand finite(body.sy)\n\t\t\tand finite(body.sz)\n\t\t\tand math.abs(body.x"
+)
+CELL_FINITE = (
+    "\tif\n\t\tnot (\n\t\t\tfinite(box.x)\n\t\t\tand finite(box.y)\n\t\t\tand finite(box.z)\n\t\t\tand finite(box.sx)\n"
+    "\t\t\tand finite(box.sy)\n\t\t\tand finite(box.sz)\n\t\t)\n\tthen\n\t\treturn false\n\tend\n\tlocal top = box.y + box.sy / 2\n"
+    "\tlocal bottom"
+)
+INSET_WEST = "local west = cell.x - cell.sx / 2 + (if i == 1 then ice.inset else 0)"
+L2W3_FIX2_MUTATIONS = {
+    # Q5, the pure rules.
+    "l2w3 fix2 Q5: Chills takes an air swing": (
+        WORLD_REACT,
+        '\tif fx.shape ~= "arc" or fx.airborne == true then',
+        '\tif fx.shape ~= "arc" then',
+    ),
+    "l2w3 fix2 Q5: SwingStrike drops the air verdict": (WORLD_REACT, "\t\tairborne = airborne,\n", "\t\tairborne = false,\n"),
+    "l2w3 fix2 Q5: Freeze ignores the bodies": (
+        WORLD_REACT,
+        "\t\t\tand not WorldReact.Holds(cell.box, bodies, sink)\n",
+        "",
+    ),
+    "l2w3 fix2 Q5: Holds ignores the sink": (WORLD_REACT, "local below = top - (sink :: number)", "local below = top"),
+    "l2w3 fix2 Q5: Holds judges bodies with a sink under 0": (
+        WORLD_REACT,
+        "if bodies == nil or not (finite(sink) and (sink :: number) >= 0) then",
+        "if bodies == nil or sink == nil then",
+    ),
+    "l2w3 fix2 Q5: Holds counts touching in plan (x)": (
+        WORLD_REACT,
+        "and math.abs(body.x - box.x) < (body.sx + box.sx) / 2",
+        "and math.abs(body.x - box.x) <= (body.sx + box.sx) / 2",
+    ),
+    "l2w3 fix2 Q5: Holds counts touching in plan (z)": (
+        WORLD_REACT,
+        "and math.abs(body.z - box.z) < (body.sz + box.sz) / 2",
+        "and math.abs(body.z - box.z) <= (body.sz + box.sz) / 2",
+    ),
+    "l2w3 fix2 Q5: Holds ignores the feet": (WORLD_REACT, "\t\t\tand body.y - body.sy / 2 < below\n", ""),
+    "l2w3 fix2 Q5: Holds ignores the cell's bottom": (WORLD_REACT, "\t\t\tand body.y + body.sy / 2 > bottom\n", ""),
+    "l2w3 fix2 Q5: Holds takes a body that is not finite": (WORLD_REACT, BODY_FINITE, "\t\t\tmath.abs(body.x"),
+    "l2w3 fix2 Q5: Holds takes a cell that is not finite": (
+        WORLD_REACT,
+        CELL_FINITE,
+        "\tlocal top = box.y + box.sy / 2\n\tlocal bottom",
+    ),
+    "l2w3 fix2 Q5: BodyBox's feet at the hip": (
+        WORLD_REACT,
+        "local stand = hipHeight + size.Y / 2",
+        "local stand = hipHeight",
+    ),
+    "l2w3 fix2 Q5: BodyBox ignores the turn": (
+        WORLD_REACT,
+        "sx = 2 * (rx * halfX + rz * halfZ),",
+        "sx = 2 * halfX,",
+    ),
+    "l2w3 fix2 Q5: BodyBox reads no flat part as facing +Z": (
+        WORLD_REACT,
+        "local rx = if flat > FLAT_MIN then math.abs(right.X) / flat else 1",
+        "local rx = if flat > FLAT_MIN then math.abs(right.X) / flat else 0",
+    ),
+    "l2w3 fix2 Q5: IceSink takes a sink under 0": (WORLD_REACT, "if finite(sink) and sink >= 0 then", "if finite(sink) then"),
+    "l2w3 fix2 Q5: IceSink takes one that is not finite": (
+        WORLD_REACT,
+        "if finite(sink) and sink >= 0 then",
+        'if type(sink) == "number" and sink >= 0 then',
+    ),
+    "l2w3 fix2 Q5: IceSink reads lift": (
+        WORLD_REACT,
+        'local sink: any = if type(ice) == "table" then ice.sink else nil',
+        'local sink: any = if type(ice) == "table" then ice.lift else nil',
+    ),
+    # Q5, the lines that hand them the verdict and the bodies (read as text).
+    "l2w3 fix2 Q5: resolveMelee calls every swing grounded": (
+        WEAPON,
+        "local swing = WorldReact.SwingStrike(variant, step, origin, heading, airSwing)",
+        "local swing = WorldReact.SwingStrike(variant, step, origin, heading, false)",
+    ),
+    "l2w3 fix2 Q5: OnAttack hands resolveMelee no verdict": (
+        WEAPON,
+        "\t\t\tdirection,\n\t\t\tairSwing\n\t\t)",
+        "\t\t\tdirection,\n\t\t\tfalse\n\t\t)",
+    ),
+    "l2w3 fix2 Q5: finish() drops the verdict": (WEAPON, "\t\tairborne = swing.airborne,\n", ""),
+    "l2w3 fix2 Q5: freeze hands no bodies": (
+        LEVEL_SERVICE,
+        "local held = if sink ~= nil then bodies() else nil",
+        "local held = nil",
+    ),
+    "l2w3 fix2 Q5: freeze reads no sink": (
+        LEVEL_SERVICE,
+        "local sink = WorldReact.IceSink(if rules ~= nil then rules.ice else nil)",
+        "local sink = WorldReact.IceSink(nil)",
+    ),
+    "l2w3 fix2 Q5: the server's bodies turn by the look": (
+        LEVEL_SERVICE,
+        "root.CFrame.RightVector,",
+        "root.CFrame.LookVector,",
+    ),
+    "l2w3 fix2 Q5: the server's bodies are only the first player's": (
+        LEVEL_SERVICE,
+        "\tfor _, player in Players:GetPlayers() do\n\t\tlocal character = player.Character",
+        "\tfor _, player in { Players:GetPlayers()[1] } do\n\t\tlocal character = player.Character",
+    ),
+    "l2w3 fix2 Q5: the ghost ignores the bodies": (
+        REACT_FX,
+        "if not WorldReact.Holds(box, around, sink) then",
+        "if true then",
+    ),
+    "l2w3 fix2 Q5: the ghost judges no sink": (REACT_FX, "local sink = ReactFx.IceSink()", "local sink = nil"),
+    "l2w3 fix2 Q5: the client's bodies turn by the look": (REACT_FX, "root.CFrame.RightVector,", "root.CFrame.LookVector,"),
+    "l2w3 fix2 Q5: ReactFx reads its own sink": (
+        REACT_FX,
+        "return WorldReact.IceSink(if react ~= nil then react.ice else nil)",
+        "return 0",
+    ),
+    "l2w3 fix2 Q5: the phone ignores the bodies": (
+        INPUT,
+        "return not WorldReact.Holds(box, around, ReactFx.IceSink())",
+        "return true",
+    ),
+    "l2w3 fix2 Q5: the predicted swing's verdict is the Humanoid's": (
+        INPUT,
+        "airSwing = swingAirborne,",
+        "airSwing = airborne,",
+    ),
+    "l2w3 fix2 Q5: the phone's strike is an air swing": (
+        INPUT,
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, false)",
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, true)",
+    ),
+    "l2w3 fix2 Q5: the ghost's strike is always grounded": (FROST_FX, "\t\tswing.airSwing\n\t)", "\t\tfalse\n\t)"),
+    "l2w3 fix2 Q5: the early hitbox's strike is always grounded": (
+        FEEDBACK,
+        "swing.heading, swing.airSwing)",
+        "swing.heading, false)",
+    ),
+    # Q6.
+    "l2w3 fix2 Q6: no inset on the west": (GEOMETRY, INSET_WEST, "local west = cell.x - cell.sx / 2"),
+    "l2w3 fix2 Q6: no inset on the east": (
+        GEOMETRY,
+        "local east = cell.x + cell.sx / 2 - (if i == nx then ice.inset else 0)",
+        "local east = cell.x + cell.sx / 2",
+    ),
+    "l2w3 fix2 Q6: no inset on the north": (
+        GEOMETRY,
+        "local north = cell.z - cell.sz / 2 + (if j == 1 then ice.inset else 0)",
+        "local north = cell.z - cell.sz / 2",
+    ),
+    "l2w3 fix2 Q6: no inset on the south": (
+        GEOMETRY,
+        "local south = cell.z + cell.sz / 2 - (if j == nz then ice.inset else 0)",
+        "local south = cell.z + cell.sz / 2",
+    ),
+    "l2w3 fix2 Q6: every west face inset": (GEOMETRY, INSET_WEST, "local west = cell.x - cell.sx / 2 + ice.inset"),
+    "l2w3 fix2 Q6: the inset doubled": (
+        GEOMETRY,
+        "local east = cell.x + cell.sx / 2 - (if i == nx then ice.inset else 0)",
+        "local east = cell.x + cell.sx / 2 - (if i == nx then 2 * ice.inset else 0)",
+    ),
+    "l2w3 fix2 Q6: Cells' order read Z fastest": (
+        GEOMETRY,
+        "local i, j = (k - 1) % nx + 1, (k - 1) // nx + 1",
+        "local j, i = (k - 1) % nz + 1, (k - 1) // nz + 1",
+    ),
+    "l2w3 fix2 Q6: a cell left no width is built": (
+        GEOMETRY,
+        "if not covered and east - west > SEAM and south - north > SEAM then",
+        "if not covered then",
+    ),
+    "l2w3 fix2 Q6: IceOf takes an inset under 0": (GEOMETRY, "\t\tand inset >= 0\n", ""),
+    "l2w3 fix2 Q6: IceOf takes an endless inset": (GEOMETRY, "\t\tand isFinite(inset)\n", ""),
+    "l2w3 fix2 Q6: IceOf drops the inset": (
+        GEOMETRY,
+        "thickness = thickness, inset = inset }, false",
+        "thickness = thickness, inset = 0 }, false",
+    ),
+    "l2w3 fix2 Q6: IceOf's inset defaults to a stud": (
+        GEOMETRY,
+        "local inset: any = if ice.inset == nil then 0 else ice.inset",
+        "local inset: any = if ice.inset == nil then 1 else ice.inset",
+    ),
+}
+MUTATIONS.update(L2W3_FIX2_MUTATIONS)
+
+
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
     it printed none: run_harness.py prints one whenever a case ran)."""
@@ -5635,7 +5839,11 @@ chosen = list(MUTATIONS.items())
 if span:
     low, high = span.split(":")
     chosen = chosen[int(low) : int(high)]
-chosen = [(label, entry) for label, entry in chosen if not only or only in label]
+if only.startswith("files:"):
+    ends = tuple(name.strip() for name in only[len("files:") :].split(",") if name.strip())
+    chosen = [(label, entry) for label, entry in chosen if entry[0].endswith(ends)]
+else:
+    chosen = [(label, entry) for label, entry in chosen if not only or only in label]
 
 # Run from one checkout against another, this would undo the other's rules and judge them by this
 # one's cases: refused, as run_harness.py refuses it.

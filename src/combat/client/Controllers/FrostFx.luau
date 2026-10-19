@@ -12,7 +12,9 @@
 --    with the strike the server will build from it: WorldReact.SwingStrike, the one pure rule
 --    WeaponService.resolveMelee builds its strike with (fix round c-m3), on the swing's origin,
 --    flat heading and predicted combo step. The ghosts are that swing's (by seq): its answering
---    strike starts their grace (OnAnswered), its refusal takes them (OnRefused).
+--    strike starts their grace (OnAnswered), its refusal takes them (OnRefused). The second fix
+--    round's Q5: the strike carries AirSwing's verdict (`airSwing`), so a swing in the air shows no
+--    ghost, and ReactFx shows none on a cell a player's body stands in: the server freezes neither.
 --
 -- FeedbackController owns the wiring (its swing handler, its strike listener, its refusals,
 -- Destroy): it is the one strike listener and InputController's one swing handler. No sound
@@ -40,6 +42,7 @@ export type Swing = {
 	origin: Vector3,
 	heading: Vector3,
 	step: number,
+	airSwing: boolean,
 }
 
 -- What OnStrike reads of a strike from the network (FeedbackController's parsed Strike).
@@ -138,7 +141,13 @@ function FrostFx.OnSwing(swing: Swing): ()
 	if not FrostFx.IsIce(swing.family) then
 		return
 	end
-	local strike = WorldReact.SwingStrike(swing.variant, swing.step, swing.origin, swing.heading)
+	local strike = WorldReact.SwingStrike(
+		swing.variant,
+		swing.step,
+		swing.origin,
+		swing.heading,
+		swing.airSwing
+	)
 	puff(strike.origin, strike.direction, strike.size, strike.arcDegrees)
 	ReactFx.PredictFreeze(strike, swing.seq)
 end

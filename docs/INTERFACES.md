@@ -15646,3 +15646,9 @@ stood, margin)` judge a fall by where the body last stood (`WeaponService.LastGr
 every deep (non-colliding) block with a `landing` grown by `rescue.outside`; ice blocks may touch but not overlap;
 a cell is skipped only when a cover holds all of it; frozen cells keep ground grip; `controls.iceAutoDegrees` 34
 (phone auto-swing at water only, never airborne).
+W3 second fix round (lead, 2026-10-19): `SwingStrike(variant, step, origin, heading, airborne)` and
+`Strike.airborne` (an airborne swing chills nothing, judged by the swing's own SwingGate verdict);
+`WorldReact.BodyBox`, `Holds`, `IceSink`; `Freeze(cells, element, fx, reachDown, ahead, bodies?, sink?)` skips a
+cell a body stands in; client `ReactFx.Bodies()`, `ReactFx.IceSink()`, `PredictedSwing.airSwing`; config
+`levels.react.ice.sink` 0.5 and `inset` 0.05 (edge cells inset from the water's own faces); `sim_range.ice_cells`
+cells carry `box` and `cell`; check_stage_mirror compares ice boxes one by one.

@@ -469,6 +469,25 @@ for _, case in data.fenceCases do
 	end)
 end
 
+-- The L2 W3 second fix round's Q6: the ice pieces a layout becomes (the inset from the water's faces) --------
+for _, case in data.iceCases do
+	J.try(case.id, function()
+		local sizes = Geo.SizesOf(data.expeditions, case.levels)
+		local pieces, why = Geo.Pieces(case.layout, sizes, case.levels.maxParts)
+		if pieces == nil then
+			return { refused = why }
+		end
+		local rows = {}
+		for _, piece in pieces do
+			if piece.role == "ice" then
+				local b = piece.box
+				table.insert(rows, { piece.name, b.x - b.sx / 2, b.x + b.sx / 2, b.z - b.sz / 2, b.z + b.sz / 2, b.y + b.sy / 2, b.y - b.sy / 2 })
+			end
+		end
+		return rows
+	end)
+end
+
 -- Ruling 6: is a level with one number set to zero or emptied refused? ---------------------------------
 for _, case in data.refusalCases do
 	J.try(case.id, function()

@@ -224,6 +224,9 @@ type StrikeFx = {
 	-- L2-35: the empty end strike of a projectile a set or a run abandoned. Never sent; the
 	-- strike listeners skip it (it resolved nothing in the world).
 	abandoned: boolean?,
+	-- The L2 W3 second fix round's Q5: a melee swing judged airborne at its origin (SwingGate,
+	-- OnAttack). Never sent; the strike listeners read it (WorldReact.Chills freezes nothing then).
+	airborne: boolean?,
 }
 -- L2-35: what OnStrikeResolved's listeners are handed: the shape as WorldReact reads it.
 type StrikeListener = (
@@ -1106,7 +1109,9 @@ local function resolveMelee(
 	root: BasePart,
 	seq: number,
 	origin: Vector3,
-	direction: Vector3
+	direction: Vector3,
+	-- The L2 W3 second fix round's Q5: OnAttack's SwingGate verdict for this swing (at its origin).
+	airSwing: boolean
 ): ()
 	local heading = flatten(direction) or flatten(root.CFrame.LookVector) or Vector3.new(0, 0, -1)
 	local chain = variant.chain
@@ -1116,8 +1121,10 @@ local function resolveMelee(
 	local multiplier = if chain ~= nil and chain[step] ~= nil then chain[step] else 1
 	-- The L2 W3 fix round's c-m3: the swing's geometry is WorldReact.SwingStrike's, the one the
 	-- client's frost ghost and phone auto-swing build too. Lead ruling: the chain's LAST hit may
-	-- sweep a different arc (finisherArcDegrees; 360 = a spin round the root).
-	local swing = WorldReact.SwingStrike(variant, step, origin, heading)
+	-- sweep a different arc (finisherArcDegrees; 360 = a spin round the root). The second fix
+	-- round's Q5: it carries whether the swing was made in the air, so the ice it would freeze
+	-- under a falling body stays water.
+	local swing = WorldReact.SwingStrike(variant, step, origin, heading, airSwing)
 	local arcDegrees = swing.arcDegrees
 	local damage = variant.damage * multiplier
 	local range = swing.size
@@ -1177,6 +1184,7 @@ local function resolveMelee(
 			else nil,
 		seq = seq,
 		step = step,
+		airborne = swing.airborne,
 	})
 end
 
@@ -2393,7 +2401,18 @@ function WeaponService.OnAttack(
 	shooter.creditAt[slot] = now
 	if variant.kind == "melee" then
 		SwingGate.Took(shooter.airSwing, airSwing)
-		resolveMelee(config, shooter, weapon, variantKey, variant, root, seq, swingAt, direction)
+		resolveMelee(
+			config,
+			shooter,
+			weapon,
+			variantKey,
+			variant,
+			root,
+			seq,
+			swingAt,
+			direction,
+			airSwing
+		)
 	else
 		local used, scale, full =
 			resolveCharge(shooter, weapon, variant, charge or 0, previousAttackAt, now)

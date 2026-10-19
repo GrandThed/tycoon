@@ -2817,6 +2817,14 @@ export type CombatIceConfig = {
 	thickness: number,
 	reachDown: number,
 	ahead: number,
+	-- The second fix round's Q6: studs the cells' faces that lie on the water block's own faces are
+	-- built inside them, so a frozen cell's side never shares a plane with the water's (shimmer).
+	-- nil = 0; a value that is not a finite number of at least 0 leaves the water with no cells.
+	inset: number?,
+	-- The second fix round's Q5: studs a body's feet may lie under a cell's top and still stand on
+	-- it; deeper, the body is in the cell and it does not freeze (WorldReact.Holds). nil (or not a
+	-- finite number of at least 0) = no body is judged.
+	sink: number?,
 }
 
 -- RunState (built only by ArenaService)

@@ -3535,7 +3535,8 @@ function FeedbackController.PredictSwing(swing: InputController.PredictedSwing):
 	FrostFx.OnSwing(swing)
 	local variant = swing.variant
 	-- The server's own strike for this step (the chain's last hit may sweep its own arc).
-	local predicted = WorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading)
+	local predicted =
+		WorldReact.SwingStrike(variant, swing.step, swing.origin, swing.heading, swing.airSwing)
 	local shape = predicted.shape
 	-- An airborne arc reaches down to the crowd below; its end point is the band's bottom.
 	local reachDown = if swing.airborne then math.max(config().movement.airSwingReachDown, 0) else 0

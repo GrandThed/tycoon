@@ -36,12 +36,16 @@
 --    `Ice` to replicate (AnswerFreeze: the server broadcasts the strike before it freezes), and
 --    a swing never answered loses them after Theme.COMBAT_RANGE_SWING_ANSWER_SECONDS, the time
 --    after which input counts it dropped. A cell two swings named keeps its ghost while either
---    holds it. A ghost is information, so it draws on every device.
+--    holds it. A ghost is information, so it draws on every device. The second fix round's Q5: no
+--    ghost for a swing made in the air (its strike's `airborne`, Chills) nor on a cell a player's
+--    body stands in (WorldReact.Holds over Bodies, with levels.react.ice's sink): the server
+--    freezes neither.
 --  * Frozen (CombatFx `react`, event "frozen", the cell's box): a pale glint over the cell and a
 --    burst of frost motes; a low-end device gets the glint alone.
 --
 -- No sound (combat has none).
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
@@ -599,10 +603,46 @@ function ReactFx.IceReach(): (number?, number?)
 	return WorldReact.IceReach(if react ~= nil then react.ice else nil)
 end
 
+-- The second fix round's Q5: levels.react.ice's sink, read by the server's own reader
+-- (WorldReact.IceSink); nil = no body is judged (as on the server).
+function ReactFx.IceSink(): number?
+	local combat = Catalog.GetCombatConfig()
+	local react = if combat ~= nil then combat.levels.react else nil
+	return WorldReact.IceSink(if react ~= nil then react.ice else nil)
+end
+
+-- The second fix round's Q5: every player's body as this client sees it now (its own root, the
+-- others' replicated ones), as LevelService reads them for the freeze: WorldReact.BodyBox of the
+-- root Part and the Humanoid. A character with no root Part or no Humanoid has none.
+function ReactFx.Bodies(): { WorldReact.Box }
+	local found: { WorldReact.Box } = {}
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character == nil then
+			continue
+		end
+		local root = character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if root ~= nil and root:IsA("BasePart") and humanoid ~= nil then
+			table.insert(
+				found,
+				WorldReact.BodyBox(
+					root.Position,
+					root.CFrame.RightVector,
+					root.Size,
+					humanoid.HipHeight
+				)
+			)
+		end
+	end
+	return found
+end
+
 -- L2-56: the local player's own ice swing `seq` as it was sent (WorldReact.SwingStrike: the
 -- strike the server will build from it). Every unfrozen cell WorldReact.Chills names gets a
 -- ghost of ice on this frame, held by `seq` until AnswerFreeze's grace, RefuseFreeze, or
--- Theme.COMBAT_RANGE_SWING_ANSWER_SECONDS with no answer (c-m2).
+-- Theme.COMBAT_RANGE_SWING_ANSWER_SECONDS with no answer (c-m2). The second fix round's Q5: a
+-- cell a player's body stands in gets none (WorldReact.Holds, the bodies read once a cell chills).
 function ReactFx.PredictFreeze(swing: WorldReact.Strike, seq: number): ()
 	if not state.mounted then
 		return
@@ -611,13 +651,23 @@ function ReactFx.PredictFreeze(swing: WorldReact.Strike, seq: number): ()
 	if reachDown == nil or ahead == nil then
 		return
 	end
+	local sink = ReactFx.IceSink()
+	local bodies: { WorldReact.Box }? = nil
 	local named: { BasePart } = {}
 	ReactFx.ForEachIce(
 		swing.origin,
 		swing.size + ahead,
 		reachDown,
 		function(part: BasePart, box: WorldReact.Box): boolean
-			if WorldReact.Chills(swing, box, reachDown, ahead) then
+			if not WorldReact.Chills(swing, box, reachDown, ahead) then
+				return false
+			end
+			local around = bodies
+			if around == nil then
+				around = ReactFx.Bodies()
+				bodies = around
+			end
+			if not WorldReact.Holds(box, around, sink) then
 				table.insert(named, part)
 			end
 			return false

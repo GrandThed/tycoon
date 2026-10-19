@@ -248,6 +248,15 @@ MUTANTS = [
      "\t\tif type(block) ~= \"table\" then\n\t\t\tcontinue\n\t\tend\n\t\tif\n"),
     ("L2 W3 fix s-s2: Overlap counts touching", "LevelGeometry",
      "return math.abs(a.x - b.x) < (a.sx + b.sx) / 2 - SEAM", "return math.abs(a.x - b.x) <= (a.sx + b.sx) / 2 + SEAM"),
+    # The W3 second fix round's Q6: the ice cells inset from their water's own faces, against
+    # sim_range.ice_cells box by box.
+    ("L2 W3 fix2 Q6: no inset on the east", "LevelGeometry",
+     "local east = cell.x + cell.sx / 2 - (if i == nx then ice.inset else 0)", "local east = cell.x + cell.sx / 2"),
+    ("L2 W3 fix2 Q6: every north face inset", "LevelGeometry",
+     "local north = cell.z - cell.sz / 2 + (if j == 1 then ice.inset else 0)", "local north = cell.z - cell.sz / 2 + ice.inset"),
+    ("L2 W3 fix2 Q6: a cell left no width is built", "LevelGeometry",
+     "if not covered and east - west > SEAM and south - north > SEAM then", "if not covered then"),
+    ("L2 W3 fix2 Q6: IceOf takes an inset under 0", "LevelGeometry", "\t\tand inset >= 0\n", ""),
 ]
 
 

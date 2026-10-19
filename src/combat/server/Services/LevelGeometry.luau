@@ -33,8 +33,9 @@ export type Bounds = {
 }
 export type Size = { sx: number, sy: number, sz: number }
 -- L2-53: how an ice block's cells are built (Combat.json levels.react.ice): about `cell` studs
--- square, `thickness` deep, the top `lift` over the water's top.
-export type IceSize = { cell: number, lift: number, thickness: number }
+-- square, `thickness` deep, the top `lift` over the water's top; the second fix round's Q6: the
+-- faces that lie on the block's own faces `inset` studs inside them.
+export type IceSize = { cell: number, lift: number, thickness: number, inset: number }
 -- What a layout does not say and the config does: the fence's thickness and how deep the ground
 -- is (Combat.json levels.fenceThickness, levels.floorThickness; a camp's own fence.thickness wins
 -- over `fence`, FenceThickness), and how big a checkpoint
@@ -153,8 +154,9 @@ local function sizeOf(value: any): Size?
 end
 
 -- L2-53: Combat.json levels.react.ice as the cells are built: a cell and a thickness that are
--- positive finite numbers and a finite lift. nil for anything else, and then true when the key
--- was there (LevelService says so once): an ice block is then deep water with no cells.
+-- positive finite numbers and a finite lift; the second fix round's Q6: an inset that is a finite
+-- number of at least 0 (none = 0). nil for anything else, and then true when the key was there
+-- (LevelService says so once): an ice block is then deep water with no cells.
 function LevelGeometry.IceOf(react: any): (IceSize?, boolean)
 	local ice: any = if type(react) == "table" then react.ice else nil
 	if ice == nil then
@@ -166,8 +168,17 @@ function LevelGeometry.IceOf(react: any): (IceSize?, boolean)
 	local cell = LevelGeometry.Length(ice.cell)
 	local thickness = LevelGeometry.Length(ice.thickness)
 	local lift = ice.lift
-	if cell ~= nil and thickness ~= nil and type(lift) == "number" and isFinite(lift) then
-		return { cell = cell, lift = lift, thickness = thickness }, false
+	local inset: any = if ice.inset == nil then 0 else ice.inset
+	if
+		cell ~= nil
+		and thickness ~= nil
+		and type(lift) == "number"
+		and isFinite(lift)
+		and type(inset) == "number"
+		and isFinite(inset)
+		and inset >= 0
+	then
+		return { cell = cell, lift = lift, thickness = thickness, inset = inset }, false
 	end
 	return nil, true
 end
@@ -773,10 +784,14 @@ end
 -- not built: that water is never walked on. The fix round's d-m1: a cover that holds only the
 -- cell's centre (the island over the pond's columns beside it) left a slit of water between its
 -- face and the next cell that no swing could close; a cell it holds in part is built, and its top
--- lies inside the cover where they meet.
+-- lies inside the cover where they meet. The second fix round's Q6: a cell's face that lies on one
+-- of the block's own faces (the first and last column and row) is built `inset` inside it, so the
+-- frozen cell's side never shares a plane with the water's own (the two shimmered); the cover test
+-- still reads the whole cell. A cell the inset leaves no width is not built.
 local function iceCells(name: string, box: Box, ice: IceSize, covers: { Box }): { Piece }
 	local top = box.y + box.sy / 2
 	local pieces: { Piece } = {}
+	local nx, nz = WorldReact.CellGrid(box, ice.cell)
 	for k, cell in WorldReact.Cells(box, ice.cell) do
 		local covered = false
 		for _, other in covers do
@@ -789,17 +804,23 @@ local function iceCells(name: string, box: Box, ice: IceSize, covers: { Box }): 
 				break
 			end
 		end
-		if not covered then
+		-- Cells' order: X fastest, then Z.
+		local i, j = (k - 1) % nx + 1, (k - 1) // nx + 1
+		local west = cell.x - cell.sx / 2 + (if i == 1 then ice.inset else 0)
+		local east = cell.x + cell.sx / 2 - (if i == nx then ice.inset else 0)
+		local north = cell.z - cell.sz / 2 + (if j == 1 then ice.inset else 0)
+		local south = cell.z + cell.sz / 2 - (if j == nz then ice.inset else 0)
+		if not covered and east - west > SEAM and south - north > SEAM then
 			table.insert(pieces, {
 				name = `Ice_{name}_{k}`,
 				role = "ice",
 				box = {
-					x = cell.x,
+					x = (west + east) / 2,
 					y = top + ice.lift - ice.thickness / 2,
-					z = cell.z,
-					sx = cell.sx,
+					z = (north + south) / 2,
+					sx = east - west,
 					sy = ice.thickness,
-					sz = cell.sz,
+					sz = south - north,
 				},
 				look = "ice",
 				collide = false,

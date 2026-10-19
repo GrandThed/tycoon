@@ -36,8 +36,12 @@
 -- round (s-m1, d-m5): what a cell shows, which numbers freeze reads, which blocks are reactive and
 -- the sizes the level is built with are WorldReact's and LevelGeometry's pure answers, which the
 -- harness loads; this file only applies them. A frozen cell grips like the ground (Q2): it keeps
--- the Ice look, not the Ice material's slide.
+-- the Ice look, not the Ice material's slide. The second fix round's Q5: freeze hands Freeze every
+-- player's body (WorldReact.BodyBox of its root and Humanoid, read here and nowhere else on the
+-- server), so a cell a body stands in stays water; the strike itself says whether it was swung in
+-- the air (WeaponService sets `airborne`, Chills refuses it).
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -645,11 +649,39 @@ function LevelService.OnReacted(callback: (Reacted) -> ()): ()
 	table.insert(state.reactedListeners, callback)
 end
 
+-- The second fix round's Q5: every player's body now (the server's copy), as WorldReact.BodyBox
+-- reads it. A character with no root Part or no Humanoid has none.
+local function bodies(): { WorldReact.Box }
+	local found: { WorldReact.Box } = {}
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character == nil then
+			continue
+		end
+		local root = character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if root ~= nil and root:IsA("BasePart") and humanoid ~= nil then
+			table.insert(
+				found,
+				WorldReact.BodyBox(
+					root.Position,
+					root.CFrame.RightVector,
+					root.Size,
+					humanoid.HipHeight
+				)
+			)
+		end
+	end
+	return found
+end
+
 -- L2-54: a strike of `element` on the built level's ice cells. WorldReact.Freeze decides which
 -- freeze (Combat.json levels.react.ice's reachDown and ahead, read by WorldReact.IceReach); each
 -- one shows as WorldReact.IceLook's floor: its look, collides and is met by rays and the camera
 -- (the Default group: players stand on it; the crowd never comes here), its `Ice` attribute turns
--- true; and the OnReacted listeners are told. Never yields.
+-- true; and the OnReacted listeners are told. The second fix round's Q5: a cell a player's body
+-- stands in stays water (levels.react.ice's sink, WorldReact.IceSink; without one no body is
+-- judged, with one warn). Never yields.
 local function freeze(element: string, fx: WorldReact.Strike, rules: Types.CombatReactConfig?): ()
 	local ice = state.ice
 	if #ice == 0 then
@@ -663,11 +695,19 @@ local function freeze(element: string, fx: WorldReact.Strike, rules: Types.Comba
 		)
 		return
 	end
+	local sink = WorldReact.IceSink(if rules ~= nil then rules.ice else nil)
+	if sink == nil then
+		warnOnce(
+			"react:iceSink",
+			"[LevelService] Combat.json levels.react.ice has no sink; a body in the water does not stop a freeze"
+		)
+	end
 	local cells: { WorldReact.IceCell } = table.create(#ice)
 	for index, entry in ice do
 		cells[index] = entry.cell
 	end
-	for _, index in WorldReact.Freeze(cells, element, fx, reachDown, ahead) do
+	local held = if sink ~= nil then bodies() else nil
+	for _, index in WorldReact.Freeze(cells, element, fx, reachDown, ahead, held, sink) do
 		local entry = ice[index]
 		showIce(entry.part, WorldReact.IceLook(true, entry.shown))
 		local event: Reacted = { name = entry.name, react = element, box = entry.cell.box }

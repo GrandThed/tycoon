@@ -39,6 +39,9 @@ and compares what they answer, value by value:
   * `StageFlow.Ceiling` against `sim_range.trigger_ceiling`: every shipped camp and the edges;
   * `LevelGeometry.FenceThickness` against `sim_range.fence_thickness` (the L2 W2 second fix round's
     m1): every shipped camp and the edges; every zone row carries its `fence` too;
+  * `LevelGeometry.Pieces`' ice pieces against `sim_range.ice_cells`, box by box (the L2 W3 second fix
+    round's Q6: the inset from the water's own faces): every shipped level layout, and Forest Road
+    with other insets, none written, one under 0, two pools that touch and one too thin for it;
   * `StageFlow.GateNudge` against `sim_range.gate_nudge` on a grid over the fenced rectangle of
     every shipped locking camp (its edges, `inner`'s, the corners, half a stud either side) and
     in height;
@@ -478,6 +481,52 @@ L2W3_REFUSALS = (
     ("a second pool overlapping the first", second_pool(13, 0)),
     ("a second pool on the first's footprint", second_pool(0, 0)),
 )
+
+
+def ice_rows(layout, ice):
+    """sim_range.ice_cells as LevelGeometry.Pieces lists its ice pieces: in the blocks' order, then
+    WorldReact.Cells' (X fastest), each [name, west, east, north, south, top, bottom]."""
+    cells = sr.ice_cells(layout, ice)
+    if not cells:
+        return []
+    order, across = {}, {}
+    for index, block in enumerate(layout["blocks"]):
+        if block.get("react") == "ice":
+            name = block.get("name") or block["look"]
+            order[name] = index
+            across[name] = max(math.ceil(block["sx"] / ice["cell"]), 1)
+    rows = []
+    for cell in sorted(cells, key=lambda c: (order[c["block"]], c["k"] * across[c["block"]] + c["i"])):
+        number = cell["k"] * across[cell["block"]] + cell["i"] + 1
+        rows.append([f"Ice_{cell['block']}_{number}", *cell["box"], cell["top"], cell["top"] - ice["thickness"]])
+    return rows
+
+
+def ice_cases(data, expected, raw_layouts, rules):
+    """The W3 second fix round's Q6: LevelGeometry.Pieces' ice pieces (built with LevelGeometry.SizesOf
+    of Combat.json `levels`) against sim_range.ice_cells, box by box: every shipped level layout with
+    the shipped levels.react.ice, and Forest Road with an inset of 0, a wider one (0.5), none written,
+    one under 0 (no cells on either side), and with two pools that touch beside a pool too thin for
+    its inset (its cells left no width)."""
+    ice = (rules.get("react") or {}).get("ice")
+    views = [(name, layout, ice) for name, layout in raw_layouts.items() if not layout.get("arena")]
+    forest = raw_layouts.get("ForestRoad")
+    if forest is not None and isinstance(ice, dict):
+        views += [("ForestRoad, inset 0", forest, {**ice, "inset": 0}),
+                  ("ForestRoad, inset 0.5", forest, {**ice, "inset": 0.5}),
+                  ("ForestRoad, no inset written", forest, {k: v for k, v in ice.items() if k != "inset"}),
+                  ("ForestRoad, inset -1", forest, {**ice, "inset": -1})]
+        pools = copy.deepcopy(forest)
+        for name, x, z, sx in (("TestPool", 0, 30, 14), ("TestPool2", 14, 30, 14), ("TestThin", 40, 30, 0.08)):
+            pools["blocks"].append({"name": name, "look": "water", "x": x, "y": 400, "z": z, "sx": sx, "sy": 2,
+                                    "sz": 14, "collide": False, "react": "ice"})
+        views.append(("ForestRoad with two pools that touch and one 0.08 wide", pools, ice))
+    for index, (label, layout, case_ice) in enumerate(views, 1):
+        case = f"ice.{index}"
+        levels = {**rules, "react": {**(rules.get("react") or {}), "ice": case_ice}}
+        data["iceCases"].append({"id": case, "layout": layout, "levels": levels})
+        expected[case] = ("LevelGeometry.Pieces: the ice cells (the W3 second fix round's Q6 inset)", label,
+                          ice_rows(layout, case_ice))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1988,7 +2037,7 @@ def main():
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
             "campRules": combat["camps"], "campCases": [], "splitCases": [], "rayCases": [], "swingCases": [],
             "combatCases": [], "reserveCases": [], "tentOwesCases": [], "regionCases": [], "fieldedCases": [],
-            "ceilingCases": [], "fenceCases": []}
+            "ceilingCases": [], "fenceCases": [], "iceCases": []}
     # The L1c second fix round's F1: StageFlow.Ceiling against sim_range.trigger_ceiling, on every
     # shipped camp and on the edges: a low fence, one at triggerHeight, an open camp's tall one,
     # none, a height that is a string or absent.
@@ -2014,6 +2063,7 @@ def main():
         data["fenceCases"].append({"id": case, "camp": camp, "default": rules["fenceThickness"]})
         expected[case] = ("LevelGeometry.FenceThickness: a camp's own fence depth (the L2 W2 second fix round's m1)",
                           label, sr.fence_thickness(camp, rules["fenceThickness"]))
+    ice_cases(data, expected, raw_layouts, rules)
     shipped_plans = []  # (label, plan) of every level with residents at every difficulty: Wave 2's camp cases
     bursts, tempos = {}, {}
     scripted = {}  # trace id -> (label, the Python's ticks)
