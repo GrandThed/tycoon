@@ -283,6 +283,7 @@
 		"adsBloomMult": 0.35,
 		"adsSpeedMult": 0.55,
 		"originPad": 6,
+		"originWallChord": 1.5,
 		"critMult": 2.0,
 		"bloomMovingSpeed": 1.5,
 		"originLagSeconds": 0.05,

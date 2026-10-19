@@ -1339,7 +1339,8 @@ local Theme = {
 	ABILITIES_NAME_TEXT = 15,
 	ABILITIES_HINT_HEIGHT = 14,
 	ABILITIES_HINT_TEXT = 10,
-	-- A Buy the server never answered is live again after this long.
+	-- A Buy or a weapon pick the server never answered is live again after this long (both
+	-- Armory tabs; L2 W2 section 2: 3 s at most).
 	ABILITIES_RESULT_TIMEOUT_SECONDS = 3,
 	ABILITIES_TOAST_SECONDS = 2.5,
 	-- The first refused air jump of a session says where to get it, for this long.
@@ -1409,8 +1410,6 @@ local Theme = {
 		fire = Color3.fromRGB(255, 122, 40),
 		ice = Color3.fromRGB(110, 196, 255),
 	} :: { [string]: Color3 },
-	-- A pick the server never answered is live again after this long (L2 W2 section 2: 3 s).
-	LOBBY_ARMORY_RESULT_TIMEOUT_SECONDS = 3,
 
 	-- FlameFx: a held fire stream, per shooter, from the hand to the reach the server cut at the
 	-- first wall (the strike's size). Particles in a widening cone, and a tapered core that is

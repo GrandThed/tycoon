@@ -101,10 +101,9 @@
 --  * CampFx's "Checkpoint" notice is the HUD's notice line under the wallet.
 --
 -- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-3, L2-10, L2-14, L2-19), in `bootMission`; the
--- behaviour lives in UI/AbilitiesPanel (now UI/ArmoryPanel) and Controllers/SecretFx, this only
--- wires them:
---  * K, or the run layer's "Abilities" button, opens the Abilities panel in the lobby (closing
---    the map: one sheet at a time; M closes the panel the same way). Buy sends
+-- behaviour lives in UI/ArmoryPanel and Controllers/SecretFx, this only wires them:
+--  * K, or the run layer's "Armory" button, opens the Armory panel in the lobby (closing the
+--    map: one sheet at a time; M closes the panel the same way). Buy on its Abilities tab sends
 --    RequestBuyAbility(id); the `buyAbility` ActionResult goes to the panel. The Snapshot's
 --    `combat.valor` and `combat.abilities` feed it, `combat.secrets` feeds SecretFx.
 --  * CombatFx of kind `secret` (a chest found by anyone, or locked for this player) go to
@@ -115,8 +114,8 @@
 --    first two as buttons ("+10 Valor" was there already).
 --
 -- L2 Wave 2 (docs/prompts/l2-w2-contract.md, sections 2, 3, 4 and L2-38), in `bootMission`:
---  * The Abilities panel is the Armory panel (UI/ArmoryPanel: Weapons and Abilities tabs), on the
---    same K, Y and HUD button ("Armory"). A pick sends RequestSetFamily(slot, family, variant);
+--  * The Armory panel (UI/ArmoryPanel) has Weapons and Abilities tabs, on K, Y and the HUD's
+--    "Armory" button. A pick sends RequestSetFamily(slot, family, variant);
 --    the `setFamily` ActionResult goes to the panel, and so does every TuneState's loadout (the
 --    server's word on what is held). The Snapshot's `combat.families` feeds it.
 --  * CombatFx of kind `react` (a bramble burnt) go to ReactFx, which also watches the level's

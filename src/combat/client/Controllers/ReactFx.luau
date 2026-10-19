@@ -8,9 +8,12 @@
 --    darkens toward charcoal by it (a client-local tint) and throws embers whose rate follows it. A low-end device keeps a
 --    few embers (they say how close the burn is), never the full rate.
 --  * Burnt (CombatFx `react`, event "burnt", the box as it stood): the server has destroyed the
---    Part; here a flash of the box, a local ghost of it that shrinks away (only fades under
---    Theme.reducedMotion) and a puff of smoke (not on low-end devices). Every piece is anchored,
---    never collides, is never queried and is gone within Theme.REACT_SMOKE_SECONDS.
+--    Part; here a flash of the box, a local ghost of it that shrinks away and a puff of smoke. A
+--    low-end device gets the ghost's fade alone and no smoke (spec section 10); the gate is never
+--    Theme.reducedMotion, which every touch device has (the living-city lesson), and the shrink is
+--    the one-off cue that the way is open. Every piece is anchored, never collides, is never
+--    queried and is gone within Theme.REACT_SMOKE_SECONDS.
+--  * The Parts it watches are also the targets of touch auto-fire's stream (ForEachPart, c-M1).
 --
 -- No sound (combat has none).
 
@@ -174,7 +177,7 @@ local function burnt(centre: Vector3, size: Vector3): ()
 	ghost.Transparency = Theme.REACT_GHOST_TRANSPARENCY
 	ghost.Parent = folder
 	local goal: { [string]: any } = { Transparency = 1 }
-	if not Theme.reducedMotion then
+	if not Theme.lowEndDevice then
 		local shrunk = Vector3.new(size.X, MIN_SIZE, size.Z)
 		goal.Size = shrunk
 		goal.CFrame = frame - Vector3.new(0, (size.Y - MIN_SIZE) / 2, 0)
@@ -248,6 +251,17 @@ function ReactFx.OnFx(fx: any): ()
 		return
 	end
 	burnt(Vector3.new(fx.x, fx.y, fx.z), size)
+end
+
+-- c-M1: each reactive Part the level holds now, with its `React` and `Heat` attributes as read
+-- (InputController's touch auto-fire asks, on the frames a stream family is held). Empty until
+-- Mount, and in the range, which has no level.
+function ReactFx.ForEachPart(callback: (part: BasePart, react: any, heat: any) -> ()): ()
+	for part in state.parts do
+		if part.Parent ~= nil then
+			callback(part, part:GetAttribute(REACT_ATTRIBUTE), part:GetAttribute(HEAT_ATTRIBUTE))
+		end
+	end
 end
 
 function ReactFx.Destroy(): ()

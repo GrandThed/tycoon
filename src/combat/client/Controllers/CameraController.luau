@@ -91,8 +91,10 @@
 -- the root by up to movement.cameraMaxLag (3) and, during a leap or lunge, its flat position
 -- trails it by as much, so off the step's edge or round a bend it could stand inside the step or
 -- a wall, where a spherecast starting inside a part sees nothing of it and the camera ends up
--- behind the rock. The pivot is therefore pulled back toward the head along a ray first
--- (openPivot); with no lag the two are one point and nothing is cast.
+-- behind the rock. The pivot is therefore pulled back toward the head first (openPivot), with
+-- the same sphere the boom uses: a thin ray met at a shallow angle would leave it closer to the
+-- surface than the sphere's radius. With no lag (level ground, no motion ability) the two are one
+-- point and nothing is cast; a jump, a fall or a slope lags the height, one cast a frame.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -434,22 +436,15 @@ local function clearDistance(params: RaycastParams, from: Vector3, offset: Vecto
 end
 
 -- L2-44: the lagging pivot, pulled back toward the head (root + pivot height, always in the open:
--- the body stands there) when a solid lies between them, so every spherecast starts in the open.
+-- the body stands there, so a sphere of the collision radius fits) when a solid lies between them,
+-- so every spherecast after it starts in the open (c-m1: a sphere, as clearDistance sweeps it).
 local function openPivot(params: RaycastParams, rootPosition: Vector3, pivot: Vector3): Vector3
 	local head = rootPosition + Vector3.new(0, Theme.COMBAT_CAMERA_PIVOT_HEIGHT, 0)
 	local offset = pivot - head
 	if offset.Magnitude < LAG_EPSILON then
 		return pivot
 	end
-	local hit = Workspace:Raycast(head, offset, params)
-	if hit == nil then
-		return pivot
-	end
-	local keep = math.max(
-		hit.Distance - Theme.COMBAT_CAMERA_COLLISION_RADIUS - Theme.COMBAT_CAMERA_COLLISION_PAD,
-		0
-	)
-	return head + offset.Unit * keep
+	return head + offset.Unit * clearDistance(params, head, offset)
 end
 
 -- L1c-5a: how far along `offset` from `from` the camera may go before entering a locking camp

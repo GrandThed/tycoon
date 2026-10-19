@@ -18,7 +18,8 @@ and compares what they answer, value by value:
     layout, refused alike.
   * `StageFlow.Validate`'s react, opens and shortcuts lines (L2-34, L2-36): a copy of Forest Road's
     layout given a test tunnel (a shortcut and a fire bramble that opens it) is accepted alike, and
-    each line broken once in it is refused alike.
+    each line broken once in it is refused alike (the L2 W2 fix round's s-m3 adds a shortcut size
+    of 0 or below).
   * `StageFlow.Validate`'s L1b lines: the residents, the spots, which camps lock, the population
     gate and the three new `levels` numbers, each broken once in a copy of the shipped level, its
     layout or Combat.json, refused alike; and (the L1c fix round's data m2) every broken copy of
@@ -382,6 +383,7 @@ L2W2_ACCEPTED = (
     ("a block that opens a shortcut and reacts to nothing", tunnel_change(lambda l, b, s: b.pop("react"))),
     ("a shortcut id of 32 characters",
      tunnel_change(lambda l, b, s: (s.__setitem__("id", "s" * 32), b.__setitem__("opens", "s" * 32)))),
+    ("a shortcut a hundredth of a stud wide", tunnel_change(lambda l, b, s: s.__setitem__("sx", 0.01))),
 )
 L2W2_REFUSALS = (
     ("a bramble that reacts to lava", tunnel_change(lambda l, b, s: b.__setitem__("react", "lava"))),
@@ -398,6 +400,10 @@ L2W2_REFUSALS = (
     ("a shortcut whose y is a string", tunnel_change(lambda l, b, s: s.__setitem__("y", "4"))),
     ("a shortcut with no sz", tunnel_change(lambda l, b, s: s.pop("sz"))),
     ("a shortcut that is a string", tunnel_change(lambda l, b, s: l["shortcuts"].append("cave"))),
+    # The L2 W2 fix round's s-m3: a box no root can stand in.
+    ("a shortcut with an sz of 0", tunnel_change(lambda l, b, s: s.__setitem__("sz", 0))),
+    ("a shortcut with a negative sx", tunnel_change(lambda l, b, s: s.__setitem__("sx", -4))),
+    ("a shortcut with a negative sy", tunnel_change(lambda l, b, s: s.__setitem__("sy", -0.5))),
 )
 
 

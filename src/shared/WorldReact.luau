@@ -3,7 +3,8 @@
 -- Whether a resolved strike touches a reactive block, how many strikes of its element take it
 -- away, and how far it has gone. Pure: numbers, tables and Vector3 values only, no service, no
 -- Instance, no clock, so tools/crowd_harness tests the very rules LevelService runs. LevelService
--- holds the blocks and the heat, and only executes what is decided here.
+-- holds the blocks and the heat, and only executes what is decided here (StrikeElement, then
+-- Apply); phone auto-fire asks Wants whether a reactive Part is worth holding the stream on.
 --
 -- Only a segment burns: a `capsule` (a flame stream, its reach cut at the first wall, so a stream
 -- stopped by a bramble ends on its face) and a `ray`. Every other shape (arcs, spheres, cones:
@@ -11,7 +12,9 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(sharedFolder:WaitForChild("Types"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 -- What the rules read of a resolved strike (WeaponService's StrikeFx has these fields).
 export type Strike = {
@@ -26,6 +29,9 @@ export type Strike = {
 export type Box = { x: number, y: number, z: number, sx: number, sy: number, sz: number }
 -- Combat.json levels.react (Types.CombatReactConfig), as the rules read it.
 export type Rules = { fireHits: number?, iceHits: number?, pad: number? }
+-- One reactive block as Apply reads it: the element that takes it away, its box, and how many
+-- strikes of that element it has taken (Apply writes the new count back).
+export type Entry = { react: string, box: Box, heat: number }
 
 local WorldReact = {}
 
@@ -170,6 +176,105 @@ function WorldReact.Share(heat: number, need: number): number
 		return 0
 	end
 	return math.clamp(heat / need, 0, 1)
+end
+
+-- The element a resolved strike carries to the world: its family's (Unlocks.ElementOf) for an
+-- attack, none for an ability's strike. L2-34 says Dragon's Breath burns nothing, and an
+-- ability's capsule is built from its end point without the wall cut an attack's stream gets,
+-- so a later capsule ability would otherwise heat a bramble through the ridge (fix round s-m2).
+function WorldReact.StrikeElement(
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	weapon: string,
+	ability: string?
+): Types.Element?
+	if ability ~= nil then
+		return nil
+	end
+	return Unlocks.ElementOf(weapons, weapon)
+end
+
+-- One strike of `element` on the level's reactive blocks (fix round s-m1: LevelService.React's
+-- loop, here so the harness holds it). Every entry whose `react` is that element and whose box
+-- the strike touches (Touches, grown by `pad`) takes one strike (Heat with `need`), written back
+-- to its `heat`. Returns the indices of the entries that go (`gone`, highest first, so removing
+-- them in that order leaves the others' indices right) and of those that only heated (`heated`,
+-- highest first). Read `heated` before removing `gone`. No element, or a need that is not a count,
+-- changes nothing.
+function WorldReact.Apply(
+	entries: { Entry },
+	element: string?,
+	fx: Strike,
+	pad: number,
+	need: number
+): ({ number }, { number })
+	local gone: { number } = {}
+	local heated: { number } = {}
+	if element == nil then
+		return gone, heated
+	end
+	for index = #entries, 1, -1 do
+		local entry = entries[index]
+		if entry.react ~= element or not WorldReact.Touches(fx, entry.box, pad) then
+			continue
+		end
+		local heat, done = WorldReact.Heat(entry.heat, need)
+		if heat == entry.heat then
+			continue
+		end
+		entry.heat = heat
+		table.insert(if done then gone else heated, index)
+	end
+	return gone, heated
+end
+
+-- An axis-aligned Part's box (level blocks are never turned, LevelGeometry).
+function WorldReact.BoxOf(position: Vector3, size: Vector3): Box
+	return { x = position.X, y = position.Y, z = position.Z, sx = size.X, sy = size.Y, sz = size.Z }
+end
+
+-- Fix round d-m3: whether a shot's origin (a client's claim, already within reach of the head)
+-- lies on the head's side of the walls. `distance` is head to origin; `forward` is where a ray
+-- from the head toward the origin first met a solid (nil = nothing: clear); `backward` is where
+-- the reverse ray, from the origin toward the head, first met one (nil while `forward` hit = the
+-- origin sits inside a solid, where a shot would leave through the far face). Between the two
+-- hits lies solid, or open ground between two solids; up to `tolerance` studs of it is allowed,
+-- because the honest origin sits 1.5 to 2 studs to the shoulder side of the head and its line
+-- cuts the edge of a wall the player hugs at an inner corner. A wall thicker than `tolerance`
+-- still refuses every origin beyond it (the line crosses at least its thickness). Numbers that are not finite refuse.
+function WorldReact.OriginClear(
+	distance: number,
+	forward: number?,
+	backward: number?,
+	tolerance: number
+): boolean
+	if forward == nil then
+		return true
+	end
+	if backward == nil or not (finite(distance) and finite(forward) and finite(backward)) then
+		return false
+	end
+	local chord = distance - (backward :: number) - (forward :: number)
+	return chord <= length(tolerance)
+end
+
+-- Fix round c-M1: whether phone auto-fire holds the stream on a reactive Part. Its `React`
+-- attribute (`react`) must name `element`, the held family's (one of the two words); its `Heat`
+-- attribute (`heat`, 0 to 1, nil before the first strike) must be under 1; and the stream's
+-- capsule, cut at the first wall, must touch its box grown by the pad. Resting bodies are the
+-- auto-fire's own rule, not this one.
+function WorldReact.Wants(
+	element: string?,
+	react: any,
+	heat: any,
+	fx: Strike,
+	box: Box,
+	pad: number
+): boolean
+	if not Unlocks.IsElement(element) or react ~= element then
+		return false
+	end
+	local share = if heat == nil then 0 elseif finite(heat) then heat :: number else 1
+	return share < 1 and WorldReact.Touches(fx, box, pad)
 end
 
 return WorldReact

@@ -8,13 +8,15 @@
 --    cut the capsule at the first wall (the strike's `size`), as wide as the capsule.
 --  * Someone else's stream follows their strikes and goes out COMBAT_FLAME_LINGER_INTERVALS
 --    ticks after the last one. The local player's starts on the frame the shot is sent
---    (InputController's stream handler, the P3.1 lesson: no waiting for the server) and points
---    along the live camera ray, cut at the first wall the way the server cuts it; the server's
---    strikes only keep it alive and correct its width.
+--    (InputController's stream handler, the P3.1 lesson: no waiting for the server), lives on
+--    those local shots alone (it goes out on release, c-m6) and points along the live shot line
+--    (InputController.ShotRay: the crosshair line from the head's depth, where the server's
+--    capsule starts), cut at the first wall by the server's rule (InputController.StreamReach);
+--    the server's strikes only correct its width.
 --  * Look: particles in a widening cone (lifetime x speed = the reach, spread = the capsule's
 --    half-width at the far end) over a translucent tapered core Beam. On a low-end device the
---    core alone is drawn, more opaque, and no light (spec section 10). The core's flicker is off
---    under Theme.reducedMotion. No sound (combat has none).
+--    core alone is drawn, more opaque, with no flicker and no light (spec section 10; never
+--    gated on Theme.reducedMotion, which every touch device has). No sound (combat has none).
 --
 -- FeedbackController owns the wiring (Start, OnStrike, Destroy): it is the one strike listener.
 
@@ -28,7 +30,6 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 
 local Create = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Create"))
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
-local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 
 -- What FeedbackController hands over of a strike (its parsed Strike has more).
@@ -49,7 +50,8 @@ type Stream = {
 	light: PointLight?,
 	lastAt: number,
 	linger: number,
-	-- The server's last word (others are drawn from it): origin, unit direction, reach.
+	-- Another shooter's stream is drawn from the server's last word: origin, unit direction,
+	-- reach. The local stream reads only `range` (its family's, from the last local shot).
 	origin: Vector3,
 	aim: Vector3,
 	reach: number,
@@ -107,27 +109,6 @@ local function muzzleOf(userId: number, aim: Vector3): Vector3?
 		return hand.Position + aim * MUZZLE_FORWARD
 	end
 	return nil
-end
-
--- What the server's capsule stops at: every player's body and the effect folders are passed
--- through, and so is anything that does not collide (worldReach's rule).
-local function wallParams(): RaycastParams
-	local ignore: { Instance } = {}
-	for _, player in Players:GetPlayers() do
-		local character = player.Character
-		if character ~= nil then
-			table.insert(ignore, character)
-		end
-	end
-	local fx = Workspace:FindFirstChild(Theme.COMBAT_RANGE_FX_FOLDER)
-	if fx ~= nil then
-		table.insert(ignore, fx)
-	end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = ignore
-	params.RespectCanCollide = true
-	return params
 end
 
 local function lingerOf(variant: Types.RangeWeaponVariant?): number
@@ -255,7 +236,7 @@ end
 -- One stream drawn this frame, from `from` along `aim` for `reach`, `width` across at the end.
 local function draw(stream: Stream, from: Vector3, aim: Vector3, reach: number, now: number): ()
 	local width = stream.width
-	local wobble = if Theme.reducedMotion
+	local wobble = if Theme.lowEndDevice
 		then 1
 		else 1 + Theme.COMBAT_FLAME_WOBBLE * math.sin(
 			(now + stream.phase) * 2 * math.pi * Theme.COMBAT_FLAME_WOBBLE_HZ
@@ -294,28 +275,26 @@ local function step(): ()
 	end
 	local now = os.clock()
 	local me = localUserId()
-	local params: RaycastParams? = nil
 	for userId, stream in streams do
 		if now - stream.lastAt > stream.linger then
 			destroyStream(userId)
 			continue
 		end
-		local aim = stream.aim
-		local reach = stream.reach
 		if userId == me then
-			-- Display prediction: the next tick leaves along the live camera ray, so the local
-			-- flame points there now, cut at the first wall up to the family's range.
-			local aimOrigin, look = CameraController.GetAimRay()
-			aim = look
-			local cast = params or wallParams()
-			params = cast
-			local wall = Workspace:Raycast(aimOrigin, look * stream.range, cast)
-			local tipPoint = if wall ~= nil then wall.Position else aimOrigin + look * stream.range
-			local from = muzzleOf(userId, look) or stream.origin
-			reach = math.max((tipPoint - from):Dot(look), 0)
-			draw(stream, from, aim, reach, now)
+			-- Display prediction: the next tick leaves along the shot line, so the local flame
+			-- points there now, its tip where the server will cut the capsule.
+			local shotFrom, look = InputController.ShotRay()
+			if shotFrom == nil or look == nil then
+				destroyStream(userId)
+				continue
+			end
+			local tipPoint = shotFrom
+				+ look * InputController.StreamReach(shotFrom, look, stream.range)
+			local from = muzzleOf(userId, look) or shotFrom
+			draw(stream, from, look, math.max((tipPoint - from):Dot(look), 0), now)
 		else
-			local tipPoint = stream.origin + aim * reach
+			local aim = stream.aim
+			local tipPoint = stream.origin + aim * stream.reach
 			local from = muzzleOf(userId, aim) or stream.origin
 			local toward = unitOf(tipPoint - from) or aim
 			draw(stream, from, toward, (tipPoint - from).Magnitude, now)
@@ -323,10 +302,19 @@ local function step(): ()
 	end
 end
 
--- A strike of a stream family (FeedbackController checked IsStream). Keeps the shooter's
--- stream alive and moves it to where the server resolved this tick.
+-- A strike of a stream family (FeedbackController checked IsStream). Keeps another shooter's
+-- stream alive and moves it to where the server resolved this tick. The local player's own
+-- strikes only correct the width (c-m6: arriving a round trip late, they would keep the flame
+-- burning after the trigger is released).
 function FlameFx.OnStrike(strike: StreamStrike, variant: Types.RangeWeaponVariant?): ()
 	if not started then
+		return
+	end
+	if strike.userId == localUserId() then
+		local own = streams[strike.userId]
+		if own ~= nil and strike.width ~= nil then
+			own.width = strike.width
+		end
 		return
 	end
 	local aim = unitOf(strike.direction)
@@ -342,9 +330,6 @@ function FlameFx.OnStrike(strike: StreamStrike, variant: Types.RangeWeaponVarian
 	stream.width = strike.width
 		or (if variant ~= nil then variant.width else nil)
 		or Theme.COMBAT_FLAME_DEFAULT_WIDTH
-	if variant ~= nil then
-		stream.range = math.max(stream.range, variant.range)
-	end
 end
 
 -- InputController's stream handler: the local player just sent a shot of a continuous family.
@@ -368,9 +353,6 @@ local function onLocalShot(
 	stream.aim = aim
 	stream.range = variant.range
 	stream.width = variant.width or Theme.COMBAT_FLAME_DEFAULT_WIDTH
-	if stream.reach <= 0 then
-		stream.reach = variant.range
-	end
 end
 
 -- Called by FeedbackController.Start in a build that fights with the range's weapons.

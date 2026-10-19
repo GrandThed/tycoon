@@ -2,8 +2,9 @@
 """The check_levels mutants, committed (the L1c fix round's m6): every rule L1c and its fix round
 added to tools/check_levels.py, every rule of L2 Wave 1 (L2-6, L2-11, L2-13, L2-14, L2-18, L2-19)
 and of L2 Wave 2 (L2-34, L2-36, L2-37, L2-38, L2-47: the cave behind fire, the shortcut route, the
-chain of keys, R8's sight, the bend), shown red on a mutated copy of the shipped data, and green
-again on the data as it ships.
+chain of keys, R8's sight, the bend) and its fix round (d-M1: no carrying ability onto the ridge;
+d-m1: the walk-off grace in the ridge's reach; d-m2: the bend's known limit; s-m3: a shortcut's size),
+shown red on a mutated copy of the shipped data, and green again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
@@ -83,6 +84,9 @@ SHORTCUT = "the shortcut route, with the brambles burnt"
 SNEAK_CAVE = "every point of the shortcut route lies farther than its posture's sight"
 SNIPER_OPEN = "with the brambles burnt, the unreachable sniper spots"
 BEND = "no hop cuts a bend"
+# The L2 W2 fix round (docs/prompts/l2-w2-fix-round.md: d-M1, d-m1, d-m2, s-m3).
+RIDGE_LIFT = "behind fire: no ability that carries a player with the double jump"
+BEND_LIFT = "no hop with an ability that carries"
 REACT = "Combat.json levels.react (L2-34)"
 
 
@@ -181,6 +185,17 @@ def straight_exit(data):
     wall.update({"x": -88, "sx": 32})  # x -104..-72: over the old mouth
     bramble = block(data, "CaveBrambleE")
     bramble.update({"x": -110, "sx": 13})  # x -116.5..-103.5, flush with RoadAB5's north edge
+
+
+def ridge_ends(data, x):
+    """The 84-high ridge by the lookout (CaveWallS2, CaveRoofE) ends at `x`; the 64-high pieces
+    east of it (CaveWallS3, CaveRoofE2) start there."""
+    for west, east, x1 in (("CaveWallS2", "CaveWallS3", -118.0), ("CaveRoofE", "CaveRoofE2", -102.0)):
+        block(data, west).update({"x": (-221.0 + x) / 2, "sx": x + 221.0})
+        block(data, east).update({"x": (x + x1) / 2, "sx": x1 - x})
+
+
+RIDGE_84 = ("CaveWallS2", "CaveRoofE", "CaveWallAlcoveW", "CaveWallAlcoveE", "CaveWallAlcoveN", "CaveRoofAlcove")
 
 
 def cliff(data, name, x0, x1, top):
@@ -409,6 +424,32 @@ CASES = (
      lambda d: d["combat"]["debug"].__setitem__("grantFamilyAttribute", "DebugGrantAbility"), {}, LEVERS, True),
     ("L2-34: the bramble look grey", lambda d: d["expeditions"]["looks"]["bramble"].__setitem__("color", [110, 112, 104]),
      {}, LOOKS, True),
+    # The fix round's d-M1: no lift or air dash of a Double Jump owner ends on the ridge.
+    ("d-M1: the ridge by the ledge back at 64 (W2's data: CaveWallS2, CaveRoofE and the alcove)",
+     lambda d: [top_at(d, n, 64) for n in RIDGE_84], {}, RIDGE_LIFT, True),
+    ("d-M1: the 84 ridge ends at x -205 (the Spear's air dash onto CaveWallS3)", lambda d: ridge_ends(d, -205), {},
+     RIDGE_LIFT, True),
+    ("d-M1 control: the 84 ridge ends at x -195", lambda d: ridge_ends(d, -195), {}, RIDGE_LIFT, False),
+    ("d-M1: no air dash, the 84 ridge ends at x -210 (Leap Smash onto CaveWallS3)",
+     lambda d: (d["ctx"].__setitem__("dashes", []), ridge_ends(d, -210)), {}, RIDGE_LIFT, True),
+    ("d-M1 control: no air dash, the 84 ridge ends at x -205",
+     lambda d: (d["ctx"].__setitem__("dashes", []), ridge_ends(d, -205)), {}, RIDGE_LIFT, False),
+    # The fix round's d-m1: the ridge's reach includes the walk-off grace (46.6 -> 49.3).
+    ("d-m1: a perch at 34, 48 studs off CaveWallS3 (inside the grace's 49.3, outside 46.6)",
+     lambda d: add_block(d, "MutantPerch", "ground", -180, -176, -34, -30, 34, 30), {}, RIDGE, True),
+    ("d-m1 control: the same perch 50 studs off", lambda d: add_block(d, "MutantPerch", "ground", -180, -176, -32, -28, 34, 30),
+     {}, RIDGE, False),
+    # The fix round's d-m2: the bend cut with an ability's travel is a known limit only while no
+    # family that carries can be owned without a lever.
+    ("d-m2: the cache pays the Spear (a family that carries, owned without a lever)",
+     lambda d: secret_entry(d, "cache").__setitem__("family", "spear"), {}, BEND_LIFT, True),
+    ("d-m2 control: the cache pays the Longbow (a family that does not carry)",
+     lambda d: secret_entry(d, "cache").__setitem__("family", "longbow"), {}, BEND_LIFT, False),
+    # The fix round's s-m3: Validate refuses a shortcut size of 0 or below (the mirror's line).
+    ("s-m3: the shortcut's sz 0", lambda d: layout(d)["shortcuts"][0].__setitem__("sz", 0), {}, PROBLEMS, True),
+    ("s-m3: the shortcut's sx -12", lambda d: layout(d)["shortcuts"][0].__setitem__("sx", -12), {}, PROBLEMS, True),
+    ("s-m3 control: the shortcut's sy 0.01", lambda d: layout(d)["shortcuts"][0].__setitem__("sy", 0.01), {}, PROBLEMS,
+     False),
     # L2-47: the AB bend.
     ("L2-47: the bend wall removed", lambda d: layout(d)["blocks"].remove(block(d, "BendWall")), {}, BEND, True),
     ("L2-47: the bend wall only between the roads (z -52..-8: a hop round its north end)",
@@ -470,6 +511,11 @@ MIRROR_CASES = (
     ("m3: sim_range's gate_nudge drops the fenced-rectangle test (the mirror alone)", None,
      ("    if not (abs(x - tx) <= thx and abs(z - tz) <= thz):\n        return None\n", ""),
      "StageFlow.GateNudge"),
+    # The L2 W2 fix round's s-m3: the shortcut size rule out of the Python mirror alone (the Luau
+    # side's mutant is tools/crowd_harness/mutate.py's).
+    ("s-m3: sim_range's react_problems takes a shortcut size of 0 (the mirror alone)", None,
+     ("            if finite(entry.get(key)) and entry[key] <= 0:", "            if False:"),
+     "a shortcut with an sz of 0"),
 )
 
 

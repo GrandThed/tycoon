@@ -339,6 +339,10 @@ function W2.flowTests(): ()
 		{ "a shortcut with an endless sz", function(o: any) tunnel(o).sz = math.huge end },
 		{ "a shortcut with a y that is a string", function(o: any) tunnel(o).y = "4" end },
 		{ "a shortcut that is not a table", function(o: any) table.insert(o.shortcuts, "cave") end },
+		-- Fix round s-m3: a box no root can stand in.
+		{ "a shortcut with an sz of 0", function(o: any) tunnel(o).sz = 0 end },
+		{ "a shortcut with a negative sx", function(o: any) tunnel(o).sx = -4 end },
+		{ "a shortcut with a negative sy", function(o: any) tunnel(o).sy = -0.5 end },
 	}
 	local missed = {}
 	for _, case in refusals do
@@ -348,6 +352,7 @@ function W2.flowTests(): ()
 	end
 	check(#missed == 0, `each broken line refuses the level (accepted: {table.concat(missed, ", ")})`)
 	check(#problems(function(o: any) tunnel(o).id = string.rep("s", 32) last(o).opens = string.rep("s", 32) end) == 0, "a shortcut id of 32 bytes is fine")
+	check(#problems(function(o: any) tunnel(o).sx = 0.01 end) == 0, "a shortcut a hundredth of a stud wide is a size")
 	local function noOpens(o: any): ()
 		o.shortcuts = nil
 		for _, block in o.blocks do
@@ -455,5 +460,171 @@ function W2.realTests(): ()
 	check(reactive == #brambles, `closed, each bramble is a reactive piece ({reactive})`)
 end
 L1.group("l2w2 realTests", W2.realTests)
+
+-- The L2 W2 fix round (docs/prompts/l2-w2-fix-round.md): s-m1 (LevelService.React's loop as the
+-- pure WorldReact.Apply), s-m2 (an ability's strike carries no element) and c-M1 (WorldReact.Wants,
+-- phone auto-fire's question about a reactive Part).
+function W2.applyTests(): ()
+	print(" WorldReact: StrikeElement, Apply and Wants (fix round s-m1, s-m2, c-M1)")
+	local R, U = W2.React, W2.Unlocks
+	local weapons = W2.weapons
+	check(R.StrikeElement(weapons, "flamethrower", nil) == "fire", "an attack carries its family's element")
+	check(R.StrikeElement(weapons, "broadsword", nil) == "ice", "whichever element that is")
+	check(R.StrikeElement(weapons, "flamethrower", "dragonBreath") == nil, "an ability's strike carries none (s-m2: it never burns)")
+	check(R.StrikeElement(weapons, "flamethrower", "") == nil, "whatever the ability id, an empty one too")
+	check(R.StrikeElement(weapons, "longbow", nil) == nil and R.StrikeElement(weapons, "lavaGun", nil) == nil and R.StrikeElement(nil, "flamethrower", nil) == nil, "no element, a word that is none, no roster: none")
+	check(U.IsElement("fire") and U.IsElement("ice"), "IsElement: fire and ice")
+	check(not U.IsElement("lava") and not U.IsElement("") and not U.IsElement(nil) and not U.IsElement(5), "and nothing else")
+
+	local east = vec(1, 0, 0)
+	-- 1: fire on the stream's line; 2: ice in the same place; 3: fire off the line; 4: fire on
+	-- the line, one strike from the end.
+	local function entries(): any
+		return {
+			{ react = "fire", box = { x = 10, y = 0, z = 0, sx = 2, sy = 2, sz = 2 }, heat = 0 },
+			{ react = "ice", box = { x = 10, y = 0, z = 0, sx = 2, sy = 2, sz = 2 }, heat = 0 },
+			{ react = "fire", box = { x = 10, y = 0, z = 30, sx = 2, sy = 2, sz = 2 }, heat = 0 },
+			{ react = "fire", box = { x = 12, y = 0, z = 0, sx = 2, sy = 2, sz = 2 }, heat = 5 },
+		}
+	end
+	local stream = W2.capsule(vec(0, 0, 0), east, 20)
+	local list = entries()
+	local gone, heated = R.Apply(list, "fire", stream, 0.5, 6)
+	check(#gone == 1 and gone[1] == 4, "the fire block one strike from the end goes")
+	check(#heated == 1 and heated[1] == 1, "the fire block the stream touches heats")
+	check(list[1].heat == 1 and list[4].heat == 6, "their heat is written back")
+	check(list[2].heat == 0, "an ice block in the same place takes nothing from fire")
+	check(list[3].heat == 0, "a fire block the stream misses takes nothing")
+	list = entries()
+	gone, heated = R.Apply(list, "ice", stream, 0.5, 6)
+	check(#gone == 0 and #heated == 1 and heated[1] == 2 and list[1].heat == 0 and list[4].heat == 5, "an ice strike heats the ice block only")
+	list = entries()
+	gone, heated = R.Apply(list, nil, stream, 0.5, 6)
+	check(#gone == 0 and #heated == 0 and list[1].heat == 0 and list[4].heat == 5, "no element (a Longbow arrow): nothing")
+	list = entries()
+	gone, heated = R.Apply(list, "fire", W2.capsule(vec(0, 0, 0), east, 8.5), 0.5, 6)
+	check(#gone == 0 and #heated == 1 and heated[1] == 1, "the pad reaches the block's face")
+	list = entries()
+	gone, heated = R.Apply(list, "fire", W2.capsule(vec(0, 0, 0), east, 8.5), 0, 6)
+	check(#gone == 0 and #heated == 0 and list[1].heat == 0, "and without it the same stream falls short")
+	list = entries()
+	gone, heated = R.Apply(list, "fire", stream, 0.5, 0)
+	check(#gone == 0 and #heated == 0 and list[1].heat == 0, "a need that is not a count: nothing")
+	list = entries()
+	list[1].heat = 5
+	gone, heated = R.Apply(list, "fire", stream, 0.5, 6)
+	check(#gone == 2 and gone[1] == 4 and gone[2] == 1 and #heated == 0, "two blocks go in one strike, the highest index first")
+	local removed = {}
+	for _, index in gone do
+		table.insert(removed, table.remove(list, index))
+	end
+	check(#list == 2 and list[1].react == "ice" and list[2].box.z == 30 and removed[1].box.x == 12, "removing them in that order leaves the others")
+	list = entries()
+	gone, heated = R.Apply(list, "fire", { shape = "cone", origin = vec(0, 0, 0), direction = east, size = 40, width = 40 }, 10, 6)
+	check(#gone == 0 and #heated == 0, "a cone heats nothing")
+
+	local box = R.BoxOf(vec(1, 2, 3), vec(4, 5, 6))
+	check(box.x == 1 and box.y == 2 and box.z == 3 and box.sx == 4 and box.sy == 5 and box.sz == 6, "BoxOf: a Part's position and size")
+
+	local bramble = { x = 10, y = 0, z = 0, sx = 2, sy = 2, sz = 2 }
+	check(R.Wants("fire", "fire", nil, stream, bramble, 0.5), "Wants: a fire bramble the stream touches, never struck")
+	check(R.Wants("fire", "fire", 0.5, stream, bramble, 0.5) and R.Wants("fire", "fire", 0.99, stream, bramble, 0.5), "half burnt, or a hair under 1: still")
+	check(not R.Wants("fire", "fire", 1, stream, bramble, 0.5), "burnt through (Heat 1): no")
+	check(not R.Wants("fire", "fire", W2.NAN, stream, bramble, 0.5) and not R.Wants("fire", "fire", "0", stream, bramble, 0.5), "a Heat that is NaN or not a number: no")
+	check(not R.Wants("ice", "fire", nil, stream, bramble, 0.5), "a frost weapon at a fire bramble: no")
+	check(not R.Wants(nil, "fire", nil, stream, bramble, 0.5), "a family with no element: no")
+	check(not R.Wants("lava", "lava", nil, stream, bramble, 0.5), "a word that is no element, on both sides: no")
+	check(not R.Wants("fire", nil, nil, stream, bramble, 0.5), "a Part with no React: no")
+	check(not R.Wants("fire", "fire", nil, W2.capsule(vec(0, 0, 0), east, 8.4), bramble, 0.5), "a stream (cut at a wall) short of the grown face: no")
+	check(R.Wants("fire", "fire", nil, W2.capsule(vec(0, 0, 0), east, 8.5), bramble, 0.5), "one that reaches it: yes")
+end
+L1.group("l2w2 applyTests", W2.applyTests)
+
+-- The lines that act on those verdicts (none of their files loads here), read as text by
+-- run_harness.py (FIXTURES.source.wiring).
+function W2.wiringTests(): ()
+	print(" The lines that act on WorldReact and the aim rule, read as text (fix round s-m1, s-m2, d-m3)")
+	local w = FIXTURES.source.wiring
+	if w == nil then
+		check(false, "the source reading has a wiring entry")
+		return
+	end
+	check(w.main == 1, `Main wires WeaponService.OnStrikeResolved(LevelService.React) once ({w.main})`)
+	check(w.finishFound and w.finishListeners == 1 and w.finishGuarded, `finish() tells its strike listeners once, inside "if not fx.abandoned" ({w.finishFound}, {w.finishListeners}, {w.finishGuarded})`)
+	check(w.reactFound and w.reactElement == 1, `LevelService.React takes its element from WorldReact.StrikeElement with the ability id ({w.reactElement})`)
+	check(w.reactApply == 1 and w.reactOwnLoop == 0, `and hands the loop to WorldReact.Apply, with none of its own (Apply {w.reactApply}, own {w.reactOwnLoop})`)
+	check(w.aimFound and w.aimRay == 1 and w.aimRayMost == 1, `aimAllowed casts head to origin and back and answers with WorldReact.OriginClear, each line once ({w.aimRay} to {w.aimRayMost})`)
+end
+L1.group("l2w2 wiringTests", W2.wiringTests)
+
+-- Where a segment first enters any of `boxes`, as a distance from `from`; nil when it enters none.
+-- A box that holds `from` is not seen, as a Roblox ray does not see the part it starts in.
+function W2.firstHit(from: any, to: any, boxes: { any }): number?
+	local delta = to - from
+	local best: number? = nil
+	for _, b in boxes do
+		local low, high, inside = 0, 1, true
+		for _, axis in { { from.X, delta.X, b.x, b.sx }, { from.Y, delta.Y, b.y, b.sy }, { from.Z, delta.Z, b.z, b.sz } } do
+			local a, d, centre, size = axis[1], axis[2], axis[3], axis[4]
+			local min, max = centre - size / 2, centre + size / 2
+			inside = inside and a > min and a < max
+			if d == 0 then
+				if a < min or a > max then
+					low, high = 1, 0
+				end
+			else
+				local enter, leave = (min - a) / d, (max - a) / d
+				if enter > leave then
+					enter, leave = leave, enter
+				end
+				low, high = math.max(low, enter), math.min(high, leave)
+			end
+		end
+		if not inside and low <= high then
+			local distance = low * delta.Magnitude
+			if best == nil or distance < (best :: number) then
+				best = distance
+			end
+		end
+	end
+	return best
+end
+
+-- The aim rule's verdict for a head and an origin among `boxes`, as aimAllowed asks it.
+function W2.originClear(head: any, origin: any, boxes: { any }, tolerance: number): boolean
+	local forward = W2.firstHit(head, origin, boxes)
+	local backward = if forward ~= nil then W2.firstHit(origin, head, boxes) else nil
+	return W2.React.OriginClear((origin - head).Magnitude, forward, backward, tolerance)
+end
+
+function W2.originTests(): ()
+	print(" WorldReact.OriginClear: a shot origin behind a wall (fix round d-m3)")
+	local R = W2.React
+	check(R.OriginClear(5, nil, nil, 1.5), "nothing between the head and the origin: clear")
+	check(not R.OriginClear(5, 2, nil, 1.5), "a hit there and none back (the origin inside a solid): refused")
+	check(R.OriginClear(5, 2, 1.5, 1.5) and not R.OriginClear(5, 2, 1.4, 1.5), "solid between the hits up to the tolerance: clear (closed); a hair more: refused")
+	check(not R.OriginClear(5, 2, 1.5, -1) and R.OriginClear(5, 2, 3, -1), "a negative tolerance counts as 0")
+	check(not R.OriginClear(W2.NAN, 2, 1, 1.5) and not R.OriginClear(5, math.huge, 1, 1.5) and not R.OriginClear(5, 2, W2.NAN, 1.5), "a number that is not finite: refused")
+
+	-- Wave 2 pattern: the inner corner of a tunnel bend, two 2-stud walls meeting at (0, 0), the
+	-- solid in x < 0, z < 0; the head hugging it at a body's radius; the honest origin 1.75 to the
+	-- shoulder side, 0.6 up, kept 0.7 off the walls by the camera's spherecast.
+	local walls = {
+		{ x = -1, y = 5, z = -10, sx = 2, sy = 20, sz = 20 },
+		{ x = -10, y = 5, z = -1, sx = 20, sy = 20, sz = 2 },
+	}
+	local tolerance = 1.5
+	local origin = vec(-1.2, 3.6, 0.9)
+	check(W2.originClear(vec(1, 3, -1.2), origin, walls, tolerance), "the corner, standing still (0.36 studs of wall cut): clear")
+	check(W2.originClear(vec(1, 3, -2.2), origin, walls, tolerance), "the server's head 1 stud behind (0.97): clear")
+	check(W2.originClear(vec(1, 3, -2.7), origin, walls, tolerance), "1.5 studs behind (1.25): clear")
+	check(not W2.originClear(vec(1, 3, -3.2), origin, walls, tolerance), "2 studs behind (1.52): refused, the known limit")
+	check(W2.originClear(vec(5, 3, 5), vec(6.75, 3.6, 5), walls, tolerance), "in the open: clear")
+	check(not W2.originClear(vec(1, 3, -5), vec(-3, 3, -5), walls, tolerance), "a forged origin 4 studs away, beyond a 2-stud wall: refused")
+	check(not W2.originClear(vec(-5, 3, 1.2), vec(-6, 3, -3.5), walls, tolerance), "beyond the other wall, at a slant: refused")
+	check(not W2.originClear(vec(1, 3, -5), vec(-1, 3, -5), walls, tolerance), "a forged origin inside the wall: refused")
+	check(not W2.originClear(vec(1, 3, -5), vec(-0.3, 3, -5), walls, tolerance), "even 0.3 into it")
+end
+L1.group("l2w2 originTests", W2.originTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

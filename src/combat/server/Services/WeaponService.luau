@@ -250,6 +250,8 @@ local state = {
 	-- throws is warned once and the strike goes on.
 	strikeListeners = {} :: { StrikeListener },
 	warnedStrikeListener = false,
+	-- Fix round d-m3: the players a wall refusal of a shot origin has been warned for (Studio).
+	warnedAimWall = {} :: { [Player]: boolean },
 	statsAccumulator = 0,
 	-- Ruling 21 (nil = every player may act) and the range's readout fields.
 	actGate = nil :: ((player: Player) -> boolean)?,
@@ -503,7 +505,14 @@ local function claimSlack(
 	return math.max(pad, 0) + speed * lag
 end
 
--- Fortnite aim: the ray starts at the camera, which must sit near this character's head.
+-- Fortnite aim: the ray starts at the camera, which must sit near this character's head, on the
+-- head's side of every wall. Distance alone let a modified client start a shot (or a ground
+-- point's camera ray) beyond a 2-stud cave wall (fix round d-m3). A ray from the head to the
+-- origin, and back, through the parts every world query here uses, measures the solid between
+-- them; WorldReact.OriginClear allows shooting.originWallChord of it, the edge an honest
+-- shoulder origin's line cuts at an inner corner (0.36 standing still, 0.97 with the server's
+-- head 1 stud behind, 1.25 at 1.5; tests_l2w2 "originTests"). In Studio a wall refusal warns
+-- once per player.
 local function aimAllowed(
 	shooter: Shooter,
 	root: BasePart,
@@ -513,8 +522,30 @@ local function aimAllowed(
 	local character = shooter.player.Character
 	local head = if character ~= nil then character:FindFirstChild("Head") else nil
 	local anchor = if head ~= nil and head:IsA("BasePart") then head.Position else root.Position
-	return (origin - anchor).Magnitude
-		<= claimSlack(shooter, root, config.shooting.originPad, config)
+	local offset = origin - anchor
+	local distance = offset.Magnitude
+	if distance > claimSlack(shooter, root, config.shooting.originPad, config) then
+		return false
+	end
+	local params = worldParams()
+	local forward = workspace:Raycast(anchor, offset, params)
+	local backward = if forward ~= nil then workspace:Raycast(origin, -offset, params) else nil
+	local clear = WorldReact.OriginClear(
+		distance,
+		if forward ~= nil then forward.Distance else nil,
+		if backward ~= nil then backward.Distance else nil,
+		config.shooting.originWallChord
+	)
+	if not clear and RunService:IsStudio() and not state.warnedAimWall[shooter.player] then
+		state.warnedAimWall[shooter.player] = true
+		local through = if forward ~= nil then forward.Instance:GetFullName() else "?"
+		warn(
+			`[WeaponService] {shooter.player.Name}: a shot origin {string.format("%.2f", distance)}`
+				.. ` studs from the head lies behind {through} (more than {config.shooting.originWallChord}`
+				.. " studs of wall between); refused (fix round d-m3, warned once per player)"
+		)
+	end
+	return clear
 end
 
 -- P3.1: a swing lands where the swinger's own screen had them. Swept from the server's copy,
@@ -2115,6 +2146,7 @@ function WeaponService.RemovePlayer(player: Player): ()
 	end
 	state.shooters[player] = nil
 	state.gearOverride[player] = nil
+	state.warnedAimWall[player] = nil
 	VitalsService.RemovePlayer(player)
 	local survivors: { Projectile } = {}
 	for _, projectile in state.projectiles do

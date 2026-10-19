@@ -192,6 +192,7 @@ function ArmoryPanel.new(
 
 	local pageTop = padding + Theme.ABILITIES_HEADER_HEIGHT + Theme.ABILITIES_ROW_GAP
 	local setOpen: (open: boolean) -> ()
+	local reselect: () -> ()
 	local function isLive(): boolean
 		return view.open and view.lobby
 	end
@@ -199,6 +200,12 @@ function ArmoryPanel.new(
 		onSetFamily = deps.onSetFamily,
 		toast = deps.toast,
 		isLive = isLive,
+		-- Its first paint runs inside `new`, before `reselect` exists; the sheet is closed then.
+		onRepaint = function()
+			if view.open then
+				reselect()
+			end
+		end,
 	})
 	local abilities = ArmoryAbilities.new(sheet, inner, offers, {
 		onBuy = deps.onBuy,
@@ -276,6 +283,21 @@ function ArmoryPanel.new(
 	local function firstSelection(): GuiObject
 		local tab = currentTab()
 		return pages[tab].FirstSelection() or tabButtons[tab]
+	end
+
+	-- c-m2: a pick in flight and the button just equipped turn unselectable, and a family granted
+	-- or taken rebuilds the cards, so a gamepad's selection can be left on a dead button or on
+	-- nothing (the stick would then walk the character behind the scrim). While the sheet is open
+	-- and the pad was the last input, it goes back to the tab's first live button.
+	reselect = function(): ()
+		if not view.open or not padLast() then
+			return
+		end
+		local selected = GuiService.SelectedObject
+		if selected ~= nil and selected.Selectable and selected:IsDescendantOf(sheet) then
+			return
+		end
+		GuiService.SelectedObject = firstSelection()
 	end
 
 	local function showTab(tab: Tab): ()
@@ -435,6 +457,7 @@ function ArmoryPanel.new(
 			weapons.SetFamilies(families)
 			-- A new family adds a card: the Weapons page may have grown.
 			layout()
+			reselect()
 		end,
 		SetLoadout = function(loadout: Types.RangeLoadout?)
 			weapons.SetLoadout(loadout)
@@ -464,6 +487,7 @@ function ArmoryPanel.new(
 			end
 			if payload.action == "buyAbility" then
 				abilities.OnResult(payload)
+				reselect()
 			elseif payload.action == "setFamily" then
 				weapons.OnResult(payload)
 			end

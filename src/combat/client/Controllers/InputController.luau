@@ -122,6 +122,8 @@ local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local GroundRule = require(sharedFolder:WaitForChild("GroundRule"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -132,6 +134,7 @@ local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 local RangeTouchButtons = require(script.Parent:WaitForChild("RangeTouchButtons"))
 local AirSwing = require(script.Parent:WaitForChild("AirSwing"))
 local CampAim = require(script.Parent:WaitForChild("CampAim"))
+local ReactFx = require(script.Parent:WaitForChild("ReactFx"))
 
 export type Stance = "melee" | "ranged"
 export type SlotTiers = { melee: number, ranged: number }
@@ -1085,6 +1088,37 @@ local function shotRay(rig: LocalRig): (Vector3, Vector3)
 	return rayOrigin + look * along, look
 end
 
+-- The same world query RangeService makes: players skipped, collidable geometry only (crowd
+-- enemies have no Instances).
+local function worldParams(): RaycastParams
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	local ignored: { Instance } = {}
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character ~= nil then
+			table.insert(ignored, character)
+		end
+	end
+	params.FilterDescendantsInstances = ignored
+	return params
+end
+
+-- How far a stream's capsule runs from `origin` along the unit `look` before the world stops it,
+-- up to `range`: WeaponService's worldReach, with the same query. A colliding bramble stops it on
+-- its face, which is how the capsule then touches the bramble (L2-34).
+local function streamReach(origin: Vector3, look: Vector3, range: number): number
+	if range <= 0 then
+		return 0
+	end
+	local result = Workspace:Raycast(origin, look * range, worldParams())
+	if result == nil then
+		return range
+	end
+	return (result.Position - origin).Magnitude
+end
+
 local function flatCameraLook(): Vector3
 	local _, look = CameraController.GetAimRay()
 	local flat = Vector3.new(look.X, 0, look.Z)
@@ -1214,13 +1248,13 @@ local function inMeleeShape(
 	variant: Types.RangeWeaponVariant,
 	origin: Vector3,
 	forward: Vector3,
+	range: number,
 	extraPad: number,
 	centre: Vector3,
 	radius: number
 ): boolean
 	local pad = variant.pad + extraPad
 	local shape = variant.shape
-	local range = variant.range
 	if shape == "arc" then
 		return HitShapes.Arc(origin, forward, range, variant.arcDegrees or 360, pad, centre, radius)
 	elseif shape == "sphere" then
@@ -1235,13 +1269,17 @@ local function inMeleeShape(
 	return HitShapes.Ray(origin, forward, range, variant.width or 0, pad, centre, radius) ~= nil
 end
 
+-- `range` is the variant's, or a stream's reach cut at the first wall (c-m4: the server cuts
+-- its capsule there, so a body behind the wall is neither a target nor a hold). Returns whether a
+-- takeable body is inside with no refused one, then whether a refused body is inside.
 local function enemyInReach(
 	variant: Types.RangeWeaponVariant,
 	origin: Vector3,
 	forward: Vector3,
+	range: number,
 	extraPad: number,
 	lagPad: number
-): boolean
+): (boolean, boolean)
 	local found = false
 	local refused = false
 	CrowdRenderer.ForEach(
@@ -1257,8 +1295,23 @@ local function enemyInReach(
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
 			local head = position + Vector3.new(0, height - headRadius, 0)
-			local inside = inMeleeShape(variant, origin, forward, extraPad, body, radius + lagPad)
-				or inMeleeShape(variant, origin, forward, extraPad, head, headRadius + lagPad)
+			local inside = inMeleeShape(
+				variant,
+				origin,
+				forward,
+				range,
+				extraPad,
+				body,
+				radius + lagPad
+			) or inMeleeShape(
+				variant,
+				origin,
+				forward,
+				range,
+				extraPad,
+				head,
+				headRadius + lagPad
+			)
 			if not inside then
 				return
 			end
@@ -1269,8 +1322,49 @@ local function enemyInReach(
 			end
 		end
 	)
-	rangeState.aimHeld = found and refused
-	return found and not refused
+	-- A shape hits everything inside it, so any refused body holds it, also once the trigger
+	-- has left (a held stream's ride-out never reaches a resting body).
+	rangeState.aimHeld = refused
+	return found and not refused, refused
+end
+
+-- c-M1: a reactive block auto-fire's stream would burn (WorldReact.Wants, on the server's own
+-- Touches): its Part's `React` is the held family's element, its `Heat` is under 1, and the
+-- capsule from the shot origin, cut at the first wall, touches its box padded by levels.react.pad.
+local function reactOnAuto(
+	cfg: Types.ProvingGroundsConfig,
+	variant: Types.RangeWeaponVariant,
+	origin: Vector3,
+	look: Vector3,
+	reach: number
+): boolean
+	local element = Unlocks.ElementOf(cfg.weapons, (activeFamily(cfg)))
+	if element == nil then
+		return false
+	end
+	local pad = WorldReact.Pad(if combatConfig ~= nil then combatConfig.levels.react else nil)
+	local stream: WorldReact.Strike = {
+		shape = variant.shape,
+		origin = origin,
+		direction = look,
+		size = reach,
+		width = variant.width,
+	}
+	local found = false
+	ReactFx.ForEachPart(function(part: BasePart, react: any, heat: any)
+		if found then
+			return
+		end
+		found = WorldReact.Wants(
+			element,
+			react,
+			heat,
+			stream,
+			WorldReact.BoxOf(part.Position, part.Size),
+			pad
+		)
+	end)
+	return found
 end
 
 local function autoFireOn(cfg: Types.ProvingGroundsConfig): boolean
@@ -1283,7 +1377,9 @@ end
 
 -- Touch auto-fire's "on target": the assist cone for guns and bows, the whole cone for a cone
 -- gun (it hits everything inside) and the whole capsule for a stream (L2-48: the short
--- Flamethrower fires only with a body inside its reach), the padded melee shape for melee.
+-- Flamethrower fires only with a body inside its reach), the padded melee shape for melee. A
+-- stream's capsule is cut at the first wall (c-m4), and with no body in it the stream also fires
+-- at a block it would burn (c-M1: a phone has no trigger), never past a resting body in it.
 local function targetOnAuto(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
@@ -1294,12 +1390,21 @@ local function targetOnAuto(
 	local root = rig.root.Position
 	if isRanged(variant) then
 		local origin, look = shotRay(rig)
-		if variant.shape == "cone" or variant.shape == "capsule" then
-			return enemyInReach(variant, origin, look, 0, lagPad)
+		if variant.shape == "capsule" then
+			local reach = streamReach(origin, look, variant.range)
+			local onBody, refused = enemyInReach(variant, origin, look, reach, 0, lagPad)
+			if onBody or refused then
+				return onBody
+			end
+			return reactOnAuto(cfg, variant, origin, look, reach)
+		elseif variant.shape == "cone" then
+			return (enemyInReach(variant, origin, look, variant.range, 0, lagPad))
 		end
 		return enemyInSights(variant, origin, look, controls.autoFireAssistDegrees, lagPad)
 	end
-	return enemyInReach(variant, root, flatCameraLook(), controls.autoSwingPad, lagPad)
+	return (
+		enemyInReach(variant, root, flatCameraLook(), variant.range, controls.autoSwingPad, lagPad)
+	)
 end
 
 -- A queued tap still inside its buffer; an expired one is dropped.
@@ -1825,23 +1930,6 @@ local function slotReady(cfg: Types.ProvingGroundsConfig, slot: Stance): boolean
 	end
 	local slotState = if slot == MELEE_SLOT then current.melee else current.ranged
 	return serverNow() >= slotState.readyAt - cfg.abilities.earlySeconds
-end
-
--- The same world query RangeService makes: players skipped, collidable geometry only (crowd
--- enemies have no Instances).
-local function worldParams(): RaycastParams
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.RespectCanCollide = true
-	local ignored: { Instance } = {}
-	for _, player in Players:GetPlayers() do
-		local character = player.Character
-		if character ~= nil then
-			table.insert(ignored, character)
-		end
-	end
-	params.FilterDescendantsInstances = ignored
-	return params
 end
 
 local function floorHit(from: Vector3, params: RaycastParams): number?
@@ -2484,6 +2572,23 @@ end
 function InputController.GetAimRay(): Ray
 	local origin, look = CameraController.GetAimRay()
 	return Ray.new(origin, look)
+end
+
+-- c-M2: the line the local player's shots leave on (the crosshair line from the head's depth,
+-- exactly what rangeAttack sends); nil, nil without a living character. FlameFx draws the local
+-- flame along it, so the drawn tip is where the server's capsule ends.
+function InputController.ShotRay(): (Vector3?, Vector3?)
+	local rig = localRig()
+	if rig == nil then
+		return nil, nil
+	end
+	return shotRay(rig)
+end
+
+-- c-M2: how far a stream runs from `origin` along the unit `look` before the world stops it, up to
+-- `range` (the server's worldReach; touch auto-fire cuts its capsule with the same call).
+function InputController.StreamReach(origin: Vector3, look: Vector3, range: number): number
+	return streamReach(origin, look, range)
 end
 
 -- The loadout the server confirmed on TuneState, forwarded by FeedbackController (the one

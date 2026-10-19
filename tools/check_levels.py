@@ -15,6 +15,12 @@ without its key, within reach with it" (L2-18): the owner's band, one jump with 
 lifting ability's arc worst case (LIFT_MODEL), the trigger met only on the ledge, and rewards only
 behind a sold key.
 
+L2 Wave 2, "fire, the cave and the shortcut", and its fix round: the cave sealed behind fire and its
+ridge unclimbable (the walk-off grace in the reach, d-m1), no ability that carries a Double Jump owner
+(Leap Smash's arc, Impale Dash held in the air) onto the ridge (d-M1), the shortcut route, R8 on both
+variants, the chain of keys, and no hop cutting a bend (an ability's travel: a known limit until L3
+while no family that carries can be owned without a lever, d-m2).
+
 A level is built in Studio from `src/shared/Layouts/Levels/<Name>.json`, and nobody sees it there
 before the owner does. This tool proves the layout on paper instead: it walks the level's `route`
 over the layout's boxes the way a player with one jump would, checks every gate of the constraint
@@ -54,8 +60,8 @@ Usage:
   py tools/check_levels.py --plan-only    # the plans only
   py tools/check_levels.py --scale 4 8    # studs per character across and down (default 4 8)
 
-Every rule L1c and its fix round added, and every rule of L2 Wave 1, is shown red on a mutated copy
-by tools/check_levels_mutants.py (run_gates below is what it calls).
+Every rule L1c and its fix round added, and every rule of L2 Waves 1 and 2, is shown red on a mutated
+copy by tools/check_levels_mutants.py (run_gates below is what it calls).
 """
 
 from __future__ import annotations
@@ -269,6 +275,8 @@ THEME_KEYS = ("COMBAT_CAMERA_PIVOT_HEIGHT", "COMBAT_CAMERA_MIN_PITCH_DEGREES", "
 # ... and the spherecast's radius, which keeps a camera off a wall (the sight gate's stand-off).
 SIGHT_THEME_KEYS = ("COMBAT_CAMERA_COLLISION_RADIUS",)
 # m1: the drawn body (CrowdRenderer's torso, in radii), read from the file like Theme.
+# The fix round's d-M1: AbilityService's MECHANICS rows whose target is "dash" (the caster is carried).
+ABILITY_SERVICE_PATH = REPO_ROOT / "src" / "combat" / "server" / "Services" / "AbilityService.luau"
 RENDERER_PATH = REPO_ROOT / "src" / "combat" / "client" / "Controllers" / "CrowdRenderer.luau"
 RENDERER_KEYS = ("TORSO_WIDTH", "TORSO_DEPTH")
 EPS = 1e-6
@@ -457,6 +465,15 @@ def stray_reach(move, drop):
     return move["walkSpeed"] * (up + down) + move["dashDistance"]
 
 
+def wall_reach_of(move):
+    """How far from where he stood a player lands on the flat, the walk-off grace included: a
+    jump, a double jump and a dash (stray_reach) after walking movement.coyoteSeconds off an edge,
+    falling that long first (BALANCE "L2 W1" c3: 2.4 studs out, 1.4 lower; 49.3 on today's numbers;
+    the fix round's d-m1: the reach the unclimbable and walled-camp rules measure)."""
+    grace = move.get("coyoteSeconds") or 0
+    return stray_reach(move, sr.GRAVITY * grace * grace / 2) + move["walkSpeed"] * grace
+
+
 def ability_height(proving):
     """The most any weapon ability lifts its caster (Leap Smash's `height`): L1c-1."""
     return max([0.0] + [float(((w.get("ability") or {}).get("height")) or 0) for w in proving["weapons"].values()])
@@ -476,10 +493,11 @@ def is_tall(solid):
 def unclimbable(solids, move, ability):
     """L1c-3: the names of the walls nobody stands on. A `wall` block or a camp fence is
     unclimbable when its top stands at least climb_max over every standable surface within
-    stray_reach of it (that is, nobody lands within reach of its foot high enough to get on it);
+    wall_reach_of (stray_reach and the walk-off grace) of it (that is, nobody lands within reach of
+    its foot high enough to get on it);
     another unclimbable wall is not such a surface. The largest set that holds: start from every
     candidate and drop the ones a standable surface beats until nothing changes."""
-    reach = stray_reach(move, 0)
+    reach = wall_reach_of(move)
     climb = climb_max(move, ability)
     standable = ("block", "floor", "secret", "fence", "obstacle")
     bare = exposed(solids)
@@ -800,6 +818,30 @@ def fielded_lifts(proving):
     return [family for family, _ability in lifting_abilities(proving)]
 
 
+def dashing_abilities(proving):
+    """Every family's ability that carries its caster along the flat, holding his height in the air
+    (AbilityService MECHANICS `target = "dash"`: Impale Dash, MovementController.Lunge over its
+    `range`): [(family, ability)]."""
+    import re
+
+    text = ABILITY_SERVICE_PATH.read_text(encoding="utf-8") if ABILITY_SERVICE_PATH.exists() else ""
+    ids = set(re.findall(r'^\s*(\w+)\s*=\s*\{\s*target\s*=\s*"dash"', text, re.MULTILINE))
+    return [(family, w["ability"]) for family, w in sorted(proving["weapons"].items())
+            if (w.get("ability") or {}).get("id") in ids and is_number(w["ability"].get("range"))]
+
+
+def air_carry(move, need):
+    """How far on the flat an owner of the double jump is from where he left the ground while his
+    feet are still `need` or more over it: the walk-off grace, both jumps' climb and the fall down to
+    `need`, at walk speed, and a dash (which holds his height); None when his jumps never get there."""
+    rise = move["jumpHeight"] + move["doubleJumpHeight"]
+    if need > rise + EPS:
+        return None
+    up = math.sqrt(2 * move["jumpHeight"] / sr.GRAVITY) + math.sqrt(2 * move["doubleJumpHeight"] / sr.GRAVITY)
+    down = math.sqrt(2 * max(rise - need, 0.0) / sr.GRAVITY)
+    return move["walkSpeed"] * (up + down + (move.get("coyoteSeconds") or 0)) + move["dashDistance"]
+
+
 def point_rect(rect, x, z):
     """The flat distance from (x, z) to a rectangle (x0, x1, z0, z1, ...)."""
     return math.hypot(max(rect[0] - x, x - rect[1], 0.0), max(rect[2] - z, z - rect[3], 0.0))
@@ -849,16 +891,37 @@ def key_rects(solids, base, chest):
     return rects
 
 
-def lift_takeoffs(solids, box, reach, skip, tall, move, model):
+def lift_rise(move, air):
+    """WallClip.Rise: how high a caster's jumps carry him, the double jump on top when he owns it
+    (`air`); the most a ground point may stand over his floor, and over a void his floor is his
+    feet less this (CasterFloor)."""
+    return move["jumpHeight"] + (move["doubleJumpHeight"] if air else 0)
+
+
+def lift_carry(move, air):
+    """How far on the flat a take-off at the top of his jumps is from where he left the ground: walk
+    speed over the climb of one jump, and of the double jump after it when he owns it (`air`), plus
+    the walk-off grace (movement.coyoteSeconds) for an owner (the fix round's d-M1 and d-m1)."""
+    up = math.sqrt(2 * move["jumpHeight"] / sr.GRAVITY)
+    if air:
+        up += math.sqrt(2 * move["doubleJumpHeight"] / sr.GRAVITY) + (move.get("coyoteSeconds") or 0)
+    return move["walkSpeed"] * up
+
+
+def lift_takeoffs(solids, box, reach, skip, tall, move, model, air=False, low=None, height=0.0):
     """(c)'s take-offs for one cast range: {(x, z, feet): (the caster's floor, how)}. Every
     standable top (not an unclimbable wall, not a key surface) within castRange and a body's radius
-    of the key tops, on a LIFT_GRID grid, cast on the ground and at the top of one jump; and off
-    each such top's edge at the top of a jump, pushed out 1 and 4 studs, as far as the jump carries
-    at walk speed, and that plus half and all of an air dash (which holds its height). There the
-    caster's floor is the top under him, or over a void LIFT_MODEL's rule."""
-    jump = move["jumpHeight"]
+    of the key tops, on a LIFT_GRID grid, cast on the ground and at the top of his jumps; and off
+    each such top's edge at the top of his jumps, pushed out 1 and 4 studs, as far as the jumps
+    carry at walk speed (lift_carry), and that plus half and all of an air dash (which holds its
+    height). There the caster's floor is the top under him, or over a void LIFT_MODEL's rule. His
+    jumps are one jump, or with `air` the jump and the double jump (lift_rise). With `low` (the
+    lowest key top less a step up) and the ability's `height`, a top none of whose take-offs can
+    lift the feet that high (lift_routes' bound, his floor at most the highest standable top within
+    the pushes that his jumps clear) gives none."""
+    jump = lift_rise(move, air)
     standable = ("block", "floor", "secret", "fence", "obstacle")
-    top_reach = move["walkSpeed"] * math.sqrt(2 * jump / sr.GRAVITY)
+    top_reach = lift_carry(move, air)
     offs = (1.0, 4.0, top_reach, top_reach + move["dashDistance"] / 2, top_reach + move["dashDistance"])
     takeoffs = {}
     bare = exposed(solids)
@@ -867,6 +930,13 @@ def lift_takeoffs(solids, box, reach, skip, tall, move, model):
             continue
         if rect_gap((s.x0, s.x1, s.z0, s.z1), box) > reach + BODY_RADIUS + offs[-1]:
             continue
+        if low is not None:
+            floor = max([s.top] + [o.top for o in solids if o.kind in standable and o.top <= s.top + jump + EPS
+                                   and o.gap_to(s) <= offs[-1] + EPS])
+            bound = (max(s.top + jump, floor + jump) + height if model == "today"
+                     else max(s.top + jump, floor + jump + height))
+            if bound < low - EPS:
+                continue
         for x, z in standable_points(solids, s, LIFT_GRID):
             if point_rect(box, x, z) <= reach + BODY_RADIUS:
                 takeoffs.setdefault((round(x, 2), round(z, 2), s.top), (s.top, f"{s.name} (on the ground)"))
@@ -892,25 +962,30 @@ def lift_takeoffs(solids, box, reach, skip, tall, move, model):
     return takeoffs
 
 
-def lift_arc_route(x, z, feet, caster, grid, near, keys, box, move, height, model):
+def lift_arc_route(x, z, feet, caster, grid, near, keys, box, move, height, model, air=False):
     """One take-off of (c): the first target whose arc puts the feet STEP_UP under a key top or
-    higher within BODY_RADIUS of it, as (target x, z, floor, sample x, z, feet, key), or None."""
-    jump = move["jumpHeight"]
+    higher within BODY_RADIUS of it, as (target x, z, floor, sample x, z, feet, key), or None. A
+    target whose line passes no key within BODY_RADIUS is skipped (no sample of it can meet one),
+    and an arc is stopped only by the solids its line crosses: the same answer, sooner."""
+    jump = lift_rise(move, air)
     low = min(k[4] for k in keys) - STEP_UP
     root = feet + sr.ROOT_HEIGHT
     for dx, dz in grid:
         tx, tz = x + dx, z + dz
         if segment_rect(x, z, tx, tz, box) > BODY_RADIUS + EPS:
             continue
+        if all(segment_rect(x, z, tx, tz, kr) > BODY_RADIUS + EPS for kr in keys):
+            continue
         floor = max([o.top for o in near if o.holds(tx, tz)], default=None)
         floor = caster if floor is None else floor
         if floor - caster > jump + EPS:
-            continue  # GroundPoint refuses it: WallClip.TooHigh with Rise(movement, false)
+            continue  # GroundPoint refuses it: WallClip.TooHigh with Rise(movement, air)
         to = floor + sr.ROOT_HEIGHT
         apex = (max(root, to) + height if model == "today"
                 else max(root, to + height, caster + sr.ROOT_HEIGHT + height))
         if apex - sr.ROOT_HEIGHT < low - EPS:
             continue
+        crossed = [o for o in near if segment_rect(x, z, tx, tz, (o.x0, o.x1, o.z0, o.z1)) <= EPS]
         up, down = math.sqrt(max(apex - root, 0.0)), math.sqrt(max(apex - to, 0.0))
         share = up / (up + down) if up + down > EPS else 0.5
         steps = max(int(math.ceil(math.hypot(dx, dz) / LIFT_STEP)), 1)
@@ -927,21 +1002,22 @@ def lift_arc_route(x, z, feet, caster, grid, near, keys, box, move, height, mode
                        None)
             if hit is not None:
                 return tx, tz, floor, px, pz, f, hit
-            if k > 0 and any(o.holds(px, pz) and o.top > f + EPS and o.bottom < f + BODY_HEIGHT - EPS for o in near):
+            if k > 0 and any(o.holds(px, pz) and o.top > f + EPS and o.bottom < f + BODY_HEIGHT - EPS for o in crossed):
                 break  # stopped against a solid
     return None
 
 
-def lift_routes(solids, keys, skip, tall, move, lifts, model=None):
+def lift_routes(solids, keys, skip, tall, move, lifts, model=None, air=False):
     """L2-18 (c): every way a player WITHOUT the double jump gets a lifting ability's arc onto a
-    secret's ledge (lift_takeoffs, then lift_arc_route). Targets as GroundPoint finds them: every
+    secret's ledge (lift_takeoffs, then lift_arc_route); with `air`, a player WITH it onto the given
+    tops (the fix round's d-M1: the cave's ridge and roof). Targets as GroundPoint finds them: every
     point within castRange on the flat (a LIFT_GRID grid and LIFT_RIM points on the rim); its floor
     is the highest top under it, or the caster's floor over a void; refused when more than
-    WallClip.Rise(movement, false) = jumpHeight over the caster's floor. The arc is
-    MovementController.Leap's under LIFT_MODEL, sampled every LIFT_STEP and stopped at the first
-    solid over the feet. One route per take-off, at most LIFT_ROUTES_MAX: [text]."""
+    WallClip.Rise(movement, air) over the caster's floor. The arc is MovementController.Leap's under
+    LIFT_MODEL, sampled every LIFT_STEP and stopped at the first solid over the feet. One route per
+    take-off, at most LIFT_ROUTES_MAX: [text]."""
     model = model or LIFT_MODEL
-    jump = move["jumpHeight"]
+    jump = lift_rise(move, air)
     low = min(k[4] for k in keys) - STEP_UP
     box = (min(k[0] for k in keys), max(k[1] for k in keys), min(k[2] for k in keys), max(k[3] for k in keys))
     standable = ("block", "floor", "secret", "fence", "obstacle")
@@ -953,7 +1029,13 @@ def lift_routes(solids, keys, skip, tall, move, lifts, model=None):
                 if math.hypot(dx * LIFT_GRID, dz * LIFT_GRID) <= reach + EPS]
         grid += [(reach * math.cos(2 * math.pi * k / LIFT_RIM), reach * math.sin(2 * math.pi * k / LIFT_RIM))
                  for k in range(LIFT_RIM)]
-        for (x, z, feet), (caster, how) in sorted(lift_takeoffs(solids, box, reach, skip, tall, move, model).items()):
+        for (x, z, feet), (caster, how) in sorted(lift_takeoffs(solids, box, reach, skip, tall, move, model,
+                                                                air, low, height).items()):
+            # No target stands more than his rise over his floor, so no arc from here tops this:
+            # the bound below without the scan of what is near.
+            ceiling = max(feet, caster + jump) + height if model == "today" else max(feet, caster + jump + height)
+            if ceiling < low - EPS:
+                continue
             near = [o for o in solids if rect_gap((o.x0, o.x1, o.z0, o.z1), (x - reach, x + reach, z - reach, z + reach))
                     <= EPS]
             # The highest arc any legal target gives from here: none reaches a key's step-up height.
@@ -964,7 +1046,13 @@ def lift_routes(solids, keys, skip, tall, move, lifts, model=None):
                      else max(root, best + sr.ROOT_HEIGHT + height, caster + sr.ROOT_HEIGHT + height))
             if bound - sr.ROOT_HEIGHT < low - EPS:
                 continue
-            hit = lift_arc_route(x, z, feet, caster, grid, near, keys, box, move, height, model)
+            # Only the keys an arc from here can meet: within castRange and a body of him, and no
+            # higher than the bound lifts the feet.
+            mine = [kr for kr in keys if point_rect(kr, x, z) <= reach + BODY_RADIUS + EPS
+                    and kr[4] - STEP_UP <= bound - sr.ROOT_HEIGHT + EPS]
+            if not mine:
+                continue
+            hit = lift_arc_route(x, z, feet, caster, grid, near, mine, box, move, height, model, air)
             if hit is not None:
                 tx, tz, floor, px, pz, f, key = hit
                 found.append(f"{family}'s {ability.get('name') or ability.get('id')} from {how} at ({x:g}, {feet:g}, "
@@ -1326,7 +1414,7 @@ def check_layout(name, layout, ctx, expect):
                f"{tag} camp {cid} has a fence, and a root on its top is inside the trigger's height "
                f"(levels.triggerHeight {levels['triggerHeight']:g})" + (f": {fence['height']:g} high" if fence else "")
                + (f" (an unclimbable wall: its top is at least {climb_max(move, ctx['abilityHeight']):g} over every "
-                  f"standable surface within {stray_reach(move, 0):.1f}, so nobody stands on it; L1c-3)" if walled else ""))
+                  f"standable surface within {wall_reach_of(move):.1f}, so nobody stands on it; L1c-3)" if walled else ""))
         wide = len(gates) == 2 and all(g["width"] >= GATE_MIN_WIDTH - EPS and g["side"] in SIDES for g in gates)
         expect(wide, f"{tag} camp {cid} has two gates (entry, exit) at least {GATE_MIN_WIDTH:g} wide: "
                + ", ".join(f"{g['side']} {g['width']:g}" for g in gates))
@@ -2279,8 +2367,9 @@ def sniper_spots(level, layout, ctx, solids):
     (its camps' floors and the road its groups chase over). A locking camp's own floor, fence and
     cover are left out (INTERFACES "Open for later": shooting out of the boss room). One spot per
     solid: its name, its region, the open camp of the region whose floor is nearest, how many
-    points, the box of those points, and the point of them nearest the region (where a straight
-    sniper course stands). tools/sim_range.py rates a course from every spot this returns."""
+    points, the box of those points, the point of them nearest the region that sees it (where a
+    straight sniper course stands) and the nearest point of all (`near`, seen or not: where a cone
+    no wall stops is cast from, the fix round's d-m4). tools/sim_range.py rates a course from every spot this returns."""
     rules = ctx["camps"]
     reach = ctx["longbow"]
     rooms = tuple(f"Camp_{c['id']}_" for c in layout["camps"] if c.get("locks") is True)
@@ -2332,6 +2421,7 @@ def sniper_spots(level, layout, ctx, solids):
             camp = min(open_camps, key=lambda c: rect_distance(x, z, *camp_rect(c)))
             spots.append({"id": solid.name, "region": region["id"], "camp": camp["id"], "top": solid.top,
                           "points": len(found), "at": (x, solid.top, z), "gap": gap,
+                          "near": (found[0][1], solid.top, found[0][2]), "nearGap": found[0][0],
                           "box": (min(f[1] for f in found), max(f[1] for f in found),
                                   min(f[2] for f in found), max(f[2] for f in found))})
     return spots
@@ -2971,7 +3061,7 @@ def check_walled(name, level, layout, ctx, expect, solids):
     rows = ctx["gate16"].setdefault(level["layout"], {}).setdefault("walled", [])
     tall = unclimbable(solids, move, ctx["abilityHeight"])
     top_cam, parts = camera_top(ctx)
-    reach = stray_reach(move, 0)
+    reach = wall_reach_of(move)
     for cid in walled:
         camp = next((c for c in layout["camps"] if c["id"] == cid), None)
         tag = f"{name} camp {cid} (walled):"
@@ -3746,8 +3836,39 @@ def check_cave(name, level, layout, ctx, expect, solids):
     walls = sorted(n for n, look in facing if look == "wall")
     expect(bool(walls) and not loose,
            f"{tag} behind fire: every wall that faces the sealed air is unclimbable (top at least "
-           f"{climb_max(move, ctx['abilityHeight']):g} over every surface within {stray_reach(move, 0):.1f}), so nobody "
+           f"{climb_max(move, ctx['abilityHeight']):g} over every surface within {wall_reach_of(move):.1f}), so nobody "
            f"stands on the ridge or its roof (L2-37 f): " + (f"climbable {', '.join(loose)}" if loose else f"{len(walls)} walls"))
+    # The fix round's d-M1: nor does any lifting ability's arc put a player WITH the double jump on
+    # one of those tops (cast at the top of his jumps from every surface near them, off every edge
+    # with the jumps' carry and a dash, over a void his floor his feet less both jumps).
+    lifts = ctx.get("lifts") or []
+    ridge = [x for x in solids if x.name in set(walls)]
+    keys = [(x.x0, x.x1, x.z0, x.z1, x.top, x.name) for x in ridge]
+    routes = lift_routes(solids, keys, {x.name for x in ridge}, tall, move, lifts, air=True) if keys and lifts else []
+    # And an air dash ability (Impale Dash) cast at any height his jumps carry him to: his feet held
+    # there over the ability's range on top of the jumps' and the dash's carry (air_carry), straight
+    # over whatever lies between (the worst case).
+    bare = exposed(solids)
+    standable = ("block", "floor", "secret", "fence", "obstacle")
+    for family, a in ctx.get("dashes") or []:
+        for o in solids:
+            if o.kind not in standable or o.name in tall or o.name not in bare or o.name in set(walls):
+                continue
+            for kr in keys:
+                carry = air_carry(move, kr[4] - STEP_UP - o.top)
+                gap = rect_gap((o.x0, o.x1, o.z0, o.z1), kr[:4])
+                if carry is not None and gap <= carry + float(a["range"]) + BODY_RADIUS + EPS:
+                    routes.append(f"{family}'s {a.get('name')} from {o.name} (top {o.top:g}) onto {kr[5]}'s top {kr[4]:g}, "
+                                  f"{gap:.1f} away (carry {carry:.1f} + {float(a['range']):g})")
+    count = f"{len(routes)}{'+' if len(routes) >= LIFT_ROUTES_MAX else ''}"
+    told = ", ".join([f"{family} ({a.get('name')}, height {a['height']:g}, castRange {a['castRange']:g})"
+                      for family, a in lifts] + [f"{family} ({a.get('name')}, range {float(a['range']):g}, held in the air)"
+                                                 for family, a in ctx.get("dashes") or []]) or "no family that carries"
+    expect(bool(keys) and not routes,
+           f"{tag} behind fire: no ability that carries a player with the double jump puts him on a wall that faces the "
+           f"sealed air ({told}; take-offs at the top of jump and double jump, {lift_carry(move, True):.1f} studs of carry "
+           f"plus a dash of {move['dashDistance']:g}; LIFT_MODEL \"{LIFT_MODEL}\"; the fix round's d-M1): "
+           + (f"{count} ways onto one: {'; '.join(routes[:2])}" if routes else f"{len(keys)} tops, none"))
     # (a) for a fire secret: met from its alcove floor and its own top, from nowhere outside.
     for secret in secrets:
         chest = next((x for x in solids if x.name == f"Secret_{secret['id']}"), None)
@@ -3875,19 +3996,34 @@ def rim_points(solid, step):
                 | {(solid.x1, z) for z in zs})
 
 
+def carrying_families(ctx):
+    """The families whose ability carries the caster through the air (a lift's castRange, an air
+    dash's range): {family: (the ability's name, studs on the flat)}."""
+    found = {family: (a.get("name"), float(a["castRange"])) for family, a in ctx.get("lifts") or []}
+    for family, a in ctx.get("dashes") or []:
+        if float(a["range"]) > found.get(family, (None, 0.0))[1]:
+            found[family] = (a.get("name"), float(a["range"]))
+    return found
+
+
 def check_route_skips(name, layout, ctx, expect, solids, tall):
     """L2-47 (Ben: "close it now"): no hop cuts a bend of the road. For every two walked road
     blocks that do not touch, the shortest way through the air from the edge of one to the edge
     of the other (round every unclimbable wall: through their corners, in plan) is longer than a
     jump, a double jump, a dash and the walk-off grace carry (falling the drop between them), or it
     saves at most SKIP_SAVE studs of the route (measured from the route's nearest point on each
-    block)."""
+    block). The fix round's d-m2: the same with the longest flat travel of an ability that carries
+    its caster (carrying_families) on top is a KNOWN LIMIT until L3 (reported; no camp is skipped)
+    while no such family can be owned without a lever (ctx ownedFamilies: the loadout's starters and
+    every family a level's secret pays); once one can, it is red."""
     move = ctx["move"]
     blocks = route_blocks(layout, solids, SAMPLE * 4)
     walls = [(s.x0, s.x1, s.z0, s.z1) for s in solids if s.name in tall]
     grace = move["walkSpeed"] * (move.get("coyoteSeconds") or 0)
+    carriers = carrying_families(ctx)
+    travel = max([0.0] + [studs for _name, studs in carriers.values()])
     names = sorted(blocks)
-    worst, cuts = None, []
+    worst, cuts, lifted = None, [], []
     for i, an in enumerate(names):
         for bn in names[i + 1:]:
             a, sa = blocks[an]
@@ -3897,9 +4033,10 @@ def check_route_skips(name, layout, ctx, expect, solids, tall):
                 continue
             lo, hi = (a, b) if a.top >= b.top else (b, a)
             reach = stray_reach(move, lo.top - hi.top) + grace
-            if gap > reach + EPS or hi.top - lo.top > climb_max(move, ctx["abilityHeight"]) + EPS:
+            far = reach + travel
+            if gap > far + EPS or hi.top - lo.top > climb_max(move, ctx["abilityHeight"]) + EPS:
                 continue
-            box = (min(a.x0, b.x0) - reach, max(a.x1, b.x1) + reach, min(a.z0, b.z0) - reach, max(a.z1, b.z1) + reach)
+            box = (min(a.x0, b.x0) - far, max(a.x1, b.x1) + far, min(a.z0, b.z0) - far, max(a.z1, b.z1) + far)
             near = [w for w in walls if rect_gap(w, box[:4]) <= EPS]
             corners = [(w[0] - 0.01, w[2] - 0.01) for w in near] + [(w[0] - 0.01, w[3] + 0.01) for w in near]
             corners += [(w[1] + 0.01, w[2] - 0.01) for w in near] + [(w[1] + 0.01, w[3] + 0.01) for w in near]
@@ -3919,8 +4056,8 @@ def check_route_skips(name, layout, ctx, expect, solids, tall):
                     for v in range(n):
                         if graph[u][k] + graph[k][v] < graph[u][v]:
                             graph[u][v] = graph[u][k] + graph[k][v]
-            pa = [p for p in rim_points(a, SKIP_STEP) if point_rect((b.x0, b.x1, b.z0, b.z1), *p) <= reach]
-            pb = [p for p in rim_points(b, SKIP_STEP) if point_rect((a.x0, a.x1, a.z0, a.z1), *p) <= reach]
+            pa = [p for p in rim_points(a, SKIP_STEP) if point_rect((b.x0, b.x1, b.z0, b.z1), *p) <= far]
+            pb = [p for p in rim_points(b, SKIP_STEP) if point_rect((a.x0, a.x1, a.z0, a.z1), *p) <= far]
             if not pa or not pb:
                 continue
             to_b = []
@@ -3931,14 +4068,21 @@ def check_route_skips(name, layout, ctx, expect, solids, tall):
             def along(points, p):
                 return min(points, key=lambda r: (r[1] - p[0]) ** 2 + (r[2] - p[1]) ** 2)[0]
 
+            known = None
             for p in pa:
                 from_a = [math.dist(p, corners[u]) if clear(p, corners[u]) else math.inf for u in range(n)]
                 sp = along(sa, p)
                 for q, rest in zip(pb, to_b):
                     hop = math.dist(p, q) if clear(p, q) else min((from_a[u] + rest[u] for u in range(n)), default=math.inf)
-                    if hop > reach + EPS:
+                    if hop > far + EPS:
                         continue
                     saved = abs(along(sb, q) - sp) - hop
+                    if hop > reach + EPS:
+                        if saved > SKIP_SAVE + EPS and (known is None or saved > known[0]):
+                            known = (saved, f"{an} to {bn}: a hop of {hop:.1f} (over the {reach:.1f} of the jumps and "
+                                            f"a dash) from ({p[0]:g}, {p[1]:g}) to ({q[0]:g}, {q[1]:g}) saves "
+                                            f"{saved:.0f} studs of road")
+                        continue
                     if worst is None or saved > worst[0]:
                         worst = (saved, f"{an} ({p[0]:g}, {p[1]:g}) to {bn} ({q[0]:g}, {q[1]:g}), a hop of {hop:.1f}")
                     if saved > SKIP_SAVE + EPS:
@@ -3948,10 +4092,29 @@ def check_route_skips(name, layout, ctx, expect, solids, tall):
                 else:
                     continue
                 break
+            if known is not None:
+                lifted.append(known[1])
     expect(not cuts, f"{tag_of(name)} no hop cuts a bend: between two walked road blocks that do not touch, the shortest way "
            f"round the unclimbable walls is beyond a jump, a double jump, a dash and the walk-off grace, or saves at most "
            f"{SKIP_SAVE:g} studs of road (L2-47)" + (": " + "; ".join(cuts[:3]) if cuts else
                                                      f" (the most any hop saves: {worst[0]:.0f}, {worst[1]})" if worst else ""))
+    owners = sorted(ctx.get("ownedFamilies") or ctx.get("loadout") or [])
+    owned = sorted(set(owners) & set(carriers))
+    told = ", ".join(f"{family}'s {ability} {studs:g}" for family, (ability, studs) in sorted(carriers.items())) or "none"
+    if lifted and not owned:
+        verdict = (f"KNOWN LIMIT until L3 (the fix round's d-m2): {len(lifted)} hop(s) with an ability's travel cut a bend, "
+                   f"no camp skipped, and no family that carries can be owned without a lever (owned: "
+                   f"{', '.join(owners) or 'none'}): {'; '.join(lifted[:2])}")
+        ctx["gate16"].setdefault(name, {}).setdefault("lifts", []).extend(
+            f"bend (known limit until L3, d-m2): {line}" for line in lifted)
+    elif lifted:
+        verdict = f"{', '.join(owned)} can be owned without a lever: {'; '.join(lifted[:3])}"
+    else:
+        verdict = "no hop with an ability's travel cuts one either"
+    expect(not lifted or not owned,
+           f"{tag_of(name)} no hop with an ability that carries ({told}, on top of the jumps and a dash) cuts a bend by more "
+           f"than {SKIP_SAVE:g} studs of road while a family that carries can be owned without a lever (L2-47, the fix "
+           f"round's d-m2): {verdict}")
 
 
 def tag_of(name):
@@ -4149,6 +4312,7 @@ def load_all():
            "abilityHeight": ability_height(proving), "camera": combat.get("camera"), "theme": theme_numbers(),
            "renderer": renderer_numbers(), "abilityIds": ability_ids(expeditions), "lifts": lifting_abilities(proving),
            "fieldedLifts": fielded_lifts(proving), "loadout": sorted((proving.get("loadout") or {}).values()),
+           "dashes": dashing_abilities(proving),
            "weapons": proving["weapons"]}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
@@ -4282,11 +4446,16 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
            "Config/Levels: every file is named <n>_<Name>.json, the only name Catalog reads, and no two share an id"
            + (f" (Catalog would not read {', '.join(stray)})" if stray else f" ({len(ids)} files: {', '.join(ids)})"))
     # The level files first: they say which kinds stand in which camp.
+    paid = set()
     for file in level_files:
         level = sr.resolve_level(file, ctx["missions"].get(file.get("mission")), ctx["runCap"])
         check_level_file(file, level, layouts, ctx, expect)
         if file.get("layout") in layouts:
             check_secret_rewards(file, layouts[file["layout"]], expeditions, expect, ctx.get("weapons"), ctx["ranks"])
+            paid |= set(key_chain(file, layouts[file["layout"]], expeditions, ctx.get("weapons") or {})[1])
+    # The families a player can own without a Studio lever: the starters and every family a secret
+    # pays behind a key he can come to hold (the fix round's d-m2).
+    ctx["ownedFamilies"] = sorted(set(ctx.get("loadout") or []) | paid)
     bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
                  for name, layout in layouts.items()}
     for name, layout in layouts.items():

@@ -189,6 +189,12 @@ function Unlocks.OwnsFamily(
 	return starters[id] == true or (families ~= nil and families[id] == true)
 end
 
+-- True when `word` is one of the two elements (the L2 W2 fix round's c-M1: phone auto-fire asks
+-- this of a Part's `React` attribute through WorldReact.Wants, so the list stays here alone).
+function Unlocks.IsElement(word: any): boolean
+	return type(word) == "string" and ELEMENTS[word] ~= nil
+end
+
 -- The element a family carries: its `element` when that is one of the two words, else nil (no
 -- such family, no element, or a word that is not an element: it fails closed).
 function Unlocks.ElementOf(

@@ -34,7 +34,6 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
-local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local BarrierGroups = require(script.Parent:WaitForChild("BarrierGroups"))
@@ -52,15 +51,13 @@ type CampParts = {
 	barriers: { BasePart },
 	checkpoint: BasePart?,
 }
--- L2-35: one reactive block of the level that is built: its Part's name, the Part, its box, the
--- element that takes it away, the strikes it has taken and the shortcut it opens.
+-- L2-35: one reactive block of the level that is built: its Part's name, the Part, the shortcut it
+-- opens, and what WorldReact.Apply reads and writes (its element, box and strikes taken).
 type Reactive = {
 	name: string,
 	part: BasePart,
-	box: LevelGeometry.Box,
-	react: string,
-	heat: number,
 	opens: string?,
+	cell: WorldReact.Entry,
 }
 -- What OnReacted's listeners are told: the block's name, its element and its box as it stood.
 export type Reacted = { name: string, react: string, box: LevelGeometry.Box }
@@ -388,10 +385,8 @@ local function construct(
 			table.insert(reactive, {
 				name = piece.name,
 				part = part :: BasePart,
-				box = box,
-				react = react,
-				heat = 0,
 				opens = piece.opens,
+				cell = { react = react, box = box, heat = 0 },
 			})
 		end
 		part.Parent = folder
@@ -593,24 +588,25 @@ function LevelService.OnReacted(callback: (Reacted) -> ()): ()
 end
 
 -- L2-35, WeaponService's strike listener (Main wires it): `player`'s strike with `weapon`
--- touched what it touched. Every reactive block of the built level whose element is the
--- family's (Unlocks.ElementOf, through Tuning) and whose box the strike's segment meets
--- (WorldReact.Touches, Combat.json levels.react.pad) takes one strike; at its count
--- (WorldReact.Need) its Part is destroyed and the OnReacted listeners are told. No "in play" rule
--- (a bramble is not loot), and no ability rule here: a shape that is not a segment touches
--- nothing. Never yields, never throws on what the config says.
+-- touched what it touched. The element is WorldReact.StrikeElement's (the family's, through
+-- Tuning, and none for an ability's strike: fix round s-m2); WorldReact.Apply decides which
+-- reactive blocks of the built level take one strike (their element, the strike's segment
+-- touching the box grown by Combat.json levels.react.pad) and which go (WorldReact.Need). This
+-- only executes: the heated show it on their Part's `Heat` attribute, the gone are destroyed and
+-- the OnReacted listeners told. No "in play" rule (a bramble is not loot). Never yields, never
+-- throws on what the config says.
 function LevelService.React(
 	_player: Player,
 	weapon: string,
 	fx: WorldReact.Strike,
-	_ability: string?
+	abilityId: string?
 ): ()
 	local reactive = state.reactive
 	if #reactive == 0 then
 		return
 	end
 	local config: any = Tuning.Get()
-	local element = Unlocks.ElementOf(config.weapons, weapon)
+	local element = WorldReact.StrikeElement(config.weapons, weapon, abilityId)
 	if element == nil then
 		return
 	end
@@ -625,24 +621,23 @@ function LevelService.React(
 		return
 	end
 	local pad = WorldReact.Pad(rules)
-	local gone: { Reactive } = {}
-	for index = #reactive, 1, -1 do
-		local entry = reactive[index]
-		if entry.react ~= element or not WorldReact.Touches(fx, entry.box, pad) then
-			continue
-		end
-		local heat, done = WorldReact.Heat(entry.heat, need)
-		entry.heat = heat
-		if done then
-			table.remove(reactive, index)
-			table.insert(gone, entry)
-		else
-			entry.part:SetAttribute(CONST.HEAT_ATTRIBUTE, WorldReact.Share(heat, need))
-		end
+	local cells: { WorldReact.Entry } = table.create(#reactive)
+	for index, entry in reactive do
+		cells[index] = entry.cell
 	end
-	for _, entry in gone do
+	local gone, heated = WorldReact.Apply(cells, element, fx, pad, need)
+	for _, index in heated do
+		local entry = reactive[index]
+		entry.part:SetAttribute(CONST.HEAT_ATTRIBUTE, WorldReact.Share(entry.cell.heat, need))
+	end
+	local removed: { Reactive } = {}
+	for _, index in gone do
+		table.insert(removed, table.remove(reactive, index) :: Reactive)
+	end
+	for _, entry in removed do
 		entry.part:Destroy()
-		local event: Reacted = { name = entry.name, react = entry.react, box = entry.box }
+		local cell = entry.cell
+		local event: Reacted = { name = entry.name, react = cell.react, box = cell.box }
 		for _, listener in state.reactedListeners do
 			listener(event)
 		end

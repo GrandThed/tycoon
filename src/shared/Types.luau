@@ -2018,6 +2018,9 @@ export type RangeShootingConfig = {
 	adsBloomMult: number,
 	adsSpeedMult: number,
 	originPad: number,
+	-- L2 W2 d-m3: studs of solid a shot origin's line from the head may cross (an honest shoulder
+	-- origin clips a wall's edge at an inner corner); under the thinnest wall a level builds (2).
+	originWallChord: number,
 	critMult: number,
 	-- Speed above which a character counts as moving for bloom; server origin check adds
 	-- rootSpeed x (ping + originLagSeconds) to originPad.

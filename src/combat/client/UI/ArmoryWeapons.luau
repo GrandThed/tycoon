@@ -12,8 +12,9 @@
 --    secret pays it, locked, with where it hides ("Hidden on Forest Road": a secret is seen before
 --    it is reached, MISSIONS_DESIGN section 7). Today that is the Flamethrower alone.
 --  * A press sends RequestSetFamily(slot, family, variant) through the host and greys every
---    button until the `setFamily` ActionResult (or Theme.LOBBY_ARMORY_RESULT_TIMEOUT_SECONDS). An ok
---    shows the pick as held at once; the TuneState after it is the truth.
+--    button until the `setFamily` ActionResult that names its family (or
+--    Theme.ABILITIES_RESULT_TIMEOUT_SECONDS, the one Armory timeout). An ok shows the pick as held
+--    at once; the TuneState after it is the truth.
 --
 -- Laid out for the 340-wide sheet: two 155 design px columns, cards 80 tall (name row 20, the
 -- button row 48, three 4 px gaps). A name is truncated, never wrapped; a variant label wraps to two
@@ -39,6 +40,9 @@ export type Deps = {
 	toast: (text: string, seconds: number, isError: boolean) -> (),
 	-- Whether a press may act now (the sheet is open and the lobby is up).
 	isLive: () -> boolean,
+	-- After every repaint (a button may have gone unselectable or been rebuilt away): the panel
+	-- puts a gamepad's selection back on a live button (c-m2).
+	onRepaint: (() -> ())?,
 }
 
 export type VariantModel = { key: string, label: string }
@@ -353,6 +357,10 @@ function ArmoryWeapons.new(parent: Instance, width: number, deps: Deps): Page
 		for _, card in cards do
 			paintCard(card)
 		end
+		local onRepaint = deps.onRepaint
+		if onRepaint ~= nil then
+			onRepaint()
+		end
 	end
 
 	local function pick(card: Card, variant: string): ()
@@ -372,7 +380,7 @@ function ArmoryWeapons.new(parent: Instance, width: number, deps: Deps): Page
 		view.token += 1
 		local token = view.token
 		paint()
-		task.delay(Theme.LOBBY_ARMORY_RESULT_TIMEOUT_SECONDS, function()
+		task.delay(Theme.ABILITIES_RESULT_TIMEOUT_SECONDS, function()
 			if token == view.token and view.pending ~= nil then
 				view.pending = nil
 				paint()
@@ -565,9 +573,14 @@ function ArmoryWeapons.new(parent: Instance, width: number, deps: Deps): Page
 			if typeof(payload) ~= "table" or payload.action ~= "setFamily" then
 				return
 			end
+			-- c-m3: only the answer to the pick in flight frees it; a late answer to one that timed
+			-- out still toasts, and its loadout comes on TuneState.
 			local pending = view.pending
-			view.pending = nil
-			view.token += 1
+			local answers = pending ~= nil and pending.family == payload.slotId
+			if answers then
+				view.pending = nil
+				view.token += 1
+			end
 			local name = "Weapon"
 			for _, card in cards do
 				if card.model.family == payload.slotId then
@@ -575,7 +588,7 @@ function ArmoryWeapons.new(parent: Instance, width: number, deps: Deps): Page
 				end
 			end
 			if payload.ok == true then
-				if pending ~= nil and pending.family == payload.slotId then
+				if answers then
 					view.picked = pending
 				end
 				deps.toast(name .. " equipped", Theme.ABILITIES_TOAST_SECONDS, false)

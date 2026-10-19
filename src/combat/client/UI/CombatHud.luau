@@ -74,23 +74,22 @@
 -- is clear of the header, the objective line, "Camps 1 / 3", the notice line and the boss bar
 -- at the top on a PC and on a 667 x 375 phone; it is a label, never a tap target.
 --
--- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-10): "Abilities" between Map and Return, in the
--- lobby only, like Map (`deps.onAbilities`; nil = no button). It is the phone's way to the
--- Abilities panel; a keyboard also has K, a gamepad Y (`deps.abilitiesKey` names it).
+-- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-10), renamed in Wave 2: "Armory" between Map
+-- and Return, in the lobby only, like Map (`deps.onArmory`; nil = no button). It is the phone's
+-- way to the Armory panel; a keyboard also has K, a gamepad Y (`deps.armoryKey` names it).
 --
--- The L2 W1 fix round's c1: Map, Abilities and Return make a 280 design px row, which ran under
+-- The L2 W1 fix round's c1: Map, Armory and Return make a 280 design px row, which ran under
 -- the health bar on a landscape phone and under the Dash and slot buttons in portrait. The
 -- buttons are laid out in ROWS (ActionRows): the host hands SetLayout what stands at the bottom
 -- of the screen (the health bar, the thumb cluster, the AbilityBar), each row ends a gap short
 -- of whatever is in its own band, and what does not fit goes up a row. Measured at MIN_SCALE:
--- 667 x 375 and 640 x 360 give Map over Abilities + Return (Return ends 51 and 38 px short of
--- the bar); 375 x 667 gives one button per row (Map, Abilities, Return), right edge 103 px
+-- 667 x 375 and 640 x 360 give Map over Armory + Return (Return ends 51 and 38 px short of
+-- the bar); 375 x 667 gives one button per row (Map, Armory, Return), right edge 103 px
 -- against the slot button's 158; 1920 x 1080 keeps one row. The key hints and the perf line sit
 -- over however many rows there are.
 --
--- L2 Wave 2 (docs/prompts/l2-w2-contract.md, section 2): the button reads "Armory" and opens the
--- Armory panel (Weapons and Abilities tabs) in the same slot, at the same width, so the rows
--- above do not change (`deps.onArmory`, `deps.armoryKey`).
+-- L2 Wave 2 (docs/prompts/l2-w2-contract.md, section 2): the Armory panel has Weapons and
+-- Abilities tabs; its button keeps W1's slot and width, so the rows above do not change.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

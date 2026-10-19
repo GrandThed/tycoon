@@ -4815,6 +4815,170 @@ L2W2_MUTATIONS = {
 }
 MUTATIONS.update(L2W2_MUTATIONS)
 
+# The L2 W2 fix round (docs/prompts/l2-w2-fix-round.md), from the server agent: WorldReact's
+# StrikeElement, Apply, Wants and OriginClear (s-m1, s-m2, c-M1, d-m3), Unlocks.IsElement,
+# Validate's shortcut sizes (s-m3), and the source checks on Main's wiring, finish()'s abandoned skip, LevelService.React and
+# aimAllowed's wall ray (d-m3). Main and LevelService are copied for those source checks.
+MAIN_SERVER = "src/combat/server/Main.server.luau"
+LEVEL_SERVICE = "src/combat/server/Services/LevelService.luau"
+FILES += [MAIN_SERVER, LEVEL_SERVICE]
+L2W2_FIX_MUTATIONS = {
+    # s-m2: an ability's strike carries no element.
+    "l2w2 fix: an ability's strike carries its family's element": (
+        WORLD_REACT,
+        "\tif ability ~= nil then\n\t\treturn nil\n\tend\n\treturn Unlocks.ElementOf(weapons, weapon)",
+        "\treturn Unlocks.ElementOf(weapons, weapon)",
+    ),
+    "l2w2 fix: every attack carries fire": (
+        WORLD_REACT,
+        "\treturn Unlocks.ElementOf(weapons, weapon)\nend",
+        '\treturn "fire"\nend',
+    ),
+    # s-m1: Apply.
+    "l2w2 fix: Apply heats any element's block": (WORLD_REACT, "if entry.react ~= element or not", "if not"),
+    "l2w2 fix: Apply's element is a constant": (
+        WORLD_REACT,
+        "if entry.react ~= element or not",
+        'if entry.react ~= "fire" or not',
+    ),
+    "l2w2 fix: Apply heats what the strike misses": (
+        WORLD_REACT,
+        "if entry.react ~= element or not WorldReact.Touches(fx, entry.box, pad) then",
+        "if entry.react ~= element then",
+    ),
+    "l2w2 fix: Apply drops the pad": (
+        WORLD_REACT,
+        "not WorldReact.Touches(fx, entry.box, pad) then",
+        "not WorldReact.Touches(fx, entry.box, 0) then",
+    ),
+    "l2w2 fix: Apply does not write the heat back": (WORLD_REACT, "\t\tentry.heat = heat\n", ""),
+    "l2w2 fix: Apply swaps gone and heated": (
+        WORLD_REACT,
+        "table.insert(if done then gone else heated, index)",
+        "table.insert(if done then heated else gone, index)",
+    ),
+    "l2w2 fix: Apply walks the list upwards": (
+        WORLD_REACT,
+        "\tfor index = #entries, 1, -1 do\n",
+        "\tfor index = 1, #entries do\n",
+    ),
+    "l2w2 fix: BoxOf swaps two sizes": (WORLD_REACT, "sx = size.X, sy = size.Y", "sx = size.Y, sy = size.X"),
+    # c-M1: Wants.
+    "l2w2 fix: Wants ignores the element": (
+        WORLD_REACT,
+        "if not Unlocks.IsElement(element) or react ~= element then",
+        "if not Unlocks.IsElement(react) then",
+    ),
+    "l2w2 fix: Wants takes any word": (
+        WORLD_REACT,
+        "if not Unlocks.IsElement(element) or react ~= element then",
+        "if element == nil or react ~= element then",
+    ),
+    "l2w2 fix: Wants ignores the heat": (WORLD_REACT, "return share < 1 and WorldReact.Touches", "return WorldReact.Touches"),
+    "l2w2 fix: Wants reads no heat as burnt": (
+        WORLD_REACT,
+        "local share = if heat == nil then 0 elseif",
+        "local share = if heat == nil then 1 elseif",
+    ),
+    "l2w2 fix: Wants reads a broken heat as 0": (
+        WORLD_REACT,
+        "elseif finite(heat) then heat :: number else 1",
+        "elseif finite(heat) then heat :: number else 0",
+    ),
+    "l2w2 fix: Wants ignores the stream": (
+        WORLD_REACT,
+        "return share < 1 and WorldReact.Touches(fx, box, pad)",
+        "return share < 1",
+    ),
+    "l2w2 fix: Wants drops the pad": (
+        WORLD_REACT,
+        "return share < 1 and WorldReact.Touches(fx, box, pad)",
+        "return share < 1 and WorldReact.Touches(fx, box, 0)",
+    ),
+    "l2w2 fix: IsElement takes any word": (
+        UNLOCKS,
+        'return type(word) == "string" and ELEMENTS[word] ~= nil',
+        'return type(word) == "string" and word ~= ""',
+    ),
+    # s-m3: Validate's shortcut sizes.
+    "l2w2 fix: a shortcut size of 0 is accepted": (
+        FLOW,
+        "if isFinite(entry[key]) and entry[key] <= 0 then",
+        "if isFinite(entry[key]) and entry[key] < 0 then",
+    ),
+    "l2w2 fix: a negative shortcut size is accepted": (
+        FLOW,
+        "if isFinite(entry[key]) and entry[key] <= 0 then",
+        "if false then",
+    ),
+    "l2w2 fix: only a shortcut's sz is a size": (FLOW, 'for _, key in { "sx", "sy", "sz" } do', 'for _, key in { "sz" } do'),
+    # The source checks (s-m1, s-m2, d-m3).
+    "l2w2 fix: Main does not wire React": (
+        MAIN_SERVER,
+        "WeaponService.OnStrikeResolved(LevelService.React)",
+        "-- WeaponService.OnStrikeResolved(LevelService.React) (unwired)",
+    ),
+    "l2w2 fix: finish tells listeners of abandoned strikes": (
+        WEAPON,
+        "\tif not fx.abandoned then\n\t\tlocal abilityId",
+        "\tif true then\n\t\tlocal abilityId",
+    ),
+    "l2w2 fix: React forgets the ability": (
+        LEVEL_SERVICE,
+        "WorldReact.StrikeElement(config.weapons, weapon, abilityId)",
+        "WorldReact.StrikeElement(config.weapons, weapon, nil)",
+    ),
+    "l2w2 fix: React's element is a constant": (
+        LEVEL_SERVICE,
+        "local element = WorldReact.StrikeElement(config.weapons, weapon, abilityId)",
+        'local element = "fire"',
+    ),
+    "l2w2 fix: React keeps a loop of its own": (
+        LEVEL_SERVICE,
+        "local gone, heated = WorldReact.Apply(cells, element, fx, pad, need)",
+        "local gone, heated = {}, {}\n\tfor index = #reactive, 1, -1 do\n"
+        "\t\tif WorldReact.Touches(fx, cells[index].box, pad) then\n\t\t\ttable.insert(gone, index)\n"
+        "\t\tend\n\tend",
+    ),
+    "l2w2 fix: the aim has no wall ray": (
+        WEAPON,
+        "local forward = workspace:Raycast(anchor, offset, params)",
+        "local forward = nil",
+    ),
+    "l2w2 fix: the aim has no ray back": (
+        WEAPON,
+        "workspace:Raycast(origin, -offset, params) else nil",
+        "nil else nil",
+    ),
+    "l2w2 fix: the aim ignores the verdict": (WEAPON, "\treturn clear\nend", "\treturn true\nend"),
+    # d-m3: OriginClear.
+    "l2w2 fix: an origin behind any wall is clear": (
+        WORLD_REACT,
+        "\tif forward == nil then\n\t\treturn true\n\tend\n\tif backward == nil",
+        "\tif true then\n\t\treturn true\n\tend\n\tif backward == nil",
+    ),
+    "l2w2 fix: an origin inside a solid is clear": (
+        WORLD_REACT,
+        "if backward == nil or not (finite(distance)",
+        "if backward == nil then\n\t\treturn true\n\tend\n\tif not (finite(distance)",
+    ),
+    "l2w2 fix: an endless hit is a number": (
+        WORLD_REACT,
+        " or not (finite(distance) and finite(forward) and finite(backward)) then",
+        " then",
+    ),
+    "l2w2 fix: the chord ignores the hit back": (
+        WORLD_REACT,
+        "local chord = distance - (backward :: number) - (forward :: number)",
+        "local chord = distance - (forward :: number)",
+    ),
+    "l2w2 fix: the wall tolerance is 0": (WORLD_REACT, "return chord <= length(tolerance)", "return chord <= 0"),
+    "l2w2 fix: the wall tolerance is open": (WORLD_REACT, "return chord <= length(tolerance)", "return chord < length(tolerance)"),
+    "l2w2 fix: a negative wall tolerance counts": (WORLD_REACT, "return chord <= length(tolerance)", "return chord <= tolerance"),
+}
+MUTATIONS.update(L2W2_FIX_MUTATIONS)
+
+
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
     it printed none: run_harness.py prints one whenever a case ran)."""

@@ -5761,3 +5761,99 @@ OK (pinned in `EXPECTED.sniperSpotsOpen`).
 | s1 control: the centre rule at secretReach 5 (was red on the 12-wide cache; the 6-wide chest opens from 4 off its centre) | (a) the cache | green |
 
 The full driver: 108 data cases, the 4 stage-mirror cases and the 1 simulator case, all as expected (35 min).
+
+## L2 W2 fix round: the ridge, the grace, the bend and the fire sniper (2026-10-18)
+
+Rulings: `docs/prompts/l2-w2-fix-round.md` (d-M1, d-m1, d-m2, d-m4 and the s-m3 mirror; findings in
+`docs/prompts/l2-w2-review/data-tools.md`). Gates: `py tools/check_levels.py` PASS (about 20 s);
+`py -3.12 tools/sim_range.py --check` on 64-bit 3.12 PASS (498 checks, 10.4 min); `py -3.12 tools/sim_combat.py
+--check` 23 of 23; `py tools/check_stage_mirror.py` PASS with the server's s-m3 line in.
+
+### L2 W2 fix: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ForestRoad.json` CaveWallS2 | x −221..−118, top 64 | **x −221..−180, top 84**, and **CaveWallS3** x −180..−118, top 64 | d-M1: a Double Jump owner's lift or air dash from the lookout ledge ended on it (below) |
+| `ForestRoad.json` CaveRoofE | x −221..−102, top 64 | **x −221..−180, top 84**, and **CaveRoofE2** x −180..−102, top 64 | the same |
+| CaveWallAlcoveW / E / N, CaveRoofAlcove | top 64 | **top 84** | the ruling: every 64-high piece within reach of the ledge or its chest (the alcove is 60 off the ledge) |
+| `check_levels.py` (f), the ridge | `unclimbable` only | plus **no ability that carries a Double Jump owner onto a wall facing the sealed air**: `lift_routes(air=True)` (take-offs at jump + double jump, 18.0 studs of carry and a dash, a void's floor his feet less 30, a target up to 30 over it) and Impale Dash held in the air over its 30 studs (`dashing_abilities`, `air_carry`) | d-M1, and the reviewer's Spear follow-up: the Spear does the same as the Greataxe |
+| `check_levels.py` `unclimbable` and the walled gate's reach | `stray_reach` 46.6 | **`wall_reach_of` 49.3** (2.4 studs walked off the edge and 1.4 lower first, BALANCE "L2 W1" c3) | d-m1: the contract and this file promised 49.3 |
+| `check_levels.py` L2-47 | jumps and a dash only | plus a second rule: the same with the longest carrying ability's travel (32) is a **known limit until L3** while no carrying family can be owned without a lever; red once one can | d-m2 |
+| `check_levels.py` `sniper_spots` | the nearest point that sees the region | also `near`, the nearest point of all (seen or not) | d-m4: where a cone that ignores walls is cast from |
+| `sim_range.py` `react_problems` | finite numbers | **a shortcut `sx`, `sy` or `sz` of 0 or below is refused**, `shortcut "<id>": <key> is <n>, not a size above 0` | s-m3, the server's StageFlow line mirrored |
+| `sim_range.py` the open-tunnel snipers | the bow only | each spot also with the Flamethrower carried, **Dragon's Breath** cast through walls at the nearest body its cones reach, from the spot's point and from its nearest point; he waits out the cooldown (idle 10 s + 10 s) | d-m4 |
+
+No config number moved. Parts 112 → **114** (maxParts 600). Main route 1,079 and the shortcut route 350 are
+unchanged; so is everything `sim_range` measured before (the pair, the tunnel runs, L2-39, every bow sniper row).
+
+### L2 W2 fix: the ridge (d-M1)
+
+Where the 84-high ridge must end for the rule to hold (the split between CaveWallS2 / S3 and CaveRoofE / E2;
+the alcove at 84 in every row):
+
+| Split at x | Leap Smash (Greataxe) | Impale Dash held in the air (Spear) |
+|---|---|---|
+| −221 (W2 as shipped: everything east of S1 at 64) | **10 take-offs** off the ledge's edge over the void, feet 68 over CaveWallS2 | reaches |
+| −210 | 3 take-offs onto CaveWallS3 | reaches |
+| −205 | clean | **onto CaveWallS3, 67.9 off the ledge** (41.5 carry + 30 + a body) |
+| −195 | clean | clean |
+| **−180 (shipped)** | clean, about 25 studs to spare | clean, about 20 studs to spare |
+
+The reviewer's estimate (about −195) holds for the Leap; the Spear's air dash reaches about 5 studs further,
+which is why the ridge runs to −180. The 84 tops stand 50 over the ledge (34) and 46 over its chest (38), over
+the most a lift adds (30 + 10 + a 3-stud step). Nothing inside changes: every roof's foot is still 22, the
+tunnel's 12 × 14 section, the camera clearance and the sight rule are as before (only tops moved). From outside
+the step from 84 to 64 sits 41 studs further east than in W2.
+
+The rule took the gate from 14 s to 2 min on first writing; two bounds that change no answer (a surface none of
+whose take-offs can lift the feet to the lowest key, then only the keys within castRange of a take-off and the
+solids each line crosses) bring the whole `check_levels` run back to about 20 s. The lookout's L2-18 (c) answers
+are unchanged.
+
+### L2 W2 fix: the bend with an ability (d-m2, known limit until L3)
+
+No family that carries (Greataxe, Spear) can be owned without a lever today (owned: Broadsword, Longbow, and the
+Flamethrower from the lookout). With an ability's 32 studs on top of the jumps and a dash:
+
+| Hop | Length | Road saved |
+|---|---|---|
+| RoadAB1 / AB2 → RoadAB5, round BendWall's south end | 80.4–80.8 | 61–63 studs (about 3 s) |
+| RoadBC1 / BC2 → RoadBC4 | 54.0 | 104 studs (about 5 s) |
+| RoadBC1 / BC2 → RoadBC5 | 70.0 | 96 studs |
+
+No camp is skipped. The AB rows are new against the review (which named the BC bend only): BendWall is a wall
+to the ridge in the north, but its south end at z −8 lets a carried hop go round it. Both close with data when L3
+sells a carrying family (a wall at BC; BendWall run south), or the rule goes red on its own.
+
+### L2 W2 fix: the fire sniper (d-m4)
+
+Cash / Timber a minute against the mission player on the same seeds (11 / 23 / 37); every hit landing:
+
+| Spot (tunnel open) | Normal (mission 25,104–28,041 / 40–45) | Hard at 2 / 2 (mission 18,614–20,512 / 27–30) |
+|---|---|---|
+| CaveExit, bow (W2) | 2,825 / 2,825 / 565 | 0 / 0 / 0 |
+| CaveExit + Dragon's Breath | 2,037 / 2,037 / 582 | 1,355 / 1,646 / 1,623 |
+| CaveExit + Dragon's Breath, behind ExitS (nearest point, 3 off the road) | 1,947 / 1,947 / 556 | 1,197 / 1,201 / 1,041 |
+| CaveMouth, bow (W2) | 1,436 / 7,181 / 958 | 0 / **19,151** / 0 |
+| CaveMouth + Dragon's Breath | 799 / 3,994 / 533 | 0 / 10,651 / 0 |
+| CaveMouth + Dragon's Breath, nearest point | 795 / 530 / 530 | 0 / 0 / 0 |
+
+From behind CaveWallExitS the cones do land (two casts, 14 to 27 hits), but the rushers at the road's edge
+stand down or go home before the third, and on Hard the shooters put him down in about 20 s. CaveMouth's nearest
+point is 27 off the region, past the cones' 20.8 and a body: no cast. **Neither spot out-earns the mission player
+with the fire family's ability (the best is 8% of it), so the corridor stays where it is.** The thinnest margin
+is still the bow's Hard CaveMouth seed 23 (−6.6%).
+
+### L2 W2 fix: `check_levels_mutants.py`, new cases
+
+| Case | Rule | Expected |
+|---|---|---|
+| the ridge by the ledge back at 64 (W2's data) | d-M1 | red |
+| the 84 ridge ends at x −205 (the Spear's air dash) / control at −195 | d-M1 | red / green |
+| no air dash, the ridge ends at x −210 (Leap Smash) / control at −205 | d-M1 | red / green |
+| a perch at 34, 48 off CaveWallS3 (inside 49.3, outside 46.6) / control 50 off | d-m1, the ridge | red / green |
+| the cache pays the Spear (a carrying family owned without a lever) / control: the Longbow | d-m2 | red / green |
+| the shortcut's sz 0; its sx −12 / control: its sy 0.01 | s-m3, Validate | red; red / green |
+| sim_range's size rule out (the mirror alone) | check_stage_mirror | red |
+
+The full driver: 114 data cases, the 5 stage-mirror cases and the 1 simulator case, all as expected (40 min).

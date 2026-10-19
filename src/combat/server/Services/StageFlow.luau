@@ -951,7 +951,7 @@ end
 -- L2-34, L2-36: the layout's reactive blocks and shortcuts. A block's `react` is "fire" or "ice"
 -- and the block collides (a block nothing stops would be burnt by a stream that passes through
 -- it); its `opens` names an entry of `layout.shortcuts`. `shortcuts` is a list whose entries have
--- a unique id of at most Unlocks.MAX_ID_LENGTH bytes and finite numbers.
+-- a unique id of at most Unlocks.MAX_ID_LENGTH bytes, finite numbers and sizes above 0.
 local function reactProblems(layout: Types.LevelLayout, problem: (string) -> ()): ()
 	local ids: { [string]: boolean } = {}
 	local shortcuts: any = layout.shortcuts
@@ -972,6 +972,13 @@ local function reactProblems(layout: Types.LevelLayout, problem: (string) -> ())
 		for _, key in { "x", "y", "z", "sx", "sy", "sz" } do
 			if not isFinite(entry[key]) then
 				problem(`shortcut "{id}": {key} is {tostring(entry[key])}, not a number`)
+			end
+		end
+		-- Fix round s-m3: a box no root can stand in would never be found, and SecretFlow drops a
+		-- negative size without a word, so a typo is refused here instead.
+		for _, key in { "sx", "sy", "sz" } do
+			if isFinite(entry[key]) and entry[key] <= 0 then
+				problem(`shortcut "{id}": {key} is {entry[key]}, not a size above 0`)
 			end
 		end
 	end

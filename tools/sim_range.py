@@ -5422,8 +5422,9 @@ SHORTCUT_ID_MAX = unlocks_cap("MAX_ID_LENGTH")
 
 def react_problems(layout, problem):
     """StageFlow.reactProblems (L2-34, L2-36), after the secrets: `shortcuts` is a list whose
-    entries have a unique id of at most Unlocks.MAX_ID_LENGTH bytes and finite x, y, z, sx, sy, sz;
-    a block's `react` is "fire" or "ice" and the block collides; its `opens` names a shortcut."""
+    entries have a unique id of at most Unlocks.MAX_ID_LENGTH bytes and finite x, y, z, sx, sy, sz,
+    the sizes above 0 (the L2 W2 fix round's s-m3); a block's `react` is "fire" or "ice" and the
+    block collides; its `opens` names a shortcut."""
     ids = set()
     shortcuts = layout.get("shortcuts")
     if shortcuts is not None and not isinstance(shortcuts, list):
@@ -5440,6 +5441,9 @@ def react_problems(layout, problem):
         for key in ("x", "y", "z", "sx", "sy", "sz"):
             if not finite(entry.get(key)):
                 problem(f'shortcut "{sid}": {key} is {entry.get(key)}, not a number')
+        for key in ("sx", "sy", "sz"):
+            if finite(entry.get(key)) and entry[key] <= 0:
+                problem(f'shortcut "{sid}": {key} is {entry[key]:g}, not a size above 0')
     blocks = layout.get("blocks")
     if not isinstance(blocks, list):
         return
@@ -7732,6 +7736,57 @@ class LevelRun(ThreatRun):
         sc["arrived"] = t + sc["travel"]
         sc["paidPull"] = dict(self.wallet)
 
+    def sniper_idle(self):
+        """How long the sniper waits with no hit landing before he goes: SNIPER_IDLE_SECONDS, and the
+        fire family's whole cooldown more when he carries it (d-m4: he waits for his next cast)."""
+        if not self.policy.get("breath"):
+            return SNIPER_IDLE_SECONDS
+        ab = self.cfg["weapons"][self.policy["breath"]]["ability"]
+        return SNIPER_IDLE_SECONDS + ab["cooldownSeconds"] * self.cfg["abilities"]["cooldownScale"]
+
+    def breath_step(self, t):
+        """The L2 W2 fix round's d-m4: the sniper also carries the fire family (`breath`) and casts
+        its ability (Dragon's Breath, the Slug Burst launcher: cones from the muzzle that no wall
+        stops, L2-29) at the nearest living body its cones reach on the flat, the moment it is ready
+        and he is not busy. Every tick of the cast lands at once (the most it can take before a
+        knock moves a body), the busy window locks his bow, and every kill (his bow's or the
+        cones') refunds it down to its floor, as AbilityService does for both slots."""
+        family = self.policy["breath"]
+        ab = self.cfg["weapons"][family]["ability"]
+        g = lambda key, default=0: ab.get(key, default) if ab.get(key) is not None else default  # noqa: E731
+        scale = self.cfg["abilities"]["cooldownScale"]
+        sc = self.scene
+        state = sc.setdefault("breath", {"ready": 0.0, "floor": 0.0, "kills": sum(self.killed.values()), "casts": 0,
+                                         "hits": 0})
+        kills = sum(self.killed.values())
+        if kills > state["kills"] and state["ready"] > t:
+            state["ready"] = max(state["floor"], state["ready"] - g("killRefundSeconds") * scale * (kills - state["kills"]))
+        state["kills"] = kills
+        if t < state["ready"] - THREAT_EPS or t < self.busy_until - THREAT_EPS:
+            return
+        live = [e for e in self.fighters if e.alive
+                and math.hypot(e.x - self.x, e.z - self.z) <= g("range") + g("pad") + e.r]
+        if not live:
+            return
+        target = min(live, key=lambda e: (e.x - self.x) ** 2 + (e.z - self.z) ** 2)
+        gap = math.hypot(target.x - self.x, target.z - self.z)
+        face = ((target.x - self.x) / gap, 0.0, (target.z - self.z) / gap) if gap > EPSILON else (1.0, 0.0, 0.0)
+        count = count_of(g("count"), 0)
+        self.world.now = t
+        self.world.scale = self.cast_scale
+        self.world.blow = (self.x, self.z, g("knockback"), g("launch"))
+        for _ in range(count):
+            tally = strike(self.world, self.cfg, {"shape": "cone", "origin": (self.x, chest_height(self.cfg), self.z),
+                                                  "direction": face, "size": g("range"), "arcDegrees": g("arcDegrees"),
+                                                  "pad": g("pad"), "cap": g("cap"), "damage": g("damage")})
+            state["hits"] += tally.hits
+        self.world.blow = None
+        self.world.scale = self.hit_scale
+        state["casts"] += 1
+        base = g("cooldownSeconds") * scale
+        state["ready"], state["floor"] = t + base, t + min(g("minCooldownSeconds") * scale, base)
+        self.busy_until = t + count * g("tickSeconds")
+
     def place_scene(self, x, z, y):
         self.x, self.z, self.ground = x + self.jitter[0], z + self.jitter[1], y
         self.anchor = (self.x, self.z)
@@ -7838,14 +7893,16 @@ class LevelRun(ThreatRun):
             elif sc["phase"] == "travel" and t >= sc["arrived"]:
                 sc["phase"] = "spot"
             elif sc["phase"] == "spot" and (t >= sc["arrived"] + SNIPER_SPOT_SECONDS or not self.residents_left(sc["floor"])
-                                            or t - max(self.last_landed or 0.0, sc["arrived"]) >= SNIPER_IDLE_SECONDS):
+                                            or t - max(self.last_landed or 0.0, sc["arrived"]) >= self.sniper_idle()):
                 sc["lastLanded"] = self.last_landed
-                sc["minutes"] = max(self.last_landed or 0.0, sc["arrived"] + SNIPER_IDLE_SECONDS) / 60
+                sc["minutes"] = max(self.last_landed or 0.0, sc["arrived"] + self.sniper_idle()) / 60
                 self.end("stopped", t)
             if sc["phase"] == "spot":
                 for group in self.groups:
                     if group["def"]["floor"] == sc["floor"] and group["standDown"] and group["state"] == "fight":
                         sc.setdefault("stoodDown", t)
+                if self.policy.get("breath") and self.end_reason is None:
+                    self.breath_step(t)
             return
         if sc["kind"] in ("walkout", "lose"):
             if sc["exited"] is None and self.x > cx + hx:
@@ -9128,11 +9185,29 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
 
     def cut_snipers(view, hp, difficulty):
         """L2-37: the straight sniper course from every spot the open tunnel adds, on its blocks
-        (the course starts by the camp's gate on the main route, as R8's does)."""
+        (the course starts by the camp's gate on the main route, as R8's does). The fix round's
+        d-m4: from each such spot also the course that carries the fire family and casts its
+        ability (breath_step) besides the bow, from the spot's own point and, when it differs, from
+        its point nearest the region seen or not (behind a wall: the cones pass through); its rows
+        are the spot's id and the ability's name."""
         snipe = {**cut, "route": layout["route"]}
-        return {spot["id"]: [LevelRun(view, hp, ctx, level, snipe, difficulty,
-                                      dict(THREAT_POLICIES["sniper"], weapon=(bow, None), spot=spot), seed).run()
-                             for seed in MISSION_SEEDS] for spot in report["cutSpots"]}
+        found = {}
+        for spot in report["cutSpots"]:
+            found[spot["id"]] = [LevelRun(view, hp, ctx, level, snipe, difficulty,
+                                          dict(THREAT_POLICIES["sniper"], weapon=(bow, None), spot=spot), seed).run()
+                                 for seed in MISSION_SEEDS]
+            if flame is None:
+                continue
+            ability = cfg["weapons"][flame]["ability"]["name"]
+            stands = [(f"{spot['id']} + {ability}", spot)]
+            if spot.get("near") is not None and tuple(spot["near"]) != tuple(spot["at"]):
+                stands.append((f"{spot['id']} + {ability}, nearest point", dict(spot, at=spot["near"])))
+            for key, stand in stands:
+                found[key] = [LevelRun(view, hp, ctx, level, snipe, difficulty,
+                                       dict(THREAT_POLICIES["sniper"], weapon=(bow, None), spot=stand, breath=flame),
+                                       seed).run()
+                              for seed in MISSION_SEEDS]
+        return found
 
     for difficulty in ctx["expeditions"]["difficulties"]:
         scales = level["difficulties"].get(difficulty)

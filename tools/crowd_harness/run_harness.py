@@ -28,7 +28,9 @@ once for both callers) and scopes the ground-point source check to the two funct
 L2 W2 adds the pure WorldReact (a strike's segment against a reactive block, the heat) and
 tests_l2w2.luau: Unlocks' owned families, element keys and set-family verdict, WorldReact,
 SecretFlow's shortcuts, LevelGeometry.Pieces' open set, Validate's react, opens and shortcuts
-lines, and a family's element as a structural Tuning path.
+lines, and a family's element as a structural Tuning path. Its fix round adds WorldReact's
+StrikeElement, Apply and Wants, and reads as text the lines that act on them (Main's wiring,
+finish()'s abandoned skip, LevelService.React) and aimAllowed's wall ray (`source.wiring`).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -195,6 +197,30 @@ GROUND_POINT_BODY = {
     "client": re.compile(r"(?ms)^local function groundPoint\(.*?^end$"),
     "server": re.compile(r"(?ms)^function WeaponService\.GroundPoint\(.*?^end$"),
 }
+# The L2 W2 fix round's s-m1, s-m2 and d-m3: the service lines that act on WorldReact's and the
+# aim rule's verdicts, read as text (none of these files loads here). Main wires the strike
+# listener once; finish() tells the listeners only inside its `if not fx.abandoned` block;
+# LevelService.React takes its element from WorldReact.StrikeElement (with the ability id, so an
+# ability's strike burns nothing) and hands the loop to WorldReact.Apply, with no loop of its
+# own; aimAllowed casts the ray from the head to the origin and back and answers with
+# WorldReact.OriginClear's verdict on them.
+MAIN_SERVER = "src/combat/server/Main.server.luau"
+LEVEL_SERVICE = "src/combat/server/Services/LevelService.luau"
+# A live line at the top level of Main (a commented-out one does not count).
+REACT_WIRING = re.compile(r"(?m)^WeaponService\.OnStrikeResolved\(LevelService\.React\)[ \t]*$")
+FINISH_BODY = re.compile(r"(?ms)^local function finish\(.*?^end$")
+FINISH_GUARDED = re.compile(r"(?s)\n\tif not fx\.abandoned then\n(?:(?!\n\tend\n).)*?\bstate\.strikeListeners\b")
+REACT_BODY = re.compile(r"(?ms)^function LevelService\.React\(.*?^end$")
+REACT_ELEMENT = "local element = WorldReact.StrikeElement(config.weapons, weapon, abilityId)"
+REACT_APPLY = "WorldReact.Apply(cells, element, fx, pad, need)"
+REACT_OWN_LOOP = re.compile(r"\bWorldReact\.(?:Touches|Heat)\(|\.react\s*[~=]=")
+AIM_BODY = re.compile(r"(?ms)^local function aimAllowed\(.*?^end$")
+AIM_RAYS = (
+    "local forward = workspace:Raycast(anchor, offset, params)",
+    "workspace:Raycast(origin, -offset, params)",
+    "local clear = WorldReact.OriginClear(",
+    "\treturn clear\n",
+)
 COMBAT_PROJECT = "combat.project.json"
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
@@ -233,7 +259,33 @@ def source_reading(repo: Path) -> dict:
             "parts": len(GROUND_PART_CALL.findall(source)),
             "reads": len(GROUND_INPUT_READ.findall(source)),
         }
-    return {"groundClient": client, "groundServer": server, "zoomCap": zoom, "groundFloor": ground_floor}
+    finish = FINISH_BODY.search(text(WEAPON_SERVICE))
+    finish_text = finish.group(0) if finish else ""
+    react = REACT_BODY.search(text(LEVEL_SERVICE))
+    react_text = react.group(0) if react else ""
+    aim = AIM_BODY.search(text(WEAPON_SERVICE))
+    aim_text = aim.group(0) if aim else ""
+    wiring = {
+        "main": len(REACT_WIRING.findall(text(MAIN_SERVER))),
+        "finishFound": finish is not None,
+        "finishListeners": finish_text.count("state.strikeListeners"),
+        "finishGuarded": FINISH_GUARDED.search(finish_text) is not None,
+        "reactFound": react is not None,
+        "reactElement": react_text.count(REACT_ELEMENT),
+        "reactApply": react_text.count(REACT_APPLY),
+        "reactOwnLoop": len(REACT_OWN_LOOP.findall(react_text)),
+        "aimFound": aim is not None,
+        # Each line of the rule once: the smallest and the largest count.
+        "aimRay": min(aim_text.count(line) for line in AIM_RAYS),
+        "aimRayMost": max(aim_text.count(line) for line in AIM_RAYS),
+    }
+    return {
+        "groundClient": client,
+        "groundServer": server,
+        "zoomCap": zoom,
+        "groundFloor": ground_floor,
+        "wiring": wiring,
+    }
 
 
 def sources(repo: Path) -> dict:
