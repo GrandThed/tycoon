@@ -15633,3 +15633,8 @@ then from the head led by the lag slack; check_levels keeps the tolerance under 
 Phone auto-fire also targets a reactive Part it can burn (`WorldReact.Wants`); ability strikes never burn
 (`WorldReact.StrikeElement`). Stream families take no bloom.
 The aim rule's lead goes along `PositionRing.Motion`'s way (the server's measure); the replicated velocity only shortens it (W2 fix 3, m1).
+
+# L2 W3 contracts — ice, the frost hammer, deep water and the island shrine
+
+Decisions: `docs/MISSIONS_DESIGN.md` §22 (W3 paragraph). Contract of record: `docs/prompts/l2-w3-contract.md`
+(rulings L2-48 onward, §13 Ben's answers and the lead's rulings), on branch `l2-w3`. No `Main.server.luau` change.

@@ -517,3 +517,8 @@ mouth under the lookout, a roofed tunnel behind a ridge past camp A with the Rai
 onto the road into Main Camp; once found, later runs skip the Pickets (~25 s on Normal, ~5% of the pay given
 up) **[Ben]**. The lobby weapon choice is kept **for this visit** only; L3 designs the saved loadout **[Ben]**.
 The 6-stud gap at the road's U-bend that players could hop is **closed now** **[Ben]**.
+
+**W3 decisions (2026-10-19, click questions with plans):** the frost hammer freezes **a patch per swing** (freeze
+your way across), the ice **lasts the whole run**, and the water is **the creek into a pond** with the island shrine
+in the pond, ~100 studs from any ground **[Ben]**. The water becomes deep (a fall comes back to the road by the
+creek). The shrine pays the most of the three chests.
