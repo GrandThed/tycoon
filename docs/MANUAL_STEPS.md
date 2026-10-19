@@ -2030,8 +2030,8 @@ feels right").
 
 **Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
 
-**Status 2026-10-19:** built, reviewed, three fix rounds, QA green on `l2-w2` + `l2-w2-fix2`.
-**Not merged yet.** Wait for the lead's word (step 0) before step 1.
+**Status 2026-10-19:** built, reviewed, three fix rounds, QA green; merged to `main` (`1ace3a4`).
+**Unplayed.** Run it as part of "L2 Wave 3" below, or alone.
 
 <!-- FILE TO OPEN: start. Lead: if L2 Wave 2 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -2046,10 +2046,10 @@ feels right").
 **Steps:**
 
 - [ ] 0. (Lead) Merge, rebuild, tell Ben.
-      - [ ] QA "other gates" line filled (PLAN "L2", Wave 2, QA).
-      - [ ] `l2-w2-fix2` and `l2-w2` merged to `main`; the six place files rebuilt.
+      - [x] QA "other gates" line filled (PLAN "L2", Wave 2, QA).
+      - [x] `l2-w2-fix2` and `l2-w2` merged to `main`; the six place files rebuilt (`1ace3a4`).
       - [ ] Ben told: "L2 Wave 2 is merged, Build all. If you haven't played L1c and Wave 1, start
-            with those."
+            with those." (May be folded into L2 Wave 3's step 0.)
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
 - [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
@@ -2065,6 +2065,64 @@ feels right").
   secrets and the tunnel, from the next run) and **V** (+10 Valor).
 - The Output line "[WeaponService] … a shot origin … refused" shows at most once per player. On
   an honest shot it is a bug; say which step.
+
+## L2 Wave 3
+
+**Studio only. Nothing to set up beyond opening the rebuilt file.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setup.
+- No game pass or developer product: the Frost Hammer is found in the Castle (a later level). In
+  Studio the **I** key gives it.
+- The deep water, the ice cells, the island and the shrine chest are grey blocks and Parts the
+  game builds from data; nothing to place or import.
+- The frost mist, ghost ice and quake shards are particles and Parts the game makes; nothing to
+  import.
+- Still silent (no audio step).
+- No profile schema step: v7 (Wave 1) already holds `families` and `secrets`.
+
+**Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds. In the
+live game nobody can open the Island Shrine until the Castle exists.
+
+**Status 2026-10-19:** built, reviewed, three fix rounds, QA green on `l2-w3` + `l2-w3-fix2`.
+**Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L2 Wave 3 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Wait for the lead's word first.** Before the merge, "Build all" gives Wave 2 (no hammer, the
+  water still solid).
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the key hint has **"I frost hammer"** in it.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] QA line filled (PLAN "L2", Wave 3, QA).
+      - [ ] `l2-w3-fix2` and `l2-w3` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L2 Wave 3 is merged, Build all. If you haven't played L1c, Wave 1 and
+            Wave 2, start with those."
+- [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
+- [ ] 4. Not played yet? First `docs/PLAYTEST.md` "L1c — the Chief's Clearing" (steps 1–8),
+      "L2 Wave 1 — Double Jump and the lookout" (steps 2–9), then "L2 Wave 2 — the Flamethrower
+      and the tunnel" (steps 1–12). Same file.
+- [ ] 5. Run `docs/PLAYTEST.md` "L2 Wave 3 — the frost hammer and the island shrine" (ten steps,
+      then an optional phone, two-player, lag and low-graphics check, then three click
+      questions).
+- [ ] 6. If you did the lag check: File (*Archivo*) → Studio Settings (*Configuración de
+      Studio*) → **Network** (*Red*) → **Incoming Replication Lag** back to **0**.
+- [ ] 7. Close Studio without saving `proving.rbxl`. Tell Claude when you are done.
+
+**Notes:**
+- **Every Play starts a fresh save** (Studio's mock store): no hammer, no Double Jump, no
+  Flamethrower, no secrets, no tunnel, no Valor. Use **I** (Frost Hammer), **J** (Double Jump),
+  **F** (Flamethrower), **H** (reset secrets and the tunnel, from the next run) and **V** (+10
+  Valor).
+- The ice resets with every run, not only with **H**.
+- Two Studio-only numbers to report if you meet them: the ice keeps stopping one patch short of
+  you while you stand on its edge (`levels.react.ice.sink`), or a slam drops you through a sheet
+  (`thickness` 1.9).
 
 ## M10 — Icon, store icons, thumbnails
 

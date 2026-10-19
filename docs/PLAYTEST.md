@@ -5290,7 +5290,7 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - **About 20 minutes. Keys only, no panel.** Grey blocks, no sound.
 
 **Status 2026-10-19:** built, reviewed (three slices: 0 Critical, 3 Major, 15 Minor; two fix-diff
-reviews: 0 / 0 / 3 + 1 and 0 / 0 / 1 + 2; all fixed), QA green. **Wait for the lead's merge word.**
+reviews: 0 / 0 / 3 + 1 and 0 / 0 / 1 + 2; all fixed), QA green. **Merged to `main` (`1ace3a4`); unplayed.**
 
 **Played Wave 1 and L1c yet? If not, do those first, in this same file:**
 1. "L1c — the Chief's Clearing" (above), steps 1–8.
@@ -5427,6 +5427,175 @@ Asked afterwards, as click questions:
 - **The cache's pay (4 Valor, 60 Timber):** too little / about right / too much.
 
 Also, if you have a view: is the tunnel too dark; anything wrong, by step number, PC or phone.
+
+## L2 Wave 3 — the frost hammer and the island shrine
+
+<!-- FILE TO OPEN: start. Lead: if L2 Wave 3 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Only after the lead says L2 Wave 3 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** the key hint on screen has **"I frost hammer"** in it.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** the Frost Hammer freezes the creek a patch per swing, and you walk the ice to the
+Island Shrine.
+- The Frost Hammer is a melee weapon. Each swing freezes the water just ahead of you.
+- The creek runs south from the bridge into a pond. The shrine stands on an island in the pond,
+  about 100 studs from any ground: no jump or dash reaches it.
+- The water is deep now. A fall brings you back onto the bridge by the creek.
+- In the real game the hammer is found in the Castle (a later level). Here **I** gives it to you.
+- **About 15 minutes. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-19:** built, reviewed (three slices: 0 Critical, 1 Major, 11 Minor; fix-diff:
+0 / 0 / 2 + 2; all fixed), QA green. **Wait for the lead's merge word.**
+
+**Played L1c, Wave 1 and Wave 2 yet? If not, do those first, in this same file:**
+1. "L1c — the Chief's Clearing" (above), steps 1–8.
+2. "L2 Wave 1 — Double Jump and the lookout" (above), steps 2–9.
+3. "L2 Wave 2 — the Flamethrower and the tunnel" (above), steps 1–12.
+- On this build the Armory's Melee column also shows a locked **Frost Hammer** card. Not a bug.
+
+Setup: `docs/MANUAL_STEPS.md` "L2 Wave 3".
+
+**Keys:**
+- **Enter** = Depart; **arrows** = level and difficulty; **M** = map.
+- **K** = Armory (lobby only).
+- **1** / **2** = melee / ranged; **left click** = attack; **Q** = melee ability; **E** = ranged
+  ability.
+- **Space** jump (twice = double jump); **Left Shift** dash; **C** in the air = ground slam.
+- **N** = next camp; **Backspace** twice = Abandon.
+- Studio only: **J** = Double Jump on / off; **F** = Flamethrower on / off; **I** = Frost Hammer
+  on / off; **H** = reset secrets and the tunnel; **V** = +10 Valor.
+
+**Studio resets your save every session.** Each Play starts with no hammer, no Double Jump, no
+secrets and no Valor. The ice resets with every run.
+
+**Where the water is:** from the start walk east: the first road, a gap you hop, then a long road
+(the **bridge**) over the **creek**. Just past the creek, on your right, a small pad with a sign:
+**"ISLAND SHRINE - needs ICE"**. The creek runs south from there into a wide **pond**. The
+shrine's light column stands on an island in the pond.
+
+### The run (no panel)
+
+- [ ] 1. **The Armory, before the hammer.** **Play.** In the lobby press **K** → **Weapons** tab.
+      - Melee: **Broadsword**, and **Frost Hammer** **locked**, with an **ICE** chip and the line
+        **"Found in the Castle"**. No Equip button.
+      - **K** closes it.
+      - Bug: the hammer can be equipped; no hammer card; it reads "Hidden on Forest Road".
+- [ ] 2. **Get it and equip it.** Press **I**: toast **"Frost Hammer is yours"**. Press **J** too
+      (Double Jump on: step 8 uses it).
+      - **K** → Weapons → **Equip** under Frost Hammer. The card turns **gold**; Broadsword is no
+        longer gold. **K** closes it.
+      - Bug: still locked after I; Equip does nothing.
+- [ ] 3. **A swing over water.** **Enter**, walk to the bridge. Stand on the bridge's **south
+      edge** over the creek (or on the sign pad's west edge), face the water, press **1**, click.
+      - On the click: the swing glows **pale blue** with frost mist, and see-through **ghost ice**
+        shows on the water ahead at once.
+      - A moment later **real ice** takes its place, with a glint. **No flicker** (never ice →
+        water → ice).
+      - Ice forms only **ahead** of you: about two rows (~13 studs) a swing.
+      - Bug: no ice; ice behind or beside you; the ghost blinks out before the real ice; ice
+        vanishes.
+- [ ] 4. **Freeze your way across.** Step onto the ice, swing again, walk on. Follow the creek
+      south into the pond and on to the island.
+      - About **9 swings**, about **10–15 s**.
+      - The ice **grips**: run and stop on it, no sliding.
+      - The ice stays: walk back over it, it is still there.
+      - Bug: you slide; you fall through ice; a gap you cannot freeze; the ice keeps stopping one
+        patch short of you.
+- [ ] 5. **Nothing freezes in the air.** At the ice's edge, **jump** toward open water and swing
+      in the air.
+      - No ghost, no ice. You fall in.
+      - You come back on the **bridge, by the creek**, in about a second.
+      - Bug: ice forms in the air or round your body; you land at the start or at a camp.
+- [ ] 6. **The shrine.** On the island, stand beside the chest (or on it). It opens **once**:
+      - a card above the crosshair: **"ISLAND SHRINE FOUND"**, **"+6 Valor"**, **"+60 Timber"**;
+      - the chest turns **gold** and the light column goes.
+      - Stand there again: nothing more.
+      - Bug: no card; it pays twice; it opens from the ice beside the island.
+- [ ] 7. **Falls come back to the creek.** Same run, on the frozen creek:
+      - **Walk** off its **side** (east or west) at full speed → back on the bridge by the creek.
+      - **Dash** off its side → the same place.
+      - Walk off the bridge's **north** side, right above the creek → the same place.
+      - Walk east along the bridge road to where it turns north, and keep walking **straight east**
+        off the edge → back at the **start** (or your last checkpoint), **not** by the creek.
+      - Bug: a creek fall lands at the start or a camp; the east-end fall lands by the creek; you
+        are stuck under the map.
+- [ ] 8. **Frost Quake and the slam.** On the bridge by the creek press **Q** (Frost Quake).
+      - **One wide ring** of ice round you (about 32 studs). Ice shards spring up only on
+        **ground**: the road, the bank, frozen ice. **None** in the air over open water or the
+        void.
+      - It freezes **no** water.
+      - Then on the ice: **double jump**, then **C** (ground slam). You land **on** the ice, never
+        through it.
+      - Bug: three small rings; shards floating over water; the quake freezes water; the slam
+        drops you through the ice.
+- [ ] 9. **Look for flicker** (camera close to the ice, then far away):
+      - the **pond's edges** and the creek's long sides;
+      - the island's **south face**: stand on the ice south of the island and look back north;
+      - the **mouth** where the creek meets the pond: no grey line across the ice, no shimmer
+        through the water.
+      - Bug: a face that flickers; a grey crack across the crossing at the mouth.
+- [ ] 10. **The map card, then reset.** **Backspace** twice, back to the lobby.
+      - The map card's third secret (**ICE**) is **gold with a check**.
+      - Press **H**, then **Enter** for a new run: the water is open again, the shrine's column is
+        back, the chest is grey. Freeze across once more: it pays again.
+      - **Backspace** twice. Close Studio without saving.
+      - Bug: the icon stays "?" after the chest; the chest stays gold after H.
+
+**Optional, not one of the ten:**
+- **Phone.** Test (*Prueba*) → Device (*Dispositivo*) → a 375×667 phone. Play, both ways:
+  landscape (**667×375**) and portrait (**375×667**).
+  - In the lobby: **Armory** → Weapons. The Frost Hammer card fits and "Found in the Castle" is
+    readable, no scrolling.
+  - Landscape: **I**, equip the hammer, **Enter**, walk to the creek.
+  - Stand on the sign pad's west edge facing the water: the hammer **swings by itself** and
+    freezes. Walk onto the ice facing south: it keeps swinging and freezing ahead.
+  - Walk the whole bridge with the camera along the road: it **never swings** at the creek beside
+    you.
+  - Hop at the ice's edge toward open water: **no swing in the air**, the jump is not cut short.
+  - Bug: it never swings at water; it swings while you walk the bridge; it swings mid-air.
+- **Two players.** Test (*Prueba*) → **Local Server** (*Servidor local*), **2 players**
+  (*2 jugadores*) → **Start** (*Iniciar*), in `proving.rbxl`.
+  - Player1: **I**, equip the hammer. Both walk to the creek.
+  - Player2 walks off the bank into the creek while Player1 swings at the water he falls into.
+    The water round Player2 stays water: he is **never trapped in ice** and comes back on the
+    bridge. The next swing freezes that spot.
+  - Player2 (no hammer) walks Player1's ice to the island: he can, but his chest says **"Needs
+    ICE"**. Press **I** in Player2's window: now it opens for him too.
+  - Bug: Player2 stuck inside ice; one player sees ice the other does not.
+- **Lag.** File (*Archivo*) → Studio Settings (*Configuración de Studio*) → **Network** (*Red*) →
+  **Incoming Replication Lag** = **0.2**. Play, equip the hammer.
+  - Swing at the ice's edge and keep walking onto your own ghost ice. You stand on the new ice or
+    fall back to the bridge; you **never stick** in ice.
+  - Set it back to **0** afterwards (it stays on for every place).
+- **Low graphics** (level 1–3): no frost mist and no motes, but the ghost ice and the glint still
+  show.
+
+### Not a bug (don't report these)
+
+- In the real game nobody can get the hammer until the Castle (a later level). **I** stands in
+  for that.
+- The ice lasts one run. Every new run starts with open water.
+- Frost Quake freezes nothing: only swings do.
+- On PC, a swing on the bridge facing the creek freezes a patch beside the bridge. (The phone
+  never auto-swings there.)
+- Two players: ghost ice can flash for a moment over a teammate who is falling in. The real ice
+  does not form there.
+- A friend who walks your ice still needs his own ice weapon to open the shrine (keys are per
+  player).
+- The hammer kills bosses a little slower than the Broadsword. On purpose.
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- **Does freezing your way across feel good?** Great / fine / too slow / too fiddly.
+- **The shrine's pay (6 Valor, 60 Timber):** too little / about right / too much.
+- **Does the hammer feel good as a weapon?** Great / fine / weak / too strong.
+
+Also, if you have a view: any flicker (where), anything wrong, by step number, PC or phone.
 
 ## M12 — Village growing city
 

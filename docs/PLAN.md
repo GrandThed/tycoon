@@ -2846,8 +2846,8 @@ families, abilities and the player's body go into the Expeditions missions, era 
 | Step | Scope | State |
 |---|---|---|
 | L0 | Pictures: the map, Forest Road's plan, the Armory | Done 2026-10-13 |
-| L1 | Forest Road in grey: lobby camp, map, three camp parts, stand-in boss, difficulties | **Built, reviewed and fixed 2026-10-13; merging after QA** |
-| L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | Not started |
+| L1 | Forest Road in grey: lobby camp, map, three camp parts, stand-in boss, difficulties | Merged 2026-10-14; L1b and L1c after it; closed 2026-10-16 on Ben's word |
+| L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | **W1–W3 built, reviewed, QA green (2026-10-17 → 19); W1, W2 merged, W3 waits for the merge; Ben's looks pending** |
 | L3 | The Armory: per-weapon tiers, the profile shape, weapon models | Not started |
 | L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | Not started |
 | L5 | Friends: parties and revive in a level | Not started |
@@ -4072,15 +4072,173 @@ tools 0 / 1 / 4). All fixed or ruled:
 - [x] Fix round (`78463a0`)
 - [x] Fix-diff review 0 / 0 / 3 + 1, fixed (`aca232d`)
 - [x] Second fix-diff review 0 / 0 / 1 + 2, fixed (`21205da`)
-- [ ] QA: other gates line (lead)
-- [ ] Merged to `main`, six place files rebuilt (lead)
+- [x] QA: other gates line (lead)
+- [x] Merged to `main`, six place files rebuilt (lead, `1ace3a4`)
 - [ ] L2 Wave 2 playtest (Ben)
 
-### Wave 3 — ice, the frost hammer and the creek (after W2)
+### Wave 3 — ice, the frost hammer, deep water and the island shrine (2026-10-19)
 
-- The **frost hammer**, a melee family whose swings freeze the water in front of you.
-- Deep water (a fall gets the free rescue); the pond grows so the Island Shrine needs ice.
-- Built now, found later: locked in the game until the Castle, testable in Studio through a lever.
+**Documents:**
+- Ben's W3 decisions (2026-10-19): `docs/MISSIONS_DESIGN.md` §22, "W3 decisions".
+- Contract: `docs/prompts/l2-w3-contract.md` (rulings L2-49 to L2-68; Ben's answers and lead's rulings §13,
+  lead's rulings after the build §14). INTERFACES "# L2 W3 contracts" with its as-built notes.
+- Fix rounds: `docs/prompts/l2-w3-fix-round.md`, `l2-w3-fix2.md`, `l2-w3-fix3.md`.
+- Reports: `docs/prompts/l2-w3-reports/`. Findings: `docs/prompts/l2-w3-review/` (`server.md`, `client.md`,
+  `data-tools.md`, `fix-diff.md`).
+- Values: `docs/BALANCE.md` "L2 W3", "L2 W3 fix round", "L2 W3 third fix round".
+- Branch `l2-w3` (worktree `tycoon-p5`); fixes 2 and 3 on `l2-w3-fix2` (worktree `tycoon-p5b`).
+
+**Ben's picks (2026-10-19, click questions with plans):**
+- **A patch per swing:** you freeze your way across (not the whole water in one swing).
+- **The ice lasts the whole run** (no melting).
+- **The creek into a pond** (option A): the shrine on an island in the pond, ~100 studs from any ground. The lake
+  (option B) and melting are dropped.
+
+**What shipped:**
+- **The Frost Hammer** (`weapons.frostHammer`, melee, era 1, `element = "ice"`, one variant "Frost swing").
+  - Arc swing: 9 studs, 120°, 38 damage, 1.55 a second, chain 1 / 1 / 1.8. Only the finisher is heavy (breaks
+    plates).
+  - **Frost Quake** (Q): the Earthquake launcher, **one ring of radius 32**, 30 damage; cooldown 12 s, floor 5 s.
+    Its shards are spaced round the ring and stand only where there is floor.
+  - Abilities never freeze. Only swings do.
+  - Visuals: a pale-blue hitbox, a frost puff (`FrostFx`), `AbilityFx/FrostQuake`. Low-end devices skip the
+    particles (`lowEndDevice`, never `reducedMotion`). No sound.
+  - The designer moved the contract's numbers (36 / 1.5 a second / 140°; quake 3 rings × 50) to keep the hammer
+    slower than the Broadsword on both bosses; the lead accepted (§14).
+- **Found later.** `Expeditions.json found.frostHammer` = node `castle`, "Found in the Castle". Nothing pays it
+  yet; only the Studio lever grants it. The Armory lists it locked, with an ICE chip and that line.
+- **Deep water.** `CreekUp` (under the bridge), `Creek` and `Pond` no longer collide. A block with
+  `react = "ice"` must not collide, and two ice blocks may touch but not overlap (Validate both sides, mirrored).
+- **Ice cells, built with the level** (no Part made mid-run): `Combat.json levels.react.ice` = cell 7, lift 0.2,
+  thickness 1.9, reachDown 6, ahead 4, inset 0.05, sink 0.5.
+  - 136 invisible cells; 252 Parts of 600.
+  - A frozen cell shows the Ice look, collides, meets rays and the camera, and **keeps ground grip** (no slide).
+  - Edge faces on open water are inset 0.05; where two ice blocks meet (the creek's mouth) they are not.
+- **What a swing freezes** (pure `WorldReact.Chills` / `Freeze`; the server, the phone and the ghost all build
+  the strike with one `WorldReact.SwingStrike`):
+  - an ice-family swing on the ground; a cell whose top is within 6 under the swing and whose centre is inside
+    the arc grown 4 ahead: about two rows (~13 studs) a swing;
+  - **never** a swing in the air, and **never** a cell a player's body is in (a falling body is led by its fall
+    over the lag).
+  - The ice is shared by the party and lasts the run. A new run starts with open water.
+- **Falls come back to the creek** (`StageFlow.Landing` / `FallLanding`).
+  - Any deep block may carry a `landing`. Creek, Pond and CreekUp land on Road2 by the creek.
+  - A fall is judged by where the body last stood (`WeaponService.LastGround`) and by where it is now, so a
+    walk-off (~9 studs out) or a dash-off (~29 out) still lands by the creek.
+  - Elsewhere, and in a closed camp's fight or breather, the last checkpoint as before.
+- **The layout** (`Layouts/Levels/ForestRoad.json`): the creek runs south from the bridge into a 72 × 60 pond;
+  `ShrineIsland` 16 × 16 at (−400, 128.5), off the cell grid lines; the chest 6 × 4 × 6 on it. The main path
+  never touches water: a one-jump first run is unchanged.
+- **The Island Shrine chest** (key ICE): **+6 Valor, +60 Timber**, the biggest of the three.
+- **Phones:**
+  - Auto-swing at unfrozen water ahead, in a narrower cone (`controls.iceAutoDegrees` 34), so walking the bridge
+    never swings at the creek beside it.
+  - Never in the air (it asks the server's `AirSwing.Judge`); a body in the swing still decides first.
+  - The water test caches every cell and returns at once away from the ice (270–300 µs → 0.3 µs a frame).
+- **Feel:** a predicted ghost of ice on the press frame, held by the swing's seq until the server answers (a
+  refusal drops it at once); a glint and frost motes on `"frozen"`.
+- **Studio levers** (both entry points; inert outside Studio and in the range): **I** toggles the Frost Hammer
+  (`grantFamily` / `removeFamily`, attributes `DebugGrantFamily`, `DebugRemoveFamily`); DebugPanel "Frost Hammer:
+  ON/off (I)". **H** resets the shrine with the other secrets; the ice resets with every run.
+- **Gates:**
+  - `check_levels.py`: deep water; (g) the island out of reach without ice (worst means 80.6 studs, Impale Dash
+    held in the air; the island 102.5 away; margin +22 over `ICE_MARGIN` 15); (h) the frozen layout (island
+    reached, chest opens from it only, a 16-cell chain a swing always extends, no new perch, bend, cave or
+    walled-camp leak); the fall line; the fill line; overlap; coplanar faces; the sheet bounds
+    (0.685 < thickness < root 2).
+  - `check_levels_mutants`; harness suite `tests_l2w3.luau`; `check_stage_mirror` compares ice boxes one by one
+    (9 views); `sim_range` hammer rows, L2-39, the pair and the crossing.
+
+**Commits:**
+- Brief `eba729a`; contract and Ben's answers `cd9c754`. Build `5ae3912`.
+- Lead rulings and review brief `6db63ae`; findings and fix-round rulings `8112ff3`. Fix round `5b8af9e`.
+- Second fix-round rulings `62da82a`; fix 2 `25528b7`.
+- Fix-diff review: `429a448` brief, `c3106d2` findings and third rulings. Fix 3 `3cfabac`.
+- Plus this docs commit.
+
+**First review: three Opus slices, 0 Critical, 1 Major, 11 Minor, 8 Suggestions** (server 0 / 1 / 1 + 3, client
+0 / 0 / 4 + 2, data and tools 0 / 0 / 6 + 3), plus four items the lead queued (Q1–Q4). All fixed:
+- **s-M1:** a walk-off the frozen creek's side carried the body ~9 studs out, past the 4-stud margin, so the
+  player went back to camp A's checkpoint → falls are judged by where the body last stood.
+- **Q1–Q4:** phone auto-swing in a narrower cone; frozen ice grips; any deep water may land (CreekUp too); Frost
+  Quake draws its one ring.
+- Server: the ice-applying lines under the harness (pure helpers, source checks); ice blocks touch, never
+  overlap; one `Ice` attribute name (`WorldReact.ICE_ATTRIBUTE`).
+- Client: the phone scanned every cell every frame → cached cells; ghosts follow the swing's answer, not a
+  clock; one `SwingStrike` for the server and all three client copies; no auto-swing in the air; quake shards
+  by circumference, dropped where there is no floor.
+- Data and tools: two slits beside the island could never freeze → a cell is skipped only when one cover holds
+  all of it, plus a fill gate; hammer targets set to the measured rows; Leap Smash's fall term; a walk-off grace
+  mutant; the frozen layout through the bend, cave and walled-camp rules; the shrine pays 60 Timber (was 63).
+- Known limit (s-s1): water cover is judged by a block's top, and camp pieces never cover water. Nothing on
+  Forest Road is affected.
+
+**Second fix round (lead's rulings from the fix round's Studio risks):**
+- **Q5:** a swing in the air, or onto a cell a body stands in, freezes nothing (server, ghost and phone).
+- **Q6:** edge cells inset 0.05 from the water's faces (against shimmer), mirrored box by box.
+
+**Fix-diff review: 0 Critical, 0 Major, 2 Minor, 2 Suggestions.** All fixed in fix 3:
+- **fd-m1:** the island's faces lay on the pond's row lines, so frozen cell faces sat on its faces (flicker) →
+  island at z 128.5; a coplanar-face gate.
+- **fd-m2:** a 4-deep sheet could close round a teammate falling in at a real ping → thickness 1.9, a sheet-bound
+  gate, and the server leads a falling body by its fall over the commit lag.
+- **fd-s1:** the phone's air test asks the server's question (`AirSwing.Judge`).
+- **fd-s2:** no inset where two ice blocks meet (no grey seam at the creek's mouth).
+
+**Balance (BALANCE "L2 W3"), Normal 2 / 2:**
+- Frost Hammer, range tier 1: single 75, crowd6 439 (the targets). Colossus 83.2–84.9 s, Warlord 102.9–107.1 s,
+  against the Broadsword's 75–77 / 97–98; Frost Quake does not make it faster. 0 hits taken.
+  - L2-39 margins are tight (Warlord +2.9 s): any hammer number change re-runs the boss rows.
+- Forest Road, Frost Hammer + Longbow: **4.46 / 4.69 / 4.43 min**, 0 downs; cash a minute ×0.95 of the
+  Broadsword pair; its Colossus ×1.07.
+- The crossing: **9 swings, 109 studs, 39 cells**. 9.0 s at a human pace (band 8–20 s); 5.8 s ideal, under the
+  band (the lead judges the human pace, §14).
+- The chest: 60 Timber = 28% of a first clear's 211, plus 6 Valor (held under Double Jump's 10).
+- R8: the frozen Creek joins the frozen sniper lists only; it earns 0 on Normal and Hard.
+  `SNIPER_KNOWN_LIMIT_L4` unchanged.
+
+**QA:**
+- full mutate on 5b8af9e: 1,106 run, 0 not caught; all 19 gates PASS; fix rounds 2–3 filtered (308 and 337 run,
+  0 not caught; 1,189 entries, 0 stale; mirror mutants 119/119)
+- After fix 3: harness PASS (3,154 checks); `check_levels`, `check_levels_mutants --only W3` (92 data and 7
+  mirror cases), `check_stage_mirror` (9 views), `sim_range --check` (64-bit), `check_compile` (174 files),
+  stylua, selene, luau-lsp (both sourcemaps), rojo build: green.
+- `gen_asset_manifest.py --check`: PASS (no asset change).
+
+**Carried (owners):**
+- **ui-engineer:** the frost ghost judges teammates without the fall lead, so for a teammate mid-fall it can show
+  ice the server holds back for a moment; it drops at the answer's grace.
+- **lead + economy-designer (Castle level):** the hammer is lever-only until the Castle. `found.frostHammer` names
+  the map node `castle`; the Castle must pay it (a secret or a clear).
+- **lead → Ben:** the Island Shrine cannot be opened in the live game until the Castle exists (the publish freeze
+  holds anyway).
+- **lead + luau-engineer (L5):** a guest without an ice weapon can walk the leader's ice but meets "Needs ICE" at
+  the chest (keys are per player).
+- **lead, Studio only:** shimmer on the ice's outer faces; the 0.05 notch where Pond columns 3 and 7 meet the
+  creek over 0.18 studs; ice grip under a Humanoid; the 0.5 sink (if the ice stops one cell ahead of a player on
+  its edge, raise it); a slam onto the 1.9 sheet; the phone on the bank's very lip.
+- **luau-engineer:** a body's last standing frame cannot be led; off the frozen edge at a 0.15 s round trip up to
+  0.21 of a root can lie inside a fresh sheet (never all of it).
+- **economy-designer:** the full `check_levels_mutants` run is now ~2 h 10 min (the frozen-layout rules).
+- Every W2, W1, L1c and L1b carried item above stands. **Publish freeze (lead):** no Expeditions publish from
+  `main` until L4.
+- **L2 is complete**, pending Ben's looks at W1, W2 and W3 (and L1c). **Next: L3 (the Armory)**, only on Ben's
+  word.
+
+**Next:**
+1. The lead merges `l2-w3-fix2` and `l2-w3` to `main` and rebuilds the six place files.
+2. **Ben's look:** `docs/PLAYTEST.md` "L2 Wave 3 — the frost hammer and the island shrine" (L1c, W1 and W2
+   first if unplayed); setup `docs/MANUAL_STEPS.md` "L2 Wave 3".
+3. Then L3 (the Armory), only on Ben's word.
+
+- [x] W3 built (`5ae3912`)
+- [x] Reviewed: three slices, 0 / 1 / 11 + 8, plus Q1–Q4 (`8112ff3`)
+- [x] Fix round (`5b8af9e`)
+- [x] Second fix round, Q5 + Q6 (`25528b7`)
+- [x] Fix-diff review 0 / 0 / 2 + 2, fixed (`3cfabac`)
+- [x] QA: full mutate on `5b8af9e`, all 19 gates; fix rounds 2–3 filtered
+- [ ] Merged to `main`, six place files rebuilt (lead)
+- [ ] L2 Wave 3 playtest (Ben)
 
 ## M12 — Growing city
 
