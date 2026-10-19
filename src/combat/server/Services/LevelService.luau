@@ -39,7 +39,10 @@
 -- the Ice look, not the Ice material's slide. The second fix round's Q5: freeze hands Freeze every
 -- player's body (WorldReact.BodyBox of its root and Humanoid, read here and nowhere else on the
 -- server), so a cell a body stands in stays water; the strike itself says whether it was swung in
--- the air (WeaponService sets `airborne`, Chills refuses it).
+-- the air (WeaponService sets `airborne`, Chills refuses it). The third fix round's fd-m2: a body
+-- the air tracking found off its floor is judged with its feet led by its fall over its commit lag
+-- (WeaponService.FallSpeed, Tuning.CommitLag, WorldReact.FallDrop): the server's copy trails that
+-- player's screen, where a cell frozen now turns solid a round trip later.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -53,6 +56,7 @@ local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local BarrierGroups = require(script.Parent:WaitForChild("BarrierGroups"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
+local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
 
 type Looks = { [string]: Types.LevelLook }
 -- What SetCamp changes of one camp. Every camp of the level has one.
@@ -650,9 +654,15 @@ function LevelService.OnReacted(callback: (Reacted) -> ()): ()
 end
 
 -- The second fix round's Q5: every player's body now (the server's copy), as WorldReact.BodyBox
--- reads it. A character with no root Part or no Humanoid has none.
+-- reads it. A character with no root Part or no Humanoid has none. The third fix round's fd-m2: a
+-- body the air tracking last found off its floor (WeaponService.FallSpeed) reaches down as far as
+-- it falls over its commit lag (that player's ping and the allowance, under the ceiling, as the
+-- claim slack excuses), at its measured speed capped at the fastest legal move and under this
+-- place's gravity. A standing body is not led: its feet are where it stands.
 local function bodies(): { WorldReact.Box }
 	local found: { WorldReact.Box } = {}
+	local config = Tuning.Get()
+	local fastest = Tuning.FastestMove(config)
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
 		if character == nil then
@@ -661,13 +671,19 @@ local function bodies(): { WorldReact.Box }
 		local root = character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if root ~= nil and root:IsA("BasePart") and humanoid ~= nil then
+			local fall = WeaponService.FallSpeed(player)
+			local lag = Tuning.CommitLag(config.shooting, player:GetNetworkPing())
+			local drop = if fall ~= nil
+				then WorldReact.FallDrop(fall, lag, Workspace.Gravity, fastest)
+				else 0
 			table.insert(
 				found,
 				WorldReact.BodyBox(
 					root.Position,
 					root.CFrame.RightVector,
 					root.Size,
-					humanoid.HipHeight
+					humanoid.HipHeight,
+					drop
 				)
 			)
 		end

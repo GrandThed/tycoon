@@ -318,7 +318,7 @@
 			"react": "ice",
 			"landing": { "x": -385, "y": 0, "z": 2 }
 		},
-		{ "name": "ShrineIsland", "look": "ground", "x": -400, "y": -2, "z": 128, "sx": 16, "sy": 4, "sz": 16 },
+		{ "name": "ShrineIsland", "look": "ground", "x": -400, "y": -2, "z": 128.5, "sx": 16, "sy": 4, "sz": 16 },
 		{ "name": "ShrineSignPad", "look": "path", "x": -385, "y": -2, "z": 13, "sx": 10, "sy": 4, "sz": 10 },
 		{ "name": "Road3", "look": "path", "x": -348, "y": -2, "z": -22, "sx": 16, "sy": 4, "sz": 60 },
 		{ "name": "Road4", "look": "path", "x": -329, "y": -2, "z": -44, "sx": 54, "sy": 4, "sz": 16 },

@@ -184,6 +184,11 @@ type Shooter = {
 	-- footprint's floor within the standing band, SwingGate.IsAir); nil after a server move or
 	-- for a fresh body. The rescue lands a fall by it (LastGround).
 	stood: Vector3?,
+	-- The L2 W3 third fix round's fd-m2: how fast this body fell on the last sample (studs/s,
+	-- downward positive, at least 0) when that sample found it off its footprint's floor; nil
+	-- while it stood, after a server move and for a fresh body. LevelService leads its feet by
+	-- it before an ice cell is judged (FallSpeed).
+	fall: number?,
 	-- Server-only: draws every pattern seed, so a client can neither pick nor predict one.
 	seedRandom: Random,
 	damageLog: { DamageEntry },
@@ -1932,6 +1937,7 @@ local function trackAir(now: number, deltaTime: number): ()
 			shooter.airborne = false
 			shooter.lastY = nil
 			shooter.stood = nil
+			shooter.fall = nil
 			PositionRing.Clear(shooter.history)
 			continue
 		end
@@ -1962,6 +1968,9 @@ local function trackAir(now: number, deltaTime: number): ()
 			fallSpeed = math.max(fallSpeed, (previousY - y) / deltaTime)
 		end
 		shooter.lastY = y
+		-- The third fix round's fd-m2: a body this sample did not find standing (where it stood is
+		-- not where it is) is falling at the speed measured here, the slam's own.
+		shooter.fall = if shooter.stood == position then nil else math.max(fallSpeed, 0)
 		if airborne then
 			if shooter.airborne then
 				shooter.peakY = math.max(shooter.peakY, y)
@@ -1991,6 +2000,7 @@ local function resetAir(shooter: Shooter): ()
 	shooter.lastDiveSpeed = 0
 	shooter.lastY = nil
 	shooter.stood = nil
+	shooter.fall = nil
 	shooter.airSwing = SwingGate.New()
 	PositionRing.Clear(shooter.history)
 end
@@ -2146,6 +2156,7 @@ function WeaponService.AddPlayer(player: Player): ()
 		lastDiveSpeed = 0,
 		lastY = nil,
 		stood = nil,
+		fall = nil,
 		seedRandom = Random.new(),
 		damageLog = {},
 		lastHits = 0,
@@ -2243,13 +2254,15 @@ end
 -- the jump is not the player's motion, and left in the position ring it would read as up to
 -- originLagMaxSeconds of capped claim slack. Clears that history, and (the L2 W3 fix round's
 -- s-M1) where the body last stood, which is not where it now is: a fall before it stands again
--- is judged by where it is. A fresh character needs no call: PrepareCharacter already clears
--- both. No-op for a player without weapons, and so before any player has been added.
+-- is judged by where it is; and (the third fix round's fd-m2) its fall speed, until the next
+-- sample measures it where it was put. A fresh character needs no call: PrepareCharacter already
+-- clears them. No-op for a player without weapons, and so before any player has been added.
 function WeaponService.ForgetMotion(player: Player): ()
 	local shooter = state.shooters[player]
 	if shooter ~= nil then
 		PositionRing.Clear(shooter.history)
 		shooter.stood = nil
+		shooter.fall = nil
 	end
 end
 
@@ -2259,6 +2272,16 @@ end
 function WeaponService.LastGround(player: Player): Vector3?
 	local shooter = state.shooters[player]
 	return if shooter ~= nil then shooter.stood else nil
+end
+
+-- The L2 W3 third fix round's fd-m2: how fast `player`'s body was falling when the air tracking
+-- last sampled it off its footprint's floor (studs/s, downward positive, at least 0: the larger
+-- of its replicated velocity and its position's change, as the slam reads it); nil while it
+-- stood, and for a player without weapons, a fresh body or one the server just moved. LevelService
+-- leads a falling body's feet by it before it judges an ice cell (WorldReact.FallDrop).
+function WeaponService.FallSpeed(player: Player): number?
+	local shooter = state.shooters[player]
+	return if shooter ~= nil then shooter.fall else nil
 end
 
 -- Every live projectile ends where it is (an empty end strike, so clients stop their flights):

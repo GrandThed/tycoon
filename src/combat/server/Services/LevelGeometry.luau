@@ -34,7 +34,8 @@ export type Bounds = {
 export type Size = { sx: number, sy: number, sz: number }
 -- L2-53: how an ice block's cells are built (Combat.json levels.react.ice): about `cell` studs
 -- square, `thickness` deep, the top `lift` over the water's top; the second fix round's Q6: the
--- faces that lie on the block's own faces `inset` studs inside them.
+-- faces that lie on the block's own faces `inset` studs inside them (the third fix round's fd-s2:
+-- but where another ice block meets them).
 export type IceSize = { cell: number, lift: number, thickness: number, inset: number }
 -- What a layout does not say and the config does: the fence's thickness and how deep the ground
 -- is (Combat.json levels.fenceThickness, levels.floorThickness; a camp's own fence.thickness wins
@@ -777,6 +778,40 @@ function LevelGeometry.BareLobby(): Types.LevelLayout
 	}
 end
 
+-- The third fix round's fd-s2: does the side of a cell that lies on its water's own face meet
+-- another ice block over its whole length? That side lies on the plane `plane` across X (`onX`)
+-- or across Z, faces `facing` (-1 west or north, 1 east or south) and runs from `low` to `high`
+-- along the face. It does when one of `waters` (every ice block as built) has its opposite side on
+-- that plane (to SEAM), the same top, and spans the side whole: the two blocks' cells then meet
+-- there, and an inset would draw a seam across the crossing. A side that meets open air, a block
+-- that is not ice, or another ice block only in part keeps its inset. A block's own far side lies
+-- on its near one only when it is too thin for a cell to be built, so the block is not left out.
+local function meetsIce(
+	waters: { Box },
+	top: number,
+	onX: boolean,
+	plane: number,
+	facing: number,
+	low: number,
+	high: number
+): boolean
+	for _, other in waters do
+		local centre = if onX then other.x else other.z
+		local size = if onX then other.sx else other.sz
+		local along = if onX then other.z else other.x
+		local span = if onX then other.sz else other.sx
+		if
+			math.abs(centre - facing * size / 2 - plane) <= SEAM
+			and math.abs(other.y + other.sy / 2 - top) <= SEAM
+			and along - span / 2 <= low + SEAM
+			and along + span / 2 >= high - SEAM
+		then
+			return true
+		end
+	end
+	return false
+end
+
 -- L2-53: the ice cells of the ice block at `index` of `blocks` (built at `box`): WorldReact.Cells of
 -- its footprint, each a piece `thickness` deep whose top is `lift` over the water's top, named
 -- Ice_<block>_<k> with k the cell's place in Cells' order. A cell the footprint of one colliding
@@ -787,8 +822,17 @@ end
 -- lies inside the cover where they meet. The second fix round's Q6: a cell's face that lies on one
 -- of the block's own faces (the first and last column and row) is built `inset` inside it, so the
 -- frozen cell's side never shares a plane with the water's own (the two shimmered); the cover test
--- still reads the whole cell. A cell the inset leaves no width is not built.
-local function iceCells(name: string, box: Box, ice: IceSize, covers: { Box }): { Piece }
+-- still reads the whole cell. A cell the inset leaves no width is not built. The third fix round's
+-- fd-s2: a side that one of `waters` (every ice block) meets whole (meetsIce: the creek's
+-- mouth into the pond) is not inset, so the sheets meet without a seam; the shimmer that face
+-- could show would lie under the water's top.
+local function iceCells(
+	name: string,
+	box: Box,
+	ice: IceSize,
+	covers: { Box },
+	waters: { Box }
+): { Piece }
 	local top = box.y + box.sy / 2
 	local pieces: { Piece } = {}
 	local nx, nz = WorldReact.CellGrid(box, ice.cell)
@@ -806,10 +850,16 @@ local function iceCells(name: string, box: Box, ice: IceSize, covers: { Box }): 
 		end
 		-- Cells' order: X fastest, then Z.
 		local i, j = (k - 1) % nx + 1, (k - 1) // nx + 1
-		local west = cell.x - cell.sx / 2 + (if i == 1 then ice.inset else 0)
-		local east = cell.x + cell.sx / 2 - (if i == nx then ice.inset else 0)
-		local north = cell.z - cell.sz / 2 + (if j == 1 then ice.inset else 0)
-		local south = cell.z + cell.sz / 2 - (if j == nz then ice.inset else 0)
+		local x0, x1 = cell.x - cell.sx / 2, cell.x + cell.sx / 2
+		local z0, z1 = cell.z - cell.sz / 2, cell.z + cell.sz / 2
+		local openWest = i == 1 and not meetsIce(waters, top, true, x0, -1, z0, z1)
+		local openEast = i == nx and not meetsIce(waters, top, true, x1, 1, z0, z1)
+		local openNorth = j == 1 and not meetsIce(waters, top, false, z0, -1, x0, x1)
+		local openSouth = j == nz and not meetsIce(waters, top, false, z1, 1, x0, x1)
+		local west = x0 + (if openWest then ice.inset else 0)
+		local east = x1 - (if openEast then ice.inset else 0)
+		local north = z0 + (if openNorth then ice.inset else 0)
+		local south = z1 - (if openSouth then ice.inset else 0)
 		if not covered and east - west > SEAM and south - north > SEAM then
 			table.insert(pieces, {
 				name = `Ice_{name}_{k}`,
@@ -907,6 +957,14 @@ function LevelGeometry.Pieces(
 		for _, secret in listOf(layout.secrets) do
 			table.insert(covers, LevelGeometry.SecretBox(secret))
 		end
+		-- The third fix round's fd-s2: every ice block as built, so a cell's side another one meets
+		-- whole is not inset.
+		local waters: { Box } = {}
+		for index, box in built do
+			if blocks[index].react == "ice" then
+				table.insert(waters, box)
+			end
+		end
 		for index, box in built do
 			local block = blocks[index]
 			if block.react ~= "ice" then
@@ -919,7 +977,7 @@ function LevelGeometry.Pieces(
 				return nil,
 					`the ice of {block.name or `Block_{index}`} is {nx * nz} cells, over levels.maxParts ({maxParts})`
 			end
-			for _, piece in iceCells(block.name or `Block_{index}`, box, ice, covers) do
+			for _, piece in iceCells(block.name or `Block_{index}`, box, ice, covers, waters) do
 				table.insert(pieces, piece)
 			end
 		end

@@ -16,8 +16,11 @@ walk-off grace; d-m6: a frozen sheet as deep as a floor; s1: an alias of a dash;
 the cave's closed half and the walled camp on the frozen layout, its sight run on the tops the ice
 adds) and its second fix round (Q6: the fill line allows the inset's rim and no more, the inset stays
 a seam, the chain is judged on the cells' places in the grid, and the inset out of sim_range's mirror;
-Q5: the sink's bounds), shown red on a mutated copy of the shipped data, and green again on the data
-as it ships.
+Q5: the sink's bounds) and its third (fd-m1: no frozen face on a same-facing face of a solid, the
+island off the pond's grid lines; fd-m2: a frozen sheet between a slam's step and a root, no longer
+held to levels.floorThickness; fd-s2: no inset where another ice block meets a side, in the fill
+line and out of sim_range's mirror), shown red on a mutated copy of the shipped data, and green
+again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
@@ -134,6 +137,9 @@ FROZEN_FLOORS = "forestRoad (frozen) camp C (walled): from every outside surface
 FROZEN_SIGHT = re.compile(r"forestRoad \(frozen\) camp C \(walled\): \(the points on .*\) from no eye point")
 # The L2 W3 second fix round (docs/prompts/l2-w3-fix2.md: Q5 sink, Q6 inset).
 INSET_SINK = "Combat.json levels.react.ice's inset and sink"
+# The L2 W3 third fix round (docs/prompts/l2-w3-fix3.md: fd-m1, fd-m2).
+COPLANAR = "with the ice: no face of a built ice piece lies within"
+SHEET = "with the ice frozen, every frozen sheet is thicker than"
 
 
 def layout(data):
@@ -736,19 +742,26 @@ CASES = (
      FILL, True),
     # d-m3: Leap Smash's fall from a high top. With no air dash, a 34-high tower 92 south of the
     # island: the Leap reaches 71.0 and its fall 12.3 more (83.2 + 15 > 92); without the fall term
-    # the margin would read +21.0.
+    # the margin would read +21.0. (The island's south face is at z 136.5 since the third fix round.)
     ("W3 fix d-m3: no air dash, a 34-high tower 92 south of the island (Leap Smash and its fall)",
-     lambda d: (d["ctx"].__setitem__("dashes", []), add_block(d, "MutantTower", "ground", -404, -396, 228, 236, 34, 30)),
+     lambda d: (d["ctx"].__setitem__("dashes", []),
+                add_block(d, "MutantTower", "ground", -404, -396, 228.5, 236.5, 34, 30)),
      {}, ICE_GAP, True),
     ("W3 fix d-m3 control: the same tower 99 south (83.2 + 15 < 99)",
-     lambda d: (d["ctx"].__setitem__("dashes", []), add_block(d, "MutantTower", "ground", -404, -396, 235, 243, 34, 30)),
+     lambda d: (d["ctx"].__setitem__("dashes", []),
+                add_block(d, "MutantTower", "ground", -404, -396, 235.5, 243.5, 34, 30)),
      {}, ICE_GAP, False),
     # d-m4: the walk-off grace in the jumps' rule: 46.6 without it, 49.3 with it.
     ("W3 fix d-m4: the island 48 from the sign pad (inside the walk-off grace: 46.6 < 48 < 49.3)",
      lambda d: island_at(d, 48), {}, ICE_JUMPS, True),
-    # d-m6: a frozen sheet is a floor, levels.floorThickness deep.
-    ("W3 fix d-m6: ice.thickness 1 (a frozen sheet thinner than levels.floorThickness 4)",
-     lambda d: ice(d).__setitem__("thickness", 1), {}, FROZEN_DEPTH, True),
+    # d-m6, re-aimed by the third fix round's fd-m2: the floor line no longer judges the frozen
+    # sheets (the sheet line does: SHEET below), and still judges every other block of the frozen
+    # layout: Road2 2 deep with nothing under it is thin ground there (the island 2 deep would rest on
+    # the frozen pond).
+    ("W3 fix3 fd-m2 (d-m6 re-aimed): Road2 2 deep, nothing under it (the frozen layout's floor line)",
+     lambda d: block(d, "Road2").update({"y": -1, "sy": 2}), {}, FROZEN_DEPTH, True),
+    ("W3 fix3 fd-m2 control (d-m6 re-aimed): ice.thickness 1 (the floor line judges a sheet no more)",
+     lambda d: ice(d).__setitem__("thickness", 1), {}, FROZEN_DEPTH, False),
     # s1: an ability whose MECHANICS line aliases a dash's is a dash.
     ("W3 fix s1: Frost Quake (range 70) aliased to Impale Dash: an air dash onto the island",
      lambda d: frost_quake_dash(d, "impaleDash"), {}, ICE_DASH, True),
@@ -769,8 +782,8 @@ CASES = (
     # The W3 second fix round (docs/prompts/l2-w3-fix2.md). Q6: the fill line allows the inset's rim
     # and no more; the inset stays a seam; the chain is judged on the cells' places in the grid.
     ("W3 fix2 Q6: sim_range.ice_cells insets the west faces twice (a rim wider than the inset)", None,
-     {"sr": swapped_sim("west = cx - wx / 2 + (inset if i == 0 else 0)",
-                        "west = cx - wx / 2 + (2 * inset if i == 0 else 0)")},
+     {"sr": swapped_sim("west = gx0 + (inset if open_west else 0)",
+                        "west = gx0 + (2 * inset if open_west else 0)")},
      FILL, True),
     ("W3 fix2 Q6 control: ice.inset 0.25 (ICE_INSET_MOST): the fill line allows its rim",
      lambda d: ice(d).__setitem__("inset", 0.25), {}, FILL, False),
@@ -787,6 +800,35 @@ CASES = (
     ("W3 fix2 Q5: ice.sink 2 (the R15 HipHeight)", lambda d: ice(d).__setitem__("sink", 2), {}, INSET_SINK, True),
     ("W3 fix2 Q5 control: ice.sink 1.9", lambda d: ice(d).__setitem__("sink", 1.9), {}, INSET_SINK, False),
     ("W3 fix2 Q5: no ice.sink", lambda d: ice(d).pop("sink"), {}, ICE_CONFIG, True),
+    # The W3 third fix round (docs/prompts/l2-w3-fix3.md). fd-m1: the island's south face back on the
+    # pond's row line z 136 (cells (4, 5) and (6, 5) are built beside it, their south faces on its
+    # own); its west face on the column line x -409.82 (the cells of column 4 it holds in part); the
+    # control lies the inset off the line.
+    ("W3 fix3 fd-m1: the island back at z 128 (its south face on the pond's row line)",
+     lambda d: block(d, "ShrineIsland").__setitem__("z", 128), {}, COPLANAR, True),
+    ("W3 fix3 fd-m1: the island at x -401.818 (its west face on the pond's column line)",
+     lambda d: block(d, "ShrineIsland").__setitem__("x", -436 + 4 * 72 / 11 + 8), {}, COPLANAR, True),
+    ("W3 fix3 fd-m1 control: the island at z 128.05 (its south face the inset off the row line)",
+     lambda d: block(d, "ShrineIsland").__setitem__("z", 128.05), {}, COPLANAR, False),
+    # fd-m2: a sheet thicker than the fastest fall's step (0.685 here: a fall from the jumps' apex over
+    # the lookout at 240 Hz) and thinner than a root (2).
+    ("W3 fix3 fd-m2: ice.thickness 0.6 (the fastest fall moves 0.685 a physics step)",
+     lambda d: ice(d).__setitem__("thickness", 0.6), {}, SHEET, True),
+    ("W3 fix3 fd-m2 control: ice.thickness 0.7", lambda d: ice(d).__setitem__("thickness", 0.7), {}, SHEET, False),
+    ("W3 fix3 fd-m2: ice.thickness 2 (a root fits wholly inside)", lambda d: ice(d).__setitem__("thickness", 2), {},
+     SHEET, True),
+    ("W3 fix3 fd-m2: ice.thickness 4 (d-m6's floor: a root fits wholly inside)",
+     lambda d: ice(d).__setitem__("thickness", 4), {}, SHEET, True),
+    ("W3 fix3 fd-m2: slamFallSpeed 480 (a slam moves 2 a physics step)",
+     lambda d: d["ctx"]["move"].__setitem__("slamFallSpeed", 480), {}, SHEET, True),
+    # fd-s2: the sides another ice block meets whole are not inset, so the fill line allows no rim
+    # there; where the two do not meet (another top) both rims are allowed.
+    ("W3 fix3 fd-s2: sim_range.ice_cells insets the creek's mouth too (a seam into the pond)", None,
+     {"sr": swapped_sim("open_south = k == nz - 1 and not ice_meets(waters, water, False, gz1, 1, gx0, gx1)",
+                        "open_south = k == nz - 1")},
+     FILL, True),
+    ("W3 fix3 fd-s2 control: the Pond's top 0.5 under the Creek's (they do not meet: both rims allowed)",
+     lambda d: top_at(d, "Pond", -1.5), {}, FILL, False),
 )
 
 
@@ -870,7 +912,16 @@ MIRROR_CASES = (
     # The W3 second fix round's Q6: the inset out of the Python mirror alone (the Luau side's are
     # tools/crowd_harness/mirror_mutants.py's and mutate.py's).
     ("W3 fix2 Q6: sim_range's ice_cells drops the inset on the west (the mirror alone)", None,
-     ("west = cx - wx / 2 + (inset if i == 0 else 0)", "west = cx - wx / 2"),
+     ("west = gx0 + (inset if open_west else 0)", "west = gx0"),
+     "LevelGeometry.Pieces: the ice cells"),
+    # The W3 third fix round's fd-s2: ice_meets out of the Python mirror alone (the Luau side's are
+    # mirror_mutants.py's and mutate.py's).
+    ("W3 fix3 fd-s2: sim_range's ice_meets ignores the top (the mirror alone)", None,
+     ('                and abs(w["y"] + w["sy"] / 2 - top) <= GEOMETRY_SEAM\n', ""),
+     "LevelGeometry.Pieces: the ice cells"),
+    ("W3 fix3 fd-s2: sim_range's ice_meets takes a side met in part (the mirror alone)", None,
+     ("and along - span / 2 <= low + GEOMETRY_SEAM and along + span / 2 >= high - GEOMETRY_SEAM",
+      "and along - span / 2 < high and along + span / 2 > low"),
      "LevelGeometry.Pieces: the ice cells"),
     ("W3 fix2 Q6: sim_range's ice_cells builds a cell the inset leaves no width (the mirror alone)", None,
      ("                if east - west <= GEOMETRY_SEAM or south - north <= GEOMETRY_SEAM:\n                    continue\n", ""),

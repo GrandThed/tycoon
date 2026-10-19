@@ -15652,3 +15652,9 @@ W3 second fix round (lead, 2026-10-19): `SwingStrike(variant, step, origin, head
 cell a body stands in; client `ReactFx.Bodies()`, `ReactFx.IceSink()`, `PredictedSwing.airSwing`; config
 `levels.react.ice.sink` 0.5 and `inset` 0.05 (edge cells inset from the water's own faces); `sim_range.ice_cells`
 cells carry `box` and `cell`; check_stage_mirror compares ice boxes one by one.
+W3 third fix round (lead, 2026-10-19): `WorldReact.FallDrop(fallSpeed, lag, gravity, fastest)` and `BodyBox(..., drop?)`
+lead a falling body before `Holds`; `WeaponService.FallSpeed(player)` (LevelService now requires WeaponService, no
+cycle); `iceOnAuto(cfg, variant, rig, heading)` asks `AirSwing.Judge`; cell sides met by another ice block are not
+inset (`LevelGeometry.meetsIce` / `sim_range.ice_meets`); check_levels `ice_coplanar`, `sheet_bounds`
+(0.685 < thickness < root 2), `sheets_apart`; ice thickness 1.9; ShrineIsland at z 128.5. The 1.9 sheet holds a
+slam because the root box (2 tall) would have to move ~3.9 studs in one physics step (2.33 at 60 Hz).

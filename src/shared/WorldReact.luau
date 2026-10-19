@@ -24,7 +24,10 @@
 -- The second fix round's Q5 (a body lodged in ice): a swing made in the air freezes nothing (the
 -- strike carries SwingGate's verdict at its origin, `airborne`), and no cell freezes while a
 -- player's body stands in it (BodyBox, Holds, levels.react.ice.sink). The server, the ghost and
--- the phone ask the same two rules.
+-- the phone ask the same two rules. The third fix round's fd-m2: the server's copy of a falling
+-- body trails that player's own screen, where the cell turns solid a round trip after the freeze,
+-- so the server leads a falling body's feet by its fall over the commit lag (FallDrop, BodyBox's
+-- `drop`) before it asks Holds.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -374,29 +377,56 @@ function WorldReact.IceSink(ice: any): number?
 	return nil
 end
 
+-- The third fix round's fd-m2: how far a body falling at `fallSpeed` (studs a second, downward
+-- positive) drops over `lag` seconds under `gravity`: its speed over the lag and gravity's
+-- half g lag squared on top. The speed is taken at 0 or more (a rising body still has gravity's
+-- part) and at most `fastest`, the fastest legal move, as the claim slack caps its speed
+-- (Tuning.FastestMove): the replicated velocity is the client's word. Gravity under 0 counts as
+-- none. 0 when any number is not finite or the lag is not above 0.
+function WorldReact.FallDrop(
+	fallSpeed: number,
+	lag: number,
+	gravity: number,
+	fastest: number
+): number
+	if
+		not (finite(fallSpeed) and finite(lag) and finite(gravity) and finite(fastest))
+		or not (lag > 0)
+	then
+		return 0
+	end
+	local speed = math.min(math.max(fallSpeed, 0), math.max(fastest, 0))
+	return speed * lag + math.max(gravity, 0) * lag * lag / 2
+end
+
 -- The second fix round's Q5: a character's body as the ice rules read it, from its root Part
 -- (`position`, its `right` vector and `size`) and its Humanoid's `hipHeight`. In plan, the box
 -- round the root's footprint turned by `right` on the flat (a right vector with no flat part reads
 -- as facing +X, as SwingGate.ProbePoint); in height, from its feet (hipHeight and half the root
 -- under the root's centre, where a standing Humanoid holds them) up as far again over it (an R15's
--- head is a little lower: the excess only reaches cells a body deep under the ice touches).
+-- head is a little lower: the excess only reaches cells a body deep under the ice touches). The
+-- third fix round's fd-m2: `drop` (FallDrop; nil, under 0 or not finite = 0) lowers the feet and
+-- keeps the top, so the box spans the body from where the server sees it down to where its own
+-- screen will have it when a cell frozen now turns solid there.
 function WorldReact.BodyBox(
 	position: Vector3,
 	right: Vector3,
 	size: Vector3,
-	hipHeight: number
+	hipHeight: number,
+	drop: number?
 ): Box
 	local flat = math.sqrt(right.X * right.X + right.Z * right.Z)
 	local rx = if flat > FLAT_MIN then math.abs(right.X) / flat else 1
 	local rz = if flat > FLAT_MIN then math.abs(right.Z) / flat else 0
 	local halfX, halfZ = size.X / 2, size.Z / 2
 	local stand = hipHeight + size.Y / 2
+	local lower = length(drop)
 	return {
 		x = position.X,
-		y = position.Y,
+		y = position.Y - lower / 2,
 		z = position.Z,
 		sx = 2 * (rx * halfX + rz * halfZ),
-		sy = 2 * stand,
+		sy = 2 * stand + lower,
 		sz = 2 * (rz * halfX + rx * halfZ),
 	}
 end

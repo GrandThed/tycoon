@@ -318,6 +318,13 @@ ICE_SINK_MOST = 2.0
 # The W3 fix round's s-M1: WeaponService.trackAir records where a body last stood once a Heartbeat;
 # a body leaving a bank is at most this many frames' flat travel back from its edge when last seen.
 SERVER_FRAME_HZ = 60
+# The W3 third fix round's fd-m2 (the lead's ruling, which replaces d-m6's): a frozen sheet is not a
+# camp floor and is not held to levels.floorThickness. It need only be thicker than the fastest fall
+# onto it moves in one physics step (Roblox steps physics at PHYSICS_HZ), so a slam cannot tunnel
+# through it, and thinner than the R15 root Part (ROOT_TALL; it is 2 x 2 x 1), so a root never lies
+# wholly inside a sheet that freezes round a body the server's copy saw a round trip late.
+PHYSICS_HZ = 240.0
+ROOT_TALL = 2.0
 THEME_PATH = REPO_ROOT / "src" / "client" / "UI" / "Theme.luau"
 # The Theme numbers the highest camera is built from (the client's; read from the file, never copied).
 THEME_KEYS = ("COMBAT_CAMERA_PIVOT_HEIGHT", "COMBAT_CAMERA_MIN_PITCH_DEGREES", "COMBAT_SHAKE_MAX_STUDS")
@@ -330,6 +337,8 @@ RENDERER_PATH = REPO_ROOT / "src" / "combat" / "client" / "Controllers" / "Crowd
 RENDERER_KEYS = ("TORSO_WIDTH", "TORSO_DEPTH")
 EPS = 1e-6
 SIDES = ("north", "south", "west", "east")
+# Where each side lies in a footprint (x0, x1, z0, z1).
+SIDES_AT = {"west": 0, "east": 1, "north": 2, "south": 3}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1850,11 +1859,14 @@ def check_deep_water(name, layout, ctx, expect, solids, deep):
               if lacking else "; ".join(f"{n} met by {', '.join(sorted(v))}" for n, v in sorted(edges.items())) or "none"))
 
 
-def check_kill_height(tag, layout, solids, levels, expect):
+def check_kill_height(tag, layout, solids, levels, expect, sheets_apart=False):
     """killY and the depth of the ground (fix round, E5 and part A's item 2). A fall is short and
     a landing holds: killY is at least KILL_UNDER[0] under every standable surface, at most
     KILL_UNDER[1] under the lowest, under every Part's bottom and above KILL_FLOOR; and every
-    block a body lands on is at least levels.floorThickness deep, or rests on another solid."""
+    block a body lands on is at least levels.floorThickness deep, or rests on another solid.
+    `sheets_apart` (the frozen layout, the W3 third fix round's fd-m2): a frozen sheet (look "ice")
+    is judged by check_ice's sheet line instead (thicker than a slam's step, thinner than a root),
+    not by levels.floorThickness."""
     kill = layout["killY"]
     tops = [s for s in solids if s.kind in ("block", "floor", "secret", "obstacle", "fence")]
     lowest = min(tops, key=lambda s: s.top) if tops else None
@@ -1869,6 +1881,8 @@ def check_kill_height(tag, layout, solids, levels, expect):
     for s in solids:
         if s.kind != "block" or s.look not in GROUND_LOOKS or s.top - s.bottom >= depth - EPS:
             continue
+        if sheets_apart and s.look == "ice":
+            continue
         # Thin ground is sound only where another solid lies right under all of it.
         mid_x, mid_z = (s.x0 + s.x1) / 2, (s.z0 + s.z1) / 2
         rests = all(any(o is not s and o.holds(x, z) and o.top >= s.bottom - EPS and o.bottom < s.bottom
@@ -1876,7 +1890,8 @@ def check_kill_height(tag, layout, solids, levels, expect):
                     for x in (s.x0, mid_x, s.x1) for z in (s.z0, mid_z, s.z1))
         if not rests:
             thin.append(f"{s.name} ({s.top - s.bottom:g} deep)")
-    expect(not thin, f"{tag} every block a body lands on (looks {', '.join(GROUND_LOOKS)}) is at least "
+    expect(not thin, f"{tag} every block a body lands on (looks {', '.join(GROUND_LOOKS)}"
+           + ("; the frozen sheets by the sheet line" if sheets_apart else "") + ") is at least "
            f"levels.floorThickness {depth:g} deep, or rests on another solid" + (f" (thin: {', '.join(thin)})" if thin else ""))
 
 
@@ -4316,15 +4331,39 @@ def ice_crossing_cells(layout, solids, ice, reached, island):
     return cells, starts, goals, (min(joined) + 1 if joined else None)
 
 
+def ice_side_met(waters, b, side, low, high):
+    """The W3 third fix round's fd-s2, check_levels' own statement (not sim_range's): the part `low`
+    to `high` of ice block `b`'s `side` face lies against another ice block over its whole length:
+    that block's opposite side on the same plane, its top the same. The cells' sides there are
+    built whole (no inset), so the sheets meet without a seam."""
+    top = b["y"] + b["sy"] / 2
+    for w in waters:
+        if abs(w["y"] + w["sy"] / 2 - top) > EPS:
+            continue
+        if side in ("west", "east"):
+            mine = b["x"] - b["sx"] / 2 if side == "west" else b["x"] + b["sx"] / 2
+            theirs = w["x"] + w["sx"] / 2 if side == "west" else w["x"] - w["sx"] / 2
+            lo, hi = w["z"] - w["sz"] / 2, w["z"] + w["sz"] / 2
+        else:
+            mine = b["z"] - b["sz"] / 2 if side == "north" else b["z"] + b["sz"] / 2
+            theirs = w["z"] + w["sz"] / 2 if side == "north" else w["z"] - w["sz"] / 2
+            lo, hi = w["x"] - w["sx"] / 2, w["x"] + w["sx"] / 2
+        if abs(mine - theirs) <= EPS and lo <= low + EPS and hi >= high - EPS:
+            return True
+    return False
+
+
 def ice_holes(layout, ice):
     """The W3 fix round's d-m1: the water of each ice block that neither a built piece
     (sim_range.ice_cells) nor a cover (a colliding block or secret whose top stands over the
     water's top, as LevelGeometry reads them) lies over: {block name: (area in studs², [(x0, x1,
     z0, z1), ...] the holes)}, empty when every block is filled. Exact: the block is cut along
     every edge of every piece and cover that crosses it, and each part's centre is tested. The W3
-    second fix round's Q6: the rim levels.react.ice.inset wide inside the block's own faces is the
-    inset the cells are built with, so only the block shrunk by it must be filled; a piece inset any
-    further, or a missing one, still leaves a hole."""
+    second fix round's Q6: a rim levels.react.ice.inset wide inside the block's own faces is the
+    inset the cells are built with, and need not be filled; the third fix round's fd-s2: only along
+    a cell's side that no other ice block meets whole (ice_side_met), so where the creek meets the
+    pond the sheets must meet. A piece inset any further, inset where another ice block meets it,
+    or missing, leaves a hole."""
     cells = sr.ice_cells(layout, ice)
     allow = sr.ice_inset(ice) or 0
     blocks = [b for b in layout["blocks"] if b.get("react") == "ice"]
@@ -4336,9 +4375,22 @@ def ice_holes(layout, ice):
     for b in blocks:
         name = b.get("name") or b["look"]
         water = b["y"] + b["sy"] / 2
-        box = (b["x"] - b["sx"] / 2 + allow, b["x"] + b["sx"] / 2 - allow,
-               b["z"] - b["sz"] / 2 + allow, b["z"] + b["sz"] / 2 - allow)
-        held = [c["box"] for c in cells if c["block"] == name] + [c[:4] for c in covers if c[4] > water]
+        box = (b["x"] - b["sx"] / 2, b["x"] + b["sx"] / 2, b["z"] - b["sz"] / 2, b["z"] + b["sz"] / 2)
+        # The rim each built cell's side on the block's own face may leave (none where another ice
+        # block meets that side whole).
+        rims = []
+        for c in cells:
+            if c["block"] != name:
+                continue
+            x0, x1, z0, z1 = c["cell"]
+            for side, on, strip in (("west", x0, (x0, x0 + allow, z0, z1)), ("east", x1, (x1 - allow, x1, z0, z1)),
+                                    ("north", z0, (x0, x1, z0, z0 + allow)), ("south", z1, (x0, x1, z1 - allow, z1))):
+                face = box[SIDES_AT[side]]
+                low, high = (z0, z1) if side in ("west", "east") else (x0, x1)
+                if abs(on - face) <= EPS and not ice_side_met(blocks, b, side, low, high):
+                    rims.append(strip)
+        held = ([c["box"] for c in cells if c["block"] == name] + [c[:4] for c in covers if c[4] > water]
+                + rims)
         xs = sorted({box[0], box[1]} | {min(max(v, box[0]), box[1]) for r in held for v in r[:2]})
         zs = sorted({box[2], box[3]} | {min(max(v, box[2]), box[3]) for r in held for v in r[2:4]})
         holes, area = [], 0.0
@@ -4353,6 +4405,60 @@ def ice_holes(layout, ice):
         if holes:
             found[name] = (area, holes)
     return found
+
+
+def box_faces(x0, x1, z0, z1, bottom, top):
+    """A box's six faces: (axis, plane, facing, (low, high) on the first other axis, (low, high) on
+    the second): x faces run over (y, z), z faces over (y, x), y faces over (x, z)."""
+    return (("x", x0, -1, (bottom, top), (z0, z1)), ("x", x1, 1, (bottom, top), (z0, z1)),
+            ("z", z0, -1, (bottom, top), (x0, x1)), ("z", z1, 1, (bottom, top), (x0, x1)),
+            ("y", bottom, -1, (x0, x1), (z0, z1)), ("y", top, 1, (x0, x1), (z0, z1)))
+
+
+def ice_coplanar(layout, ice, solids):
+    """The W3 third fix round's fd-m1: every face of a built ice piece (sim_range.ice_cells, as frozen:
+    ice.thickness deep under its top) that lies closer than levels.react.ice.inset (the seam Q6 set
+    against the shimmer; a face on the very plane always counts) to a face of the same facing of
+    a solid (`solids`: every colliding block, camp piece and secret), the two overlapping over an
+    area: [(piece, its face, the solid, the gap)]. Frozen, the two z-fight: the island's south face
+    on a pond row's line put two cells' faces on its own."""
+    gap_most = max(sr.ice_inset(ice) or 0, 0)
+    deep = ice.get("thickness") or 0
+    found = []
+    for c in sr.ice_cells(layout, ice):
+        x0, x1, z0, z1 = c["box"]
+        mine = box_faces(x0, x1, z0, z1, c["top"] - deep, c["top"])
+        for s in solids:
+            for axis, plane, facing, a, b in box_faces(s.x0, s.x1, s.z0, s.z1, s.bottom, s.top):
+                for m_axis, m_plane, m_facing, ma, mb in mine:
+                    if m_axis != axis or m_facing != facing:
+                        continue
+                    gap = abs(m_plane - plane)
+                    if gap > EPS and gap >= gap_most - EPS:
+                        continue
+                    if min(ma[1], a[1]) - max(ma[0], a[0]) > EPS and min(mb[1], b[1]) - max(mb[0], b[0]) > EPS:
+                        found.append((f"Ice_{c['block']} ({c['i']}, {c['k']})",
+                                      f"{'-+'[facing > 0]}{axis} {m_plane:g}", s.name, gap))
+    return found
+
+
+def sheet_bounds(move, freached, fsolids, ice):
+    """The W3 third fix round's fd-m2: (the least a frozen sheet is thick, the most, the fastest fall
+    onto it, what that fall is). The least: the fastest fall onto a sheet moved in one physics step
+    (PHYSICS_HZ): the slam's dive (movement.slamFallSpeed) or a free fall from the jumps' apex over
+    the highest top a player reaches on the frozen layout down to the lowest sheet, whichever is
+    faster. The most: the R15 root's height (ROOT_TALL)."""
+    sheets = [s for s in fsolids if s.look == "ice" and s.kind == "block"]
+    lowest = min((s.top for s in sheets), default=None)
+    high = max((s.top for s in fsolids if s.name in freached), default=None)
+    slam = float(move.get("slamFallSpeed") or 0)
+    fall, what = slam, f"the slam's dive {slam:g}"
+    if lowest is not None and high is not None:
+        drop = high + move["jumpHeight"] + move["doubleJumpHeight"] - lowest
+        free = math.sqrt(2 * sr.GRAVITY * max(drop, 0.0))
+        if free > fall:
+            fall, what = free, f"a fall of {drop:.1f} from the jumps' apex over the highest top reached ({free:.1f})"
+    return fall / PHYSICS_HZ, ROOT_TALL, fall, what
 
 
 def check_ice(name, level, layout, ctx, expect, solids):
@@ -4374,9 +4480,11 @@ def check_ice(name, level, layout, ctx, expect, solids):
       and with the ice frozen: every unclimbable wall stays so, the secrets' (a) to (d) hold
         (check_secret_reach), R8's lists are the pinned frozen lists (both brambles' variants), the
         shot-origin chord holds (the sheets are floor, not walls), killY is still a short fall and
-        every sheet is levels.floorThickness deep (look "ice" in GROUND_LOOKS: the W3 fix round's
-        d-m6), and the bend rule (the sheets walked ground), the cave's closed half and the walled
-        camps hold (s2)."""
+        every other block a body lands on is levels.floorThickness deep; every sheet is thicker than
+        the fastest fall onto it moves in a physics step and thinner than an R15 root (sheet_bounds:
+        the W3 third fix round's fd-m2, the lead's ruling in place of d-m6's floorThickness); no face
+        of a piece lies on a same-facing face of a solid (ice_coplanar: fd-m1); and the bend rule
+        (the sheets walked ground), the cave's closed half and the walled camps hold (s2)."""
     secrets = [x for x in layout["secrets"] if x["needs"] == "ice"]
     if not secrets:
         return
@@ -4505,13 +4613,32 @@ def check_ice(name, level, layout, ctx, expect, solids):
            f"levels.react.ice.inset ({sr.ice_inset(ice)}) inside each block's faces (the second fix round's Q6)"
            + ("".join(f"; {n}: {area:.2f} studs² open, e.g. x {h[0][0]:.2f}..{h[0][1]:.2f}, z {h[0][2]:.2f}..{h[0][3]:.2f}"
                       for n, (area, h) in sorted(holes.items())) if holes else f" ({len(cells)} pieces)"))
+    # The third fix round's fd-m1: no frozen face on a same-facing face of a solid.
+    flush = ice_coplanar(layout, ice, solids) if ice is not None else []
+    expect(not flush,
+           f"{tag} with the ice: no face of a built ice piece lies within levels.react.ice.inset "
+           f"({sr.ice_inset(ice) if ice is not None else None}) of a same-facing face of a solid (frozen, the two would "
+           f"z-fight; the W3 third fix round's fd-m1)"
+           + (f": {len(flush)} pairs, e.g. " + "; ".join(f"{p} {f} on {s} ({g:.3f} apart)" for p, f, s, g in flush[:3])
+              if flush else f" ({len(cells)} pieces against {len(solids)} solids)"))
+    # The third fix round's fd-m2: the sheet's thickness, between a slam's step and a root.
+    if ice is not None and is_number(ice.get("thickness")):
+        least, most, fall, what = sheet_bounds(move, freached, fsolids, ice)
+        deep = ice["thickness"]
+        expect(least < deep < most - EPS,
+               f"{tag} with the ice frozen, every frozen sheet is thicker than the fastest fall onto it moves in one "
+               f"physics step ({what}, at {PHYSICS_HZ:g} Hz: {least:.3f}) and thinner than an R15 root ({most:g}: a "
+               f"root never lies wholly inside a sheet that freezes round a body a round trip late), not "
+               f"levels.floorThickness (the W3 third fix round's fd-m2): ice.thickness {deep:g}")
+        facts.append(f"a frozen sheet {deep:g} deep: thicker than {least:.3f} ({what} at {PHYSICS_HZ:g} Hz), "
+                     f"thinner than a root {most:g}")
     # The W2 lessons, with the ice frozen: no new ledge route, perch or wall.
     gone = sorted(n for n in tall if n not in ftall)
     expect(not gone, f"{tag} with the ice frozen every unclimbable wall stays unclimbable (L2-60, L1c-3)"
            + (f": climbable {', '.join(gone)}" if gone else f" ({len(tall)} walls)"))
     check_secret_reach(f"{name} (frozen)", frozen, ctx, expect, fsolids, ftall)
     check_origin_chord(f"{name} (frozen)", frozen, ctx, expect)
-    check_kill_height(f"{tag} with the ice frozen,", frozen, fsolids, levels, expect)
+    check_kill_height(f"{tag} with the ice frozen,", frozen, fsolids, levels, expect, sheets_apart=True)
     # The W3 fix round's s2: the bend rule (the frozen sheets walked ground), the cave's closed half
     # and the walled camps, on the frozen layout too.
     check_route_skips(f"{level['layout']} (frozen)", frozen, ctx, expect, fsolids, ftall, ice=True)

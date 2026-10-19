@@ -45,6 +45,33 @@ function W3.holds(cover: any, box: any): boolean
 	return math.abs(box.x - cover.x) + box.sx / 2 <= cover.sx / 2 + 1e-6 and math.abs(box.z - cover.z) + box.sz / 2 <= cover.sz / 2 + 1e-6
 end
 
+-- The third fix round's fd-s2, the harness's own statement: does the part `low` to `high` of
+-- `water`'s `side` face ("west", "east", "north" or "south") lie against another of `waters` over
+-- its whole length (that block's opposite side on the same plane, the same top)? Those sides are
+-- built whole; every other side on a water's face is inset.
+function W3.meetsWhole(waters: { any }, water: any, side: string, low: number, high: number): boolean
+	local top = water.y + water.sy / 2
+	for _, other in waters do
+		if other == water or math.abs(other.y + other.sy / 2 - top) > 1e-6 then
+			continue
+		end
+		local mine, theirs, lo, hi
+		if side == "west" or side == "east" then
+			mine = if side == "west" then water.x - water.sx / 2 else water.x + water.sx / 2
+			theirs = if side == "west" then other.x + other.sx / 2 else other.x - other.sx / 2
+			lo, hi = other.z - other.sz / 2, other.z + other.sz / 2
+		else
+			mine = if side == "north" then water.z - water.sz / 2 else water.z + water.sz / 2
+			theirs = if side == "north" then other.z + other.sz / 2 else other.z - other.sz / 2
+			lo, hi = other.x - other.sx / 2, other.x + other.sx / 2
+		end
+		if math.abs(mine - theirs) <= 1e-6 and lo <= low + 1e-6 and hi >= high - 1e-6 then
+			return true
+		end
+	end
+	return false
+end
+
 function W3.cellsTests(): ()
 	print(" WorldReact.Cells: a footprint cut into even cells (L2-53)")
 	local R = W3.React
@@ -726,10 +753,13 @@ function W3.realTests(): ()
 	end
 	-- The second fix round's Q6: no cell's side lies on its water's own face (the frozen side and
 	-- the water's shared a plane and shimmered); every side within a stud of that face lies exactly
-	-- the shipped inset inside it, and every other side is a cell's or a cover's.
+	-- the shipped inset inside it, and every other side is a cell's or a cover's. The third fix
+	-- round's fd-s2: but a side another ice block meets whole (the creek's mouth into the pond) lies
+	-- on the face, so the sheets meet with no seam.
 	local inset = frost.inset
 	check(type(inset) == "number" and inset > 0 and inset < 1, `Combat.json levels.react.ice has an inset under a stud ({tostring(inset)})`)
-	local onFace, inner = {}, 0
+	local onFace, inner, met = {}, 0, 0
+	local names = { "west", "east", "north", "south" }
 	for _, water in ice do
 		local faces = { water.x - water.sx / 2, water.x + water.sx / 2, water.z - water.sz / 2, water.z + water.sz / 2 }
 		for _, box in byBlock[water.name] or {} do
@@ -738,14 +768,21 @@ function W3.realTests(): ()
 				local away = math.abs(sides[side] - faces[side])
 				if away < 1 then
 					inner += 1
-					if math.abs(away - (inset or 0)) > 1e-9 then
-						table.insert(onFace, `{water.name} ({box.x}, {box.z}) side {side} {away}`)
+					-- The side's span along the face, as built (a corner the other face insets is a
+					-- hair shorter than the cell's place; nothing shipped meets a span that close).
+					local low, high = if side <= 2 then sides[3] else sides[1], if side <= 2 then sides[4] else sides[2]
+					local whole = W3.meetsWhole(ice, water, names[side], low, high)
+					local want = if whole then 0 else (inset or 0)
+					met += if whole then 1 else 0
+					if math.abs(away - want) > 1e-9 then
+						table.insert(onFace, `{water.name} ({box.x}, {box.z}) {names[side]} {away} (wanted {want})`)
 					end
 				end
 			end
 		end
 	end
-	check(inner > 0 and #onFace == 0, `{inner} cell sides by their water's faces, each the inset inside it{L1.real.list(onFace)}`)
+	check(inner > 0 and #onFace == 0, `{inner} cell sides by their water's faces, each the inset inside it but where another ice block meets it whole ({met}){L1.real.list(onFace)}`)
+	check(met == 6, `the creek's mouth into the pond: its 3 last cells' south sides and the pond's 3 cells under it meet with no seam ({met} sides)`)
 
 	-- The crossing: from Road2's south edge above the creek, swing toward the island, step onto
 	-- the frozen cell nearest it, swing again; the ice must reach the island's edge.
@@ -1034,12 +1071,29 @@ function W3.insetTests(): ()
 	check(thinOnes == 0 and thinNames.Ice_Water_2 ~= nil, `and that water has no cell, the others theirs ({thinOnes})`)
 	local thinZero = names(0, thin)
 	check(thinZero.Ice_Thin_1 ~= nil and thinZero.Ice_Thin_2 ~= nil, "with an inset of 0 it has its cells")
-	-- Two ice blocks touching: each one's faces on the shared plane are inset, a seam of twice it.
+	-- The third fix round's fd-s2: two ice blocks touching whole at one top meet with no seam; a side
+	-- met only in part, or by a block whose top differs, keeps its inset.
 	local pair = W3.layout()
 	table.insert(pair.blocks, { name = "Next", look = "water", x = 0, y = -3, z = 14, sx = 21, sy = 4, sz = 14, collide = false, react = "ice" })
 	local paired = names(0.25, pair)
 	local south, north = paired.Ice_Water_6, paired.Ice_Next_3
-	check(south ~= nil and north ~= nil and near((north.z - north.sz / 2) - (south.z + south.sz / 2), 0.5), "two ice blocks touching: a seam of twice the inset between their cells")
+	check(south ~= nil and north ~= nil and near(north.z - north.sz / 2, 7, 1e-12) and near(south.z + south.sz / 2, 7, 1e-12), "two ice blocks touching whole at one top: their cells meet on the shared plane, no seam")
+	check(south ~= nil and near(south.x + south.sx / 2, 10.25), "and the side of that cell on open air keeps its inset")
+	local function eastOf(z: number, sz: number, y: number): any
+		local layout = W3.layout()
+		table.insert(layout.blocks, { name = "East", look = "water", x = 17.5, y = y, z = z, sx = 14, sy = 4, sz = sz, collide = false, react = "ice" })
+		return names(0.25, layout)
+	end
+	local whole = eastOf(0, 14, -3)
+	check(whole.Ice_Water_3 ~= nil and whole.Ice_Water_6 ~= nil and near(whole.Ice_Water_3.x + whole.Ice_Water_3.sx / 2, 10.5, 1e-12) and near(whole.Ice_Water_6.x + whole.Ice_Water_6.sx / 2, 10.5, 1e-12), "an ice block east of the water over its whole depth: the east cells reach the face")
+	local part = eastOf(0, 7, -3)
+	check(part.Ice_Water_3 ~= nil and part.Ice_Water_6 ~= nil and near(part.Ice_Water_3.x + part.Ice_Water_3.sx / 2, 10.25) and near(part.Ice_Water_6.x + part.Ice_Water_6.sx / 2, 10.25), "one that meets each east cell's side only in part (z -3.5..3.5): both keep the inset")
+	local row = eastOf(-3.5, 7, -3)
+	check(row.Ice_Water_3 ~= nil and row.Ice_Water_6 ~= nil and near(row.Ice_Water_3.x + row.Ice_Water_3.sx / 2, 10.5, 1e-12) and near(row.Ice_Water_6.x + row.Ice_Water_6.sx / 2, 10.25), "one that meets the first row's side whole (z -7..0): that cell reaches the face, the next keeps its inset")
+	local lower = eastOf(0, 14, -3.5)
+	check(lower.Ice_Water_3 ~= nil and near(lower.Ice_Water_3.x + lower.Ice_Water_3.sx / 2, 10.25), "one whose top is half a stud lower: the inset stays (their sheets do not meet)")
+	local beyond = whole
+	check(beyond.Ice_East_1 ~= nil and near(beyond.Ice_East_1.x - beyond.Ice_East_1.sx / 2, 10.5, 1e-12) and near(beyond.Ice_East_2.x + beyond.Ice_East_2.sx / 2, 24.25), "and the neighbour's own cells: whole on the shared side, inset on its open one")
 	-- IceOf.
 	local react = { ice = { cell = 7, lift = 0.2, thickness = 4 } }
 	local got, refused = Geo.IceOf(react)
@@ -1075,10 +1129,120 @@ function W3.fix2WiringTests(): ()
 		check(b ~= nil and b.found and b.players == 1 and b.box == 1, `{label}: every player's character as WorldReact.BodyBox of its root and Humanoid ({b and b.found}, {b and b.players}, {b and b.box})`)
 	end
 	check(f.ghostSink == 1 and f.ghostHolds == 1, `the frost ghost skips a cell a body stands in, with the server's sink ({f.ghostSink}, {f.ghostHolds})`)
-	check(f.phoneHolds == 1 and f.phoneGround == 1, `the phone's auto-swing at water skips a cell a body stands in, and judges a grounded swing ({f.phoneHolds}, {f.phoneGround})`)
+	check(f.phoneHolds == 1 and f.phoneGround == 1, `the phone's auto-swing at water skips a cell a body stands in, and builds its strike with the swing's air verdict ({f.phoneHolds}, {f.phoneGround})`)
 	check(f.predictedAir == 1 and f.frostAir == 1 and f.hitboxAir == 1, `the predicted swing carries AirSwing's verdict, and the ghost and the early hitbox build their strike with it ({f.predictedAir}, {f.frostAir}, {f.hitboxAir})`)
 	check(f.sinkReader == 1, `ReactFx reads the sink with the server's reader ({f.sinkReader})`)
 end
 L1.group("l2w3 fix2WiringTests", W3.fix2WiringTests)
+
+-- The third fix round (docs/prompts/l2-w3-fix3.md), fd-m2: the server's copy of a falling body
+-- trails that player's own screen, where a cell frozen now turns solid a round trip later; the
+-- server leads its feet by its fall over the commit lag (WorldReact.FallDrop, BodyBox's `drop`),
+-- and the shipped sheet (1.9) is thinner than the root, so a root never lies wholly inside it.
+function W3.fix3Tests(): ()
+	print(" WorldReact: a falling body's feet led over the commit lag (the third fix round's fd-m2)")
+	local R = W3.React
+	local Tune = load("Tuning")
+	local g = 196.2
+	-- FallDrop: speed x lag + g lag^2 / 2, the speed at 0 or more and at most the fastest move.
+	check(near(R.FallDrop(19.8, 0.1, g, 140), 1.98 + 0.981), `19.8 studs/s over 0.1 s: 1.98 + 0.981 ({R.FallDrop(19.8, 0.1, g, 140)})`)
+	check(near(R.FallDrop(-10, 0.1, g, 140), 0.981) and near(R.FallDrop(0, 0.2, g, 140), 3.924), "a body not yet falling (or rising) still has gravity's part")
+	check(near(R.FallDrop(1000, 0.1, g, 140), 14 + 0.981), "a speed over the fastest move is capped at it (the client's word)")
+	check(R.FallDrop(20, 0, g, 140) == 0 and R.FallDrop(20, -0.1, g, 140) == 0, "no lag, or one under 0: no drop")
+	check(near(R.FallDrop(20, 0.1, 0, 140), 2) and near(R.FallDrop(20, 0.1, -50, 140), 2), "no gravity (or under 0): the speed's part alone")
+	check(near(R.FallDrop(20, 0.1, g, -5), 0.981), "a fastest move under 0 leaves gravity's part")
+	local bad = 0
+	for _, args in { { W3.NAN, 0.1, g, 140 }, { 20, W3.NAN, g, 140 }, { 20, 0.1, W3.NAN, 140 }, { 20, 0.1, g, W3.NAN }, { math.huge, 0.1, g, 140 }, { 20, math.huge, g, 140 }, { 20, 0.1, math.huge, 140 }, { 20, 0.1, g, math.huge } } do
+		bad += if R.FallDrop(args[1], args[2], args[3], args[4]) == 0 then 0 else 1
+	end
+	check(bad == 0, `any number not finite: no drop ({bad} did)`)
+	-- BodyBox's drop lowers the feet and keeps the top.
+	local size, hip = W3.R15.size, W3.R15.hip
+	local led = R.BodyBox(vec(0, 3, 0), vec(1, 0, 0), size, hip, 2.5)
+	check(near(led.y - led.sy / 2, -2.5) and near(led.y + led.sy / 2, 6) and near(led.sx, 2) and near(led.sz, 1), `a drop of 2.5: feet at -2.5, the top still 6, the plan unchanged ({led.y}, {led.sy})`)
+	local plain = R.BodyBox(vec(0, 3, 0), vec(1, 0, 0), size, hip)
+	local same = true
+	for _, drop in { 0, -1, W3.NAN, math.huge } do
+		local box = R.BodyBox(vec(0, 3, 0), vec(1, 0, 0), size, hip, drop)
+		same = same and box.y == plain.y and box.sy == plain.sy
+	end
+	check(same, "a drop of 0, under 0 or not finite: the body as it stands")
+	-- The review's case: a cell whose top is -0.8, the sink 0.5; feet at -1.0 falling at 19.8.
+	local cell = { x = 0, y = -1.75, z = 0, sx = 7, sy = 1.9, sz = 7 }
+	local function body(feet: number, drop: number?): any
+		return R.BodyBox(vec(0, feet + hip + size.Y / 2, 0), vec(1, 0, 0), size, hip, drop)
+	end
+	check(not R.Holds(cell, { body(-1.0) }, 0.5), "feet at -1.0, 0.2 under the top, unled: standing on it by the sink, the cell would freeze")
+	check(R.Holds(cell, { body(-1.0, R.FallDrop(19.8, 0.1, g, 140)) }, 0.5), "led by its fall over a 0.1 s lag (2.96): in it, the cell stays water")
+
+	-- A teammate walks off the bank (top 0) into the creek while another swings at that cell. The
+	-- server judges the freeze on its copy of him at server time ts (feet -g ts^2 / 2, falling at
+	-- g ts; at ts 0 he still stands, unled); the cell turns solid on his own screen a round trip
+	-- later. The shipped sheet, sink and commit lag (his ping is the round trip).
+	local frost = L1.real.rules.react ~= nil and L1.real.rules.react.ice or nil
+	local proving = FIXTURES.proving
+	if type(frost) ~= "table" or proving == nil then
+		check(false, "the shipped Combat.json levels.react.ice and ProvingGrounds.json are there")
+		return
+	end
+	local top = -1 + frost.lift
+	local shipped = { x = 0, y = top - frost.thickness / 2, z = 0, sx = 7, sy = frost.thickness, sz = 7 }
+	local fastest = Tune.FastestMove(proving)
+	-- How much of his root (2 tall, its foot hipHeight over his feet) the cell holds when it turns
+	-- solid on his screen, at the worst ts it froze; and whether it was ever wholly inside.
+	local function walkOff(start: number, trip: number, lead: boolean): (number, boolean)
+		local lag = Tune.CommitLag(proving.shooting, trip)
+		local worst, whole = 0, false
+		for step = 0, 120 do
+			local ts = step / 240
+			local feet = start - g * ts * ts / 2
+			local drop = if lead and step > 0 then R.FallDrop(g * ts, lag, g, fastest) else 0
+			if not R.Holds(shipped, { body(feet, drop) }, frost.sink) then
+				local later = ts + trip
+				local seen = start - g * later * later / 2
+				local low, high = seen + hip, seen + hip + size.Y
+				local inside = math.max(math.min(high, top) - math.max(low, top - frost.thickness), 0)
+				worst = math.max(worst, inside)
+				whole = whole or (low >= top - frost.thickness - 1e-9 and high <= top + 1e-9)
+			end
+		end
+		return worst, whole
+	end
+	local ledIn = walkOff(0, 0.15, true)
+	check(ledIn == 0, `off the bank, a 0.15 s round trip, led: no part of his root is in the cell when it turns solid on his screen ({ledIn})`)
+	local unledIn = walkOff(0, 0.15, false)
+	check(unledIn > 1, `unled, the same walk-off: the cell turns solid round {unledIn} of his root (the lead is what keeps him out)`)
+	local everWhole = false
+	for _, start in { 0, top } do
+		for _, trip in { 0.05, 0.1, 0.15, 0.2, 0.25, 0.3 } do
+			for _, lead in { true, false } do
+				local _, whole = walkOff(start, trip, lead)
+				everWhole = everWhole or whole
+			end
+		end
+	end
+	check(not everWhole and frost.thickness < size.Y, `off the bank or the frozen edge, any round trip to 0.3 s, led or not: the sheet ({frost.thickness}) is thinner than his root ({size.Y}), never wholly round it`)
+	local edgeIn = walkOff(top, 0.15, true)
+	check(edgeIn < 0.25, `off the frozen edge at 0.15 s (his last standing frame cannot be led): at most {edgeIn} of his root, under a quarter stud`)
+end
+L1.group("l2w3 fix3Tests", W3.fix3Tests)
+
+-- The third fix round's lines that apply fd-m2 and fd-s1, read as text (FIXTURES.source.w3fix3).
+function W3.fix3WiringTests(): ()
+	print(" The third fix round's lines: the led bodies and the phone's air verdict, read as text")
+	local f = FIXTURES.source.w3fix3
+	if f == nil then
+		check(false, "the source reading has a w3fix3 entry")
+		return
+	end
+	local b = f.bodies or {}
+	check(f.bodiesFound and b.bodiesFastest == 1 and b.bodiesFall == 1 and b.bodiesLag == 1 and b.bodiesDrop == 1 and b.bodiesStands == 1, `LevelService's bodies lead a falling body by WeaponService.FallSpeed over Tuning.CommitLag with the player's ping, Workspace.Gravity and Tuning.FastestMove, and a standing one by 0 ({b.bodiesFastest}, {b.bodiesFall}, {b.bodiesLag}, {b.bodiesDrop}, {b.bodiesStands})`)
+	local server = FIXTURES.source.w3fix2 and FIXTURES.source.w3fix2.bodies and FIXTURES.source.w3fix2.bodies.server
+	check(server ~= nil and server.box == 1, "and hand that drop to WorldReact.BodyBox")
+	check(f.trackFall == 1 and f.trackCleared == 1, `trackAir measures the fall of a body it did not find standing, and clears it with no root ({f.trackFall}, {f.trackCleared})`)
+	check(f.resetCleared == 1 and f.forgetCleared == 1 and f.fallAnswer == 1, `a fresh body and a server move clear it; FallSpeed answers it ({f.resetCleared}, {f.forgetCleared}, {f.fallAnswer})`)
+	check(f.phoneFound and f.phoneJudge == 1 and f.phoneRefuse == 1 and f.phoneCarry == 2 and f.phoneHumanoid == 0, `the phone's ice auto-swing asks AirSwing.Judge, refuses an air swing, carries the verdict into both strikes and never asks the Humanoid ({f.phoneJudge}, {f.phoneRefuse}, {f.phoneCarry}, {f.phoneHumanoid})`)
+end
+L1.group("l2w3 fix3WiringTests", W3.fix3WiringTests)
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

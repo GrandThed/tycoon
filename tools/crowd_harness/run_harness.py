@@ -326,7 +326,7 @@ CLIENT_STRIKES = {
     "phone": (
         INPUT_CONTROLLER,
         re.compile(r"(?ms)^local function autoIceStrike\(.*?^end$"),
-        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, false)",
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, airborne)",
         ("strike.arcDegrees = math.min(arc, cone)", "\treturn strike\n"),
     ),
     "hitbox": (
@@ -372,9 +372,14 @@ ATTACK_PASS = re.compile(
 BODY_BOX_CALL = re.compile(
     r"WorldReact\.BodyBox\(\s*root\.Position,\s*root\.CFrame\.RightVector,\s*root\.Size,\s*humanoid\.HipHeight\s*\)"
 )
+# The W3 third fix round's fd-m2: the server's call hands BodyBox the falling body's lead too.
+BODY_BOX_LED = re.compile(
+    r"WorldReact\.BodyBox\(\s*root\.Position,\s*root\.CFrame\.RightVector,\s*root\.Size,\s*humanoid\.HipHeight,"
+    r"\s*drop\s*\)"
+)
 BODIES_BODY = {
-    "server": (LEVEL_SERVICE, re.compile(r"(?ms)^local function bodies\(.*?^end$")),
-    "client": (REACT_FX, re.compile(r"(?ms)^function ReactFx\.Bodies\(.*?^end$")),
+    "server": (LEVEL_SERVICE, re.compile(r"(?ms)^local function bodies\(.*?^end$"), BODY_BOX_LED),
+    "client": (REACT_FX, re.compile(r"(?ms)^function ReactFx\.Bodies\(.*?^end$"), BODY_BOX_CALL),
 }
 GHOST_BODY = re.compile(r"(?ms)^function ReactFx\.PredictFreeze\(.*?^end$")
 SINK_BODY = re.compile(r"(?ms)^function ReactFx\.IceSink\(.*?^end$")
@@ -390,10 +395,30 @@ W3_FIX2_LINES = {
     "ghostSink": "local sink = ReactFx.IceSink()",
     "ghostHolds": "if not WorldReact.Holds(box, around, sink) then",
     "phoneHolds": "return not WorldReact.Holds(box, around, ReactFx.IceSink())",
-    "phoneGround": "WorldReact.SwingStrike(variant, step, origin, heading, false)",
+    "phoneGround": "WorldReact.SwingStrike(variant, step, origin, heading, airborne)",
     "predictedAir": "airSwing = swingAirborne,",
     "swingAir": "swing.airSwing",
     "sinkReader": "return WorldReact.IceSink(if react ~= nil then react.ice else nil)",
+}
+# The W3 third fix round (docs/prompts/l2-w3-fix3.md): fd-m2, the server leads a falling body's feet
+# by its fall over its commit lag (LevelService's bodies, from WeaponService.FallSpeed, which
+# trackAir measures and a server move or a fresh body clears); fd-s1, the phone's ice auto-swing
+# asks AirSwing.Judge (the server's question) and refuses an air swing, its strikes carrying the
+# verdict, the Humanoid's floor sensor no longer asked.
+FALL_SPEED_BODY = re.compile(r"(?ms)^function WeaponService\.FallSpeed\(.*?^end$")
+W3_FIX3_LINES = {
+    "bodiesFastest": "local fastest = Tuning.FastestMove(config)",
+    "bodiesFall": "local fall = WeaponService.FallSpeed(player)",
+    "bodiesLag": "local lag = Tuning.CommitLag(config.shooting, player:GetNetworkPing())",
+    "bodiesDrop": "then WorldReact.FallDrop(fall, lag, Workspace.Gravity, fastest)",
+    "bodiesStands": "else 0",
+    "trackFall": "shooter.fall = if shooter.stood == position then nil else math.max(fallSpeed, 0)",
+    "fallCleared": "shooter.fall = nil",
+    "fallAnswer": "return if shooter ~= nil then shooter.fall else nil",
+    "phoneJudge": "local allowed, inAir = AirSwing.Judge(origin, rig.root, rig.humanoid)",
+    "phoneRefuse": "if not allowed or inAir then",
+    "phoneCarry": "cone, inAir)",
+    "phoneHumanoid": "MovementController.IsAirborne",
 }
 COMBAT_PROJECT = "combat.project.json"
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
@@ -490,6 +515,37 @@ def source_reading(repo: Path) -> dict:
         "w3": w3,
         "w3fix": w3_fix_reading(text, react_text, freeze_text),
         "w3fix2": w3_fix2_reading(text, freeze_text),
+        "w3fix3": w3_fix3_reading(text),
+    }
+
+
+def w3_fix3_reading(text) -> dict:
+    """The W3 third fix round's lines (W3_FIX3_LINES), counted in the function each belongs to.
+    `text` reads a repo file (empty when missing)."""
+    weapon = text(WEAPON_SERVICE)
+    lines = W3_FIX3_LINES
+
+    def body(pattern, source: str) -> str:
+        found = pattern.search(source)
+        return found.group(0) if found else ""
+
+    bodies = body(BODIES_BODY["server"][1], text(LEVEL_SERVICE))
+    track = body(TRACK_AIR_BODY, weapon)
+    phone = body(PHONE_BODY, text(INPUT_CONTROLLER))
+    return {
+        "bodiesFound": bool(bodies),
+        "bodies": {key: bodies.count(lines[key]) for key in
+                   ("bodiesFastest", "bodiesFall", "bodiesLag", "bodiesDrop", "bodiesStands")},
+        "trackFall": track.count(lines["trackFall"]),
+        "trackCleared": track.count(lines["fallCleared"]),
+        "resetCleared": body(RESET_AIR_BODY, weapon).count(lines["fallCleared"]),
+        "forgetCleared": body(FORGET_BODY, weapon).count(lines["fallCleared"]),
+        "fallAnswer": body(FALL_SPEED_BODY, weapon).count(lines["fallAnswer"]),
+        "phoneFound": bool(phone),
+        "phoneJudge": phone.count(lines["phoneJudge"]),
+        "phoneRefuse": phone.count(lines["phoneRefuse"]),
+        "phoneCarry": phone.count(lines["phoneCarry"]),
+        "phoneHumanoid": phone.count(lines["phoneHumanoid"]),
     }
 
 
@@ -506,12 +562,12 @@ def w3_fix2_reading(text, freeze_text: str) -> dict:
     attack = body(ATTACK_BODY, weapon)
     melee = body(MELEE_BODY, weapon)
     bodies = {}
-    for side, (rel, pattern) in BODIES_BODY.items():
+    for side, (rel, pattern, call) in BODIES_BODY.items():
         inside = body(pattern, text(rel))
         bodies[side] = {
             "found": bool(inside),
             "players": inside.count(lines["players"]),
-            "box": len(BODY_BOX_CALL.findall(inside)),
+            "box": len(call.findall(inside)),
         }
     ghost = body(GHOST_BODY, text(REACT_FX))
     sink = body(SINK_BODY, text(REACT_FX))

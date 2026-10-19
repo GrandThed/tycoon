@@ -1389,16 +1389,17 @@ local function reactOnAuto(
 	return found
 end
 
--- The strike the server builds for an ice swing at `step` (WorldReact.SwingStrike), its arc cut
--- to touch auto-swing's `cone` (nil = uncut). A grounded swing's: iceOnAuto never asks in the air.
+-- The strike the server builds for an ice swing at `step` (WorldReact.SwingStrike, with the swing's
+-- own air verdict `airborne`), its arc cut to touch auto-swing's `cone` (nil = uncut).
 local function autoIceStrike(
 	variant: Types.RangeWeaponVariant,
 	step: number,
 	origin: Vector3,
 	heading: Vector3,
-	cone: number?
+	cone: number?,
+	airborne: boolean
 ): WorldReact.Strike
-	local strike = WorldReact.SwingStrike(variant, step, origin, heading, false)
+	local strike = WorldReact.SwingStrike(variant, step, origin, heading, airborne)
 	local arc = strike.arcDegrees
 	if arc ~= nil and cone ~= nil then
 		strike.arcDegrees = math.min(arc, cone)
@@ -1416,30 +1417,37 @@ end
 --  * The combo step the swing will get is the server's to decide, so a cell triggers only when
 --    the strike of every step of the chain chills it.
 --  * c-m4: never while airborne. The freeze band was sized for a grounded origin (L2-54), and an
---    air swing would spend the jump's one swing and hang the body (AirSwing, AirHang).
+--    air swing would spend the jump's one swing and hang the body (AirSwing, AirHang). The third
+--    fix round's fd-s1: "airborne" is the server's own question, AirSwing.Judge at the swing's
+--    origin (SwingGate's footprint test, lag 0, no side effect), never the Humanoid's floor
+--    sensor, whose width is not the root's footprint: a phone on the bank's very lip would
+--    otherwise swing at full rate, freeze nothing and spend the jump's air swing on the first.
 --  * The second fix round's Q5: never at a cell a player's body stands in (WorldReact.Holds, the
 --    server's rule; the bodies are read only once a cell has passed every other test).
--- A frozen cell never triggers. Far from the water this costs one rectangle test (c-m1).
+-- A frozen cell never triggers. Far from the water this costs AirSwing's five floor rays and one
+-- rectangle test (c-m1).
 local function iceOnAuto(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
-	origin: Vector3,
+	rig: LocalRig,
 	heading: Vector3
 ): boolean
 	if Unlocks.ElementOf(cfg.weapons, (activeFamily(cfg))) ~= "ice" then
-		return false
-	end
-	if MovementController.IsAirborne() then
 		return false
 	end
 	local reachDown, ahead = ReactFx.IceReach()
 	if reachDown == nil or ahead == nil then
 		return false
 	end
+	local origin = rig.root.Position
+	local allowed, inAir = AirSwing.Judge(origin, rig.root, rig.humanoid)
+	if not allowed or inAir then
+		return false
+	end
 	local coneValue = (cfg.controls :: any).iceAutoDegrees
 	local cone: number? = if type(coneValue) == "number" then coneValue else nil
 	-- A cell every step chills is one step 1 chills, so step 1's reach picks the cells asked.
-	local first = autoIceStrike(variant, 1, origin, heading, cone)
+	local first = autoIceStrike(variant, 1, origin, heading, cone, inAir)
 	local strikes: { WorldReact.Strike }? = nil
 	local bodies: { WorldReact.Box }? = nil
 	return ReactFx.ForEachIce(
@@ -1456,7 +1464,7 @@ local function iceOnAuto(
 				local made: { WorldReact.Strike } = {}
 				local chain = variant.chain
 				for step = 2, if chain ~= nil then #chain else 1 do
-					table.insert(made, autoIceStrike(variant, step, origin, heading, cone))
+					table.insert(made, autoIceStrike(variant, step, origin, heading, cone, inAir))
 				end
 				strikes = made
 				others = made
@@ -1519,7 +1527,7 @@ local function targetOnAuto(
 	if onBody or refused then
 		return onBody
 	end
-	return iceOnAuto(cfg, variant, root, look)
+	return iceOnAuto(cfg, variant, rig, look)
 end
 
 -- A queued tap still inside its buffer; an expired one is dropped.

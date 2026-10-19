@@ -5527,6 +5527,23 @@ def ice_inset(ice):
     return inset if finite(inset) and inset >= 0 else None
 
 
+def ice_meets(waters, top, on_x, plane, facing, low, high):
+    """LevelGeometry's meetsIce (the W3 third fix round's fd-s2): the side of a cell on its water's
+    own face, on the plane `plane` across x (`on_x`) or across z, facing `facing` (-1 west or north,
+    1 east or south), from `low` to `high` along that face, meets one of `waters` (every ice block)
+    whole: its opposite side on that plane (to GEOMETRY_SEAM), the same top, spanning the side. Such
+    a side is built with no inset. (A block's own far side lies on its near one only when the block
+    is too thin for a cell.)"""
+    for w in waters:
+        centre, size = (w["x"], w["sx"]) if on_x else (w["z"], w["sz"])
+        along, span = (w["z"], w["sz"]) if on_x else (w["x"], w["sx"])
+        if (abs(centre - facing * size / 2 - plane) <= GEOMETRY_SEAM
+                and abs(w["y"] + w["sy"] / 2 - top) <= GEOMETRY_SEAM
+                and along - span / 2 <= low + GEOMETRY_SEAM and along + span / 2 >= high - GEOMETRY_SEAM):
+            return True
+    return False
+
+
 def ice_cells(layout, ice):
     """L2-53, LevelGeometry.Pieces' ice pieces: every block whose `react` is "ice" divided evenly
     into ceil(side / ice.cell) cells per axis (WorldReact.Cells); a cell the footprint of ONE
@@ -5534,7 +5551,8 @@ def ice_cells(layout, ice):
     included, to GEOMETRY_SEAM: the W3 fix round's d-m1) gets no piece; a cell it holds in part is
     built (its top lies inside the cover where they meet). The second fix round's Q6: a cell's face
     on one of the block's own faces (the first and last column and row) is built ice.inset inside it
-    (the cover test reads the whole cell), and a cell the inset leaves no width is not built.
+    (the cover test reads the whole cell), and a cell the inset leaves no width is not built; the
+    third fix round's fd-s2: but not a face another ice block meets whole (ice_meets).
     [{block, i, k, box (x0, x1, z0, z1) as built, cell (x0, x1, z0, z1) its whole place in the grid,
     top (the water's top + ice.lift), water (the water's top)}] in the layout's block order, i
     across x, k across z. `ice` nil (Combat.json levels.react.ice absent), or an inset that is not
@@ -5549,6 +5567,7 @@ def ice_cells(layout, ice):
     # (x, z, sx, sz, top) as LevelGeometry builds them: every colliding block, every secret.
     covers = [(b["x"], b["z"], b["sx"], b["sz"], b["y"] + b["sy"] / 2) for b in blocks if b.get("collide") is not False]
     covers += [(s["x"], s["z"], s["sx"], s["sz"], s["y"] + s["sy"] / 2) for s in layout.get("secrets") or []]
+    waters = [b for b in blocks if b.get("react") == "ice"]
     found = []
     for b in blocks:
         if b.get("react") != "ice":
@@ -5563,10 +5582,15 @@ def ice_cells(layout, ice):
                 if any(c[4] > water and abs(cx - c[0]) + wx / 2 <= c[2] / 2 + GEOMETRY_SEAM
                        and abs(cz - c[1]) + wz / 2 <= c[3] / 2 + GEOMETRY_SEAM for c in covers):
                     continue
-                west = cx - wx / 2 + (inset if i == 0 else 0)
-                east = cx + wx / 2 - (inset if i == nx - 1 else 0)
-                north = cz - wz / 2 + (inset if k == 0 else 0)
-                south = cz + wz / 2 - (inset if k == nz - 1 else 0)
+                gx0, gx1, gz0, gz1 = cx - wx / 2, cx + wx / 2, cz - wz / 2, cz + wz / 2
+                open_west = i == 0 and not ice_meets(waters, water, True, gx0, -1, gz0, gz1)
+                open_east = i == nx - 1 and not ice_meets(waters, water, True, gx1, 1, gz0, gz1)
+                open_north = k == 0 and not ice_meets(waters, water, False, gz0, -1, gx0, gx1)
+                open_south = k == nz - 1 and not ice_meets(waters, water, False, gz1, 1, gx0, gx1)
+                west = gx0 + (inset if open_west else 0)
+                east = gx1 - (inset if open_east else 0)
+                north = gz0 + (inset if open_north else 0)
+                south = gz1 - (inset if open_south else 0)
                 if east - west <= GEOMETRY_SEAM or south - north <= GEOMETRY_SEAM:
                     continue
                 found.append({"block": b.get("name") or b["look"], "i": i, "k": k,

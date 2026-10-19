@@ -6095,3 +6095,82 @@ The full driver (196 data cases, 9 stage-mirror cases, 1 simulator case; about 2
 expected but the old dam case, which d-m1 made green and which was re-aimed above; the re-aimed case and its new
 control were then run alone (red / green). The server agent named its stage-mirror refusal "a pool that
 collides, with no landing" for the ice-collides mirror case.
+
+## L2 W3 third fix round: the island off the grid, a sheet thinner than a root, the creek's mouth (2026-10-19)
+
+Rulings: `docs/prompts/l2-w3-fix3.md`. The findings (fd-m1, fd-m2, fd-s1, fd-s2) are in
+`docs/prompts/l2-w3-review/fix-diff.md`; the round's report is `docs/prompts/l2-w3-reports/fix3.md`.
+
+Gates:
+- `py tools/check_levels.py` PASS;
+- `py -3.12 tools/sim_range.py --check` PASS (523 PASS lines, 0 FAIL, on Python 3.12.10 64-bit);
+- `py tools/check_stage_mirror.py` PASS (ice cells: 9 views compared box by box);
+- `py tools/check_levels_mutants.py --only "W3"`: every case as expected: 92 data cases (67 red, 25 green) and 7 stage-mirror cases, the shipped data green.
+
+### L2 W3 fix3: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Combat.json levels.react.ice.thickness` | 4 | **1.9** | fd-m2. The server judges a body on its own copy, which trails that player's screen by a round trip, and a cell frozen now turns solid on his screen a round trip later. At 4 a body's 2-stud root could end up wholly inside a fresh cell (a teammate walking into the creek at a 0.15 s round trip; the swinger stepping onto his own ghost). Under the root's height it never can. The lead's ruling replaces d-m6's: a sheet is not a camp floor (below) |
+| `ForestRoad.json ShrineIsland` | z 128 (z 120..136) | **z 128.5** (z 120.5..136.5); the chest stays at z 128 | fd-m1. The island's south face lay on the pond's row line z 136, so the cells beside it, (4, 5) and (6, 5), had their south faces on its own: frozen, the opaque ice and the grey island z-fight. Both its z faces are now mid-row (rows 3 and 6); its x faces (−408, −392) were already mid-column |
+| `check_levels.py` floor depth | every frozen sheet ≥ `levels.floorThickness` 4 (d-m6) | the frozen sheets are judged by the new sheet line; the floor line still judges every other block of the frozen layout | fd-m2 |
+| `check_levels.py` | — | the coplanar line (`ice_coplanar`), the sheet line (`sheet_bounds`; `PHYSICS_HZ` 240, `ROOT_TALL` 2) | fd-m1, fd-m2 |
+| `check_levels.py` fill line | the block shrunk by the inset on every side | a rim only along the cell sides that are inset (`ice_side_met`, check_levels' own statement of fd-s2) | fd-s2: where the creek meets the pond the sheets must meet |
+| `sim_range.py ice_cells` | every cell side on the block's own face inset | not a side another ice block meets whole at the same top (`ice_meets`) | fd-s2, mirrors `LevelGeometry.meetsIce` |
+
+### L2 W3 fix3: the island (fd-m1)
+
+| Measure | Before | Now |
+|---|---|---|
+| Faces of an ice piece within the inset (0.05) of a same-facing face of a solid | **2** (cells (4, 5) and (6, 5), on the island's south face) | **0** (136 pieces against 86 solids) |
+| ShrineSignPad to the island | 102.0 | **102.5** |
+| Margin over the farthest reach (the Spear's Impale Dash held in the air, 80.6) | +21.5 | **+22.0** (`ICE_MARGIN` 15) |
+| The chest's trigger (z 122.5..133.5, x −405.5..−394.5) over the island | 2.5 to spare each side | 2.0 north, **3.0** south; 2.5 east and west |
+| Ice pieces / Parts | 136 / 252 | 136 / 252: column 5's rows 4 and 5 still lie wholly under the island; rows 3 and 6 are part-covered |
+| Chain from a bank to the island | 16 cells (4 by a bank, 10 by the island) | unchanged |
+| The crossing | 9 swings, 9.0 s human / 5.8 s ideal, 108.7 studs, 39 cells | unchanged |
+
+### L2 W3 fix3: the sheet (fd-m2)
+
+The sheet line (check_ice, on the frozen layout) holds two bounds:
+- **Thicker than the fastest fall onto it moves in one physics step.** That fall is the faster of the slam's dive
+  (`movement.slamFallSpeed` 140) and a free fall from the jumps' apex over the highest top reached on the frozen layout
+  down to the lowest sheet: 68.8 studs, **164.3 studs/s**. At 240 Hz that is **0.685** a step. The 240 Hz is an
+  assumption about Roblox physics: if adaptive stepping drops a falling character to 60 Hz, a slam moves 2.33 a step.
+- **Thinner than the R15 root** (`ROOT_TALL` 2), so a root never lies wholly inside a sheet.
+
+1.9 passes both. killY on the frozen layout is unchanged (12.2 under the ice); the lowest Part's bottom is now −4 (the
+island's), was −4.8 (the sheets').
+
+The server's side (`LevelService` bodies):
+- Every body the air tracking last found off its floor (`WeaponService.FallSpeed`) has its feet led by
+  `WorldReact.FallDrop`: fall × lag + g × lag² / 2.
+  - The fall is the larger of the replicated velocity and the position's change, capped at `Tuning.FastestMove` 140.
+  - The lag is `Tuning.CommitLag`: that player's ping plus 0.05, at most 0.3.
+  - A standing body is not led.
+- The review's case: feet at −1.0 falling at 19.8 with a lag of 0.1 is led 2.96, so the cell is held.
+- A teammate walking off the bank at a 0.15 s round trip (lag 0.2):
+  - no part of his root is in the cell when it turns solid on his screen;
+  - unled, it would hold 1.9 of his root.
+- Off the frozen edge at a 0.15 s round trip, his last standing frame cannot be led: at most **0.21** of his root, never
+  the whole of it.
+
+### L2 W3 fix3: the creek's mouth (fd-s2)
+
+Six cell sides now lie on their water's face, with no inset:
+- the Creek's last row: its 3 south sides;
+- the Pond's first row, columns 4 to 6: their north sides.
+
+The 0.1 seam across the crossing is gone. The Pond's columns 3 and 7 meet the Creek over 0.18 studs only, so they keep
+their inset. Every other side on a water's face keeps it too: 72 sides by the faces in all, 6 of them met.
+
+### L2 W3 fix3: `check_levels_mutants.py`, new and changed cases
+
+| Case | Rule | Expected |
+|---|---|---|
+| the island back at z 128; the island at x −401.818 (its west face on a column line) / control: z 128.05 (the inset off the line) | the coplanar line (fd-m1) | red ×2 / green |
+| `ice.thickness` 0.6 / control 0.7; 2; 4; `slamFallSpeed` 480 | the sheet line (fd-m2) | red / green; red; red; red |
+| re-aimed d-m6: Road2 2 deep, nothing under it / control `ice.thickness` 1 | the frozen layout's floor line | red / green |
+| `sim_range.ice_cells` insets the creek's mouth too / control: the Pond's top 0.5 under the Creek's | the fill line (fd-s2) | red / green |
+| `sim_range.ice_meets` ignores the top; takes a side met in part (the mirror alone) | check_stage_mirror | red ×2 |
+| re-aimed: the Q6 west-twice swap and the Q6 mirror case on the new lines; d-m3's towers 0.5 south with the island | as before | as before |

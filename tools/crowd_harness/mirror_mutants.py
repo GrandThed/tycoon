@@ -251,12 +251,21 @@ MUTANTS = [
     # The W3 second fix round's Q6: the ice cells inset from their water's own faces, against
     # sim_range.ice_cells box by box.
     ("L2 W3 fix2 Q6: no inset on the east", "LevelGeometry",
-     "local east = cell.x + cell.sx / 2 - (if i == nx then ice.inset else 0)", "local east = cell.x + cell.sx / 2"),
+     "local east = x1 - (if openEast then ice.inset else 0)", "local east = x1"),
     ("L2 W3 fix2 Q6: every north face inset", "LevelGeometry",
-     "local north = cell.z - cell.sz / 2 + (if j == 1 then ice.inset else 0)", "local north = cell.z - cell.sz / 2 + ice.inset"),
+     "local north = z0 + (if openNorth then ice.inset else 0)", "local north = z0 + ice.inset"),
     ("L2 W3 fix2 Q6: a cell left no width is built", "LevelGeometry",
      "if not covered and east - west > SEAM and south - north > SEAM then", "if not covered then"),
     ("L2 W3 fix2 Q6: IceOf takes an inset under 0", "LevelGeometry", "\t\tand inset >= 0\n", ""),
+    # The W3 third fix round's fd-s2: a side another ice block meets whole is not inset (the stage
+    # mirror's views of pools that touch, meet in part, at another top and at a corner).
+    ("L2 W3 fix3 fd-s2: the south side always inset", "LevelGeometry",
+     "local openSouth = j == nz and not meetsIce(waters, top, false, z1, 1, x0, x1)", "local openSouth = j == nz"),
+    ("L2 W3 fix3 fd-s2: meetsIce ignores the top", "LevelGeometry",
+     "\t\t\tand math.abs(other.y + other.sy / 2 - top) <= SEAM\n", ""),
+    ("L2 W3 fix3 fd-s2: meetsIce takes a side met in part", "LevelGeometry",
+     "\t\t\tand along - span / 2 <= low + SEAM\n\t\t\tand along + span / 2 >= high - SEAM\n",
+     "\t\t\tand along - span / 2 < high\n\t\t\tand along + span / 2 > low\n"),
 ]
 
 

@@ -5391,8 +5391,8 @@ L2W3_FIX_MUTATIONS = {
     ),
     "l2w3 fix c-m3: the phone's own step": (
         INPUT,
-        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, false)",
-        "local strike = WorldReact.SwingStrike(variant, 1, origin, heading, false)",
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, airborne)",
+        "local strike = WorldReact.SwingStrike(variant, 1, origin, heading, airborne)",
     ),
     "l2w3 fix c-m3: the early hitbox's own step": (
         FEEDBACK,
@@ -5589,8 +5589,8 @@ L2W3_FIX_MUTATIONS = {
     ),
     "l2w3 fix s-M1: a fresh body keeps the stood point": (
         WEAPON,
-        "\tshooter.stood = nil\n\tshooter.airSwing = SwingGate.New()",
-        "\tshooter.airSwing = SwingGate.New()",
+        "\tshooter.stood = nil\n\tshooter.fall = nil\n\tshooter.airSwing = SwingGate.New()",
+        "\tshooter.fall = nil\n\tshooter.airSwing = SwingGate.New()",
     ),
     "l2w3 fix s-M1: LastGround answers nothing": (
         WEAPON,
@@ -5623,7 +5623,7 @@ CELL_FINITE = (
     "\t\t\tand finite(box.sy)\n\t\t\tand finite(box.sz)\n\t\t)\n\tthen\n\t\treturn false\n\tend\n\tlocal top = box.y + box.sy / 2\n"
     "\tlocal bottom"
 )
-INSET_WEST = "local west = cell.x - cell.sx / 2 + (if i == 1 then ice.inset else 0)"
+INSET_WEST = "local west = x0 + (if openWest then ice.inset else 0)"
 L2W3_FIX2_MUTATIONS = {
     # Q5, the pure rules.
     "l2w3 fix2 Q5: Chills takes an air swing": (
@@ -5743,7 +5743,7 @@ L2W3_FIX2_MUTATIONS = {
     ),
     "l2w3 fix2 Q5: the phone's strike is an air swing": (
         INPUT,
-        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, false)",
+        "local strike = WorldReact.SwingStrike(variant, step, origin, heading, airborne)",
         "local strike = WorldReact.SwingStrike(variant, step, origin, heading, true)",
     ),
     "l2w3 fix2 Q5: the ghost's strike is always grounded": (FROST_FX, "\t\tswing.airSwing\n\t)", "\t\tfalse\n\t)"),
@@ -5753,27 +5753,27 @@ L2W3_FIX2_MUTATIONS = {
         "swing.heading, false)",
     ),
     # Q6.
-    "l2w3 fix2 Q6: no inset on the west": (GEOMETRY, INSET_WEST, "local west = cell.x - cell.sx / 2"),
+    "l2w3 fix2 Q6: no inset on the west": (GEOMETRY, INSET_WEST, "local west = x0"),
     "l2w3 fix2 Q6: no inset on the east": (
         GEOMETRY,
-        "local east = cell.x + cell.sx / 2 - (if i == nx then ice.inset else 0)",
-        "local east = cell.x + cell.sx / 2",
+        "local east = x1 - (if openEast then ice.inset else 0)",
+        "local east = x1",
     ),
     "l2w3 fix2 Q6: no inset on the north": (
         GEOMETRY,
-        "local north = cell.z - cell.sz / 2 + (if j == 1 then ice.inset else 0)",
-        "local north = cell.z - cell.sz / 2",
+        "local north = z0 + (if openNorth then ice.inset else 0)",
+        "local north = z0",
     ),
     "l2w3 fix2 Q6: no inset on the south": (
         GEOMETRY,
-        "local south = cell.z + cell.sz / 2 - (if j == nz then ice.inset else 0)",
-        "local south = cell.z + cell.sz / 2",
+        "local south = z1 - (if openSouth then ice.inset else 0)",
+        "local south = z1",
     ),
-    "l2w3 fix2 Q6: every west face inset": (GEOMETRY, INSET_WEST, "local west = cell.x - cell.sx / 2 + ice.inset"),
+    "l2w3 fix2 Q6: every west face inset": (GEOMETRY, INSET_WEST, "local west = x0 + ice.inset"),
     "l2w3 fix2 Q6: the inset doubled": (
         GEOMETRY,
-        "local east = cell.x + cell.sx / 2 - (if i == nx then ice.inset else 0)",
-        "local east = cell.x + cell.sx / 2 - (if i == nx then 2 * ice.inset else 0)",
+        "local east = x1 - (if openEast then ice.inset else 0)",
+        "local east = x1 - (if openEast then 2 * ice.inset else 0)",
     ),
     "l2w3 fix2 Q6: Cells' order read Z fastest": (
         GEOMETRY,
@@ -5799,6 +5799,182 @@ L2W3_FIX2_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L2W3_FIX2_MUTATIONS)
+
+
+# The L2 W3 third fix round (docs/prompts/l2-w3-fix3.md). fd-m2: the server leads a falling body's
+# feet by its fall over its commit lag (WorldReact.FallDrop and BodyBox's `drop`; LevelService's
+# bodies; WeaponService's measured fall and FallSpeed). fd-s1: the phone's ice auto-swing asks
+# AirSwing.Judge. fd-s2: a cell's side another ice block meets whole is not inset (LevelGeometry's
+# meetsIce and the list of ice blocks). Proved by tests_l2w3.luau's fix3Tests, insetTests,
+# realTests and fix3WiringTests.
+FALL_RETURN = "return speed * lag + math.max(gravity, 0) * lag * lag / 2"
+FALL_SPEED = "local speed = math.min(math.max(fallSpeed, 0), math.max(fastest, 0))"
+OPEN_SOUTH = "local openSouth = j == nz and not meetsIce(waters, top, false, z1, 1, x0, x1)"
+L2W3_FIX3_MUTATIONS = {
+    # fd-m2, the pure rules.
+    "l2w3 fix3 fd-m2: FallDrop drops gravity's part": (WORLD_REACT, FALL_RETURN, "return speed * lag"),
+    "l2w3 fix3 fd-m2: FallDrop drops the speed's part": (
+        WORLD_REACT,
+        FALL_RETURN,
+        "return math.max(gravity, 0) * lag * lag / 2",
+    ),
+    "l2w3 fix3 fd-m2: FallDrop squares gravity's whole": (
+        WORLD_REACT,
+        FALL_RETURN,
+        "return speed * lag + math.max(gravity, 0) * lag * lag",
+    ),
+    "l2w3 fix3 fd-m2: FallDrop's gravity under 0 lifts": (
+        WORLD_REACT,
+        FALL_RETURN,
+        "return speed * lag + gravity * lag * lag / 2",
+    ),
+    "l2w3 fix3 fd-m2: FallDrop's speed is not capped": (WORLD_REACT, FALL_SPEED, "local speed = math.max(fallSpeed, 0)"),
+    "l2w3 fix3 fd-m2: FallDrop takes a rising speed": (
+        WORLD_REACT,
+        FALL_SPEED,
+        "local speed = math.min(fallSpeed, math.max(fastest, 0))",
+    ),
+    "l2w3 fix3 fd-m2: FallDrop runs a lag under 0": (WORLD_REACT, "\t\tor not (lag > 0)\n", "\t\tor false\n"),
+    "l2w3 fix3 fd-m2: FallDrop takes an endless gravity": (
+        WORLD_REACT,
+        "not (finite(fallSpeed) and finite(lag) and finite(gravity) and finite(fastest))",
+        "not (finite(fallSpeed) and finite(lag) and finite(fastest))",
+    ),
+    "l2w3 fix3 fd-m2: BodyBox ignores the drop": (WORLD_REACT, "local lower = length(drop)", "local lower = 0"),
+    "l2w3 fix3 fd-m2: BodyBox takes a drop under 0": (WORLD_REACT, "local lower = length(drop)", "local lower = drop or 0"),
+    "l2w3 fix3 fd-m2: BodyBox's drop moves the whole body": (
+        WORLD_REACT,
+        "\t\ty = position.Y - lower / 2,\n",
+        "\t\ty = position.Y - lower,\n",
+    ),
+    "l2w3 fix3 fd-m2: BodyBox's drop lowers the top too": (
+        WORLD_REACT,
+        "\t\tsy = 2 * stand + lower,\n",
+        "\t\tsy = 2 * stand,\n",
+    ),
+    # fd-m2, the lines that apply them.
+    "l2w3 fix3 fd-m2: the server leads no body": (
+        LEVEL_SERVICE,
+        "then WorldReact.FallDrop(fall, lag, Workspace.Gravity, fastest)",
+        "then 0",
+    ),
+    "l2w3 fix3 fd-m2: the server leads a standing body by gravity": (
+        LEVEL_SERVICE,
+        "\t\t\t\telse 0\n",
+        "\t\t\t\telse WorldReact.FallDrop(0, lag, Workspace.Gravity, fastest)\n",
+    ),
+    "l2w3 fix3 fd-m2: the server's lag ignores the ping": (
+        LEVEL_SERVICE,
+        "local lag = Tuning.CommitLag(config.shooting, player:GetNetworkPing())",
+        "local lag = Tuning.CommitLag(config.shooting, 0)",
+    ),
+    "l2w3 fix3 fd-m2: the server's lead has no cap": (
+        LEVEL_SERVICE,
+        "local fastest = Tuning.FastestMove(config)",
+        "local fastest = math.huge",
+    ),
+    "l2w3 fix3 fd-m2: the server hands BodyBox no drop": (
+        LEVEL_SERVICE,
+        "\t\t\t\t\thumanoid.HipHeight,\n\t\t\t\t\tdrop\n",
+        "\t\t\t\t\thumanoid.HipHeight\n",
+    ),
+    "l2w3 fix3 fd-m2: trackAir measures no fall": (
+        WEAPON,
+        "shooter.fall = if shooter.stood == position then nil else math.max(fallSpeed, 0)",
+        "shooter.fall = nil",
+    ),
+    "l2w3 fix3 fd-m2: trackAir's fall ignores the footing": (
+        WEAPON,
+        "shooter.fall = if shooter.stood == position then nil else math.max(fallSpeed, 0)",
+        "shooter.fall = math.max(fallSpeed, 0)",
+    ),
+    "l2w3 fix3 fd-m2: no root keeps the fall": (
+        WEAPON,
+        "\t\t\tshooter.fall = nil\n\t\t\tPositionRing.Clear(shooter.history)\n",
+        "\t\t\tPositionRing.Clear(shooter.history)\n",
+    ),
+    "l2w3 fix3 fd-m2: a server move keeps the fall": (
+        WEAPON,
+        "\t\tshooter.stood = nil\n\t\tshooter.fall = nil\n\tend\nend",
+        "\t\tshooter.stood = nil\n\tend\nend",
+    ),
+    "l2w3 fix3 fd-m2: a fresh body keeps the fall": (
+        WEAPON,
+        "\tshooter.fall = nil\n\tshooter.airSwing = SwingGate.New()",
+        "\tshooter.airSwing = SwingGate.New()",
+    ),
+    "l2w3 fix3 fd-m2: FallSpeed answers nothing": (
+        WEAPON,
+        "return if shooter ~= nil then shooter.fall else nil",
+        "return nil",
+    ),
+    # fd-s1: the phone asks the server's question.
+    "l2w3 fix3 fd-s1: the phone asks the Humanoid again": (
+        INPUT,
+        "local allowed, inAir = AirSwing.Judge(origin, rig.root, rig.humanoid)",
+        "local allowed, inAir = true, MovementController.IsAirborne()",
+    ),
+    "l2w3 fix3 fd-s1: the phone swings in the air": (INPUT, "if not allowed or inAir then", "if not allowed then"),
+    "l2w3 fix3 fd-s1: the phone swings a refused swing": (INPUT, "if not allowed or inAir then", "if inAir then"),
+    "l2w3 fix3 fd-s1: the phone's first strike drops the verdict": (
+        INPUT,
+        "local first = autoIceStrike(variant, 1, origin, heading, cone, inAir)",
+        "local first = autoIceStrike(variant, 1, origin, heading, cone, false)",
+    ),
+    "l2w3 fix3 fd-s1: the phone's other strikes drop the verdict": (
+        INPUT,
+        "table.insert(made, autoIceStrike(variant, step, origin, heading, cone, inAir))",
+        "table.insert(made, autoIceStrike(variant, step, origin, heading, cone, false))",
+    ),
+    # fd-s2: a side another ice block meets whole is not inset.
+    "l2w3 fix3 fd-s2: the west side always inset": (
+        GEOMETRY,
+        "local openWest = i == 1 and not meetsIce(waters, top, true, x0, -1, z0, z1)",
+        "local openWest = i == 1",
+    ),
+    "l2w3 fix3 fd-s2: the east side always inset": (
+        GEOMETRY,
+        "local openEast = i == nx and not meetsIce(waters, top, true, x1, 1, z0, z1)",
+        "local openEast = i == nx",
+    ),
+    "l2w3 fix3 fd-s2: the north side always inset": (
+        GEOMETRY,
+        "local openNorth = j == 1 and not meetsIce(waters, top, false, z0, -1, x0, x1)",
+        "local openNorth = j == 1",
+    ),
+    "l2w3 fix3 fd-s2: the south side always inset": (GEOMETRY, OPEN_SOUTH, "local openSouth = j == nz"),
+    "l2w3 fix3 fd-s2: the south side asks the north plane": (
+        GEOMETRY,
+        OPEN_SOUTH,
+        "local openSouth = j == nz and not meetsIce(waters, top, false, z0, 1, x0, x1)",
+    ),
+    "l2w3 fix3 fd-s2: the east side asks the wrong facing": (
+        GEOMETRY,
+        "local openEast = i == nx and not meetsIce(waters, top, true, x1, 1, z0, z1)",
+        "local openEast = i == nx and not meetsIce(waters, top, true, x1, -1, z0, z1)",
+    ),
+    "l2w3 fix3 fd-s2: meetsIce ignores the top": (
+        GEOMETRY,
+        "\t\t\tand math.abs(other.y + other.sy / 2 - top) <= SEAM\n",
+        "",
+    ),
+    "l2w3 fix3 fd-s2: meetsIce takes a side met in part": (
+        GEOMETRY,
+        "\t\t\tand along - span / 2 <= low + SEAM\n\t\t\tand along + span / 2 >= high - SEAM\n",
+        "\t\t\tand along - span / 2 < high\n\t\t\tand along + span / 2 > low\n",
+    ),
+    "l2w3 fix3 fd-s2: meetsIce reads the neighbour's near side": (
+        GEOMETRY,
+        "math.abs(centre - facing * size / 2 - plane) <= SEAM",
+        "math.abs(centre + facing * size / 2 - plane) <= SEAM",
+    ),
+    "l2w3 fix3 fd-s2: Pieces lists no ice block to meet": (
+        GEOMETRY,
+        '\t\t\tif blocks[index].react == "ice" then\n\t\t\t\ttable.insert(waters, box)',
+        "\t\t\tif false then\n\t\t\t\ttable.insert(waters, box)",
+    ),
+}
+MUTATIONS.update(L2W3_FIX3_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

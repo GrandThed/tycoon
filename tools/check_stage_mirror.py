@@ -507,7 +507,9 @@ def ice_cases(data, expected, raw_layouts, rules):
     of Combat.json `levels`) against sim_range.ice_cells, box by box: every shipped level layout with
     the shipped levels.react.ice, and Forest Road with an inset of 0, a wider one (0.5), none written,
     one under 0 (no cells on either side), and with two pools that touch beside a pool too thin for
-    its inset (its cells left no width)."""
+    its inset (its cells left no width). The third fix round's fd-s2 (a side another ice block meets
+    whole is not inset): the touching pools at a wider inset, and pools that meet another only in
+    part, at another top, and at a corner."""
     ice = (rules.get("react") or {}).get("ice")
     views = [(name, layout, ice) for name, layout in raw_layouts.items() if not layout.get("arena")]
     forest = raw_layouts.get("ForestRoad")
@@ -521,6 +523,16 @@ def ice_cases(data, expected, raw_layouts, rules):
             pools["blocks"].append({"name": name, "look": "water", "x": x, "y": 400, "z": z, "sx": sx, "sy": 2,
                                     "sz": 14, "collide": False, "react": "ice"})
         views.append(("ForestRoad with two pools that touch and one 0.08 wide", pools, ice))
+        views.append(("ForestRoad with two pools that touch and one 0.08 wide, inset 0.5", pools, {**ice, "inset": 0.5}))
+        # fd-s2: Wide's west side meets Narrow (14 deep) only in part; Low meets Wide's east side
+        # whole but 1 stud lower; Corner touches Wide's south-east corner only.
+        apart = copy.deepcopy(forest)
+        for name, x, z, sx, sz, y in (("TestWide", 0, 60, 21, 28, 400), ("TestNarrow", -17.5, 60, 14, 14, 400),
+                                      ("TestLow", 17.5, 60, 14, 28, 399), ("TestCorner", 17.5, 81, 14, 14, 400)):
+            apart["blocks"].append({"name": name, "look": "water", "x": x, "y": y, "z": z, "sx": sx, "sy": 2,
+                                    "sz": sz, "collide": False, "react": "ice"})
+        views.append(("ForestRoad with pools that meet in part, at another top and at a corner", apart,
+                      {**ice, "inset": 0.5}))
     for index, (label, layout, case_ice) in enumerate(views, 1):
         case = f"ice.{index}"
         levels = {**rules, "react": {**(rules.get("react") or {}), "ice": case_ice}}
