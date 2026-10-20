@@ -70,3 +70,4 @@ Learned facts that don't belong in the spec live in `.claude/memory/` so they tr
 @.claude/memory/agent-context-cost-2026-10-13.md
 @.claude/memory/chief-clearing-2026-10-16.md
 @.claude/memory/l2-secrets-2026-10-17.md
+@.claude/memory/l3-armory-2026-10-20.md
