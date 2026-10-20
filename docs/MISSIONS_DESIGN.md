@@ -534,3 +534,29 @@ then a second run; no script error; crowd step p95 under 0.6 ms). **L1c and L2 a
 answers to the waves' click questions were this one line, read as "about right" for the one-jump first run, the
 Flamethrower, the tunnel's trade, the frost crossing and the three chests' pay. Next: L3, the Armory (per-weapon
 tiers, the upgrade loop with Forest drops, the new screen, weapon models), only on his word.
+
+## 24. L3 "the Armory": decisions (2026-10-20)
+
+Ben: *"we are starting L3"*, then mid-turn *"we are not starting every weapon with tier 1 nor ending every weapon to
+tier 20"* (recorded in §10). Two groundwork studies (`docs/prompts/l3-study-report-systems.md`,
+`l3-study-report-screen.md`), then click questions with sketches; he took the lead's recommendation on all eight:
+
+- **The windows, as drawn** (systems report §2.3): Broadsword and Longbow 1–12, Flamethrower 2–8 (the lookout),
+  Warhammer 3–16 (the Forest's first Hard clear), Frost Hammer 5–12, Greataxe 6–18, Splitbow 8–8 (a relic), Spear 9–20,
+  Shotgun 9–16, Piercing Rifle 11–18, Launcher 13–20, SMG 14–20, Beam 16–20, Chain Gun 17–20, Spinblade 20–20 (a relic).
+  Five bands of four tiers, one per level; a band's top tier also needs that level's Hard star (the trophy). **[Ben]**
+- **Three Forest runs take one weapon from tier 1 to tier 4** (Timber 100 / 250 / 500 for T2 / T3 / T4; both starters
+  in about 31 minutes; the first clear buys T2 for both). **[Ben]**
+- **The city's income no longer gates tiers.** Levels and their drops do; the city keeps a level's cash and 100%
+  offline income while the player is in the dungeon. **[Ben]** This answers §11.1.
+- **Brutal Forest waits for Castle gear** (recommended T5, tuning unchanged). **[Ben]**
+- **The screen: A, "Showcase"** (the L0 order: the big turning weapon, its details and the shelf on one screen), the
+  **tier track as the full ladder of 20 with the weapon's window lit**, **all 15 models with one look each** (looks that
+  grow with the tier can follow later as content only), **dressed by the level where each weapon is found** (Forest wood,
+  bone, rope, flint; Castle steel, crests, gold; Underworld black iron, embers; Planet alloy, glow strips; Dream crystal,
+  pastels). **[Ben]**
+
+Lead rulings told to Ben the same day (he may overrule): tier 1 is the 2/2 he has always played (no one has played a
+fresh 0/0 profile); live players' Timber spent on tiers is refunded when their profile converts (§11.3); other players
+see your weapons (the one in use in the right hand, the other on the back); the loadout is saved and changes in the
+lobby or the city, never inside a fight.
