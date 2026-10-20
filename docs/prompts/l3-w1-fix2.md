@@ -50,3 +50,6 @@ selene, luau-lsp on both sourcemaps, `py tools/check_compile.py`, the harness
 `check_stage_mirror`, `mutate.py` filtered to your new entries plus `files:` for every file you changed, `check_levels`,
 and the forest part of `sim_range --check` (`--levels-only --level forest`). `export PATH="$HOME/.rokit/bin:$PATH"`;
 `py` only; LF. Report to `docs/prompts/l3-w1-fix-reports/fix2.md` and reply with it.
+
+**F7 (QA)** `tools/crowd_harness/tests_l3.luau` is not stylua-formatted (the only new file that fails `stylua --check`;
+the older harness files that fail it fail on `main` too and stay as they are). Format it.
