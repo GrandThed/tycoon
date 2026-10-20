@@ -545,3 +545,103 @@ aimed at the camera; use rotY 90/270). `solar_panel`/`solar_tracker` face −Z, 
 `light_panel` lit face −Z, holder 0.015 clear of the wall. `mast_segment` stacks every 1.0; `mast_tip`
 is 0.6 wide. `flag` pole at local x −0.275, cloth toward +X. `pad_marking` has a dark disc: only on a
 white deck. `planter_tray` is the only green in the era.
+
+## weapon kit (L3, generated weapons; step 1 2026-10-20)
+
+All 15 weapon families get a model, one look each, detailed, dressed by the level where each is
+found (MISSIONS_DESIGN section 24). No Kenney kit has weapons, so `weapon-kit` is generated in
+Blender like `people-kit` (one-piece props) and `stadium-kit` (colour-only materials).
+
+**Files.**
+- `tools/assets/weapon_kit_palette.py`: every colour of every weapon, per level (`FOREST`, `CASTLE`,
+  `UNDERWORLD`, `PLANET`, `DREAM`) plus `FIRE` and `ICE` accents. `py tools/assets/weapon_kit_palette.py`
+  prints each swatch's contrast against the Armory panel (30, 41, 70), the stage glow (58, 77, 130),
+  a dark shelf card (24, 24, 28) and three daylight grounds; `--sheet` writes
+  `assets/testfit/out/Weapons/_palette.png`.
+- `tools/assets/weapon_kit_mesh.py`: the shared geometry (`Mesh`), the export, the frame file and the
+  palette card. Imported by the level generators, never run on its own.
+- `tools/assets/weapon_kit_<level>.py`: one generator per level dress (`weapon_kit_forest.py` holds
+  Broadsword and Longbow; step 2 adds Flamethrower and Warhammer to it, and `_castle`, `_underworld`,
+  `_planet`, `_dream`). Each writes `<Model>.glb` and `<Model>.frame.json` per weapon, and
+  `palette-card.glb`, into `assets/kenney3d/weapon-kit/Models/GLB format/`.
+- `tools/testfit/blueprints/_props/Weapons/<Model>.json`: one piece, `pos` [0, 0, 0], `rotY` 0,
+  `scale` 1.0. Its `footprint` only has to cover the weapon's X and Z extent both ways from the grip
+  (Broadsword [1, 6.5]) so the merge's footprint check stays quiet; it means nothing in game.
+- `tools/testfit/weaponview.py` (Blender) and `weaponstrip.py` (`py`, Pillow): testfit's weapon view.
+
+**Run.**
+```
+blender -b -P tools/assets/weapon_kit_forest.py [-- --only Broadsword]
+blender -b -P tools/testfit/testfit.py -- --blueprint tools/testfit/blueprints/_props/Weapons/Broadsword.json
+blender -b -P tools/assets/merge_stages.py -- --props --era Weapons [--model Broadsword]   # the triangle count
+py tools/testfit/weaponstrip.py --sheet assets/testfit/out/Weapons                          # _contact.png
+```
+Any blueprint under `_props/Weapons/` (or `--weapon`) gets the weapon view instead of the five-stage
+strip; every other blueprint renders exactly as before (Lantern and Tavern checked pixel for pixel).
+Outputs in `assets/testfit/out/Weapons/`: `<Model>_strip.png` (side view beside a 5-stud R15
+silhouette with the frame points marked, and a three-quarter "stage" view, both on the panel colour
+with the L0 mock's radial behind), `<Model>_icon.png` (512 px, alpha, long axis on the diagonal, the
+point or upper limb to the upper right) and `<Model>_icon_check.png` (the icon at 64 and 128 px on
+the dark card, the panel and the glow, as the unowned near-black silhouette, and on the daylight
+grounds). Raw renders and the spec go to `_raw/`. About 5 s a weapon.
+
+**The frame contract.** A merged prop is one MeshPart, so the client reads these points from config
+and never measures them:
+- 1 glTF unit = 1 stud. The grip centre is the origin. The blade tip, the point or the muzzle lies
+  along −Z; up (a gun's top, a bow's upper limb, an axe's back edge) is +Y; right is +X.
+- Every weapon names `grip`, `tip` (point or muzzle) and `holster` in `Mesh.frame`; bows add `nock`
+  (where the arrow sits on the string), blades may add `bladeBase` (a swing trail's inner end). The
+  generator writes them to `<Model>.frame.json`, the view draws them (grip green, tip red, holster
+  yellow, nock cyan, others white), and the merge keeps the origin exactly (merged bounds equal the
+  generator's to the thousandth).
+- `holster` is the point that sits on `BodyBackAttachment`: the middle of the length for blades and
+  hafts, the bounding-box centre for bows.
+
+**Names.** Model name = the family id with its first letter capitalised (`Broadsword`, `FrostHammer`,
+`Smg`, `Chaingun`), so the client derives it with no table. The upload name is
+`EraCityTycoon_Prop_Weapons_<Model>_S<n>`, 30 + the name's length: every family fits the 50-character
+cap with the long prefix (Flamethrower, the longest, is 42).
+
+**Scale and budget.** Against a 5-stud R15: sword 3.6–4.0, hammer and axe hafts 3.8–4.5, spear 6–7,
+bow 3.6–4.0 tall, guns 2.4–3.4, launcher about 3.6, flamethrower about 3.2 plus a tank. 1,500–3,500
+triangles each, never over 5,000: the generator prints the count (and warns outside the target), the
+merge confirms it (the same number). Measured costs: a rope turn 100–140 triangles (10–14 segments,
+a 5-sided cord), a spiral wrap 24 per ring at 12 segments and 6 rings per turn, a knapped blade about
+750, a lathe of 10 rings at 10 segments 200.
+
+**Colour.**
+- Only `weapon_kit_palette.py` colours: `Mesh` raises on any other. A swatch under contrast 2.4
+  against the panel is "inner" (`role()`): it may fill a face, never the silhouette edge; frame it
+  with an edge swatch (a bevel, a rim, a band). Black iron (Underworld) and rubber (Planet) are inner.
+- Every generator run rewrites `palette-card.glb`, one tiny triangle per swatch, so the palette
+  texture palette.py builds (it scans every GLB in the folder) holds every swatch whichever weapons
+  exist. The cache trap therefore bites only when `weapon_kit_palette.py` changes: then delete
+  `assets/build/palettes/weapon-kit.*` before the next merge.
+- Checked on the merged Broadsword and Longbow: every triangle samples exactly its authored colour.
+
+**The mesh vocabulary** (`Mesh` methods, glTF space): `grid` (rings, caps, apexes; the base of
+everything), `lathe`, `sweep` (a tube along a polyline, round or elliptical, parallel-transported),
+`loop` (an elliptical ring), `prism` (any outline, convex or not, extruded), `box`, and the detail
+helpers `binding` (cord turns in alternating colours, tilted so they read wound), `wrap` (a spiral
+strap with its groove colour), `nodule` (a knapped stone or knuckle), `rivet`, `feather` (a vane with
+a barred tip and a quill) and `blade` (a double-edged blade with a median ridge and bevel bands,
+optionally knapped). Every closed primitive is checked as it is added: turned outward by its signed
+volume, and a warning names any primitive whose edges do not pair up (a face wound against its
+neighbours). Smooth shading (`smooth=True`) stays inside one primitive; caps are always flat.
+
+**What the strips taught (step 1).**
+- A flat palette reads as a blade through two things: a light bevel band along each edge and the
+  lit and shaded halves of a median ridge. Dark "flake scars" painted on the flats read as square
+  dirt patches and were dropped; the flaking shows through a bevel line that wobbles flake by flake.
+- Knapped scallops deeper than about a hundredth of a stud read as a wavy (flamberge) or saw-toothed
+  blade: the Broadsword's are 0.008 at most, varied per flake, so it stays a broadsword at 64 px.
+- Thin parts vanish on the shelf: a limb a tenth of a stud wide is two pixels at 64 px. The Longbow's
+  stave is chunkier than a real one (0.18 across at the riser, 0.09 at the tips) and its bone nocks
+  are 0.3 long, which is also what carries the bone of the family into the icon.
+- What makes the two one family: the same flint, bone and two-tone rope; a spiral leather grip
+  bound with rope at both ends; red-ochre bands; a hanging charm with fangs and an ochre feather.
+- The bow's D: limb tips 0.46 behind the grip (0.58 of draw less a 0.12 recurve), string at z +0.52, arrow at
+  y +0.31. Bows read best from the side; the icon's diagonal keeps the D.
+- The merge prints "geometry N studs below ground" for every weapon: expected, the grip is the origin.
+- The weapon view's light is one key plus ambient (0.5 + 0.62 cos), like a ViewportFrame; Roblox's
+  own constants are unknown until Studio, so expect one tuning round there, not here.

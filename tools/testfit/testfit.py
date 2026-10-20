@@ -5,9 +5,12 @@ Run inside Blender (headless):
     blender -b -P tools/testfit/testfit.py -- --blueprint <file.json> --out <dir> [--stage N]
     blender -b -P tools/testfit/testfit.py -- --blueprint <file.json> --ground 173,138,93
     blender -b -P tools/testfit/testfit.py -- --dump-bounds <kit-slug>
+    blender -b -P tools/testfit/testfit.py -- --blueprint tools/testfit/blueprints/_props/Weapons/<Name>.json
 
 A city-dressing prop blueprint (blueprints/_props/<Era>/, or any blueprint with --props) renders
-only the stages it defines, and without --out lands in assets/testfit/out/<Era>/props/.
+only the stages it defines, and without --out lands in assets/testfit/out/<Era>/props/. A weapon
+(blueprints/_props/Weapons/, or --weapon) gets weaponview.py's side, stage and icon renders on the
+Armory panel colour instead, in assets/testfit/out/Weapons/.
 
 Blueprint coordinates use the glTF/Roblox convention (Y up, front faces -Z) in kit
 units before scaling.  Blender is Z up, so every position is converted with
@@ -453,6 +456,26 @@ def dump_bounds(kit):
                 block.remove(item)
 
 
+def is_weapon_blueprint(path):
+    """Weapon props (L3) live under blueprints/_props/Weapons/ and render with weaponview.py."""
+    return is_prop_blueprint(path) and os.path.basename(os.path.dirname(os.path.abspath(path))) == "Weapons"
+
+
+def render_weapon(bp_path, out_dir):
+    try:
+        bp = load_blueprint(bp_path)
+    except BlueprintError as exc:
+        warn(f"blueprint {bp_path} rejected: {exc}")
+        return
+    for message in bp.warnings:
+        warn(message)
+    # weaponview imports this module by name; when testfit runs as __main__ that name is not taken yet.
+    sys.modules.setdefault("testfit", sys.modules[__name__])
+    import weaponview
+
+    weaponview.render_weapon(bp, out_dir)
+
+
 def ground_colour(text):
     """`--ground r,g,b`: three whole numbers 0..255, as a layout's baseColor is written."""
     try:
@@ -472,6 +495,7 @@ def main():
     parser.add_argument("--stage", type=int, help="render only this stage (0-4)")
     parser.add_argument("--props", action="store_true", help="treat the blueprint as a city-dressing prop wherever it lives")
     parser.add_argument("--dump-bounds", metavar="KIT", help="print size and origin of every GLB in a kit")
+    parser.add_argument("--weapon", action="store_true", help="render as a weapon (side, stage, icon) wherever it lives")
     parser.add_argument(
         "--ground",
         type=ground_colour,
@@ -486,6 +510,9 @@ def main():
         dump_bounds(args.dump_bounds)
     elif args.blueprint:
         bp_path = os.path.abspath(args.blueprint)
+        if args.weapon or is_weapon_blueprint(bp_path):
+            render_weapon(bp_path, os.path.abspath(args.out or os.path.join(OUT_ROOT, "Weapons")))
+            return
         prop = args.props or is_prop_blueprint(bp_path)
         if args.out:
             out_dir = args.out
