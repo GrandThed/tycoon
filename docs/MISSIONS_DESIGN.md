@@ -522,3 +522,12 @@ The 6-stud gap at the road's U-bend that players could hop is **closed now** **[
 your way across), the ice **lasts the whole run**, and the water is **the creek into a pond** with the island shrine
 in the pond, ~100 studs from any ground **[Ben]**. The water becomes deep (a fall comes back to the road by the
 creek). The shrine pays the most of the three chests.
+
+## 23. L2 closed (2026-10-20)
+
+After playing the L1c clearing and L2 Waves 1–3 in Studio, Ben: *"okey, i tested everything and it felt really
+good"*. Studio's log shows one session of about 6½ minutes on the rebuilt `proving.rbxl` (a Forest Road Normal clear,
+then a second run; no script error; crowd step p95 under 0.6 ms). **L1c and L2 are closed on his word.** **[Ben]** His
+answers to the waves' click questions were this one line, read as "about right" for the one-jump first run, the
+Flamethrower, the tunnel's trade, the frost crossing and the three chests' pay. Next: L3, the Armory (per-weapon
+tiers, the upgrade loop with Forest drops, the new screen, weapon models), only on his word.

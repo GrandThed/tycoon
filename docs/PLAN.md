@@ -3778,7 +3778,7 @@ root in the fenced rectangle is now nudged onto the floor).
 - [x] Second fix-diff review 0 / 0 / 3, fixed (`35a1f21`)
 - [x] QA green (full mutate.py 788 / 0 at `4825316`; fix 3 filtered 236 / 0, 0 stale)
 - [x] Merged to `main`, six place files rebuilt (lead; `1fc7d91`, 2026-10-16)
-- [ ] L1c playtest (Ben; step 1 of the L2 Wave 1 playtest)
+- [x] L1c playtest (Ben), played 2026-10-20 (Studio log: one ~6.5 min session on the rebuilt proving.rbxl, a Forest Road Normal clear, no script error, crowd p95 < 0.6 ms); Ben: "i tested everything and it felt really good"
 
 ## L2 — secrets and keys
 
@@ -3926,7 +3926,7 @@ tools 4). All fixed:
 - [x] Fix-diff review 0 / 1 / 3, fixed (`b056843`)
 - [x] QA: full mutate on `613e736` (lead)
 - [x] Merged to `main`, six place files rebuilt (lead, `fed5ed6`)
-- [ ] L2 Wave 1 playtest (Ben)
+- [x] L2 Wave 1 playtest (Ben), played 2026-10-20 (Studio log: one ~6.5 min session on the rebuilt proving.rbxl, a Forest Road Normal clear, no script error, crowd p95 < 0.6 ms); Ben: "i tested everything and it felt really good"
 
 ### Wave 2 — fire, the Flamethrower, the cave and the shortcut (2026-10-18/19)
 
@@ -4074,7 +4074,7 @@ tools 0 / 1 / 4). All fixed or ruled:
 - [x] Second fix-diff review 0 / 0 / 1 + 2, fixed (`21205da`)
 - [x] QA: other gates line (lead)
 - [x] Merged to `main`, six place files rebuilt (lead, `1ace3a4`)
-- [ ] L2 Wave 2 playtest (Ben)
+- [x] L2 Wave 2 playtest (Ben), played 2026-10-20 (Studio log: one ~6.5 min session on the rebuilt proving.rbxl, a Forest Road Normal clear, no script error, crowd p95 < 0.6 ms); Ben: "i tested everything and it felt really good"
 
 ### Wave 3 — ice, the frost hammer, deep water and the island shrine (2026-10-19)
 
@@ -4238,7 +4238,7 @@ tools 0 / 1 / 4). All fixed or ruled:
 - [x] Fix-diff review 0 / 0 / 2 + 2, fixed (`3cfabac`)
 - [x] QA: full mutate on `5b8af9e`, all 19 gates; fix rounds 2–3 filtered
 - [ ] Merged to `main`, six place files rebuilt (lead)
-- [ ] L2 Wave 3 playtest (Ben)
+- [x] L2 Wave 3 playtest (Ben), played 2026-10-20 (Studio log: one ~6.5 min session on the rebuilt proving.rbxl, a Forest Road Normal clear, no script error, crowd p95 < 0.6 ms); Ben: "i tested everything and it felt really good"
 
 ## M12 — Growing city
 
