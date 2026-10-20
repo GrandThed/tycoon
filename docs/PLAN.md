@@ -2847,8 +2847,8 @@ families, abilities and the player's body go into the Expeditions missions, era 
 |---|---|---|
 | L0 | Pictures: the map, Forest Road's plan, the Armory | Done 2026-10-13 |
 | L1 | Forest Road in grey: lobby camp, map, three camp parts, stand-in boss, difficulties | Merged 2026-10-14; L1b and L1c after it; closed 2026-10-16 on Ben's word |
-| L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | **W1–W3 built, reviewed, QA green (2026-10-17 → 19); W1, W2 merged, W3 waits for the merge; Ben's looks pending** |
-| L3 | The Armory: per-weapon tiers, the profile shape, weapon models | Not started |
+| L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | W1–W3 merged (2026-10-17 → 19); closed 2026-10-20 on Ben's word, with L1c |
+| L3 | The Armory: per-weapon tiers, the profile shape, weapon models | **Started 2026-10-20. W1 (tiers per weapon, the Armory screen in grey) built, reviewed 0 / 1 / 13, fix-diff 0 / 0 / 2, QA green; waits for the merge. The 15 weapon models approved by Ben 2026-10-20 (not uploaded). W2 (the models in the game) next, on Ben's word.** See "L3" below |
 | L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | Not started |
 | L5 | Friends: parties and revive in a level | Not started |
 
@@ -4237,8 +4237,240 @@ tools 0 / 1 / 4). All fixed or ruled:
 - [x] Second fix round, Q5 + Q6 (`25528b7`)
 - [x] Fix-diff review 0 / 0 / 2 + 2, fixed (`3cfabac`)
 - [x] QA: full mutate on `5b8af9e`, all 19 gates; fix rounds 2–3 filtered
-- [ ] Merged to `main`, six place files rebuilt (lead)
+- [x] Merged to `main`, six place files rebuilt (lead; fast-forward to `1fcc35e`, place files `fbc6d2f`)
 - [x] L2 Wave 3 playtest (Ben), played 2026-10-20 (Studio log: one ~6.5 min session on the rebuilt proving.rbxl, a Forest Road Normal clear, no script error, crowd p95 < 0.6 ms); Ben: "i tested everything and it felt really good"
+
+## L3 — the Armory
+
+**Goal:** every weapon has its own tier on one ladder of 20, inside its own window; Forest drops pay the upgrades;
+the loadout and the stars are saved; a new Armory screen opens in both places; then the 15 weapon models go in.
+- **No sound. Phones must work.** Each wave is playable alone in Studio.
+
+**Documents:**
+- Ben's decisions (2026-10-20, eight click questions; he took every recommendation): `docs/MISSIONS_DESIGN.md` §24,
+  with the windows restated in §10 ("we are not starting every weapon with tier 1 nor ending every weapon to tier
+  20") and the approved models at the end of §24.
+- Studies: `docs/prompts/l3-study-report-systems.md`, `l3-study-report-screen.md` (brief `l3-study.md`).
+- Values: `docs/BALANCE.md` "L3 W1" and "L3 W1 fix round".
+- Branch `l3-armory`, worktree `C:\Users\benja\Desktop\tycoon-p5`.
+
+**Ben's rulings (2026-10-20, MISSIONS_DESIGN §24):**
+1. **The windows, as drawn:** Broadsword and Longbow 1–12, Flamethrower 2–8, Warhammer 3–16, Frost Hammer 5–12,
+   Greataxe 6–18, Splitbow 8–8 (a relic), Spear 9–20, Shotgun 9–16, Piercing Rifle 11–18, Launcher 13–20, SMG 14–20,
+   Beam 16–20, Chain Gun 17–20, Spinblade 20–20 (a relic).
+2. Five bands of four tiers, one per level. A band's top tier also needs that level's Hard star (the trophy).
+3. **Three Forest runs take one weapon from T1 to T4** (Timber 100 / 250 / 500 for T2 / T3 / T4).
+4. **The city's income no longer gates tiers.** Levels and their drops do.
+5. **Brutal Forest waits for Castle gear** (recommended T5, tuning unchanged).
+6. **The screen: A, "Showcase"**: the big weapon, its details and the shelf on one screen; the tier track is the full
+   ladder of 20 with the window lit.
+7. **All 15 models, one look each,** dressed by the level where each is found.
+8. Lead rulings told to him (he may overrule): T1 is the 2 / 2 he has always played; live players' Timber spent on
+   old tiers is refunded when their profile converts; others see your weapons (in use in the right hand, the other
+   on the back); the loadout is saved and changes in the lobby or the city, never in a fight.
+
+**Steps:**
+
+| Step | Scope | State |
+|---|---|---|
+| W1 | Tiers per weapon, profile v8, the saved loadout and stars, the Armory screen in grey in both places | **Built, reviewed 0 / 1 / 13, fix-diff 0 / 0 / 2, QA green (2026-10-20); fix 2 landing; waits for the merge** |
+| Kit | The 15 weapon models (generated Blender geometry; the shelf icons render from the same files) | **Approved by Ben 2026-10-20** ("Yes, build the other 13", then all 15 on the overview). Nothing uploaded |
+| W2 | The models in the game: the icon upload route, one harvest paste, the ViewportFrame stage, weapons in hand that others see | Not started; only on Ben's word |
+
+### Wave 1 — tiers per weapon and the Armory screen in grey (2026-10-20)
+
+**Documents:**
+- Contract: `docs/prompts/l3-w1-contract.md` (rulings L3-1 to L3-39; the lead's rulings §12, 1–10, override the text
+  above them). INTERFACES "# L3 W1 contracts" points to it.
+- Brief: `docs/prompts/l3-w1-brief.md`.
+- Fix rounds: `docs/prompts/l3-w1-fix-round.md` (R1–R12), `l3-w1-fix2.md` (F1–F7).
+- Reports: `docs/prompts/l3-w1-reports/`, `docs/prompts/l3-w1-fix-reports/`. Findings: `docs/prompts/l3-w1-review/`
+  (`1-saving.md`, `2-combat-server.md`, `3-hub-hosts.md`, `4-screen.md`) and `docs/prompts/l3-w1-fix-diff-review.md`.
+- QA brief: `docs/prompts/l3-w1-qa.md`.
+
+**What shipped:**
+- **The ladder of 20** (`Armory.json ladder`; every number there, none in code).
+  - Damage `1.5 × 1.65^(t−1)`: T1 ×1.5 (today's 2 / 2 exactly), T2 ×2.475, T3 ×4.08, T4 ×6.74, T5 ×11.12 … T20
+    ×20,337. Heavy, plate and armour stay unscaled.
+  - HP per slot per tier; T1–T11 are the old slot tiers 2–12. MaxHp = 100 + melee + ranged: T1 / T1 155, T3 / T3
+    230, T5 / T5 380 (today's 2 / 2, 4 / 4, 6 / 6, so no `damageScale` moved). The range's body is `rangeHp` 130.
+  - **Windows** per family (`Armory.json windows`, Ben's table). `TierOf` = the saved tier clamped into the window,
+    so a later window change never strands a profile.
+  - **Bands of 4.** Forest = Timber: T2 / T3 / T4 = 100 / 250 / 500. A band top needs `stars[level].hard`, or a
+    Brutal star (`ladder.starAlso`, R1). Later bands' materials (Iron, Ember, Glowstone, Crystal) and position-1
+    costs are placeholders; the screen hides an unbuilt band's price ("Comes with Castle").
+  - **No city income gate.** `unlockRate` is no longer read (`slots` stays, unread, until L4).
+- **Pure rules** in `src/shared/Armory.luau`: `TierOf`, `HeldTiers`, `StrikeTier` (G's override clamped into each
+  window, R3), `StarHeld` (R1), `UpgradeVerdict` / `Upgrade` (refusals in order: invalid, locked, peak, busy,
+  notBuilt, needsStar, insufficientFunds), `SavedPower` (R7), `LegacyRefund`, `Problems` (warned at Init in both
+  places). Mirrored in `sim_combat.py`; `StrikeTier`, `HeldFamily`, `SavedPower` deliberately unmirrored (F4).
+- **Profile v8** (add-only): `combat.tiers`, `combat.loadout`, `combat.stars`. `gear` is frozen (kept, never
+  written or read by new code).
+  - `Migrations[7]` refunds old slot tiers from a frozen price list (3 / 3 → +500 Timber). **It pays, so it is not
+    idempotent**: one runner, `ProfileSchema.Run`, for `DataService` and the harness (R5).
+  - Stars leave session memory: the map, the T4 gate and the summary read the profile's.
+- **The saved loadout** (`Unlocks.LoadoutOf` / `SaveLoadout`): changes in the lobby's or the hub's Armory, never in
+  a fight. Admit holds the saved pair. Closes "a cooldown carried across a family switch" and W2's "loadout kept
+  for the visit only".
+- **Where tiers act:** each hit by the striking family's tier (the slam by the held melee's); the bar by the held
+  pair; `OnSetFamily` refreshes the bar. **`provingGear` no longer replaces the profile** (L3-11), so a T2 bought
+  in `proving.rbxl` reaches the hits and the bar.
+- **Remotes:** `RequestUpgradeWeapon(family)` in both places; `RequestSetFamily` in the hub too; `RequestBuyGear`
+  removed. `ActionResult` reasons gain `peak`, `notBuilt`, `needsStar`.
+- **Forest Road on the ladder:** recommended Normal / Hard / Brutal **T1 / T3 / T5**; the Raider Arena T1; Hard
+  `hpScale` 5.2 → **4.25** (clock +0.1%); Hard pays **×2** (§12.8; ×2.5 made the climb too fast); Hard's first clear
+  gives the **Warhammer** (at T3), Brutal's first clear **+25 Valor**.
+- **The Armory screen, in grey, in both places** (seven shared modules in `src/client/UI/`: `ArmoryScreen`,
+  `ArmoryStage`, `ArmoryTrack`, `ArmoryShelf`, `ArmoryDetail`, `ArmoryAbilityPage`, pure `ArmoryModel`):
+  - placeholder stage (name, slot, FIRE / ICE chip, big tier; dark when unowned);
+  - the track: 20 pips in five band colours, the window lit, start and top marked, "At its peak" at the top;
+  - the shelf of 15 in window order; dark cards with a hint ("First Hard clear of Forest Road", "Hidden on Forest
+    Road", "Found in the Castle" …);
+  - the next line ("T2: 68 → 111 dmg · HP +20 → +30"), the cost line ("500 Timber · Forest Road · needs ★ Hard"),
+    styles, Equip and Upgrade coloured from the shared rules, never deciding;
+  - the Abilities tab (read-only in the hub: "Bought in the dungeon's lobby").
+  - Inputs: lobby K, pad Y, the HUD button; hub K and the bottom bar's Armory key; Esc, X, the scrim or pad B close;
+    LB / RB tabs; pad A sunk; a selection always present (R10); **Roblox's touch controls hidden while open** (R9).
+  - Fits 640 × 360, 667 × 375 and 375 × 667 (portrait: stage, details, a 5 × 3 shelf).
+- **Hub:** `ArmoryService` takes upgrade and equip; the profile copy is the pure `ProfileCopy.Combat` (the whole
+  profile, R7); Power is `Armory.SavedPower` (64 fresh, 77 after Longbow T2, the same in both places). The hub no
+  longer shows total Max HP. A party invite draws above the screen (R8). `src/client/UI/ArmoryPanel.luau` and the
+  three lobby panel files are deleted.
+- **Summary and map:** "Warhammer is yours: equip it in the Armory (K)"; the map's difficulty buttons read T1 / T3
+  / T5; the DebugPanel shows the held families' tiers.
+- **Studio levers** (both entry points; inert outside Studio and in the range): **T** +500 Timber (in the lobby and
+  hub, every built band's material); **U** the Hard star of every built level, **paying its first-clear reward**
+  (the Warhammer), like a real first Hard clear (R4; the hub's star button too, F2); **L** reset the Armory (tiers,
+  loadout, stars; materials, Valor and families stay); **G** presets T1 / T3 / T5, cleared by an upgrade or L;
+  `setTier`. Attributes `DebugSetTier`, `DebugGrantStar`, `DebugResetArmory`. Hub strip: "Grant 500 Timber", tier,
+  star and reset buttons.
+- **Gates:** `check_levels.py` (every non-starter family has a shelf hint; a firstClear family's hint names its
+  level; `ownedFamilies` counts first clears; R8's reach = the longest ownable ranged weapon; the trophy rule);
+  `sim_combat` assertion 1 (the ladder) and 2 (the climb, 5–7 runs, 20–40 min); `sim_range` R8 with the bow alone at
+  T4, every weapon at its own tier (`armed_problems`), the Flamethrower pair at T2 / T2; harness `tests_l3.luau`,
+  `tests_l3_ui.luau`; `check_stage_mirror`; text checks and `mutate.py` entries for the service lines (R3, F1).
+
+**Commits:**
+- Study brief and windows `b0a0769`; studies `808820b`; Ben's decisions `06d5e08`.
+- Contract brief `773f37d`; contract `d9e7ad1`, `4362568`. Build `ff7a910`; Hard ×2 in sim_combat `64a6b12`.
+- Review brief `a2628da`; findings and fix-round rulings `f6c426d`. Fix round `32d7893`.
+- QA brief `af04038`. Fix-diff review and fix 2 rulings `ba34a67`; fix 2 F7 `51a6529`, F1–F6 landing.
+- Plus this docs commit.
+
+**First review: four Opus slices, 0 Critical, 1 Major, 13 Minor, 13 Suggestions** (saving 0 / 0 / 6, combat
+server 0 / 1 / 2, hub and hosts 0 / 0 / 2, screen 0 / 0 / 3). All fixed or ruled (R1–R12):
+- **2-M1:** the range simulator scaled a weapon by its slot's tier, the game by its own → R2 (every weapon at its own
+  tier; Frost Hammer Forest rows reported, not gated; the Flamethrower pair rated at T2 / T2 as ratios).
+- R1 a Brutal star also opens a band top; R3 `StrikeTier` and text checks; R4 U pays first clears; R5 one
+  migration runner; R6 gates that prove themselves; R7 pure profile copy and Power; R8 invite above the screen; R9
+  touch controls hidden; R10 a gamepad always has a selection; R11 one equip in flight; R12 the L4 publish shuts
+  servers down.
+
+**Fix-diff review: 0 Critical, 0 Major, 2 Minor, 5 Suggestions** (fix 2, F1–F7):
+- **m1:** the text checks pinned each service call, not the lines that feed it → F1 (counts for every input line,
+  return counts, spelling-robust, one mutant each).
+- **m2:** the hub's star lever did not pay the first-clear reward → F2 (`Unlocks.ApplyFirstClear`, shared).
+- F3 `GrantStars` resolves the level first; F4 unmirrored functions named; F5 the hub replays the screen when its
+  config resolves late; F6 the fire sniper's cast judged per spot; F7 `tests_l3.luau` formatted.
+- **Not fixed (s3):** a gamepad cannot reach a party invite while the Armory is open (B closes it first). In
+  PLAYTEST.
+
+**Balance (BALANCE "L3 W1"), seeds 11 / 23 / 37:**
+- **Normal at T1 is byte-identical** to today's 2 / 2 in every simulator row.
+- Hard at T3: 5.22 min (+0.1%), 0 downs; Brutal at T5: 5.24 min (+1.0%). Colossus at Hard T3 81.7 s (today 81.6).
+- Human gate one preset below: Hard at T1 down (seed 11) or about ×2.4 the time; Brutal at T3 down on every seed.
+- A Normal clear pays **211 Timber** and 10 Valor: T2 for both starters on the first clear.
+- **The climb** (both starters T1 → T4, chests and tunnel included): at Hard ×2, **6 runs, about 24.6 min** of clears
+  (Ben's "three runs per weapon"); real play adds about a minute a run. BALANCE's pay and climb tables were measured
+  at ×2.5 (5 runs, 19.8 min).
+- The Flamethrower pair at T2 / T2: 3.16–3.20 min, ×1.02 cash, the same boss time (a sidegrade).
+- **The Frost Hammer by lever** (T5 in the Forest): Forest Road in about 2.3 min, the Colossus in about 14 s.
+  Reported, not gated: it is a Castle weapon.
+
+**QA:**
+- Quick gates green (lead, `docs/prompts/l3-w1-qa.md`).
+- At the fix-diff review (`32d7893`): harness PASS (3,654 checks); `check_stage_mirror` PASS; `mirror_mutants
+  --only Armory` 10 / 10; `check_levels` PASS; `sim_combat --check` 23 / 23; `sim_range --check --levels-only
+  --level forest` (64-bit) 157 PASS, 0 FAIL; `check_compile` (178 files), stylua, selene, luau-lsp: clean.
+- `gen_asset_manifest.py`: unchanged (no asset change).
+- Full `mutate.py` and `check_levels_mutants.py` (worktree `tycoon-p5b`) and fix 2's filtered entries: the lead
+  fills this line.
+
+**Carried (owners):**
+- **lead (L4), R12:** the L4 publish adds **"Shut down all servers"** after both places are published
+  (MANUAL_STEPS "L3 W1").
+- **lead: the hub joins the Expeditions publish freeze.** Both places publish together at L4, because
+  `ProfileSchema` is shared: the hub alone would refund live players' Timber while the live Expeditions place still
+  fights at their old `gear`.
+- **economy-designer + lead (L4): R8 sniper perches on Hard** are a known limit until L4, like Normal
+  (`SNIPER_KNOWN_LIMIT_L4["hard"]` = LookoutLedge, LookoutSignPad, Secret_lookout). Rates reported, every hit
+  landing gated; the set must be empty before L4 ships.
+- **lead + luau-engineer + ui-engineer (M11 merge):** the `m11-unlocks` branch must be re-keyed to L3's Armory when
+  it merges (the readiness key is `RequestUpgradeWeapon` now; `RequestBuyGear` and the hub's `ArmoryPanel` are gone).
+- **lead + economy-designer: Ascension is unreachable.** It needs Steel, Circuits and Alloy, which no level pays.
+- **lead + economy-designer: Valor has nothing to buy** after Double Jump.
+- **economy-designer (Castle): the Frost Hammer's Forest pair rows** (clear, cash a minute, the Colossus) are
+  reported, not gated, until the Castle re-bands it.
+- **ui-engineer: a gamepad cannot reach a party invite** while the Armory is open (B closes it first). Fix only if
+  Ben minds.
+- **economy-designer + luau-engineer (Castle):** W2's bend-hop known limit stays: no carrying family (Greataxe,
+  Spear) is ownable in L3.
+- **lead → Ben (Castle):** bands 2–5's materials and position-1 costs are placeholders; Ben names them with each
+  level.
+- **lead + luau-engineer (L5):** a duo splits Timber by damage share, so each player needs about twice the runs.
+- **lead, Studio only:** gamepad A on a screen button must not jump and must press once (L3-36); `TextScaled` names
+  under the `UIScale` stay at or above 8 px; "Flamethrower" never breaks mid-word in portrait.
+- Every L2, L1c and L1b carried item above stands. **Publish freeze (lead):** neither place publishes from `main`
+  until L4.
+
+### The weapon kit (2026-10-20)
+
+- **15 models, one look each, dressed by the level where each is found** (Forest wood, bone, rope, flint; Castle
+  steel, crests, gold; Underworld black iron, embers; Planet alloy, glow strips; Dream crystal, pastels).
+- Generators (the committed record; GLBs regenerate): `tools/assets/weapon_kit_{forest,castle,underworld,planet,
+  dream}.py` on the frozen `weapon_kit_mesh.py` and `weapon_kit_palette.py`. Blueprints
+  `tools/testfit/blueprints/_props/Weapons/<Model>.json`. Testfit's weapon view: `tools/testfit/weaponview.py`,
+  `weaponstrip.py`. Facts: `tools/testfit/README.md`, "weapon kit".
+- Frame contract: 1 unit = 1 stud, the grip at the origin, the tip along −Z, `grip` / `tip` / `holster` (+ `nock`
+  on bows) in `<Model>.frame.json`. Model name = the family id capitalised (`FrostHammer`, `Smg`); upload name
+  `EraCityTycoon_Prop_Weapons_<Model>_S<n>` (at most 42 characters). 1,500–3,500 triangles each.
+- Ben approved the Broadsword and Longbow prototypes (kit step 1, `ea1cf19`), then all 15 on
+  `assets/testfit/out/Weapons/_overview.png` (step 2, `3ccb548`).
+- **Nothing is uploaded.** The models and their 15 shelf icons upload at the start of W2.
+
+### Wave 2 — the models in the game (planned)
+
+- **Upload:** the 15 models (the props route, era `Weapons`, as `merge_stages.py --props --era Weapons` already
+  merges them) and 15 shelf icons (512 px Blender renders with alpha) as Decals through the `upload_paths.upload_decal` route, which needs an icon kind and its own alpha
+  check (the path check rejects alpha). **One harvest paste**, then templates.
+- **The stage:** a ViewportFrame behind `ArmoryStage`'s API (turn, drag, light, dark silhouettes when unowned); the
+  turn gated on `lowEndDevice`, never `reducedMotion`.
+- **Weapons in hand that others see:** the one in use in the right hand, the other on the back (`holster` on
+  `BodyBackAttachment`), from server attributes in `WeaponService`; per-family templates in `WeaponController`.
+- **Owners (to confirm in W2's contract):** ui-engineer (client), luau-engineer (one server file and Types), lead (the
+  pipeline and the paste).
+- **Risks:** ViewportFrame is new here (how the palette models read in it is unknown until Ben looks); the turning
+  stage's frame time on a phone is unmeasured.
+- Ben's look: the stage, a weapon in hand, a teammate's weapon.
+
+**Next:**
+1. Fix 2 (F1–F6) lands and passes its filtered gates; the lead fills the QA line, merges `l3-armory` to `main` and
+   rebuilds the six place files.
+2. **Ben's look:** `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen"; setup
+   `docs/MANUAL_STEPS.md` "L3 W1".
+3. Then W2 (the models in the game), only on Ben's word.
+
+- [x] Ben's decisions (`06d5e08`)
+- [x] Weapon kit: 15 models approved by Ben (`3ccb548`)
+- [x] W1 built (`ff7a910`)
+- [x] Reviewed: four slices, 0 / 1 / 13 + 13 (`f6c426d`)
+- [x] Fix round R1–R12 (`32d7893`)
+- [x] Fix-diff review 0 / 0 / 2 + 5 (`ba34a67`)
+- [ ] Fix 2, F1–F7 (luau-engineer; F7 `51a6529`)
+- [ ] QA: full mutate and the lead's line
+- [ ] Merged to `main`, six place files rebuilt (lead)
+- [ ] L3 Wave 1 playtest (Ben)
+- [ ] W2: the models in the game
 
 ## M12 — Growing city
 

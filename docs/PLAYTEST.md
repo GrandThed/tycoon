@@ -5060,8 +5060,8 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - **About 8 minutes. Keys only, no panel.** Grey blocks, no sound.
 
 **Status 2026-10-16:** built, reviewed (2 Critical, 3 Major, 9 Minor; then two checks of the fixes:
-0 / 2 / 2 and 0 / 0 / 3; all fixed), QA green, merged to `main` (`1fc7d91`). **Unplayed.** It is
-step 1 of "L2 Wave 1" below. **From L2 Wave 1 on, press J first** (Double Jump is bought now; steps
+0 / 2 / 2 and 0 / 0 / 3; all fixed), QA green, merged to `main` (`1fc7d91`). **Played 2026-10-20, closed on
+Ben's word.** It is step 1 of "L2 Wave 1" below. **From L2 Wave 1 on, press J first** (Double Jump is bought now; steps
 3 and 6 use it).
 
 Setup: `docs/MANUAL_STEPS.md` "L1c".
@@ -5159,7 +5159,7 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - **About 20 minutes with the L1c look. Keys only, no panel.** Grey blocks, no sound.
 
 **Status 2026-10-17:** built, reviewed (three slices: 0 Critical, 0 Major, 15 Minor; fix-diff:
-0 / 1 / 3; all fixed), QA green. **Merged to `main` (`fed5ed6`); unplayed.**
+0 / 1 / 3; all fixed), QA green. **Merged to `main` (`fed5ed6`); played 2026-10-20, closed on Ben's word.**
 
 Setup: `docs/MANUAL_STEPS.md` "L2 Wave 1".
 
@@ -5290,7 +5290,8 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - **About 20 minutes. Keys only, no panel.** Grey blocks, no sound.
 
 **Status 2026-10-19:** built, reviewed (three slices: 0 Critical, 3 Major, 15 Minor; two fix-diff
-reviews: 0 / 0 / 3 + 1 and 0 / 0 / 1 + 2; all fixed), QA green. **Merged to `main` (`1ace3a4`); unplayed.**
+reviews: 0 / 0 / 3 + 1 and 0 / 0 / 1 + 2; all fixed), QA green. **Merged to `main` (`1ace3a4`); played
+2026-10-20, closed on Ben's word.**
 
 **Played Wave 1 and L1c yet? If not, do those first, in this same file:**
 1. "L1c — the Chief's Clearing" (above), steps 1–8.
@@ -5449,7 +5450,8 @@ Island Shrine.
 - **About 15 minutes. Keys only, no panel.** Grey blocks, no sound.
 
 **Status 2026-10-19:** built, reviewed (three slices: 0 Critical, 1 Major, 11 Minor; fix-diff:
-0 / 0 / 2 + 2; all fixed), QA green. **Wait for the lead's merge word.**
+0 / 0 / 2 + 2; all fixed), QA green. **Merged to `main` (`1fcc35e`); played 2026-10-20, closed on Ben's
+word.**
 
 **Played L1c, Wave 1 and Wave 2 yet? If not, do those first, in this same file:**
 1. "L1c — the Chief's Clearing" (above), steps 1–8.
@@ -5596,6 +5598,153 @@ Asked afterwards, as click questions:
 - **Does the hammer feel good as a weapon?** Great / fine / weak / too strong.
 
 Also, if you have a view: any flicker (where), anything wrong, by step number, PC or phone.
+
+## L3 Wave 1 — tiers per weapon and the Armory screen
+
+<!-- FILE TO OPEN: start. Lead: if L3 Wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Only after the lead says L3 Wave 1 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** the key hint ends **"T +500 Timber · U ★ Hard · L reset
+  Armory"**.
+- Step 9 uses `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (the city), built by the same
+  "Build all".
+<!-- FILE TO OPEN: end -->
+
+**Goal:** every weapon has its own tier, you buy tiers with Timber, and a new Armory screen shows
+it all.
+- One ladder of 20 tiers. Each weapon has its own window on it (Broadsword and Longbow 1–12).
+- T2 / T3 / T4 cost 100 / 250 / 500 Timber. T4 also needs the Forest's **Hard star**.
+- Grey screen, no 3D weapons yet: the big area shows the weapon's name. Models come in Wave 2.
+- **About 15 minutes. Play and keys only, no panel.** No sound.
+
+**Status 2026-10-20:** built, reviewed (four slices: 0 Critical, 1 Major, 13 Minor; fix-diff:
+0 / 0 / 2; all fixed), QA green. **Wait for the lead's merge word.**
+
+Setup: `docs/MANUAL_STEPS.md` "L3 W1".
+
+**Keys:**
+- **K** = Armory (in the lobby). **Esc** or its **X** closes it.
+- **Enter** = Depart; **arrows** = level and difficulty; **M** = map.
+- **1** / **2** = melee / ranged; **left click** = attack.
+- **Backspace** twice = Abandon.
+- Studio only, new: **T** = +500 Timber; **U** = the Forest's Hard star (and the Warhammer, like
+  a real first Hard clear); **L** = reset the Armory; **G** = gear T1 → T3 → T5.
+- Studio only, as in L2: **J** Double Jump, **F** Flamethrower, **I** Frost Hammer, **H** reset
+  secrets, **V** +10 Valor.
+
+**Studio resets your save every session.** Each Play starts at T1 / T1 with no Timber and no
+stars. T, U and L stand in for the runs.
+
+**The health numbers below** ("/ 165" and so on) are read on the health bar. If the lobby shows no bar, read them as
+the next run starts: an upgrade bought in the lobby is already in the bar when you arrive at the trailhead.
+
+### The look (keys only)
+
+- [ ] 1. **The screen.** **Play.** The health bar reads **155 / 155**. Press **K**.
+      - It opens on **Weapons** with the **Broadsword** selected: big **"Broadsword"**,
+        **MELEE**, **T1**.
+      - The track: **20 pips** in five colour bands of four. Pips **1–12** are open, **1** is lit.
+      - The shelf along the bottom, in this order: Broadsword, Longbow, Flamethrower, Warhammer,
+        Frost Hammer, Greataxe, Splitbow, Spear, Shotgun, Piercing Rifle, Launcher, SMG, Beam,
+        Chain Gun, Spinblade.
+      - Top bar: the **Timber · Valor** wallet and an **X**. The **Abilities** tab lists Double
+        Jump.
+      - Bug: an empty shelf; cards out of order; a track of 12 pips; no wallet.
+- [ ] 2. **Dark cards.** Click the **Warhammer** card.
+      - It is **dark**. The track lights its window, **3–16**; pips 1–2 and 17–20 stay dim.
+      - Text: **"Not found yet · First Hard clear of Forest Road"**. **No buttons.**
+      - **Flamethrower**: "Hidden on Forest Road". **Spinblade**: one pip, at 20.
+      - **Esc** closes it. **K**, then its **X**: closes. **K**, then click outside the frame:
+        closes.
+      - Bug: a dark card has an Upgrade or Equip button; a card with no hint.
+- [ ] 3. **Buy T2 for both.** Press **T** (+500 Timber). Or clear Forest Road on Normal instead
+      (about 5 min; it pays about 211 Timber, enough for both).
+      - **K** → **Longbow**. Next line: **"T2: 68 → 111 dmg · HP +20 → +30"**. Cost line:
+        **"100 Timber · Forest Road"**.
+      - Click **"Upgrade T2"**: it reads "Upgrading...", then the toast **"Longbow: T2"**. Pip 2
+        lights. The wallet drops 100. The health bar ends in **/ 165**.
+      - Same on the **Broadsword** ("T2: 36 → 59 dmg"). The bar ends in **/ 180**.
+      - Bug: Timber spent with no tier; two tiers for one click; the bar does not move.
+- [ ] 4. **Feel it.** **M**: the difficulty buttons read **T1 / T3 / T5**. **Enter** on Normal.
+      - In camp A, a fully drawn arrow's body hit reads about **111** (it was about 68). A plain
+        sword hit reads about **59** (was 36). Fodder falls faster.
+      - **Backspace** twice, back to the lobby.
+      - Bug: hits still read 68 / 36; the bar is back at 155.
+- [ ] 5. **T4 needs the Hard star.** Press **T** twice. **K**, buy **Longbow T3** (250).
+      - At T3 the cost line reads **"500 Timber · Forest Road · needs ★ Hard"** and the button
+        **"Needs ★ Hard on Forest Road"** (greyed).
+      - Press **U**: notice **"★ Hard: Forest Road · Warhammer"**. The button now reads
+        **"Upgrade T4"**. Buy it: pips 1–4 lit, the bar ends in **/ 230**.
+      - Bug: T4 buyable before U; still "Needs ★ Hard" after U; no Warhammer in the notice.
+- [ ] 6. **The Warhammer and styles.** **K** → **Warhammer**: now bright, **T3**, pip 3 lit.
+      - **Equip**: toast **"Warhammer equipped"**; its button reads **Equipped**. The bar ends in
+        **/ 260**.
+      - Press **U** again: the notice names **no** reward (already yours).
+      - **Longbow** → **"B: Quick shot"**: toast **"Longbow: B · Quick shot"**.
+      - Bug: Warhammer still dark; equipped at T1; U gives the Warhammer twice.
+- [ ] 7. **Reset.** Press **L**: notice **"Armory reset: tiers, loadout and stars"**.
+      - Everything back to T1, Broadsword + Longbow held, the bar ends in **/ 155**.
+      - The Warhammer stays yours. The Timber stays.
+      - Bug: tiers left over; the Warhammer gone; Timber gone.
+- [ ] 8. **Phone.** Stop. Test (*Prueba*) → Device (*Dispositivo*) → a **640×360** phone,
+      landscape (add a custom 640×360 device if the list has none). **Play.**
+      - Tap the HUD's **Armory** button. Roblox's **thumbstick and jump button vanish**.
+      - The header, the middle and the shelf fit inside the frame; nothing covers the big name.
+        The shelf scrolls sideways.
+      - Press **T**, tap **"Upgrade T2"** low, then in the middle: it buys; you never jump.
+      - Close with **X**: the thumbstick and jump come back.
+      - Rotate to portrait (**375×667**): big name on top, then the details, then the 15 cards
+        in a **5 × 3** grid. Names readable; "Flamethrower" not split mid-word.
+      - Bug: controls still showing while open; a jump on a tap; buttons off screen.
+- [ ] 9. **The city.** Stop; turn the Device emulator off. Close `proving.rbxl` (don't save).
+      Open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`, **Play**.
+      - Press **K**: the **same screen** (Weapons, Broadsword selected, wallet). **Esc**.
+      - Click the bottom bar's **Armory** key: the same screen again.
+      - **Abilities** tab: "Bought in the dungeon's lobby", no Buy button.
+      - **Longbow**: "T2: 68 → 111 dmg · HP +20 → +30" and **"Need 100 more Timber"**.
+      - Close Studio without saving.
+      - Bug: K does nothing; a different (old) Armory; a Buy button on Abilities.
+
+**Optional, not one of the nine:**
+- **Two players.** Test (*Prueba*) → **Local Server** (*Servidor local*), **2 players**
+  (*2 jugadores*) → **Start** (*Iniciar*), in `proving.rbxl`.
+  - Player1: **T**, buy **Longbow T2**. Player2's Armory still shows Longbow **T1** and his own
+    wallet.
+  - Bug: Player2's tier or wallet changed.
+- **Gamepad.** In the lobby: **Y** opens it, **LB / RB** switch tabs, **B** closes on the first
+  press.
+  - The d-pad moves the selection and never leaves the screen.
+  - **A** presses a button **without jumping**, once (one toast a press). If nothing was
+    selected, the first A only selects; the next A presses.
+- **Low graphics** (level 1–3): nothing new animates.
+
+### Not a bug (don't report these)
+
+- **No 3D weapons yet.** The big area shows the name and tier. Wave 2 brings the models.
+- Every Play starts a fresh save: T1 / T1, no Timber, no stars.
+- **The city no longer shows a total Max HP.** The next-tier line shows the HP step instead.
+- **I** puts the Frost Hammer in at **T5** (it is a Castle weapon): Forest Road in about 2.3 min,
+  the Colossus in about **14 s**.
+- Cards past the Forest read "Found in the Castle", "Found in the Underworld" … Their tiers past
+  T4 read "Comes with Castle", with no price.
+- Brutal's recommended tier is T5: Brutal waits for Castle gear.
+- **G** is for this session only; buying a tier or **L** clears it.
+- A gamepad cannot reach a party invite while the Armory is open: **B** closes the Armory first.
+- Valor has nothing to buy after Double Jump. Ascension (in the city) cannot be reached yet.
+- In a duo, Timber is split by damage, so each player needs about twice the runs.
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- **Did T2 feel like a step?** Clearly stronger / a little / no difference.
+- **Three Forest runs per weapon (T1 → T4):** too few / about right / too many.
+- **Is the screen readable?** Yes / hard on the phone / hard on PC.
+- **Anything about the layout?** Fine / something to move (say what).
+
+Also, if you have a view: anything wrong, by step number, PC or phone.
 
 ## M12 — Village growing city
 

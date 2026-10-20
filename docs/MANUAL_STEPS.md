@@ -1364,8 +1364,9 @@ Expeditions **`74210626673425`**.
       rojo build -o build/test.rbxl
       rojo build combat.project.json -o build/combat.rbxl
       ```
-- [ ] 2. Both commands must print no error. Building from the worktree
-      (`C:\Users\benja\Desktop\tycoon-c2`) works too, but publish from the merged main.
+- [ ] 2. Both commands must print no error. Build and publish from the main checkout
+      (`C:\Users\benja\Desktop\tycoon`) only: the `tycoon-c2` folder holds the old `c2-coop`
+      branch.
 
 ### 2. Studio setting (once, experience-wide)
 
@@ -1726,7 +1727,8 @@ merge on, Play opens the L1 lobby camp; this arena is the map's Raider Arena nod
 
 **Do NOT publish the Expeditions place from `main` until L4.** This replaces the freeze "until
 P5 Wave 3". The old combat is unmounted: only the lobby camp, Forest Road in grey and the
-Raider Arena can be played.
+Raider Arena can be played. **From L3 W1 on, the city (hub) is frozen too**, and both publish
+together at L4 (see "L3 W1" below).
 
 **Status 2026-10-13:**
 - Built, reviewed and fixed on branch `l1-forest-road` (`de03e36`). QA is running.
@@ -1950,7 +1952,7 @@ feels right").
 **Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
 
 **Status 2026-10-16:** built, reviewed, three fix rounds, QA green; merged to `main` (`1fc7d91`).
-**Unplayed.** Run it as step 1 of "L2 Wave 1" below.
+**Played 2026-10-20** (one session with L2), closed on Ben's word.
 
 <!-- FILE TO OPEN: start. Lead: if L1c is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -1986,7 +1988,7 @@ feels right").
   lost (PLAN "L2", Wave 1). Not a step now.
 
 **Status 2026-10-17:** built, reviewed, two fix rounds, QA green; merged to `main` (`fed5ed6`).
-**Unplayed.** Run it as part of "L2 Wave 2" below, or alone.
+**Played 2026-10-20** (one session with W2 and W3), closed on Ben's word.
 
 <!-- FILE TO OPEN: start. Lead: if L2 Wave 1 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -2031,7 +2033,7 @@ feels right").
 **Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
 
 **Status 2026-10-19:** built, reviewed, three fix rounds, QA green; merged to `main` (`1ace3a4`).
-**Unplayed.** Run it as part of "L2 Wave 3" below, or alone.
+**Played 2026-10-20** (one session with W1 and W3), closed on Ben's word.
 
 <!-- FILE TO OPEN: start. Lead: if L2 Wave 2 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -2082,8 +2084,9 @@ feels right").
 **Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds. In the
 live game nobody can open the Island Shrine until the Castle exists.
 
-**Status 2026-10-19:** built, reviewed, three fix rounds, QA green on `l2-w3` + `l2-w3-fix2`.
-**Not merged yet.** Wait for the lead's word (step 0) before step 1.
+**Status 2026-10-19:** built, reviewed, three fix rounds, QA green; merged to `main` (`1fcc35e`;
+place files `fbc6d2f`). **Played 2026-10-20**, closed on Ben's word ("i tested everything and it
+felt really good").
 
 <!-- FILE TO OPEN: start. Lead: if L2 Wave 3 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -2096,10 +2099,10 @@ live game nobody can open the Island Shrine until the Castle exists.
 
 **Steps:**
 
-- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+- [x] 0. (Lead) Merge, rebuild, tell Ben.
       - [x] QA line filled (PLAN "L2", Wave 3, QA).
-      - [ ] `l2-w3-fix2` and `l2-w3` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L2 Wave 3 is merged, Build all. If you haven't played L1c, Wave 1 and
+      - [x] `l2-w3-fix2` and `l2-w3` merged to `main`; the six place files rebuilt (`fbc6d2f`).
+      - [x] Ben told: "L2 Wave 3 is merged, Build all. If you haven't played L1c, Wave 1 and
             Wave 2, start with those."
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
@@ -2123,6 +2126,72 @@ live game nobody can open the Island Shrine until the Castle exists.
 - Two Studio-only numbers to report if you meet them: the ice keeps stopping one patch short of
   you while you stand on its edge (`levels.react.ice.sink`), or a slam drops you through a sheet
   (`thickness` 1.9).
+
+## L3 W1
+
+**Studio only. Nothing to set up beyond opening the rebuilt files.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setting.
+- The 15 weapon models and their shelf icons are approved but **not uploaded**. They upload at the
+  start of L3 W2, with one harvest paste then.
+- No game pass or developer product: tiers are bought with Timber in the game.
+- No profile step: profile v8 converts old saves by itself (once).
+- Still silent (no audio step).
+
+**Do NOT publish either place from `main` until L4.** The publish freeze now covers **both** the
+city (hub) and the Expeditions place.
+- Why: they share the save format. The city alone would refund live players' Timber while the live
+  Expeditions place still fights at their old gear.
+- At L4 both publish together, in the order below. Not a step now.
+
+**Status 2026-10-20:** built, reviewed (four slices, then a fix-diff review; all fixed), QA green
+on `l3-armory`. **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L3 Wave 1 is not merged to `main`, change only this block. -->
+**Files to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`, then
+`C:\Users\benja\Desktop\tycoon\build\test.rbxl` (both in the main checkout)
+- **Wait for the lead's word first.** Before the merge, "Build all" gives L2 (the old Armory
+  panel).
+- **Build them:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A file that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the key hint ends **"T +500 Timber · U ★ Hard · L reset
+  Armory"**.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [ ] Fix 2 (F1–F6) landed; QA line filled (PLAN "L3", Wave 1, QA).
+      - [ ] `l3-armory` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L3 Wave 1 is merged, Build all."
+- [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 2. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save).
+- [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
+      lobby.
+- [ ] 4. Run `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen", steps 1–8.
+- [ ] 5. Close `proving.rbxl` without saving. Open
+      `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (the city) for step 9.
+- [ ] 6. Close Studio without saving. Tell Claude when you are done (four click questions follow).
+
+**Notes:**
+- **Every Play starts a fresh save** (Studio's mock store): T1 / T1, no Timber, no stars. Use
+  **T** (+500 Timber), **U** (★ Hard on Forest Road, plus the Warhammer), **L** (reset the
+  Armory) and **G** (gear T1 → T3 → T5). **J**, **F**, **I**, **H**, **V** as in L2.
+- In the city the only new key is **K**. Its Studio strip has the same levers as buttons (Grant
+  500 Timber, tier, ★ Hard, reset); the look does not need them.
+
+### The L4 publish order (later, not now)
+
+Done once, at L4, in one sitting. Same dialogs as "C2 → 4. Republish BOTH places".
+- [ ] L4-1. **City (hub):** open `C:\Users\benja\Desktop\tycoon\build\test.rbxl` → **File → Publish
+      to Roblox** → *Era Tycoon: Village to Space (BETA)* → the **start place** → **Overwrite**.
+- [ ] L4-2. **Expeditions:** open `C:\Users\benja\Desktop\tycoon\build\combat.rbxl` → **File →
+      Publish to Roblox As…** → the same experience → **`Expeditions`** → **Overwrite**. Read the
+      place name twice: the combat build over the start place replaces your city.
+- [ ] L4-3. Creator Hub → the experience → **Places**: both rows show today's "last updated"
+      time.
+- [ ] L4-4. **Shut down all servers:** on the experience card **⋯ → Restart servers** (older UI:
+      "Shut Down All Servers"). Old servers would keep running the old save rules.
+- Never publish only one of the two.
 
 ## M10 — Icon, store icons, thumbnails
 
