@@ -14,13 +14,17 @@
 -- L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-28): the dungeon strip's Armory levers, for the
 -- hub's Armory screen. "Grant 500 Timber" (was 25: a tier now costs 100 to 500; the server pays
 -- every built band's material, Timber today), "Melee T1 +1" / "Ranged T1 +1" (`setTier` on the
--- HELD families, their tiers from SetTiers), "★ Forest Hard" (`grantStar`) and "Reset Armory"
--- (`resetArmory`). SetVisible takes the strip away while the Armory screen covers its corner.
+-- HELD families, their tiers from SetTiers), the star lever (`grantStar` with Unlocks.ALL_STARS,
+-- captioned from the built levels, "★ Hard: Forest Road") and "Reset Armory" (`resetArmory`).
+-- SetVisible takes the strip away while the Armory screen covers its corner.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Format"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Format = require(sharedFolder:WaitForChild("Format"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
+local ArmoryScreen = require(script.Parent:WaitForChild("ArmoryScreen"))
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
 local SoundController =
@@ -64,10 +68,6 @@ local VALOR_GRANT = 10
 local FAKE_RUNS = 3
 -- C2 contract: `fakeParty` takes 0–3 fake members; the button steps +1 and wraps to clear.
 local FAKE_PARTY_MAX = 3
--- L3-28: the grantStar value for every built band level; Forest Road is the only one until the
--- Castle is built, which is what the caption says.
-local STAR_ALL = "*"
-local STAR_TEXT = "★ Forest Hard"
 
 local DebugPanel = {}
 
@@ -238,8 +238,10 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 			else "Ranged tier +1"
 	end
 	paintTierButtons()
-	makeButton(STAR_TEXT, function()
-		deps.onLever("grantStar", STAR_ALL)
+	-- L3-28, 3-s2: every built band level's star, named from those levels, so the caption says
+	-- what the lever does once the Castle is built too.
+	local starButton = makeButton(ArmoryScreen.StarLeverText(), function()
+		deps.onLever("grantStar", Unlocks.ALL_STARS)
 	end)
 	makeButton("Reset Armory", function()
 		deps.onLever("resetArmory", true)
@@ -254,6 +256,10 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	local function setExpanded(value: boolean): ()
 		expanded = value
 		body.Visible = value
+		if value then
+			-- The level files may have come after boot.
+			starButton.Text = ArmoryScreen.StarLeverText()
+		end
 		root.Size = UDim2.fromOffset(STRIP_WIDTH, if value then expandedHeight else BUTTON_HEIGHT)
 		tab.Text = if value then "⚙ debug ▾" else "⚙ debug"
 	end

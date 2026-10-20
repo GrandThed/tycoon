@@ -524,6 +524,7 @@ was upgraded), on Normal and Hard, against the mission player at the same gear.
 | `sim_combat.py` unlock table (1916-1970), C0 check 1 (2765-2801) | the income gate: **retired**, with a BALANCE line | designer |
 | `sim_range.py` `THREAT_TIER` (180), `armory_max_hp` (1582), `hpByTier` (3605), `gear_max_hp` / `mission_gear` (5257-5275), `level_view` (7013), `preset_gears` / `recommended_gear` / `preset_below` (8971-8983), the Validate mirror | the ladder, `rangeHp`, presets, `firstClear` | designer |
 | `check_stage_mirror.py`, `stage_mirror.luau` | the new `Armory` functions it compares (`:155`) and `StageFlow.FirstClear` | luau-engineer A |
+| `sim_range.py` `gear_profile`, `held_pair`, `held_scale`, `level_view(held=)`, `gear_max_hp(held=)` (hit, pair-kit, slam, cast and breath scales; the bar and regen), held to the game by `armed_problems`; `sim_combat.py` `climb_runs(fire=)` | `WeaponService.damageScale` (`Armory.StrikeTier` of the striking family; the slam passes the held melee) and `gearOf` (the held pair) — added in the fix round (R2) | designer |
 | crowd harness `tests_l2.luau` (its v6 profile reaches v8) and `tests.luau:620` (130, now `rangeHp`) | `ProfileSchema`, the range body | luau-engineer A |
 
 ## 8. Studio levers (Studio only, both entry points, inert in the live game and in the range)
@@ -734,3 +735,9 @@ was upgraded), on Normal and Hard, against the mission player at the same gear.
    Normal on 2026-10-16 ("fix in L4" when the real forest re-places them); the lead extends that to Hard
    (`SNIPER_KNOWN_LIMIT_L4["hard"]`). Their rates stay reported, every hit landing stays gated, and the set must be
    empty before L4 ships. The lead tells Ben in one line.
+10. **The fix round** (`docs/prompts/l3-w1-fix-round.md`, R1–R12, owners' reports in `docs/prompts/l3-w1-fix-reports/`):
+    a Brutal star also opens a band top (`ladder.starAlso`); one `Armory.StrikeTier` for hits and the bar (G's override
+    clamped into each window); U pays first-clear rewards; one migration runner (`ProfileSchema.Run`); the hub's profile
+    copy is the pure `ProfileCopy.Combat`, Power the pure `Armory.SavedPower`; the simulators scale every weapon by its
+    own tier (the Frost Hammer's Forest pair rows reported until the Castle, the Flamethrower pair rated at T2 / T2 as
+    ratios to the starter pair); touch controls hidden while the Armory is open; the invite above the hub's Armory.

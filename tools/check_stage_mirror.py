@@ -123,6 +123,10 @@ and compares what they answer, value by value:
     every level at every difficulty and on Forest Road given each first-clear shape, and
     Validate's firstClear lines refused alike (L3-17); every Validate is handed the weapons and the
     starters on both sides, so a first clear's family is checked as a family, not an id only.
+    Its fix round adds `StarHeld` (a band top opened by the Hard star or a `starAlso` one: profiles
+    holding only a Brutal star, a config without `starAlso` and one whose `starAlso` is a word), and
+    breaks that only one Problems rule can name (bandSize 4.5, a band removed, a negative ranged HP
+    entry, a `starAlso` that is no list of names).
 
 It fails when either side changes alone. A function of the Luau that the simulators do not
 mirror (the rescue, the skips, the map) is listed, not compared: tools/crowd_harness tests those.
@@ -188,7 +192,7 @@ ARMORY_MIRRORS = {"LadderSize": "ladder_size", "Window": "window", "TierOf": "ti
                   "MaxHp": "max_hp", "RangeHp": "range_hp", "GearPower": "gear_power", "BandOf": "band_of",
                   "NextTier": "next_tier", "TierCost": "tier_cost", "Preview": "preview",
                   "UpgradeVerdict": "upgrade_verdict", "LegacyRefund": "legacy_refund", "Problems": "problems",
-                  "SetTier": "set_tier", "BuiltBands": "built_bands"}
+                  "SetTier": "set_tier", "BuiltBands": "built_bands", "StarHeld": "star_held"}
 NEEDED["Armory"] = tuple(ARMORY_MIRRORS)
 NEEDED["StageFlow"] += ("FirstClear",)
 # The grids the Armory is asked on (L3 W1).
@@ -214,6 +218,10 @@ ARMORY_COMBATS = (
                                               "rifle": "x"}},
     {"materials": {"Timber": 1000}, "tiers": {"broadsword": 3}, "stars": {"forestRoad": {"normal": True}}},
     {"materials": {"Timber": 1000}, "tiers": {"broadsword": 3}, "stars": {"forestRoad": {"hard": False}}},
+    # The fix round's R1: a Brutal star alone, at a band top with the price held and one short.
+    {"materials": {"Timber": 500}, "tiers": {"broadsword": 3, "longbow": 3}, "stars": {"forestRoad": {"brutal": True}}},
+    {"materials": {"Timber": 499, "Iron": 10 ** 6}, "tiers": {"broadsword": 3, "longbow": 7},
+     "stars": {"forestRoad": {"brutal": True, "normal": True}, "castle": {"brutal": True}}},
 )
 # Problems on copies broken one rule at a time: (label, change). Both sides must call each unsound.
 ARMORY_BREAKS = (
@@ -234,6 +242,14 @@ ARMORY_BREAKS = (
     ("a tierWeight that is a string", lambda c: c["power"].__setitem__("tierWeight", "11")),
     ("no starDifficulty", lambda c: c["ladder"].__setitem__("starDifficulty", "")),
     ("no ladder", lambda c: c.pop("ladder")),
+    # The fix round's R6: breaks only one rule can name (bandSize not whole skips the costs and cover
+    # rules; four bands of four; melee stays above a negative ranged entry and the list still rises).
+    ("bandSize 4.5", lambda c: c["ladder"].__setitem__("bandSize", 4.5)),
+    ("one band removed", lambda c: c["ladder"]["bands"].pop()),
+    ("a negative ranged HP entry", lambda c: c["ladder"]["hp"]["ranged"].__setitem__(0, -1)),
+    # R1: starAlso is a list of difficulty names, or absent.
+    ("a starAlso that is a word", lambda c: c["ladder"].__setitem__("starAlso", "brutal")),
+    ("a starAlso with an empty name", lambda c: c["ladder"].__setitem__("starAlso", ["brutal", ""])),
 )
 # L3-17: the first-clear shapes Forest Road is given at Hard (FirstClear and Validate alike).
 FIRST_CLEARS = (
@@ -2160,6 +2176,8 @@ def armory_python(op, cfg, row, families):
     if op == "builtBands":
         levels, materials = sc.built_bands(cfg, {level: True for level in ARMORY_BUILT[row[0] - 1]})
         return [levels, materials]
+    if op == "starHeld":
+        return sc.star_held(cfg, combats[row[0] - 1], row[1])
     raise ValueError(op)
 
 
@@ -2191,7 +2209,11 @@ def armory_cases(data, expected, report, proving):
     ladder["rangeHp"] = 0
     edges["legacy"]["gearCosts"][1] = {"material": "", "amount": 60}
     edges["legacy"]["gearCosts"][2] = {"material": "Timber", "amount": -180}
-    configs = [("shipped", armory), ("no ladder", bare), ("narrowed windows", narrow), ("edges", edges)]
+    ladder["starAlso"] = "brutal"  # a word, not a list: it opens nothing (R1)
+    hard_only = copy.deepcopy(armory)
+    hard_only["ladder"].pop("starAlso", None)
+    configs = [("shipped", armory), ("no ladder", bare), ("narrowed windows", narrow), ("edges", edges),
+               ("no starAlso", hard_only)]
     combats = range(1, len(ARMORY_COMBATS) + 1)
     built = range(1, len(ARMORY_BUILT) + 1)
     grids = {
@@ -2223,13 +2245,14 @@ def armory_cases(data, expected, report, proving):
         "setTier": [[c, family, tier] for c in (1, 4, 9) for family in asked
                     for tier in (-1, 0, 1, 2, 7, 12, 25, 2.5, 5.6)],
         "builtBands": [[b] for b in built],
+        "starHeld": [[c, level] for c in combats for level in ("forestRoad", "castle", "nope")],
     }
     luau_names = {"ladderSize": "LadderSize", "window": "Window", "tierOf": "TierOf", "heldTiers": "HeldTiers",
                   "multiplier": "Multiplier", "damageScale": "DamageScale", "weaponHp": "WeaponHp", "maxHp": "MaxHp",
                   "rangeHp": "RangeHp", "gearPower": "GearPower", "bandOf": "BandOf", "nextTier": "NextTier",
                   "tierCost": "TierCost", "preview": "Preview", "upgradeVerdict": "UpgradeVerdict",
                   "legacyRefund": "LegacyRefund", "problems": "Problems", "setTier": "SetTier",
-                  "builtBands": "BuiltBands"}
+                  "builtBands": "BuiltBands", "starHeld": "StarHeld"}
     breaks = []
     for label, change in ARMORY_BREAKS:
         broken = copy.deepcopy(armory)

@@ -61,9 +61,10 @@ local PROFILE_TEMPLATE: Types.PlayerState = {
 -- per profile.
 local warnedNoArmory = false
 
--- Migrations[n](state) upgrades schema n → n+1; the runner bumps state.version afterwards.
--- Additive and idempotent. Reconcile would also fill the new fields, but the version stamp must
--- advance so an old profile is provably upgraded once rather than reconciled forever.
+-- Migrations[n](state) upgrades schema n → n+1; the runner (Run, below) stamps state.version after
+-- each. Additive; every step but [7] is idempotent, and step 7 PAYS (the slot-tier refund), so the
+-- version stamp is what runs each one once. Reconcile would also fill the new fields, but the stamp
+-- must advance so an old profile is provably upgraded once rather than reconciled forever.
 local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
 	[1] = function(state: Types.PlayerState): ()
 		if state.pendingDoubleOfflineAmount == nil then
@@ -172,10 +173,38 @@ local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
 	end,
 }
 
+-- Why the runner stopped short of a clean v{SCHEMA_VERSION}: a step is missing (the profile is left at
+-- the version it reached), or a newer server wrote the profile (left untouched, and it plays).
+export type RunVerdict = "missing" | "ahead"
+
+-- The fix round's R5: the one migration runner. DataService calls it on every load and the harness
+-- calls the same function, so the proof that step 7 pays exactly once is a proof about this loop.
+-- Each step runs once and the stamp moves to the version it produced, in order from the profile's
+-- version; a current profile takes no step. Never yields (a step may not either).
+local function run(state: Types.PlayerState): RunVerdict?
+	local from = state.version
+	if from % 1 ~= 0 then
+		return "missing"
+	end
+	for version = from, SCHEMA_VERSION - 1 do
+		local migrate = Migrations[version]
+		if migrate == nil then
+			return "missing"
+		end
+		migrate(state)
+		state.version = version + 1
+	end
+	if state.version > SCHEMA_VERSION then
+		return "ahead"
+	end
+	return nil
+end
+
 return {
 	SCHEMA_VERSION = SCHEMA_VERSION,
 	STORE_NAME = STORE_NAME,
 	PROFILE_KEY_PREFIX = PROFILE_KEY_PREFIX,
 	PROFILE_TEMPLATE = PROFILE_TEMPLATE,
 	Migrations = Migrations,
+	Run = run,
 }

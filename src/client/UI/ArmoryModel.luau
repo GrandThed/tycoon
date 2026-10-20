@@ -140,6 +140,10 @@ local TEXT = {
 	separator = " · ",
 	arrow = " → ",
 	star = "★ ",
+	-- A band's top when the ladder names no difficulty to show (the validator warns about it).
+	needsAStar = "Needs a star on ",
+	noStar = "★ ?",
+	noLevel = "none",
 }
 
 local ArmoryModel = {}
@@ -171,11 +175,13 @@ local function bandSize(armory: Types.ArmoryConfig?): number
 	return if type(size) == "number" and size >= 1 then size else 0
 end
 
--- The difficulty whose star a band's top tier needs (`ladder.starDifficulty`).
-local function starDifficulty(armory: Types.ArmoryConfig?): string
+-- The difficulty whose star the screen names at a band's top (`ladder.starDifficulty`, the one
+-- the U lever grants). nil when the ladder names none: then no line names a star, and only the
+-- verdict (the server's rule) says one is missing.
+local function starDifficulty(armory: Types.ArmoryConfig?): string?
 	local ladder = ladderOf(armory)
 	local key = if ladder ~= nil then ladder.starDifficulty else nil
-	return if type(key) == "string" and key ~= "" then key else "hard"
+	return if type(key) == "string" and key ~= "" then key else nil
 end
 
 -- The map node for a level id: the node that plays it, else the node of that id.
@@ -220,6 +226,14 @@ function ArmoryModel.DifficultyName(expeditions: Types.ExpeditionsConfig?, key: 
 		return name
 	end
 	return string.upper(string.sub(key, 1, 1)) .. string.sub(key, 2)
+end
+
+-- The star a band's top names, "★ Hard"; nil when the ladder names no difficulty.
+local function starWords(inputs: Inputs): string?
+	local key = starDifficulty(inputs.armory)
+	return if key ~= nil
+		then TEXT.star .. ArmoryModel.DifficultyName(inputs.expeditions, key)
+		else nil
 end
 
 -- A band's colour: its level's map node's theme ({ r, g, b }); nil when none is known.
@@ -456,11 +470,12 @@ function ArmoryModel.Pips(inputs: Inputs, card: Card): { Pip }
 	return pips
 end
 
+-- R1 of the fix round: the server's own reading of a band top's star (starDifficulty, or a
+-- harder one in `starAlso`), so the cost line never disagrees with UpgradeVerdict.
 local function hasStar(inputs: Inputs, levelId: string): boolean
+	local armory = inputs.armory
 	local combat = inputs.combat
-	local stars = if combat ~= nil then combat.stars else nil
-	local level = if type(stars) == "table" then stars[levelId] else nil
-	return type(level) == "table" and level[starDifficulty(inputs.armory)] == true
+	return armory ~= nil and combat ~= nil and Armory.StarHeld(armory, combat, levelId)
 end
 
 -- The next tier's band level, its material and price, and whether it is a band's top.
@@ -499,11 +514,10 @@ local function upgradeWords(inputs: Inputs, card: Card, reason: string): string?
 	if reason == "notBuilt" then
 		return TEXT.comesWith .. levelName
 	elseif reason == "needsStar" then
-		return "Needs "
-			.. TEXT.star
-			.. ArmoryModel.DifficultyName(inputs.expeditions, starDifficulty(armory))
-			.. " on "
-			.. levelName
+		local star = starWords(inputs)
+		return if star ~= nil
+			then "Needs " .. star .. " on " .. levelName
+			else TEXT.needsAStar .. levelName
 	elseif reason == "insufficientFunds" then
 		local short = amount - (combat.materials[material] or 0)
 		return if short > 0
@@ -566,10 +580,10 @@ local function costLine(inputs: Inputs, card: Card): string?
 		.. TEXT.separator
 		.. ArmoryModel.LevelName(inputs, levelId)
 	if bandTop and not hasStar(inputs, levelId) then
-		line ..= TEXT.separator .. "needs " .. TEXT.star .. ArmoryModel.DifficultyName(
-			inputs.expeditions,
-			starDifficulty(armory)
-		)
+		local star = starWords(inputs)
+		if star ~= nil then
+			line ..= TEXT.separator .. "needs " .. star
+		end
 	end
 	return line
 end
@@ -766,16 +780,53 @@ function ArmoryModel.RefusalText(
 	return TEXT.retry
 end
 
--- The toast for an accepted press: "Longbow: T2", "Warhammer equipped". `tier` is the tier the
--- press bought, when the screen knows it.
-function ArmoryModel.OkText(inputs: Inputs, action: string, family: string, tier: number?): string
+-- The toast for an accepted press: "Longbow: T2", "Warhammer equipped", and for a style switched
+-- on the held family what changed, "Longbow: B · Quick shot". `tier` is the tier the press
+-- bought, when the screen knows it; `style` the key a switch on the held family sent (nil for an
+-- equip of another family, which is what changed there).
+function ArmoryModel.OkText(
+	inputs: Inputs,
+	action: string,
+	family: string,
+	tier: number?,
+	style: string?
+): string
 	local name = familyName(inputs, family)
 	if action == "upgradeWeapon" then
 		return if tier ~= nil
 			then name .. ": " .. ArmoryModel.TierText(tier)
 			else name .. TEXT.upgraded
 	end
+	if style ~= nil then
+		local def = inputs.weapons[family]
+		local variant = if def ~= nil and type(def.variants) == "table"
+			then def.variants[style]
+			else nil
+		local label = if type(variant) == "table" then variant.label else nil
+		return name
+			.. ": "
+			.. style
+			.. (if type(label) == "string" and label ~= "" then TEXT.separator .. label else "")
+	end
 	return name .. TEXT.equippedToast
+end
+
+-- The Studio star lever's caption (L3-28, Unlocks.ALL_STARS): the star it grants and every level
+-- it grants it on, "★ Hard: Forest Road", from the ladder's built bands, so a band whose level
+-- gets built renames the button with no edit (3-s2). "★ Hard: none" while no band level is built.
+function ArmoryModel.StarLeverText(inputs: Inputs): string
+	local armory = inputs.armory
+	local names: { string } = {}
+	if armory ~= nil then
+		local built = inputs.built
+		local levelIds = Armory.BuiltBands(armory, built)
+		for _, levelId in levelIds do
+			table.insert(names, ArmoryModel.LevelName(inputs, levelId))
+		end
+	end
+	return (starWords(inputs) or TEXT.noStar)
+		.. ": "
+		.. (if #names > 0 then table.concat(names, ", ") else TEXT.noLevel)
 end
 
 -- The header's wallet (L3-19): the material of every band whose level is built, in band order

@@ -94,6 +94,7 @@ type ArmoryLadder = {
 	bands: { ArmoryLadderBand },
 	costs: { number },
 	starDifficulty: string,
+	starAlso: { string }?,
 }
 type ArmoryWindow = { start: number, top: number }
 type ArmoryLegacyCost = { material: string, amount: number }
@@ -139,6 +140,8 @@ type CombatProfile = {
 type ArmoryOwner = { rebirthCount: number, combat: CombatProfile }
 
 type SlotTiers = { melee: number, ranged: number }
+-- ProvingGrounds.json `loadout`: each slot's starter family.
+type StarterPair = { melee: string, ranged: string }
 export type Refusal = "insufficientFunds" | "locked" | "invalid"
 -- L3-5: why an upgrade is refused, tested in this order (UpgradeVerdict). "unavailable" (no
 -- profile, no Armory config) is the caller's.
@@ -252,6 +255,62 @@ function Armory.HeldTiers(
 	return { melee = Armory.TierOf(cfg, combat, melee), ranged = Armory.TierOf(cfg, combat, ranged) }
 end
 
+-- The fix round's R3: the tier a family strikes at, and the tier the bar reads for a held one. A
+-- Studio session override's tier for the family's slot is held inside the family's OWN window, so
+-- a T1 preset never fields a weapon below its window (2-s1); without an override, TierOf. An
+-- override that is not a whole number reads the window's start, as a saved tier does, and a family
+-- with no window strikes at T1 whatever the override says.
+function Armory.StrikeTier(
+	cfg: ArmoryConfig,
+	combat: CombatProfile?,
+	family: string,
+	overrideTier: number?
+): number
+	if overrideTier == nil then
+		return Armory.TierOf(cfg, combat, family)
+	end
+	local first, last = Armory.Window(cfg, family)
+	if first == nil or last == nil then
+		return 1
+	end
+	if not whole(overrideTier) then
+		return first
+	end
+	return math.min(math.max(overrideTier, first), last)
+end
+
+-- L3-10's slot rule, in the one place both readings take it from (Unlocks.LoadoutOf and
+-- SavedPower): the family the saved loadout holds in `slot` when it is a family of `weapons`, fills
+-- that slot and is owned (a starter, or one the profile's `families` holds true for); otherwise
+-- the slot's starter. `weapons` is ProvingGrounds.json `weapons`, of which only each entry's `slot`
+-- is read, and `starters` its `loadout`. "" for a slot other than "melee" and "ranged".
+function Armory.HeldFamily(
+	combat: CombatProfile?,
+	weapons: any,
+	starters: StarterPair,
+	slot: string
+): string
+	local starter = if slot == "melee"
+		then starters.melee
+		elseif slot == "ranged" then starters.ranged
+		else nil
+	if starter == nil then
+		return ""
+	end
+	local saved: any = if combat ~= nil then combat.loadout else nil
+	local family: any = if type(saved) == "table" then saved[slot] else nil
+	local def: any = if type(family) == "string" and type(weapons) == "table"
+		then weapons[family]
+		else nil
+	if type(def) ~= "table" or def.slot ~= slot then
+		return starter
+	end
+	local families: any = if combat ~= nil then combat.families else nil
+	local isStarter = family ~= "" and (family == starters.melee or family == starters.ranged)
+	local found = type(families) == "table" and families[family] == true
+	return if isStarter or found then family else starter
+end
+
 -- L3-1: what a tier multiplies the range's tier-1 numbers by (the tier held inside the ladder).
 -- 1 without a ladder, for a tier that is not a whole number, or for an entry that is not a number
 -- above 0: those degrade to the range's numbers, never to hits that remove no HP.
@@ -333,6 +392,27 @@ function Armory.GearPower(cfg: ArmoryConfig, tiers: SlotTiers, ascension: SlotTi
 	return math.round(
 		damage * tierWeight + Armory.MaxHp(cfg, tiers, ascension) * cfg.power.hpWeight
 	)
+end
+
+-- The fix round's R7: the Power of the pair a profile has SAVED, the one number the hub's readout
+-- and the dungeon place's Snapshot both show: the families HeldFamily reads from the loadout, at
+-- their tiers, with the slots' Ascension. A fresh profile is T1 / T1, so 64 on the shipped
+-- Armory.json. `weapons` and `starters` are ProvingGrounds.json's `weapons` and `loadout`; with no
+-- family known ("" starters) both slots read T1.
+function Armory.SavedPower(
+	cfg: ArmoryConfig,
+	combat: CombatProfile?,
+	weapons: any,
+	starters: StarterPair
+): number
+	local melee = Armory.HeldFamily(combat, weapons, starters, "melee")
+	local ranged = Armory.HeldFamily(combat, weapons, starters, "ranged")
+	local levels: any = if combat ~= nil then combat.ascension else nil
+	local ascension: SlotTiers = {
+		melee = if type(levels) == "table" and finite(levels.melee) then levels.melee else 0,
+		ranged = if type(levels) == "table" and finite(levels.ranged) then levels.ranged else 0,
+	}
+	return Armory.GearPower(cfg, Armory.HeldTiers(cfg, combat, melee, ranged), ascension)
 end
 
 -- L3-4: a tier's band (1 = the first level's) and its position inside the band (1..bandSize).
@@ -417,11 +497,36 @@ local function starHeld(combat: CombatProfile, levelId: string, difficulty: any)
 	return type(difficulty) == "string" and type(row) == "table" and row[difficulty] == true
 end
 
+-- The fix round's R1: does the profile hold the trophy a band top of `levelId` needs? That level's
+-- `starDifficulty` star, or the star of any difficulty `starAlso` lists: a Brutal clear opens T4 as
+-- a Hard one does (the map still stars only the difficulty cleared). False without a ladder or a
+-- profile; a `starAlso` that is not a list adds nothing. The server's verdict and the screen's
+-- lines both read it.
+function Armory.StarHeld(cfg: ArmoryConfig, combat: CombatProfile?, levelId: string): boolean
+	local ladder = ladderOf(cfg)
+	if ladder == nil or combat == nil then
+		return false
+	end
+	if starHeld(combat, levelId, ladder.starDifficulty) then
+		return true
+	end
+	local also: any = ladder.starAlso
+	if type(also) ~= "table" then
+		return false
+	end
+	for index = 1, #also do
+		if starHeld(combat, levelId, also[index]) then
+			return true
+		end
+	end
+	return false
+end
+
 -- L3-5: may this family go up a tier now? nil = yes; otherwise the first refusal that applies,
 -- in this order: no window (or no ladder); not owned; at its top; not allowed here (gateOpen =
 -- the combat place's MayLeave, true in the hub); the next tier's band level is not built (no
 -- level file for it in `built`, or the tier has no price); a band's top position without that
--- level's starDifficulty star; the band material short. The buttons colour from this and the
+-- level's trophy (StarHeld); the band material short. The buttons colour from this and the
 -- server decides with it.
 function Armory.UpgradeVerdict(
 	cfg: ArmoryConfig,
@@ -451,9 +556,7 @@ function Armory.UpgradeVerdict(
 	if ladder == nil or band == nil or built[band.levelId] ~= true or material == "" then
 		return "notBuilt"
 	end
-	if
-		position == ladder.bandSize and not starHeld(combat, band.levelId, ladder.starDifficulty)
-	then
+	if position == ladder.bandSize and not Armory.StarHeld(cfg, combat, band.levelId) then
 		return "needsStar"
 	end
 	local have: any = combat.materials[material]
@@ -578,6 +681,21 @@ function Armory.LegacyRefund(cfg: ArmoryConfig, gear: SlotTiers): { [string]: nu
 	return refund
 end
 
+-- A list (keys 1..n, nothing else) of non-empty strings; an empty list is one.
+local function namesList(value: any): boolean
+	if type(value) ~= "table" then
+		return false
+	end
+	local count = 0
+	for _, name in value do
+		count += 1
+		if type(name) ~= "string" or name == "" then
+			return false
+		end
+	end
+	return count == #value
+end
+
 -- L3-5: the validator, warned at Init in both places: one line per thing that makes a tier rule
 -- degrade. `families` are the weapon family ids (ProvingGrounds.json `weapons`); each needs a
 -- window inside the ladder, and every window must name one of them. An empty list = sound.
@@ -673,6 +791,10 @@ function Armory.Problems(cfg: ArmoryConfig, families: { string }): { string }
 		end
 		if type(ladder.starDifficulty) ~= "string" or ladder.starDifficulty == "" then
 			problem("ladder.starDifficulty names no difficulty: no band top can ever be bought")
+		end
+		local also: any = ladder.starAlso
+		if also ~= nil and not namesList(also) then
+			problem("ladder.starAlso is not a list of difficulty names")
 		end
 	end
 	local windows: any = cfg.windows

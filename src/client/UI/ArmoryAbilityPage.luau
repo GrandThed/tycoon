@@ -39,6 +39,9 @@ export type Offer = { id: string, name: string, text: string, price: number, ord
 
 export type Page = {
 	frame: ScrollingFrame,
+	-- The offers as the configs read now (the screen asks at every open, 4-s3: Expeditions may
+	-- arrive after the host mounts the screen); the rows are rebuilt only when they changed.
+	SetOffers: (offers: { Offer }) -> (),
 	SetState: (valor: number, owned: { [string]: any }?) -> (),
 	-- The server's ActionResult for a purchase (action "buyAbility"); anything else is ignored.
 	OnResult: (payload: any) -> (),
@@ -197,7 +200,8 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 			button.TextColor3 = if live then Theme.MAP_COLOR_INK else Theme.MAP_COLOR_DIM
 		end
 		button.Active = live
-		button.Selectable = live
+		-- 4-s2: a Buy waiting for its answer keeps a pad's selection (its press re-checks).
+		button.Selectable = live or view.pending == offer.id
 	end
 
 	local function paint(): ()
@@ -236,72 +240,111 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 	end
 
 	local textWidth = -(padding * 2 + buttonWidth + Theme.ARMORY_SCREEN_GAP)
-	for index, offer in offers do
-		local frame = Create("Frame", {
-			Name = "Ability_" .. offer.id,
-			Active = false,
-			LayoutOrder = index,
-			Size = rowSize(Theme.ARMORY_SCREEN_ABILITY_ROW_HEIGHT),
-			BackgroundColor3 = Theme.MAP_COLOR_PANEL_LIGHT,
-			BorderSizePixel = 0,
-			ZIndex = Theme.ZINDEX_CARD,
-			Parent = list,
-		}) :: Frame
-		rounded(frame, Theme.ROW_CORNER_RADIUS)
-		local nameHeight = Theme.ARMORY_SCREEN_ABILITY_NAME_TEXT + 4
-		local lineHeight = Theme.TEXT_SMALL + 2
-		local name =
-			label("Name", Theme.ARMORY_SCREEN_ABILITY_NAME_TEXT, Theme.MAP_COLOR_TEXT, frame)
-		name.Position = UDim2.fromOffset(padding, 4)
-		name.Size = UDim2.new(1, textWidth, 0, nameHeight)
-		name.TextTruncate = Enum.TextTruncate.AtEnd
-		name.Text = offer.name
-		local text = label("Text", Theme.TEXT_SMALL, Theme.MAP_COLOR_DIM, frame)
-		text.Font = Theme.FONT
-		text.Position = UDim2.fromOffset(padding, 4 + nameHeight)
-		text.Size = UDim2.new(1, textWidth, 0, lineHeight * 2)
-		text.TextWrapped = true
-		text.TextTruncate = Enum.TextTruncate.AtEnd
-		text.TextYAlignment = Enum.TextYAlignment.Top
-		text.Text = offer.text
-		local price = label("Price", Theme.TEXT_SMALL, Theme.MAP_COLOR_GOLD, frame)
-		price.Position = UDim2.fromOffset(padding, 4 + nameHeight + lineHeight * 2)
-		price.Size = UDim2.new(1, textWidth, 0, lineHeight)
-		price.Text = Format.Cash(offer.price) .. " Valor"
-		local button = Create("TextButton", {
-			Name = "Buy",
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -padding, 0.5, 0),
-			Size = UDim2.fromOffset(buttonWidth, Theme.ARMORY_SCREEN_BUTTON_HEIGHT),
-			BorderSizePixel = 0,
-			AutoButtonColor = false,
-			Font = Theme.FONT_BOLD,
-			TextSize = Theme.TEXT_SMALL,
-			TextWrapped = true,
-			Text = "",
-			ZIndex = Theme.ZINDEX_CARD,
-			Parent = frame,
-		}) :: TextButton
-		rounded(button, Theme.ROW_CORNER_RADIUS)
-		local row: Row = { offer = offer, frame = frame, button = button, unbind = function() end }
-		row.unbind = deps.bind(button, function()
-			buy(row)
-		end)
-		table.insert(rows, row)
+	-- What the rows were built from: the screen hands the offers in again at every open.
+	local built = { signature = nil :: string?, empty = nil :: TextLabel? }
+	local function signatureOf(offerList: { Offer }): string
+		local parts: { string } = {}
+		for _, offer in offerList do
+			table.insert(
+				parts,
+				table.concat({ offer.id, offer.name, offer.text, tostring(offer.price) }, "|")
+			)
+		end
+		return table.concat(parts, ",")
 	end
-	if #offers == 0 then
-		local empty = label("Empty", Theme.TEXT_SMALL, Theme.MAP_COLOR_DIM, list)
-		empty.Font = Theme.FONT
-		empty.LayoutOrder = 1
-		empty.Size = rowSize(Theme.ARMORY_SCREEN_ABILITY_ROW_HEIGHT)
-		empty.TextXAlignment = Enum.TextXAlignment.Center
-		empty.Text = EMPTY_TEXT
+	local function dropRows(): ()
+		for _, row in rows do
+			row.unbind()
+			row.frame:Destroy()
+		end
+		table.clear(rows)
+		local empty = built.empty
+		if empty ~= nil then
+			empty:Destroy()
+			built.empty = nil
+		end
 	end
+	local function build(offerList: { Offer }): ()
+		local signature = signatureOf(offerList)
+		if signature == built.signature then
+			return
+		end
+		built.signature = signature
+		dropRows()
+		for index, offer in offerList do
+			local frame = Create("Frame", {
+				Name = "Ability_" .. offer.id,
+				Active = false,
+				LayoutOrder = index,
+				Size = rowSize(Theme.ARMORY_SCREEN_ABILITY_ROW_HEIGHT),
+				BackgroundColor3 = Theme.MAP_COLOR_PANEL_LIGHT,
+				BorderSizePixel = 0,
+				ZIndex = Theme.ZINDEX_CARD,
+				Parent = list,
+			}) :: Frame
+			rounded(frame, Theme.ROW_CORNER_RADIUS)
+			local nameHeight = Theme.ARMORY_SCREEN_ABILITY_NAME_TEXT + 4
+			local lineHeight = Theme.TEXT_SMALL + 2
+			local name =
+				label("Name", Theme.ARMORY_SCREEN_ABILITY_NAME_TEXT, Theme.MAP_COLOR_TEXT, frame)
+			name.Position = UDim2.fromOffset(padding, 4)
+			name.Size = UDim2.new(1, textWidth, 0, nameHeight)
+			name.TextTruncate = Enum.TextTruncate.AtEnd
+			name.Text = offer.name
+			local text = label("Text", Theme.TEXT_SMALL, Theme.MAP_COLOR_DIM, frame)
+			text.Font = Theme.FONT
+			text.Position = UDim2.fromOffset(padding, 4 + nameHeight)
+			text.Size = UDim2.new(1, textWidth, 0, lineHeight * 2)
+			text.TextWrapped = true
+			text.TextTruncate = Enum.TextTruncate.AtEnd
+			text.TextYAlignment = Enum.TextYAlignment.Top
+			text.Text = offer.text
+			local price = label("Price", Theme.TEXT_SMALL, Theme.MAP_COLOR_GOLD, frame)
+			price.Position = UDim2.fromOffset(padding, 4 + nameHeight + lineHeight * 2)
+			price.Size = UDim2.new(1, textWidth, 0, lineHeight)
+			price.Text = Format.Cash(offer.price) .. " Valor"
+			local button = Create("TextButton", {
+				Name = "Buy",
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -padding, 0.5, 0),
+				Size = UDim2.fromOffset(buttonWidth, Theme.ARMORY_SCREEN_BUTTON_HEIGHT),
+				BorderSizePixel = 0,
+				AutoButtonColor = false,
+				Font = Theme.FONT_BOLD,
+				TextSize = Theme.TEXT_SMALL,
+				TextWrapped = true,
+				Text = "",
+				ZIndex = Theme.ZINDEX_CARD,
+				Parent = frame,
+			}) :: TextButton
+			rounded(button, Theme.ROW_CORNER_RADIUS)
+			local row: Row =
+				{ offer = offer, frame = frame, button = button, unbind = function() end }
+			row.unbind = deps.bind(button, function()
+				buy(row)
+			end)
+			table.insert(rows, row)
+		end
+		if #offerList == 0 then
+			local empty = label("Empty", Theme.TEXT_SMALL, Theme.MAP_COLOR_DIM, list)
+			empty.Font = Theme.FONT
+			empty.LayoutOrder = 1
+			empty.Size = rowSize(Theme.ARMORY_SCREEN_ABILITY_ROW_HEIGHT)
+			empty.TextXAlignment = Enum.TextXAlignment.Center
+			empty.Text = EMPTY_TEXT
+			built.empty = empty
+		end
+	end
+	build(offers)
 
 	paint()
 
 	local page: Page = {
 		frame = list,
+		SetOffers = function(offerList: { Offer })
+			build(offerList)
+			paint()
+		end,
 		SetState = function(valor: number, owned: { [string]: any }?)
 			view.valor = valor
 			table.clear(view.owned)
@@ -372,10 +415,7 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 				UDim2.fromOffset(math.min(width, Theme.ARMORY_SCREEN_ABILITY_MAX_WIDTH), height)
 		end,
 		Destroy = function()
-			for _, row in rows do
-				row.unbind()
-			end
-			table.clear(rows)
+			dropRows()
 			list:Destroy()
 		end,
 	}

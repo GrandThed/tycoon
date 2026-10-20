@@ -6365,3 +6365,76 @@ recommendedPower` was written on), so assertions 3 and 5-14 are unchanged to the
 6 runs and about 24.6 minutes, `CLIMB_MINUTES` 20–40, a Hard clear 20 Valor); the four Hard R8 rows join Normal's
 known limit until L4 (`SNIPER_KNOWN_LIMIT_L4["hard"]` = LookoutLedge, LookoutSignPad, Secret_lookout), reported, not
 gated. The tables above were measured at ×2.5; re-run `py tools/sim_combat.py --check` for the ×2 numbers.
+
+## L3 W1 fix round: the trophy, and every weapon at its own tier in the simulators (2026-10-20)
+
+Rulings: `docs/prompts/l3-w1-fix-round.md` R1 (review `1-saving.md` m5) and R2 (review `2-combat-server.md` M1,
+with its two pair-gate rulings). Measured with `py -3.12 tools/sim_range.py --check` (64-bit, the gate's; about
+15 min), `py -3.12 tools/sim_combat.py --check` and `py tools/check_levels.py`. The "before" numbers are the same
+commands, or the reviewer's probe (`s2probe/pair_scale.py`), on a clean copy of `f6c426d` (a2628da plus the
+reviews). Forest Road Normal, seeds 11 / 23 / 37.
+
+### Fix round: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Armory.json ladder.starAlso` | — | `["brutal"]` | R1: a band's top tier opens with that level's Hard star or a harder one, so a Brutal clear (a party can carry a T3 player through it) also opens T4. `starDifficulty` stays `hard`: the star the screen names and the U lever grants. The map's stars are unchanged |
+| `sim_combat.py` `star_held`, `upgrade_verdict`, `problems` | `_star_held(starDifficulty)` | `star_held(cfg, combat, levelId)` = `Armory.StarHeld` (starDifficulty or any starAlso; false without a ladder or a profile). Problems adds A's line "ladder.starAlso is not a list of difficulty names" | R1: the mirror of A's `Armory.luau`; `check_stage_mirror` compares them |
+| `sim_combat` assertion 1 | starDifficulty `hard` | also starAlso `["brutal"]` (`LADDER_STAR_ALSO`) | R1: the shipped value is pinned |
+| `check_levels` `check_trophy` (new) | — | starDifficulty is a difficulty of Expeditions.json, and starAlso lists exactly the difficulties after it, in order | R1's "or a harder one", held to the data: no easier star opens a band top, and a difficulty added later (Overdrive) cannot be left out. Armory.Problems checks only the shape |
+| `sim_range` `level_view(held=)`, `gear_max_hp(held=)`, `gear_profile`, `held_pair`, `held_scale` | the level player scaled each strike by its SLOT's gear tier; the bar was the gear's | every strike at the striking family's own `Armory.TierOf`, for a profile whose starters stand at the gear (a non-starter at its window start); the slam at the held melee's; the fire sniper's cast at the fire family's; the bar and the regen the held pair's (`HeldTiers`). A run on a view built for another held pair, or with another bar, is refused | R2 (2-M1): what `WeaponService.damageScale` and `gearOf` do since L3-6 |
+| `sim_range` run results `armed`, gate "fights at each family's own tier" (new) | — | each pair run and fire-sniper run records its held pair, bar and scales; `armed_problems` recomputes them with `Armory.HeldTiers` and fails any difference | R2: the mirror proves itself (the shipped gates were green on weapons the game does not field) |
+| `PAIR_FLAME_GEAR` (new) | the Flamethrower pair at the row's gear, T1/T1 | **T2/T2**: the Flamethrower at T2, and its yardstick (Broadsword + Longbow) at T2/T2 too | R2: like with like, at the gear he holds when the Flamethrower first comes (the climb's run 2) |
+| `PAIR_CLEAR_MINUTES` (4.0, 5.75) | absolute minutes | **`PAIR_CLEAR_SHARE` (x0.939, x1.350)** of the starter pair's mean clear at the same gear | R2: 4.0 / 4.259 and 5.75 / 4.259, where 4.259 min is the starter pair's mean T1 clear (248.1, 259.2, 259.4 s) when the band was set. At T2 the band is 3.04-4.37 min. Both ends are converted ("every pair limit becomes a ratio") |
+| `PAIR_CASH_SHARE` 1.10, `PAIR_BOSS_SHARE` 0.90 | ratios to the starter pair at T1 | the same ratios, to the starter pair at T2/T2 | R2: today's ratio limits are kept |
+| The Frost Hammer pair rows (clear, cash a minute, the Colossus) | gated at T1, the Frost Hammer at x1.5 | **reported, not gated, until the Castle**; the Frost Hammer at T5 (x11.118), bar 290 | R2: a Castle weapon arriving at T5, lever-only in the Forest. Its armed check stays gated, as does every frost-crossing and geometry gate |
+| `sim_combat` climb, run 3 (the fire family into the tunnel) | the ranged "gear" set to the Flamethrower's tier | the starters' tiers, with the view holding Broadsword + Flamethrower (`holds`) | R2: `gear` now means the starters' tiers everywhere. Same bar, same clear (2.63 min) |
+| `sim_combat` assertion 2 | — | also checks that the run whose chest pays the fire family is at `sim_range.PAIR_FLAME_GEAR` | R2: the pair's gear comes from the climb; if prices move the lookout run, this turns red |
+
+### Fix round: the pair rows, before and after (Forest Road Normal)
+
+| Row | Gear (bar) | Before: the sim as shipped | The game's rule at T1 (the reviewer's probe) | After (R2) | Verdict |
+|---|---|---|---|---|---|
+| Broadsword + Longbow | T1/T1 (155) | 4.14 / 4.32 / 4.32 min; 30,859 cash a minute; Colossus 76.4 s | the same | the same (now the Frost Hammer's yardstick, reported) | — |
+| Broadsword + Flamethrower | T1/T1 (155), Flamethrower x1.5 | 4.06 / 4.24 / 4.17 min; x1.02 cash; Colossus x0.99 | 4.04 / 3.93 / 4.03 min (seed 23 under the 4.0 floor); x1.07; x0.96 | no longer rated at T1 | — |
+| Broadsword + Longbow | **T2/T2 (180)** | — | — | **3.34 / 3.16 / 3.20 min (mean 3.23)**; 40,344 cash a minute; Colossus 46.2 s | the yardstick |
+| Broadsword + Flamethrower | **T2/T2, Flamethrower T2 (180)** | — | — | **3.20 / 3.16 / 3.20 min**, band 3.04-4.37 (x0.939-x1.350 of 3.23); **40,991 cash a minute, x1.02** (<= x1.10); **Colossus 46.2 s, x1.00** (>= x0.90); no down | **PASS** |
+| Frost Hammer + Longbow | T1/T1 (155), Frost Hammer x1.5 | 4.46 / 4.69 / 4.43 min; x0.95 cash; Colossus x1.08 | 2.22 / 2.30 / 2.27 min; x1.83; 13.9 s, x0.18 (bar left at 155) | **2.22 / 2.30 / 2.27 min; 56,507 cash a minute, x1.83; Colossus 13.9 s against 76.4 s, x0.18; bar 290** | **reported until the Castle** (it would fail all three of the old limits) |
+| The fire sniper's Dragon's Breath (R8, L2-37), tunnel open | T1/T1 (155); the cast at the Flamethrower's T2 (x2.475; it was the bow's x1.5) | Normal: CaveMouth 799 / 3,994 / 533 cash a minute, CaveExit 2,037 / 2,037 / 582 | the same | the same on Normal and on Hard: the larger cast kills nothing more from those spots; 6 runs cast on each difficulty | PASS, unchanged |
+
+What it means for play: at the gear it comes at, the Flamethrower pair is a sidegrade (x1.02 cash, the same boss
+time), as L2 W2 intended. The Frost Hammer is a T5 Castle weapon. Given in the Forest by the Studio lever I, it
+clears Forest Road in about 2.3 minutes and kills the Colossus in about 14 s. That is the expected size of a
+four-tier jump (x7.4 on the hits), not a balance fault; the Castle re-bands it.
+
+### Fix round: the L3-27 mirror row (to add to the contract's table)
+
+| Mirror | Mirrors | Owner |
+|---|---|---|
+| `sim_range.py` `gear_profile`, `held_pair`, `held_scale`, `level_view(held=)` and `gear_max_hp(held=)` (the level player's hit, pair-kit, slam, cast and breath scales; his bar and regen), held to the game's rule by `armed_problems`; `sim_combat.py` `climb_runs(fire=)` | `WeaponService.damageScale` (TierOf of the striking family; the slam passes the held melee) and `gearOf` (`Armory.HeldTiers` of the held pair) | designer |
+
+### Fix round: new gates and their mutants
+
+| Gate | Where | Shown red by |
+|---|---|---|
+| R1: starAlso names exactly the difficulties after starDifficulty (`check_trophy`) | check_levels | starAlso `[]`, absent, `["normal"]`, `["brutal", "brutal"]`; starDifficulty `heroic`; a difficulty added after Brutal and not listed / control: that difficulty listed. Scratch run, all as expected; entries proposed to the lead |
+| R1: StarHeld and the starAlso Problems line (the mirror) | sim_combat, check_stage_mirror | A Brutal star opens T4 and a Normal star does not. `"brutal"`, `[""]`, `[3]` and `{"a": "brutal"}` are named; `[]`, `{}` and absent are silent. Scratch run; check_stage_mirror PASS against A's Luau |
+| R2: each run fights at each family's own tier, the bar the held pair's | sim_range | the SIM_CASES proposed to the lead (results below) |
+| R2: the fire sniper casts at least once, so its tier check is not vacuous | sim_range | — (6 casts on each difficulty) |
+| R2: the Flamethrower pair at T2/T2, its limits as ratios | sim_range | `PAIR_FLAME_GEAR` back at T1/T1 (SIM_CASE below) |
+| R2: the fire family comes at `PAIR_FLAME_GEAR` in the climb | sim_combat assertion 2 | `PAIR_FLAME_GEAR` at T3/T3: assertion 2 red, every other assertion green (hand mutant) |
+
+The R2 SIM_CASES, proposed for `check_levels_mutants.py`. Each was run here through its own `sim_case`
+(`--check --levels-only --level forest`), and all went red as expected:
+
+- every family's scale read from its slot's gear again: FAIL (5); the Frost Hammer pair fights at x1.5 instead
+  of x11.118, and so does its slam;
+- the bar from the gear, not the held pair: FAIL (1); bar 155 instead of 290;
+- the fire sniper's cast at the bow's scale: FAIL (4); x1.5 instead of x2.475;
+- the slam as the starter melee, not the held one: FAIL (1); slam x1.5 instead of x11.118;
+- `PAIR_FLAME_GEAR` back at T1/T1: FAIL (1); the pair clears in 4.04 / 3.93 / 4.03 min against a band of
+  4.00-5.75. Seed 23 falls under it, which is the reviewer's finding: rated unlike with like, the pair looks too fast.
+
+The full `sim_range --check` output differs from the clean copy's only in the cave section above (71 lines): every
+Normal, Hard, Brutal, arena, R8 and range row is byte-identical. PASS lines went from 549 to 561: six old pair
+gates left and eighteen new ones came in.

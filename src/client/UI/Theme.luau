@@ -17,6 +17,14 @@ local LEVEL_BUTTON_HEIGHT = 52
 local PRESTIGE_ROW_HEIGHT = 52
 local DIALOG_BUTTON_HEIGHT = 48
 local TOGGLE_HEIGHT = 48
+-- L3 W1's Armory screen: its tabs and close button, its detail buttons and Buy, its shelf cards
+-- (at least 68 wide, so the height is the small side).
+local ARMORY_SCREEN_HEADER_HEIGHT = 48
+local ARMORY_SCREEN_BUTTON_HEIGHT = 48
+local ARMORY_SCREEN_CARD_HEIGHT = 56
+-- The smallest label text that still reads at MIN_SCALE (7.3 physical px): the bottom bar's
+-- words and the Armory shelf's names shrink to this and never further.
+local LABEL_MIN_TEXT = 8
 
 -- Spec section 10: reduce motion on touch devices and on low-end signals. The low-end
 -- signal is the player's saved graphics quality: anyone who has dialed quality down to
@@ -45,7 +53,10 @@ local Theme = {
 		LEVEL_BUTTON_HEIGHT,
 		PRESTIGE_ROW_HEIGHT,
 		DIALOG_BUTTON_HEIGHT,
-		TOGGLE_HEIGHT
+		TOGGLE_HEIGHT,
+		ARMORY_SCREEN_HEADER_HEIGHT,
+		ARMORY_SCREEN_BUTTON_HEIGHT,
+		ARMORY_SCREEN_CARD_HEIGHT
 	),
 	MAX_SCALE = 1.8,
 	TAP_TARGET_MIN = TAP_TARGET_MIN,
@@ -84,7 +95,7 @@ local Theme = {
 	BOTTOM_BAR_ICON_HEIGHT = 20,
 	BOTTOM_BAR_LABEL_Y = 26,
 	BOTTOM_BAR_LABEL_HEIGHT = 16,
-	BOTTOM_BAR_LABEL_MIN_TEXT = 8,
+	BOTTOM_BAR_LABEL_MIN_TEXT = LABEL_MIN_TEXT,
 
 	PANEL_WIDTH = 340,
 	-- M4 carry-over (a): in landscape the panel docks right while the top bar sits
@@ -1376,7 +1387,7 @@ local Theme = {
 	ARMORY_SCREEN_PADDING = 8,
 	ARMORY_SCREEN_GAP = 6,
 	ARMORY_SCREEN_SCRIM_TRANSPARENCY = 0.35,
-	ARMORY_SCREEN_HEADER_HEIGHT = 48, -- the tabs and the close button
+	ARMORY_SCREEN_HEADER_HEIGHT = ARMORY_SCREEN_HEADER_HEIGHT, -- the tabs and the close button
 	ARMORY_SCREEN_TAB_WIDTH = 104,
 	-- The wallet ("1.2K Timber · 25 Valor") wraps to two lines on a portrait phone (103 wide).
 	ARMORY_SCREEN_WALLET_TEXT = 13,
@@ -1422,7 +1433,7 @@ local Theme = {
 	ARMORY_SCREEN_LINE_HEIGHT = 16,
 	ARMORY_SCREEN_LINE_GAP = 3,
 	ARMORY_SCREEN_LINE_TEXT = 12,
-	ARMORY_SCREEN_BUTTON_HEIGHT = 48,
+	ARMORY_SCREEN_BUTTON_HEIGHT = ARMORY_SCREEN_BUTTON_HEIGHT,
 	-- Up to four buttons share the row (two styles, Equip, Upgrade at 1.5 shares): 93, 93, 93
 	-- and 140 in a 440 column, 79 and 119 in portrait's 377.
 	ARMORY_SCREEN_BUTTON_MAX_WIDTH = 150,
@@ -1446,16 +1457,18 @@ local Theme = {
 	-- grid of five columns showing three rows.
 	ARMORY_SCREEN_SHELF_HEIGHT = 64,
 	ARMORY_SCREEN_CARD_WIDTH = 92,
-	ARMORY_SCREEN_CARD_HEIGHT = 56,
+	ARMORY_SCREEN_CARD_HEIGHT = ARMORY_SCREEN_CARD_HEIGHT,
 	ARMORY_SCREEN_CARD_GAP = 6,
 	ARMORY_SCREEN_CARD_PAD = 5,
 	ARMORY_SCREEN_CARD_NAME_TEXT = 11,
 	-- A portrait card is 68 wide (58 for the name): a long word scales down to this, the bottom
-	-- bar's floor (BOTTOM_BAR_LABEL_MIN_TEXT), instead of truncating.
-	ARMORY_SCREEN_CARD_NAME_MIN_TEXT = 8,
+	-- bar's floor (BOTTOM_BAR_LABEL_MIN_TEXT), instead of truncating. The tier line ("Not
+	-- found") shrinks to it too beside an element's dot.
+	ARMORY_SCREEN_CARD_NAME_MIN_TEXT = LABEL_MIN_TEXT,
 	ARMORY_SCREEN_CARD_NAME_HEIGHT = 26, -- two lines: "Piercing / Rifle"
 	ARMORY_SCREEN_CARD_TIER_TEXT = 14,
 	ARMORY_SCREEN_CARD_DOT = 8,
+	ARMORY_SCREEN_CARD_DOT_GAP = 3, -- between the tier line's end and the dot
 	ARMORY_SCREEN_CARD_HELD_BAR = 3,
 	ARMORY_SCREEN_CARD_DARK = Color3.fromRGB(22, 29, 50),
 	ARMORY_SCREEN_PORTRAIT_COLUMNS = 5,
@@ -1541,6 +1554,9 @@ local Theme = {
 
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,
+	-- R8 of the L3 W1 fix round: the hub's party invite is a small card that takes its own taps,
+	-- so it stays above the full-screen cards (the Armory screen) and below the dialogs.
+	ZINDEX_INVITE = 17,
 	ZINDEX_DIALOG = 20,
 	ZINDEX_LOAD = 22, -- above dialogs (none can open without a model), below toasts
 	ZINDEX_CEREMONY = 25,

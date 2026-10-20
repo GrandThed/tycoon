@@ -96,8 +96,10 @@ local function sendSnapshot(player: Player): ()
 		return
 	end
 	local armoryConfig = Catalog.GetArmoryConfig()
-	-- L3-6: power reads the held families' tiers (the frozen slot `gear` would never move).
-	local heldTiers, ascension = WeaponService.GearOf(player)
+	-- L3-6, R7: Power is the saved loadout's, by the one pure rule the hub's readout reads too
+	-- (Armory.SavedPower), so a player's Power is the same number in both places. The frozen slot
+	-- `gear` would never move; without ProvingGrounds.json no family is known and both slots read T1.
+	local provingConfig = Catalog.GetProvingGroundsConfig()
 	local snapshot: Types.Snapshot = {
 		kind = "snapshot",
 		plotIndex = 0,
@@ -107,7 +109,12 @@ local function sendSnapshot(player: Player): ()
 		incomePerSecond = 0,
 		persistedIncomePerSecond = state.incomeAtSave,
 		gearPower = if armoryConfig ~= nil
-			then Armory.GearPower(armoryConfig, heldTiers, ascension)
+			then Armory.SavedPower(
+				armoryConfig,
+				state.combat,
+				if provingConfig ~= nil then provingConfig.weapons else nil,
+				if provingConfig ~= nil then provingConfig.loadout else { melee = "", ranged = "" }
+			)
 			else 0,
 		welcomeBack = nil,
 	}

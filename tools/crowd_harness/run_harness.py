@@ -38,6 +38,11 @@ freeze, the rescue's landing in WaveService and Frost Quake's launcher in Abilit
 L3 W1 adds tests_l3.luau (the pure Armory ladder, windows, upgrade and refund, the profile's v8
 step, Unlocks' saved loadout and stars, Armory.json as it ships), tests_l3_run.luau (StageFlow's
 first clear) and tests_l3_ui.luau (the Armory screen's pure ArmoryModel, bundled with Format).
+Its fix round adds the pure ProfileCopy (the hub's Delta copy) and reads as text (`source.l3`, the
+L2 pattern) the service lines that apply L3's rules: the strike tier in WeaponService's hits, bar and
+slam, the upgrade's gate, the first clear in EndRun and the U lever, the stars from the profile,
+readLevel's Validate inputs, DebugService's wildcard and presets, both places' Power, the hub's copy,
+DataService's runner and the hub's upgrade (L3_LINES, counted in the function each belongs to).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -110,6 +115,8 @@ SOURCES = {
     # L3 W1: the Armory screen's pure model (tests_l3_ui.luau) and the number formatting it reads.
     "Format": "src/shared/Format.luau",
     "ArmoryModel": "src/client/UI/ArmoryModel.luau",
+    # The L3 W1 fix round's R7: the hub's Delta copy of a combat profile, made pure.
+    "ProfileCopy": "src/shared/ProfileCopy.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -433,6 +440,91 @@ W3_FIX3_LINES = {
     "phoneHumanoid": "MovementController.IsAirborne",
 }
 COMBAT_PROJECT = "combat.project.json"
+# The L3 W1 fix round (docs/prompts/l3-w1-fix-round.md R3, R4, R5, R7, 3-s2): the service lines that
+# apply L3's pure rules. None of these services loads here, so each line is counted as text in the
+# one function it belongs to (None = the whole file), and tests_l3.luau holds each count to its
+# expected value: a call site that stops calling the rule, or calls it with other inputs, fails.
+UNLOCK_SERVICE = "src/combat/server/Services/UnlockService.luau"
+DEBUG_SERVICE = "src/combat/server/Services/DebugService.luau"
+HUB_ECONOMY = "src/server/Services/EconomyService.luau"
+HUB_DATA = "src/server/Services/DataService.luau"
+HUB_ARMORY = "src/server/Services/ArmoryService.luau"
+L3_BODIES = {
+    "gearOf": (WEAPON_SERVICE, re.compile(r"(?ms)^local function gearOf\(.*?^end$")),
+    "damageScale": (WEAPON_SERVICE, re.compile(r"(?ms)^local function damageScale\(.*?^end$")),
+    "onSlam": (WEAPON_SERVICE, re.compile(r"(?ms)^function WeaponService\.OnSlam\(.*?^end$")),
+    "onUpgrade": (UNLOCK_SERVICE, re.compile(r"(?ms)^function UnlockService\.OnUpgradeWeapon\(.*?^end$")),
+    "endRun": (WAVE_SERVICE, re.compile(r"(?ms)^function WaveService\.EndRun\(.*?^end$")),
+    "starsOf": (WAVE_SERVICE, re.compile(r"(?ms)^local function starsOf\(.*?^end$")),
+    "readLevel": (WAVE_SERVICE, re.compile(r"(?ms)^local function readLevel\(.*?^end$")),
+    "grantStars": (WAVE_SERVICE, re.compile(r"(?ms)^function WaveService\.GrantStars\(.*?^end$")),
+    "nextGear": (DEBUG_SERVICE, re.compile(r"(?ms)^local function nextGear\(.*?^end$")),
+    "setGear": (DEBUG_SERVICE, re.compile(r"(?ms)^local function setGear\(.*?^end$")),
+    "hubPower": (HUB_ECONOMY, re.compile(r"(?ms)^local function computeGearPower\(.*?^end$")),
+    "runMigrations": (HUB_DATA, re.compile(r"(?ms)^local function runMigrations\(.*?^end$")),
+    "hubUpgrade": (HUB_ARMORY, re.compile(r"(?ms)^local function tryUpgradeWeapon\(.*?^end$")),
+}
+# key: (file, body or None for the whole file, the exact text). The expected counts are the cases'.
+L3_LINES = {
+    # R3: hits and the bar take the strike tier (luau-engineer B's lines), the slam the held melee family.
+    "strikeTierCalls": (WEAPON_SERVICE, None, "Armory.StrikeTier("),
+    "gearMelee": (WEAPON_SERVICE, "gearOf", "melee = Armory.StrikeTier(armoryConfig, combat, held.melee, meleeOverride),"),
+    "gearRanged": (WEAPON_SERVICE, "gearOf", "ranged = Armory.StrikeTier(armoryConfig, combat, held.ranged, rangedOverride),"),
+    "gearMeleeOverride": (WEAPON_SERVICE, "gearOf", "local meleeOverride = if gear ~= nil then gear.melee else nil"),
+    "gearRangedOverride": (WEAPON_SERVICE, "gearOf", "local rangedOverride = if gear ~= nil then gear.ranged else nil"),
+    "scaleTier": (WEAPON_SERVICE, "damageScale", "local tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)"),
+    "scaleMelee": (WEAPON_SERVICE, "damageScale", "\t\t\tthen gear.melee\n"),
+    "scaleRanged": (WEAPON_SERVICE, "damageScale", 'elseif slot == "ranged" then gear.ranged'),
+    "scaleReturn": (WEAPON_SERVICE, "damageScale", "return Armory.DamageScale(armoryConfig, tier, level, ability)"),
+    "slamFamily": (WEAPON_SERVICE, "onSlam", "StrikeTally.New(damageScale(player, shooter.loadout.melee, false))"),
+    # R3: the combat place's upgrade is gated on MayLeave and owns through the starters.
+    "upgradeGate": (UNLOCK_SERVICE, "onUpgrade", "\t\tgate ~= nil and gate(player),\n"),
+    "upgradeOwned": (UNLOCK_SERVICE, "onUpgrade", "Unlocks.OwnsFamily(combat.families, family, starters()),"),
+    # R3 (L3-17): a new star's first-clear reward in EndRun; R4: the U lever pays the same way.
+    "endRunReward": (WAVE_SERVICE, "endRun", "local reward = if star then StageFlow.FirstClear(level, plan.difficulty) else nil"),
+    "endRunGrant": (WAVE_SERVICE, "endRun", "local given = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil"),
+    "grantFirstClearCalls": (WAVE_SERVICE, None, "UnlockService.GrantFirstClear("),
+    "starsProfile": (WAVE_SERVICE, "starsOf", "if profile ~= nil then\n\t\treturn Unlocks.StarsOf(profile.combat)"),
+    "readLevelInputs": (WAVE_SERVICE, "readLevel", "\t\ttuned.weapons,\n\t\tUnlocks.Starters(tuned.loadout)\n\t)"),
+    "leverAward": (WAVE_SERVICE, "grantStars", "if not StageFlow.Award(stars, levelId, difficulty) then"),
+    "leverReward": (WAVE_SERVICE, "grantStars", "local reward = if level ~= nil then StageFlow.FirstClear(level, difficulty) else nil"),
+    "leverGrant": (WAVE_SERVICE, "grantStars", "local grant = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil"),
+    "leverStudio": (WAVE_SERVICE, "grantStars", "if not boot.mission or not RunService:IsStudio() then"),
+    # 3-s2 and 2-s1 in the combat place's levers.
+    "debugAllStars": (DEBUG_SERVICE, None, "if which == Unlocks.ALL_STARS then"),
+    "debugLiteral": (DEBUG_SERVICE, None, '== "*"'),
+    "debugNextGear": (DEBUG_SERVICE, "nextGear", "local gear = WeaponService.GearOverride(player) or WeaponService.GearOf(player)"),
+    "debugSetGear": (DEBUG_SERVICE, "setGear", "local gear = WeaponService.GearOverride(target) or fought"),
+    # R7: both places show the saved pair's Power; the hub's Delta carries the pure copy.
+    "mainPower": (MAIN_SERVER, None, "then Armory.SavedPower(\n\t\t\t\tarmoryConfig,\n\t\t\t\tstate.combat,\n"),
+    "mainGearOf": (MAIN_SERVER, None, "WeaponService.GearOf("),
+    "hubPower": (HUB_ECONOMY, "hubPower", "return Armory.SavedPower(\n\t\tarmoryConfig,\n\t\tstate.combat,\n"),
+    "hubPowerSent": (HUB_ECONOMY, None, "gearPower = computeGearPower(state)"),
+    "hubCopy": (HUB_ECONOMY, None, "delta.combat = ProfileCopy.Combat(state.combat)"),
+    "hubFrozenGear": (HUB_ECONOMY, None, "combat.gear"),
+    # R5: DataService runs the one runner and keeps no loop of its own.
+    "runnerCall": (HUB_DATA, "runMigrations", "local verdict = ProfileSchema.Run(state)"),
+    "runnerSteps": (HUB_DATA, None, "Migrations["),
+    # The hub's upgrade: its gate is open (no fight) and it owns through the starters; 3-s2 there too.
+    "hubUpgradeCall": (HUB_ARMORY, "hubUpgrade", "Armory.Upgrade(armoryConfig, state.combat, family, owned, true, built)"),
+    "hubUpgradeOwned": (HUB_ARMORY, "hubUpgrade", "local owned = Unlocks.OwnsFamily(state.combat.families, family, starters)"),
+    "hubAllStars": (HUB_ARMORY, None, "if value == Unlocks.ALL_STARS then"),
+    "hubLiteral": (HUB_ARMORY, None, '== "*"'),
+}
+
+
+def l3_reading(text) -> dict:
+    """The L3 W1 fix round's lines (L3_LINES), each counted in the function it belongs to. `found`
+    names the functions whose body was found; `text` reads a repo file (empty when missing)."""
+    bodies = {}
+    for key, (rel, pattern) in L3_BODIES.items():
+        found = pattern.search(text(rel))
+        bodies[key] = found.group(0) if found else None
+    counts = {}
+    for key, (rel, body, line) in L3_LINES.items():
+        source = text(rel) if body is None else (bodies[body] or "")
+        counts[key] = source.count(line)
+    return {"found": {key: value is not None for key, value in bodies.items()}, "counts": counts}
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
 
@@ -528,6 +620,7 @@ def source_reading(repo: Path) -> dict:
         "w3fix": w3_fix_reading(text, react_text, freeze_text),
         "w3fix2": w3_fix2_reading(text, freeze_text),
         "w3fix3": w3_fix3_reading(text),
+        "l3": l3_reading(text),
     }
 
 

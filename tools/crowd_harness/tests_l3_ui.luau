@@ -214,6 +214,17 @@ UI3.armory = {
 	windows = UI3.windows,
 }
 
+-- The Armory config with ladder fields replaced (`false` removes one).
+function UI3.armoryWith(over: any): any
+	local ladder = table.clone(UI3.ladder)
+	for key, value in over do
+		ladder[key] = if value == false then nil else value
+	end
+	local armory = table.clone(UI3.armory)
+	armory.ladder = ladder
+	return armory
+end
+
 -- A combat profile; `over` replaces fields.
 function UI3.combat(over: any?): any
 	local combat: any = {
@@ -501,6 +512,48 @@ function UI3.lineTests(): ()
 		normalStar.costLine == "500 Timber · Forest Road · needs ★ Hard",
 		"only the ladder's starDifficulty star counts"
 	)
+	-- R1 of the fix round: the band top opens with the Hard star or a harder one (`starAlso`),
+	-- read through the server's own Armory.StarHeld; the screen still names Hard.
+	local brutalStar = UI3.combat({
+		materials = { Timber = 999 },
+		tiers = { longbow = 3 },
+		stars = { forestRoad = { brutal = true } },
+	})
+	local brutal = UI3.detail(
+		{ armory = UI3.armoryWith({ starAlso = { "brutal" } }), combat = brutalStar },
+		"longbow"
+	)
+	check(
+		brutal.costLine == "500 Timber · Forest Road"
+			and brutal.upgrade.live
+			and brutal.upgrade.text == "Upgrade T4",
+		`a Brutal clear opens the band top too ({brutal.costLine}; {brutal.upgrade.text})`
+	)
+	local brutalUnlisted = UI3.detail({ combat = brutalStar }, "longbow")
+	check(
+		brutalUnlisted.costLine == "500 Timber · Forest Road · needs ★ Hard"
+			and not brutalUnlisted.upgrade.live
+			and brutalUnlisted.upgrade.text == "Needs ★ Hard on Forest Road",
+		"a harder star counts only where starAlso names it"
+	)
+	-- 4-s4: a ladder that names no difficulty names no star (the validator warns); the verdict,
+	-- the server's rule, still says one is missing.
+	local unnamed = UI3.detail({
+		armory = UI3.armoryWith({ starDifficulty = false }),
+		combat = UI3.combat({
+			materials = { Timber = 999 },
+			tiers = { longbow = 3 },
+			stars = { forestRoad = { hard = true } },
+		}),
+	}, "longbow")
+	check(
+		unnamed.costLine == "500 Timber · Forest Road",
+		`no starDifficulty: the cost line names no star ({unnamed.costLine})`
+	)
+	check(
+		not unnamed.upgrade.live and unnamed.upgrade.text == "Needs a star on Forest Road",
+		`and the button says a star is missing without naming one ({unnamed.upgrade.text})`
+	)
 	local peak = UI3.detail({ combat = UI3.combat({ tiers = { longbow = 12 } }) }, "longbow")
 	check(
 		peak.nextLine == "At its peak" and peak.costLine == nil,
@@ -733,6 +786,24 @@ function UI3.equipTests(): ()
 		not UI3.detail({ combat = owned, gateOpen = false }, "splitbow").styles[1].live,
 		"the gate shut: no style is live"
 	)
+	-- R11 of the fix round: one equip in flight holds every style button too, the held family's
+	-- switch and another family's Equip A / Equip B alike (the screen's press would refuse them).
+	local hammerPending = { equipFamily = "warhammer", equipVariant = "A" }
+	local heldDuring = UI3.detail({ combat = owned, pending = hammerPending }, "longbow")
+	check(
+		#heldDuring.styles == 2
+			and not heldDuring.styles[1].live
+			and not heldDuring.styles[2].live
+			and heldDuring.styles[2].look == "action",
+		"another family's equip in flight: the held family's style switch is not live"
+	)
+	local otherDuring = UI3.detail({ combat = owned, pending = hammerPending }, "splitbow")
+	check(
+		#otherDuring.styles == 2
+			and not otherDuring.styles[1].live
+			and not otherDuring.styles[2].live,
+		"nor another family's Equip A / Equip B"
+	)
 	local picked = UI3.detail(
 		{ combat = owned, held = { melee = "warhammer", ranged = "longbow", variants = {} } },
 		"warhammer"
@@ -802,6 +873,25 @@ function UI3.textTests(): ()
 		M.OkText(base, "setFamily", "warhammer", nil) == "Warhammer equipped"
 			and M.OkText(base, "setFamily", "nothing", nil) == "Weapon equipped",
 		"an equip's toast"
+	)
+	-- 4-s5: a style switched on the held family says what changed.
+	local restyled = M.OkText(base, "setFamily", "longbow", nil, "B")
+	check(restyled == "Longbow: B · Quick shot", `a style switch toasts the style ({restyled})`)
+	check(
+		M.OkText(base, "setFamily", "longbow", nil, "Z") == "Longbow: Z",
+		"a style with no label known: its key"
+	)
+	-- 3-s2: the Studio star lever's caption, from the built band levels.
+	local lever = M.StarLeverText(UI3.inputs())
+	check(lever == "★ Hard: Forest Road", `the star lever names its star and level ({lever})`)
+	check(
+		M.StarLeverText(UI3.inputs({ built = { forestRoad = true, castle = true } }))
+			== "★ Hard: Forest Road, Castle",
+		"a band level built later joins the caption"
+	)
+	check(
+		M.StarLeverText(UI3.inputs({ built = {} })) == "★ Hard: none",
+		"no built band level: none"
 	)
 	local wallet = M.Wallet(
 		UI3.inputs({ combat = UI3.combat({ materials = { Timber = 1234, Iron = 50 }, valor = 25 }) })
@@ -905,6 +995,24 @@ function UI3.realTests(): ()
 	check(
 		M.Wallet(inputs) == "0 Timber · 0 Valor",
 		"the wallet shows Forest Road's Timber only (the later bands are not built)"
+	)
+	check(
+		M.StarLeverText(inputs) == "★ Hard: Forest Road",
+		"the star lever's caption on the shipped files"
+	)
+	-- R1 on the shipped ladder: a Brutal clear of Forest Road opens the Longbow's T4.
+	local brutalInputs = table.clone(inputs)
+	brutalInputs.combat = UI3.combat({
+		materials = { Timber = 999 },
+		tiers = { longbow = 3 },
+		stars = { forestRoad = { brutal = true } },
+	})
+	local brutalBow = M.Detail(brutalInputs, "longbow")
+	check(
+		brutalBow ~= nil
+			and brutalBow.upgrade.live
+			and brutalBow.costLine == "500 Timber · Forest Road",
+		`the shipped ladder opens T4 on a Brutal star ({brutalBow and brutalBow.upgrade.text})`
 	)
 end
 L1.group("l3ui realTests", UI3.realTests)

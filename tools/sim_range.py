@@ -103,6 +103,12 @@ Earthquake launcher), Validate's ice and landing lines, the ice cells LevelGeome
 pair on Forest Road, R8's straight course from the frozen layout's spots, and the crossing to the
 island shrine (ice_crossing). Deep water is no floor: it does not collide, so nothing here stands on it.
 
+L3 Wave 1's fix round (docs/prompts/l3-w1-fix-round.md, R2) scales every strike as WeaponService does since
+L3-6: by the striking family's own Armory.TierOf (level_view's `_scales`, held_scale), for a profile
+whose starters stand at the gear and whose other families sit at their window starts (gear_profile);
+the slam by the held melee, the bar and regen by the held pair (gearOf). A view is built for one held
+pair (level_view held=); every pair run records what it fought with (`armed`), and the gate recomputes it.
+
 WHICH PYTHON. The gate is `py tools/sim_range.py --check`, and the launcher follows the first
 line of this file to the 64-bit Python 3.12. `py -`, a script with no such line, and whatever
 imports this file from one run on the machine's other Python (3.14, a 32-bit build). A level
@@ -288,7 +294,19 @@ PLATE_SLAMS = 2
 # weapon, clears in about 4.2 min). With the tunnel found, the run's cash a minute is at most
 # SHORTCUT_CASH_SHARE of the full run's on Normal and Hard (past it: reported to the lead, no camp
 # change); the clear's saving is reported.
+# L3 W1 fix round, R2 (review 2-M1): every family fights at its own tier (held_scale), so the pair is
+# rated like with like. The Flamethrower first comes on run 2 of the climb (sim_combat assertion 2:
+# run 1 buys both starters T2), so its pair and the starter pair (Broadsword + Longbow) it is held to
+# both run at PAIR_FLAME_GEAR, the Flamethrower at its own TierOf (its window start, T2). Every pair
+# limit is a ratio to that starter pair: cash and the Colossus as before, and the clear band
+# PAIR_CLEAR_SHARE of the starter pair's mean clear, the ratio PAIR_CLEAR_MINUTES was to that pair's
+# mean T1 clear when the band was set (PAIR_STARTER_T1_MINUTES: 248.1 / 259.2 / 259.4 s on a2628da,
+# whose T1 is the old 2/2 the band was set at). The Frost Hammer is a Castle weapon arriving at T5
+# (lever-only in the Forest): its Forest pair rows are reported, not gated, until the Castle.
 PAIR_CLEAR_MINUTES = (4.0, 5.75)
+PAIR_STARTER_T1_MINUTES = 255.544 / 60
+PAIR_CLEAR_SHARE = tuple(m / PAIR_STARTER_T1_MINUTES for m in PAIR_CLEAR_MINUTES)  # (0.939, 1.350)
+PAIR_FLAME_GEAR = {"melee": 2, "ranged": 2}
 PAIR_CASH_SHARE = 1.10
 PAIR_BOSS_SHARE = 0.90
 SHORTCUT_CASH_SHARE = 1.15
@@ -2197,13 +2215,19 @@ class ThreatRun:
         weapon = policy.get("weapon") or (cfg["loadout"]["melee"], None)
         self.variant = variant_of(cfg, *weapon)
         self.melee = self.variant["kind"] == "melee"
-        # P5 ruling 8: the HP-loss scale of his weapon's slot, of the ground slam (melee) and of
-        # his ability. A mission view carries them in `_scales`; the range has none, so all are 1.
-        scales = cfg.get("_scales") or {}
-        slot = cfg["weapons"][weapon[0]]["slot"]
-        self.hit_scale = scales.get(slot, 1.0)
-        self.slam_scale = scales.get("melee", 1.0)
-        self.cast_scale = scales.get(slot + "Ability", self.hit_scale)
+        # P5 ruling 8 and L3-6: a strike's HP-loss scale is the STRIKING family's own tier
+        # (WeaponService.damageScale reads Armory.TierOf of that family; the L3 W1 fix round's R2):
+        # his weapon's, the ground slam's (the held melee family's, as the server passes it) and his
+        # ability's. A mission view carries them per family (level_view); the range has none, so
+        # all are 1. The view is built for one held pair, its bar that pair's (gearOf): a policy
+        # that holds another pair, or a bar from another view, is refused.
+        held = held_pair(cfg, policy)
+        if cfg.get("_held") is not None and (tuple(cfg["_held"]) != held or env["hp"] != cfg["_hp"]):
+            raise ValueError(f"a mission view built for {' + '.join(cfg['_held'])} at {cfg['_hp']:g} HP plays "
+                             f"{' + '.join(held)} at {env['hp']:g} HP: build its own (level_view held=)")
+        self.hit_scale = held_scale(cfg, weapon[0], False)
+        self.slam_scale = held_scale(cfg, held[0], False)
+        self.cast_scale = held_scale(cfg, weapon[0], True)
         if cfg["weapons"][weapon[0]]["ability"]["id"] == "magDump":
             # Mag Dump only buffs the fire: its bullets are ordinary attacks and scale as such
             # (damageMult, not abilityMult; the two differ from Ascension 1 on).
@@ -2235,9 +2259,15 @@ class ThreatRun:
                 melee = v["kind"] == "melee"
                 links = v.get("chain") or [1.0]
                 slot = cfg["weapons"][family]["slot"]
-                self.kit[slot] = {"variant": v, "melee": melee, "scale": scales.get(slot, 1.0),
+                self.kit[slot] = {"family": family, "variant": v, "melee": melee,
+                                  "scale": held_scale(cfg, family, False),
                                   "heavy": v["damage"] * (max(links) if melee else 1) >= crowd["heavyHit"]}
             self.wield(self.kit["melee"])
+        # R2: what he fought with, for the gate that holds the run to the game's tiers
+        # (check_cave_runs): the held pair, the bar, every strike's scale.
+        self.armed = {"held": held, "bar": env["hp"], "slam": self.slam_scale, "cast": self.cast_scale,
+                      "hit": ({k["family"]: k["scale"] for k in self.kit.values()} if self.kit is not None
+                              else {weapon[0]: self.hit_scale})}
         self.guards_at = None  # when the last of a boss's guard fell
         self.gave = 0.0  # studs the boss walked between then and its plate's break
         if self.boss is not None:
@@ -5256,11 +5286,43 @@ def load_level_files():
     return [load_config(path) for path in paths]
 
 
-def gear_max_hp(armory, gear):
-    """Armory.MaxHp of a gear (the held families' tiers, L3-2) with no Ascension."""
+def gear_profile(cfg, gear):
+    """[tier] The combat profile a simulated gear stands for (R2 of the L3 W1 fix round): the two
+    starters (ProvingGrounds.json loadout) at the gear's tiers and every other family never
+    upgraded, so Armory.TierOf reads its window start (the Flamethrower T2, the Frost Hammer T5)."""
+    return {"tiers": {cfg["loadout"]["melee"]: gear["melee"], cfg["loadout"]["ranged"]: gear["ranged"]}}
+
+
+def held_pair(cfg, policy):
+    """[tier] The two families a policy's player holds, melee then ranged (the loadout's two slots,
+    gearOf's `held`): `holds` (carried in its slot, never fought with: sim_combat's climb carrying
+    the fire family into the tunnel), then a pair's own, else his weapon in its slot, and the starter
+    in a slot none of them names. The sniper's `breath` family is cast beside the bow, not held (the
+    simulator's most it can earn)."""
+    held = dict(cfg["loadout"])
+    fought = policy.get("pair") or ((policy.get("weapon") or (cfg["loadout"]["melee"], None))[0],)
+    for family in tuple(policy.get("holds") or ()) + tuple(fought):
+        held[cfg["weapons"][family]["slot"]] = family
+    return held["melee"], held["ranged"]
+
+
+def held_scale(view, family, ability):
+    """[tier] WeaponService.damageScale (L3-6): Armory.DamageScale at the striking family's own
+    TierOf, an attack's or an ability's; 1 in the range (a config with no mission view)."""
+    scales = view.get("_scales")
+    if scales is None:
+        return 1.0
+    return scales["cast" if ability else "hit"][family]
+
+
+def gear_max_hp(armory, gear, cfg=None, held=None):
+    """Armory.MaxHp of the held pair (L3-2, gearOf: Armory.HeldTiers) with no Ascension. `held` =
+    (melee family, ranged family) of the profile `gear` stands for (gear_profile, which needs `cfg`);
+    without one, the gear's own tiers (the starters)."""
     import sim_combat as sc  # the Armory mirror lives there (lazy: it imports this file)
 
-    return sc.max_hp(armory, gear, NO_ASCENSION)
+    tiers = gear if held is None else sc.held_tiers(armory, gear_profile(cfg, gear), held[0], held[1])
+    return sc.max_hp(armory, tiers, NO_ASCENSION)
 
 
 def mission_gear():
@@ -7059,9 +7121,14 @@ def level_context():
             "files": {f["id"]: f for f in load_level_files()}}
 
 
-def level_view(cfg, scales, regen_share, armory, gear):
-    """[scales] [tier] [health] The range's config as a difficulty plays it at a gear: (view, the
-    bar). The view carries `_scales`, the player's HP-loss scale per source."""
+def level_view(cfg, scales, regen_share, armory, gear, held=None):
+    """[scales] [tier] [health] The range's config as a difficulty plays it at a gear, the player
+    holding `held` = (melee family, ranged family), the starters by default: (view, the bar). `gear`
+    is the starters' tiers; every family fights at its own Armory.TierOf of that profile
+    (gear_profile: a non-starter at its window start), as WeaponService.damageScale and gearOf do
+    since L3-6 (the L3 W1 fix round's R2). The view carries `_scales` (every family's HP-loss scale,
+    an attack's and an ability's), `_held` and `_hp`; the bar and the regen are the held pair's
+    (VitalsService: regenShare x MaxHealth)."""
     import sim_combat as sc  # the Armory and Combat mirrors live there (lazy: it imports this file)
     view = json.loads(json.dumps(cfg))
     for kind in view["crowd"]["kinds"].values():
@@ -7071,10 +7138,16 @@ def level_view(cfg, scales, regen_share, armory, gear):
         for attack in kind.get("attacks") or []:
             if attack["damage"] > 0:
                 attack["damage"] = max(luau_round(attack["damage"] * scales["damageScale"]), 1)
-    hp = gear_max_hp(armory, gear)
+    held = tuple(held) if held is not None else (cfg["loadout"]["melee"], cfg["loadout"]["ranged"])
+    profile = gear_profile(cfg, gear)
+    hp = gear_max_hp(armory, gear, cfg, held)
     view["player"]["regenPerSecond"] = regen_share * hp
-    view["_scales"] = {slot + suffix: sc.damage_scale(armory, gear[slot], 0, ability)
-                       for slot in ("melee", "ranged") for suffix, ability in (("", False), ("Ability", True))}
+    tiers = {family: sc.tier_of(armory, profile, family) for family in cfg["weapons"]}
+    view["_scales"] = {key: {family: sc.damage_scale(armory, tier, 0, ability) for family, tier in tiers.items()}
+                       for key, ability in (("hit", False), ("cast", True))}
+    view["_tiers"] = tiers
+    view["_held"] = list(held)
+    view["_hp"] = hp
     return view, hp
 
 
@@ -8020,7 +8093,8 @@ class LevelRun(ThreatRun):
         face = ((target.x - self.x) / gap, 0.0, (target.z - self.z) / gap) if gap > EPSILON else (1.0, 0.0, 0.0)
         count = count_of(g("count"), 0)
         self.world.now = t
-        self.world.scale = self.cast_scale
+        # R2: the cast scales by the fire family's own tier (AbilityService strikes as that family).
+        self.world.scale = self.armed["breath"] = held_scale(self.cfg, family, True)
         self.world.blow = (self.x, self.z, g("knockback"), g("launch"))
         for _ in range(count):
             tally = strike(self.world, self.cfg, {"shape": "cone", "origin": (self.x, chest_height(self.cfg), self.z),
@@ -8992,6 +9066,7 @@ class LevelRun(ThreatRun):
                 "lastDeath": {self.zones[f - 1]["id"]: at for f, at in self.last_death.items() if f is not None},
                 "lastResident": {self.zones[f - 1]["id"]: at for f, at in self.last_resident.items() if f is not None},
                 "scene": dict(self.scene), "fielded": {x["camp"]: x["sent"] for x in self.tents},
+                "armed": dict(self.armed),
                 "refusedTent": {x["camp"]: sorted(x["refusedAt"]) for x in self.tents},
                 "wakes": sum(1 for e in self.events if e[2] == "rest" and e[3] == "rise"),
                 "leashes": sum(1 for e in self.events if e[2] == "fight" and e[3] == "home"),
@@ -9661,19 +9736,34 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
         if cut is not None and difficulty in (ctx["expeditions"]["difficulties"][0], SNIPER_HARD):
             row["cave"] = {"runs": runs_of(view, hp, difficulty, "mission", where=cut),
                            "human": runs_of(view, hp, difficulty, "human", where=cut) if human else []}
-        row["pair"] = row["pairBow"] = row["flame"] = row["pairIce"] = None
+        row["pairIce"] = row["pairBow"] = row["flamePair"] = None
+        sword = cfg["loadout"]["melee"]
         if rank == 1 and frost is not None:
-            # L2 W3 (section 9): the Frost Hammer with the Longbow, against the Broadsword with it.
-            row["pairIce"] = runs_of(view, hp, difficulty, "mission", pair=(frost, bow))
-            row["pairBow"] = runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], bow))
+            # L2 W3 (section 9): the Frost Hammer with the Longbow, against the Broadsword with it, at
+            # the row's gear; the Frost Hammer at its own tier (T5) and its bar (R2: reported, not
+            # gated, until the Castle).
+            ice_view, ice_hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], gear,
+                                          held=(frost, bow))
+            row["pairIce"] = {"hp": ice_hp, "tier": ice_view["_tiers"][frost],
+                              "runs": runs_of(ice_view, ice_hp, difficulty, "mission", pair=(frost, bow))}
+            row["pairBow"] = runs_of(view, hp, difficulty, "mission", pair=(sword, bow))
         if rank == 1 and flame is not None:
-            row["pair"] = runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], flame))
-            row["pairBow"] = row["pairBow"] or runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], bow))
+            # R2: the Flamethrower's pair and the starter pair it is held to, both at the gear he holds
+            # when it first comes (PAIR_FLAME_GEAR), the Flamethrower at its own tier and his bar the
+            # held pair's.
+            fgear = dict(PAIR_FLAME_GEAR)
+            bow_view, bow_hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], fgear)
+            fire_view, fire_hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], fgear,
+                                            held=(sword, flame))
             # The Flamethrower alone has no heavy hit and the level's player slams no resident, so it
             # cannot open a plate: through the first open camp only (information).
             first = (open_zones(plan, layout) or [None])[0]
-            row["flame"] = runs_of(view, hp, difficulty, "mission", flame,
-                                   stop_zone=first["floor"] if first is not None else None)
+            row["flamePair"] = {
+                "gear": fgear, "hp": fire_hp, "bowHp": bow_hp, "tier": fire_view["_tiers"][flame],
+                "pair": runs_of(fire_view, fire_hp, difficulty, "mission", pair=(sword, flame)),
+                "pairBow": runs_of(bow_view, bow_hp, difficulty, "mission", pair=(sword, bow)),
+                "flame": runs_of(fire_view, fire_hp, difficulty, "mission", flame,
+                                 stop_zone=first["floor"] if first is not None else None)}
         row["cutSniper"] = {}
         if rank == 1:
             if scenarios:
@@ -9749,7 +9839,7 @@ def print_mission(cfg, report):
         return
     mission, view, level = report["mission"], report["view"], report["level"]
     scales_of = next(iter(level["difficulties"].values()))
-    scales = view["_scales"]
+    scales = {slot: held_scale(view, family, False) for slot, family in zip(("melee", "ranged"), view["_held"])}
     print()
     print(f"RAIDER ARENA (P5 and L1 ruling 27; {mission['name']} as a level of one camp, arena {mission['arena']}, gear "
           f"{report['gear']['melee']}/{report['gear']['ranged']}, health {report['hp']:.0f}; hpScale "
@@ -9899,7 +9989,7 @@ def print_forest(cfg, report):
           f"{camps_rules['leashSeconds']:g} s)")
     for difficulty, row in report["difficulties"].items():
         s, view, plan = row["scales"], row["view"], row["plan"]
-        mine = view["_scales"]
+        mine = {slot: held_scale(view, family, False) for slot, family in zip(("melee", "ranged"), view["_held"])}
         print(f"  {names.get(difficulty, difficulty).upper()}: hpScale {s['hpScale']:g}, damageScale {s['damageScale']:g}, "
               f"plateScale {s['plateScale']:g}, rewardMult {s['rewardMult']:g}; at gear "
               f"{row['gear']['melee']}/{row['gear']['ranged']} (health {row['hp']:.0f}, regen "
@@ -10140,31 +10230,45 @@ def print_cave(cfg, report):
     names = report["ctx"]["expeditions"]["difficultyNames"]
     print()
     print("L2 W2 (the Flamethrower and the Raiders' Tunnel; docs/prompts/l2-w2-contract.md section 7)")
+    def armed_text(runs):
+        a = runs[0]["armed"]
+        return (f" [{' + '.join(cfg['weapons'][f]['name'] for f in a['held'])}, bar {a['bar']:.0f}; hits "
+                + ", ".join(f"{cfg['weapons'][f]['name']} x{s:.4g}" for f, s in a["hit"].items()) + "]")
+
     for difficulty, row in report["difficulties"].items():
-        tag = f"  {names.get(difficulty, difficulty).upper()} at gear {gear_text(row['gear'])}"
-        lines = []
-        for label, runs in (("the full run (Broadsword, reacting player)", row["runs"]),
-                            ("the pair: Broadsword + Longbow, each swing with the one that reaches", row.get("pairBow")),
-                            ("the pair: Broadsword + Flamethrower", row.get("pair")),
-                            ("L2 W3, the pair: Frost Hammer + Longbow", row.get("pairIce")),
-                            ("the Flamethrower alone, through the first open camp (information)", row.get("flame")),
-                            ("the tunnel found, reacting player", (row.get("cave") or {}).get("runs")),
-                            ("the tunnel found, a human's reaction", (row.get("cave") or {}).get("human"))):
-            if not runs:
-                continue
-            lines.append(f"    {label}:")
-            for seed, r in zip(MISSION_SEEDS, runs):
-                fight = (r["bosses"].get(FOREST_BOSS) or (None, None))
-                took = f"{fight[1] - fight[0]:.1f} s" if fight[1] is not None else "-"
-                cash, timber = pay_rate(r)
-                lines.append(f"      seed {seed}: {r['end']} at {r['at'] / 60:.2f} min, {r['downs']} down(s), {r['hits']} hits, "
-                             f"paid {wallet_text(r)} ({cash:,.0f} cash and {timber:.1f} {report['level']['material']} a "
-                             f"minute), the {FOREST_BOSS} {took}, A cleared "
-                             + (f"{r['clearedAt']['A']:.1f} s" if r["clearedAt"].get("A") is not None else "never (skipped)"))
-        if lines:
-            print(tag)
-            for line in lines:
-                print(line)
+        ice, fire = row.get("pairIce") or {}, row.get("flamePair") or {}
+        blocks = [(f"  {names.get(difficulty, difficulty).upper()} at gear {gear_text(row['gear'])}", (
+            ("the full run (Broadsword, reacting player)", row["runs"]),
+            ("the pair: Broadsword + Longbow, each swing with the one that reaches", row.get("pairBow")),
+            (f"L2 W3, the pair: Frost Hammer (T{ice.get('tier')}) + Longbow (R2: reported until the Castle)",
+             ice.get("runs")),
+            ("the tunnel found, reacting player", (row.get("cave") or {}).get("runs")),
+            ("the tunnel found, a human's reaction", (row.get("cave") or {}).get("human"))))]
+        if fire:
+            blocks.append((f"  {names.get(difficulty, difficulty).upper()} at gear {gear_text(fire['gear'])} (R2: when the "
+                           f"Flamethrower first comes, at T{fire['tier']})", (
+                ("the pair: Broadsword + Longbow (the yardstick)", fire["pairBow"]),
+                ("the pair: Broadsword + Flamethrower", fire["pair"]),
+                ("the Flamethrower alone, through the first open camp (information)", fire["flame"]))))
+        for tag, sources in blocks:
+            lines = []
+            for label, runs in sources:
+                if not runs:
+                    continue
+                lines.append(f"    {label}:" + armed_text(runs))
+                for seed, r in zip(MISSION_SEEDS, runs):
+                    fight = (r["bosses"].get(FOREST_BOSS) or (None, None))
+                    took = f"{fight[1] - fight[0]:.1f} s" if fight[1] is not None else "-"
+                    cash, timber = pay_rate(r)
+                    lines.append(f"      seed {seed}: {r['end']} at {r['at'] / 60:.2f} min, {r['downs']} down(s), "
+                                 f"{r['hits']} hits, paid {wallet_text(r)} ({cash:,.0f} cash and {timber:.1f} "
+                                 f"{report['level']['material']} a minute), the {FOREST_BOSS} {took}, A cleared "
+                                 + (f"{r['clearedAt']['A']:.1f} s" if r["clearedAt"].get("A") is not None
+                                    else "never (skipped)"))
+            if lines:
+                print(tag)
+                for line in lines:
+                    print(line)
     for difficulty, row in report["difficulties"].items():
         snipers = row.get("cutSniper") or (row.get("under") or {}).get("cutSniper") or {}
         mission = row["runs"] if row.get("cutSniper") else (row.get("under") or {}).get("runs")
@@ -10205,51 +10309,109 @@ def print_ice(cfg, report):
                           for s in report["iceSpots"]))
 
 
+def armed_problems(armory, cfg, gear, runs, held, breath=None):
+    """R2 (the L3 W1 fix round, review 2-M1): how each run's player fought, against the game's rule
+    recomputed from scratch (WeaponService.gearOf and damageScale): Armory.HeldTiers of a profile
+    whose starters stand at `gear`, every other family at its window start; the bar MaxHp of those
+    tiers; each striking family at its own tier; the slam as the held melee; a `breath` cast (when
+    one was cast) at the fire family's own tier. The mismatches, as text."""
+    import sim_combat as sc
+
+    profile = {"tiers": {cfg["loadout"]["melee"]: gear["melee"], cfg["loadout"]["ranged"]: gear["ranged"]}}
+    tiers = sc.held_tiers(armory, profile, held[0], held[1])
+    found = []
+    for seed, r in zip(MISSION_SEEDS, runs):
+        a = r["armed"]
+        want = {held[0]: sc.damage_scale(armory, tiers["melee"], 0, False),
+                held[1]: sc.damage_scale(armory, tiers["ranged"], 0, False)}
+        if tuple(a["held"]) != tuple(held):
+            found.append(f"seed {seed} held {' + '.join(a['held'])}")
+        if a["bar"] != sc.max_hp(armory, tiers, NO_ASCENSION):
+            found.append(f"seed {seed} bar {a['bar']:g}, not {sc.max_hp(armory, tiers, NO_ASCENSION):g}")
+        for family, scale in a["hit"].items():
+            if family not in want or scale != want[family]:
+                found.append(f"seed {seed} {family} x{scale:g}, not x{want.get(family, float('nan')):g}")
+        if a["slam"] != want[held[0]]:
+            found.append(f"seed {seed} slam x{a['slam']:g}, not x{want[held[0]]:g}")
+        if breath is not None and a.get("breath") is not None:
+            cast = sc.damage_scale(armory, sc.tier_of(armory, profile, breath), 0, True)
+            if a["breath"] != cast:
+                found.append(f"seed {seed} {breath}'s cast x{a['breath']:g}, not x{cast:g}")
+    return found
+
+
+def armed_line(cfg, runs):
+    """The held pair, bar and strike scales of a set of runs (their first; armed_problems holds the rest)."""
+    a = runs[0]["armed"] if runs else None
+    if a is None:
+        return "no run"
+    return (f"{' + '.join(cfg['weapons'][f]['name'] for f in a['held'])}, bar {a['bar']:.0f}, "
+            + ", ".join(f"{cfg['weapons'][f]['name']} x{s:.4g}" for f, s in a["hit"].items())
+            + f", slam x{a['slam']:.4g}" + (f", breath x{a['breath']:.4g}" if a.get("breath") is not None else ""))
+
+
 def check_cave_runs(cfg, report, expect):
     """L2 W2's bands on Forest Road (section 7): the pair, the tunnel found, the open spots (R8)."""
     names = report["ctx"]["expeditions"]["difficultyNames"]
+    armory = report["ctx"]["armory"]
     flame = report.get("flame")
+    sword, longbow = cfg["loadout"]["melee"], cfg["loadout"]["ranged"]
+
+    def clears(runs):
+        return ", ".join(f"{r['end']} at {r['at'] / 60:.2f} min ({r['downs']} down)" for r in runs)
+
+    def armed(tag, label, gear, runs, held, breath=None):
+        # R2: each run fought as the game fields its loadout (WeaponService.damageScale and gearOf),
+        # recomputed here with Armory.HeldTiers of the profile the gear stands for.
+        found = armed_problems(armory, cfg, gear, runs, held, breath)
+        expect(not found, f"{tag}: {label} fights at each family's own tier, the bar the held pair's (R2, "
+                          f"L3-6): " + ("; ".join(found) if found else armed_line(cfg, runs)))
+
     for difficulty, row in report["difficulties"].items():
         tag = f"forest, {names.get(difficulty, difficulty)} at gear {gear_text(row['gear'])}"
-        full = cash_rate(row["runs"])
-        pair = row.get("pair")
-        if pair:
-            lo, hi = PAIR_CLEAR_MINUTES
-            bow = row.get("pairBow") or []
-            mine, boss, base = cash_rate(pair), colossus_seconds(pair), colossus_seconds(bow)
-            alone = full
-            full = cash_rate(bow)
+        fire = row.get("flamePair")
+        if fire:
+            # R2: like with like, at the gear he holds when the Flamethrower first comes; every limit a
+            # ratio to the starter pair at that gear.
+            pair, bow = fire["pair"], fire["pairBow"]
+            ftag = f"forest, {names.get(difficulty, difficulty)} at gear {gear_text(fire['gear'])} (the Flamethrower's first run)"
             fname = cfg["weapons"][flame]["name"]
-            if mine and alone:
-                print(f"  note  {tag}: the pair against the Broadsword alone (the reacting player of the band above): "
-                      f"x{mine / alone:.2f} its cash a minute (reported)")
-            expect(all(r["end"] == "cleared" and lo * 60 <= r["at"] <= hi * 60 and r["downs"] == 0 for r in pair),
-                   f"{tag}: the reacting player carrying the Broadsword and the {fname} clears in {lo:g}-{hi:g} min with no "
-                   f"down, every seed: " + ", ".join(f"{r['end']} at {r['at'] / 60:.2f} min ({r['downs']} down)" for r in pair))
+            mine, full = cash_rate(pair), cash_rate(bow)
+            boss, base = colossus_seconds(pair), colossus_seconds(bow)
+            yard = mean_of([r["at"] for r in bow]) if bow and all(r["end"] == "cleared" for r in bow) else None
+            lo, hi = ((s * yard for s in PAIR_CLEAR_SHARE) if yard is not None else (math.inf, -math.inf))
+            expect(yard is not None and all(r["end"] == "cleared" and lo <= r["at"] <= hi and r["downs"] == 0 for r in pair),
+                   f"{ftag}: the reacting player carrying the Broadsword and the {fname} clears in "
+                   f"x{PAIR_CLEAR_SHARE[0]:.3f}-x{PAIR_CLEAR_SHARE[1]:.3f} the starter pair's mean clear with no down, every "
+                   f"seed: " + clears(pair) + (f"; the band {lo / 60:.2f}-{hi / 60:.2f} min (the starter pair "
+                                                f"{yard / 60:.2f} min: {clears(bow)})" if yard is not None
+                                                else f"; the starter pair: {clears(bow)}"))
             expect(mine is not None and full is not None and mine <= PAIR_CASH_SHARE * full,
-                   f"{tag}: the pair's cash a minute is at most x{PAIR_CASH_SHARE:g} the same player's carrying the Broadsword "
-                   f"and the Longbow: "
+                   f"{ftag}: the pair's cash a minute is at most x{PAIR_CASH_SHARE:g} the same player's carrying the "
+                   f"Broadsword and the Longbow: "
                    + (f"{mine:,.0f} against {full:,.0f} (x{mine / full:.2f})" if mine and full else "a run did not clear"))
             expect(boss is not None and base is not None and boss >= PAIR_BOSS_SHARE * base,
-                   f"{tag}: the pair's {FOREST_BOSS} in the run is not shorter than x{PAIR_BOSS_SHARE:g} the Longbow pair's: "
-                   + (f"{boss:.1f} s against {base:.1f} s" if boss and base else "not killed"))
-        ice_pair = row.get("pairIce")
-        if ice_pair:
-            lo, hi = PAIR_CLEAR_MINUTES
-            bow = row.get("pairBow") or []
+                   f"{ftag}: the pair's {FOREST_BOSS} in the run is not shorter than x{PAIR_BOSS_SHARE:g} the Longbow "
+                   f"pair's: " + (f"{boss:.1f} s against {base:.1f} s (x{boss / base:.2f})" if boss and base else "not killed"))
+            armed(ftag, f"the Broadsword + {fname} pair", fire["gear"], pair, (sword, flame))
+            armed(ftag, "the Broadsword + Longbow pair", fire["gear"], bow, (sword, longbow))
+            armed(ftag, f"the {fname} alone", fire["gear"], fire["flame"], (sword, flame))
+        ice = row.get("pairIce")
+        if ice:
+            # R2: the Frost Hammer is a Castle weapon arriving at T5 (lever-only in the Forest), so its
+            # Forest balance rows are reported, not gated, until the Castle. What it fights with is gated.
+            ice_pair, bow = ice["runs"], row.get("pairBow") or []
             mine, boss, base, yard = cash_rate(ice_pair), colossus_seconds(ice_pair), colossus_seconds(bow), cash_rate(bow)
             fname = cfg["weapons"][report["frost"]]["name"]
-            expect(all(r["end"] == "cleared" and lo * 60 <= r["at"] <= hi * 60 and r["downs"] == 0 for r in ice_pair),
-                   f"{tag}: the reacting player carrying the {fname} and the Longbow clears in {lo:g}-{hi:g} min with no "
-                   f"down, every seed (L2 W3): " + ", ".join(f"{r['end']} at {r['at'] / 60:.2f} min ({r['downs']} down)"
-                                                            for r in ice_pair))
-            expect(mine is not None and yard is not None and mine <= PAIR_CASH_SHARE * yard,
-                   f"{tag}: the {fname} pair's cash a minute is at most x{PAIR_CASH_SHARE:g} the same player's carrying the "
-                   f"Broadsword and the Longbow (L2 W3): "
-                   + (f"{mine:,.0f} against {yard:,.0f} (x{mine / yard:.2f})" if mine and yard else "a run did not clear"))
-            expect(boss is not None and base is not None and boss >= PAIR_BOSS_SHARE * base,
-                   f"{tag}: the {fname} pair's {FOREST_BOSS} in the run is not shorter than x{PAIR_BOSS_SHARE:g} the Longbow "
-                   f"pair's (L2 W3): " + (f"{boss:.1f} s against {base:.1f} s" if boss and base else "not killed"))
+            print(f"  note  {tag}: the {fname} (T{ice['tier']}, bar {ice['hp']:.0f}) + Longbow pair, reported until the "
+                  f"Castle (R2): clears {clears(ice_pair)}; cash a minute "
+                  + (f"{mine:,.0f} against the Broadsword + Longbow pair's {yard:,.0f} (x{mine / yard:.2f}; the L2 W3 limit "
+                     f"was x{PAIR_CASH_SHARE:g})" if mine and yard else "-")
+                  + f"; the {FOREST_BOSS} "
+                  + (f"{boss:.1f} s against {base:.1f} s (x{boss / base:.2f}; the limit was x{PAIR_BOSS_SHARE:g})"
+                     if boss and base else "not killed"))
+            armed(tag, f"the {fname} + Longbow pair", row["gear"], ice_pair, (report["frost"], longbow))
+            armed(tag, "the Broadsword + Longbow pair", row["gear"], bow, (sword, longbow))
         full = cash_rate(row["runs"])
         cave = row.get("cave")
         if cave:
@@ -10266,14 +10428,22 @@ def check_cave_runs(cfg, report, expect):
                       if mine and full else "a run did not clear"))
         snipers = row.get("cutSniper") or (row.get("under") or {}).get("cutSniper") or {}
         mission = row["runs"] if row.get("cutSniper") else (row.get("under") or {}).get("runs")
+        stag = tag if row.get("cutSniper") else 'forest, ' + names.get(difficulty, difficulty) + ' at the proving gear'
+        sniper_gear = row["gear"] if row.get("cutSniper") else (row.get("under") or {}).get("gear")
+        fire_rows = [spot for spot in snipers if " + " in spot]  # the courses that cast the fire family's ability
         for spot, runs in snipers.items():
             good = all(sniper_rate(r)[0] < pay_rate(m)[0] and sniper_rate(r)[1] < pay_rate(m)[1] and r["evaded"] == 0
                        for r, m in zip(runs, mission))
-            expect(good, f"{tag if row.get('cutSniper') else 'forest, ' + names.get(difficulty, difficulty) + ' at the proving gear'}"
-                   f": with the tunnel open, the sniper from {spot} earns less cash and less Timber a minute than the mission "
-                   f"player on the same seeds, every hit landing (R8, L2-37): " + "; ".join(
+            expect(good, f"{stag}: with the tunnel open, the sniper from {spot} earns less cash and less Timber a minute "
+                   f"than the mission player on the same seeds, every hit landing (R8, L2-37): " + "; ".join(
                        f"seed {seed} {sniper_rate(r)[0]:,.0f} / {sniper_rate(r)[1]:.1f} against {pay_rate(m)[0]:,.0f} / "
                        f"{pay_rate(m)[1]:.1f}" for seed, r, m in zip(MISSION_SEEDS, runs, mission)))
+            if spot in fire_rows:
+                armed(stag, f"the sniper from {spot}", sniper_gear, runs, (sword, longbow), breath=flame)
+        if fire_rows:
+            cast = [r["armed"]["breath"] for spot in fire_rows for r in snipers[spot] if r["armed"].get("breath") is not None]
+            expect(cast, f"{stag}: the fire sniper casts the fire family's ability at least once (else its tier check "
+                         f"proves nothing): " + (f"{len(cast)} runs cast, at x{cast[0]:.4g}" if cast else "no run cast"))
 
 
 def check_crossing(cfg, report, expect):

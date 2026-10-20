@@ -63,18 +63,10 @@ function L2.v6(): any
 	}
 end
 
--- DataService.runMigrations' loop, as it stands there: every step from the profile's version to
--- SCHEMA_VERSION, the version bumped after each.
+-- The migration runner is ProfileSchema.Run itself, the one DataService calls on every load (the
+-- L3 W1 fix round's R5): the harness keeps no copy of the loop, so every case below is about it.
 function L2.migrate(state: any): ()
-	local Schema = L2.Schema
-	while state.version < Schema.SCHEMA_VERSION do
-		local step = Schema.Migrations[state.version]
-		if step == nil then
-			return
-		end
-		step(state)
-		state.version += 1
-	end
+	L2.Schema.Run(state)
 end
 
 -- ProfileStore's Reconcile (ProfileStore.luau ReconcileTable): fills each missing string key
@@ -119,8 +111,9 @@ function L2.schemaTests(): ()
 	check(L2.empty(mine.abilities) and L2.empty(mine.secrets) and L2.empty(mine.families) and L2.empty(mine.shortcuts), "it gains the four maps, empty")
 	check(mine.abilities ~= combat.abilities and mine.secrets ~= combat.secrets and mine.families ~= combat.families and mine.shortcuts ~= combat.shortcuts, "none of them is the template's own table (no aliasing)")
 	check(mine.abilities ~= mine.families and mine.secrets ~= mine.shortcuts, "and each is a table of its own")
-	local refund = load("Armory").LegacyRefund(ARMORY, { melee = 2, ranged = 1 }).Timber or 0
-	check(mine.valor == 7 and mine.materials.Timber == 12 + refund and mine.gear.melee == 2 and mine.highestEra == 2 and mine.stats.kills == 4, `what the profile already held is untouched (Timber gains only the v8 step's refund of its 2 / 1 slot tiers, {refund})`)
+	-- 70 + 10 Timber: the frozen prices of slot tiers 2 / 1 (L3-8), pinned, never read back from the
+	-- function under test (the fix round's R6, 1-m4).
+	check(mine.valor == 7 and mine.materials.Timber == 12 + 80 and mine.gear.melee == 2 and mine.highestEra == 2 and mine.stats.kills == 4, `what the profile already held is untouched (Timber gains only the v8 step's refund of its 2 / 1 slot tiers, 80: {mine.materials.Timber})`)
 	mine.abilities.doubleJump = true
 	check(combat.abilities.doubleJump == nil, "writing the migrated map leaves the template empty")
 	local other = L2.v6()

@@ -151,6 +151,7 @@ LADDER_BANDS = 5
 LADDER_BAND_SIZE = 4
 LADDER_BAND_LEVELS = ("forestRoad", "castle", "underworld", "planet", "dream")
 LADDER_FOREST_COSTS = (100, 250, 500)
+LADDER_STAR_ALSO = ("brutal",)  # R1 (L3 W1 fix round): the Hard star or a harder one opens a band top
 LADDER_WINDOWS = {"broadsword": (1, 12), "longbow": (1, 12), "flamethrower": (2, 8), "warhammer": (3, 16),
                   "frostHammer": (5, 12), "greataxe": (6, 18), "splitbow": (8, 8), "spear": (9, 20),
                   "shotgun": (9, 16), "rifle": (11, 18), "launcher": (13, 20), "smg": (14, 20), "beam": (16, 20),
@@ -509,12 +510,25 @@ def _star_held(combat, level_id, difficulty):
     return isinstance(difficulty, str) and isinstance(row, dict) and row.get(difficulty) is True
 
 
+def star_held(cfg, combat, level_id):
+    """Armory.StarHeld (R1, review 1-m5) -- the level's ladder.starDifficulty star, or the star of any
+    difficulty in ladder.starAlso (a Brutal clear also opens a band top); False without a ladder or a
+    profile, and a starAlso that is not a list adds nothing."""
+    ladder = _ladder(cfg)
+    if ladder is None or combat is None:
+        return False
+    if _star_held(combat, level_id, ladder.get("starDifficulty")):
+        return True
+    also = ladder.get("starAlso")
+    return isinstance(also, list) and any(_star_held(combat, level_id, d) for d in also)
+
+
 def upgrade_verdict(cfg, combat, family, owned, gate_open, built):
     """Armory.UpgradeVerdict (L3-5) -- None, or the first refusal in this order: invalid (no window
     or no ladder), locked (not owned), peak (at its top), busy (the gate is shut), notBuilt (the
     next tier's band level has no level file, or the tier has no price), needsStar (a band's top
-    position without that level's starDifficulty star), insufficientFunds (the band material is
-    not a number at least the cost)."""
+    position without StarHeld: that level's starDifficulty star or a starAlso one), insufficientFunds
+    (the band material is not a number at least the cost)."""
     if window(cfg, family) is None:
         return "invalid"
     if not owned:
@@ -529,7 +543,7 @@ def upgrade_verdict(cfg, combat, family, owned, gate_open, built):
     material, cost = tier_cost(cfg, tier)
     if ladder is None or entry is None or built.get(entry["levelId"]) is not True or material == "":
         return "notBuilt"
-    if position == ladder.get("bandSize") and not _star_held(combat, entry["levelId"], ladder.get("starDifficulty")):
+    if position == ladder.get("bandSize") and not star_held(cfg, combat, entry["levelId"]):
         return "needsStar"
     have = (combat.get("materials") or {}).get(material)
     if not (_finite(have) and have >= cost):
@@ -608,7 +622,8 @@ def problems(cfg, families):
     """Armory.Problems (L3-5) -- the Init validator, line for line: the ladder (damage rising numbers
     above 0; each hp row LadderSize numbers of at least 0 that never fall, melee never below ranged;
     rangeHp above 0; bandSize a whole number above 0 with bandSize x #bands = LadderSize; every band
-    a level and a material; one cost per position, each at least 0; a starDifficulty), every family
+    a level and a material; one cost per position, each at least 0; a starDifficulty; starAlso absent
+    or a list of non-empty strings), every family
     a window 1 <= start <= top <= LadderSize, no window for a family that is not one, the legacy
     list, and a numeric power.tierWeight. Assertion 1 holds the shipped values to L3-1..L3-4 on top."""
     out = []
@@ -674,6 +689,12 @@ def problems(cfg, families):
                     problem(f"ladder.costs[{position}] is {_lstr(cost)}, not a number of at least 0")
         if not isinstance(ladder.get("starDifficulty"), str) or ladder["starDifficulty"] == "":
             problem("ladder.starDifficulty names no difficulty: no band top can ever be bought")
+        # Armory.luau `namesList`: a list of non-empty strings (an empty one is one). Luau decodes an
+        # empty JSON object to the same empty table as [], so {} passes too.
+        also = ladder.get("starAlso")
+        if also is not None and also != {} and (not isinstance(also, list)
+                                                or any(not isinstance(d, str) or d == "" for d in also)):
+            problem("ladder.starAlso is not a list of difficulty names")
     windows = cfg.get("windows")
     known = set()
     for family in families:
@@ -2263,7 +2284,8 @@ def print_ladder(armory, curves, missions):
         entry = (ladder.get("bands") or [])[band - 1]
         material, cost = tier_cost(armory, tier)
         both = {"melee": tier, "ranged": tier}
-        trophy = f"needs the {ladder.get('starDifficulty')} star" if position == ladder.get("bandSize") else ""
+        trophy = (f"needs the {' or '.join([ladder.get('starDifficulty')] + list(ladder.get('starAlso') or []))} star"
+                  if position == ladder.get("bandSize") else "")
         print(f"  {tier:>4} {multiplier(armory, tier):>10,.4f} {weapon_hp(armory, 'melee', tier, 0):>8,.0f} "
               f"{weapon_hp(armory, 'ranged', tier, 0):>9,.0f} {max_hp(armory, both, NO_ASCENSION):>9,.0f} "
               f"{gear_power(armory, both, NO_ASCENSION):>9,} {band:>4} {entry['levelId']:<11} {material:<9} "
@@ -3112,6 +3134,9 @@ def ladder_problems(armory, proving):
         found.append(f"T2..T{LADDER_BAND_SIZE} cost {prices}, not {list(LADDER_FOREST_COSTS)} Timber (Ben)")
     if ladder.get("starDifficulty") != "hard":
         found.append(f"starDifficulty is {ladder.get('starDifficulty')!r}, not hard (the Hard star is the trophy)")
+    if ladder.get("starAlso") != list(LADDER_STAR_ALSO):
+        found.append(f"starAlso is {ladder.get('starAlso')!r}, not {list(LADDER_STAR_ALSO)} (R1: a harder star "
+                     "opens a band top too)")
     windows = {f: window(armory, f) for f in families}
     wrong = [f"{f} {windows[f]} (needs {LADDER_WINDOWS.get(f)})" for f in families if windows[f] != LADDER_WINDOWS.get(f)]
     if wrong or sorted(armory.get("windows") or {}) != families:
@@ -3139,22 +3164,28 @@ def ladder_note(armory, proving):
             f"{max_hp(armory, {'melee': 20, 'ranged': 20}, NO_ASCENSION):,.0f}; RangeHp {range_hp(armory):g}; power T1/T1 "
             f"{gear_power(armory, {'melee': 1, 'ranged': 1}, NO_ASCENSION)}; Forest T2/T3/T4 "
             f"{'/'.join(str(tier_cost(armory, t)[1]) for t in (2, 3, 4))} {tier_cost(armory, 2)[0]}, T4 needs the "
-            f"{armory['ladder']['starDifficulty']} star; {len(armory['windows'])} windows as L3-3; the v8 refund of a 3/3 "
+            f"{' or '.join([armory['ladder']['starDifficulty']] + list(armory['ladder'].get('starAlso') or []))} star; "
+            f"{len(armory['windows'])} windows as L3-3; the v8 refund of a 3/3 "
             f"profile {refund}; Armory.Problems on {len(proving['weapons'])} families: none")
 
 
-def climb_runs(proving, report, gear, difficulty, cut, memo):
-    """sim_range's reacting player (default melee only) through a level at `gear` {melee tier, ranged
-    tier}, on the shortcut layout when `cut`: every seed's run, memoised on its key."""
+def climb_runs(proving, report, gear, difficulty, cut, memo, fire=None):
+    """sim_range's reacting player (default melee only) through a level with the starters at `gear`
+    {melee tier, ranged tier}, on the shortcut layout when `cut`, carrying `fire` (the fire family)
+    in the ranged slot when given: his bar is then the Broadsword's and the fire family's at its own
+    tier (gearOf's held pair, the L3 W1 fix round's R2); he fights with the sword alone either way.
+    Every seed's run, memoised on its key."""
     import sim_range as sr
 
-    key = (difficulty, gear["melee"], gear["ranged"], cut)
+    key = (difficulty, gear["melee"], gear["ranged"], cut, fire)
     if key not in memo:
         ctx, level = report["ctx"], report["level"]
         layout = report["cut"] if cut else report["layout"]
         scales = level["difficulties"][difficulty]
-        view, hp = sr.level_view(proving, scales, level["crowd"]["regenShare"], ctx["armory"], gear)
-        memo[key] = [sr.LevelRun(view, hp, ctx, level, layout, difficulty, sr.THREAT_POLICIES["mission"], seed).run()
+        held = (proving["loadout"]["melee"], fire) if fire is not None else None
+        view, hp = sr.level_view(proving, scales, level["crowd"]["regenShare"], ctx["armory"], gear, held=held)
+        policy = sr.THREAT_POLICIES["mission"] if fire is None else dict(sr.THREAT_POLICIES["mission"], holds=(fire,))
+        memo[key] = [sr.LevelRun(view, hp, ctx, level, layout, difficulty, policy, seed).run()
                      for seed in sr.MISSION_SEEDS]
     return memo[key]
 
@@ -3194,8 +3225,9 @@ def starter_climb(proving, armory, report):
         difficulty = "hard" if min(held.values()) >= hard_tier else "normal"
         carry_fire = state["lookout"] and not state["cache"] and cache is not None
         cut = state["cache"] or carry_fire
-        gear = {"melee": held["melee"], "ranged": tier_of(armory, combat, flame) if carry_fire else held["ranged"]}
-        measured = climb_runs(proving, report, gear, difficulty, cut and report["cut"] is not None, memo)
+        gear = dict(held)
+        measured = climb_runs(proving, report, gear, difficulty, cut and report["cut"] is not None, memo,
+                              fire=flame if carry_fire else None)
         cleared = [r for r in measured if r["end"] == "cleared"]
         timber = sum(r["wallet"]["materials"] for r in measured) / len(measured)
         valor = sum(r["wallet"]["valor"] for r in measured) / len(measured)
@@ -3247,6 +3279,8 @@ def starter_climb(proving, armory, report):
 
 def climb_verdict(climb, report, armory):
     """Assertion 2's verdict and line."""
+    import sim_range as sr
+
     level = report["level"]
     runs = climb["runs"]
     minutes = sum(r["minutes"] for r in runs)
@@ -3258,11 +3292,16 @@ def climb_verdict(climb, report, armory):
     brutal_first = (brutal.get("firstClear") or {}).get("valor")
     family = (hard.get("firstClear") or {}).get("family")
     arrives = (window(armory, family) or (None,))[0] if family else None
+    # R2 (the L3 W1 fix round): sim_range rates the fire family's pair at the gear he holds on the run
+    # whose chest pays it (PAIR_FLAME_GEAR); the climb is where that gear comes from.
+    lookout = next((sid for sid, e in (level.get("secrets") or {}).items() if e.get("family") == report["flame"]), None)
+    fire_gear = next((r["gear"] for r in runs if lookout in r["chests"]), None)
     lo_r, hi_r = CLIMB_RUNS
     lo_m, hi_m = CLIMB_MINUTES
     good = (climb["done"] and lo_r <= len(runs) <= hi_r and lo_m <= minutes <= hi_m and first >= CLIMB_FIRST_TIMBER
             and all(r["cleared"] == r["seeds"] for r in runs) and hard_valor == HARD_VALOR
-            and brutal_first == BRUTAL_FIRST_VALOR and arrives == hard["recommendedTier"])
+            and brutal_first == BRUTAL_FIRST_VALOR and arrives == hard["recommendedTier"]
+            and fire_gear == sr.PAIR_FLAME_GEAR)
     steps = "; ".join(
         f"run {i} {r['difficulty']} at T{r['gear']['melee']}/T{r['gear']['ranged']}"
         + (" with the fire family" if r["fire"] else "") + (" (tunnel)" if r["cut"] else "")
@@ -3274,7 +3313,10 @@ def climb_verdict(climb, report, armory):
                   f"(needs {lo_r}-{hi_r}), {minutes:.1f} min of clears (needs {lo_m:g}-{hi_m:g}); the first Normal clear "
                   f"{first:.0f} Timber (needs >= {CLIMB_FIRST_TIMBER}); a Hard clear {hard_valor} Valor (needs "
                   f"{HARD_VALOR}), the Brutal first clear {brutal_first} (needs {BRUTAL_FIRST_VALOR}); Hard's first clear "
-                  f"gives {family} at T{arrives} (Hard's recommendedTier {hard['recommendedTier']}) | {steps}")
+                  f"gives {family} at T{arrives} (Hard's recommendedTier {hard['recommendedTier']}); the {report['flame']} "
+                  f"comes at "
+                  + (f"T{fire_gear['melee']}/T{fire_gear['ranged']}" if fire_gear is not None else "no run")
+                  + f" (sim_range PAIR_FLAME_GEAR T{sr.PAIR_FLAME_GEAR['melee']}/T{sr.PAIR_FLAME_GEAR['ranged']}) | {steps}")
 
 
 class Checks:

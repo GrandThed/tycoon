@@ -52,7 +52,6 @@ local SCHEMA_VERSION = ProfileSchema.SCHEMA_VERSION
 local STORE_NAME = ProfileSchema.STORE_NAME
 local PROFILE_KEY_PREFIX = ProfileSchema.PROFILE_KEY_PREFIX
 local PROFILE_TEMPLATE = ProfileSchema.PROFILE_TEMPLATE
-local Migrations = ProfileSchema.Migrations
 -- Infrastructure retry policy, not game balance (ProfileStore retries the underlying DataStore
 -- calls itself; this only re-attempts a thrown StartSessionAsync/Save). Kept in code
 -- deliberately — Config/*.json is for gameplay constants.
@@ -85,22 +84,17 @@ local loadAttempts: { [Player]: number } = {}
 local loadPhases: { [Player]: LoadPhase } = {}
 local lastLoadFailure: { [Player]: number } = {}
 
--- Unit-style guard exercised on every load: a current-version profile takes zero iterations,
--- and a schema bump without its migration function is a loud warn instead of silent corruption.
+-- Exercised on every load through ProfileSchema.Run, the runner the harness proves (the L3 W1 fix
+-- round's R5): a current-version profile takes zero steps, and a schema bump without its migration
+-- function is a loud warn instead of silent corruption.
 local function runMigrations(state: Types.PlayerState, player: Player): ()
-	while state.version < SCHEMA_VERSION do
-		local migrate = Migrations[state.version]
-		if migrate == nil then
-			warn(
-				`[DataService] missing migration v{state.version}→v{state.version + 1}`
-					.. ` for {player.Name}; profile left at v{state.version}`
-			)
-			return
-		end
-		migrate(state)
-		state.version += 1
-	end
-	if state.version > SCHEMA_VERSION then
+	local verdict = ProfileSchema.Run(state)
+	if verdict == "missing" then
+		warn(
+			`[DataService] missing migration v{state.version}→v{state.version + 1}`
+				.. ` for {player.Name}; profile left at v{state.version}`
+		)
+	elseif verdict == "ahead" then
 		-- A newer server wrote this profile; keep the data untouched and let it play.
 		warn(
 			`[DataService] profile v{state.version} for {player.Name} is ahead of v{SCHEMA_VERSION}`

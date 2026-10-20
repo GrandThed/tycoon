@@ -148,6 +148,8 @@ SHEET = "with the ice frozen, every frozen sheet is thicker than"
 HINT = "map: every weapons family that is not a starter has a shelf hint"
 FIRST_NODE = "map: every firstClear family with a `found` entry"
 PRESETS = "Combat.json debug.gearPresets are"
+# The L3 W1 fix round (docs/prompts/l3-w1-fix-round.md R1).
+TROPHY = "Armory.json ladder (R1)"
 
 
 def layout(data):
@@ -897,6 +899,16 @@ CASES = (
      lambda d: level(d)["difficulties"]["hard"].__setitem__("recommendedTier", 4), {}, PRESETS, True),
     ("L3-15 control: Brutal's recommendedTier 3 (a preset's)",
      lambda d: level(d)["difficulties"]["brutal"].__setitem__("recommendedTier", 3), {}, PRESETS, False),
+    # The L3 W1 fix round, R1: starAlso lists exactly the difficulties harder than starDifficulty.
+    ("R1: starAlso [] (a Brutal clear no longer opens a band top)",
+     lambda d: d["ctx"]["armory"]["ladder"].__setitem__("starAlso", []), {}, TROPHY, True),
+    ("R1: starAlso ['normal'] (an easier star opens a band top)",
+     lambda d: d["ctx"]["armory"]["ladder"].__setitem__("starAlso", ["normal"]), {}, TROPHY, True),
+    ("R1: a difficulty after Brutal that starAlso leaves out",
+     lambda d: d["expeditions"]["difficulties"].append("overdrive"), {}, TROPHY, True),
+    ("R1 control: that difficulty listed in starAlso",
+     lambda d: (d["expeditions"]["difficulties"].append("overdrive"),
+                d["ctx"]["armory"]["ladder"].__setitem__("starAlso", ["brutal", "overdrive"])), {}, TROPHY, False),
 )
 
 
@@ -1049,10 +1061,30 @@ SIM_CASES = (
     # L3-26: R8 with only the bow upgraded is gated like R8: the LookoutLedge out of Normal's known
     # limit turns its sword-T1 / bow-T4 row red (it out-earns the mission player there).
     ("L3-26: the LookoutLedge out of Normal's known limit (its only-the-bow-upgraded row)",
-     ('SNIPER_KNOWN_LIMIT_L4 = {"normal": ("LookoutLedge", "Secret_lookout")}',
-      'SNIPER_KNOWN_LIMIT_L4 = {"normal": ("Secret_lookout",)}'),
+     ('    "normal": ("LookoutLedge", "Secret_lookout"),  # L2 W2: the cache moved into the cave',
+      '    "normal": ("Secret_lookout",),  # L2 W2: the cache moved into the cave'),
      ("--check", "--levels-only", "--level", "forest"),
      "Normal at gear 1/4 (only the bow upgraded, L3-26): the sniper from LookoutLedge earns less"),
+    # The L3 W1 fix round, R2: every strike at the striking family's own tier, the bar from the held
+    # pair, the Flamethrower's pair rated like with like. About fifteen minutes each.
+    ("R2: every family's scale from its slot's gear again (the pre-fix rule)",
+     ('    view["_scales"] = {key: {family: sc.damage_scale(armory, tier, 0, ability) for family, tier in tiers.items()}',
+      '    view["_scales"] = {key: {family: sc.damage_scale(armory, gear[cfg["weapons"][family]["slot"]], 0, ability) for family, tier in tiers.items()}'),
+     ("--check", "--levels-only", "--level", "forest"), "fights at each family's own tier"),
+    ("R2: the bar from the gear, not the held pair",
+     ('    hp = gear_max_hp(armory, gear, cfg, held)', '    hp = gear_max_hp(armory, gear)'),
+     ("--check", "--levels-only", "--level", "forest"), "the bar the held pair's (R2"),
+    ("R2: the fire sniper's cast at the bow's scale",
+     ('        self.world.scale = self.armed["breath"] = held_scale(self.cfg, family, True)',
+      '        self.world.scale = self.armed["breath"] = self.cast_scale'),
+     ("--check", "--levels-only", "--level", "forest"), "Dragon's Breath fights at each family's own tier"),
+    ("R2: the slam as the starter melee, not the held one",
+     ('        self.slam_scale = held_scale(cfg, held[0], False)',
+      '        self.slam_scale = held_scale(cfg, cfg["loadout"]["melee"], False)'),
+     ("--check", "--levels-only", "--level", "forest"), "fights at each family's own tier"),
+    ("R2: the Flamethrower's pair at T1 again (unlike with like)",
+     ('PAIR_FLAME_GEAR = {"melee": 2, "ranged": 2}', 'PAIR_FLAME_GEAR = {"melee": 1, "ranged": 1}'),
+     ("--check", "--levels-only", "--level", "forest"), "the starter pair's mean clear with no down"),
 )
 
 

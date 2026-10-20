@@ -98,9 +98,7 @@ type DockablePanel = {
 
 local FIRST_ERA = 1
 
--- L3-22: the Armory's key (the dungeon's lobby uses the same) and the line that names the keys.
-local ARMORY_KEY = Enum.KeyCode.K
-local ARMORY_KEY_HINT = "K or Esc closes"
+-- L3-22: the Armory's key is ArmoryScreen.KEY in both places; on a pad the hub has no toggle.
 local ARMORY_PAD_HINT = "B closes · " .. ArmoryScreen.PAD_TAB_NAMES .. " tabs"
 -- L3-24: the answers the Armory screen reads (an upgrade's and an equip's, ok or refused).
 local ARMORY_ACTIONS: { [string]: boolean } = { upgradeWeapon = true, setFamily = true }
@@ -453,10 +451,10 @@ local function boot(): ()
 	end
 	resolveCombatRemotes()
 	local hasArmory = armoryConfig ~= nil
-	-- L3: the screen shows the weapon families, so it needs their config as well; the Power
-	-- readout is the server's number and needs only the Armory.
+	-- L3: the screen shows the weapon families, so its key also waits for their config; the Power
+	-- readout is the server's number and needs only the Armory. Read again until it is there
+	-- (refreshCombatKeys): the Config folder may still be replicating at boot (3-s1).
 	local provingConfig = Catalog.GetProvingGroundsConfig()
-	local hasArmoryScreen = hasArmory and provingConfig ~= nil
 	-- The place id being 0 does NOT hide the panel: the contract wants the tiles visible and
 	-- disabled with "Publish the Expeditions place first", so the feature is discoverable
 	-- before the second place exists.
@@ -569,9 +567,13 @@ local function boot(): ()
 	})
 	bottomBar.SetKeyVisible("shop", hasShopListableId(monetization))
 	-- A panel whose intent does not exist yet would only be able to fail, so the key stays
-	-- hidden until the remotes are there.
+	-- hidden until the remotes are there; the Armory's until the weapon families are too.
 	local function refreshCombatKeys(): ()
-		bottomBar.SetKeyVisible("armory", hasArmoryScreen and combatRemotesReady)
+		provingConfig = provingConfig or Catalog.GetProvingGroundsConfig()
+		bottomBar.SetKeyVisible(
+			"armory",
+			armoryScreen ~= nil and provingConfig ~= nil and combatRemotesReady
+		)
 		bottomBar.SetKeyVisible("expedition", hasExpeditions and combatRemotesReady)
 	end
 	refreshCombatKeys()
@@ -579,9 +581,9 @@ local function boot(): ()
 	togglePanel = function(panelKey: PanelKey): ()
 		if panelKey == "armory" then
 			-- Like the bar's other keys, only once a model exists (the bar is hidden before) and
-			-- the intents are there to be sent.
+			-- the intents are there to be sent: K follows the key's own rule.
 			local screen = armoryScreen
-			if screen ~= nil and model ~= nil and combatRemotesReady then
+			if screen ~= nil and model ~= nil and provingConfig ~= nil and combatRemotesReady then
 				screen.Toggle()
 			end
 			return
@@ -713,12 +715,18 @@ local function boot(): ()
 		end,
 		onClose = closePanels,
 	})
-	-- C0, L3-24: built when the configs exist; its key shows once the remotes do, so every press
-	-- has somewhere to go. Intents carry a family, a slot and a style key, never an amount or a
-	-- tier. `false` from a deps call = the intent could not be sent, which the screen says.
-	if hasArmoryScreen then
+	-- C0, L3-24: built when the Armory config exists (the screen re-reads the weapon families at
+	-- every open); its key shows once those and the remotes do, so every press has somewhere to
+	-- go. Intents carry a family, a slot and a style key, never an amount or a tier. A remote
+	-- missing at the press is looked up again first (3-s1: readiness keys on one intent of the set,
+	-- and the boot listener stops once it holds). `false` = the intent could not be sent, which
+	-- the screen says.
+	if hasArmory then
 		local screen = ArmoryScreen.new(screenGui, {
 			onUpgrade = function(family: string): boolean
+				if requestUpgradeWeapon == nil then
+					resolveCombatRemotes()
+				end
 				local remote = requestUpgradeWeapon
 				if remote == nil then
 					return false
@@ -727,6 +735,9 @@ local function boot(): ()
 				return true
 			end,
 			onEquip = function(slot: string, family: string, variant: string): boolean
+				if requestSetFamily == nil then
+					resolveCombatRemotes()
+				end
 				local remote = requestSetFamily
 				if remote == nil then
 					return false
@@ -752,7 +763,7 @@ local function boot(): ()
 				toast.Show(text, seconds or Theme.TOAST_SECONDS, isError == true)
 			end,
 			keyHint = if UserInputService.KeyboardEnabled
-				then ARMORY_KEY_HINT
+				then ArmoryScreen.KEY_HINT
 				elseif UserInputService.GamepadEnabled then ARMORY_PAD_HINT
 				else nil,
 			-- The pad's Y is the lobby's toggle only; here the bar's key opens it.
@@ -762,6 +773,7 @@ local function boot(): ()
 		screen.SetAvailable(true)
 		screen.SetGate(true)
 		armoryScreen = screen
+		refreshCombatKeys()
 	end
 	local expeditionPanel: ExpeditionPanel.ExpeditionPanelHandle? = nil
 	if hasExpeditions and combatConfig ~= nil then
@@ -937,6 +949,9 @@ local function boot(): ()
 	-- and every Delta that carries it (not from refreshAll, which the cash tick also runs). The
 	-- held pair is the saved loadout as the server reads it, starters filling what it lacks.
 	local function pushArmory(combat: Types.CombatProfile): ()
+		if provingConfig == nil then
+			refreshCombatKeys() -- it reads the families again, and shows the key once they came
+		end
 		local config = provingConfig
 		if config == nil then
 			return
@@ -1596,7 +1611,7 @@ local function boot(): ()
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if
 			processed
-			or input.KeyCode ~= ARMORY_KEY
+			or input.KeyCode ~= ArmoryScreen.KEY
 			or UserInputService:GetFocusedTextBox() ~= nil
 		then
 			return

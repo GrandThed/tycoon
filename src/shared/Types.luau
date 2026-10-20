@@ -997,8 +997,8 @@ export type CombatProfile = {
 	expeditionSeconds: number,
 	stats: { kills: number, wavesCleared: number, expeditions: number, cashFromCombat: number },
 	-- L2-1 (schema v7): what the dungeon place has unlocked, keyed by id, every value true. Only
-	-- the combat place writes them; optional in the type because the hub copies the profile it
-	-- shows (EconomyService) without them, and a profile loaded by v6 code may lack them.
+	-- the combat place writes them; optional in the type because a profile written by v6 code
+	-- may lack them (the hub's copy carries every field since L3-14: ProfileCopy).
 	-- abilities: bought abilities ("doubleJump"); secrets: opened chests by level;
 	-- families: weapon families found (Broadsword and Longbow stay implicit, never written);
 	-- shortcuts: found shortcuts by level (W2's cave).
@@ -1006,7 +1006,7 @@ export type CombatProfile = {
 	secrets: { [string]: { [string]: boolean } }?,
 	families: { [string]: boolean }?,
 	shortcuts: { [string]: { [string]: boolean } }?,
-	-- L3-7 (schema v8), optional for the same reasons as the v7 maps. tiers: a family's tier, only
+	-- L3-7 (schema v8), optional for the same reason as the v7 maps. tiers: a family's tier, only
 	-- for families upgraded past their window's start (read through Armory.TierOf, clamped);
 	-- loadout: the held families, saved (both places write it, never inside a fight); stars: the
 	-- cleared difficulties by level id, every value true (the Hard star is a band's trophy).
@@ -1105,7 +1105,7 @@ export type ArmoryLadderBand = { levelId: string, material: string }
 -- tier-1 numbers at tier t; hp.<slot>[t] is the health a family of that slot adds at tier t;
 -- rangeHp is the range's own body. A tier's band is ceil(t / bandSize) and its position in the
 -- band (t - 1) % bandSize + 1; costs are by position, in the band's material; a band's top
--- position also needs that band level's `starDifficulty` star.
+-- position also needs that band level's `starDifficulty` star or a `starAlso` one (Armory.StarHeld).
 export type ArmoryLadder = {
 	damage: { number },
 	hp: { melee: { number }, ranged: { number } },
@@ -1114,6 +1114,9 @@ export type ArmoryLadder = {
 	bands: { ArmoryLadderBand },
 	costs: { number },
 	starDifficulty: string,
+	-- The fix round's R1: other difficulties whose star also opens a band top ("brutal"), so a
+	-- harder clear is never worth less than the Hard one. The map's stars are unchanged.
+	starAlso: { string }?,
 }
 -- L3-3: a family's window on the ladder (Armory.TierOf clamps a saved tier into it).
 export type ArmoryWindow = { start: number, top: number }

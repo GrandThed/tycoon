@@ -207,7 +207,7 @@ local function setTierFor(player: Player, state: Types.PlayerState, value: any):
 end
 
 -- L3-28 grantStar: the ladder's starDifficulty star of a level that has a level file, or of every
--- built band level for "*".
+-- built band level for Unlocks.ALL_STARS.
 local function grantStarTo(player: Player, state: Types.PlayerState, value: any): ()
 	local armoryConfig = Catalog.GetArmoryConfig()
 	local ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil
@@ -215,7 +215,7 @@ local function grantStarTo(player: Player, state: Types.PlayerState, value: any)
 		return
 	end
 	local levels: { string } = {}
-	if value == "*" then
+	if value == Unlocks.ALL_STARS then
 		levels = (Armory.BuiltBands(armoryConfig, built))
 	elseif built[value] == true then
 		levels = { value }

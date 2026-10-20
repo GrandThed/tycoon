@@ -5991,7 +5991,6 @@ ARMORY = "src/shared/Armory.luau"
 FILES += ["src/shared/Format.luau", "src/client/UI/ArmoryModel.luau"]
 VERDICT_LOCKED = '\tif start == nil then\n\t\treturn "invalid"\n\tend\n\tif not owned then\n\t\treturn "locked"\n\tend\n'
 VERDICT_PEAK = '\tif nextTier == nil then\n\t\treturn "peak"\n\tend\n\tif not gateOpen then\n\t\treturn "busy"\n\tend\n'
-HELD_FAMILY = "\t\t\tand def.slot == slot\n\t\t\tand Unlocks.OwnsFamily(families, family, starters)\n"
 L3_MUTATIONS = {
     # The ladder and the windows (L3-1 to L3-3).
     "l3: Window does not hold a window inside the ladder": (
@@ -6123,10 +6122,11 @@ L3_MUTATIONS = {
         ' or material == "" then\n\t\treturn "notBuilt"',
         ' then\n\t\treturn "notBuilt"',
     ),
+    # Re-aimed by the fix round's R1: the verdict asks Armory.StarHeld.
     "l3: a band top needs no star": (
         ARMORY,
-        "position == ladder.bandSize and not starHeld(",
-        "false and not starHeld(",
+        "position == ladder.bandSize and not Armory.StarHeld(",
+        "false and not Armory.StarHeld(",
     ),
     "l3: a star of any difficulty is the trophy": (
         ARMORY,
@@ -6255,11 +6255,16 @@ L3_MUTATIONS = {
         'Armory.LegacyRefund({ legacy = { gearCosts = { { material = "Timber", amount = 100 } } } } :: any, combat.gear)',
     ),
     # Unlocks: the saved loadout and stars (L3-9, L3-10), the levers' pieces (L3-28).
-    "l3: LoadoutOf holds a family not owned": (UNLOCKS, HELD_FAMILY, "\t\t\tand def.slot == slot\n"),
+    # Re-aimed by the fix round's R7: the slot rule moved to Armory.HeldFamily, which LoadoutOf calls.
+    "l3: LoadoutOf holds a family not owned": (
+        ARMORY,
+        "return if isStarter or found then family else starter",
+        "return family",
+    ),
     "l3: LoadoutOf holds a family in the wrong slot": (
-        UNLOCKS,
-        HELD_FAMILY,
-        "\t\t\tand Unlocks.OwnsFamily(families, family, starters)\n",
+        ARMORY,
+        'if type(def) ~= "table" or def.slot ~= slot then\n\t\treturn starter',
+        'if type(def) ~= "table" then\n\t\treturn starter',
     ),
     "l3: LoadoutOf keeps an unknown style": (UNLOCKS, "\t\t\t\tand def.variants[key] ~= nil\n", ""),
     "l3: SaveLoadout writes any slot": (
@@ -6382,6 +6387,259 @@ L3_UI_MUTATIONS = {
     "l3 ui: the screen opens on the ranged family": (ARMORY_MODEL, "if card.family == held.melee then", "if card.family == held.ranged then"),
 }
 MUTATIONS.update(L3_UI_MUTATIONS)
+# L3 W1 fix round, from the ui-engineer (tests_l3_ui.luau): R1, R11, 4-s4, 4-s5, 3-s2.
+L3_UI_FIX_MUTATIONS = {
+    "l3 ui: a style is live during another equip": (ARMORY_MODEL, "\t\t\tlive = pending.equipFamily == nil\n", "\t\t\tlive = true\n"),
+    "l3 ui: the cost line reads only the Hard star": (ARMORY_MODEL, "\treturn armory ~= nil and combat ~= nil and Armory.StarHeld(armory, combat, levelId)\n", "\treturn combat ~= nil and type(combat.stars) == \"table\" and type(combat.stars[levelId]) == \"table\" and combat.stars[levelId].hard == true\n"),
+    "l3 ui: an unnamed star reads as Hard": (ARMORY_MODEL, "\treturn if type(key) == \"string\" and key ~= \"\" then key else nil\n", "\treturn if type(key) == \"string\" and key ~= \"\" then key else \"hard\"\n"),
+    "l3 ui: an unnamed star's button names Hard": (ARMORY_MODEL, "\t\t\telse TEXT.needsAStar .. levelName\n", "\t\t\telse \"Needs \u2605 Hard on \" .. levelName\n"),
+    "l3 ui: a style switch toasts a plain equip": (ARMORY_MODEL, "\tif style ~= nil then\n", "\tif false then\n"),
+    "l3 ui: the star lever names the first level only": (ARMORY_MODEL, "table.concat(names, \", \")", "names[1]"),
+    "l3 ui: the star lever ignores what is built": (ARMORY_MODEL, "\t\tlocal levelIds = Armory.BuiltBands(armory, built)\n", "\t\tlocal levelIds = { \"forestRoad\" }\n"),
+}
+MUTATIONS.update(L3_UI_FIX_MUTATIONS)
+
+# The L3 W1 fix round (docs/prompts/l3-w1-fix-round.md), from luau-engineer A': the band top's trophy
+# (StarHeld, R1), the strike tier (StrikeTier, R3), the saved pair's Power and the hub's copy
+# (HeldFamily, SavedPower, ProfileCopy, R7), the one runner (ProfileSchema.Run, R5), single-rule
+# breaks of Problems (R6), and the service lines tests_l3 reads as text (run_harness.py L3_LINES):
+# those services never load here, so only those counts can catch their mutants. Then
+# luau-engineer B's entries on its own lines. Every file the text reading counts in goes into
+# every mutant root.
+UNLOCK_SERVICE = "src/combat/server/Services/UnlockService.luau"
+DEBUG_SERVICE = "src/combat/server/Services/DebugService.luau"
+HUB_ECONOMY = "src/server/Services/EconomyService.luau"
+HUB_DATA = "src/server/Services/DataService.luau"
+HUB_ARMORY = "src/server/Services/ArmoryService.luau"
+PROFILE_COPY = "src/shared/ProfileCopy.luau"
+FILES += [UNLOCK_SERVICE, DEBUG_SERVICE, HUB_ECONOMY, HUB_DATA, HUB_ARMORY, PROFILE_COPY]
+L3_FIX_MUTATIONS = {
+    # R1: StarHeld and the starAlso rule.
+    "l3fix R1: StarHeld ignores starAlso": (ARMORY, "for index = 1, #also do", "for index = 1, 0 do"),
+    "l3fix R1: StarHeld ignores starDifficulty": (
+        ARMORY,
+        "if starHeld(combat, levelId, ladder.starDifficulty) then",
+        "if false then",
+    ),
+    "l3fix R1: Problems takes any starAlso": (ARMORY, "if also ~= nil and not namesList(also) then", "if false then"),
+    "l3fix R1: a starAlso keyed by name is a list": (ARMORY, "return count == #value", "return true"),
+    "l3fix R1: a starAlso with an empty name is a list": (
+        ARMORY,
+        'if type(name) ~= "string" or name == "" then\n\t\t\treturn false',
+        'if type(name) ~= "string" then\n\t\t\treturn false',
+    ),
+    # R3: StrikeTier.
+    "l3fix R3: StrikeTier ignores the override": (
+        ARMORY,
+        "if overrideTier == nil then\n\t\treturn Armory.TierOf(cfg, combat, family)",
+        "if true then\n\t\treturn Armory.TierOf(cfg, combat, family)",
+    ),
+    "l3fix 2-s1: StrikeTier does not hold the override in the window": (
+        ARMORY,
+        "return math.min(math.max(overrideTier, first), last)",
+        "return overrideTier",
+    ),
+    "l3fix 2-s1: StrikeTier lifts no override to the window's start": (
+        ARMORY,
+        "return math.min(math.max(overrideTier, first), last)",
+        "return math.min(overrideTier, last)",
+    ),
+    "l3fix R3: an override fields a family with no window": (
+        ARMORY,
+        "if first == nil or last == nil then\n\t\treturn 1",
+        "if first == nil or last == nil then\n\t\treturn overrideTier",
+    ),
+    "l3fix R3: StrikeTier takes a fractional override": (
+        ARMORY,
+        "if not whole(overrideTier) then\n\t\treturn first",
+        "if false then\n\t\treturn first",
+    ),
+    # R7: SavedPower (HeldFamily's two rules are the re-aimed LoadoutOf entries above).
+    "l3fix R7: SavedPower reads the melee family for both slots": (
+        ARMORY,
+        'local ranged = Armory.HeldFamily(combat, weapons, starters, "ranged")',
+        'local ranged = Armory.HeldFamily(combat, weapons, starters, "melee")',
+    ),
+    "l3fix R7: SavedPower ignores Ascension": (
+        ARMORY,
+        "return Armory.GearPower(cfg, Armory.HeldTiers(cfg, combat, melee, ranged), ascension)",
+        "return Armory.GearPower(cfg, Armory.HeldTiers(cfg, combat, melee, ranged), { melee = 0, ranged = 0 })",
+    ),
+    "l3fix R7: SavedPower reads the frozen gear": (
+        ARMORY,
+        "return Armory.GearPower(cfg, Armory.HeldTiers(cfg, combat, melee, ranged), ascension)",
+        "return Armory.GearPower(cfg, if combat ~= nil then combat.gear else { melee = 1, ranged = 1 }, ascension)",
+    ),
+    # R7: ProfileCopy.
+    "l3fix R7: the copy shares the profile's tables": (PROFILE_COPY, "copy[key] = deepCopy(item)", "copy[key] = item"),
+    "l3fix R7: the copy drops a field (stars)": (
+        PROFILE_COPY,
+        "\tfor key, item in value do\n\t\tcopy[key] = deepCopy(item)",
+        '\tfor key, item in value do\n\t\tif key == "stars" then\n\t\t\tcontinue\n\t\tend\n\t\tcopy[key] = deepCopy(item)',
+    ),
+    "l3fix R7: the copy is the profile itself": (
+        PROFILE_COPY,
+        "local copy: Types.CombatProfile = deepCopy(combat)",
+        "local copy: Types.CombatProfile = combat",
+    ),
+    "l3fix R7: a loadout copied without its variants": (
+        PROFILE_COPY,
+        'if type(loadout) == "table" and type(loadout.variants) ~= "table" then',
+        "if false then",
+    ),
+    # R5: ProfileSchema.Run, the one runner.
+    "l3fix R5: the runner runs a step twice": (
+        SCHEMA,
+        "\t\tmigrate(state)\n\t\tstate.version = version + 1",
+        "\t\tmigrate(state)\n\t\tmigrate(state)\n\t\tstate.version = version + 1",
+    ),
+    "l3fix R5: the runner does not stamp the version": (SCHEMA, "\t\tstate.version = version + 1\n", ""),
+    "l3fix R5: the runner says nothing of a missing step": (
+        SCHEMA,
+        'if migrate == nil then\n\t\t\treturn "missing"',
+        "if migrate == nil then\n\t\t\treturn nil",
+    ),
+    "l3fix R5: the runner says nothing of a newer profile": (SCHEMA, 'return "ahead"', "return nil"),
+    "l3fix R5: the runner takes a version that is not whole": (
+        SCHEMA,
+        'if from % 1 ~= 0 then\n\t\treturn "missing"',
+        'if false then\n\t\treturn "missing"',
+    ),
+    # R6: the three Problems rules no break proved alone (review 1-m2).
+    "l3fix R6: Problems takes a bandSize that is not whole": (
+        ARMORY,
+        "if not whole(bandSize) or bandSize <= 0 then",
+        "if false then",
+    ),
+    "l3fix R6: Problems takes bands that do not cover the ladder": (
+        ARMORY,
+        "elseif bandSize * #bands ~= size then",
+        "elseif false then",
+    ),
+    "l3fix R6: Problems takes a negative HP entry": (
+        ARMORY,
+        "if not finite(value) or value < 0 then\n\t\t\t\t\tproblem(",
+        "if not finite(value) then\n\t\t\t\t\tproblem(",
+    ),
+    # R3: the service lines, caught only by tests_l3's text counts (run_harness.py L3_LINES).
+    "l3fix R3: the slam scales by the word melee": (
+        WEAPON,
+        "StrikeTally.New(damageScale(player, shooter.loadout.melee, false))",
+        'StrikeTally.New(damageScale(player, "melee", false))',
+    ),
+    "l3fix R3: a ranged hit reads the melee override": (
+        WEAPON,
+        'elseif slot == "ranged" then gear.ranged\n\t\t\telse nil',
+        'elseif slot == "ranged" then gear.melee\n\t\t\telse nil',
+    ),
+    "l3fix R3: a hit ignores its slot's Ascension": (
+        WEAPON,
+        "return Armory.DamageScale(armoryConfig, tier, level, ability)",
+        "return Armory.DamageScale(armoryConfig, tier, 0, ability)",
+    ),
+    "l3fix R3: the bar ignores the ranged override": (
+        WEAPON,
+        "local rangedOverride = if gear ~= nil then gear.ranged else nil",
+        "local rangedOverride = nil",
+    ),
+    "l3fix R3: the dungeon upgrades in a fight": (UNLOCK_SERVICE, "\t\tgate ~= nil and gate(player),\n", "\t\ttrue,\n"),
+    "l3fix R3: the dungeon upgrades a family not owned": (
+        UNLOCK_SERVICE,
+        "Unlocks.OwnsFamily(combat.families, family, starters()),",
+        "true,",
+    ),
+    "l3fix R3: EndRun reads no first-clear reward": (
+        WAVE_SERVICE,
+        "local reward = if star then StageFlow.FirstClear(level, plan.difficulty) else nil",
+        "local reward = nil",
+    ),
+    "l3fix R3: EndRun gives no first clear": (
+        WAVE_SERVICE,
+        "local given = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil",
+        "local given = nil",
+    ),
+    "l3fix R3: the stars stay in session memory": (
+        WAVE_SERVICE,
+        "if profile ~= nil then\n\t\treturn Unlocks.StarsOf(profile.combat)",
+        "if false then\n\t\treturn Unlocks.StarsOf(profile.combat)",
+    ),
+    "l3fix R3: readLevel hands Validate no weapons": (
+        WAVE_SERVICE,
+        "\t\ttuned.weapons,\n\t\tUnlocks.Starters(tuned.loadout)\n\t)",
+        "\t\tnil,\n\t\tUnlocks.Starters(tuned.loadout)\n\t)",
+    ),
+    "l3fix R3: readLevel hands Validate no starters": (
+        WAVE_SERVICE,
+        "\t\ttuned.weapons,\n\t\tUnlocks.Starters(tuned.loadout)\n\t)",
+        "\t\ttuned.weapons,\n\t\tnil\n\t)",
+    ),
+    "l3fix R7: the dungeon Snapshot reads the bar's tiers": (
+        MAIN_SERVER,
+        "\t\tgearPower = if armoryConfig ~= nil\n",
+        "\t\tgearPower = if armoryConfig ~= nil and WeaponService.GearOf(player) ~= nil\n",
+    ),
+    # R7, R5, 3-s2 in the hub.
+    "l3fix R7: the hub's Power reads a fresh profile": (
+        HUB_ECONOMY,
+        "return Armory.SavedPower(\n\t\tarmoryConfig,\n\t\tstate.combat,\n",
+        "return Armory.SavedPower(\n\t\tarmoryConfig,\n\t\tnil,\n",
+    ),
+    "l3fix R7: the hub's Delta drops the Power": (HUB_ECONOMY, "\t\t\tdelta.gearPower = computeGearPower(state)\n", ""),
+    "l3fix R7: the hub's Delta sends the profile itself": (
+        HUB_ECONOMY,
+        "delta.combat = ProfileCopy.Combat(state.combat)",
+        "delta.combat = state.combat",
+    ),
+    "l3fix R7: the hub's Power reads the frozen gear": (
+        HUB_ECONOMY,
+        "local function computeGearPower(state: Types.PlayerState): number\n",
+        "local function computeGearPower(state: Types.PlayerState): number\n\tlocal _ = state.combat.gear\n",
+    ),
+    "l3fix R5: DataService runs no migration": (HUB_DATA, "local verdict = ProfileSchema.Run(state)", "local verdict = nil"),
+    "l3fix R5: DataService steps a profile itself": (
+        HUB_DATA,
+        "local verdict = ProfileSchema.Run(state)",
+        "local verdict = ProfileSchema.Migrations[state.version] and ProfileSchema.Run(state)",
+    ),
+    "l3fix R3: the hub upgrades a family not owned": (
+        HUB_ARMORY,
+        "local owned = Unlocks.OwnsFamily(state.combat.families, family, starters)",
+        "local owned = true",
+    ),
+    "l3fix R3: the hub's upgrade is gated shut": (
+        HUB_ARMORY,
+        "Armory.Upgrade(armoryConfig, state.combat, family, owned, true, built)",
+        "Armory.Upgrade(armoryConfig, state.combat, family, owned, false, built)",
+    ),
+    "l3fix 3-s2: the star wildcard is spelled in the hub": (
+        HUB_ARMORY,
+        "if value == Unlocks.ALL_STARS then",
+        'if value == "*" then',
+    ),
+}
+MUTATIONS.update(L3_FIX_MUTATIONS)
+# The L3 W1 fix round, from luau-engineer B' (docs/prompts/l3-w1-fix-reports/luau-b.md): its own lines
+# in WeaponService, WaveService, DebugService and Main, caught by the same text counts.
+L3_FIX_RUN_MUTATIONS = {
+    "l3fix R3: a hit ignores its family's tier": (WEAPON, "local tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)", "local tier = 1"),
+    "l3fix R3: a hit ignores the Studio override": (WEAPON, "local tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)", "local tier = Armory.StrikeTier(armoryConfig, combat, family, nil)"),
+    "l3fix 2-s1: the override reaches a hit unclamped": (WEAPON, "local tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)", "local tier = overrideTier or Armory.TierOf(armoryConfig, combat, family)"),
+    "l3fix R3: a melee hit reads the ranged override": (WEAPON, "\t\t\tthen gear.melee\n", "\t\t\tthen gear.ranged\n"),
+    "l3fix R3: the bar's melee tier is T1": (WEAPON, "melee = Armory.StrikeTier(armoryConfig, combat, held.melee, meleeOverride),", "melee = 1,"),
+    "l3fix R3: the bar's ranged tier is the melee family's": (WEAPON, "ranged = Armory.StrikeTier(armoryConfig, combat, held.ranged, rangedOverride),", "ranged = Armory.StrikeTier(armoryConfig, combat, held.melee, rangedOverride),"),
+    "l3fix 2-s1: the bar reads the override unclamped": (WEAPON, "melee = Armory.StrikeTier(armoryConfig, combat, held.melee, meleeOverride),", "melee = meleeOverride or Armory.TierOf(armoryConfig, combat, held.melee),"),
+    "l3fix R3: the bar ignores the override": (WEAPON, "local meleeOverride = if gear ~= nil then gear.melee else nil", "local meleeOverride = nil"),
+    "l3fix R4: a lever star pays nothing": (WAVE_SERVICE, "local grant = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil", "local grant = nil"),
+    "l3fix R4: a lever star reads no reward": (WAVE_SERVICE, "local reward = if level ~= nil then StageFlow.FirstClear(level, difficulty) else nil", "local reward = nil"),
+    "l3fix R4: a lever star pays the Normal reward": (WAVE_SERVICE, "local reward = if level ~= nil then StageFlow.FirstClear(level, difficulty) else nil", 'local reward = if level ~= nil then StageFlow.FirstClear(level, "normal") else nil'),
+    "l3fix R4: an old lever star pays again": (WAVE_SERVICE, "\t\tif not StageFlow.Award(stars, levelId, difficulty) then\n\t\t\tcontinue\n\t\tend\n", "\t\tStageFlow.Award(stars, levelId, difficulty)\n"),
+    "l3fix R4: the lever pays on a live server": (WAVE_SERVICE, "if not boot.mission or not RunService:IsStudio() then", "if not boot.mission then"),
+    "l3fix 3-s2: the star wildcard is spelled in DebugService": (DEBUG_SERVICE, "if which == Unlocks.ALL_STARS then", 'if which == "*" then'),
+    "l3fix 2-s1: G matches its presets against the clamped bar": (DEBUG_SERVICE, "local gear = WeaponService.GearOverride(player) or WeaponService.GearOf(player)", "local gear = WeaponService.GearOf(player)"),
+    "l3fix 2-s1: setGear keeps the clamped tier of an unnamed slot": (DEBUG_SERVICE, "local gear = WeaponService.GearOverride(target) or fought", "local gear = fought"),
+    "l3fix R7: the dungeon Power reads a fresh profile": (MAIN_SERVER, "then Armory.SavedPower(\n\t\t\t\tarmoryConfig,\n\t\t\t\tstate.combat,\n", "then Armory.SavedPower(\n\t\t\t\tarmoryConfig,\n\t\t\t\tnil,\n"),
+}
+MUTATIONS.update(L3_FIX_RUN_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

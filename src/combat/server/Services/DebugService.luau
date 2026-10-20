@@ -157,7 +157,8 @@ local function onLadder(armoryConfig: Types.ArmoryConfig, tier: number): boolean
 end
 
 -- "melee=3,ranged=2": the session override (L1 ruling 34) in every Studio build, never the
--- profile (L3-28: its slot `gear` is frozen). A slot the lever did not name keeps the tier the
+-- profile (L3-28: its slot `gear` is frozen). A slot the lever did not name keeps the override's
+-- tier as it was set (a window may hold what is fought at above it, 2-s1), else the tier the
 -- player fights at now; a tier off the ladder is warned and ignored.
 local function setGear(player: Player?, spec: string): ()
 	local armoryConfig = Catalog.GetArmoryConfig()
@@ -180,7 +181,8 @@ local function setGear(player: Player?, spec: string): ()
 		return
 	end
 	eachState(player, function(target: Player, _state: Types.PlayerState)
-		local gear, ascension = WeaponService.GearOf(target)
+		local fought, ascension = WeaponService.GearOf(target)
+		local gear = WeaponService.GearOverride(target) or fought
 		WeaponService.SetGearOverride(target, {
 			melee = wanted.melee or gear.melee,
 			ranged = wanted.ranged or gear.ranged,
@@ -204,9 +206,11 @@ local function nextGear(player: Player?): ()
 		return
 	end
 	-- A press steps past the preset the player holds now (a fresh profile holds the first one),
-	-- so every press is a visible change. The one remembered counts only while it is still what
-	-- they fight at: an upgrade, setTier or resetArmory clears the override behind it.
-	local gear = WeaponService.GearOf(player)
+	-- so every press is a visible change. The one remembered counts only while it is still the
+	-- override: an upgrade, setTier or resetArmory clears the override behind it. The override is
+	-- read as it was set, not as fought (2-s1: G's T1 fights a held Flamethrower at its T2, which
+	-- matches no preset, so every press would set T1 again); without one, what is fought at.
+	local gear = WeaponService.GearOverride(player) or WeaponService.GearOf(player)
 	local current = gearPreset[player]
 	local held = if current ~= nil then presets[current] else nil
 	if held == nil or held.melee ~= gear.melee or held.ranged ~= gear.ranged then
@@ -314,7 +318,9 @@ local function setTier(player: Player?, spec: string): ()
 end
 
 -- L3-28, `grantStar`: Armory.json's star difficulty (the band top's trophy) of a level, or of every
--- built band's level for "*", saved for the caller or everyone admitted; the map is resent.
+-- built band's level for Unlocks.ALL_STARS, saved for the caller or everyone admitted; the map is
+-- resent. R4: a new star pays its first-clear reward as a cleared run's does
+-- (WaveService.GrantStars), and the notice names what it gave ("★ Hard: Forest Road · Warhammer").
 local function grantStar(player: Player?, which: string): ()
 	local armoryConfig = Catalog.GetArmoryConfig()
 	local ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil
@@ -323,7 +329,7 @@ local function grantStar(player: Player?, which: string): ()
 		return
 	end
 	local levelIds: { string } = {}
-	if which == "*" then
+	if which == Unlocks.ALL_STARS then
 		levelIds = builtBands()
 	elseif Catalog.GetLevelFile(which) ~= nil then
 		table.insert(levelIds, which)
@@ -334,8 +340,24 @@ local function grantStar(player: Player?, which: string): ()
 	end
 	local difficulty = ladder.starDifficulty
 	local targets: { Player } = if player ~= nil then { player } else UnlockService.Admitted()
+	-- What the new stars gave, each item once: a family by name, and the most Valor one player got.
+	local gifts: { string } = {}
+	local valor = 0
 	for _, target in targets do
-		WaveService.GrantStars(target, levelIds, difficulty)
+		local _new, grants = WaveService.GrantStars(target, levelIds, difficulty)
+		local paid = 0
+		for _, grant in grants do
+			local family = grant.family
+			local name = if family ~= nil then UnlockService.FamilyName(family) else nil
+			if name ~= nil and table.find(gifts, name) == nil then
+				table.insert(gifts, name)
+			end
+			paid += grant.valor
+		end
+		valor = math.max(valor, paid)
+	end
+	if valor > 0 then
+		table.insert(gifts, `+{valor} Valor`)
 	end
 	local map = Catalog.GetExpeditionsConfig()
 	local named = if map ~= nil then map.difficultyNames[difficulty] else nil
@@ -345,6 +367,9 @@ local function grantStar(player: Player?, which: string): ()
 		table.insert(levelNames, if file ~= nil then file.name else levelId)
 	end
 	local label = `★ {named or difficulty}: {table.concat(levelNames, ", ")}`
+	if #gifts > 0 then
+		label ..= ` · {table.concat(gifts, ", ")}`
+	end
 	RunFx.Push({ kind = "notice", text = label })
 end
 

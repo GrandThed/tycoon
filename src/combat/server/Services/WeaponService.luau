@@ -86,8 +86,8 @@ local CONST = {
 	-- Ruling 7: root positions kept per player, one per Heartbeat (2 s at 60 Hz). A slack window
 	-- tuned longer than this reads the oldest sample, which only makes the slack smaller.
 	HISTORY_CAPACITY = 120,
-	-- GearOf's answer in the range, and without a loaded profile: tier 1 (L3-1: in a mission that
-	-- is the ladder's first step, the 2/2 every level was tuned at; the range scales by 1).
+	-- GearOf's answer in the range, and without Armory.json: tier 1 (L3-1: in a mission that is
+	-- the ladder's first step, the 2/2 every level was tuned at; the range scales by 1).
 	RANGE_GEAR = table.freeze({ melee = 1, ranged = 1 }),
 	NO_ASCENSION = table.freeze({ melee = 0, ranged = 0 }),
 }
@@ -601,26 +601,22 @@ local function mayAct(player: Player): boolean
 	return gate == nil or gate(player)
 end
 
--- Ruling 12, L3-6: the tiers the bar (and Gear Power) is read at, one per slot: those of the held
--- families (the shooter's loadout; before admission, the saved one as AddPlayer will read it,
--- L3-10), with each slot's Ascension. The Studio session override comes before the profile. A
--- proving build reads the profile like any other (L3-11: a baked gear would hide every tier Ben
--- buys there). Tier 1 and no Ascension in the range and without a loaded profile. Fresh tables,
--- so no caller can write the profile through them.
+-- Ruling 12, L3-6: the tiers the bar is read at, one per slot: each held family's
+-- Armory.StrikeTier, the call damageScale makes, so the bar and the hits always name one tier
+-- (R3). The held families are the shooter's loadout; before admission, the saved one as AddPlayer
+-- will read it (L3-10). The Studio session override's tier is held inside each family's window
+-- (2-s1: G's T1 fields the Flamethrower at its T2, as the Armory screen shows it), and its
+-- Ascension comes before the profile's. A proving build reads the profile like any other (L3-11:
+-- a baked gear would hide every tier Ben buys there). Tier 1 and no Ascension in the range and
+-- without Armory.json; without a loaded profile the starters, at tier 1. Fresh tables, so no
+-- caller can write the profile through them.
 local function gearOf(player: Player): (SlotTiers, SlotTiers)
-	if state.mode == "range" then
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if state.mode == "range" or armoryConfig == nil then
 		return table.clone(CONST.RANGE_GEAR), table.clone(CONST.NO_ASCENSION)
-	end
-	local override = state.gearOverride[player]
-	if override ~= nil then
-		return table.clone(override.gear), table.clone(override.ascension)
 	end
 	local profile = DataService.GetState(player)
-	local armoryConfig = Catalog.GetArmoryConfig()
-	if profile == nil or armoryConfig == nil then
-		return table.clone(CONST.RANGE_GEAR), table.clone(CONST.NO_ASCENSION)
-	end
-	local combat = profile.combat
+	local combat = if profile ~= nil then profile.combat else nil
 	local shooter = state.shooters[player]
 	local config = Tuning.Get()
 	local held = if shooter ~= nil
@@ -629,15 +625,25 @@ local function gearOf(player: Player): (SlotTiers, SlotTiers)
 			melee = startingFamily(config, "melee"),
 			ranged = startingFamily(config, "ranged"),
 		})
-	local ascension = combat.ascension
-	return Armory.HeldTiers(armoryConfig, combat, held.melee, held.ranged),
-		{ melee = ascension.melee, ranged = ascension.ranged }
+	local override = state.gearOverride[player]
+	local gear = if override ~= nil then override.gear else nil
+	local meleeOverride = if gear ~= nil then gear.melee else nil
+	local rangedOverride = if gear ~= nil then gear.ranged else nil
+	local ascension = if override ~= nil
+		then override.ascension
+		elseif combat ~= nil then combat.ascension
+		else CONST.NO_ASCENSION
+	return {
+		melee = Armory.StrikeTier(armoryConfig, combat, held.melee, meleeOverride),
+		ranged = Armory.StrikeTier(armoryConfig, combat, held.ranged, rangedOverride),
+	}, { melee = ascension.melee, ranged = ascension.ranged }
 end
 
--- Ruling 8, L3-6: one number per resolved attack, at the STRIKING family's tier (Armory.TierOf,
--- or the Studio override's tier for the slot that family fills) and that slot's Ascension. An
--- unknown family has no slot, so no override tier and no Ascension. Always 1 in the range, whose
--- numbers are the tier-1 ones; tier 1 without a loaded profile.
+-- Ruling 8, L3-6: one number per resolved attack, at the STRIKING family's tier and that slot's
+-- Ascension. The tier is Armory.StrikeTier (R3): the Studio override's tier for the slot the family
+-- fills, held inside the family's window (2-s1), else Armory.TierOf. An unknown family has no
+-- slot, so no override tier and no Ascension. Always 1 in the range, whose numbers are the tier-1
+-- ones; without a loaded profile a family's start (tier 1 for a starter).
 local function damageScale(player: Player, family: string, ability: boolean): number
 	if state.mode == "range" then
 		return 1
@@ -648,22 +654,26 @@ local function damageScale(player: Player, family: string, ability: boolean): nu
 	end
 	local def = familyDef(Tuning.Get(), family)
 	local slot = if def ~= nil then def.slot else ""
-	local override = state.gearOverride[player]
 	local profile = DataService.GetState(player)
-	local tier = 1
-	local ascension: SlotTiers = CONST.NO_ASCENSION
+	local combat = if profile ~= nil then profile.combat else nil
+	local override = state.gearOverride[player]
+	local overrideTier: number? = nil
 	if override ~= nil then
 		local gear = override.gear
-		tier = if slot == "melee" then gear.melee elseif slot == "ranged" then gear.ranged else 1
-		ascension = override.ascension
-	elseif profile ~= nil then
-		tier = Armory.TierOf(armoryConfig, profile.combat, family)
-		ascension = profile.combat.ascension
+		overrideTier = if slot == "melee"
+			then gear.melee
+			elseif slot == "ranged" then gear.ranged
+			else nil
 	end
+	local ascension = if override ~= nil
+		then override.ascension
+		elseif combat ~= nil then combat.ascension
+		else CONST.NO_ASCENSION
 	local level = if slot == "melee"
 		then ascension.melee
 		elseif slot == "ranged" then ascension.ranged
 		else 0
+	local tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)
 	return Armory.DamageScale(armoryConfig, tier, level, ability)
 end
 
@@ -2243,15 +2253,26 @@ function WeaponService.PrepareCharacter(player: Player, character: Model): ()
 	VitalsService.PrepareCharacter(player, character)
 end
 
--- Ruling 12, L3-6: (tiers, ascension) per slot. Tier 1 and no Ascension in the range; then the
--- Studio session override (L1 ruling 34); otherwise the held families' tiers on the profile (tier
--- 1 until it has loaded), in a proving build too (L3-11). Fresh tables.
+-- Ruling 12, L3-6: (tiers, ascension) per slot. Tier 1 and no Ascension in the range; otherwise
+-- each held family's Armory.StrikeTier: the Studio session override's tier (L1 ruling 34) held
+-- inside the family's window, else its tier on the profile (tier 1 until it has loaded), in a
+-- proving build too (L3-11). Fresh tables.
 function WeaponService.GearOf(player: Player): (SlotTiers, SlotTiers)
 	return gearOf(player)
 end
 
+-- L1 ruling 34: the Studio session override's tiers as a lever set them, before any window holds
+-- them (GearOf answers what is fought at); nil when none is set. The G key compares its presets
+-- with this: G's T1 fights a held Flamethrower at T2, so GearOf would never match the preset
+-- again and every press would set T1. A fresh table.
+function WeaponService.GearOverride(player: Player): SlotTiers?
+	local override = state.gearOverride[player]
+	return if override ~= nil then table.clone(override.gear) else nil
+end
+
 -- L1 ruling 34: the tiers this player fights at for the rest of the session, both slots, whatever
--- the profile says; nil clears it (a successful upgrade, setTier and resetArmory do, L3-28).
+-- the profile says (each held inside the held family's window, 2-s1); nil clears it (a successful
+-- upgrade, setTier and resetArmory do, L3-28).
 -- Studio only: outside Studio it does nothing, and it is never written to a profile. The caller
 -- refreshes the body (VitalsService.RefreshMaxHp).
 function WeaponService.SetGearOverride(

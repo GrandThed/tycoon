@@ -2352,20 +2352,41 @@ end
 
 -- The `grantStar` lever (L3-28): `difficulty`'s star of every level in `levelIds` for `player`,
 -- saved in their profile (a session star without one, as a cleared run's), then the map to
--- everyone (the leader's stars open the nodes). How many were new.
-function WaveService.GrantStars(player: Player, levelIds: { string }, difficulty: string): number
-	if not boot.mission then
-		return 0
+-- everyone (the leader's stars open the nodes). R4: a star that is new pays its difficulty's
+-- first-clear reward through UnlockService.GrantFirstClear, as EndRun's does, so U gives what a
+-- Hard clear gives (T4's star and the Warhammer) and a later Hard clear owes nothing. The level
+-- is read as a run reads it (resolveLevel); one that does not resolve pays nothing and is warned
+-- there. Studio only, as the lever is: a reward is never handed out here on a live server. How
+-- many stars were new, and what their rewards gave.
+function WaveService.GrantStars(
+	player: Player,
+	levelIds: { string },
+	difficulty: string
+): (number, { Types.FirstClearGrant })
+	local grants: { Types.FirstClearGrant } = {}
+	if not boot.mission or not RunService:IsStudio() then
+		return 0, grants
 	end
+	local combatConfig = config()
+	local map = Catalog.GetExpeditionsConfig()
 	local stars = starsOf(player.UserId)
 	local new = 0
 	for _, levelId in levelIds do
-		if StageFlow.Award(stars, levelId, difficulty) then
-			new += 1
+		if not StageFlow.Award(stars, levelId, difficulty) then
+			continue
+		end
+		new += 1
+		local level = if combatConfig ~= nil and map ~= nil
+			then resolveLevel(levelId, difficulty, combatConfig, map)
+			else nil
+		local reward = if level ~= nil then StageFlow.FirstClear(level, difficulty) else nil
+		local grant = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil
+		if grant ~= nil then
+			table.insert(grants, grant)
 		end
 	end
 	sendMapState(nil)
-	return new
+	return new, grants
 end
 
 -- The `resetArmory` lever (L3-28), after UnlockService has emptied the profiles' stars: the

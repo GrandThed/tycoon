@@ -7,6 +7,10 @@
 -- and every group runs behind L1.group, so one that throws fails a check and the bundle goes on.
 -- The rules are tested on a fixture with the contract's own numbers (L3.fixture), so a data
 -- change cannot hide a rule change; the shipped data is pinned against the same numbers last.
+-- The fix round (docs/prompts/l3-w1-fix-round.md) adds the band top's trophy (StarHeld, R1), the
+-- strike tier (StrikeTier, R3), the saved pair's Power and the hub's profile copy (SavedPower,
+-- ProfileCopy, R7), the one migration runner (ProfileSchema.Run, R5), single-rule breaks of every
+-- Problems rule (R6), and, read as text (FIXTURES.source.l3), the server lines that apply them.
 
 print("L3: tiers per weapon, the saved loadout and profile v8 (Armory, Unlocks, ProfileSchema)")
 
@@ -14,6 +18,8 @@ local L3: any = {
 	Armory = load("Armory"),
 	Unlocks = load("Unlocks"),
 	Schema = load("ProfileSchema"),
+	-- The fix round (docs/prompts/l3-w1-fix-round.md): the hub's profile copy, made pure (R7).
+	Copy = load("ProfileCopy"),
 	NAN = 0 / 0,
 	-- L3-1: 1.5 x 1.65^(t - 1), to 4 decimals.
 	DAMAGE = {
@@ -102,6 +108,8 @@ function L3.fixture(): any
 		},
 		costs = { 100, 100, 250, 500 },
 		starDifficulty = "hard",
+		-- The fix round's R1: a Brutal clear opens a band top as a Hard one does.
+		starAlso = { "brutal" },
 	}
 	cfg.windows = {}
 	for family, pair in L3.WINDOWS do
@@ -323,6 +331,13 @@ function L3.verdictTests(): ()
 	check(verdict("broadsword", { broadsword = 3 }, {}, { forestRoad = { normal = true } }, true, true, forest) == "needsStar", "a Normal star is not the trophy")
 	check(verdict("broadsword", { broadsword = 3 }, {}, { forestRoad = { hard = false } }, true, true, forest) == "needsStar", "a star written false is no star")
 	check(verdict("broadsword", { broadsword = 3 }, {}, { castle = { hard = true } }, true, true, forest) == "needsStar", "another level's Hard star is not this band's")
+	-- R1: a Brutal clear opens the band top too (starAlso), with no Hard star written.
+	check(verdict("broadsword", { broadsword = 3 }, { Timber = 500 }, { forestRoad = { brutal = true } }, true, true, forest) == nil, "a Brutal star alone opens T4 (starAlso)")
+	check(verdict("broadsword", { broadsword = 3 }, { Timber = 499 }, { forestRoad = { brutal = true } }, true, true, forest) == "insufficientFunds", "and the price still applies after it")
+	local hardOnly = L3.fixture()
+	hardOnly.ladder.starAlso = nil
+	check(A.UpgradeVerdict(hardOnly, L3.combat({ broadsword = 3 }, { Timber = 500 }, { forestRoad = { brutal = true } }), "broadsword", true, true, forest) == "needsStar", "without starAlso a Brutal star is not the trophy")
+	check(A.UpgradeVerdict(hardOnly, L3.combat({ broadsword = 3 }, { Timber = 500 }, hard), "broadsword", true, true, forest) == nil, "and the Hard star still is")
 	check(verdict("broadsword", { broadsword = 3 }, { Timber = 499 }, hard, true, true, forest) == "insufficientFunds", "then insufficientFunds: T4 costs 500 Timber, 499 held")
 	check(verdict("broadsword", { broadsword = 3 }, { Timber = 500 }, hard, true, true, forest) == nil, "500 Timber and the star: T4 may be bought")
 	check(verdict("broadsword", {}, { Timber = 99 }, nil, true, true, forest) == "insufficientFunds", "T2 costs 100: 99 is short")
@@ -385,6 +400,221 @@ function L3.upgradeTests(): ()
 	check(A.Upgrade(cfg, made, "flamethrower", true, true, forest) == nil and made.tiers.flamethrower == 3 and made.materials.Timber == 0, "a profile with no tiers table gets one; the Flamethrower goes 2 -> 3 for 250")
 end
 L1.group("l3 upgradeTests", L3.upgradeTests)
+
+function L3.starTests(): ()
+	print(" StarHeld: a band top's trophy, Hard or harder (the fix round's R1)")
+	local A = L3.Armory
+	local cfg = L3.fixture()
+	local function holds(stars: any, levelId: string?, config: any?): boolean
+		return A.StarHeld(config or cfg, L3.combat(nil, nil, stars), levelId or "forestRoad")
+	end
+	check(holds({ forestRoad = { hard = true } }), "the Hard star is the trophy")
+	check(holds({ forestRoad = { brutal = true } }), "so is the Brutal one (starAlso)")
+	check(holds({ forestRoad = { hard = true, brutal = true } }), "and both together")
+	check(not holds({ forestRoad = { normal = true } }), "a Normal star is not")
+	check(not holds({ forestRoad = { hard = false, brutal = false } }), "a star written false is no star")
+	check(not holds({ forestRoad = { hard = 1, brutal = "yes" } } :: any), "nor one that is not true")
+	check(not holds({ castle = { hard = true, brutal = true } }), "another level's stars are not this level's")
+	check(holds({ castle = { brutal = true } }, "castle"), "a later band reads its own level's stars")
+	check(not holds(nil) and not holds({}) and not holds({ forestRoad = 5 } :: any), "no stars, none for the level, or a row that is not a table: not held")
+	check(not A.StarHeld(cfg, nil, "forestRoad"), "no profile: not held")
+	local bare = L3.fixture()
+	bare.ladder = nil
+	check(not holds({ forestRoad = { hard = true } }, nil, bare), "no ladder: no trophy at all")
+	local hardOnly = L3.fixture()
+	hardOnly.ladder.starAlso = nil
+	check(holds({ forestRoad = { hard = true } }, nil, hardOnly) and not holds({ forestRoad = { brutal = true } }, nil, hardOnly), "without starAlso only the Hard star counts")
+	local text = L3.fixture()
+	text.ladder.starAlso = "brutal" :: any
+	check(not holds({ forestRoad = { brutal = true } }, nil, text), "a starAlso that is not a list adds nothing")
+	local two = L3.fixture()
+	two.ladder.starAlso = { "nightmare", "brutal" }
+	check(holds({ forestRoad = { brutal = true } }, nil, two) and holds({ forestRoad = { nightmare = true } }, nil, two), "every difficulty starAlso lists counts, in any position")
+	local mixed = L3.fixture()
+	mixed.ladder.starAlso = { 5, "brutal" } :: any
+	check(holds({ forestRoad = { brutal = true } }, nil, mixed), "an entry that is no name is skipped, the next still read")
+	local noHard = L3.fixture()
+	noHard.ladder.starDifficulty = nil :: any
+	check(not holds({ forestRoad = { hard = true } }, nil, noHard) and holds({ forestRoad = { brutal = true } }, nil, noHard), "no starDifficulty: the Hard star opens nothing, a starAlso one still does (as sim_combat reads it)")
+end
+L1.group("l3 starTests", L3.starTests)
+
+function L3.strikeTests(): ()
+	print(" StrikeTier: the tier a hit and the bar read, a Studio override held in the window (R3)")
+	local A = L3.Armory
+	local cfg = L3.fixture()
+	-- Without an override it IS TierOf, for every family and saved shape the tier rules know.
+	local profiles = {
+		L3.combat(nil),
+		L3.combat({}),
+		L3.combat({ broadsword = 5, longbow = 12, flamethrower = 1, warhammer = 20, frostHammer = 7, rifle = 4.5, smg = "x" }),
+	}
+	local same = true
+	for _, combat in profiles do
+		for family in L3.WINDOWS do
+			same = same and A.StrikeTier(cfg, combat, family, nil) == A.TierOf(cfg, combat, family)
+		end
+		same = same and A.StrikeTier(cfg, combat, "nope", nil) == 1
+	end
+	same = same and A.StrikeTier(cfg, nil, "warhammer", nil) == 3
+	check(same, "no override: TierOf, for every family, saved tier and no profile at all")
+	-- 2-s1: G's T1 preset can never field a weapon below its window, and T5 never above its top.
+	local held = true
+	for family, pair in L3.WINDOWS do
+		held = held and A.StrikeTier(cfg, L3.combat({}), family, 1) == pair[1]
+		held = held and A.StrikeTier(cfg, L3.combat({}), family, 20) == pair[2]
+		held = held and A.StrikeTier(cfg, L3.combat({}), family, 30) == pair[2]
+		held = held and A.StrikeTier(cfg, L3.combat({}), family, 0) == pair[1]
+	end
+	check(held, "an override is held inside each family's window: T1 reads its start, T20 and T30 its top, T0 its start")
+	check(A.StrikeTier(cfg, L3.combat({}), "flamethrower", 1) == 2 and A.StrikeTier(cfg, L3.combat({}), "frostHammer", 1) == 5, "G's T1 fields the Flamethrower at T2 and the Frost Hammer at T5, as the screen shows them")
+	check(A.StrikeTier(cfg, L3.combat({}), "broadsword", 3) == 3 and A.StrikeTier(cfg, L3.combat({}), "warhammer", 5) == 5, "an override inside the window is the tier")
+	check(A.StrikeTier(cfg, L3.combat({ broadsword = 9 }), "broadsword", 3) == 3, "the override beats the saved tier (it is a session override)")
+	check(A.StrikeTier(cfg, L3.combat({}), "warhammer", 4.5) == 3 and A.StrikeTier(cfg, L3.combat({}), "warhammer", L3.NAN) == 3 and A.StrikeTier(cfg, L3.combat({}), "warhammer", math.huge) == 3, "an override that is not a whole number reads the window's start, as a saved one does")
+	check(A.StrikeTier(cfg, L3.combat({}), "nope", 5) == 1, "a family with no window strikes at T1 whatever the override says")
+	local bare = L3.fixture()
+	bare.ladder = nil
+	check(A.StrikeTier(bare, L3.combat({}), "broadsword", 5) == 1 and A.StrikeTier(bare, L3.combat({ broadsword = 4 }), "broadsword", nil) == 1, "no ladder: T1, with an override or without")
+	check(A.StrikeTier(cfg, nil, "longbow", 4) == 4, "an override needs no profile")
+end
+L1.group("l3 strikeTests", L3.strikeTests)
+
+function L3.powerTests(): ()
+	print(" HeldFamily and SavedPower: the saved pair's Power, the one rule both places read (R7)")
+	local A = L3.Armory
+	local U = L3.Unlocks
+	local weapons = FIXTURES.proving.weapons
+	local starters = FIXTURES.proving.loadout
+	local fresh = L1.copy(L3.Schema.PROFILE_TEMPLATE.combat)
+	check(A.SavedPower(ARMORY, fresh, weapons, starters) == 64, `a fresh profile reads 64 on the shipped files ({A.SavedPower(ARMORY, fresh, weapons, starters)})`)
+	local cfg = L3.fixture()
+	check(A.SavedPower(cfg, fresh, weapons, starters) == 64, "and on the contract's fixture")
+	check(A.SavedPower(cfg, nil, weapons, starters) == 64, "no profile: T1 / T1, 64")
+	check(A.SavedPower(cfg, fresh, nil, { melee = "", ranged = "" }) == 64, "no ProvingGrounds.json (no family known): T1 / T1, 64")
+	local veteran = L1.copy(fresh)
+	veteran.gear = { melee = 3, ranged = 3 }
+	check(A.SavedPower(cfg, veteran, weapons, starters) == 64, "the frozen slot gear is never read (3 / 3 there, no tiers saved: still 64)")
+	local none = { melee = 0, ranged = 0 }
+	local function power(tiers: any, loadout: any, families: any, ascension: any): number
+		local combat = L3.combat(tiers)
+		combat.loadout = loadout
+		combat.families = families
+		combat.ascension = ascension or none
+		return A.SavedPower(cfg, combat, weapons, starters)
+	end
+	check(power({ broadsword = 3 }, nil, {}) == A.GearPower(cfg, { melee = 3, ranged = 1 }, none), "an upgraded starter moves it (Broadsword T3)")
+	check(power({}, { ranged = "flamethrower", variants = {} }, { flamethrower = true }) == A.GearPower(cfg, { melee = 1, ranged = 2 }, none), "a held Flamethrower reads its window's start, T2")
+	check(power({}, { ranged = "flamethrower", variants = {} }, {}) == 64, "a saved family not owned reads the starter")
+	check(power({ longbow = 4 }, { ranged = "flamethrower", variants = {} }, {}) == A.GearPower(cfg, { melee = 1, ranged = 4 }, none), "and the starter's own tier")
+	check(power({}, nil, {}, { melee = 1, ranged = 0 }) == A.GearPower(cfg, { melee = 1, ranged = 1 }, { melee = 1, ranged = 0 }), "the slots' Ascension counts")
+	-- The two readings of a saved pair never disagree: the hub's old two lines, and SavedPower.
+	local agree = true
+	local shapes = 0
+	local loadouts = {
+		false,
+		{ variants = {} },
+		{ melee = "warhammer", ranged = "flamethrower", variants = {} },
+		{ melee = "longbow", ranged = "broadsword", variants = {} },
+		{ melee = "nope", ranged = 5, variants = {} },
+		"x",
+	}
+	local familySets = { {}, { warhammer = true, flamethrower = true }, { warhammer = false } }
+	local tierSets = { {}, { broadsword = 4, warhammer = 9, flamethrower = 7, longbow = 2 } }
+	for _, loadout in loadouts do
+		for _, families in familySets do
+			for _, tiers in tierSets do
+				local combat = L3.combat(tiers)
+				combat.loadout = if loadout == false then nil else loadout
+				combat.families = families
+				local held = U.LoadoutOf(combat, weapons, starters)
+				local expected = A.GearPower(cfg, A.HeldTiers(cfg, combat, held.melee, held.ranged), none)
+				agree = agree and A.SavedPower(cfg, combat, weapons, starters) == expected
+				agree = agree and A.HeldFamily(combat, weapons, starters, "melee") == held.melee
+				agree = agree and A.HeldFamily(combat, weapons, starters, "ranged") == held.ranged
+				shapes += 1
+			end
+		end
+	end
+	check(agree and shapes == 36, `SavedPower is GearPower at the tiers of LoadoutOf's pair, and HeldFamily is LoadoutOf's slot, over {shapes} saved shapes`)
+	check(A.HeldFamily(fresh, weapons, starters, "nope") == "" and A.HeldFamily(fresh, weapons, starters, "melee") == starters.melee, "HeldFamily: empty for a slot that is not melee or ranged, the starter for a fresh profile")
+end
+L1.group("l3 powerTests", L3.powerTests)
+
+-- Every table reached from `value`, by identity.
+function L3.tables(value: any, into: any): any
+	into = into or {}
+	if type(value) == "table" and not into[value] then
+		into[value] = true
+		for _, item in value do
+			L3.tables(item, into)
+		end
+	end
+	return into
+end
+
+-- Every key path of `template` (recursively) that `copy` lacks, as "a.b".
+function L3.missingPaths(template: any, copy: any, prefix: string, into: any): any
+	into = into or {}
+	for key, value in template do
+		local path = if prefix == "" then tostring(key) else `{prefix}.{key}`
+		if type(copy) ~= "table" or copy[key] == nil then
+			table.insert(into, path)
+		elseif type(value) == "table" then
+			L3.missingPaths(value, copy[key], path, into)
+		end
+	end
+	return into
+end
+
+function L3.copyTests(): ()
+	print(" ProfileCopy: the hub's Delta copy carries every field and shares no table (R7)")
+	local Copy = L3.Copy
+	local template = L3.Schema.PROFILE_TEMPLATE.combat
+	-- The template as a profile holds it, every map with an entry, so a dropped or aliased field at
+	-- any depth shows.
+	local source = L1.copy(template)
+	source.materials.Timber = 40
+	source.missions.village = { bestWave = 4, bossClears = 1, overdriveBest = 0 }
+	source.abilities.doubleJump = true
+	source.secrets.forestRoad = { lookout = true }
+	source.families.flamethrower = true
+	source.shortcuts.forestRoad = { cave = true }
+	source.tiers.broadsword = 3
+	source.loadout = { melee = "warhammer", ranged = "flamethrower", variants = { longbow = "B" } }
+	source.stars.forestRoad = { hard = true }
+	local copy = Copy.Combat(source)
+	local missing = L3.missingPaths(template, copy, "")
+	check(#missing == 0, `every key of ProfileSchema's template combat, at every depth, is in the copy (missing: {table.concat(missing, ", ")})`)
+	local deeper = L3.missingPaths(source, copy, "")
+	check(#deeper == 0 and L3.same(copy, source), `and every entry a profile holds, equal (missing: {table.concat(deeper, ", ")})`)
+	local mine = L3.tables(source)
+	local shared = 0
+	for item in L3.tables(copy) do
+		if mine[item] then
+			shared += 1
+		end
+	end
+	check(shared == 0, `the copy shares no table with the profile ({shared} shared)`)
+	copy.stars.forestRoad.hard = false
+	copy.loadout.variants.longbow = "A"
+	copy.materials.Timber = 0
+	check(source.stars.forestRoad.hard == true and source.loadout.variants.longbow == "B" and source.materials.Timber == 40, "writing the copy changes nothing in the profile")
+	local later = L1.copy(source)
+	later.relics = { castle = { crown = true } }
+	local laterCopy = Copy.Combat(later)
+	check(laterCopy.relics ~= nil and laterCopy.relics ~= later.relics and laterCopy.relics.castle.crown == true, "a field a later schema adds rides along without an edit (a v9 map)")
+	local half = L1.copy(source)
+	half.loadout = { melee = "warhammer" }
+	local halfCopy = Copy.Combat(half)
+	check(type(halfCopy.loadout.variants) == "table" and halfCopy.loadout.melee == "warhammer" and half.loadout.variants == nil, "a loadout without its variants is copied with an empty one; the profile is not touched")
+	local old = L1.copy(source)
+	old.tiers = nil
+	old.loadout = nil
+	old.stars = nil
+	local oldCopy = Copy.Combat(old)
+	check(oldCopy.tiers == nil and oldCopy.loadout == nil and oldCopy.stars == nil and oldCopy.families.flamethrower == true, "a field the profile lacks stays nil (a v7 profile's copy)")
+end
+L1.group("l3 copyTests", L3.copyTests)
 
 function L3.leverTests(): ()
 	print(" The Armory levers' shared pieces (L3-28) and the refund rule (L3-8)")
@@ -451,45 +681,69 @@ end
 L1.group("l3 leverTests", L3.leverTests)
 
 function L3.problemTests(): ()
-	print(" Problems: the validator (L3-5)")
+	print(" Problems: the validator, each rule named by its own break (L3-5, the fix round's R6)")
 	local A = L3.Armory
 	local families = L3.families()
 	local sound = A.Problems(L3.fixture(), families)
 	check(#sound == 0, `the contract's ladder and windows are sound ({#sound} lines{if #sound > 0 then ": " .. sound[1] else ""})`)
+	-- Each break names the rule it breaks: the line that rule writes must be among the answers, so
+	-- a rule that went quiet cannot hide behind a second rule the same break also trips (R6).
 	local breaks = {
-		{ "no ladder", function(c) c.ladder = nil end },
-		{ "a damage list that is not a list", function(c) c.ladder.damage = 5 end },
-		{ "a damage entry that does not rise", function(c) c.ladder.damage[5] = c.ladder.damage[4] end },
-		{ "a damage entry of 0", function(c) c.ladder.damage[1] = 0 end },
-		{ "a melee HP list one short", function(c) table.remove(c.ladder.hp.melee) end },
-		{ "a ranged HP entry that falls", function(c) c.ladder.hp.ranged[6] = 1 end },
+		{ "no ladder", function(c) c.ladder = nil end, "has no ladder" },
+		{ "a damage list that is not a list", function(c) c.ladder.damage = 5 end, "ladder.damage is not a list" },
+		{ "a damage entry that does not rise", function(c) c.ladder.damage[5] = c.ladder.damage[4] end, "ladder.damage[5] (6.7382) does not rise" },
+		{ "a damage entry of 0", function(c) c.ladder.damage[1] = 0 end, "ladder.damage[1] is 0, not a number above 0" },
+		{ "a melee HP list one short", function(c) table.remove(c.ladder.hp.melee) end, "ladder.hp.melee is not a list of 20 numbers" },
+		{ "a ranged HP entry that falls", function(c) c.ladder.hp.ranged[6] = 1 end, "ladder.hp.ranged[6] (1) falls below ladder.hp.ranged[5] (110)" },
 		-- 85 at T3 and T4 keeps the ranged list rising, so only the melee rule can name it.
-		{ "ranged above melee at one tier", function(c) c.ladder.hp.ranged[3] = 85; c.ladder.hp.ranged[4] = 85 end },
-		{ "a negative HP entry", function(c) c.ladder.hp.melee[1] = -1 end },
-		{ "a rangeHp of 0", function(c) c.ladder.rangeHp = 0 end },
-		{ "bandSize 3", function(c) c.ladder.bandSize = 3 end },
-		{ "bandSize 0", function(c) c.ladder.bandSize = 0 end },
-		{ "a band with no material", function(c) c.ladder.bands[2].material = "" end },
-		{ "a band with no level", function(c) c.ladder.bands[3].levelId = nil end },
-		{ "three costs for four positions", function(c) table.remove(c.ladder.costs) end },
-		{ "a negative cost", function(c) c.ladder.costs[2] = -1 end },
-		{ "no starDifficulty", function(c) c.ladder.starDifficulty = "" end },
-		{ "a family without a window", function(c) c.windows.spear = nil end },
-		{ "a window naming no family", function(c) c.windows.nope = { start = 1, top = 2 } end },
-		{ "a window whose start is above its top", function(c) c.windows.rifle = { start = 18, top = 11 } end },
-		{ "a window starting at 0", function(c) c.windows.rifle = { start = 0, top = 11 } end },
-		{ "a window past the ladder", function(c) c.windows.rifle = { start = 11, top = 25 } end },
-		{ "a fractional window", function(c) c.windows.rifle = { start = 11.5, top = 18 } end },
-		{ "no legacy list", function(c) c.legacy = nil end },
-		{ "a legacy entry with no material", function(c) c.legacy.gearCosts[4].material = "" end },
-		{ "a tierWeight that is a string", function(c) c.power.tierWeight = "11" end },
+		{ "ranged above melee at one tier", function(c) c.ladder.hp.ranged[3] = 85; c.ladder.hp.ranged[4] = 85 end, "ladder.hp.melee[3] (80) is below ladder.hp.ranged[3] (85)" },
+		{ "a negative melee HP entry", function(c) c.ladder.hp.melee[1] = -1 end, "ladder.hp.melee[1] is -1, not a number of at least 0" },
+		-- R6 (1-m2): melee stays above it and the list still rises, so only the negative rule names it.
+		{ "a negative ranged HP entry", function(c) c.ladder.hp.ranged[1] = -1 end, "ladder.hp.ranged[1] is -1, not a number of at least 0", true },
+		{ "a rangeHp of 0", function(c) c.ladder.rangeHp = 0 end, "ladder.rangeHp is 0" },
+		{ "bandSize 3", function(c) c.ladder.bandSize = 3 end, "do not cover the 20 tiers" },
+		{ "bandSize 0", function(c) c.ladder.bandSize = 0 end, "ladder.bandSize is 0, not a whole number above 0" },
+		-- R6: not whole, so the costs rule is skipped and the cover rule sits behind this one.
+		{ "bandSize 4.5", function(c) c.ladder.bandSize = 4.5 end, "ladder.bandSize is 4.5, not a whole number above 0", true },
+		-- R6: four bands of four for 20 tiers; every other rule holds.
+		{ "one band removed", function(c) table.remove(c.ladder.bands) end, "ladder.bands and bandSize do not cover the 20 tiers", true },
+		{ "a band with no material", function(c) c.ladder.bands[2].material = "" end, "ladder.bands[2] (castle) names no material" },
+		{ "a band with no level", function(c) c.ladder.bands[3].levelId = nil end, "ladder.bands[3] names no level" },
+		{ "three costs for four positions", function(c) table.remove(c.ladder.costs) end, "ladder.costs is not one cost per position" },
+		{ "a negative cost", function(c) c.ladder.costs[2] = -1 end, "ladder.costs[2] is -1" },
+		{ "no starDifficulty", function(c) c.ladder.starDifficulty = "" end, "ladder.starDifficulty names no difficulty" },
+		-- R1: starAlso is a list of difficulty names, or absent.
+		{ "a starAlso that is a word", function(c) c.ladder.starAlso = "brutal" end, "ladder.starAlso is not a list of difficulty names", true },
+		{ "a starAlso with an empty name", function(c) c.ladder.starAlso = { "brutal", "" } end, "ladder.starAlso is not a list of difficulty names", true },
+		{ "a starAlso with a number", function(c) c.ladder.starAlso = { 5 } end, "ladder.starAlso is not a list of difficulty names", true },
+		{ "a starAlso keyed by name", function(c) c.ladder.starAlso = { brutal = "brutal" } end, "ladder.starAlso is not a list of difficulty names", true },
+		{ "a family without a window", function(c) c.windows.spear = nil end, 'windows has no entry for "spear"' },
+		{ "a window naming no family", function(c) c.windows.nope = { start = 1, top = 2 } end, "windows.nope names no weapon family" },
+		{ "a window whose start is above its top", function(c) c.windows.rifle = { start = 18, top = 11 } end, "windows.rifle (18 to 11)" },
+		{ "a window starting at 0", function(c) c.windows.rifle = { start = 0, top = 11 } end, "windows.rifle (0 to 11)" },
+		{ "a window past the ladder", function(c) c.windows.rifle = { start = 11, top = 25 } end, "windows.rifle (11 to 25)" },
+		{ "a fractional window", function(c) c.windows.rifle = { start = 11.5, top = 18 } end, "windows.rifle (11.5 to 18)" },
+		{ "no legacy list", function(c) c.legacy = nil end, "has no legacy.gearCosts" },
+		{ "a legacy entry with no material", function(c) c.legacy.gearCosts[4].material = "" end, "legacy.gearCosts[4] is not a material" },
+		{ "a tierWeight that is a string", function(c) c.power.tierWeight = "11" end, "power.tierWeight is not a number" },
 	}
 	for _, case in breaks do
 		local cfg = L3.fixture()
 		case[2](cfg)
 		local lines = A.Problems(cfg, families)
-		check(#lines >= 1, `{case[1]}: named ({#lines} line(s){if #lines > 0 then ": " .. lines[1] else ""})`)
+		local named = false
+		for _, line in lines do
+			named = named or string.find(line, case[3], 1, true) ~= nil
+		end
+		-- The breaks R6 added name exactly one line: no second rule could stand in for theirs.
+		local alone = case[4] ~= true or #lines == 1
+		check(named and alone, `{case[1]}: named by its rule ({#lines} line(s){if #lines > 0 then ": " .. lines[1] else ""})`)
 	end
+	local listed = L3.fixture()
+	listed.ladder.starAlso = {}
+	local none = L3.fixture()
+	none.ladder.starAlso = nil
+	check(#A.Problems(listed, families) == 0 and #A.Problems(none, families) == 0, "an empty starAlso, or none, is sound")
 end
 L1.group("l3 problemTests", L3.problemTests)
 
@@ -622,9 +876,9 @@ function L3.schemaTests(): ()
 		mine.tiers.broadsword = 2
 		check(combat.tiers.broadsword == nil, "writing the migrated tiers leaves the template empty")
 
-		-- Exactly once through the runner: the stamp, not the step, is what stops a second pay.
-		L2.migrate(state)
-		check(state.version == 8 and mine.materials.Timber == 505, "run through the runner again, it is not paid twice")
+		-- Exactly once through the runner (ProfileSchema.Run, the one DataService calls): the stamp, not
+		-- the step, is what stops a second pay.
+		check(Schema.Run(state) == nil and state.version == 8 and mine.materials.Timber == 505, "run through the runner again, it is not paid twice and says nothing")
 		local second = L3.v7(3, 3, 5)
 		local step = Schema.Migrations[7]
 		step(second)
@@ -674,6 +928,28 @@ function L3.schemaTests(): ()
 		local oldTemplate = L3.v7(0, 0, 0)
 		L2.reconcile(current, oldTemplate)
 		check(L3.same(current, snapshot), "a v7 template's Reconcile keeps every v8 field (it only fills)")
+
+		-- The runner's own answers (R5): what DataService warns on.
+		local fresh = L1.copy(template)
+		check(Schema.Run(fresh) == nil and fresh.version == 8 and L3.same(fresh, template), "a fresh v8 profile takes no step and says nothing")
+		local stamped = L3.v7(0, 0, 0)
+		check(Schema.Run(stamped) == nil and stamped.version == 8, "a v7 profile is stamped v8 by the runner")
+		local oldest = L2.v6()
+		oldest.version = 1
+		oldest.pendingDoubleOfflineAmount = nil
+		oldest.legacyShop = nil
+		check(Schema.Run(oldest) == nil and oldest.version == 8 and oldest.legacyShop ~= nil and oldest.pendingDoubleOfflineAmount == 0, "a v1 profile runs every step in order to v8")
+		local gap = L3.v7(3, 3, 5)
+		gap.version = 0
+		local gapBefore = L1.copy(gap)
+		check(Schema.Run(gap) == "missing" and L3.same(gap, gapBefore), "a version with no step is \"missing\", the profile left as it was")
+		local ahead = L3.v7(3, 3, 5)
+		ahead.version = 9
+		local aheadBefore = L1.copy(ahead)
+		check(Schema.Run(ahead) == "ahead" and L3.same(ahead, aheadBefore), "a profile a newer server wrote is \"ahead\" and untouched (no refund)")
+		local fraction = L3.v7(3, 3, 5)
+		fraction.version = 7.5
+		check(Schema.Run(fraction) == "missing" and fraction.version == 7.5 and fraction.combat.materials.Timber == 5, "a version that is not whole is \"missing\" too, and pays nothing")
 	end)
 
 	-- No Armory.json: the maps are added, nothing is paid, and the stamp still moves.
@@ -684,6 +960,81 @@ function L3.schemaTests(): ()
 	end)
 end
 L1.group("l3 schemaTests", L3.schemaTests)
+
+-- The fix round's R3, R4, R5, R7 and 3-s2, read as text: the services that apply the pure rules do
+-- not load here, so each line they must hold is counted in its own function (run_harness.py
+-- L3_LINES); 0 = a line that must be gone. A key the reading drops, or one it adds, fails too.
+L3.LINES = {
+	strikeTierCalls = { 3, "WeaponService calls Armory.StrikeTier three times: the hit and the bar's two slots" },
+	gearMelee = { 1, "the bar's melee tier is the held melee family's strike tier, with the melee override" },
+	gearRanged = { 1, "the bar's ranged tier is the held ranged family's, with the ranged override" },
+	gearMeleeOverride = { 1, "the bar reads the melee override when one is set" },
+	gearRangedOverride = { 1, "and the ranged one" },
+	scaleTier = { 1, "a hit scales by the striking family's strike tier, the override of its slot passed" },
+	scaleMelee = { 1, "a melee family's hit reads the melee override" },
+	scaleRanged = { 1, "a ranged family's hit reads the ranged override" },
+	scaleReturn = { 1, "and the hit's scale is DamageScale at that tier and the slot's Ascension" },
+	slamFamily = { 1, "the slam scales by the held melee FAMILY (not the word \"melee\")" },
+	upgradeGate = { 1, "the dungeon's upgrade passes MayLeave's gate (no upgrade in a fight)" },
+	upgradeOwned = { 1, "and owns a family through the starters and the profile's families" },
+	endRunReward = { 1, "EndRun reads a NEW star's first-clear reward" },
+	endRunGrant = { 1, "and gives it through UnlockService.GrantFirstClear" },
+	grantFirstClearCalls = { 2, "WaveService gives first clears in two places only: EndRun and the U lever" },
+	starsProfile = { 1, "a member's stars are the profile's (Unlocks.StarsOf), so needsStar can open" },
+	readLevelInputs = { 1, "readLevel hands Validate the weapons and the starters" },
+	leverAward = { 1, "U pays only a star that is new" },
+	leverReward = { 1, "U reads that difficulty's first-clear reward (R4)" },
+	leverGrant = { 1, "and gives it through GrantFirstClear, as EndRun does" },
+	leverStudio = { 1, "U pays only in a Studio mission" },
+	debugAllStars = { 1, "DebugService's grantStar wildcard is Unlocks.ALL_STARS (3-s2)" },
+	debugLiteral = { 0, "and DebugService spells no \"*\" of its own" },
+	debugNextGear = { 1, "G steps from the override as set, not the clamped bar (2-s1)" },
+	debugSetGear = { 1, "setGear keeps an unnamed slot's override as set" },
+	mainPower = { 1, "the dungeon Snapshot's Power is SavedPower on the profile (R7)" },
+	mainGearOf = { 0, "and no longer reads WeaponService.GearOf" },
+	hubPower = { 1, "the hub's Power is SavedPower on the profile (R7)" },
+	hubPowerSent = { 2, "and rides both the Delta and the Snapshot" },
+	hubCopy = { 1, "the hub's Delta carries ProfileCopy.Combat (R7)" },
+	hubFrozenGear = { 0, "EconomyService reads no frozen slot gear" },
+	runnerCall = { 1, "DataService migrates through ProfileSchema.Run, the runner proved here (R5)" },
+	runnerSteps = { 0, "and indexes no step itself (no loop of its own)" },
+	hubUpgradeCall = { 1, "the hub's upgrade is Armory.Upgrade with an open gate and the built levels" },
+	hubUpgradeOwned = { 1, "and owns through the starters and the profile's families" },
+	hubAllStars = { 1, "the hub's grantStar wildcard is Unlocks.ALL_STARS (3-s2)" },
+	hubLiteral = { 0, "and the hub spells no \"*\" of its own" },
+}
+
+function L3.sourceTests(): ()
+	print(" The service lines that apply L3's rules, read as text (the fix round's R3, R4, R5, R7, 3-s2)")
+	local reading = FIXTURES.source.l3
+	local missing = {}
+	for name, found in reading.found do
+		if not found then
+			table.insert(missing, name)
+		end
+	end
+	table.sort(missing)
+	check(#missing == 0, `every function the lines live in is there ({table.concat(missing, ", ")})`)
+	local unknown = {}
+	for key in reading.counts do
+		if L3.LINES[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	table.sort(unknown)
+	check(#unknown == 0, `every line read has an expected count here ({table.concat(unknown, ", ")})`)
+	local keys = {}
+	for key in L3.LINES do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local expected = L3.LINES[key]
+		local count = reading.counts[key]
+		check(count == expected[1], `{expected[2]} ({key}: {tostring(count)}, expected {expected[1]})`)
+	end
+end
+L1.group("l3 sourceTests", L3.sourceTests)
 
 -- Armory.json, ProvingGrounds.json and the level files as they ship, pinned to the contract.
 function L3.shippedTests(): ()
@@ -707,6 +1058,7 @@ function L3.shippedTests(): ()
 	check(ladder.rangeHp == 130 and A.RangeHp(ARMORY) == 130, "the range's body is 130")
 	check(ladder.bandSize == 4 and #ladder.bands == 5 and ladder.bands[1].levelId == "forestRoad" and ladder.bands[1].material == "Timber", "five bands of four, the first Forest Road's, paid in Timber")
 	check(L3.same(ladder.costs, { 100, 100, 250, 500 }) and ladder.starDifficulty == "hard", "costs 100 / 100 / 250 / 500 by position; the Hard star is the trophy")
+	check(L3.same(ladder.starAlso, { "brutal" }), "and a Brutal star opens a band top too (the fix round's R1)")
 	check(ARMORY.power.tierWeight == 11 and ARMORY.baseHp == 100, "tierWeight 11 on baseHp 100")
 	local none = { melee = 0, ranged = 0 }
 	check(A.MaxHp(ARMORY, { melee = 1, ranged = 1 }, none) == 155 and A.MaxHp(ARMORY, { melee = 3, ranged = 3 }, none) == 230 and A.MaxHp(ARMORY, { melee = 5, ranged = 5 }, none) == 380, "MaxHp (1, 1) 155, (3, 3) 230, (5, 5) 380")

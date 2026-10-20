@@ -25,6 +25,10 @@
 -- the jump while it is open and sunk, so pressing a button never also jumps or walks; the action
 -- presses the selected button itself in case sinking also stops the engine's own press (not
 -- verified outside Studio), and one press router (`bind`) keeps the two from pressing twice.
+-- A pad always has a selection while it is open: A with nothing selected selects, and a pad
+-- picked up or a selection that leaves the frame is put back (fix round R10). Roblox's touch
+-- controls are off while it is open (R9). The hosts bind ArmoryScreen.KEY (K) and name it with
+-- KEY_HINT; the Studio strips caption their star lever with StarLeverText.
 --
 -- Laid out phones first under one UIScale from the host's SetLayout(scale, size), the hosts'
 -- one formula: landscape at 682 x 313 design px (640 x 360 under a 58 px top bar) is a 48 header,
@@ -94,6 +98,8 @@ type Waiting = {
 	variant: string,
 	tier: number?,
 	answered: boolean,
+	-- An equip of the family already held in its slot: it switched the style (its toast says so).
+	restyle: boolean,
 }
 
 local TAB_ORDER: { Tab } = { "weapons", "abilities" }
@@ -115,6 +121,10 @@ local ArmoryScreen = {}
 -- The gamepad toggle's button and the tab keys, for the hosts' hints.
 ArmoryScreen.PAD_TOGGLE_NAME = "Y"
 ArmoryScreen.PAD_TAB_NAMES = "LB RB"
+-- L3-22: the Armory is K in both places. The hosts bind it (ignored while a text box has the
+-- keyboard), and name it with this line.
+ArmoryScreen.KEY = Enum.KeyCode.K
+ArmoryScreen.KEY_HINT = ArmoryScreen.KEY.Name .. " or Esc closes"
 
 -- Whether the player's latest input came from a gamepad (Gamepad1 to Gamepad8).
 local function padLast(): boolean
@@ -156,9 +166,29 @@ local function rounded(instance: Instance, radius: number): ()
 	Create("UICorner", { CornerRadius = UDim.new(0, radius), Parent = instance })
 end
 
+-- 3-s2: the Studio strips' star lever caption ("★ Hard: Forest Road"), from the configs as they
+-- stand now (both strips ask again when they open: the Config folders may still be arriving).
+function ArmoryScreen.StarLeverText(): string
+	local configs = readConfigs()
+	return ArmoryModel.StarLeverText({
+		armory = configs.armory,
+		weapons = configs.weapons,
+		loadout = configs.loadout,
+		expeditions = configs.expeditions,
+		levels = configs.levels,
+		built = configs.built,
+		combat = nil,
+		held = nil,
+		gateOpen = false,
+		pending = {},
+	})
+end
+
 function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 	local configs = readConfigs()
 	local connections: { RBXScriptConnection } = {}
+	-- Live only while the screen is open (bindOpenKeys).
+	local openConnections: { RBXScriptConnection } = {}
 	local view = {
 		open = false,
 		available = false,
@@ -177,6 +207,8 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 		padBound = false,
 		-- The shelf's card count at the last layout: a new family may add a row in portrait.
 		cards = 0,
+		-- GuiService.TouchControlsEnabled as the screen found it, while it holds them off (R9).
+		touchControls = nil :: boolean?,
 	}
 
 	-- The press router: every button of the screen is pressed through here, by a tap, a click,
@@ -463,6 +495,7 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 				variant = "",
 				tier = shown.nextTier,
 				answered = false,
+				restyle = false,
 			})
 			paint()
 		end,
@@ -470,15 +503,21 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 			if not (view.open and view.available) or view.equip ~= nil then
 				return
 			end
+			-- Decided at the press: in the dungeon the TuneState (the new hold) may come before
+			-- the answer, so by then every equip's family reads as held.
+			local shown = ArmoryModel.Detail(inputs(), family)
 			local slot = familySlot(family)
 			if not deps.onEquip(slot, family, variant) then
 				deps.toast(ArmoryModel.TEXT.retry, Theme.ARMORY_SCREEN_TOAST_SECONDS, true)
 				return
 			end
-			awaitAnswer(
-				"equip",
-				{ family = family, slot = slot, variant = variant, answered = false }
-			)
+			awaitAnswer("equip", {
+				family = family,
+				slot = slot,
+				variant = variant,
+				answered = false,
+				restyle = shown ~= nil and shown.card.held,
+			})
 			paint()
 		end,
 	})
@@ -673,7 +712,9 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 	end
 
 	-- Gamepad A while open: sunk (no jump, no walk behind the scrim), and it presses the
-	-- selected button itself; the engine's own presses while A is down are skipped.
+	-- selected button itself; the engine's own presses while A is down are skipped. With nothing
+	-- of the screen selected (opened by K or a click, then the pad picked up) the press only gives
+	-- the pad its selection (R10): A must never be a dead key on an open screen.
 	local function onPadPress(
 		_action: string,
 		state: Enum.UserInputState,
@@ -684,12 +725,9 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 			router.padHeld = true
 			router.release += 1
 			local engineFirst = os.clock() - router.lastAny < Theme.ACTION_DEBOUNCE_SECONDS
-			if
-				not engineFirst
-				and selected ~= nil
-				and selected:IsA("GuiButton")
-				and selected:IsDescendantOf(frame)
-			then
+			if selected == nil or not selected:IsDescendantOf(frame) then
+				GuiService.SelectedObject = firstSelection()
+			elseif not engineFirst and selected:IsA("GuiButton") then
 				fire(selected :: GuiButton)
 			end
 		elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
@@ -732,10 +770,29 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 				PAD_PRIORITY,
 				Enum.KeyCode.ButtonA
 			)
+			-- R10: a pad picked up while the screen is open gets a selection at once, and one
+			-- that leaves the screen (cleared, or moved to a card outside it) comes back. Deferred:
+			-- the engine is still settling the selection it just changed.
+			table.insert(
+				openConnections,
+				UserInputService.LastInputTypeChanged:Connect(function()
+					reselect()
+				end)
+			)
+			table.insert(
+				openConnections,
+				GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
+					task.defer(reselect)
+				end)
+			)
 		else
 			ContextActionService:UnbindAction(ACTIONS.close)
 			ContextActionService:UnbindAction(ACTIONS.tabs)
 			ContextActionService:UnbindAction(ACTIONS.press)
+			for _, connection in openConnections do
+				connection:Disconnect()
+			end
+			table.clear(openConnections)
 			router.padHeld = false
 			router.release += 1
 		end
@@ -750,8 +807,21 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 		end
 		view.open = open
 		root.Visible = open
+		-- R9: Roblox's touch thumbstick and jump button go while the screen covers the world, in
+		-- both places: nobody walks or jumps behind it, and a tap on Upgrade is never a jump (the
+		-- hub's HUD and the TouchGui share DisplayOrder 0, with no order between them).
+		local savedTouch = view.touchControls
+		if open and savedTouch == nil then
+			view.touchControls = GuiService.TouchControlsEnabled
+			GuiService.TouchControlsEnabled = false
+		elseif not open and savedTouch ~= nil then
+			GuiService.TouchControlsEnabled = savedTouch
+			view.touchControls = nil
+		end
 		if open then
 			configs = readConfigs()
+			-- 4-s3: the Abilities offers come from the configs too, read again with them.
+			abilities.SetOffers(ArmoryAbilityPage.Offers(configs.expeditions))
 			if view.tab == nil then
 				view.tab = if abilities.HasLiveBuy() then "abilities" else "weapons"
 			end
@@ -844,8 +914,13 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 		local answers = waiting ~= nil and waiting.family == family
 		if result.ok then
 			local tier = if answers and waiting ~= nil then waiting.tier else nil
+			local style = if answers
+					and waiting ~= nil
+					and waiting.restyle
+				then waiting.variant
+				else nil
 			deps.toast(
-				ArmoryModel.OkText(model, action, family, tier),
+				ArmoryModel.OkText(model, action, family, tier, style),
 				Theme.ARMORY_SCREEN_TOAST_SECONDS,
 				false
 			)

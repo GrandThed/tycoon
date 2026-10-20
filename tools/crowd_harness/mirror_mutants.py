@@ -1,6 +1,7 @@
 """Proves each L1b Wave 2 and Wave 4 comparison of tools/check_stage_mirror.py by a Luau mutant it
-catches (INTERFACES "Wave 2 — the long road" and "L1b Wave 4 — no waits, no walls", gate 10). Every mutant is one exact-text change to a copy of a
-real module, run through `check_stage_mirror.py --module NAME=<copy>`; the tool must FAIL with a
+catches (INTERFACES "Wave 2 — the long road" and "L1b Wave 4 — no waits, no walls", gate 10), and,
+since the L3 W1 fix round (R6, review 1-m3), its Armory comparisons. Every mutant is one exact-text
+change to a copy of a real module, run through `check_stage_mirror.py --module NAME=<copy>`; the tool must FAIL with a
 DIFF line on every one. A mutant whose text no longer occurs exactly once is STALE and counts as
 missed: re-aim it at the module's new text, never delete it to go green.
 
@@ -22,7 +23,8 @@ PATHS = {"HitShapes": "src/shared/HitShapes.luau", "SwingGate": "src/shared/Swin
          "Region": "src/shared/Region.luau",
          "Combat": "src/shared/Combat.luau", "CampBrain": "src/combat/server/Services/CampBrain.luau",
          "StageFlow": "src/combat/server/Services/StageFlow.luau",
-         "LevelGeometry": "src/combat/server/Services/LevelGeometry.luau"}
+         "LevelGeometry": "src/combat/server/Services/LevelGeometry.luau",
+         "Armory": "src/shared/Armory.luau"}
 MUTANTS = [
     ("CrowdRay: the head term dropped", "HitShapes", "local entry = earlier(bodyEntry, headEntry)", "local entry = bodyEntry"),
     ("CrowdRay: the crit padded", "HitShapes",
@@ -266,6 +268,28 @@ MUTANTS = [
     ("L2 W3 fix3 fd-s2: meetsIce takes a side met in part", "LevelGeometry",
      "\t\t\tand along - span / 2 <= low + SEAM\n\t\t\tand along + span / 2 >= high - SEAM\n",
      "\t\t\tand along - span / 2 < high\n\t\t\tand along + span / 2 > low\n"),
+    # The L3 W1 fix round's R6 (review 1-m3): the Armory comparisons against sim_combat's mirror. The
+    # first four are luau-engineer A's W1 hand probes; the Problems ones need a break only that rule
+    # names (check_stage_mirror's ARMORY_BREAKS), since the mirror compares Problems as found or not.
+    # The bandSize rule has no mirror mutant: every break of it trips the cover rule too, so only
+    # the harness, which reads which line was written, sees it go quiet (mutate.py).
+    ("Armory: BandOf from 0", "Armory", "(tier - 1) % bandSize + 1", "tier % bandSize + 1"),
+    ("Armory: TierOf no start", "Armory", "return math.min(math.max(saved, start), top)", "return math.min(saved, top)"),
+    ("Armory: no band-top star", "Armory", "position == ladder.bandSize and not Armory.StarHeld(",
+     "false and not Armory.StarHeld("),
+    ("Armory: SetTier unclamped", "Armory", "local held = math.min(math.max(math.floor(tier), start), top)",
+     "local held = math.floor(tier)"),
+    ("Armory: UpgradeVerdict busy before peak", "Armory",
+     '\tif nextTier == nil then\n\t\treturn "peak"\n\tend\n\tif not gateOpen then\n\t\treturn "busy"\n\tend\n',
+     '\tif not gateOpen then\n\t\treturn "busy"\n\tend\n\tif nextTier == nil then\n\t\treturn "peak"\n\tend\n'),
+    ("Armory R1: StarHeld ignores starAlso", "Armory", "for index = 1, #also do", "for index = 1, 0 do"),
+    ("Armory R1: StarHeld ignores starDifficulty", "Armory",
+     "if starHeld(combat, levelId, ladder.starDifficulty) then", "if false then"),
+    ("Armory R1: Problems takes any starAlso", "Armory", "if also ~= nil and not namesList(also) then", "if false then"),
+    ("Armory R6: Problems takes bands that do not cover the ladder", "Armory", "elseif bandSize * #bands ~= size then",
+     "elseif false then"),
+    ("Armory R6: Problems takes a negative HP entry", "Armory",
+     "if not finite(value) or value < 0 then\n\t\t\t\t\tproblem(", "if not finite(value) then\n\t\t\t\t\tproblem("),
 ]
 
 

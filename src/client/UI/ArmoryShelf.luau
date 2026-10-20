@@ -37,6 +37,7 @@ type CardFrame = {
 	button: TextButton,
 	name: TextLabel,
 	tier: TextLabel,
+	tierSize: UITextSizeConstraint,
 	dot: Frame,
 	bar: Frame,
 	stroke: UIStroke,
@@ -136,6 +137,14 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 			tier.AnchorPoint = Vector2.new(0, 1)
 			tier.Position = UDim2.new(0, pad, 1, -pad)
 			tier.Size = UDim2.new(1, -pad * 2, 0, Theme.ARMORY_SCREEN_CARD_TIER_TEXT + 2)
+			-- 4-s1: the line shrinks (to the names' floor) rather than run under the element's
+			-- dot: "Not found" is about 55 px at 11, and a portrait card leaves it 47 beside one.
+			tier.TextScaled = true
+			local tierSize = Create("UITextSizeConstraint", {
+				MaxTextSize = Theme.ARMORY_SCREEN_CARD_TIER_TEXT,
+				MinTextSize = Theme.ARMORY_SCREEN_CARD_NAME_MIN_TEXT,
+				Parent = tier,
+			}) :: UITextSizeConstraint
 			local dot = Create("Frame", {
 				Name = "Element",
 				Active = false,
@@ -176,6 +185,7 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 				button = button,
 				name = name,
 				tier = tier,
+				tierSize = tierSize,
 				dot = dot,
 				bar = bar,
 				stroke = stroke,
@@ -201,7 +211,7 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 			card.name.Text = model.name
 			card.name.TextColor3 = if owned then Theme.MAP_COLOR_TEXT else Theme.MAP_COLOR_DIM
 			card.tier.Text = if owned then model.tierText else NOT_FOUND
-			card.tier.TextSize = if owned
+			card.tierSize.MaxTextSize = if owned
 				then Theme.ARMORY_SCREEN_CARD_TIER_TEXT
 				else Theme.ARMORY_SCREEN_CARD_NAME_TEXT
 			card.tier.TextColor3 = if model.held
@@ -213,6 +223,13 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 			local color = if element ~= nil
 				then Theme.ARMORY_SCREEN_ELEMENT_COLORS[element]
 				else nil
+			-- The tier line ends where the dot starts, when there is one.
+			local pad = Theme.ARMORY_SCREEN_CARD_PAD
+			local dotRoom = if color ~= nil
+				then Theme.ARMORY_SCREEN_CARD_DOT + Theme.ARMORY_SCREEN_CARD_DOT_GAP
+				else 0
+			card.tier.Size =
+				UDim2.new(1, -(pad * 2 + dotRoom), 0, Theme.ARMORY_SCREEN_CARD_TIER_TEXT + 2)
 			card.dot.Visible = color ~= nil
 			if color ~= nil then
 				card.dot.BackgroundColor3 = color

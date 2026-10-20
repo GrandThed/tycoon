@@ -31,8 +31,8 @@
 -- into the window) and their captions show those tiers, which the host reads from the Snapshot
 -- and the TuneState (SetTiers). They replace the slot override's "Melee +1" / "Ranged +1": the
 -- override (`setGear`) is still G's presets and the DebugSetGear attribute. Three buttons mirror
--- the new keys: "+500 Timber" (T, in place of the old 25), "★ Forest Hard" (U) and "Reset Armory"
--- (L).
+-- the new keys: "+500 Timber" (T, in place of the old 25), the star lever (U: Unlocks.ALL_STARS,
+-- captioned from the built levels, "★ Hard: Forest Road (U)") and "Reset Armory" (L).
 --
 -- Geometry matches the hub's DebugPanel: 48 design px buttons (the 44 physical px tap
 -- target at MIN_SCALE), here wrapped into two columns (the hub's three). A short landscape
@@ -43,8 +43,11 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Format"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Format = require(sharedFolder:WaitForChild("Format"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
+local ArmoryScreen = require(script.Parent:WaitForChild("ArmoryScreen"))
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
 
@@ -104,10 +107,8 @@ local CELL_WIDTH = (
 	- Theme.COMBAT_DEBUG_GAP * 3
 	- Theme.SCROLLBAR_THICKNESS
 ) / Theme.COMBAT_DEBUG_COLUMNS
--- L3-28: the grantStar value for every built band level; Forest Road is the only one until the
--- Castle is built, which is what the caption says.
-local STAR_ALL = "*"
-local STAR_TEXT = "★ Forest Hard (U)"
+-- L3-28, 3-s2: the star lever's caption is ArmoryScreen.StarLeverText() and this key.
+local STAR_KEY_SUFFIX = " (U)"
 
 local DebugPanel = {}
 
@@ -203,6 +204,9 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		return button
 	end
 
+	-- The star lever, made with the others below; its caption is read again at every open.
+	local starButton: TextButton? = nil
+
 	-- The tab stays a full tap target so a phone in the Studio emulator can open it.
 	local toggle = Create("TextButton", {
 		Name = "Toggle",
@@ -222,6 +226,11 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		connections,
 		toggle.Activated:Connect(function()
 			body.Visible = not body.Visible
+			local star = starButton
+			if body.Visible and star ~= nil then
+				-- The level files may have come after boot.
+				star.Text = ArmoryScreen.StarLeverText() .. STAR_KEY_SUFFIX
+			end
 			local onToggle = deps.onToggle
 			if onToggle ~= nil then
 				onToggle(body.Visible)
@@ -289,8 +298,9 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	leverButton("+" .. Format.Cash(Theme.COMBAT_DEBUG_GRANT_VALOR) .. " Valor (V)", function()
 		deps.onLever("grantValor", Theme.COMBAT_DEBUG_GRANT_VALOR)
 	end)
-	leverButton(STAR_TEXT, function()
-		deps.onLever("grantStar", STAR_ALL)
+	-- Every built band level's star, named from those levels (the caption follows the Castle).
+	starButton = leverButton(ArmoryScreen.StarLeverText() .. STAR_KEY_SUFFIX, function()
+		deps.onLever("grantStar", Unlocks.ALL_STARS)
 	end)
 	leverButton("Reset Armory (L)", function()
 		deps.onLever("resetArmory", true)

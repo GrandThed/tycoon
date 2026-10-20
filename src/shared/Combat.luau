@@ -284,6 +284,7 @@ type ArmoryLadder = {
 	bands: { ArmoryLadderBand },
 	costs: { number },
 	starDifficulty: string,
+	starAlso: { string }?,
 }
 type ArmoryWindow = { start: number, top: number }
 type ArmoryLegacyCost = { material: string, amount: number }

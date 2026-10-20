@@ -5085,7 +5085,8 @@ def load_all():
            "fieldedLifts": fielded_lifts(proving), "loadout": sorted((proving.get("loadout") or {}).values()),
            "dashes": dashing_abilities(proving), "rescue": combat["player"].get("rescue"),
            "weapons": proving["weapons"],
-           "originWallChord": (proving.get("shooting") or {}).get("originWallChord")}
+           "originWallChord": (proving.get("shooting") or {}).get("originWallChord"),
+           "armory": sr.load_config(sr.ARMORY_PATH)}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 
@@ -5241,6 +5242,21 @@ def check_rules(combat, level_files, ctx, expect):
            f"melee tier: " + ", ".join(f"{m}/{r}" for m, r in presets))
 
 
+def check_trophy(armory, expeditions, expect):
+    """R1 (the L3 W1 fix round, review 1-m5): a band's top tier opens with that level's Hard star or a
+    harder one (Armory.StarHeld). Armory.Problems holds the shape (a starDifficulty, starAlso a list
+    of names); this holds the names to Expeditions.json `difficulties`: starDifficulty is one of them,
+    and starAlso lists exactly the difficulties after it, in their order, so no easier star opens a
+    band top and none harder is left out."""
+    ladder = (armory or {}).get("ladder") or {}
+    order = list(expeditions.get("difficulties") or [])
+    star, also = ladder.get("starDifficulty"), ladder.get("starAlso")
+    harder = order[order.index(star) + 1:] if star in order else None
+    expect(harder is not None and also == harder,
+           f"Armory.json ladder (R1): starDifficulty {star!r} is a difficulty of Expeditions.json and starAlso lists "
+           f"every harder one, in order ({harder}): {also!r}")
+
+
 def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
     """Every gate, as main runs them on the loaded files: `expect(ok, text)` is told each one. The
     route facts per layout, or None when Combat.json lacks a number the layouts are measured
@@ -5258,6 +5274,7 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
     check_map(expeditions, level_files, layouts, expect, ctx)
     check_abilities(expeditions, level_files, expect)
     check_rules(combat, level_files, ctx, expect)
+    check_trophy(ctx.get("armory"), expeditions, expect)
     # The layouts are measured with these: without one of them nothing below can be said.
     lost = [key for key in READ_RULES if not is_number(ctx["levels"].get(key))]
     if lost:

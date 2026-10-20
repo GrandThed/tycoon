@@ -202,8 +202,8 @@ local ADMIT_CHECK_LEVER = "admitCheck"
 -- L1b-W4-31: on the road N stops at the next open camp's approach before the boss room.
 -- L2-19: H resets the caller's secrets, V grants Valor; J (AIR_JUMP_KEY) toggles Double Jump.
 -- L3-28: T grants Timber (in the lobby, every built band's material), U the Hard star of every
--- built band level ("*"), L resets the Armory. The mock profile starts fresh every Studio
--- session, so without them the T4 gate would need a Hard clear in every session.
+-- built band level (Unlocks.ALL_STARS), L resets the Armory. The mock profile starts fresh every
+-- Studio session, so without them the T4 gate would need a Hard clear in every session.
 local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.N] = { lever = "skip", value = "stage" },
 	[Enum.KeyCode.B] = { lever = "skip", value = "boss" },
@@ -211,7 +211,7 @@ local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.H] = { lever = "resetSecrets", value = true },
 	[Enum.KeyCode.V] = { lever = "grantValor", value = Theme.COMBAT_DEBUG_GRANT_VALOR },
 	[Enum.KeyCode.T] = { lever = "grantMaterials", value = Theme.COMBAT_DEBUG_GRANT_TIMBER },
-	[Enum.KeyCode.U] = { lever = "grantStar", value = "*" },
+	[Enum.KeyCode.U] = { lever = "grantStar", value = Unlocks.ALL_STARS },
 	[Enum.KeyCode.L] = { lever = "resetArmory", value = true },
 }
 local AIR_JUMP_KEY = Enum.KeyCode.J
@@ -227,17 +227,18 @@ local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · F flamet
 	.. " Valor · T +"
 	.. Format.Cash(Theme.COMBAT_DEBUG_GRANT_TIMBER)
 	.. " Timber · U ★ Hard · L reset Armory"
--- L2-10: the Armory's key, in the lobby, and what the first refused air jump says.
+-- L2-10: the Armory's key (ArmoryScreen.KEY, the hub's too), in the lobby, and what the first
+-- refused air jump says.
 local HOLD_ARMORY = "armory"
-local ARMORY_KEY = Enum.KeyCode.K
-local ARMORY_KEY_HINT = "K or Esc closes"
 -- The fix round's c2: a gamepad toggles the screen with Y in the lobby and closes it with B; W2's
 -- LB and RB switch its tabs.
 local ARMORY_PAD_HINT = ArmoryScreen.PAD_TOGGLE_NAME
 	.. " or B closes · "
 	.. ArmoryScreen.PAD_TAB_NAMES
 	.. " tabs"
-local AIR_JUMP_HINT_KEYS = "Double Jump: buy it in the lobby's Armory (K)"
+local AIR_JUMP_HINT_KEYS = "Double Jump: buy it in the lobby's Armory ("
+	.. ArmoryScreen.KEY.Name
+	.. ")"
 local AIR_JUMP_HINT_PAD = "Double Jump: buy it in the lobby's Armory ("
 	.. ArmoryScreen.PAD_TOGGLE_NAME
 	.. ")"
@@ -1605,7 +1606,7 @@ local function bootMission(): ()
 			toast.Show(text, seconds or Theme.TOAST_SECONDS, isError == true)
 		end,
 		keyHint = if UserInputService.KeyboardEnabled
-			then ARMORY_KEY_HINT
+			then ArmoryScreen.KEY_HINT
 			elseif UserInputService.GamepadEnabled then ARMORY_PAD_HINT
 			else nil,
 		padToggle = true,
@@ -1638,7 +1639,7 @@ local function bootMission(): ()
 	ReactFx.Mount()
 	-- The Armory's key as SecretFx's family note and the summary's first clear name it.
 	local armoryKeyName = if UserInputService.KeyboardEnabled
-		then ARMORY_KEY.Name
+		then ArmoryScreen.KEY.Name
 		elseif UserInputService.GamepadEnabled then ArmoryScreen.PAD_TOGGLE_NAME
 		else nil
 	SecretFx.Mount(screenGui, toast.Show, armoryKeyName)
@@ -2268,7 +2269,7 @@ local function bootMission(): ()
 			end
 			return
 		end
-		if input.KeyCode == ARMORY_KEY then
+		if input.KeyCode == ArmoryScreen.KEY then
 			toggleArmory()
 			return
 		end

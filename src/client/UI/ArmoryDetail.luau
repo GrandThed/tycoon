@@ -73,7 +73,9 @@ local function paintButton(
 	button.Visible = state.visible
 	button.Text = state.text
 	button.Active = state.live
-	button.Selectable = state.live
+	-- 4-s2: a press waiting for its answer keeps a pad's selection, so T2 then T3 is A, A (the
+	-- handlers act only while their button is live).
+	button.Selectable = state.live or look == "pending"
 	entry.stroke.Enabled = look == "held"
 	if look == "action" then
 		button.BackgroundColor3 = if primary

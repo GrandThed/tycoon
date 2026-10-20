@@ -3,7 +3,7 @@
 -- Vector3, ...)`, the real module bodies wrapped the way tools/crowd_harness/run_harness.py wraps
 -- them. This file runs the real Combat, StageFlow, CampBrain, Region and LevelGeometry on them and prints
 -- one line an answer: `OUT<tab>id<tab>json`. It decides nothing: every comparison is the Python's.
--- L3 W1 adds the pure Armory's tier rules and StageFlow.FirstClear.
+-- L3 W1 adds the pure Armory's tier rules and StageFlow.FirstClear; its fix round, Armory.StarHeld.
 
 -- Vector3, as much of it as StageFlow uses -----------------------------------------------------
 local vmeta = {}
@@ -1174,6 +1174,8 @@ function L3.answer(cfg: any, op: string, row: any, families: any): any
 		end
 		local levels, materials = A.BuiltBands(cfg, built)
 		return { levels, materials }
+	elseif op == "starHeld" then
+		return A.StarHeld(cfg, combat, row[2])
 	end
 	error("unknown armory op " .. tostring(op))
 end

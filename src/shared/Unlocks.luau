@@ -12,7 +12,10 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(sharedFolder:WaitForChild("Types"))
+-- Pure and require-free, so no cycle: it holds the saved loadout's slot rule (HeldFamily).
+local Armory = require(sharedFolder:WaitForChild("Armory"))
 
 -- Structural, like a weapon family's `slot`: the ability the air jump keys on.
 local AIR_JUMP = "doubleJump"
@@ -27,6 +30,9 @@ local MAX_ID_LENGTH = 32
 local MAX_FAMILY_LENGTH = 24
 -- ... and a variant key ("A", "B"), L2-32's third argument.
 local MAX_VARIANT_LENGTH = 8
+-- Protocol, like TierLever's "<family>=<tier>": the grantStar lever's value for "every level whose
+-- band is built" (L3-28). Both places' servers and Studio strips read it here (the fix round's 3-s2).
+local ALL_STARS = "*"
 -- L2-29, L2-31: the words a family's `element` (and a secret's key) may say. Anything else is no
 -- element: a key that names it is never held.
 local ELEMENTS: { [string]: Types.Element } = {}
@@ -40,6 +46,7 @@ Unlocks.AIR_JUMP = AIR_JUMP
 Unlocks.MAX_ID_LENGTH = MAX_ID_LENGTH
 Unlocks.MAX_FAMILY_LENGTH = MAX_FAMILY_LENGTH
 Unlocks.MAX_VARIANT_LENGTH = MAX_VARIANT_LENGTH
+Unlocks.ALL_STARS = ALL_STARS
 
 function Unlocks.Attribute(abilityId: string): string
 	return ATTRIBUTE_PREFIX .. abilityId
@@ -211,31 +218,16 @@ end
 
 -- L3-10: the held families a profile has saved, as both places read them. Each slot takes the
 -- saved family when it is a family of `weapons`, fills that slot and is owned (a starter of
--- `fallback`, or one the profile's families hold); otherwise fallback[slot], the slot's starter.
--- variants keeps the saved styles whose family and key both exist, so an unknown style falls back
--- to the family's default. Fresh tables: the profile's own are never handed out.
+-- `fallback`, or one the profile's families hold); otherwise fallback[slot], the slot's starter:
+-- Armory.HeldFamily, which Armory.SavedPower reads too. variants keeps the saved styles whose family
+-- and key both exist, so an unknown style falls back to the family's default. Fresh tables: the
+-- profile's own are never handed out.
 function Unlocks.LoadoutOf(
 	combat: Types.CombatProfile?,
 	weapons: { [string]: Types.RangeWeaponDef }?,
 	fallback: { melee: string, ranged: string }
 ): Types.RangeLoadout
 	local saved: any = if combat ~= nil then combat.loadout else nil
-	local families = if combat ~= nil then combat.families else nil
-	local starters = Unlocks.Starters(fallback)
-	local function held(slot: string, default: string): string
-		local family: any = if type(saved) == "table" then saved[slot] else nil
-		local def: any = if type(family) == "string" and type(weapons) == "table"
-			then weapons[family]
-			else nil
-		if
-			type(def) == "table"
-			and def.slot == slot
-			and Unlocks.OwnsFamily(families, family, starters)
-		then
-			return family
-		end
-		return default
-	end
 	local variants: { [string]: string } = {}
 	local savedVariants: any = if type(saved) == "table" then saved.variants else nil
 	if type(savedVariants) == "table" and type(weapons) == "table" then
@@ -252,8 +244,8 @@ function Unlocks.LoadoutOf(
 		end
 	end
 	return {
-		melee = held("melee", fallback.melee),
-		ranged = held("ranged", fallback.ranged),
+		melee = Armory.HeldFamily(combat, weapons, fallback, "melee"),
+		ranged = Armory.HeldFamily(combat, weapons, fallback, "ranged"),
 		variants = variants,
 	}
 end
