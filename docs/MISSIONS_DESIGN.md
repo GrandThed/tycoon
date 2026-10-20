@@ -191,7 +191,10 @@ CITY --teleport--> DUNGEON PLACE (one server per party)
 ## 10. The Armory
 
 **Tiers.** One ladder of 20 tiers for every weapon, so "tier 9" means the same strength whatever
-the weapon. Each weapon enters at its own tier and can be upgraded to 20. **[Ben]**
+the weapon. **Each weapon has its own window on the ladder: its own start tier and its own top tier.**
+Not every weapon starts at 1 and not every weapon reaches 20; some start at the top and stay there.
+**[Ben, 2026-10-13; restated 2026-10-20: "we are not starting every weapon with tier 1 nor ending every
+weapon to tier 20"]** (The picture below was drawn before the restatement: its bars run to 20.)
 
 ```
 Longbow       T1  [####................]  free at the start
