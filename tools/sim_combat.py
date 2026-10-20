@@ -170,7 +170,7 @@ BRUTAL_FIRST_VALOR = 25
 CARRY_FUZZ_SEED = 1407
 CARRY_FUZZ_RUNS = 400
 CARRY_FUZZ_KILLS = 60
-LEVEL_REWARD_MULT = {"normal": 1, "hard": 2.5, "brutal": 4}  # L3-16: Hard x2.5 (was 2)
+LEVEL_REWARD_MULT = {"normal": 1, "hard": 2, "brutal": 4}  # L3 W1 contract §12.8: Hard stays x2
 # What a boss's calls pay per second, as a share of what the whole clear pays per second: under
 # this, standing in front of a boss to farm what it calls is always worse than playing on.
 LEVEL_STALL_SHARE = 0.5
@@ -3857,7 +3857,7 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
 
     # 20. The level gates: every kind a level fields (summons included) is priced; every
     #     difficulty and minDifficulty is one of Expeditions.json's, all three present, with
-    #     rewardMult 1, 2.5 and 4 (L3-16); stages are travel and camp in turn and end in a camp; every
+    #     rewardMult 1, 2 and 4 (§12.8); stages are travel and camp in turn and end in a camp; every
     #     camp stage names a camp of the layout; runCapSeconds is at least twice targetMinutes;
     #     every map node with a level names a level file and every from / requires.node a node;
     #     levels.gateSeconds is at least 1.
