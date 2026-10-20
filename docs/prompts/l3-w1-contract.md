@@ -724,3 +724,5 @@ was upgraded), on Normal and Hard, against the mission player at the same gear.
 5. **Owners: two luau-engineers (A shared + hub server, B combat server) and two ui-engineers (A the screen, B the two
    hosts), as proposed.** Every agent runs on Opus. The hub stays in W1.
 6. Every other ruling (L3-1 to L3-29) stands as drafted.
+7. **`src/shared/Combat.luau` goes to luau-engineer A**, for its private structural copies of `CombatProfile` and
+   `ArmoryConfig` only (the v8 fields; ui B's report has the diff). No behaviour change there.
