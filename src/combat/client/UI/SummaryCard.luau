@@ -18,6 +18,12 @@
 -- party's two extra lines: so the lines sit COMBAT_SUMMARY_LINE_GAP apart and the two buttons
 -- share one row. On that phone a solo card is about 250 design px tall and a party's 292
 -- (L1b took the "Saved at" line out).
+--
+-- L3-17: a run that earned a NEW star may also have earned a first clear (RunResult.firstClear):
+-- a weapon family ("Warhammer is yours: equip it in the Armory (K)") or Valor ("+25 Valor, first
+-- Brutal clear", already counted in the Valor above). One more small line, shown only then; the
+-- family's can wrap to two on that phone, which makes a party's card about 326 design px, still
+-- inside the 329.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -26,6 +32,7 @@ local UserInputService = game:GetService("UserInputService")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Format = require(sharedFolder:WaitForChild("Format"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
@@ -39,6 +46,9 @@ export type Deps = {
 	onReturn: () -> (),
 	-- false = no Return button (a proving build).
 	canReturn: boolean,
+	-- L3-17: the key that opens the Armory, named in a first clear's family line ("K", "Y");
+	-- nil = no key (touch: the HUD's button).
+	armoryKey: string?,
 }
 
 -- What the RunState round the result adds. `canBack` = the local player may end the wait (the
@@ -72,6 +82,9 @@ local COUNTDOWN_TEXT = "Back to camp in "
 -- Keyboards only, and only for whoever may end the wait: the key the host binds to it.
 local BACK_KEY_HINT = " · Enter to go now"
 local LEAVE_REASON = "leave"
+local FIRST_FAMILY_TEXT = " is yours: equip it in the Armory"
+local FIRST_VALOR_TEXT = " Valor, first "
+local FIRST_CLEAR_TEXT = " clear"
 -- How a run ended, in the player's words. An unknown reason shows nothing rather than a guess.
 local REASON_TEXT: { [string]: string } = {
 	cleared = "Cleared",
@@ -174,6 +187,9 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 	-- C2 lines, each hidden when it does not apply.
 	local shareLabel = line("Share", Theme.FONT, Theme.TEXT_SMALL, Theme.COLOR_TEXT)
 	local mentorLabel = line("Mentor", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_HIGHLIGHT)
+	-- L3-17, hidden unless the run gave a first clear.
+	local firstClearLabel =
+		line("FirstClear", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_HIGHLIGHT)
 	local countdownLabel =
 		line("Countdown", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_ACCENT_ALT)
 	order += 1
@@ -279,9 +295,44 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 		materialsLabel.Text = if #parts > 0 then table.concat(parts, " · ") else "No materials"
 	end
 
+	-- L3-17: what a first clear gave, from the network, so every field is checked; a family the
+	-- config does not name shows its id rather than nothing.
+	local function paintFirstClear(result: Types.RunResult, difficultyName: string): ()
+		local reward: any = result.firstClear
+		local parts: { string } = {}
+		if typeof(reward) == "table" then
+			local family = reward.family
+			if typeof(family) == "string" and family ~= "" then
+				local config = Catalog.GetProvingGroundsConfig()
+				local def = if config ~= nil then config.weapons[family] else nil
+				local key = deps.armoryKey
+				table.insert(
+					parts,
+					(if def ~= nil then def.name else family)
+						.. FIRST_FAMILY_TEXT
+						.. (if key ~= nil then " (" .. key .. ")" else "")
+				)
+			end
+			local valor = reward.valor
+			if typeof(valor) == "number" and valor > 0 then
+				table.insert(
+					parts,
+					"+"
+						.. Format.Cash(valor)
+						.. FIRST_VALOR_TEXT
+						.. difficultyName
+						.. FIRST_CLEAR_TEXT
+				)
+			end
+		end
+		firstClearLabel.Visible = #parts > 0
+		firstClearLabel.Text = table.concat(parts, " · ")
+	end
+
 	local function show(summary: Types.RunSummary?, result: Types.RunResult, info: ShowInfo): ()
 		local leaving = result.reason == LEAVE_REASON
 		paintRewards(summary, info.partySize)
+		paintFirstClear(result, info.difficultyName)
 		if leaving then
 			-- The trip home: the session's totals under the map's name, and nothing to press.
 			titleLabel.Text = info.mapName

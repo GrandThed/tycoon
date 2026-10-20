@@ -347,7 +347,7 @@ Unlocks.StarsOf(combat: Types.CombatProfile): { [string]: { [string]: boolean } 
   Castle gear.
 - `Combat.json debug`: `gearPresets` "T1", "T3", "T5" (melee = ranged = 1, 3, 5); `provingGear` T1 (L3-11).
 
-**L3-16. Hard pays ×2.5: data only (lead's ruling, 2026-10-20).**
+**L3-16. Hard pays ×2.5: data only (lead's ruling, 2026-10-20). Superseded by §12.8: Hard stays ×2.**
 - Hard's `rewardMult` goes from 2 to **2.5** (`1_ForestRoad.json`). One `rewardMult` multiplies cash, materials and the
   boss's Valor together (`Combat.luau:856-886`, `WaveService.luau:665`), so cash is ×2.5 too; that is +25% of a number
   that is 0.9% of the Village's price at 12:21 (systems report §3.4), and it saves a new key and three mirrors.
@@ -726,3 +726,11 @@ was upgraded), on Normal and Hard, against the mission player at the same gear.
 6. Every other ruling (L3-1 to L3-29) stands as drafted.
 7. **`src/shared/Combat.luau` goes to luau-engineer A**, for its private structural copies of `CombatProfile` and
    `ArmoryConfig` only (the v8 fields; ui B's report has the diff). No behaviour change there.
+8. **Hard stays ×2** (after the designer's measure, 2026-10-20). At ×2.5 both starters reached T4 in 5 runs and 19.8
+   minutes: faster than Ben's pick, "three runs a weapon", because each tier shortens the next clear. ×2 gives 6 runs
+   and about 24.6 minutes. `sim_combat`'s climb band is 5–7 runs and 20–40 minutes; a Hard clear pays 20 Valor.
+9. **R8 on Hard: the same known limit as Normal until L4.** Hard's re-measured `hpScale` (4.25) and a bow upgraded
+   alone tip LookoutLedge, LookoutSignPad and Secret_lookout over the mission player. Ben accepted those perches on
+   Normal on 2026-10-16 ("fix in L4" when the real forest re-places them); the lead extends that to Hard
+   (`SNIPER_KNOWN_LIMIT_L4["hard"]`). Their rates stay reported, every hit landing stays gated, and the set must be
+   empty before L4 ships. The lead tells Ben in one line.

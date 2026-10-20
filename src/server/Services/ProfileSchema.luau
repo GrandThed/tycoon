@@ -9,13 +9,16 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(sharedFolder:WaitForChild("Types"))
+local Armory = require(sharedFolder:WaitForChild("Armory"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
-local SCHEMA_VERSION = 7
+local SCHEMA_VERSION = 8
 local STORE_NAME = "PlayerData"
 local PROFILE_KEY_PREFIX = "p_"
 
--- Template = schema v7, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
+-- Template = schema v8, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
 -- first-ever join (no offline grant, no welcome-back card).
 local PROFILE_TEMPLATE: Types.PlayerState = {
 	version = SCHEMA_VERSION,
@@ -46,8 +49,17 @@ local PROFILE_TEMPLATE: Types.PlayerState = {
 		secrets = {},
 		families = {},
 		shortcuts = {},
+		-- L3-7: no family id here. The starters come from ProvingGrounds.json `loadout` when the
+		-- loadout is read (Unlocks.LoadoutOf), so Reconcile can never pin a profile to one.
+		tiers = {},
+		loadout = { variants = {} },
+		stars = {},
 	},
 }
+
+-- L3-8: a build without Armory.json converts a v7 profile without its refund; said once, not once
+-- per profile.
+local warnedNoArmory = false
 
 -- Migrations[n](state) upgrades schema n → n+1; the runner bumps state.version afterwards.
 -- Additive and idempotent. Reconcile would also fill the new fields, but the version stamp must
@@ -120,6 +132,42 @@ local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
 		end
 		if combat.shortcuts == nil then
 			combat.shortcuts = {}
+		end
+	end,
+	-- L3-7, L3-8: a tier belongs to a weapon family now. The three new fields are added only when
+	-- still nil, each a fresh table (Reconcile usually filled them already). Then the slot tiers
+	-- bought before v8 are paid back at the FROZEN legacy prices (Armory.LegacyRefund; never the
+	-- live `slots`), and `gear` is left as it is: live v7 code still reads it, new code never does.
+	-- The starters start at their windows' start because `tiers` holds nothing for them.
+	-- Unlike step 6 this one is NOT safe to run twice (it would pay twice): the version stamp is
+	-- what runs it once. v7 code that loads a v8 profile keeps all three fields: Reconcile only
+	-- fills, and runMigrations leaves a newer profile untouched.
+	[7] = function(state: Types.PlayerState): ()
+		local combat = state.combat
+		if combat.tiers == nil then
+			combat.tiers = {}
+		end
+		local loadout = combat.loadout
+		if loadout == nil then
+			combat.loadout = { variants = {} }
+		elseif type(loadout.variants) ~= "table" then
+			loadout.variants = {}
+		end
+		if combat.stars == nil then
+			combat.stars = {}
+		end
+		local armoryConfig = Catalog.GetArmoryConfig()
+		if armoryConfig == nil then
+			if not warnedNoArmory then
+				warnedNoArmory = true
+				warn(
+					"[ProfileSchema] no Armory.json: v7 profiles reach v8 without the slot-tier refund"
+				)
+			end
+			return
+		end
+		for material, amount in Armory.LegacyRefund(armoryConfig, combat.gear) do
+			combat.materials[material] = (combat.materials[material] or 0) + amount
 		end
 	end,
 }

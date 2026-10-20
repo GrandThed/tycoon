@@ -101,7 +101,8 @@
 --  * CampFx's "Checkpoint" notice is the HUD's notice line under the wallet.
 --
 -- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-3, L2-10, L2-14, L2-19), in `bootMission`; the
--- behaviour lives in UI/ArmoryPanel and Controllers/SecretFx, this only wires them:
+-- behaviour lives in UI/ArmoryPanel (L3: UI/ArmoryScreen) and Controllers/SecretFx, this only
+-- wires them:
 --  * K, or the run layer's "Armory" button, opens the Armory panel in the lobby (closing the
 --    map: one sheet at a time; M closes the panel the same way). Buy on its Abilities tab sends
 --    RequestBuyAbility(id); the `buyAbility` ActionResult goes to the panel. The Snapshot's
@@ -114,8 +115,8 @@
 --    first two as buttons ("+10 Valor" was there already).
 --
 -- L2 Wave 2 (docs/prompts/l2-w2-contract.md, sections 2, 3, 4 and L2-38), in `bootMission`:
---  * The Armory panel (UI/ArmoryPanel) has Weapons and Abilities tabs, on K, Y and the HUD's
---    "Armory" button. A pick sends RequestSetFamily(slot, family, variant);
+--  * The Armory panel (UI/ArmoryPanel; L3: UI/ArmoryScreen) has Weapons and Abilities tabs, on
+--    K, Y and the HUD's "Armory" button. A pick sends RequestSetFamily(slot, family, variant);
 --    the `setFamily` ActionResult goes to the panel, and so does every TuneState's loadout (the
 --    server's word on what is held). The Snapshot's `combat.families` feeds it.
 --  * CombatFx of kind `react` (a bramble burnt) go to ReactFx, which also watches the level's
@@ -127,6 +128,19 @@
 -- (the Frost Hammer, owned only by this lever until the Castle) exactly as F does the fire one,
 -- and the strip has it as a button. The default I zoom does nothing: the camera is Scriptable.
 -- CombatFx `react` "frozen" (a water cell frozen) goes to ReactFx like "burnt".
+--
+-- L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-22, L3-24, L3-28), in `bootMission`; the screen is
+-- the shared UI/ArmoryScreen (the hub mounts the same one), this only wires it:
+--  * K, the pad's Y and the run layer's "Armory" button open it in the lobby (SetAvailable),
+--    closing the map. Upgrade sends RequestUpgradeWeapon(family), Equip and a style
+--    RequestSetFamily(slot, family, variant), Buy on the Abilities tab RequestBuyAbility(id); the
+--    three ActionResults go to its OnResult. Every Snapshot's `combat` is its SetState, every
+--    TuneState's loadout its SetHeld, and the server's MayLeave rule (not live, or waiting) its
+--    SetGate.
+--  * The summary card says what a first clear gave (RunResult.firstClear); the strip shows the
+--    held families' tiers instead of the frozen slot `gear`.
+--  * Studio keys: T grants Theme.COMBAT_DEBUG_GRANT_TIMBER, U the Hard star of every built band
+--    level, L resets the Armory (tiers, loadout, stars); the strip has each as a button.
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -143,6 +157,7 @@ local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local Format = require(sharedFolder:WaitForChild("Format"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -158,7 +173,7 @@ local AbilityBar = require(uiFolder:WaitForChild("AbilityBar"))
 local BossBar = require(uiFolder:WaitForChild("BossBar"))
 local VitalsHud = require(uiFolder:WaitForChild("VitalsHud"))
 local MapScreen = require(uiFolder:WaitForChild("MapScreen"))
-local ArmoryPanel = require(uiFolder:WaitForChild("ArmoryPanel"))
+local ArmoryScreen = require(uiFolder:WaitForChild("ArmoryScreen"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -186,12 +201,18 @@ local ADMIT_CHECK_LEVER = "admitCheck"
 -- L1 ruling 33, Studio only: the keys, the lever each sends and the line that names them.
 -- L1b-W4-31: on the road N stops at the next open camp's approach before the boss room.
 -- L2-19: H resets the caller's secrets, V grants Valor; J (AIR_JUMP_KEY) toggles Double Jump.
+-- L3-28: T grants Timber (in the lobby, every built band's material), U the Hard star of every
+-- built band level ("*"), L resets the Armory. The mock profile starts fresh every Studio
+-- session, so without them the T4 gate would need a Hard clear in every session.
 local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.N] = { lever = "skip", value = "stage" },
 	[Enum.KeyCode.B] = { lever = "skip", value = "boss" },
 	[Enum.KeyCode.G] = { lever = "gear", value = "next" },
 	[Enum.KeyCode.H] = { lever = "resetSecrets", value = true },
 	[Enum.KeyCode.V] = { lever = "grantValor", value = Theme.COMBAT_DEBUG_GRANT_VALOR },
+	[Enum.KeyCode.T] = { lever = "grantMaterials", value = Theme.COMBAT_DEBUG_GRANT_TIMBER },
+	[Enum.KeyCode.U] = { lever = "grantStar", value = "*" },
+	[Enum.KeyCode.L] = { lever = "resetArmory", value = true },
 }
 local AIR_JUMP_KEY = Enum.KeyCode.J
 -- L2-38: F toggles the caller's fire family (the Flamethrower); L2-61: I the ice family (the
@@ -202,21 +223,23 @@ local ELEMENT_FAMILY_KEYS: { [Enum.KeyCode]: string } = {
 }
 local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · F flamethrower"
 	.. " · I frost hammer · H reset secrets · V +"
-	.. tostring(Theme.COMBAT_DEBUG_GRANT_VALOR)
-	.. " Valor"
--- L2-10: the Armory panel's key, in the lobby, and what the first refused air jump says.
+	.. Format.Cash(Theme.COMBAT_DEBUG_GRANT_VALOR)
+	.. " Valor · T +"
+	.. Format.Cash(Theme.COMBAT_DEBUG_GRANT_TIMBER)
+	.. " Timber · U ★ Hard · L reset Armory"
+-- L2-10: the Armory's key, in the lobby, and what the first refused air jump says.
 local HOLD_ARMORY = "armory"
 local ARMORY_KEY = Enum.KeyCode.K
 local ARMORY_KEY_HINT = "K or Esc closes"
--- The fix round's c2: a gamepad toggles the panel with Y in the lobby and closes it with B; W2's
+-- The fix round's c2: a gamepad toggles the screen with Y in the lobby and closes it with B; W2's
 -- LB and RB switch its tabs.
-local ARMORY_PAD_HINT = ArmoryPanel.PAD_TOGGLE_NAME
+local ARMORY_PAD_HINT = ArmoryScreen.PAD_TOGGLE_NAME
 	.. " or B closes · "
-	.. ArmoryPanel.PAD_TAB_NAMES
+	.. ArmoryScreen.PAD_TAB_NAMES
 	.. " tabs"
 local AIR_JUMP_HINT_KEYS = "Double Jump: buy it in the lobby's Armory (K)"
 local AIR_JUMP_HINT_PAD = "Double Jump: buy it in the lobby's Armory ("
-	.. ArmoryPanel.PAD_TOGGLE_NAME
+	.. ArmoryScreen.PAD_TOGGLE_NAME
 	.. ")"
 local AIR_JUMP_HINT_TOUCH = "Double Jump: buy it in the lobby's Armory"
 -- Run phases with nothing left to fight: the summary card has the screen.
@@ -263,9 +286,10 @@ local PAD_KEYS: { [Enum.KeyCode]: boolean } = {
 local ABANDON_KEY = Enum.KeyCode.Backspace
 -- What a refused RequestStartLevel tells the player (ActionResult.reason).
 local START_ACTION = "startLevel"
--- L2-9: a purchase's answer, and L2-32 a weapon pick's, which the Armory panel reads.
-local BUY_ABILITY_ACTION = "buyAbility"
-local SET_FAMILY_ACTION = "setFamily"
+-- The answers the Armory screen reads: L2-9 a purchase's, L2-32 a weapon pick's, L3-13 an
+-- upgrade's.
+local ARMORY_ACTIONS: { [string]: boolean } =
+	{ buyAbility = true, setFamily = true, upgradeWeapon = true }
 local START_REFUSALS: { [string]: string } = {
 	notLeader = "Only the leader can depart",
 	busy = "Not ready yet",
@@ -1084,13 +1108,12 @@ local function boot(): ()
 		if typeof(gear) == "table" and typeof(ascension) == "table" then
 			InputController.SetGear(gear)
 			WeaponController.SetGear(gear, ascension)
+			-- The strip's tier buttons name a family (L3-28), which this HUD has none of: they
+			-- stay inert here, as everything that fights does.
 			hud.SetAbilities({
 				melee = abilityInfo(MELEE_SLOT, gear.melee),
 				ranged = abilityInfo(RANGED_SLOT, gear.ranged),
 			})
-			if debugPanel ~= nil then
-				debugPanel.SetGear(gear.melee, gear.ranged)
-			end
 		end
 		-- Wallet: cash and Valor are always shown; the material chip needs the level, so it
 		-- stays blank until a RunState names one.
@@ -1298,6 +1321,7 @@ local function bootMission(): ()
 		requestDebug = remotesFolder:WaitForChild("RequestDebug", timeout) :: RemoteEvent?,
 		requestBuyAbility = remotesFolder:WaitForChild("RequestBuyAbility", timeout) :: RemoteEvent?,
 		requestSetFamily = remotesFolder:WaitForChild("RequestSetFamily", timeout) :: RemoteEvent?,
+		requestUpgradeWeapon = remotesFolder:WaitForChild("RequestUpgradeWeapon", timeout) :: RemoteEvent?,
 		combatFx = remotesFolder:WaitForChild("CombatFx", timeout) :: RemoteEvent?,
 	}
 
@@ -1352,6 +1376,8 @@ local function bootMission(): ()
 		wallet = { cash = 0, valor = 0, materials = {} :: { [string]: any } },
 		-- L2 W2: the Snapshot's `combat.families` (the families written to the profile).
 		families = {} :: { [string]: any },
+		-- L3: the last Snapshot's whole `combat`, which the strip's tiers are read from.
+		combat = nil :: Types.CombatProfile?,
 	}
 	local mapName = if expeditions ~= nil then expeditions.name else DEFAULT_MAP_NAME
 
@@ -1545,23 +1571,24 @@ local function bootMission(): ()
 		paintAirJump()
 	end
 
-	-- L2-10, L2 W2 section 2: the lobby's Armory panel (Weapons and Abilities tabs).
-	local armoryPanel = ArmoryPanel.new(screenGui, ArmoryPanel.Offers(expeditions), {
-		onBuy = function(abilityId: string): boolean
-			local remote = remotes.requestBuyAbility
-			if remote == nil then
-				return false
-			end
-			remote:FireServer(abilityId)
-			return true
+	-- L3-24: the lobby's Armory, the shared screen (Weapons and Abilities tabs). An intent that has
+	-- no remote (an older server) is reported as unsent, and the screen says so.
+	local function send(remote: RemoteEvent?, ...: any): boolean
+		if remote == nil then
+			return false
+		end
+		remote:FireServer(...)
+		return true
+	end
+	local armoryScreen = ArmoryScreen.new(screenGui, {
+		onUpgrade = function(family: string): boolean
+			return send(remotes.requestUpgradeWeapon, family)
 		end,
-		onSetFamily = function(slot: string, family: string, variant: string): boolean
-			local remote = remotes.requestSetFamily
-			if remote == nil then
-				return false
-			end
-			remote:FireServer(slot, family, variant)
-			return true
+		onEquip = function(slot: string, family: string, variant: string): boolean
+			return send(remotes.requestSetFamily, slot, family, variant)
+		end,
+		onBuyAbility = function(abilityId: string): boolean
+			return send(remotes.requestBuyAbility, abilityId)
 		end,
 		onOpenChanged = function(open: boolean)
 			-- One sheet at a time, whatever opened this one (the button, K or the pad's Y).
@@ -1574,28 +1601,47 @@ local function bootMission(): ()
 				debugPanel.SetVisible(not open)
 			end
 		end,
-		toast = toast.Show,
+		toast = function(text: string, seconds: number?, isError: boolean?)
+			toast.Show(text, seconds or Theme.TOAST_SECONDS, isError == true)
+		end,
 		keyHint = if UserInputService.KeyboardEnabled
 			then ARMORY_KEY_HINT
 			elseif UserInputService.GamepadEnabled then ARMORY_PAD_HINT
 			else nil,
 		padToggle = true,
 	})
+	-- L3-28: the strip's tier buttons name the held families at the tiers they fight at, from the
+	-- last Snapshot's `combat` and the last TuneState's loadout.
+	local function paintStripTiers(): ()
+		local loadout = FeedbackController.GetLoadout()
+		local armoryConfig = Catalog.GetArmoryConfig()
+		local combat = st.combat
+		if debugPanel == nil or loadout == nil or armoryConfig == nil or combat == nil then
+			return
+		end
+		debugPanel.SetTiers(
+			{ family = loadout.melee, tier = Armory.TierOf(armoryConfig, combat, loadout.melee) },
+			{ family = loadout.ranged, tier = Armory.TierOf(armoryConfig, combat, loadout.ranged) }
+		)
+	end
 	-- Every TuneState carries the loadout the server holds for this player (L2-32's answer).
-	FeedbackController.SetTuneStateHandler(function()
-		armoryPanel.SetLoadout(FeedbackController.GetLoadout())
-	end)
+	local function onTuneState(): ()
+		local loadout = FeedbackController.GetLoadout()
+		if loadout ~= nil then
+			armoryScreen.SetHeld(loadout)
+		end
+		paintStripTiers()
+	end
+	FeedbackController.SetTuneStateHandler(onTuneState)
 	-- A TuneState may have come before this handler was set.
-	armoryPanel.SetLoadout(FeedbackController.GetLoadout())
+	onTuneState()
 	ReactFx.Mount()
-	SecretFx.Mount(
-		screenGui,
-		toast.Show,
-		if UserInputService.KeyboardEnabled
-			then ARMORY_KEY.Name
-			elseif UserInputService.GamepadEnabled then ArmoryPanel.PAD_TOGGLE_NAME
-			else nil
-	)
+	-- The Armory's key as SecretFx's family note and the summary's first clear name it.
+	local armoryKeyName = if UserInputService.KeyboardEnabled
+		then ARMORY_KEY.Name
+		elseif UserInputService.GamepadEnabled then ArmoryScreen.PAD_TOGGLE_NAME
+		else nil
+	SecretFx.Mount(screenGui, toast.Show, armoryKeyName)
 	MovementController.SetAirJumpHintHandler(function()
 		toast.Show(
 			if UserInputService.KeyboardEnabled
@@ -1641,17 +1687,17 @@ local function bootMission(): ()
 	local function openMap(): ()
 		local screen = mapScreen
 		if screen ~= nil and st.phase == "lobby" then
-			armoryPanel.Close() -- one sheet at a time
+			armoryScreen.Close() -- one sheet at a time
 			screen.Open()
 		end
 	end
-	-- L2-10: K and the HUD's button (the pad's Y is the panel's own). The panel opens only in the
-	-- lobby (SetLobby), and closes the map as it opens.
+	-- L2-10: K and the HUD's button (the pad's Y is the screen's own). The screen opens only in the
+	-- lobby (SetAvailable), and closes the map as it opens.
 	local function toggleArmory(): ()
 		if st.phase ~= "lobby" then
 			return
 		end
-		armoryPanel.Toggle()
+		armoryScreen.Toggle()
 	end
 
 	-- The cluster's handlers are never pressed (it is not shown); they route to the range path
@@ -1659,11 +1705,11 @@ local function bootMission(): ()
 	local hud = CombatHud.new(screenGui, {
 		onMap = if mapScreen ~= nil then openMap else nil,
 		onArmory = toggleArmory,
-		-- Fix round c2: a console has only the pad's Y to reach the panel, so the button names it.
+		-- Fix round c2: a console has only the pad's Y to reach the screen, so the button names it.
 		armoryKey = if UserInputService.GamepadEnabled
 				and not UserInputService.KeyboardEnabled
 				and not UserInputService.TouchEnabled
-			then ArmoryPanel.PAD_TOGGLE_NAME
+			then ArmoryScreen.PAD_TOGGLE_NAME
 			else nil,
 		onLeave = leave,
 		onAbandon = abandon,
@@ -1683,6 +1729,7 @@ local function bootMission(): ()
 		onBack = abandon,
 		onReturn = leave,
 		canReturn = not proving,
+		armoryKey = armoryKeyName,
 	})
 
 	-- A proving build opens on the level and the difficulty the config names (ruling 32), so
@@ -1769,23 +1816,20 @@ local function bootMission(): ()
 		if typeof(combat) ~= "table" then
 			return
 		end
-		local gear = combat.gear
-		if debugPanel ~= nil and typeof(gear) == "table" then
-			debugPanel.SetGear(gear.melee, gear.ranged)
-		end
 		local wallet = st.wallet
 		wallet.cash = if typeof(state.cash) == "number" then state.cash else 0
 		wallet.valor = if typeof(combat.valor) == "number" then combat.valor else 0
 		wallet.materials = if typeof(combat.materials) == "table" then combat.materials else {}
 		paintWallet()
-		local owned = combat.abilities
 		local families = combat.families
 		st.families = if typeof(families) == "table" then families else {}
-		armoryPanel.SetState(
-			wallet.valor,
-			if typeof(owned) == "table" then owned else {},
-			st.families
-		)
+		-- The server's copy of the profile: the screen reads every map in it nil-safe (the v7 and
+		-- v8 maps are optional), so only the two fields every profile has are asked for here.
+		if typeof(combat.materials) == "table" and typeof(combat.valor) == "number" then
+			st.combat = combat :: Types.CombatProfile
+			armoryScreen.SetState(combat :: Types.CombatProfile)
+			paintStripTiers()
+		end
 		if debugPanel ~= nil then
 			debugPanel.SetFireFamily(ownsElementFamily("fire"))
 			debugPanel.SetIceFamily(ownsElementFamily("ice"))
@@ -2032,7 +2076,9 @@ local function bootMission(): ()
 			end
 		end
 		InputController.SetPhase(phase, waiting)
-		armoryPanel.SetLobby(phase == "lobby")
+		-- The screen is the lobby's; its buttons follow the server's MayLeave (not live, or waiting).
+		armoryScreen.SetAvailable(phase == "lobby")
+		armoryScreen.SetGate(not live or waiting)
 
 		-- The map opens whenever the phase becomes `lobby` (the first RunState and every
 		-- return) and closes when the phase leaves it. On a return the server refuses a start
@@ -2129,9 +2175,10 @@ local function bootMission(): ()
 		end
 		if
 			typeof(payload) == "table"
-			and (payload.action == BUY_ABILITY_ACTION or payload.action == SET_FAMILY_ACTION)
+			and typeof(payload.action) == "string"
+			and ARMORY_ACTIONS[payload.action] == true
 		then
-			armoryPanel.OnResult(payload)
+			armoryScreen.OnResult(payload :: Types.ActionResult)
 			return
 		end
 		local text, isError = actionResultText(payload)
@@ -2185,7 +2232,7 @@ local function bootMission(): ()
 		if screen ~= nil then
 			screen.SetLayout(scale, size)
 		end
-		armoryPanel.SetLayout(scale, size)
+		armoryScreen.SetLayout(scale, size)
 		SecretFx.SetLayout(scale, viewport.Y / 2 - inset.Y)
 		crosshair.SetLayout(scale)
 		FeedbackController.SetLayout(scale)

@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Catalog = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Catalog"))
+local Unlocks = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Unlocks"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
 local isStudio = RunService:IsStudio()
@@ -36,6 +37,10 @@ end
 
 local function isWeaponSlot(value: any): boolean
 	return value == "melee" or value == "ranged"
+end
+
+local function isShortName(value: any, maxLength: number): boolean
+	return typeof(value) == "string" and #(value :: string) > 0 and #(value :: string) <= maxLength
 end
 
 -- A real account id is always positive. Studio widens the rule to negative ids, and ONLY Studio:
@@ -138,12 +143,24 @@ local HubRemotes: RemoteService.RemoteDefs = {
 				return args.n == 1 and typeof(args[1]) == "string"
 			end,
 		},
-		-- C0. The client never sends a tier, a cost or a material: the slot is the whole intent,
-		-- and ArmoryService derives the next tier from the profile.
-		RequestBuyGear = {
+		-- L3-12: the slot-tier RequestBuyGear is gone; tiers belong to families now. The client
+		-- never sends a tier, a cost or a material: the family is the whole intent, and
+		-- ArmoryService derives the next tier, its cost and the star it needs from the profile.
+		RequestUpgradeWeapon = {
 			bucket = "calls",
 			validate = function(args: RemoteService.PackedArgs): boolean
-				return args.n == 1 and isWeaponSlot(args[1])
+				return args.n == 1 and isShortName(args[1], Unlocks.MAX_FAMILY_LENGTH)
+			end,
+		},
+		-- L3-12: equip a family (and one of its styles) from the hub's Armory, saved to the
+		-- loadout. Same shape as the combat place's: three names, no amount.
+		RequestSetFamily = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 3
+					and isWeaponSlot(args[1])
+					and isShortName(args[2], Unlocks.MAX_FAMILY_LENGTH)
+					and isShortName(args[3], Unlocks.MAX_VARIANT_LENGTH)
 			end,
 		},
 		RequestAscend = {

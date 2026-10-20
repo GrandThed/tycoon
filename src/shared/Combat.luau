@@ -14,6 +14,7 @@ local Armory = require(script.Parent:WaitForChild("Armory"))
 -- provides for a pure module, and the old solver compares nested tables invariantly, so every
 -- field below must stay in lockstep with Types.luau.
 type MissionRecord = { bestWave: number, bossClears: number, overdriveBest: number }
+type SavedLoadout = { melee: string?, ranged: string?, variants: { [string]: string } }
 type CombatProfile = {
 	materials: { [string]: number },
 	valor: number,
@@ -28,6 +29,9 @@ type CombatProfile = {
 	secrets: { [string]: { [string]: boolean } }?,
 	families: { [string]: boolean }?,
 	shortcuts: { [string]: { [string]: boolean } }?,
+	tiers: { [string]: number }?,
+	loadout: SavedLoadout?,
+	stars: { [string]: { [string]: boolean } }?,
 }
 
 type EnemyDef = {
@@ -271,16 +275,32 @@ type PartyEffectDef = {
 	damageMult: number?,
 	seconds: number?,
 }
+type ArmoryLadderBand = { levelId: string, material: string }
+type ArmoryLadder = {
+	damage: { number },
+	hp: { melee: { number }, ranged: { number } },
+	rangeHp: number,
+	bandSize: number,
+	bands: { ArmoryLadderBand },
+	costs: { number },
+	starDifficulty: string,
+}
+type ArmoryWindow = { start: number, top: number }
+type ArmoryLegacyCost = { material: string, amount: number }
+type ArmoryLegacy = { gearCosts: { ArmoryLegacyCost } }
 type ArmoryConfig = {
 	version: number,
 	baseHp: number,
-	power: { hpWeight: number },
+	power: { hpWeight: number, tierWeight: number? },
 	bands: { BandDef },
 	classes: { [string]: WeaponClassDef },
 	abilities: { [string]: AbilityDef },
 	slots: { [string]: ArmorySlotDef },
 	ascension: AscensionConfig,
 	partyEffects: { [string]: PartyEffectDef },
+	ladder: ArmoryLadder?,
+	windows: { [string]: ArmoryWindow }?,
+	legacy: ArmoryLegacy?,
 }
 
 -- The slices of PlayerState these functions read; callers pass the whole state.

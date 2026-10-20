@@ -131,7 +131,8 @@ MUTATIONS = {
         "",
     ),
     "24b: the previous window forgotten": (VITALS, "or met(wasFrom, wasUntil, impact, limit)", "or false"),
-    "17: the body keeps the profile's health": (VITALS, "{ melee = 1, ranged = 1 }", "{ melee = 0, ranged = 0 }"),
+    # Re-aimed for L3-2 (luau-engineer B): the range's body is Armory.RangeHp now.
+    "17: the body keeps the profile's health": (VITALS, "\treturn Armory.RangeHp(armoryConfig)\n", "\treturn nil\n"),
     "23: effects wait for the crowd step": (VITALS, "\tsettle(config, now)\n\tflush()\n", "\tsettle(config, now)\n"),
     "26: an aimed miss under an i-frame says nothing": (VITALS, AIMED, "if not held then"),
     "26: any covered miss is a dodge, aimed or not": (VITALS, AIMED, "if not held and not voided then"),
@@ -4290,7 +4291,7 @@ L2_MUTATIONS = {
         "local lift = height",
     ),
     # ProfileSchema v7 (L2-1).
-    "l2: the schema stays at v6": (SCHEMA, "local SCHEMA_VERSION = 7", "local SCHEMA_VERSION = 6"),
+    "l2: the schema stays at v6": (SCHEMA, "local SCHEMA_VERSION = 8", "local SCHEMA_VERSION = 6"),
     "l2: the template lacks abilities": (SCHEMA, "\t\tabilities = {},\n", ""),
     "l2: there is no step from v6": (
         SCHEMA,
@@ -4690,7 +4691,12 @@ L2W2_MUTATIONS = {
         'return if type(element) == "string" then ELEMENTS[element] else nil',
         'return if type(element) == "string" then element else nil',
     ),
-    "l2w2: HasElement ignores ownership": (UNLOCKS, "\t\t\tand Unlocks.OwnsFamily(families, family, starters)\n", ""),
+    # Re-aimed for L3 W1: LoadoutOf asks OwnsFamily in a line of the same text.
+    "l2w2: HasElement ignores ownership": (
+        UNLOCKS,
+        "\t\t\tUnlocks.ElementOf(weapons, family) == element\n\t\t\tand Unlocks.OwnsFamily(families, family, starters)\n",
+        "\t\t\tUnlocks.ElementOf(weapons, family) == element\n",
+    ),
     "l2w2: HoldsKey asks no element": (
         UNLOCKS,
         "\n\t\tor Unlocks.HasElement(combat.families, weapons, starters, needs)",
@@ -5976,6 +5982,406 @@ L2W3_FIX3_MUTATIONS = {
 }
 MUTATIONS.update(L2W3_FIX3_MUTATIONS)
 
+
+# L3 W1, tiers per weapon and the saved loadout (docs/prompts/l3-w1-contract.md). From luau-engineer
+# A: the pure Armory ladder, windows, upgrade, levers and refund, the profile's v8 step and Unlocks'
+# saved loadout and stars (tests_l3.luau). The harness now also bundles the Armory screen's pure
+# model and the formatting it reads (tests_l3_ui.luau), so both files go into every mutant root.
+ARMORY = "src/shared/Armory.luau"
+FILES += ["src/shared/Format.luau", "src/client/UI/ArmoryModel.luau"]
+VERDICT_LOCKED = '\tif start == nil then\n\t\treturn "invalid"\n\tend\n\tif not owned then\n\t\treturn "locked"\n\tend\n'
+VERDICT_PEAK = '\tif nextTier == nil then\n\t\treturn "peak"\n\tend\n\tif not gateOpen then\n\t\treturn "busy"\n\tend\n'
+HELD_FAMILY = "\t\t\tand def.slot == slot\n\t\t\tand Unlocks.OwnsFamily(families, family, starters)\n"
+L3_MUTATIONS = {
+    # The ladder and the windows (L3-1 to L3-3).
+    "l3: Window does not hold a window inside the ladder": (
+        ARMORY,
+        "return clampTier(window.start, size), clampTier(window.top, size)",
+        "return window.start, window.top",
+    ),
+    "l3: Window takes a start above its top": (
+        ARMORY,
+        "\t\tor not whole(window.top)\n\t\tor window.start > window.top\n\tthen",
+        "\t\tor not whole(window.top)\n\tthen",
+    ),
+    "l3: Window takes a fraction": (
+        ARMORY,
+        "\t\tor not whole(window.start)\n\t\tor not whole(window.top)\n\t\tor window.start > window.top\n\tthen",
+        "\t\tor window.start > window.top\n\tthen",
+    ),
+    "l3: TierOf ignores the saved tier": (ARMORY, "return math.min(math.max(saved, start), top)", "return start"),
+    "l3: TierOf does not hold a saved tier under the top": (
+        ARMORY,
+        "return math.min(math.max(saved, start), top)",
+        "return math.max(saved, start)",
+    ),
+    "l3: TierOf does not lift a saved tier to the start": (
+        ARMORY,
+        "return math.min(math.max(saved, start), top)",
+        "return math.min(saved, top)",
+    ),
+    "l3: TierOf takes a saved fraction": (
+        ARMORY,
+        "\tif not whole(saved) then\n\t\treturn start",
+        "\tif type(saved) ~= \"number\" or saved ~= saved then\n\t\treturn start",
+    ),
+    "l3: a family with no window fights at T2": (
+        ARMORY,
+        "if start == nil or top == nil then\n\t\treturn 1\n",
+        "if start == nil or top == nil then\n\t\treturn 2\n",
+    ),
+    "l3: HeldTiers reads the melee family for both": (
+        ARMORY,
+        "ranged = Armory.TierOf(cfg, combat, ranged) }",
+        "ranged = Armory.TierOf(cfg, combat, melee) }",
+    ),
+    "l3: NextTier passes the top": (ARMORY, "return if nextTier <= top then nextTier else nil", "return nextTier"),
+    # Strength and health (L3-1, L3-2, L3-6).
+    "l3: Multiplier does not hold the tier inside the ladder": (
+        ARMORY,
+        "ladder.damage[clampTier(tier, #ladder.damage)]",
+        "ladder.damage[tier]",
+    ),
+    "l3: Multiplier takes a tier that is not whole": (
+        ARMORY,
+        " or not whole(tier) then\n\t\treturn NEUTRAL_MULT",
+        " then\n\t\treturn NEUTRAL_MULT",
+    ),
+    "l3: WeaponHp takes a tier that is not whole": (
+        ARMORY,
+        "if list == nil or #list == 0 or not whole(tier) then",
+        "if list == nil or #list == 0 then",
+    ),
+    "l3: a multiplier of 0 is kept": (
+        ARMORY,
+        "return if finite(value) and value > 0 then value else NEUTRAL_MULT",
+        "return if finite(value) then value else NEUTRAL_MULT",
+    ),
+    "l3: DamageScale ignores Ascension": (
+        ARMORY,
+        "return Armory.Multiplier(cfg, tier) * ascensionMult(cfg, ascLevel, ability)",
+        "return Armory.Multiplier(cfg, tier)",
+    ),
+    "l3: an ability scales by damageMult": (
+        ARMORY,
+        "return if ability then level.abilityMult else level.damageMult",
+        "return level.damageMult",
+    ),
+    "l3: WeaponHp ignores hpMult": (
+        ARMORY,
+        "return value * (if level ~= nil then level.hpMult else NEUTRAL_MULT)",
+        "return value",
+    ),
+    "l3: WeaponHp reads melee for every slot": (
+        ARMORY,
+        'local list: any = if slot == "melee"\n\t\tthen hp.melee\n\t\telseif slot == "ranged" then hp.ranged\n\t\telse nil',
+        "local list: any = hp.melee",
+    ),
+    "l3: RangeHp is baseHp": (
+        ARMORY,
+        "return if finite(value) and value > 0 then value else cfg.baseHp",
+        "return cfg.baseHp",
+    ),
+    "l3: GearPower weighs the tiers at 1": (
+        ARMORY,
+        "local tierWeight = if finite(weight) then weight else 0",
+        "local tierWeight = 1",
+    ),
+    "l3: GearPower drops health": (
+        ARMORY,
+        "damage * tierWeight + Armory.MaxHp(cfg, tiers, ascension) * cfg.power.hpWeight",
+        "damage * tierWeight",
+    ),
+    "l3: Preview drops the multiplier": (
+        ARMORY,
+        "return math.round(baseDamage * Armory.Multiplier(cfg, tier)),",
+        "return math.round(baseDamage),",
+    ),
+    # Bands and costs (L3-4).
+    "l3: BandOf counts positions from 0": (ARMORY, "(tier - 1) % bandSize + 1", "tier % bandSize + 1"),
+    "l3: BandOf takes a fraction": (ARMORY, "\t\tor not whole(tier)\n", ""),
+    "l3: TierCost takes a negative cost": (
+        ARMORY,
+        "if def == nil or not finite(cost) or cost < 0 then",
+        "if def == nil or not finite(cost) then",
+    ),
+    # UpgradeVerdict's reasons and their order (L3-5).
+    "l3: locked before invalid": (
+        ARMORY,
+        VERDICT_LOCKED,
+        '\tif not owned then\n\t\treturn "locked"\n\tend\n\tif start == nil then\n\t\treturn "invalid"\n\tend\n',
+    ),
+    "l3: busy before peak": (
+        ARMORY,
+        VERDICT_PEAK,
+        '\tif not gateOpen then\n\t\treturn "busy"\n\tend\n\tif nextTier == nil then\n\t\treturn "peak"\n\tend\n',
+    ),
+    "l3: no gate": (ARMORY, '\tif not gateOpen then\n\t\treturn "busy"\n\tend\n', ""),
+    "l3: an unbuilt band is for sale": (ARMORY, "built[band.levelId] ~= true or ", ""),
+    "l3: a priceless tier is for sale": (
+        ARMORY,
+        ' or material == "" then\n\t\treturn "notBuilt"',
+        ' then\n\t\treturn "notBuilt"',
+    ),
+    "l3: a band top needs no star": (
+        ARMORY,
+        "position == ladder.bandSize and not starHeld(",
+        "false and not starHeld(",
+    ),
+    "l3: a star of any difficulty is the trophy": (
+        ARMORY,
+        'return type(difficulty) == "string" and type(row) == "table" and row[difficulty] == true',
+        'return type(row) == "table" and next(row) ~= nil',
+    ),
+    "l3: the funds at a strict edge": (
+        ARMORY,
+        "if not (finite(have) and have >= cost) then",
+        "if not (finite(have) and have > cost) then",
+    ),
+    # Upgrade (L3-13).
+    "l3: Upgrade skips its verdict": (
+        ARMORY,
+        "\tif verdict ~= nil then\n\t\treturn verdict\n\tend\n\tlocal nextTier = Armory.NextTier(cfg, combat, family)",
+        "\tlocal nextTier = Armory.NextTier(cfg, combat, family)",
+    ),
+    "l3: Upgrade spends nothing": (
+        ARMORY,
+        "\tcombat.materials[material] = math.max(0, (combat.materials[material] or 0) - cost)\n",
+        "",
+    ),
+    "l3: Upgrade writes a tier too many": (
+        ARMORY,
+        "\ttiers[family] = nextTier\n\treturn nil",
+        "\ttiers[family] = nextTier + 1\n\treturn nil",
+    ),
+    "l3: Upgrade makes a tiers table it does not keep": (
+        ARMORY,
+        "\tlocal tiers = combat.tiers or {}\n\tcombat.tiers = tiers\n\ttiers[family] = nextTier",
+        "\tlocal tiers = combat.tiers or {}\n\ttiers[family] = nextTier",
+    ),
+    # The levers' pieces (L3-28) and the refund (L3-8).
+    "l3: SetTier does not hold to the window": (
+        ARMORY,
+        "local held = math.min(math.max(math.floor(tier), start), top)",
+        "local held = math.floor(tier)",
+    ),
+    "l3: SetTier takes a NaN": (
+        ARMORY,
+        "if start == nil or top == nil or not finite(tier) then",
+        "if start == nil or top == nil then",
+    ),
+    "l3: BuiltBands lists bands not built": (ARMORY, "\t\t\tand built[def.levelId] == true\n", ""),
+    "l3: BuiltBands repeats a shared material": (
+        ARMORY,
+        "\t\t\tif table.find(materials, def.material) == nil then\n\t\t\t\ttable.insert(materials, def.material)\n\t\t\tend",
+        "\t\t\ttable.insert(materials, def.material)",
+    ),
+    "l3: the refund counts one tier too many": (
+        ARMORY,
+        "for t = 1, math.min(owned, #list) do",
+        "for t = 1, math.min(owned + 1, #list) do",
+    ),
+    "l3: the refund rounds a fraction down": (
+        ARMORY,
+        "\t\tif not whole(owned) then\n\t\t\tcontinue",
+        "\t\tif not finite(owned) then\n\t\t\tcontinue\n\t\tend\n\t\towned = math.floor(owned)\n\t\tif false then\n\t\t\tcontinue",
+    ),
+    "l3: the refund reads only melee": (
+        ARMORY,
+        "for _, owned: any in { gear.melee, gear.ranged } do",
+        "for _, owned: any in { gear.melee } do",
+    ),
+    "l3: the refund takes a negative amount": (ARMORY, "\t\t\t\tand entry.amount >= 0\n", ""),
+    # Problems (L3-5).
+    "l3: Problems takes a damage entry that does not rise": (
+        ARMORY,
+        "elseif t > 1 and finite(before) and value <= before then",
+        "elseif false then",
+    ),
+    "l3: Problems takes ranged above melee": (
+        ARMORY,
+        "if finite(melee[t]) and finite(ranged[t]) and melee[t] < ranged[t] then",
+        "if false then",
+    ),
+    "l3: Problems takes a window naming no family": (ARMORY, "if not known[family] then", "if false then"),
+    # ProfileSchema v8 (L3-7, L3-8).
+    "l3: the schema stays at v7": (SCHEMA, "local SCHEMA_VERSION = 8", "local SCHEMA_VERSION = 7"),
+    "l3: the template lacks tiers": (SCHEMA, "\t\ttiers = {},\n", ""),
+    "l3: the template names a starter": (
+        SCHEMA,
+        "\t\tloadout = { variants = {} },\n\t\tstars = {},",
+        '\t\tloadout = { melee = "broadsword", variants = {} },\n\t\tstars = {},',
+    ),
+    "l3: there is no step from v7": (
+        SCHEMA,
+        "[7] = function(state: Types.PlayerState): ()",
+        "[17] = function(state: Types.PlayerState): ()",
+    ),
+    "l3: the step shares the template's tiers": (
+        SCHEMA,
+        "\t\t\tcombat.tiers = {}\n",
+        "\t\t\tcombat.tiers = PROFILE_TEMPLATE.combat.tiers\n",
+    ),
+    "l3: the step replaces a loadout that is there": (
+        SCHEMA,
+        '\t\tif loadout == nil then\n\t\t\tcombat.loadout = { variants = {} }\n\t\telseif type(loadout.variants) ~= "table" then\n\t\t\tloadout.variants = {}\n\t\tend\n',
+        "\t\tcombat.loadout = { variants = {} }\n",
+    ),
+    "l3: the step leaves a loadout without its variants": (
+        SCHEMA,
+        '\t\telseif type(loadout.variants) ~= "table" then\n\t\t\tloadout.variants = {}\n',
+        "",
+    ),
+    "l3: the step forgets stars": (SCHEMA, "\t\tif combat.stars == nil then\n\t\t\tcombat.stars = {}\n\t\tend\n", ""),
+    "l3: the step refunds nothing": (
+        SCHEMA,
+        "\t\t\tcombat.materials[material] = (combat.materials[material] or 0) + amount\n",
+        "",
+    ),
+    "l3: the step refunds twice over": (
+        SCHEMA,
+        "(combat.materials[material] or 0) + amount\n",
+        "(combat.materials[material] or 0) + 2 * amount\n",
+    ),
+    "l3: the step zeroes the frozen gear": (
+        SCHEMA,
+        "\t\tfor material, amount in Armory.LegacyRefund(armoryConfig, combat.gear) do",
+        "\t\tlocal gear = combat.gear\n\t\tcombat.gear = { melee = 0, ranged = 0 }\n"
+        "\t\tfor material, amount in Armory.LegacyRefund(armoryConfig, gear) do",
+    ),
+    "l3: the step refunds at other prices": (
+        SCHEMA,
+        "Armory.LegacyRefund(armoryConfig, combat.gear)",
+        'Armory.LegacyRefund({ legacy = { gearCosts = { { material = "Timber", amount = 100 } } } } :: any, combat.gear)',
+    ),
+    # Unlocks: the saved loadout and stars (L3-9, L3-10), the levers' pieces (L3-28).
+    "l3: LoadoutOf holds a family not owned": (UNLOCKS, HELD_FAMILY, "\t\t\tand def.slot == slot\n"),
+    "l3: LoadoutOf holds a family in the wrong slot": (
+        UNLOCKS,
+        HELD_FAMILY,
+        "\t\t\tand Unlocks.OwnsFamily(families, family, starters)\n",
+    ),
+    "l3: LoadoutOf keeps an unknown style": (UNLOCKS, "\t\t\t\tand def.variants[key] ~= nil\n", ""),
+    "l3: SaveLoadout writes any slot": (
+        UNLOCKS,
+        '\tif slot ~= "melee" and slot ~= "ranged" then\n\t\treturn\n\tend\n',
+        "",
+    ),
+    "l3: SaveLoadout forgets the style": (UNLOCKS, "\tvariants[family] = variant\n", ""),
+    "l3: SaveLoadout makes a loadout it does not keep": (
+        UNLOCKS,
+        "\tcombat.loadout = loadout\n\t-- A hand-edited",
+        "\t-- A hand-edited",
+    ),
+    "l3: StarsOf does not keep what it made": (UNLOCKS, "\tcombat.stars = made\n", ""),
+    "l3: ResetArmory keeps the stars": (UNLOCKS, "\tcombat.stars = {}\nend", "end"),
+    "l3: ResetArmory clears the families": (
+        UNLOCKS,
+        "\tcombat.tiers = {}\n\tcombat.loadout = { variants = {} }",
+        "\tcombat.tiers = {}\n\tcombat.families = {}\n\tcombat.loadout = { variants = {} }",
+    ),
+    "l3: TierLever takes a fraction": (UNLOCKS, '"^([%w_]+)=(%d+)$"', '"^([%w_]+)=([%d%.]+)$"'),
+    "l3: TierLever takes a long id": (
+        UNLOCKS,
+        " or #family > MAX_FAMILY_LENGTH then\n\t\treturn nil, nil",
+        " then\n\t\treturn nil, nil",
+    ),
+}
+MUTATIONS.update(L3_MUTATIONS)
+
+# L3 W1, from luau-engineer B: the range's body read from the ladder, and StageFlow's first clear
+# (FirstClear and Validate's firstClear lines, tests_l3_run.luau).
+L3_RUN_MUTATIONS = {
+    "l3: the range's body is the held pair's MaxHp": (
+        VITALS,
+        "return Armory.RangeHp(armoryConfig)",
+        "return Armory.MaxHp(armoryConfig, { melee = 1, ranged = 1 }, { melee = 0, ranged = 0 })",
+    ),
+    "l3: Validate skips the first clears": (FLOW, "\tfirstClearProblems(level, weapons, starters, problem)\n", ""),
+    "l3: a firstClear that is no table is accepted": (FLOW, "\t\t\tproblem(`{where} is not a table`)\n", ""),
+    "l3: a first-clear family of any length is accepted": (FLOW, " or #id > Unlocks.MAX_FAMILY_LENGTH", ""),
+    "l3: an empty first-clear family is accepted": (
+        FLOW,
+        'if type(id) ~= "string" or id == "" or #id > Unlocks.MAX_FAMILY_LENGTH then',
+        'if type(id) ~= "string" or #id > Unlocks.MAX_FAMILY_LENGTH then',
+    ),
+    "l3: a first clear may name an unknown family": (
+        FLOW,
+        "elseif weapons ~= nil and weapons[id] == nil then",
+        "elseif false then",
+    ),
+    "l3: a first clear may name a starter": (
+        FLOW,
+        "elseif starters ~= nil and starters[id] == true then",
+        "elseif false then",
+    ),
+    "l3: a fractional first-clear Valor is accepted": (
+        FLOW,
+        "valor ~= nil and not (isFinite(valor) and valor >= 0 and valor % 1 == 0)",
+        "valor ~= nil and not (isFinite(valor) and valor >= 0)",
+    ),
+    "l3: a negative first-clear Valor is accepted": (
+        FLOW,
+        "valor ~= nil and not (isFinite(valor) and valor >= 0 and valor % 1 == 0)",
+        "valor ~= nil and not (isFinite(valor) and valor % 1 == 0)",
+    ),
+    "l3: the first-clear lines come in the table's order": (FLOW, "\ttable.sort(names)\n", ""),
+    "l3: FirstClear keeps an empty family": (
+        FLOW,
+        'family = if type(family) == "string" and family ~= "" then family else nil,',
+        'family = if type(family) == "string" then family else nil,',
+    ),
+    "l3: FirstClear keeps a fractional Valor": (
+        FLOW,
+        "valor = if isFinite(valor) and valor > 0 and valor % 1 == 0 then valor else nil,",
+        "valor = if isFinite(valor) and valor > 0 then valor else nil,",
+    ),
+    "l3: FirstClear keeps a Valor of 0": (
+        FLOW,
+        "valor = if isFinite(valor) and valor > 0 and valor % 1 == 0 then valor else nil,",
+        "valor = if isFinite(valor) and valor >= 0 and valor % 1 == 0 then valor else nil,",
+    ),
+    "l3: FirstClear gives an empty reward": (
+        FLOW,
+        "\tif given.family == nil and given.valor == nil then\n\t\treturn nil\n\tend\n",
+        "",
+    ),
+    "l3: FirstClear hands out the level file's table": (FLOW, "\treturn given\nend\n", "\treturn reward\nend\n"),
+    "l3: FirstClear reads the hard difficulty whatever is asked": (
+        FLOW,
+        "then difficulties[difficulty] else nil",
+        "then difficulties.hard else nil",
+    ),
+}
+MUTATIONS.update(L3_RUN_MUTATIONS)
+# L3 W1, from ui-engineer A: the Armory screen's pure ArmoryModel (tests_l3_ui.luau). Format.luau
+# and ArmoryModel.luau are in FILES (luau-engineer A's block above).
+ARMORY_MODEL = "src/client/UI/ArmoryModel.luau"
+L3_UI_MUTATIONS = {
+    "l3 ui: the shelf runs against window starts": (ARMORY_MODEL, "\t\t\treturn aStart < bStart\n", "\t\t\treturn aStart > bStart\n"),
+    "l3 ui: ranged before melee on one start": (ARMORY_MODEL, "return SLOT_ORDER[a.slot] < SLOT_ORDER[b.slot]", "return SLOT_ORDER[a.slot] > SLOT_ORDER[b.slot]"),
+    "l3 ui: a family with no window first": (ARMORY_MODEL, "local NO_WINDOW = math.huge", "local NO_WINDOW = 0"),
+    "l3 ui: a found entry beats the secret's hint": (ARMORY_MODEL, "\t\t\t\tand where[family] == nil\n", ""),
+    "l3 ui: an owned family keeps its hint": (ARMORY_MODEL, "hint = if owned then nil else hints[family],", "hint = hints[family],"),
+    "l3 ui: the held pair ignores the saved loadout": (ARMORY_MODEL, "return Unlocks.LoadoutOf(inputs.combat, inputs.weapons, fallback)", "return { melee = fallback.melee, ranged = fallback.ranged, variants = {} }"),
+    "l3 ui: the tier's own pip is not lit": (ARMORY_MODEL, "state = if card.owned and tier <= card.tier then", "state = if card.owned and tier < card.tier then"),
+    "l3 ui: an unowned window is lit": (ARMORY_MODEL, "state = if card.owned and tier <= card.tier then", "state = if tier <= card.tier then"),
+    "l3 ui: pips lose their band colour": (ARMORY_MODEL, "color = bandColor(inputs, band),", "color = nil,"),
+    "l3 ui: the next line ignores the held style": (ARMORY_MODEL, "nextLine = nextLine(inputs, card, equipVariant),", "nextLine = nextLine(inputs, card, card.default),"),
+    "l3 ui: the cost line forgets the star": (ARMORY_MODEL, "if bandTop and not hasStar(inputs, levelId) then", "if bandTop then"),
+    "l3 ui: an unbuilt band's cost shows": (ARMORY_MODEL, "if levelId == nil or inputs.built[levelId] ~= true or material == \"\" then", "if levelId == nil or material == \"\" then"),
+    "l3 ui: Upgrade is live whatever the verdict": (ARMORY_MODEL, "\t)\n\tif verdict == nil then\n\t\tlocal nextTier", "\t)\n\tif true then\n\t\tlocal nextTier"),
+    "l3 ui: two upgrades in flight": (ARMORY_MODEL, "return { visible = true, live = pending == nil, text = text, look = \"action\" }, nextTier", "return { visible = true, live = true, text = text, look = \"action\" }, nextTier"),
+    "l3 ui: Equip ignores the gate": (ARMORY_MODEL, "\t\tvariant,\n\t\tinputs.gateOpen\n\t)", "\t\tvariant,\n\t\ttrue\n\t)"),
+    "l3 ui: the held family is not Equipped": (ARMORY_MODEL, "\tif card.held then\n\t\treturn { visible = true, live = false, text = TEXT.equipped, look = \"held\" }", "\tif false then\n\t\treturn { visible = true, live = false, text = TEXT.equipped, look = \"held\" }"),
+    "l3 ui: two equips in flight": (ARMORY_MODEL, "\t\t\tlive = pending.equipFamily == nil,\n", "\t\t\tlive = true,\n"),
+    "l3 ui: the held style is not held": (ARMORY_MODEL, "if card.held and heldKey == variant.key then", "if false then"),
+    "l3 ui: busy toasts Try again": (ARMORY_MODEL, "\tif reason == \"busy\" then\n\t\treturn TEXT.busy\n\tend\n\tif action", "\tif action"),
+    "l3 ui: the shortfall is the whole price": (ARMORY_MODEL, "local short = amount - (combat.materials[material] or 0)", "local short = amount"),
+    "l3 ui: the wallet shows unbuilt bands": (ARMORY_MODEL, "Armory.BuiltBands(armory, inputs.built)", "Armory.BuiltBands(armory, { forestRoad = true, castle = true })"),
+    "l3 ui: the screen opens on the ranged family": (ARMORY_MODEL, "if card.family == held.melee then", "if card.family == held.ranged then"),
+}
+MUTATIONS.update(L3_UI_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

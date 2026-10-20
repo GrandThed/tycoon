@@ -96,6 +96,8 @@ local function sendSnapshot(player: Player): ()
 		return
 	end
 	local armoryConfig = Catalog.GetArmoryConfig()
+	-- L3-6: power reads the held families' tiers (the frozen slot `gear` would never move).
+	local heldTiers, ascension = WeaponService.GearOf(player)
 	local snapshot: Types.Snapshot = {
 		kind = "snapshot",
 		plotIndex = 0,
@@ -105,7 +107,7 @@ local function sendSnapshot(player: Player): ()
 		incomePerSecond = 0,
 		persistedIncomePerSecond = state.incomeAtSave,
 		gearPower = if armoryConfig ~= nil
-			then Armory.GearPower(armoryConfig, state.combat.gear, state.combat.ascension)
+			then Armory.GearPower(armoryConfig, heldTiers, ascension)
 			else 0,
 		welcomeBack = nil,
 	}
@@ -439,6 +441,15 @@ RemoteService.SetHandler(
 		UnlockService.OnSetFamily(player, slot, family, variant)
 	end
 )
+
+-- L3-13: raising a family a tier in the lobby Armory; UnlockService validates (owned, window,
+-- the band top's star, Timber) and answers with an ActionResult.
+RemoteService.SetHandler("RequestUpgradeWeapon", function(player: Player, family: string)
+	if RangeService.IsActive() then
+		return
+	end
+	UnlockService.OnUpgradeWeapon(player, family)
+end)
 
 -- Studio levers, the remote half (the attribute half is DebugService's own 1 Hz poll). The
 -- handler itself refuses everything outside Studio.

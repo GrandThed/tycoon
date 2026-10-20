@@ -3,6 +3,7 @@
 -- Vector3, ...)`, the real module bodies wrapped the way tools/crowd_harness/run_harness.py wraps
 -- them. This file runs the real Combat, StageFlow, CampBrain, Region and LevelGeometry on them and prints
 -- one line an answer: `OUT<tab>id<tab>json`. It decides nothing: every comparison is the Python's.
+-- L3 W1 adds the pure Armory's tier rules and StageFlow.FirstClear.
 
 -- Vector3, as much of it as StageFlow uses -----------------------------------------------------
 local vmeta = {}
@@ -148,11 +149,13 @@ local Region = M.load("Region")
 local data: any = DATA
 local rules = data.combat.levels
 local director = data.combat.director
+-- L3-17: Validate checks a first clear's family against the weapons and the starters.
+local L3: any = { Armory = M.load("Armory"), starters = M.load("Unlocks").Starters(data.proving.loadout) }
 
 -- What the module exports: the Python lists a comparison whose function is not there.
 do
 	local names: { [string]: { string } } =
-		{ Combat = {}, StageFlow = {}, CampBrain = {}, HitShapes = {}, SwingGate = {}, Region = {} }
+		{ Combat = {}, StageFlow = {}, CampBrain = {}, HitShapes = {}, SwingGate = {}, Region = {}, Armory = {} }
 	for module, value in
 		{
 			Combat = Combat,
@@ -161,6 +164,7 @@ do
 			HitShapes = Shapes,
 			SwingGate = Gate,
 			Region = Region,
+			Armory = L3.Armory,
 		}
 	do
 		for name, item in value do
@@ -334,7 +338,9 @@ for index, file in data.levels do
 			data.proving.crowd.kinds,
 			data.ranks,
 			rules,
-			data.proving.crowd.maxAlive
+			data.proving.crowd.maxAlive,
+			data.proving.weapons,
+			L3.starters
 		)
 	end)
 	for _, difficulty in data.planDifficulties do
@@ -502,7 +508,9 @@ for _, case in data.refusalCases do
 			data.proving.crowd.kinds,
 			data.ranks,
 			case.rules,
-			data.proving.crowd.maxAlive
+			data.proving.crowd.maxAlive,
+			data.proving.weapons,
+			L3.starters
 		)
 	end)
 end
@@ -1108,6 +1116,94 @@ for _, case in data.splitCases do
 			rows[index] = { paid = listed(paid), carry = listed(carry) }
 		end
 		return rows
+	end)
+end
+-- L3 W1: the Armory's tier rules, op by op ("none" stands for a nil: a list cannot hold one) --------
+function L3.answer(cfg: any, op: string, row: any, families: any): any
+	local A = L3.Armory
+	local combat = if type(row[1]) == "number" then data.armoryCombats[row[1]] else nil
+	if op == "ladderSize" then
+		return A.LadderSize(cfg)
+	elseif op == "window" then
+		local start, top = A.Window(cfg, row[1])
+		return if start == nil then "none" else { start, top }
+	elseif op == "tierOf" then
+		return A.TierOf(cfg, combat, row[2])
+	elseif op == "heldTiers" then
+		return A.HeldTiers(cfg, combat, row[2], row[3])
+	elseif op == "multiplier" then
+		return A.Multiplier(cfg, row[1])
+	elseif op == "damageScale" then
+		return A.DamageScale(cfg, row[1], row[2], row[3])
+	elseif op == "weaponHp" then
+		return A.WeaponHp(cfg, row[1], row[2], row[3])
+	elseif op == "maxHp" then
+		return A.MaxHp(cfg, { melee = row[1], ranged = row[2] }, { melee = row[3], ranged = row[4] })
+	elseif op == "rangeHp" then
+		return A.RangeHp(cfg)
+	elseif op == "gearPower" then
+		return A.GearPower(cfg, { melee = row[1], ranged = row[2] }, { melee = row[3], ranged = row[4] })
+	elseif op == "bandOf" then
+		return { A.BandOf(cfg, row[1]) }
+	elseif op == "nextTier" then
+		return A.NextTier(cfg, combat, row[2]) or "none"
+	elseif op == "tierCost" then
+		return { A.TierCost(cfg, row[1]) }
+	elseif op == "preview" then
+		return { A.Preview(cfg, row[1], row[2], row[3]) }
+	elseif op == "upgradeVerdict" then
+		local built = {}
+		for _, levelId in data.armoryBuilt[row[5]] do
+			built[levelId] = true
+		end
+		return A.UpgradeVerdict(cfg, combat, row[2], row[3], row[4], built) or "none"
+	elseif op == "legacyRefund" then
+		return A.LegacyRefund(cfg, { melee = row[1], ranged = row[2] })
+	elseif op == "problems" then
+		return #A.Problems(cfg, families) > 0
+	elseif op == "setTier" then
+		-- A copy: SetTier writes, and the next row reads the same saved profile.
+		local copy = table.clone(combat)
+		copy.tiers = if combat.tiers ~= nil then table.clone(combat.tiers) else nil
+		local written = A.SetTier(cfg, copy, row[2], row[3])
+		return { written or "none", copy.tiers or {} }
+	elseif op == "builtBands" then
+		local built = {}
+		for _, levelId in data.armoryBuilt[row[1]] do
+			built[levelId] = true
+		end
+		local levels, materials = A.BuiltBands(cfg, built)
+		return { levels, materials }
+	end
+	error("unknown armory op " .. tostring(op))
+end
+for _, case in data.armoryCases do
+	J.try(case.id, function()
+		local cfg = data.armoryConfigs[case.config]
+		local found = {}
+		for index, row in case.rows do
+			local ok, value = pcall(L3.answer, cfg, case.op, row, case.families)
+			found[index] = if ok then value else { threw = tostring(value) }
+		end
+		return found
+	end)
+end
+
+-- L3-17: StageFlow.FirstClear on every level at every difficulty, and on Forest Road's shapes ------
+for _, case in data.firstClearCases do
+	J.try(case.id, function()
+		local level = L.resolve(case.file)
+		if level == nil then
+			return "unresolved"
+		end
+		local found = {}
+		for index, difficulty in case.difficulties do
+			local given = Flow.FirstClear(level, difficulty)
+			found[index] = if given == nil
+				then "none"
+				else { family = given.family or "none", valor = given.valor or "none" }
+		end
+		return found
 	end)
 end
 print("DONE")

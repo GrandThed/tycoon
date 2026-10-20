@@ -21,7 +21,8 @@
 --
 -- From L1: every run ends in a summary and then the lobby camp, never the city (ruling 20); the
 -- leader starts a level with RequestStartLevel (ruling 7); stars are session memory, kept here
--- per userId (ruling 25).
+-- per userId (ruling 25). Since L3 (L3-9) a member's stars are their profile's; only a member
+-- without a loaded profile (a bot) keeps a session table.
 -- New with L1b ("L1b contracts — the living road"): the crowd has one floor per camp, set once at
 -- the start; every camp's residents are placed at the start and live on their own; every kill is
 -- paid the moment it falls, split by that body's own damage book (L1b-15), and the wallet goes
@@ -39,6 +40,8 @@
 -- fighter is tested against the level's chests (SecretFlow); UnlockService opens one and writes
 -- the profile, and this file credits the summary, marks the wallet and tells the clients. The map
 -- carries each member's own row of secrets.
+-- L3 W1 (docs/prompts/l3-w1-contract.md, L3-9 and L3-17): stars are saved in the profile, and a
+-- star that is new gives its difficulty's first-clear reward (UnlockService) on the summary.
 -- L2 W2 ("fire, the Flamethrower, the cave and the shortcut"): the level is built without the
 -- blocks the leader's found shortcuts open; each tick a standing fighter inside a shortcut's box
 -- records it (UnlockService), once per run; a reactive block that goes is told to everyone.
@@ -53,6 +56,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
@@ -226,7 +230,8 @@ local boot = {
 	rescuedAt = {} :: { [number]: number },
 	broadcastAccumulator = 0,
 	loop = nil :: RBXScriptConnection?,
-	-- Ruling 25: the stars of this session, by userId. Kept when a member leaves and comes back.
+	-- Ruling 25: the stars of this session, by userId, for a member without a loaded profile (L3-9:
+	-- everyone else's are in their profile). Kept when a member leaves and comes back.
 	stars = {} :: { [number]: StageFlow.Stars },
 	-- The leader the last MapState was computed for: a change sends a new one to everybody.
 	mapLeader = 0,
@@ -437,7 +442,16 @@ end
 
 -- The map ------------------------------------------------------------------------------------
 
+-- L3-9: the one table the map (requires.node), the start's gate, the summary's star and the
+-- Armory's band-top gate all read: a member's profile `combat.stars` (made when nil), so a star
+-- outlives the session; a member without a loaded profile (a bot) keeps this session's.
 local function starsOf(userId: number): StageFlow.Stars
+	local member = ArenaService.GetMember(userId)
+	local player = if member ~= nil and not member.bot then member.player else nil
+	local profile = if player ~= nil then DataService.GetState(player) else nil
+	if profile ~= nil then
+		return Unlocks.StarsOf(profile.combat)
+	end
 	local stars = boot.stars[userId]
 	if stars == nil then
 		stars = {}
@@ -1323,11 +1337,19 @@ function WaveService.EndRun(asked: string): ()
 
 	local results: { [number]: Types.RunResult } = {}
 	for _, member in ArenaService.GetMembers() do
-		if member.bot or member.player == nil then
+		local player = member.player
+		if member.bot or player == nil then
 			continue
 		end
 		local star = StageFlow.EarnsStar(flow, member.userId)
 			and StageFlow.Award(starsOf(member.userId), plan.levelId, plan.difficulty)
+		-- L3-17: a new star gives its difficulty's first-clear reward to a member with a profile
+		-- (GrantFirstClear answers nil without one); its Valor is on the card before it goes out.
+		local reward = if star then StageFlow.FirstClear(level, plan.difficulty) else nil
+		local given = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil
+		if given ~= nil and given.valor > 0 then
+			ArenaService.CreditSummary(member.userId, 0, "", 0, given.valor, 0)
+		end
 		results[member.userId] = {
 			levelId = level.id,
 			levelName = level.name,
@@ -1336,6 +1358,7 @@ function WaveService.EndRun(asked: string): ()
 			campsCleared = flow.cleared,
 			camps = plan.camps,
 			star = star,
+			firstClear = given,
 		}
 	end
 	ArenaService.SetResults(results)
@@ -1628,14 +1651,17 @@ local function readLevel(
 		local rescue = combatConfig.player.rescue
 		layout = LevelGeometry.FromArena(arena, -(if rescue ~= nil then rescue.below else 0))
 	end
-	local crowd = Tuning.Get().crowd
+	local tuned = Tuning.Get()
+	local crowd = tuned.crowd
 	local problems = StageFlow.Validate(
 		level,
 		layout,
 		crowd.kinds,
 		difficultyRanks(map),
 		combatConfig.levels,
-		crowd.maxAlive
+		crowd.maxAlive,
+		tuned.weapons,
+		Unlocks.Starters(tuned.loadout)
 	)
 	-- How the residents rest, wake and go home is the same for every level (Combat.json camps).
 	for _, problem in CampBrain.Problems(combatConfig.camps) do
@@ -2322,6 +2348,38 @@ function WaveService.ForgetSecrets(player: Player?): ()
 	if boot.mission and ArenaService.IsAdmitted(player) then
 		sendMapState(player)
 	end
+end
+
+-- The `grantStar` lever (L3-28): `difficulty`'s star of every level in `levelIds` for `player`,
+-- saved in their profile (a session star without one, as a cleared run's), then the map to
+-- everyone (the leader's stars open the nodes). How many were new.
+function WaveService.GrantStars(player: Player, levelIds: { string }, difficulty: string): number
+	if not boot.mission then
+		return 0
+	end
+	local stars = starsOf(player.UserId)
+	local new = 0
+	for _, levelId in levelIds do
+		if StageFlow.Award(stars, levelId, difficulty) then
+			new += 1
+		end
+	end
+	sendMapState(nil)
+	return new
+end
+
+-- The `resetArmory` lever (L3-28), after UnlockService has emptied the profiles' stars: the
+-- session stars of `player` (nil = everyone) go too, and the map is resent.
+function WaveService.ForgetStars(player: Player?): ()
+	if not boot.mission then
+		return
+	end
+	if player == nil then
+		table.clear(boot.stars)
+	else
+		boot.stars[player.UserId] = nil
+	end
+	sendMapState(nil)
 end
 
 -- The `killAll` lever: every living body, on every floor, dies and is paid as any kill is

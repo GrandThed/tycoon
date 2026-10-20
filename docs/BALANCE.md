@@ -6174,3 +6174,194 @@ their inset. Every other side on a water's face keeps it too: 72 sides by the fa
 | `sim_range.ice_cells` insets the creek's mouth too / control: the Pond's top 0.5 under the Creek's | the fill line (fd-s2) | red / green |
 | `sim_range.ice_meets` ignores the top; takes a side met in part (the mirror alone) | check_stage_mirror | red ×2 |
 | re-aimed: the Q6 west-twice swap and the Q6 mirror case on the new lines; d-m3's towers 0.5 south with the island | as before | as before |
+
+## L3 W1: tiers per weapon, and the Forest on the new ladder (2026-10-20)
+
+Contract: `docs/prompts/l3-w1-contract.md` (L3-1 to L3-39; its §12, the lead's rulings: Hard `rewardMult` 2.5 is data
+only, `provingGear` is T1 for the simulators only, every non-starter family has a shelf hint). Ben's decisions:
+`docs/MISSIONS_DESIGN.md` §10 and §24. Gear: Normal T1, Hard T3, Brutal T5, the Raider Arena T1; seeds 11 / 23 / 37.
+Measured with `py tools/sim_range.py --check` (the launcher's 64-bit Python 3.12, the gate's; about 14 min),
+`py tools/sim_combat.py --check` (about 4 min), `py tools/check_levels.py` and `py tools/check_levels_mutants.py`.
+The "today" numbers are the same commands on a clean copy of `d9e7ad1` (the branch before this wave).
+
+**Red at hand-off, for the lead (both are rulings, not data I own):** R8 on Hard (four rows, §R8 below) and the
+climb's minutes (19.8 min against 25-40, §the climb). Everything else is green.
+
+### L3 W1: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Armory.json ladder.damage` | — | 20 values, `1.5 x 1.65^(t-1)` to 4 decimals (x1.5 .. x20,336.9677) | L3-1: T1 = the 2/2 every band was tuned at |
+| `ladder.hp.melee` / `.ranged` | — | T1-T11 = the old slot tiers 2-12; T12-T20 melee 1,750 2,350 3,150 4,250 5,700 7,700 10,400 14,000 19,000, ranged 1,150 1,550 2,100 2,800 3,800 5,100 6,900 9,300 12,500 | L3-2. T12-T20 are mine: the old ladder's last steps grew about x1.36 a tier, so I carried x1.35 on, rounded, melee above ranged at every tier. Health grows slower than damage (x1.65) as it always has; later levels set their `damageScale` against MaxHp at their tier |
+| `ladder.rangeHp` | (MaxHp of slot tiers 1/1) | **130** | L3-2: the range's own body, the old 100 + 20 + 10 |
+| `ladder.bandSize`, `bands` | — | 4; `forestRoad` Timber, `castle` **Iron**, `underworld` **Ember**, `planet` **Glowstone**, `dream` **Crystal** | L3-4. **The four later materials are placeholders**, named after each level's dressing (§24) and kept apart from the C1 materials (Steel, Circuits, Alloy) so that a later level never pays into Ascension by accident; Ben names them with each level. They are never shown (L3-21) |
+| `ladder.costs` | — | **[100, 100, 250, 500]** by position | Ben's Timber 100 / 250 / 500 for T2 / T3 / T4. Position 1 is never charged in band 1; **position 1 of bands 2-5 (100) is a placeholder** (Ben decides it with the Castle) |
+| `ladder.starDifficulty` | — | `hard` | L3-4: the Hard star is the trophy |
+| `Armory.json windows` | — | L3-3's table for all 15 families | Ben, as drawn |
+| `Armory.json legacy.gearCosts` | — | the 12 frozen slot prices: Timber 10 / 60 / 180, then Steel, Circuits, Alloy the same | L3-8: the v8 refund; a 3/3 profile gets 500 Timber back |
+| `Armory.json power.tierWeight` | — | **11** | L3-6: T1/T1 reads (1.5 + 1.5) x 11 + 155 x 0.2 = **64**, today's 2/2 value, so the hub's Village tile (60) still reads ready |
+| `Combat.json debug.provingGear` | 2 / 2 | **1 / 1** | L3-11: the simulators' first-run gear only |
+| `debug.gearPresets` | "2 / 2", "4 / 4", "6 / 6" | **"T1", "T3", "T5"** (melee = ranged = 1, 3, 5) | L3-15 |
+| `debug.setTierAttribute`, `grantStarAttribute`, `resetArmoryAttribute` | — | `DebugSetTier`, `DebugGrantStar`, `DebugResetArmory` | L3-28 |
+| `Expeditions.json found` | the Frost Hammer only | 12 entries: the Warhammer on `forestRoad` ("First Hard clear of Forest Road"), and the Castle, Underworld, Planet and Dream families of L3-3 ("Found in ..." for a level's own weapon, "Hidden in ..." for its secret's) | L3-25 as ruled: every non-starter family has a shelf hint; the Flamethrower keeps its secret's |
+| `1_ForestRoad.json` Normal / Hard / Brutal `recommendedTier` | 2 / 4 / 6 | **1 / 3 / 5** | L3-15 |
+| Hard `hpScale` | 5.2 | **4.25** | L3-15, re-measured (below): Hard's clock at T3 is today's at 4/4 |
+| Hard `rewardMult` | 2 | **2** (2.5 measured, then reverted) | L3-16 then §12.8 (the lead's ruling after this measure): at ×2.5 the climb took 5 runs and 19.8 min, faster than Ben's "three runs a weapon"; ×2 gives 6 runs and about 24.6 min. A Hard clear pays 20 Valor |
+| Hard `firstClear` | — | `{ family: "warhammer" }` | L3-17: arrives at T3, its window's start and Hard's tier |
+| Brutal `firstClear` | — | `{ valor: 25 }` | L3-17 |
+| `0_RaiderArena.json recommendedTier` | 2 | **1** | L3-15 |
+
+### L3 W1: the ladder
+
+| Tier | x range numbers | HP melee | HP ranged | MaxHp T/T | Gear Power T/T | Band | Price |
+|---|---|---|---|---|---|---|---|
+| T1 | x1.5000 | 35 | 20 | 155 | 64 | 1 forestRoad | - |
+| T2 | x2.4750 | 50 | 30 | 180 | 90 | 1 forestRoad | 100 Timber |
+| T3 | x4.0837 | 80 | 50 | 230 | 136 | 1 forestRoad | 250 Timber |
+| T4 | x6.7382 | 120 | 80 | 300 | 208 | 1 forestRoad | 500 Timber + Hard star |
+| T5 | x11.1180 | 170 | 110 | 380 | 321 | 2 castle | 100 Iron |
+| T6 | x18.3447 | 250 | 160 | 510 | 506 | 2 castle | 100 Iron |
+| T7 | x30.2688 | 350 | 230 | 680 | 802 | 2 castle | 250 Iron |
+| T8 | x49.9435 | 480 | 320 | 900 | 1,279 | 2 castle | 500 Iron + Hard star |
+| T9 | x82.4068 | 700 | 450 | 1,250 | 2,063 | 3 underworld | 100 Ember |
+| T10 | x135.9711 | 950 | 620 | 1,670 | 3,325 | 3 underworld | 100 Ember |
+| T11 | x224.3524 | 1,300 | 850 | 2,250 | 5,386 | 3 underworld | 250 Ember |
+| T12 | x370.1814 | 1,750 | 1,150 | 3,000 | 8,744 | 3 underworld | 500 Ember + Hard star |
+| T13 | x610.7994 | 2,350 | 1,550 | 4,000 | 14,238 | 4 planet | 100 Glowstone |
+| T14 | x1,007.8190 | 3,150 | 2,100 | 5,350 | 23,242 | 4 planet | 100 Glowstone |
+| T15 | x1,662.9013 | 4,250 | 2,800 | 7,150 | 38,014 | 4 planet | 250 Glowstone |
+| T16 | x2,743.7872 | 5,700 | 3,800 | 9,600 | 62,283 | 4 planet | 500 Glowstone + Hard star |
+| T17 | x4,527.2488 | 7,700 | 5,100 | 12,900 | 102,179 | 5 dream | 100 Crystal |
+| T18 | x7,469.9606 | 10,400 | 6,900 | 17,400 | 167,819 | 5 dream | 100 Crystal |
+| T19 | x12,325.4350 | 14,000 | 9,300 | 23,400 | 275,840 | 5 dream | 250 Crystal |
+| T20 | x20,336.9677 | 19,000 | 12,500 | 31,600 | 453,733 | 5 dream | 500 Crystal + Hard star |
+
+MaxHp (T1,T1) 155, (T3,T3) 230 and (T5,T5) 380 are today's 2/2, 4/4 and 6/6, so no `damageScale` moves. Every
+cost from T5 up, and every material after Timber, is a placeholder until its level is built (the screen hides an
+unbuilt band's price, L3-21).
+
+### L3 W1: Forest Road on the ladder
+
+| Difficulty, gear | Multiplier (melee / ranged) | Was | The reacting player's clears (min) | Mean | Today's mean | Gate |
+|---|---|---|---|---|---|---|
+| Normal T1 | x1.5 / x1.5 | 2/2: x1.5 / x1.5 | 5.26, 4.69, 5.04 | 5.00 | 5.00 | byte-identical |
+| Hard T3, hpScale **4.25** | x4.0837 | 4/4: x5.0 / x4.5, hpScale 5.2 | 5.12, 5.34, 5.20 | **5.22** | 5.21 (306.7 / 319.9 / 311.8 s) | **+0.1%**, 0 downs (±5%) |
+| Brutal T5, hpScale 11.5 | x11.118 | 6/6: x10.83 / x11.5 | 5.10, 5.43, 5.20 | **5.24** | 5.19 (305.7 / 321.5 / 307.2 s) | **+1.0%**, 0 downs (±5%) |
+| Raider Arena T1 | x1.5 / x1.5 | 2/2 (P5 tuned it at 2/1; it has run at 2/2 since Ben's start preset, L1b Wave 2) | 10.08, 10.35, 11.49 | 10.64 | the same | identical |
+
+- **Normal at T1 is byte-identical** to today's 2/2: diffing the two whole `sim_range --check` outputs with the gear
+  labels made equal, the Normal and arena sections differ in no row. The only changes are labels, the new L3-26
+  block, and Normal's "fast" row one preset up, which is now T3 (x4.08) instead of 4/4 (x5.0). Its tents still
+  send (A 2, B 3; gate `TENT_FAST` green).
+- **Hard's hpScale.** Every melee kill time is HP / multiplier, so 5.2 x 4.0837 / 5.0 = **4.247** keeps them all.
+  4.25 keeps the clock at +0.1%. The bow gets relatively stronger on Hard (x4.08 against today's x4.5, on 18% less
+  HP), which shows in R8 below. I probed above 4.25 to see whether a higher hpScale could save R8's Hard row inside
+  the clock band. It cannot: at **4.45** the clock is **+16.8%** and at **4.6 +11.9%** (the clock is steep and
+  not monotonic just above 4.25; tents and plates change with it), and LookoutLedge still out-earns at both.
+- **The Colossus alone** (Broadsword, every seed): Normal T1 81.2 s (79.3-82.3), **Hard T3 81.7 s (79.8-83.6)**
+  (today 81.6), Brutal T5 83.8 s (82.8-84.3) (today 84.2); the arena's Colossus 76.8 s and Warlord 97.7 s (bands
+  64-90 and 77-101). The range's bosses are unchanged (scale 1, 130 HP).
+- **The human gate, one preset below.** Hard at T1: seed 11 down in Pickets; seeds 23 and 37 clear at x2.38 and
+  x2.46 his slowest T3 clear (needs a down or x1.8). The Colossus alone at T1 is not killed in 240 s (gate 135 s).
+  Brutal at T3: down on all three seeds (needs a down or x1.4); its Colossus is not killed in 240 s (gate 180 s).
+  Brutal's two presets are now x2.72 apart (they were x2.17), so its gate holds with room to spare.
+
+### L3 W1: what a clear pays (L3-16, data only)
+
+| | Cash | Timber | Valor | As times Normal |
+|---|---|---|---|---|
+| Normal | 131,733 | 211 | 10 | — |
+| Hard (x2.5) | **354,750** | **595** | **25** | x2.69 cash, x2.82 Timber (band x2-x3) |
+| Brutal (x4) | 568,933 | 906 | 40, and 25 more on the first clear | x4.32 / x4.29 |
+
+KillReward rounds each kill half up, so x2.5 on 1-, 3- and 7-Timber kinds pays a little more than x2.5. Hard's cash
+is 2.5% of the 14.28M the Village still costs at mid-era (the reference moment of assertion 4 since L3, below):
+the "+25% of 0.9%" the lead accepted.
+
+### L3 W1: the climb, both starters T1 to T4 (assertion 2)
+
+The greedy solo player. Each run is measured by sim_range at the gear he holds then (the reacting player, sword
+only; mean of the three seeds). He plays Normal until both starters reach Hard's recommendedTier (T3), then Hard.
+Double Jump is bought with the first Valor that covers it. The next run takes the lookout's chest (50 Timber, 3
+Valor and the Flamethrower). The run after carries the Flamethrower into the tunnel (the cache's 60 Timber, and
+the shortcut is found), and he takes the tunnel ever after (it pays a little less a run and more a minute). After
+each run he buys, cheapest first, every starter tier `Armory.UpgradeVerdict` allows.
+
+| Run | Difficulty, gear | Clear | Timber | Bought after | Left |
+|---|---|---|---|---|---|
+| 1 | Normal T1/T1 | 4.99 min | 211 | Broadsword T2, Longbow T2 (and Double Jump, 10 Valor) | 11 |
+| 2 | Normal T2/T2 | 3.75 min | 262 (lookout) | Broadsword T3 | 23 |
+| 3 | Normal T3/T2, Flamethrower, tunnel | 2.63 min | 262 (cache) | Longbow T3 | 35 |
+| 4 | Hard T3/T3, tunnel | 4.84 min | 539 (+ Hard star, Warhammer at T3) | Broadsword T4 | 74 |
+| 5 | Hard T4/T3, tunnel | 3.57 min | 539 | Longbow T4 | 113 |
+
+**5 runs (target 5-7: met), 19.8 min of clears (target 25-40: MISSED by 5.2 min).** The 31 minutes Ben was quoted
+came from the study's model, which counted every run at 5 minutes. Measured, each upgrade shortens the next clear
+(Normal at T2 takes 3.75 min, the tunnel at T3 2.63), and Hard at x2.5 pays 539-595 Timber, so one Hard run buys
+T4 for one weapon. Before that ruling it took two. With Hard at x2, the same model gives **6 runs, 24.6 min** (runs
+4 and 5 at 414 Timber each, then one more). That is Ben's "three runs per weapon", still 0.4 min under the band. The
+simulated clock leaves out the lobby, the map, the loading, the detours to the two chests and the burning of the
+brambles, so real play is about half a minute to a minute longer a run. The levers are Ben's prices (100 / 250 /
+500) and the lead's x2.5, so the gate stays red and is reported. The first Normal clear pays **211 Timber** (needs
+200), a Hard clear **25 Valor** and the Brutal first clear **25** (met).
+
+### L3 W1: R8, the sniper (L3-26)
+
+On Normal and Hard, two gears: the proving gear (T1/T1, as before) and **sword T1 with bow T4** (only the bow
+upgraded), against the mission player at the same gear. He fights with the sword alone, so he is the comparison
+the contract names. The pair player (sword and bow) is reported beside him. The known limit is unchanged
+(`SNIPER_KNOWN_LIMIT_L4`: on Normal, LookoutLedge and Secret_lookout).
+
+| Row | Spot | Sniper, cash / Timber a minute (seeds 11 / 23 / 37) | Mission player | Verdict |
+|---|---|---|---|---|
+| Normal, T1/T1 | every spot but the known two | under | 25.0K / 40.1, 28.0K / 45.0, 26.1K / 41.9 | green |
+| Normal, T1 sword / T4 bow | every spot but the known two | under (the best LookoutSignPad 13.5K / 15.6) | the same (the pair player: 38.9K-39.9K / 63-65) | green; LookoutLedge up to x1.37 and Secret_lookout up to x1.66 (known limit, reported) |
+| **Hard, T1/T1** | **LookoutLedge** (Double Jump owners) | **40.0K / 54.9, 34.3K / 41.2, 30.8K / 29.5** | 30.9K / 48.8, 29.2K / 45.7, 26.7K / 41.8 | **RED** (it was green by 2.5% at hpScale 5.2) |
+| **Hard, T1 sword / T4 bow** | **LookoutLedge** | **110.1K / 190, 89.0K / 153.5, 110.1K / 190** | the same (the pair player: 45.6K-48.9K / 73-78) | **RED, x3.6** |
+| **Hard, T1 sword / T4 bow** | **LookoutSignPad** | **55.8K / 88.2** every seed | the same | **RED, x1.8** |
+| **Hard, T1 sword / T4 bow** | **Secret_lookout** (Double Jump owners) | **111.4K / 192.2, 118.5K / 204.5, 118.5K / 204.5** | the same | **RED, x3.6-4.4** |
+
+All four red rows stand on the lookout's ledge or its sign pad above Pickets, and every hit of the sniper lands.
+They are Normal's known limit appearing on Hard. Camps never refill, so the pay is bounded: a sniper from the
+lookout earns, over a minute or two, only what the residents he can see are worth, and then has to come down and
+fight. No hpScale inside the clock band fixes the T1 row (probe above). The bow-T4 rows are structural: a x6.74
+bow against a x1.5 sword out-earns from any perch that sees a camp. L3-35 says no layout change in W1 without the
+lead, so these rows are reported, not fixed. The lead's options:
+
+1. Extend the known limit to Hard until L4 re-places the perches. This is data only in `sim_range.py`:
+   `SNIPER_KNOWN_LIMIT_L4 = {"normal": ("LookoutLedge", "Secret_lookout"), "hard": ("LookoutLedge",
+   "LookoutSignPad", "Secret_lookout")}`. The gate already reads the key per difficulty. It is Ben's ruling of
+   2026-10-16 carried to Hard.
+2. A layout change at the lookout (L4's re-placement, early).
+
+### L3 W1: the income gate is retired (L3-4, Ben 2026-10-20)
+
+`unlockRate` is no longer read by the tier path, so sim_combat's C0 unlock table and assertions "1 unlock ladder"
+and "2 power at median" are gone. Assertions 1 and 2 are now L3's (the ladder, the climb). Assertion 4 ("run cash
+at most 25% of what the era still costs") was anchored at the moment the city's income reached the recommended
+gear's unlockRate. With no gate, a run can come at any time, so it is anchored at mid-era: the Raider Arena's
+144,250 cash is **1.01%** of the 14.28M left at 20:55 (it was 0.97% at 12:21). The C1 Humanoid missions' run model
+keeps the slot tiers' own health and power (`c1_max_hp`, `c1_gear_power`: the scale `Missions/*.json
+recommendedPower` was written on), so assertions 3 and 5-14 are unchanged to the digit. The slot ladder's
+`unlockRate` values stay in Armory.json, unread, until L4 deletes `slots` with its last C1 reader.
+
+### L3 W1: new gates and their mutants
+
+| Gate | Where | Shown red by |
+|---|---|---|
+| Assertion 1, the ladder: Armory.Problems (Armory.luau's lines, mirrored) and the shipped values against L3-1..L3-4 and L3-8 | sim_combat | 20 hand mutants in a scratch run: a damage value off the curve or falling, 19 entries, an HP value off the old slot tier, ranged over melee, a falling HP row, rangeHp 120, tierWeight 10, four bands, bandSize 5, the Forest band in Iron, costs 100/100/300/500, starDifficulty brutal, a window changed / missing / starting at 2 / 5-3, a legacy amount, a legacy entry missing, no ladder: all red |
+| Assertion 2, the climb | sim_combat | 11 hand mutants on its verdict (not done, 4 and 8 runs, 41 and 24 min, a 199-Timber first clear, a seed not cleared, Hard x2, Brutal's 20 Valor, the Greataxe or nothing as Hard's first clear): all red; six 5.5-min runs green |
+| Every non-starter family has a shelf hint (L3-25) | check_levels | the Greataxe's found entry gone; the lookout paying no family / control: the Greataxe found on the Underworld |
+| A firstClear family's found entry names its level's node (L3-25) | check_levels | the Warhammer found on the Castle / control: its text reworded |
+| ownedFamilies counts every firstClear family (L3-25; the bend's known limit) | check_levels | Hard's first clear gives the Spear (it carries) / control: the Shotgun |
+| R8's reach = the longest range of the ownable ranged families (L3-25; was the Longbow's alone) | check_levels | the Rifle's range 400 given by Hard's first clear / control: range 400, nothing gives it |
+| Validate's firstClear lines (L3-17; `first_clear_problems` mirrors StageFlow's five lines in its order) | check_levels, check_stage_mirror | a starter, a family that is none, Valor 2.5, Valor -1, a firstClear that is a string / control: Valor 0 |
+| The three L3-28 attributes are names of their own | check_levels | one shares DebugGrantFamily, one missing, one shares DebugSetGear |
+| The presets T1 / T3 / T5, the first the proving gear, every recommendedTier a preset's | check_levels | provingGear 2/2, Hard's recommendedTier 4 / control: Brutal's 3 |
+| Hard and Brutal keep their clock (L3-29) | sim_range | `L3_CLOCK_SECONDS` hard pinned at 345 s (SIM_CASES) |
+| R8 with only the bow upgraded (L3-26) | sim_range | LookoutLedge out of Normal's known limit (SIM_CASES); and the shipped Hard rows |
+
+**Lead's rulings after this measure (2026-10-20, contract §12.8–9):** Hard's `rewardMult` back to **2** (the climb:
+6 runs and about 24.6 minutes, `CLIMB_MINUTES` 20–40, a Hard clear 20 Valor); the four Hard R8 rows join Normal's
+known limit until L4 (`SNIPER_KNOWN_LIMIT_L4["hard"]` = LookoutLedge, LookoutSignPad, Secret_lookout), reported, not
+gated. The tables above were measured at ×2.5; re-run `py tools/sim_combat.py --check` for the ×2 numbers.

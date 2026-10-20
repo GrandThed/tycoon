@@ -175,8 +175,9 @@ FLOOR_SHARE = (0.30, 0.45)
 FLOOR_MIN_SECONDS = 3.0
 
 # P4 threat bands. Sources: docs/INTERFACES.md "P4 contracts" -> "Balance targets", and
-# docs/BALANCE.md "P4". Health is tier-1 health: Armory.MaxHp with both slots at THREAT_TIER,
-# where the range pins every player whatever their profile holds (ruling 17).
+# docs/BALANCE.md "P4". The range plays the tier-1 numbers at scale 1 (THREAT_TIER is that label),
+# and its health is its own body, Armory.RangeHp (ladder.rangeHp, L3-2: the old MaxHp of slot tiers
+# 1/1), where the range pins every player whatever their profile holds (ruling 17).
 THREAT_TIER = 1
 # No single hit, and no volley landing inside one dash i-frame window, takes more than this
 # share of health.
@@ -1577,15 +1578,6 @@ def effective_cooldown(cfg, family, spacing, respawn):
 # one circle of it; what is called rises on the caller's facing, half a step off it for an even
 # count (Stop 3: before, the sim's summons rose from angle 0). One more thing is the sim's own:
 # a body refused its place is not offered its next choice in the same step.
-
-
-def armory_max_hp(armory, tier):
-    """Armory.MaxHp with both slots at `tier` and no Ascension; tier 0 = the starter weapons."""
-    total = armory["baseHp"]
-    for slot in ("melee", "ranged"):
-        slot_def = armory["slots"][slot]
-        total += slot_def["starter"]["hp"] if tier <= 0 else slot_def["tiers"][tier - 1]["hp"]
-    return total
 
 
 def timing_tolerance():
@@ -3599,10 +3591,13 @@ class ThreatRun:
 
 def threat_env(cfg):
     """Everything the threat reads from outside ProvingGrounds.json."""
+    import sim_combat as sc  # the Armory mirror lives there (lazy: it imports this file)
+
     armory = load_config(ARMORY_PATH)
     env = load_arena(cfg["arena"])
-    env["hp"] = armory_max_hp(armory, THREAT_TIER)
-    env["hpByTier"] = [armory_max_hp(armory, tier) for tier in range(len(armory["slots"]["melee"]["tiers"]) + 1)]
+    env["hp"] = sc.range_hp(armory)
+    env["hpByTier"] = [sc.max_hp(armory, {"melee": tier, "ranged": tier}, NO_ASCENSION)
+                       for tier in range(1, sc.ladder_size(armory) + 1)]
     env["tolerance"] = timing_tolerance()
     return env
 
@@ -4283,9 +4278,9 @@ def print_threat(cfg, env, facts, rows, roles, plates, ab_rows=()):
     if short:
         print("  Shorter runs: " + ", ".join(f"{name} {seconds:.0f} s" for name, seconds in short) + ".")
     tiers = env["hpByTier"]
-    print(f"  health: {hp:.0f}, tier {THREAT_TIER}, where the range pins it (ruling 17). A profile's own runs from "
-          f"{tiers[0]:.0f} on starter gear to {tiers[-1]:.0f} at the last tier, and enemy damage is the same at "
-          f"every tier (P5).")
+    print(f"  health: {hp:.0f}, the range's own body (Armory.RangeHp), where the range pins it (ruling 17). A "
+          f"profile's own runs from {tiers[0]:.0f} with both held families at T1 to {tiers[-1]:.0f} at T{len(tiers)} "
+          f"(L3-2), and enemy damage is the same at every tier (P5).")
     for a in facts["attacks"]:
         print(f"  {a['kind']} {a['shape']}: {a['damage']:.0f} = {a['share']:.0%} of health; one alone attacks every "
               f"{a['cycle']:.1f} s; it moves at {a['speed']:.0f} against the walk's {move['walkSpeed']:.0f}")
@@ -5011,12 +5006,13 @@ def check_siege(cfg, env, boss, expect):
 # "L1 contracts — Forest Road in grey").
 #
 # The same crowd, brains, shapes and player as the range, seen through a level's difficulty, in
-# the level's camps, at the gear the bands are measured at (Combat.json debug.provingGear, 2/1):
+# the level's camps, at the gear the bands are measured at (Combat.json debug.provingGear, T1/T1):
 #   [scales]   P5 ruling 10 and L1 ruling 23: every body's HP x hpScale (summons too), plates x
 #              plateScale, every enemy hit max(round(damage x damageScale), 1), regen =
 #              regenShare x MaxHealth; the scales are the played difficulty's;
-#   [tier]     P5 rulings 8 and 9: the player's HP loss x Armory.DamageScale of the slot (the slam
-#              as melee); heavy hits, plates, interrupts and armour read the tier-1 amount;
+#   [tier]     P5 rulings 8 and 9, L3-6: the player's HP loss x Armory.DamageScale of the striking
+#              family's tier (the slam as the held melee family); heavy hits, plates, interrupts and
+#              armour read the tier-1 amount;
 #   [health]   P5 ruling 11: the bar is Armory.MaxHp of the gear; ruling 18: solo, a down ends
 #              the run, unless the field is already clear;
 #   [level]    L1 rulings 1 and 27: a level is an ordered list of stages, `travel` and `camp`
@@ -5072,7 +5068,8 @@ MISSION_FILE = "1_Village.json"
 LEVEL_LAYOUT_DIR = REPO_ROOT / "src" / "shared" / "Layouts" / "Levels"
 LEVELS_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Levels"
 EXPEDITIONS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Expeditions.json"
-MISSION_GEAR_DEFAULT = {"melee": 2, "ranged": 2}
+MISSION_GEAR_DEFAULT = {"melee": 1, "ranged": 1}  # L3-11: T1 (the old 2/2)
+NO_ASCENSION = {"melee": 0, "ranged": 0}
 # The Raider Arena's bands (INTERFACES "P5" -> "Balance bands"): the bosses with the default
 # sword, a clear of all ten waves by a reacting player (breathers included), a still player in a
 # fodder wave, no enemy hit over HIT_SHARE_MAX of the bar, regen close to the range's 10/130.
@@ -5084,12 +5081,12 @@ MISSION_REGEN_TOLERANCE = 0.10
 MISSION_SEEDS = (11, 23, 37)
 # Forest Road's bands (INTERFACES "L1" -> "Balance bands", and the fix round's part E). Normal at
 # the proving gear; Hard and Brutal at their recommended gear, which is the Studio gear preset
-# (Combat.json debug.gearPresets) whose melee tier is the difficulty's recommendedTier: 4/4 and
-# 6/6. "One preset below" is the preset before it.
+# (Combat.json debug.gearPresets) whose melee tier is the difficulty's recommendedTier: T3 and T5
+# since L3 (they were 4/4 and 6/6). "One preset below" is the preset before it.
 GATE_PYTHON = (3, 12)  # the interpreter the bands are measured on: see interpreter_note
 FOREST_LEVEL = "forestRoad"
 FOREST_BOSS = "colossus"
-# Normal's first clear at the proving gear 2 / 2, from the start point to the Colossus's fall,
+# Normal's first clear at the proving gear T1 (the old 2 / 2), from the start point to the Colossus's fall,
 # walking included, every seed. L1b Wave 2 banded it 5.75-7 min; L1c (the Chief's Clearing redone:
 # an ambush of 10, then the Colossus, in place of 36 residents and two waves of about 35) takes
 # about 1.4 minutes out of it, so it is re-measured at 4.75-5.3 min and banded 4.5-5.75
@@ -5109,7 +5106,7 @@ CHEST_VALOR_MIN = 2
 # cash is reported against Wave 1's 19,800.
 FOREST_TIMBER_PER_MINUTE = (37.8, 46.2)
 FOREST_CASH_PER_MINUTE_WAVE1 = 19800
-# The bow at 2 / 2 (reported for Ben's bow question): the default ranged family alone against
+# The bow at T1 (the old 2 / 2; reported for Ben's bow question): the default ranged family alone against
 # these kinds, at the boss's spot in the boss room, aiming at the body and at the head.
 BOW_KINDS = ("brute", "armoured", "colossus")
 BOW_SECONDS = 240.0
@@ -5137,6 +5134,11 @@ HUMAN_REACTION_SECONDS = 0.55
 # clear is walking, countdowns and the bursts' own pace, so a slow Brutal clear at 4/4 takes
 # x1.5 and its Colossus 196-203 s. 1.8 and 200 s cannot hold there without retuning Brutal to
 # the gate.
+# L3-29: Hard at T3 and Brutal at T5 keep the clock they had at 4/4 and 6/6 (the reacting player's
+# mean clear over MISSION_SEEDS, measured before the remap: Hard 306.7 / 319.9 / 311.8 s, Brutal
+# 305.7 / 321.5 / 307.2 s), within L3_CLOCK_SHARE, with no down.
+L3_CLOCK_SECONDS = {"hard": 312.8, "brutal": 311.5}
+L3_CLOCK_SHARE = 0.05
 HUMAN_BELOW_ENDS = ("down", "runCap")
 HUMAN_BELOW_SLOWER = {"hard": 1.8, "brutal": 1.4}
 FOREST_BELOW_BOSS = {"hard": 135.0, "brutal": 180.0}
@@ -5255,17 +5257,15 @@ def load_level_files():
 
 
 def gear_max_hp(armory, gear):
-    """Armory.MaxHp of a gear with no Ascension."""
-    total = armory["baseHp"]
-    for slot in ("melee", "ranged"):
-        tier = gear[slot]
-        slot_def = armory["slots"][slot]
-        total += slot_def["starter"]["hp"] if tier <= 0 else slot_def["tiers"][tier - 1]["hp"]
-    return total
+    """Armory.MaxHp of a gear (the held families' tiers, L3-2) with no Ascension."""
+    import sim_combat as sc  # the Armory mirror lives there (lazy: it imports this file)
+
+    return sc.max_hp(armory, gear, NO_ASCENSION)
 
 
 def mission_gear():
-    """Combat.json debug.provingGear (P5 ruling 12), or the contract's default 2/1."""
+    """Combat.json debug.provingGear: since L3-11 the simulators' first-run gear only (T1/T1; the game
+    reads the profile's tiers in a proving build too), or MISSION_GEAR_DEFAULT."""
     try:
         gear = load_config(COMBAT_PATH)["debug"].get("provingGear")
     except (FileNotFoundError, KeyError):
@@ -5334,7 +5334,7 @@ POSTURES = ("guard", "patrol", "fire")  # a layout spot's postures (a tent's gro
 CB_POSTURES = ("guard", "patrol", "fire", "tent")  # CampBrain's POSTURES (L1b-W2-6)
 
 
-def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=None):
+def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=None, weapons=None, starters=None):
     """The fix round's ruling 6, as StageFlow.Validate reads a resolved level: zero and empty
     mean the same on both sides. One line per problem: a maxAlive that is not an integer of at
     least 1 (the level's, or a camp's own), a burst under 1, a camp's targetWaveSeconds of 0 or
@@ -5376,8 +5376,57 @@ def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=
         camp_level_problems(level, layout, rules or {}, kinds, ranks or {}, crowd_max, problems)
     if layout is not None:
         secret_problems(level, layout, problems.append)
+    first_clear_problems(level, weapons, starters, problems.append)
+    if layout is not None:
         react_problems(layout, problems.append)
     return problems
+
+
+def first_clear(level, difficulty):
+    """StageFlow.FirstClear (L3-17): what a difficulty's first clear gives besides its star, as a
+    fresh dict: `family` when it is a non-empty string, `valor` when it is a whole number above 0;
+    None when neither is left, or the difficulty has no firstClear table."""
+    difficulties = level.get("difficulties")
+    scales = difficulties.get(difficulty) if isinstance(difficulties, dict) else None
+    reward = scales.get("firstClear") if isinstance(scales, dict) else None
+    if not isinstance(reward, dict):
+        return None
+    family, valor = reward.get("family"), reward.get("valor")
+    given = {"family": family if isinstance(family, str) and family != "" else None,
+             "valor": valor if finite(valor) and valor > 0 and float(valor).is_integer() else None}
+    if given["family"] is None and given["valor"] is None:
+        return None
+    return given
+
+
+def first_clear_problems(level, weapons, starters, problem):
+    """StageFlow.firstClearProblems (L3-17): each difficulty's `firstClear`, when given, is a table;
+    its `family` a family id of 1 to Unlocks.MAX_FAMILY_LENGTH bytes and, when `weapons` (the weapons
+    families) are given, one of them, and, when `starters` are given, not one of them; its `valor` a
+    whole number of at least 0. In difficulty-name order."""
+    difficulties = level.get("difficulties")
+    if not isinstance(difficulties, dict):
+        return
+    for name in sorted(str(n) for n in difficulties):
+        scales = difficulties[name]
+        reward = scales.get("firstClear") if isinstance(scales, dict) else None
+        if reward is None:
+            continue
+        where = f"difficulties.{name}.firstClear"
+        if not isinstance(reward, dict):
+            problem(f"{where} is not a table")
+            continue
+        family = reward.get("family")
+        if family is not None:
+            if not isinstance(family, str) or family == "" or len(family.encode("utf-8")) > SECRET_FAMILY_MAX:
+                problem(f"{where}.family is {family}, not a family id")
+            elif weapons is not None and family not in weapons:
+                problem(f'{where}.family names "{family}", which is no weapons family')
+            elif starters is not None and family in starters:
+                problem(f'{where}.family names the starter "{family}", which everyone owns')
+        valor = reward.get("valor")
+        if valor is not None and not (finite(valor) and valor >= 0 and float(valor).is_integer()):
+            problem(f"{where}.valor is {valor}, not a whole number of at least 0")
 
 
 UNLOCKS_PATH = REPO_ROOT / "src" / "shared" / "Unlocks.luau"
@@ -7024,7 +7073,7 @@ def level_view(cfg, scales, regen_share, armory, gear):
                 attack["damage"] = max(luau_round(attack["damage"] * scales["damageScale"]), 1)
     hp = gear_max_hp(armory, gear)
     view["player"]["regenPerSecond"] = regen_share * hp
-    view["_scales"] = {slot + suffix: sc.damage_scale(armory, slot, gear[slot], 0, ability)
+    view["_scales"] = {slot + suffix: sc.damage_scale(armory, gear[slot], 0, ability)
                        for slot in ("melee", "ranged") for suffix, ability in (("", False), ("Ability", True))}
     return view, hp
 
@@ -7090,12 +7139,21 @@ LOSE_REST_SECONDS = 25.0  # ... and back at rest, healed, within this of its tur
 SNIPER_PULL_SECONDS = 5.0  # his first arrow from the gate lands within this, or he goes anyway
 SNIPER_SPOT_SECONDS = 240.0  # the longest he shoots from a spot
 SNIPER_IDLE_SECONDS = 10.0  # he stops once no hit of his has landed for this long
-SNIPER_HARD = "hard"  # R8: rated on Normal and on this difficulty, both at the proving gear (2 / 2)
+SNIPER_HARD = "hard"  # R8: rated on Normal and on this difficulty, both at the proving gear (T1)
+# L3-26: R8 again with only the bow upgraded, on Normal and on SNIPER_HARD: the proving gear's sword
+# and the bow at this tier (the Forest's last), against the mission player at the same gear (he
+# fights with the sword alone, so he is the gate's comparison) and, reported, the pair player.
+SNIPER_BOW_TIER = 4
 # Ben's ruling on R8's stop (2026-10-16): on Normal these spots out-earn the mission and are accepted
 # for L1 as a known limit (camps never refill, so the pay is bounded and a camp only clears faster).
 # Their rate is reported, not gated; every hit landing stays gated. L4 re-places the perches, and the
 # set must be empty before L4 ships.
-SNIPER_KNOWN_LIMIT_L4 = {"normal": ("LookoutLedge", "Secret_lookout")}  # L2 W2: the cache moved into the cave
+# Lead, 2026-10-20 (L3 W1): the same perches on Hard, where Hard's re-measured hpScale and a bow
+# upgraded alone tip them over; the same L4 fix (re-placed perches) covers both difficulties.
+SNIPER_KNOWN_LIMIT_L4 = {
+    "normal": ("LookoutLedge", "Secret_lookout"),  # L2 W2: the cache moved into the cave
+    "hard": ("LookoutLedge", "LookoutSignPad", "Secret_lookout"),
+}
 
 
 # L2-5: the spots only a player with a bought ability stands on (a ledge an ability-keyed secret
@@ -7111,7 +7169,12 @@ def sniper_spots_of(level, layout, combat_cfg, cfg):
 
     levels = combat_cfg["levels"]
     solids = cl.solids_of(layout, levels["fenceThickness"], levels["floorThickness"])
-    spots = cl.sniper_spots(level, layout, {"camps": combat_cfg["camps"], "longbow": cl.longbow_range(cfg),
+    # L3-25: the reach is check_levels', the longest range of the ownable ranged families.
+    files = load_level_files()
+    layouts = {f["layout"]: load_level_layout(f["layout"], combat_cfg["player"]["rescue"]["below"]) for f in files}
+    owned = cl.ownable_families(files, layouts, load_config(EXPEDITIONS_PATH), cfg["weapons"],
+                                (cfg.get("loadout") or {}).values())
+    spots = cl.sniper_spots(level, layout, {"camps": combat_cfg["camps"], "sniperReach": cl.sniper_reach(cfg["weapons"], owned),
                                             "move": cfg["movement"], "abilityHeight": cl.ability_height(cfg)}, solids)
     sold = set(cl.ability_ids(load_config(EXPEDITIONS_PATH)))
     needs = {}
@@ -9474,7 +9537,8 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                           ctx["expeditions"]["difficulties"][0])
     layout = load_level_layout(level["layout"], combat_cfg["player"]["rescue"]["below"])
     problems = level_problems(level, layout, combat_cfg["levels"], cfg["crowd"]["kinds"], ctx["ranks"],
-                              cfg["crowd"]["maxAlive"]) + cb_problems(combat_cfg.get("camps"))
+                              cfg["crowd"]["maxAlive"], cfg["weapons"], set(cfg["loadout"].values())) + cb_problems(
+                                  combat_cfg.get("camps"))
     if problems:
         raise SystemExit(f"sim_range: {level_id} cannot be played (StageFlow.Validate refuses it): " + "; ".join(problems))
     proving = mission_gear()
@@ -9553,6 +9617,17 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                               for seed in MISSION_SEEDS]
         return found
 
+    def bow_up(scales, difficulty):
+        """L3-26: R8 with only the bow upgraded: the proving gear's sword and the bow at
+        SNIPER_BOW_TIER, the straight course from every listed spot (sniper_runs) against the mission
+        player at the same gear (his sword alone, the gate's comparison) and, reported, the pair
+        player (sword and bow, each swing with the one that reaches)."""
+        gear = dict(proving, ranged=SNIPER_BOW_TIER)
+        view, hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], gear)
+        return {"gear": gear, "hp": hp, "sniper": sniper_runs(view, hp, difficulty),
+                "runs": runs_of(view, hp, difficulty, "mission"),
+                "pair": runs_of(view, hp, difficulty, "mission", pair=(cfg["loadout"]["melee"], bow))}
+
     for difficulty in ctx["expeditions"]["difficulties"]:
         scales = level["difficulties"].get(difficulty)
         if scales is None:
@@ -9569,7 +9644,7 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                "human": runs_of(view, hp, difficulty, "human") if human else [],
                "careless": runs_of(view, hp, difficulty, "rampage") if careless else [],
                "stand": [], "strikes": {}, "kite": [], "under": None, "below": None, "ranged": None,
-               "fast": None, "archer": [], "walkout": [], "lose": [], "sniper": {}}
+               "fast": None, "archer": [], "walkout": [], "lose": [], "sniper": {}, "bowUp": None}
         if ranged and first_open is not None:
             # On the first difficulty the bow goes on through the second open camp (L1b Wave 3: the
             # pin on the in-play step, which a bow standing off camp B forever would fail).
@@ -9613,6 +9688,7 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                 row["lose"] = runs_of(view, hp, difficulty, "lose")
                 row["sniper"] = sniper_runs(view, hp, difficulty)
                 row["cutSniper"] = cut_snipers(view, hp, difficulty) if cut is not None else {}
+                row["bowUp"] = bow_up(scales, difficulty)
                 above = next((g for g in presets if (g["melee"], g["ranged"]) > (gear["melee"], gear["ranged"])), None)
                 if above is not None:
                     fast_view, fast_hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], above)
@@ -9648,6 +9724,7 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
                 row["under"]["runs"] = mine if mine is not None else runs_of(weak_view, weak_hp, difficulty, "mission")
                 row["under"]["sniper"] = sniper_runs(weak_view, weak_hp, difficulty)
                 row["under"]["cutSniper"] = cut_snipers(weak_view, weak_hp, difficulty) if cut is not None else {}
+                row["bowUp"] = bow_up(scales, difficulty)
         report["difficulties"][difficulty] = row
     return report
 
@@ -9876,6 +9953,8 @@ def print_forest(cfg, report):
         under = row["under"]
         if under is not None and under.get("sniper"):
             print_snipers(under["sniper"], under["runs"], f"{difficulty} at gear {gear_text(under['gear'])}")
+        if row.get("bowUp"):
+            print_bow_up(row["bowUp"], difficulty)
         below = row["below"]
         if below is not None:
             slowest = max((r["at"] for r in row["human"] if r["end"] == "cleared"), default=None)
@@ -9987,6 +10066,18 @@ def sniper_rate(r):
     that ended in a down, over its time to the down."""
     minutes = r["scene"].get("minutes") or (r["at"] / 60 if r["at"] else math.inf)
     return r["wallet"]["cash"] / minutes, r["wallet"]["materials"] / minutes
+
+
+def print_bow_up(up, difficulty):
+    """L3-26's rows: the mission player and the pair player at the sword-T1 / bow-T4 gear, then R8's
+    table at that gear against the mission player."""
+    tag = f"{difficulty} at gear {gear_text(up['gear'])}, only the bow upgraded (L3-26)"
+    print(f"    {tag}, health {up['hp']:.0f}:")
+    for label, runs in (("the mission player (sword alone)", up["runs"]), ("the pair player (sword and bow)", up["pair"])):
+        print(f"      {label}: " + "; ".join(
+            f"seed {seed} {r['end']} at {r['at'] / 60:.2f} min, {pay_rate(r)[0]:,.0f} cash / {pay_rate(r)[1]:.1f} Timber "
+            f"a minute" for seed, r in zip(MISSION_SEEDS, runs)))
+    print_snipers(up["sniper"], up["runs"], tag)
 
 
 def print_snipers(snipers, mission, tag):
@@ -10242,6 +10333,17 @@ def check_forest(cfg, report, expect):
         expect(boss is not None and boss["solid"] == 0 and boss["lunges"] == 0,
                f"{tag}: the {FOREST_BOSS} alone: the reacting player takes no hit"
                + (f" ({boss['solid']} of the boss, {boss['lunges']} lunges)" if boss is not None else ""))
+        was = L3_CLOCK_SECONDS.get(difficulty)
+        if was is not None:
+            clears = [r["at"] for r in row["runs"] if r["end"] == "cleared"]
+            mean = sum(clears) / len(clears) if clears else math.inf
+            downs = sum(r["downs"] for r in row["runs"])
+            expect(len(clears) == len(row["runs"]) and downs == 0 and abs(mean / was - 1) <= L3_CLOCK_SHARE,
+                   f"{tag} at gear {gear} (recommendedTier {row['scales']['recommendedTier']}, hpScale "
+                   f"{row['scales']['hpScale']:g}): the reacting player's mean clear is within {L3_CLOCK_SHARE:.0%} of "
+                   f"the {was / 60:.2f} min it took before the L3 remap, with no down (L3-29): {mean / 60:.2f} min "
+                   f"({100 * (mean / was - 1):+.1f}%; " + ", ".join(f"{r['end']} {r['at'] / 60:.2f}" for r in row["runs"])
+                   + f"), {downs} down(s)")
         lo_a, hi_a = FOREST_AMBUSH_SECONDS[difficulty]
         times = [ambush_seconds(r) for r in row["runs"]]
         expect(all(a is not None and lo_a <= a <= hi_a for a in times),
@@ -10553,6 +10655,19 @@ def check_scenes(cfg, row, tag, expect):
     under = row["under"] or {}
     snipers, mission = (row["sniper"], row["runs"]) if row["sniper"] else (under.get("sniper") or {}, under.get("runs"))
     known = SNIPER_KNOWN_LIMIT_L4.get("normal" if row["sniper"] else SNIPER_HARD, ())
+    r8_gate(tag, "at the proving gear", snipers, mission, known, expect)
+    # L3-26: the same with only the bow upgraded (sword T1, bow SNIPER_BOW_TIER), against the
+    # mission player at that gear, on Normal and on Hard; the same known limit on Normal.
+    up = row.get("bowUp")
+    if up is not None:
+        r8_gate(tag, f"at gear {gear_text(up['gear'])} (only the bow upgraded, L3-26)", up["sniper"], up["runs"], known,
+                expect)
+
+
+def r8_gate(tag, where, snipers, mission, known, expect):
+    """R8's gate on one table: every spot outside `known` earns less cash and less Timber a minute
+    than the mission player on the same seeds, and every hit lands; a known spot is reported and
+    gated on its hits landing only."""
     for spot, runs in (snipers or {}).items():
         told = []
         good = landed = True
@@ -10566,11 +10681,11 @@ def check_scenes(cfg, row, tag, expect):
         if spot in known:
             ratio = max(sniper_rate(r)[0] / max(pay_rate(m)[0], 1) for r, m in zip(runs, mission))
             owners = f", owners of {SNIPER_SPOT_NEEDS[spot]} only (L2-5)" if spot in SNIPER_SPOT_NEEDS else ""
-            print(f"  note  {tag} at the proving gear: the sniper from {spot}{owners}, known limit, L4 (Ben's ruling; "
+            print(f"  note  {tag} {where}: the sniper from {spot}{owners}, known limit, L4 (Ben's ruling; "
                   f"reported, not gated; up to x{ratio:.2f} the mission's cash a minute): " + "; ".join(told))
-            expect(landed, f"{tag} at the proving gear: the sniper from {spot} (known limit, L4): every hit lands")
+            expect(landed, f"{tag} {where}: the sniper from {spot} (known limit, L4): every hit lands")
             continue
-        expect(good and landed, f"{tag} at the proving gear: the sniper from {spot} earns less cash and less Timber a minute than "
+        expect(good and landed, f"{tag} {where}: the sniper from {spot} earns less cash and less Timber a minute than "
                f"the mission player on the same seeds (R8; his minutes to his last landed hit, at least his arrival "
                f"+ {SNIPER_IDLE_SECONDS:g} s), every hit lands: " + "; ".join(told))
 

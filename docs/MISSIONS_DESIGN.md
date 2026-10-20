@@ -560,3 +560,9 @@ Lead rulings told to Ben the same day (he may overrule): tier 1 is the 2/2 he ha
 fresh 0/0 profile); live players' Timber spent on tiers is refunded when their profile converts (§11.3); other players
 see your weapons (the one in use in the right hand, the other on the back); the loadout is saved and changes in the
 lobby or the city, never inside a fight.
+
+**The weapon models (2026-10-20):** Ben approved the Broadsword and Longbow prototypes ("Yes, build the other 13"), then
+**all 15 models** on the overview (`assets/testfit/out/Weapons/_overview.png`): one look each, dressed by the level where
+each is found. They are uploaded with their 15 shelf icons at the start of Wave 2 (one harvest paste). **[Ben]**
+Lead rulings after the Wave 1 measure: Hard pays ×2 (×2.5 made the climb faster than his "three runs a weapon"); the
+lookout perches that out-earn on Hard join Normal's "fix in L4" known limit.

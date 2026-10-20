@@ -10,6 +10,16 @@
 -- Collapsed to a single "⚙ debug" tab by default: the hub HUD is the thing being tested,
 -- and an expanded strip must not be what the tester is looking at. It sits above the bottom
 -- bar on the left, clear of the top bar in both orientations.
+--
+-- L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-28): the dungeon strip's Armory levers, for the
+-- hub's Armory screen. "Grant 500 Timber" (was 25: a tier now costs 100 to 500; the server pays
+-- every built band's material, Timber today), "Melee T1 +1" / "Ranged T1 +1" (`setTier` on the
+-- HELD families, their tiers from SetTiers), "★ Forest Hard" (`grantStar`) and "Reset Armory"
+-- (`resetArmory`). SetVisible takes the strip away while the Armory screen covers its corner.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Format"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
@@ -18,11 +28,18 @@ local SoundController =
 
 export type Deps = { onLever: (lever: string, value: any) -> () }
 
+-- L3-28: a held family and the tier it fights at (Armory.TierOf), for one slot.
+export type HeldTier = { family: string, tier: number }
+
 export type DebugPanelHandle = {
 	SetForceTeleportFailure: (value: boolean) -> (),
 	-- C2: how many fake members the player's party has now (from PartyState), so the
 	-- fakeParty button always offers the next step from the server's truth.
 	SetFakePartyCount: (count: number) -> (),
+	-- L3-28: the held families' tiers; nil = none known (that tier button does nothing).
+	SetTiers: (melee: HeldTier?, ranged: HeldTier?) -> (),
+	-- false = the strip, its tab included, is off the screen (the Armory screen is open).
+	SetVisible: (visible: boolean) -> (),
 	SetLayout: (scale: number) -> (),
 	Destroy: () -> (),
 }
@@ -30,21 +47,27 @@ export type DebugPanelHandle = {
 -- Design-pixel geometry. These live here rather than in Theme because the strip exists only
 -- in Studio: no shipped layout depends on them (see the report's routing note if they ever
 -- need to move).
-local STRIP_WIDTH = 224
+-- L3: three columns, not two. Eleven buttons in two would stand 384 design px tall, off the top
+-- of a 667 x 375 phone in landscape (scale 0.92 and the bottom margin leave about 330); in three
+-- they keep the old four rows, and 333 px still fits a 375 px portrait canvas.
+local STRIP_WIDTH = 333
 local TAB_WIDTH = 104
-local BUTTON_WIDTH = 109 -- two columns inside STRIP_WIDTH with BUTTON_GAP between them
+local BUTTON_WIDTH = 109 -- three columns inside STRIP_WIDTH with BUTTON_GAP between them
 local BUTTON_HEIGHT = 48 -- x Theme.MIN_SCALE = the 44 physical px tap target
 local BUTTON_GAP = 6
-local COLUMNS = 2
+local COLUMNS = 3
 
 -- Grant sizes are the Studio levers' own values, named in the labels so a tester never has
 -- to guess what a button did. They are debug amounts, not game balance.
 local CASH_GRANT = 10000
-local MATERIAL_GRANT = 25
 local VALOR_GRANT = 10
 local FAKE_RUNS = 3
 -- C2 contract: `fakeParty` takes 0–3 fake members; the button steps +1 and wraps to clear.
 local FAKE_PARTY_MAX = 3
+-- L3-28: the grantStar value for every built band level; Forest Road is the only one until the
+-- Castle is built, which is what the caption says.
+local STAR_ALL = "*"
+local STAR_TEXT = "★ Forest Hard"
 
 local DebugPanel = {}
 
@@ -53,6 +76,7 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	local expanded = false
 	local forceTeleportFailure = false
 	local fakePartyCount = 0
+	local held: { melee: HeldTier?, ranged: HeldTier? } = { melee = nil, ranged = nil }
 
 	local root = Create("Frame", {
 		Name = "DebugPanel",
@@ -151,10 +175,9 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	makeButton("Grant $10K", function()
 		deps.onLever("grantCash", CASH_GRANT)
 	end)
-	-- The server pays the band material of the player's CURRENT era (Timber in the Village,
-	-- which is the only era C1 has a mission for); the label names the common case.
-	makeButton("Grant 25 Timber", function()
-		deps.onLever("grantMaterials", MATERIAL_GRANT)
+	-- L3-28: the server pays the material of every band whose level is built (Timber today).
+	makeButton("Grant " .. Format.Cash(Theme.COMBAT_DEBUG_GRANT_TIMBER) .. " Timber", function()
+		deps.onLever("grantMaterials", Theme.COMBAT_DEBUG_GRANT_TIMBER)
 	end)
 	makeButton("Grant 10 Valor", function()
 		deps.onLever("grantValor", VALOR_GRANT)
@@ -194,6 +217,33 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	makeButton("Fake invite", function()
 		deps.onLever("fakeInvite", true)
 	end)
+	-- L3-28: the held family's next saved tier (the server clamps it into the window).
+	local function tierButton(slot: "melee" | "ranged"): TextButton
+		return makeButton("", function()
+			local entry = held[slot]
+			if entry ~= nil then
+				deps.onLever("setTier", entry.family .. "=" .. tostring(entry.tier + 1))
+			end
+		end)
+	end
+	local meleeButton = tierButton("melee")
+	local rangedButton = tierButton("ranged")
+	local function paintTierButtons(): ()
+		local melee, ranged = held.melee, held.ranged
+		meleeButton.Text = if melee ~= nil
+			then "Melee T" .. Format.Cash(melee.tier) .. " +1"
+			else "Melee tier +1"
+		rangedButton.Text = if ranged ~= nil
+			then "Ranged T" .. Format.Cash(ranged.tier) .. " +1"
+			else "Ranged tier +1"
+	end
+	paintTierButtons()
+	makeButton(STAR_TEXT, function()
+		deps.onLever("grantStar", STAR_ALL)
+	end)
+	makeButton("Reset Armory", function()
+		deps.onLever("resetArmory", true)
+	end)
 
 	local rowCount = math.ceil(buttonCount / COLUMNS)
 	local bodyHeight = rowCount * BUTTON_HEIGHT
@@ -230,6 +280,14 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		SetFakePartyCount = function(count: number)
 			fakePartyCount = math.clamp(count, 0, FAKE_PARTY_MAX)
 			paintFakePartyButton()
+		end,
+		SetTiers = function(melee: HeldTier?, ranged: HeldTier?)
+			held.melee = melee
+			held.ranged = ranged
+			paintTierButtons()
+		end,
+		SetVisible = function(visible: boolean)
+			root.Visible = visible
 		end,
 		SetLayout = function(scale: number)
 			uiScale.Scale = scale

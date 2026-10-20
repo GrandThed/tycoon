@@ -179,19 +179,9 @@ local Theme = {
 	-- and the scrolling list beneath it (M6 playtest: the balance must never scroll away).
 	LEGACY_HEADER_GAP = 8,
 
-	-- C0 Armory panel: a pinned Max HP line plus one material chip per band above a list of
-	-- weapon rows. A row is a Shop-style row (name, stats, Buy button) whose third line —
-	-- "Tier 4 · 20 Steel · unlocks at 1K/s (you: 620/s)" — spans the full width under the
-	-- button and wraps, so the row grows with the text instead of clipping it.
-	ARMORY_MAX_HP_HEIGHT = 24,
-	ARMORY_CHIP_HEIGHT = 40,
-	ARMORY_CHIP_GAP = 6,
-	ARMORY_CHIP_VALUE_Y = 18,
+	-- The smallest text a squeezed chip label may scale down to (C0's Armory panel chips, now
+	-- the hub's debug strip).
 	ARMORY_CHIP_MIN_TEXT = 8,
-	ARMORY_HEADER_GAP = 8,
-	ARMORY_STAT_Y = 30,
-	ARMORY_NEXT_Y = 50,
-	ARMORY_ROW_PAD_BOTTOM = 10,
 
 	-- C0 Expedition panel: mission tiles with the same silhouette, an Overdrive toggle above
 	-- them and the "Active runs" list below. The list is refreshed by a RequestRunList intent
@@ -1171,7 +1161,9 @@ local Theme = {
 	COMBAT_DEBUG_COLUMNS = 2,
 	COMBAT_DEBUG_TOGGLE_SIZE = 48,
 	COMBAT_DEBUG_TEXT = 11,
-	COMBAT_DEBUG_GRANT_MATERIALS = 25,
+	-- L3-28: T (and the DebugPanels' "Grant 500 Timber") pays this much of every built band's
+	-- material: one press pays T2 and T3 (100 + 250) for one weapon.
+	COMBAT_DEBUG_GRANT_TIMBER = 500,
 	COMBAT_DEBUG_GRANT_VALOR = 10,
 	COMBAT_DEBUG_MAX_SPAWN_KEYS = 3,
 
@@ -1325,24 +1317,6 @@ local Theme = {
 	-- Abilities 88 + Return 104 and two gaps make a 280 design px row: 257 px at MIN_SCALE on a
 	-- 667 x 375 phone, 280 of 375 in portrait.
 	COMBAT_ABILITIES_BUTTON_WIDTH = 88,
-	-- The Abilities panel (UI/ArmoryPanel since L2 W2): a sheet over a scrim like the map. Its width
-	-- fits a 375 px portrait phone at MIN_SCALE with a margin; its rows scroll where a short
-	-- landscape screen cannot hold them all. Every button is 48 design px (44 physical at
-	-- MIN_SCALE).
-	ABILITIES_WIDTH = 340,
-	ABILITIES_PADDING = 10,
-	ABILITIES_HEADER_HEIGHT = 48,
-	ABILITIES_ROW_HEIGHT = 68, -- name, two lines of text, the price
-	ABILITIES_ROW_GAP = 6,
-	ABILITIES_BUTTON_WIDTH = 104,
-	ABILITIES_BUTTON_HEIGHT = 48,
-	ABILITIES_NAME_TEXT = 15,
-	ABILITIES_HINT_HEIGHT = 14,
-	ABILITIES_HINT_TEXT = 10,
-	-- A Buy or a weapon pick the server never answered is live again after this long (both
-	-- Armory tabs; L2 W2 section 2: 3 s at most).
-	ABILITIES_RESULT_TIMEOUT_SECONDS = 3,
-	ABILITIES_TOAST_SECONDS = 2.5,
 	-- The first refused air jump of a session says where to get it, for this long.
 	AIR_JUMP_HINT_SECONDS = 4,
 	-- The map card's secrets row (MapScreen): one icon per secret with its key under it. 30
@@ -1388,28 +1362,114 @@ local Theme = {
 	SECRET_BURST_COLOR = Color3.fromRGB(255, 214, 92),
 	SECRET_TOAST_SECONDS = 3,
 
-	-- L2 Wave 2 (docs/prompts/l2-w2-contract.md, L2-29 to L2-38).
-	-- The Armory panel (UI/ArmoryPanel), W1's Abilities panel grown into two tabs. It keeps the
-	-- ABILITIES_* sheet (340 wide, 48 px buttons); the tabs replace the title row, so the sheet
-	-- is the header (48) plus the page plus the key line. Weapons page: two columns of family
-	-- cards, each card a name row and one 48 px row of buttons; the ranged column with two cards
-	-- is 18 + 2 x (80 + 6) = 190 design px, and the sheet 284, inside the 313 design px a
-	-- 640 x 360 phone leaves under its top bar at MIN_SCALE (the page scrolls below that).
-	LOBBY_ARMORY_TAB_WIDTH = 108,
-	LOBBY_ARMORY_COLUMN_GAP = 6,
-	LOBBY_ARMORY_COLUMN_TITLE_HEIGHT = 18,
-	LOBBY_ARMORY_CARD_PAD = 4,
-	LOBBY_ARMORY_CARD_NAME_HEIGHT = 20,
-	LOBBY_ARMORY_CARD_NAME_TEXT = 14,
-	LOBBY_ARMORY_CHIP_HEIGHT = 16,
-	LOBBY_ARMORY_CHIP_TEXT = 10,
-	LOBBY_ARMORY_CHIP_PAD = 6,
-	LOBBY_ARMORY_VALOR_ROW_HEIGHT = 20,
-	-- An element's chip on its family's card (the words are SECRET_NEED_WORDS').
-	LOBBY_ARMORY_ELEMENT_COLORS = {
+	-- L3 W1 (docs/prompts/l3-w1-contract.md, L3-18 to L3-23): the Armory screen (UI/ArmoryScreen
+	-- and its Armory* parts), one for the dungeon's lobby and the hub. Layout A, "Showcase": a 48
+	-- header, the stage beside the detail column, the shelf under them. All in design px under
+	-- one UIScale. At 682 x 313 (640 x 360 under a 58 px top bar) that is 8 + 48 + 6 + a 173
+	-- middle + 6 + a 64 shelf + 8; the detail's content is 163 (24 title + 3 + 28 track + 3 +
+	-- three 16 lines with 3 gaps + 48 buttons). Portrait 393 x 648 (375 x 667): the stage takes
+	-- what the detail (163) and a 5 x 3 shelf (180) leave, 223. On a monitor the frame stops at
+	-- MAX_WIDTH x MAX_HEIGHT. Every tap target is at least 48 (44 physical at MIN_SCALE).
+	ARMORY_SCREEN_MAX_WIDTH = 880,
+	ARMORY_SCREEN_MAX_HEIGHT = 420,
+	ARMORY_SCREEN_PORTRAIT_MAX_HEIGHT = 720,
+	ARMORY_SCREEN_PADDING = 8,
+	ARMORY_SCREEN_GAP = 6,
+	ARMORY_SCREEN_SCRIM_TRANSPARENCY = 0.35,
+	ARMORY_SCREEN_HEADER_HEIGHT = 48, -- the tabs and the close button
+	ARMORY_SCREEN_TAB_WIDTH = 104,
+	-- The wallet ("1.2K Timber · 25 Valor") wraps to two lines on a portrait phone (103 wide).
+	ARMORY_SCREEN_WALLET_TEXT = 13,
+	ARMORY_SCREEN_HINT_HEIGHT = 14,
+	ARMORY_SCREEN_HINT_TEXT = 10,
+	-- The stage: at least STAGE_MIN_WIDTH, else this share of the frame's inner width.
+	ARMORY_SCREEN_STAGE_MIN_WIDTH = 220,
+	ARMORY_SCREEN_STAGE_SHARE = 0.33,
+	ARMORY_SCREEN_STAGE_PORTRAIT_MIN_HEIGHT = 120,
+	ARMORY_SCREEN_STAGE_LINE_GAP = 4,
+	ARMORY_SCREEN_STAGE_SLOT_TEXT = 12,
+	ARMORY_SCREEN_STAGE_NAME_TEXT = 22,
+	ARMORY_SCREEN_STAGE_TIER_TEXT = 34,
+	-- Lighter in the middle, behind where a weapon will stand (the L0 picture's radial): dark
+	-- steel vanishes on the panel colour itself (the study's warning). Darker for an unowned one.
+	ARMORY_SCREEN_STAGE_GRADIENT = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(36, 49, 84)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(76, 102, 162)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(36, 49, 84)),
+	}),
+	ARMORY_SCREEN_STAGE_DARK_GRADIENT = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 25, 40)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(34, 42, 66)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 25, 40)),
+	}),
+	-- A new selection pops the stage's text in from this scale (not on low-end devices).
+	ARMORY_SCREEN_STAGE_POP_SCALE = 0.94,
+	ARMORY_SCREEN_STAGE_POP_SECONDS = 0.14,
+	-- An element's chip (stage) and dot (card); the words are SECRET_NEED_WORDS'.
+	ARMORY_SCREEN_CHIP_HEIGHT = 16,
+	ARMORY_SCREEN_CHIP_TEXT = 10,
+	ARMORY_SCREEN_CHIP_PAD = 6,
+	ARMORY_SCREEN_DARK_CHIP = 0.6, -- an unowned family's chip and dot, faded
+	ARMORY_SCREEN_ELEMENT_COLORS = {
 		fire = Color3.fromRGB(255, 122, 40),
 		ice = Color3.fromRGB(110, 196, 255),
 	} :: { [string]: Color3 },
+	-- The detail column.
+	ARMORY_SCREEN_TITLE_HEIGHT = 24,
+	ARMORY_SCREEN_TITLE_TEXT = 17,
+	ARMORY_SCREEN_TIER_TEXT = 22, -- the big "T3" at the title's right
+	ARMORY_SCREEN_TIER_WIDTH = 64,
+	ARMORY_SCREEN_LINE_HEIGHT = 16,
+	ARMORY_SCREEN_LINE_GAP = 3,
+	ARMORY_SCREEN_LINE_TEXT = 12,
+	ARMORY_SCREEN_BUTTON_HEIGHT = 48,
+	-- Up to four buttons share the row (two styles, Equip, Upgrade at 1.5 shares): 93, 93, 93
+	-- and 140 in a 440 column, 79 and 119 in portrait's 377.
+	ARMORY_SCREEN_BUTTON_MAX_WIDTH = 150,
+	ARMORY_SCREEN_UPGRADE_SHARE = 1.5,
+	ARMORY_SCREEN_BUTTON_TEXT_PAD = 4,
+	-- The track: 20 pips in five bands; 19 wide in a 440 column, 16 in portrait's 377.
+	ARMORY_SCREEN_PIP_HEIGHT = 14,
+	ARMORY_SCREEN_PIP_GAP = 2,
+	ARMORY_SCREEN_PIP_BAND_GAP = 6,
+	ARMORY_SCREEN_PIP_MIN_WIDTH = 8,
+	ARMORY_SCREEN_PIP_MAX_WIDTH = 26,
+	ARMORY_SCREEN_PIP_CORNER = 3,
+	ARMORY_SCREEN_PIP_OPEN_TRANSPARENCY = 0.6,
+	ARMORY_SCREEN_PIP_DIM_TRANSPARENCY = 0.35,
+	-- The window's start and top numbers under their pips, spilling past a narrow pip.
+	ARMORY_SCREEN_PIP_MARK_GAP = 2,
+	ARMORY_SCREEN_PIP_MARK_HEIGHT = 12,
+	ARMORY_SCREEN_PIP_MARK_TEXT = 10,
+	ARMORY_SCREEN_PIP_MARK_SPILL = 6,
+	-- The shelf: landscape one row of cards (56 + the 4 px scroll bar inside 64), portrait a
+	-- grid of five columns showing three rows.
+	ARMORY_SCREEN_SHELF_HEIGHT = 64,
+	ARMORY_SCREEN_CARD_WIDTH = 92,
+	ARMORY_SCREEN_CARD_HEIGHT = 56,
+	ARMORY_SCREEN_CARD_GAP = 6,
+	ARMORY_SCREEN_CARD_PAD = 5,
+	ARMORY_SCREEN_CARD_NAME_TEXT = 11,
+	-- A portrait card is 68 wide (58 for the name): a long word scales down to this, the bottom
+	-- bar's floor (BOTTOM_BAR_LABEL_MIN_TEXT), instead of truncating.
+	ARMORY_SCREEN_CARD_NAME_MIN_TEXT = 8,
+	ARMORY_SCREEN_CARD_NAME_HEIGHT = 26, -- two lines: "Piercing / Rifle"
+	ARMORY_SCREEN_CARD_TIER_TEXT = 14,
+	ARMORY_SCREEN_CARD_DOT = 8,
+	ARMORY_SCREEN_CARD_HELD_BAR = 3,
+	ARMORY_SCREEN_CARD_DARK = Color3.fromRGB(22, 29, 50),
+	ARMORY_SCREEN_PORTRAIT_COLUMNS = 5,
+	ARMORY_SCREEN_PORTRAIT_ROWS = 3,
+	-- The Abilities tab: the lobby panel's rows (L2 W2), centred and capped.
+	ARMORY_SCREEN_ABILITY_MAX_WIDTH = 520,
+	ARMORY_SCREEN_ABILITY_ROW_HEIGHT = 68, -- name, two lines of text, the price
+	ARMORY_SCREEN_ABILITY_NAME_TEXT = 15,
+	ARMORY_SCREEN_ABILITY_BUTTON_WIDTH = 104,
+	ARMORY_SCREEN_ABILITY_NOTE_WIDTH = 132, -- the hub's "Bought in the dungeon's lobby"
+	ARMORY_SCREEN_VALOR_ROW_HEIGHT = 20,
+	-- A press the server never answered is live again after this long (L3-21: 3 s at most).
+	ARMORY_SCREEN_RESULT_TIMEOUT_SECONDS = 3,
+	ARMORY_SCREEN_TOAST_SECONDS = 2.5,
 
 	-- FlameFx: a held fire stream, per shooter, from the hand to the reach the server cut at the
 	-- first wall (the strike's size). Particles in a widening cone, and a tapered core that is

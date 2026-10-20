@@ -3,7 +3,8 @@
 -- 13–19, 25, 27, 28 and "A run"; "L1b contracts", rulings L1b-1 to L1b-22; L1b Wave 2 "the
 -- long road", L1b-W2-5 to -8 and -21: tents, the population rule, the clear bonus; L1b Wave 4 "no
 -- waits, no walls", L1b-W4-14 to -16 and -28 to -31: the chase regions, the pace tent's stock, the
--- clear on the fielded raiders, the bonus on what was fielded, N's approaches). A level is an
+-- clear on the fielded raiders, the bonus on what was fielded, N's approaches; L3 W1, L3-17: a
+-- difficulty's first-clear reward, FirstClear and its Validate lines). A level is an
 -- ordered list of stages, `travel` and `camp`; since L1b only a camp that locks (the boss room)
 -- is a stage, and every other camp of the layout is open and inhabited. This module decides
 -- everything that is a rule: which stage is next, when the boss room triggers, when its gates
@@ -956,6 +957,53 @@ local function secretProblems(
 	end
 end
 
+-- L3-17: each difficulty's `firstClear`, when given, is a table. Its `family` is a family id of at
+-- most Unlocks.MAX_FAMILY_LENGTH bytes and, when the weapons are given, one of theirs that is no
+-- starter (a starter is everyone's, so the grant would give nothing); its `valor` is a whole
+-- number of at least 0. In difficulty-name order, so the lines come out the same every time.
+local function firstClearProblems(
+	level: Types.LevelConfig,
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	starters: { [string]: boolean }?,
+	problem: (string) -> ()
+): ()
+	local difficulties: any = level.difficulties
+	if type(difficulties) ~= "table" then
+		return
+	end
+	local names: { string } = {}
+	for name in difficulties do
+		table.insert(names, tostring(name))
+	end
+	table.sort(names)
+	for _, name in names do
+		local scales: any = difficulties[name]
+		local reward: any = if type(scales) == "table" then scales.firstClear else nil
+		if reward == nil then
+			continue
+		end
+		local where = `difficulties.{name}.firstClear`
+		if type(reward) ~= "table" then
+			problem(`{where} is not a table`)
+			continue
+		end
+		local id = reward.family
+		if id ~= nil then
+			if type(id) ~= "string" or id == "" or #id > Unlocks.MAX_FAMILY_LENGTH then
+				problem(`{where}.family is {tostring(id)}, not a family id`)
+			elseif weapons ~= nil and weapons[id] == nil then
+				problem(`{where}.family names "{id}", which is no weapons family`)
+			elseif starters ~= nil and starters[id] == true then
+				problem(`{where}.family names the starter "{id}", which everyone owns`)
+			end
+		end
+		local valor = reward.valor
+		if valor ~= nil and not (isFinite(valor) and valor >= 0 and valor % 1 == 0) then
+			problem(`{where}.valor is {tostring(valor)}, not a whole number of at least 0`)
+		end
+	end
+end
+
 -- L2-34, L2-36: the layout's reactive blocks and shortcuts. A block's `react` is "fire" or "ice";
 -- a fire block collides (a block nothing stops would be burnt by a stream that passes through
 -- it), an ice block (L2-52, deep water) does not and opens nothing, and two ice blocks' footprints
@@ -1432,14 +1480,18 @@ end
 -- One line per problem; an empty list is a level that may be played. `kinds` are the crowd kinds
 -- of ProvingGrounds.json, `ranks` the place of every difficulty in Expeditions.json, `rules`
 -- Combat.json `levels` and `crowdMax` ProvingGrounds.json crowd.maxAlive (the population gate).
--- Nothing here throws on a file with a key missing: that is a problem too.
+-- L3-17: `weapons` (ProvingGrounds.json) and `starters` (Unlocks.Starters of its loadout) name
+-- the families a first clear may give; a caller that leaves them out has the family checked as an
+-- id only. Nothing here throws on a file with a key missing: that is a problem too.
 function StageFlow.Validate(
 	level: Types.LevelConfig,
 	layout: Types.LevelLayout,
 	kinds: { [string]: Types.CrowdKindDef },
 	ranks: { [string]: number },
 	rules: Types.CombatLevelsConfig,
-	crowdMax: number
+	crowdMax: number,
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	starters: { [string]: boolean }?
 ): { string }
 	local problems: { string } = {}
 	local function problem(text: string): ()
@@ -1673,6 +1725,7 @@ function StageFlow.Validate(
 	)
 	regionProblems(level, layout, camps, kinds, ranks, rules, problem)
 	secretProblems(level, layout, problem)
+	firstClearProblems(level, weapons, starters, problem)
 	reactProblems(layout, problem)
 	return problems
 end
@@ -2871,6 +2924,30 @@ function StageFlow.Award(stars: Stars, levelId: string, difficulty: string): boo
 	end
 	own[difficulty] = true
 	return true
+end
+
+-- L3-17: what the first clear of `difficulty` gives besides its star, as a fresh table (the level
+-- file is never handed out to be written): a family id that is a non-empty string, and a Valor that
+-- is a whole number above 0. A key of any other kind is left out (Validate names it before the
+-- level is played), and nil when nothing is left, or the difficulty has no `firstClear`. The
+-- caller asks only when StageFlow.Award said the star is new.
+function StageFlow.FirstClear(level: Types.LevelConfig, difficulty: string): Types.LevelFirstClear?
+	local difficulties: any = level.difficulties
+	local scales: any = if type(difficulties) == "table" then difficulties[difficulty] else nil
+	local reward: any = if type(scales) == "table" then scales.firstClear else nil
+	if type(reward) ~= "table" then
+		return nil
+	end
+	local family = reward.family
+	local valor = reward.valor
+	local given: Types.LevelFirstClear = {
+		family = if type(family) == "string" and family ~= "" then family else nil,
+		valor = if isFinite(valor) and valor > 0 and valor % 1 == 0 then valor else nil,
+	}
+	if given.family == nil and given.valor == nil then
+		return nil
+	end
+	return given
 end
 
 -- Who earns the star of a run: nobody unless it was cleared, and then those who were fighting

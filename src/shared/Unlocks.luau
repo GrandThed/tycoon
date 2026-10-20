@@ -6,6 +6,9 @@
 --
 -- Keys are checked where a reward is given, from the profile (L2-23): a client that double-jumps
 -- without owning it moves further, and gains nothing.
+--
+-- L3 W1 (docs/prompts/l3-w1-contract.md, L3-9, L3-10, L3-28): the saved loadout and stars, read
+-- the same way in the hub and the dungeon place, and the Armory levers' shared pieces.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -204,6 +207,116 @@ function Unlocks.ElementOf(
 	local def = if type(weapons) == "table" then weapons[family] else nil
 	local element: any = if type(def) == "table" then def.element else nil
 	return if type(element) == "string" then ELEMENTS[element] else nil
+end
+
+-- L3-10: the held families a profile has saved, as both places read them. Each slot takes the
+-- saved family when it is a family of `weapons`, fills that slot and is owned (a starter of
+-- `fallback`, or one the profile's families hold); otherwise fallback[slot], the slot's starter.
+-- variants keeps the saved styles whose family and key both exist, so an unknown style falls back
+-- to the family's default. Fresh tables: the profile's own are never handed out.
+function Unlocks.LoadoutOf(
+	combat: Types.CombatProfile?,
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	fallback: { melee: string, ranged: string }
+): Types.RangeLoadout
+	local saved: any = if combat ~= nil then combat.loadout else nil
+	local families = if combat ~= nil then combat.families else nil
+	local starters = Unlocks.Starters(fallback)
+	local function held(slot: string, default: string): string
+		local family: any = if type(saved) == "table" then saved[slot] else nil
+		local def: any = if type(family) == "string" and type(weapons) == "table"
+			then weapons[family]
+			else nil
+		if
+			type(def) == "table"
+			and def.slot == slot
+			and Unlocks.OwnsFamily(families, family, starters)
+		then
+			return family
+		end
+		return default
+	end
+	local variants: { [string]: string } = {}
+	local savedVariants: any = if type(saved) == "table" then saved.variants else nil
+	if type(savedVariants) == "table" and type(weapons) == "table" then
+		for family, key in savedVariants do
+			local def: any = if type(family) == "string" then weapons[family] else nil
+			if
+				type(key) == "string"
+				and type(def) == "table"
+				and type(def.variants) == "table"
+				and def.variants[key] ~= nil
+			then
+				variants[family] = key
+			end
+		end
+	end
+	return {
+		melee = held("melee", fallback.melee),
+		ranged = held("ranged", fallback.ranged),
+		variants = variants,
+	}
+end
+
+-- L3-10: an equip FamilyVerdict has allowed, saved: the family held in `slot` and its style. The
+-- loadout is made when the profile has none; a slot other than "melee" and "ranged" writes nothing.
+function Unlocks.SaveLoadout(
+	combat: Types.CombatProfile,
+	slot: string,
+	family: string,
+	variant: string
+): ()
+	if slot ~= "melee" and slot ~= "ranged" then
+		return
+	end
+	local loadout: Types.SavedLoadout = combat.loadout or { variants = {} }
+	combat.loadout = loadout
+	-- A hand-edited or half-written profile may hold a loadout without its variants.
+	local variants: any = loadout.variants
+	if type(variants) ~= "table" then
+		variants = {}
+		loadout.variants = variants
+	end
+	if slot == "melee" then
+		loadout.melee = family
+	else
+		loadout.ranged = family
+	end
+	variants[family] = variant
+end
+
+-- L3-9: the profile's `combat.stars`, made when a profile lacks it (the v8 step is the usual
+-- source). The map's `requires`, the band tops' star and the summary's star all read it.
+function Unlocks.StarsOf(combat: Types.CombatProfile): { [string]: { [string]: boolean } }
+	local existing = combat.stars
+	if existing ~= nil then
+		return existing
+	end
+	local made: { [string]: { [string]: boolean } } = {}
+	combat.stars = made
+	return made
+end
+
+-- L3-28's resetArmory lever (Studio only, both places): the profile's tiers, loadout and stars
+-- emptied, each a fresh table. Materials, Valor, families and secrets stay.
+function Unlocks.ResetArmory(combat: Types.CombatProfile): ()
+	combat.tiers = {}
+	combat.loadout = { variants = {} }
+	combat.stars = {}
+end
+
+-- L3-28's setTier value, "<family>=<tier>": the family id (at most MAX_FAMILY_LENGTH bytes) and the
+-- whole tier. nil, nil for anything else; the tier is held to the family's window by Armory.SetTier.
+function Unlocks.TierLever(value: any): (string?, number?)
+	if type(value) ~= "string" then
+		return nil, nil
+	end
+	local family, digits = string.match(value, "^([%w_]+)=(%d+)$")
+	local tier = if digits ~= nil then tonumber(digits) else nil
+	if family == nil or tier == nil or #family > MAX_FAMILY_LENGTH then
+		return nil, nil
+	end
+	return family, tier
 end
 
 -- L2-31: true when an owned family (a starter or a written one) carries `element`. A word that is

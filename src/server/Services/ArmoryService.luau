@@ -1,9 +1,11 @@
 --!strict
--- The Armory purchase path in the hub (docs/INTERFACES.md "C0 contracts"). Weapons are the only
--- equipment, so this is the whole shop: two intents (RequestBuyGear, RequestAscend), one
--- validation chain each, one atomic mutation. The chain lives in the pure Armory module; this
--- service supplies the server-owned inputs (the profile and the PERSISTED income per second)
--- and writes the result.
+-- The Armory in the hub (docs/INTERFACES.md "C0 contracts", docs/prompts/l3-w1-contract.md L3-12,
+-- L3-14, L3-28). Three intents, one validation chain each, one atomic mutation:
+-- RequestUpgradeWeapon (a family up one tier of the ladder), RequestSetFamily (the held family of
+-- a slot, saved) and RequestAscend (the Rebirth forge, kept and unreachable until L4). The chains
+-- live in the pure Armory and Unlocks modules, the same ones the dungeon place's UnlockService
+-- calls; this service supplies the profile and writes nothing they did not decide. The hub has no
+-- fight, so its gate is always open.
 --
 -- Materials and Valor are earned in the combat place only; nothing here mints either outside
 -- the Studio levers at the bottom.
@@ -17,6 +19,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local ExpeditionService = require(script.Parent:WaitForChild("ExpeditionService"))
@@ -27,35 +30,89 @@ local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 -- typed into the Properties pane mid-playtest.
 local LEVER_INTERVAL_SECONDS = 1
 
+type Action = "ascend" | "upgradeWeapon" | "setFamily"
+
+-- The verdicts Armory and Unlocks answer with, as ActionResult reasons: a singleton union that
+-- crossed a `string` reaches the typed ActionResult as plain string under the old solver.
+local REASONS: { [string]: Types.ActionReason } = {}
+REASONS.insufficientFunds = "insufficientFunds"
+REASONS.locked = "locked"
+REASONS.invalid = "invalid"
+REASONS.unavailable = "unavailable"
+REASONS.busy = "busy"
+REASONS.peak = "peak"
+REASONS.notBuilt = "notBuilt"
+REASONS.needsStar = "needsStar"
+table.freeze(REASONS)
+
 local isStudio = RunService:IsStudio()
 local leverAccumulator = 0
 -- DebugFakeParty is sticky like DebugBots (a count to play under, not an event), so it applies
 -- to every player whenever the typed value changes.
 local appliedFakeParty: number? = nil
+-- L3-13: the level ids this build has a level file for, read once at Init (a band whose level is
+-- not here cannot be bought: notBuilt).
+local built: { [string]: boolean } = {}
 
-local function sendResult(
-	player: Player,
-	action: "buyGear" | "ascend",
-	slot: string,
-	ok: boolean,
-	reason: ("insufficientFunds" | "locked" | "invalid")?
-): ()
-	local result: Types.ActionResult = { action = action, slotId = slot, ok = ok, reason = reason }
+-- An unknown verdict can only mean a drifted shared module: "invalid" is the honest reply for it.
+local function reasonOf(verdict: string?): Types.ActionReason?
+	if verdict == nil then
+		return nil
+	end
+	return REASONS[verdict] or "invalid"
+end
+
+local function sendResult(player: Player, action: Action, slotId: string, verdict: string?): ()
+	local result: Types.ActionResult = {
+		action = action,
+		slotId = slotId,
+		ok = verdict == nil,
+		reason = reasonOf(verdict),
+	}
 	RemoteService.FireClient(player, "ActionResult", result)
 end
 
--- Armory.CanBuy/CanAscend answer with one of three literals, but Luau widens a singleton union
--- when it crosses a module boundary, so the refusal is re-narrowed here for the typed
--- ActionResult. An unrecognised value can only mean a drifted Armory module: "invalid" is the
--- honest reply for it.
-local function refusalReason(reason: string?): "insufficientFunds" | "locked" | "invalid"
-	if reason == "insufficientFunds" then
-		return "insufficientFunds"
+-- The starters (L2-30) and the weapon families of ProvingGrounds.json, the same config the
+-- dungeon place reads. nil without that file: nothing can be owned or equipped then.
+local function weaponsConfig(): ({ [string]: Types.RangeWeaponDef }?, { [string]: boolean })
+	local config = Catalog.GetProvingGroundsConfig()
+	if config == nil then
+		return nil, {}
 	end
-	if reason == "locked" then
-		return "locked"
+	return config.weapons, Unlocks.Starters(config.loadout)
+end
+
+-- L3-14: one family up one tier. Armory.Upgrade decides and writes in one call with no yield, so
+-- two requests in flight cannot both pass.
+local function tryUpgradeWeapon(player: Player, family: string): ()
+	local state = DataService.GetState(player)
+	local armoryConfig = Catalog.GetArmoryConfig()
+	local weapons, starters = weaponsConfig()
+	if state == nil or armoryConfig == nil or weapons == nil then
+		sendResult(player, "upgradeWeapon", family, "unavailable")
+		return
 	end
-	return "invalid"
+	local owned = Unlocks.OwnsFamily(state.combat.families, family, starters)
+	local verdict = Armory.Upgrade(armoryConfig, state.combat, family, owned, true, built)
+	if verdict == nil then
+		EconomyService.MarkDirty(player, { combat = true })
+	end
+	sendResult(player, "upgradeWeapon", family, verdict)
+end
+
+-- L3-14: the held family of a slot (and its style), saved to the profile's loadout. The dungeon
+-- place reads it at its next admit (Unlocks.LoadoutOf).
+local function trySetFamily(player: Player, slot: string, family: string, variant: string): ()
+	local state = DataService.GetState(player)
+	local weapons, starters = weaponsConfig()
+	local verdict = if weapons == nil
+		then "unavailable"
+		else Unlocks.FamilyVerdict(state, weapons, starters, slot, family, variant, true)
+	if verdict == nil and state ~= nil then
+		Unlocks.SaveLoadout(state.combat, slot, family, variant)
+		EconomyService.MarkDirty(player, { combat = true })
+	end
+	sendResult(player, "setFamily", family, verdict)
 end
 
 -- Both mutations write the same two-field records, and a validated slot is either "melee" or
@@ -74,66 +131,25 @@ end
 
 local function spendMaterials(state: Types.PlayerState, material: string, amount: number): ()
 	local owned = state.combat.materials[material] or 0
-	-- Never below zero: Armory.CanBuy has already proved the wallet covers it, and a negative
+	-- Never below zero: Armory.CanAscend has already proved the wallet covers it, and a negative
 	-- balance would persist.
 	state.combat.materials[material] = math.max(0, owned - amount)
 end
 
--- Frozen chain: state loaded → Armory config present → a next tier exists → the city's
--- persisted income/s reaches its unlockRate → the band material covers its cost. No yields
--- between validation and mutation, so two in-flight requests cannot both pass.
-local function tryBuyGear(player: Player, slot: string): ()
-	local state = DataService.GetState(player)
-	if state == nil then
-		sendResult(player, "buyGear", slot, false, "invalid")
-		return
-	end
-	local armoryConfig = Catalog.GetArmoryConfig()
-	if armoryConfig == nil then
-		-- No Armory.json: the panel is hidden client-side, so this is a stale or forged intent.
-		sendResult(player, "buyGear", slot, false, "invalid")
-		return
-	end
-	-- Before any check that reads highestEra (PlotService.tryAdvanceEra is frozen this milestone).
-	Combat.TouchHighestEra(state)
-
-	local incomePerSecond = EconomyService.GetPersistedIncomePerSecond(player)
-	local ok, reason = Armory.CanBuy(armoryConfig, state, slot, incomePerSecond)
-	if not ok then
-		sendResult(player, "buyGear", slot, false, refusalReason(reason))
-		return
-	end
-	local tier = Armory.NextTier(armoryConfig, state.combat.gear, slot)
-	if tier == nil then
-		sendResult(player, "buyGear", slot, false, "invalid")
-		return
-	end
-	local material, amount = Armory.TierCost(armoryConfig, slot, tier)
-
-	spendMaterials(state, material, amount)
-	setSlotValue(state.combat.gear, slot, tier)
-	EconomyService.MarkDirty(player, { combat = true })
-	sendResult(player, "buyGear", slot, true, nil)
-end
-
--- Same chain for the Rebirth-gated Ascension forge: the cap comes from rebirthCount, the cost
--- from all four materials plus Valor.
+-- The Rebirth-gated Ascension forge: the cap comes from rebirthCount, the cost from all four
+-- materials plus Valor.
 local function tryAscend(player: Player, slot: string): ()
 	local state = DataService.GetState(player)
-	if state == nil then
-		sendResult(player, "ascend", slot, false, "invalid")
-		return
-	end
 	local armoryConfig = Catalog.GetArmoryConfig()
-	if armoryConfig == nil then
-		sendResult(player, "ascend", slot, false, "invalid")
+	if state == nil or armoryConfig == nil then
+		sendResult(player, "ascend", slot, "invalid")
 		return
 	end
 	Combat.TouchHighestEra(state)
 
 	local ok, reason = Armory.CanAscend(armoryConfig, state, slot)
 	if not ok then
-		sendResult(player, "ascend", slot, false, refusalReason(reason))
+		sendResult(player, "ascend", slot, reason or "invalid")
 		return
 	end
 	local current = if slot == "melee"
@@ -142,7 +158,7 @@ local function tryAscend(player: Player, slot: string): ()
 	local level = current + 1
 	local cost = Armory.AscensionCost(armoryConfig, level)
 	if cost == nil then
-		sendResult(player, "ascend", slot, false, "locked")
+		sendResult(player, "ascend", slot, "locked")
 		return
 	end
 
@@ -152,20 +168,103 @@ local function tryAscend(player: Player, slot: string): ()
 	state.combat.valor = math.max(0, state.combat.valor - cost.valor)
 	setSlotValue(state.combat.ascension, slot, level)
 	EconomyService.MarkDirty(player, { combat = true })
-	sendResult(player, "ascend", slot, true, nil)
+	sendResult(player, "ascend", slot, nil)
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- Studio levers (inert outside Studio: Start polls only there, HandleDebug returns at once)
+-- ---------------------------------------------------------------------------------------------
+
+-- L3-28: the grant pays the material of every band whose level has a level file (Timber today),
+-- as the dungeon lobby's does; it replaces the C0 rule of the player's era band. Shared by the
+-- attribute and the RequestDebug lever.
+local function grantMaterialsTo(state: Types.PlayerState, value: number): ()
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if armoryConfig == nil then
+		return
+	end
+	local _, materials = Armory.BuiltBands(armoryConfig, built)
+	for _, material in materials do
+		state.combat.materials[material] = (state.combat.materials[material] or 0) + value
+	end
+end
+
+-- L3-28 setTier: "<family>=<tier>", the tier held to the family's window; owning it is not needed.
+local function setTierFor(player: Player, state: Types.PlayerState, value: any): ()
+	local armoryConfig = Catalog.GetArmoryConfig()
+	local family, tier = Unlocks.TierLever(value)
+	if armoryConfig == nil or family == nil or tier == nil then
+		warn(`[ArmoryService] setTier wants "<family>=<tier>", got {tostring(value)}`)
+		return
+	end
+	local written = Armory.SetTier(armoryConfig, state.combat, family, tier)
+	if written == nil then
+		warn(`[ArmoryService] setTier: "{family}" has no window on the ladder`)
+		return
+	end
+	EconomyService.MarkDirty(player, { combat = true })
+	warn(`[ArmoryService] setTier: {player.Name}'s {family} is T{written}`)
+end
+
+-- L3-28 grantStar: the ladder's starDifficulty star of a level that has a level file, or of every
+-- built band level for "*".
+local function grantStarTo(player: Player, state: Types.PlayerState, value: any): ()
+	local armoryConfig = Catalog.GetArmoryConfig()
+	local ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil
+	if armoryConfig == nil or ladder == nil or typeof(value) ~= "string" then
+		return
+	end
+	local levels: { string } = {}
+	if value == "*" then
+		levels = (Armory.BuiltBands(armoryConfig, built))
+	elseif built[value] == true then
+		levels = { value }
+	end
+	if #levels == 0 then
+		warn(`[ArmoryService] grantStar: no built level "{value}"`)
+		return
+	end
+	local stars = Unlocks.StarsOf(state.combat)
+	for _, levelId in levels do
+		local row = stars[levelId] or {}
+		stars[levelId] = row
+		row[ladder.starDifficulty] = true
+	end
+	EconomyService.MarkDirty(player, { combat = true })
+	warn(
+		`[ArmoryService] grantStar: {player.Name} holds the {ladder.starDifficulty} star of {table.concat(
+			levels,
+			", "
+		)}`
+	)
+end
+
+-- L3-28 resetArmory: tiers, loadout and stars emptied; materials, Valor, families and secrets stay.
+local function resetArmoryFor(player: Player, state: Types.PlayerState): ()
+	Unlocks.ResetArmory(state.combat)
+	EconomyService.MarkDirty(player, { combat = true })
+	warn(`[ArmoryService] resetArmory: {player.Name}'s tiers, loadout and stars are empty`)
+end
+
+-- A positive finite number is the only value that pays something out: a corrupted materials,
+-- Valor or cash field can never be persisted from a typo in the Properties pane.
+local function grantAmount(value: any): number?
+	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
+		return nil
+	end
+	return value
 end
 
 -- Studio levers (same shape as EconomyService's GrantCash): a positive number on Workspace is
--- consumed once and reset to 0. GrantMaterials pays the material of the band matching the
--- player's CURRENT era, which is the one their Armory tiers are priced in.
+-- consumed once and reset to 0, for every loaded player.
 local function consumeGrantLever(
 	attribute: string,
 	apply: (state: Types.PlayerState, value: number) -> ()
 ): ()
-	local value = workspace:GetAttribute(attribute)
 	-- NaN/inf are refused too: Studio with API access writes a real profile, and a corrupted
 	-- materials or Valor field would survive the session.
-	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
+	local value = grantAmount(workspace:GetAttribute(attribute))
+	if value == nil then
 		return
 	end
 	workspace:SetAttribute(attribute, 0)
@@ -185,25 +284,51 @@ local function consumeGrantLever(
 	)
 end
 
--- GrantMaterials pays the material of the band matching the player's CURRENT era, which is the
--- one their Armory tiers are priced in. Shared by the attribute and the RequestDebug lever.
-local function grantMaterialsTo(state: Types.PlayerState, value: number): ()
-	local armoryConfig = Catalog.GetArmoryConfig()
-	if armoryConfig == nil then
+-- L3-28's string levers (setTier, grantStar): a non-empty string is consumed once (reset to "")
+-- and applied to every loaded player. nil = the lever is off in Combat.json.
+local function consumeStringLever(
+	attribute: string?,
+	apply: (
+		player: Player,
+		state: Types.PlayerState,
+		value: string
+	) -> ()
+): ()
+	if attribute == nil then
 		return
 	end
-	local material = Armory.BandMaterial(armoryConfig, state.era)
-	if material == nil then
+	local value = workspace:GetAttribute(attribute)
+	if typeof(value) ~= "string" or value == "" then
 		return
 	end
-	state.combat.materials[material] = (state.combat.materials[material] or 0) + value
+	workspace:SetAttribute(attribute, "")
+	for _, player in Players:GetPlayers() do
+		local state = DataService.GetState(player)
+		if state ~= nil then
+			apply(player, state, value)
+		end
+	end
+end
+
+-- L3-28's resetArmory attribute: a number above 0, consumed once (reset to 0).
+local function consumeResetLever(attribute: string?): ()
+	if attribute == nil or grantAmount(workspace:GetAttribute(attribute)) == nil then
+		return
+	end
+	workspace:SetAttribute(attribute, 0)
+	for _, player in Players:GetPlayers() do
+		local state = DataService.GetState(player)
+		if state ~= nil then
+			resetArmoryFor(player, state)
+		end
+	end
 end
 
 -- C1: the join list's Studio stand-in. Unlike the grant levers this one is not per player, so
 -- it gets its own consumer rather than consumeGrantLever's loop over loaded profiles.
 local function consumeFakeRunsLever(attribute: string): ()
-	local value = workspace:GetAttribute(attribute)
-	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
+	local value = grantAmount(workspace:GetAttribute(attribute))
+	if value == nil then
 		return
 	end
 	workspace:SetAttribute(attribute, 0)
@@ -244,18 +369,12 @@ local function consumeStudioLevers(): ()
 	consumeGrantLever(debugConfig.grantValorAttribute, function(state, value)
 		state.combat.valor += value
 	end)
+	consumeStringLever(debugConfig.setTierAttribute, setTierFor)
+	consumeStringLever(debugConfig.grantStarAttribute, grantStarTo)
+	consumeResetLever(debugConfig.resetArmoryAttribute)
 	consumeFakeRunsLever(debugConfig.fakeRunsAttribute)
 	consumeFakePartyLever(debugConfig.fakePartyAttribute)
 	consumeFakeInviteLever(debugConfig.fakeInviteAttribute)
-end
-
--- A lever value that pays something out: positive and finite, so a corrupted materials, Valor
--- or cash field can never be persisted from a typo in the Properties pane.
-local function grantAmount(value: any): number?
-	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
-		return nil
-	end
-	return value
 end
 
 local ArmoryService = {}
@@ -294,9 +413,23 @@ function ArmoryService.HandleDebug(player: Player, lever: string, value: any): (
 		workspace:SetAttribute(combatConfig.debug.forceTeleportFailureAttribute, value == true)
 		return
 	end
-	local amount = grantAmount(value)
 	local state = DataService.GetState(player)
-	if amount == nil or state == nil then
+	if state == nil then
+		return
+	end
+	-- L3-28: the Armory's levers carry a string or nothing, never an amount.
+	if lever == "setTier" then
+		setTierFor(player, state, value)
+		return
+	elseif lever == "grantStar" then
+		grantStarTo(player, state, value)
+		return
+	elseif lever == "resetArmory" then
+		resetArmoryFor(player, state)
+		return
+	end
+	local amount = grantAmount(value)
+	if amount == nil then
 		return
 	end
 	if lever == "grantCash" then
@@ -317,10 +450,34 @@ function ArmoryService.HandleDebug(player: Player, lever: string, value: any): (
 end
 
 function ArmoryService.Init(): ()
+	for _, levelId in Catalog.GetLevelIds() do
+		built[levelId] = true
+	end
+	-- L3-5: the validator, warned once; the screen and the server both degrade on what it names.
+	local armoryConfig = Catalog.GetArmoryConfig()
+	local weapons = weaponsConfig()
+	if armoryConfig ~= nil then
+		local families: { string } = {}
+		if weapons ~= nil then
+			for family in weapons do
+				table.insert(families, family)
+			end
+		end
+		table.sort(families)
+		for _, line in Armory.Problems(armoryConfig, families) do
+			warn(`[ArmoryService] {line}`)
+		end
+	end
 	-- Payload types are already validated by RemoteService; the casts narrow the varargs.
-	RemoteService.SetHandler("RequestBuyGear", function(player: Player, slot: any)
-		tryBuyGear(player, slot :: string)
+	RemoteService.SetHandler("RequestUpgradeWeapon", function(player: Player, family: any)
+		tryUpgradeWeapon(player, family :: string)
 	end)
+	RemoteService.SetHandler(
+		"RequestSetFamily",
+		function(player: Player, slot: any, family: any, variant: any)
+			trySetFamily(player, slot :: string, family :: string, variant :: string)
+		end
+	)
 	RemoteService.SetHandler("RequestAscend", function(player: Player, slot: any)
 		tryAscend(player, slot :: string)
 	end)

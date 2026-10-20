@@ -23,16 +23,29 @@
 -- strip that drives the hub's RequestDebug levers. C2 adds the hub party: PartyState feeds
 -- the Expedition panel's party strip, PartyInvite raises the non-blocking PartyInviteToast,
 -- and the four RequestParty* intents are the only way the client touches a party.
+--
+-- L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-22, L3-24, L3-28): the C0 slot Armory panel is
+-- gone. The Armory is the shared UI/ArmoryScreen the dungeon's lobby mounts too, a full-screen
+-- card over the bottom bar, opened by K and the bar's Armory key (and closing any dock panel).
+-- Upgrade sends RequestUpgradeWeapon(family) and Equip / a style RequestSetFamily(slot, family,
+-- variant); there is no fight here, so its gate is always open and it has no Abilities to sell
+-- (they are bought in the dungeon's lobby). The Snapshot's and every Delta's `combat` is its
+-- SetState, and the held pair is the saved loadout as the server reads it (Unlocks.LoadoutOf).
+-- The Armory and Expedition keys and the Power readout now wait for RequestUpgradeWeapon, the
+-- intent that replaced RequestBuyGear. In Studio the strip gains the Armory levers.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Format = require(sharedFolder:WaitForChild("Format"))
+local Armory = require(sharedFolder:WaitForChild("Armory"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -43,7 +56,7 @@ local BottomBar = require(uiFolder:WaitForChild("BottomBar"))
 local BuildPanel = require(uiFolder:WaitForChild("BuildPanel"))
 local LegacyPanel = require(uiFolder:WaitForChild("LegacyPanel"))
 local ShopPanel = require(uiFolder:WaitForChild("ShopPanel"))
-local ArmoryPanel = require(uiFolder:WaitForChild("ArmoryPanel"))
+local ArmoryScreen = require(uiFolder:WaitForChild("ArmoryScreen"))
 local ExpeditionPanel = require(uiFolder:WaitForChild("ExpeditionPanel"))
 local ExpeditionSummaryCard = require(uiFolder:WaitForChild("ExpeditionSummaryCard"))
 local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
@@ -84,6 +97,13 @@ type DockablePanel = {
 }
 
 local FIRST_ERA = 1
+
+-- L3-22: the Armory's key (the dungeon's lobby uses the same) and the line that names the keys.
+local ARMORY_KEY = Enum.KeyCode.K
+local ARMORY_KEY_HINT = "K or Esc closes"
+local ARMORY_PAD_HINT = "B closes · " .. ArmoryScreen.PAD_TAB_NAMES .. " tabs"
+-- L3-24: the answers the Armory screen reads (an upgrade's and an equip's, ok or refused).
+local ARMORY_ACTIONS: { [string]: boolean } = { upgradeWeapon = true, setFamily = true }
 
 -- Spec section 6: an item whose id is still 0 does not exist for the player. The Shop
 -- button appears only once the human has created at least one item the Shop can list --
@@ -402,8 +422,8 @@ local function boot(): ()
 	-- Boot waits for neither case (review of 2026-09-17): the panels are built from config
 	-- alone, and their buttons appear the moment the remotes exist — now, or from the
 	-- ChildAdded listener further down.
-	local requestBuyGear: RemoteEvent? = nil
-	local requestAscend: RemoteEvent? = nil
+	local requestUpgradeWeapon: RemoteEvent? = nil
+	local requestSetFamily: RemoteEvent? = nil
 	local requestExpedition: RemoteEvent? = nil
 	local requestJoinRun: RemoteEvent? = nil
 	local requestRunList: RemoteEvent? = nil
@@ -417,8 +437,8 @@ local function boot(): ()
 	local requestPartyKick: RemoteEvent? = nil
 	local combatRemotesReady = false
 	local function resolveCombatRemotes(): ()
-		requestBuyGear = remotesFolder:FindFirstChild("RequestBuyGear") :: RemoteEvent?
-		requestAscend = remotesFolder:FindFirstChild("RequestAscend") :: RemoteEvent?
+		requestUpgradeWeapon = remotesFolder:FindFirstChild("RequestUpgradeWeapon") :: RemoteEvent?
+		requestSetFamily = remotesFolder:FindFirstChild("RequestSetFamily") :: RemoteEvent?
 		requestExpedition = remotesFolder:FindFirstChild("RequestExpedition") :: RemoteEvent?
 		requestJoinRun = remotesFolder:FindFirstChild("RequestJoinRun") :: RemoteEvent?
 		requestRunList = remotesFolder:FindFirstChild("RequestRunList") :: RemoteEvent?
@@ -427,11 +447,16 @@ local function boot(): ()
 		requestPartyRespond = remotesFolder:FindFirstChild("RequestPartyRespond") :: RemoteEvent?
 		requestPartyLeave = remotesFolder:FindFirstChild("RequestPartyLeave") :: RemoteEvent?
 		requestPartyKick = remotesFolder:FindFirstChild("RequestPartyKick") :: RemoteEvent?
-		-- One intent decides for all of them: RemoteService creates the whole set at once.
-		combatRemotesReady = requestBuyGear ~= nil
+		-- One intent decides for all of them: RemoteService creates the whole set at once. L3-24:
+		-- RequestUpgradeWeapon, since RequestBuyGear is gone.
+		combatRemotesReady = requestUpgradeWeapon ~= nil
 	end
 	resolveCombatRemotes()
 	local hasArmory = armoryConfig ~= nil
+	-- L3: the screen shows the weapon families, so it needs their config as well; the Power
+	-- readout is the server's number and needs only the Armory.
+	local provingConfig = Catalog.GetProvingGroundsConfig()
+	local hasArmoryScreen = hasArmory and provingConfig ~= nil
 	-- The place id being 0 does NOT hide the panel: the contract wants the tiles visible and
 	-- disabled with "Publish the Expeditions place first", so the feature is discoverable
 	-- before the second place exists.
@@ -518,6 +543,10 @@ local function boot(): ()
 	local panels: { [string]: DockablePanel } = {}
 	local togglePanel: (key: PanelKey) -> ()
 	local openPanel: (key: PanelKey) -> ()
+	-- L3-24: the Armory is a full-screen card, not a dock panel; built with the other panels below.
+	local armoryScreen: ArmoryScreen.Handle? = nil
+	-- C1's Studio strip, built further down (the Armory hides it while open).
+	local debugPanel: DebugPanel.DebugPanelHandle? = nil
 
 	local ceremony = Ceremony.new(screenGui, {
 		onClosed = function()
@@ -542,14 +571,27 @@ local function boot(): ()
 	-- A panel whose intent does not exist yet would only be able to fail, so the key stays
 	-- hidden until the remotes are there.
 	local function refreshCombatKeys(): ()
-		bottomBar.SetKeyVisible("armory", hasArmory and combatRemotesReady)
+		bottomBar.SetKeyVisible("armory", hasArmoryScreen and combatRemotesReady)
 		bottomBar.SetKeyVisible("expedition", hasExpeditions and combatRemotesReady)
 	end
 	refreshCombatKeys()
 
 	togglePanel = function(panelKey: PanelKey): ()
+		if panelKey == "armory" then
+			-- Like the bar's other keys, only once a model exists (the bar is hidden before) and
+			-- the intents are there to be sent.
+			local screen = armoryScreen
+			if screen ~= nil and model ~= nil and combatRemotesReady then
+				screen.Toggle()
+			end
+			return
+		end
 		if panels[panelKey] == nil then
 			return -- the feature's config is absent, so its panel was never built
+		end
+		local screen = armoryScreen
+		if screen ~= nil then
+			screen.Close() -- one sheet at a time
 		end
 		local previous = openPanelKey
 		if previous ~= nil then
@@ -671,24 +713,55 @@ local function boot(): ()
 		end,
 		onClose = closePanels,
 	})
-	-- C0: built only when the config AND the remotes exist, so every tap below has somewhere
-	-- to go. Intents carry a slot or a mission id and nothing else — no amounts, ever.
-	local armoryPanel: ArmoryPanel.ArmoryPanelHandle? = nil
-	if hasArmory and armoryConfig ~= nil then
-		armoryPanel = ArmoryPanel.new(screenGui, {
-			armoryConfig = armoryConfig,
-			onBuy = function(slot: ArmoryPanel.Slot)
-				if requestBuyGear ~= nil then
-					requestBuyGear:FireServer(slot)
+	-- C0, L3-24: built when the configs exist; its key shows once the remotes do, so every press
+	-- has somewhere to go. Intents carry a family, a slot and a style key, never an amount or a
+	-- tier. `false` from a deps call = the intent could not be sent, which the screen says.
+	if hasArmoryScreen then
+		local screen = ArmoryScreen.new(screenGui, {
+			onUpgrade = function(family: string): boolean
+				local remote = requestUpgradeWeapon
+				if remote == nil then
+					return false
+				end
+				remote:FireServer(family)
+				return true
+			end,
+			onEquip = function(slot: string, family: string, variant: string): boolean
+				local remote = requestSetFamily
+				if remote == nil then
+					return false
+				end
+				remote:FireServer(slot, family, variant)
+				return true
+			end,
+			-- Abilities are bought in the dungeon's lobby: the tab is read-only here.
+			onBuyAbility = nil,
+			onOpenChanged = function(open: boolean)
+				-- One sheet at a time: opening it closes the dock panel; the strip, which sits
+				-- over the bottom-left of the screen, is away while it is open.
+				if open then
+					closePanels()
+				end
+				bottomBar.SetActive(if open then "armory" else openPanelKey)
+				local strip = debugPanel
+				if strip ~= nil then
+					strip.SetVisible(not open)
 				end
 			end,
-			onAscend = function(slot: ArmoryPanel.Slot)
-				if requestAscend ~= nil then
-					requestAscend:FireServer(slot)
-				end
+			toast = function(text: string, seconds: number?, isError: boolean?)
+				toast.Show(text, seconds or Theme.TOAST_SECONDS, isError == true)
 			end,
-			onClose = closePanels,
+			keyHint = if UserInputService.KeyboardEnabled
+				then ARMORY_KEY_HINT
+				elseif UserInputService.GamepadEnabled then ARMORY_PAD_HINT
+				else nil,
+			-- The pad's Y is the lobby's toggle only; here the bar's key opens it.
+			padToggle = false,
 		})
+		-- No fight in the hub: the screen is always up and its gate always open (L3-14).
+		screen.SetAvailable(true)
+		screen.SetGate(true)
+		armoryScreen = screen
 	end
 	local expeditionPanel: ExpeditionPanel.ExpeditionPanelHandle? = nil
 	if hasExpeditions and combatConfig ~= nil then
@@ -769,7 +842,6 @@ local function boot(): ()
 	-- C1 Studio bridge: a strip of buttons for the hub's debug levers. Studio-only by
 	-- construction — a live client never builds it, and the server ignores the intent
 	-- anyway, so the lever cannot be reached from a published place.
-	local debugPanel: DebugPanel.DebugPanelHandle? = nil
 	if RunService:IsStudio() then
 		debugPanel = DebugPanel.new(screenGui, {
 			onLever = function(lever: string, value: any)
@@ -783,9 +855,6 @@ local function boot(): ()
 	panels.legacy = legacyPanel
 	panels.shop = shopPanel
 	panels.settings = settingsPanel
-	if armoryPanel ~= nil then
-		panels.armory = armoryPanel
-	end
 	if expeditionPanel ~= nil then
 		panels.expedition = expeditionPanel
 	end
@@ -856,17 +925,36 @@ local function boot(): ()
 		shopPanel.Refresh(state, current.persistedIncomePerSecond, Catalog.GetEraConfig(state.era))
 		-- C0: nil hides the readout entirely on a hub without an Armory.
 		topBar.SetPower(if hasArmory and combatRemotesReady then current.gearPower else nil)
-		local armory = armoryPanel
-		if armory ~= nil then
-			-- The Armory gates on the PERSISTED rate, which is the one the server checks.
-			armory.Refresh(state, current.persistedIncomePerSecond)
-		end
 		local expedition = expeditionPanel
 		if expedition ~= nil then
 			expedition.Refresh(state, current.gearPower)
 		end
 		refreshBonuses()
 		refreshPreload(current)
+	end
+
+	-- L3-24: the Armory and the strip's tier buttons follow the combat profile, from the Snapshot
+	-- and every Delta that carries it (not from refreshAll, which the cash tick also runs). The
+	-- held pair is the saved loadout as the server reads it, starters filling what it lacks.
+	local function pushArmory(combat: Types.CombatProfile): ()
+		local config = provingConfig
+		if config == nil then
+			return
+		end
+		local held = Unlocks.LoadoutOf(combat, config.weapons, config.loadout)
+		local screen = armoryScreen
+		if screen ~= nil then
+			screen.SetState(combat)
+			screen.SetHeld(held)
+		end
+		local strip = debugPanel
+		local cfg = armoryConfig
+		if strip ~= nil and cfg ~= nil then
+			strip.SetTiers(
+				{ family = held.melee, tier = Armory.TierOf(cfg, combat, held.melee) },
+				{ family = held.ranged, tier = Armory.TierOf(cfg, combat, held.ranged) }
+			)
+		end
 	end
 
 	local function applySnapshot(payload: { [string]: any }): ()
@@ -903,6 +991,9 @@ local function boot(): ()
 		-- snapshot always rebuilds the rows (M2 contract check).
 		buildPanel.SetEra(eraConfig)
 		refreshAll()
+		if isCombatProfile(snapshot.state.combat) then
+			pushArmory(snapshot.state.combat)
+		end
 
 		local settings = readSettings(snapshot.state.settings)
 		if settings ~= nil then
@@ -979,6 +1070,7 @@ local function boot(): ()
 		local combat = delta.combat
 		if isCombatProfile(combat) then
 			current.state.combat = combat :: Types.CombatProfile
+			pushArmory(current.state.combat)
 		end
 		-- The contract ships gearPower as its own optional field beside it, so it is read
 		-- independently: a flush that only re-prices the loadout still moves the readout.
@@ -1049,34 +1141,6 @@ local function boot(): ()
 	local function onCombatActionResult(payload: { [string]: any }): ()
 		local action = payload.action
 		local reason = payload.reason
-		local armory = armoryPanel
-		if action == "buyGear" or action == "ascend" then
-			local slot = payload.slotId
-			if armory ~= nil and (slot == "melee" or slot == "ranged") then
-				armory.FlashSlot(slot :: ArmoryPanel.Slot)
-			end
-			if reason == "insufficientFunds" then
-				SoundController.Play("insufficientFunds")
-			end
-			-- The Armory can be closed by the time a refusal lands (rate limit, a race with
-			-- the panel's close), so the reason is always said in words too.
-			local message: string
-			if action == "buyGear" then
-				message = if reason == "insufficientFunds"
-					then "Not enough materials"
-					elseif reason == "locked" then "Locked — your city's income is too low"
-					else "Can't buy that weapon right now"
-			else
-				message = if reason == "insufficientFunds"
-					then "Not enough materials or Valor"
-					elseif
-						reason == "locked"
-					then "Ascension is capped — Rebirth again to raise it"
-					else "Can't ascend right now"
-			end
-			toast.Show(message, Theme.TOAST_ERROR_SECONDS, true)
-			return
-		end
 		if action == "party" then
 			-- A refused invite frees its picker row; a late Accept retires the card.
 			local expedition = expeditionPanel
@@ -1122,9 +1186,20 @@ local function boot(): ()
 		if typeof(payload) ~= "table" then
 			return
 		end
-		local isCombatAction = payload.action == "buyGear"
-			or payload.action == "ascend"
-			or payload.action == "expedition"
+		-- L3-24: an upgrade's or an equip's answer, ok or refused, is the Armory screen's: it says
+		-- the words itself (it may be closed by then, so they are a toast). The hub keeps the
+		-- sound of a payment it could not make.
+		if typeof(payload.action) == "string" and ARMORY_ACTIONS[payload.action] == true then
+			local screen = armoryScreen
+			if screen ~= nil then
+				screen.OnResult(payload :: Types.ActionResult)
+			end
+			if payload.ok == false and payload.reason == "insufficientFunds" then
+				SoundController.Play("insufficientFunds")
+			end
+			return
+		end
+		local isCombatAction = payload.action == "expedition"
 			or payload.action == "joinRun"
 			or payload.action == "party"
 		if payload.ok == true then
@@ -1350,6 +1425,10 @@ local function boot(): ()
 		if strip ~= nil then
 			strip.SetLayout(scale)
 		end
+		local armory = armoryScreen
+		if armory ~= nil then
+			armory.SetLayout(scale, size)
+		end
 		ceremony.SetScale(scale)
 		loadScreen.SetScale(scale)
 		welcomeCard.SetLayout(scale, landscape)
@@ -1512,6 +1591,18 @@ local function boot(): ()
 		end)
 	end
 	player:GetAttributeChangedSignal("Cash"):Connect(onCashAttribute)
+	-- L3-22: K toggles the Armory, as in the dungeon's lobby; never while the chat or another text
+	-- box has the keyboard, which `processed` says for the chat and the focus for the rest.
+	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
+		if
+			processed
+			or input.KeyCode ~= ARMORY_KEY
+			or UserInputService:GetFocusedTextBox() ~= nil
+		then
+			return
+		end
+		togglePanel("armory")
+	end)
 	-- The neighbors bonus tracks the live player count, not a server push.
 	Players.PlayerAdded:Connect(refreshBonuses)
 	Players.PlayerRemoving:Connect(refreshBonuses)

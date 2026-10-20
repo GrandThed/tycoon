@@ -26,11 +26,24 @@
 -- L2 Wave 3 (docs/prompts/l2-w3-contract.md, L2-61): "Frost Hammer on/off" (the I key), the same
 -- for the caller's ice family, from `deps.iceFamily` and SetIceFamily.
 --
+-- L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-28): tiers belong to families, so the two "+1"
+-- buttons raise the HELD families' saved tiers (`setTier "<family>=<tier>"`, the server clamps it
+-- into the window) and their captions show those tiers, which the host reads from the Snapshot
+-- and the TuneState (SetTiers). They replace the slot override's "Melee +1" / "Ranged +1": the
+-- override (`setGear`) is still G's presets and the DebugSetGear attribute. Three buttons mirror
+-- the new keys: "+500 Timber" (T, in place of the old 25), "★ Forest Hard" (U) and "Reset Armory"
+-- (L).
+--
 -- Geometry matches the hub's DebugPanel: 48 design px buttons (the 44 physical px tap
--- target at MIN_SCALE) wrapped into two columns. A short landscape viewport makes the body
--- SCROLL rather than shrink, because a lever that is 27 px tall is a lever no one can hit.
+-- target at MIN_SCALE), here wrapped into two columns (the hub's three). A short landscape
+-- viewport makes the body SCROLL rather than shrink, because a lever that is 27 px tall is a
+-- lever no one can hit.
 -- It parks in the left column between the run header and the bottom-left controls, the one
 -- band no other HUD element uses in either orientation, and collapses to a single tab.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Format"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
@@ -49,12 +62,16 @@ export type Deps = {
 	iceFamily: { lever: () -> (string, string) }?,
 }
 
+-- L3-28: a held family and the tier it fights at (Armory.TierOf), for one slot.
+export type HeldTier = { family: string, tier: number }
+
 export type DebugPanelHandle = {
 	-- The crowd kinds the spawn buttons name: the live level's rewarded kinds, sorted; none
 	-- in the lobby.
 	SetKinds: (kinds: { string }) -> (),
 	SetWave: (wave: number) -> (),
-	SetGear: (melee: number, ranged: number) -> (),
+	-- L3-28: the held families' tiers; nil = none known (the tier button does nothing).
+	SetTiers: (melee: HeldTier?, ranged: HeldTier?) -> (),
 	-- L2-19: whether the caller owns the double jump now (the button's caption).
 	SetAirJump: (owned: boolean) -> (),
 	-- L2-38: whether the caller holds the fire family now (the button's caption).
@@ -87,6 +104,10 @@ local CELL_WIDTH = (
 	- Theme.COMBAT_DEBUG_GAP * 3
 	- Theme.SCROLLBAR_THICKNESS
 ) / Theme.COMBAT_DEBUG_COLUMNS
+-- L3-28: the grantStar value for every built band level; Forest Road is the only one until the
+-- Castle is built, which is what the caption says.
+local STAR_ALL = "*"
+local STAR_TEXT = "★ Forest Hard (U)"
 
 local DebugPanel = {}
 
@@ -94,8 +115,7 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	local connections: { RBXScriptConnection } = {}
 	local spawnButtons: { TextButton } = {}
 	local wave = 0
-	local meleeTier = 0
-	local rangedTier = 0
+	local held: { melee: HeldTier?, ranged: HeldTier? } = { melee = nil, ranged = nil }
 	local godMode = false
 	local bots = 0
 
@@ -244,12 +264,17 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	leverButton("Kill all", function()
 		deps.onLever("killAll", 1)
 	end)
-	leverButton("Melee +1", function()
-		deps.onLever("setGear", "melee=" .. tostring(meleeTier + 1))
-	end)
-	leverButton("Ranged +1", function()
-		deps.onLever("setGear", "ranged=" .. tostring(rangedTier + 1))
-	end)
+	-- L3-28: the held family's next saved tier; the server also drops any override G put on.
+	local function tierButton(caption: string, slot: "melee" | "ranged"): TextButton
+		return leverButton(caption .. " tier +1", function()
+			local entry = held[slot]
+			if entry ~= nil then
+				deps.onLever("setTier", entry.family .. "=" .. tostring(entry.tier + 1))
+			end
+		end)
+	end
+	local meleeButton = tierButton("Melee", "melee")
+	local rangedButton = tierButton("Ranged", "ranged")
 	leverButton("Bots +1", function()
 		bots += 1
 		deps.onLever("bots", bots)
@@ -258,11 +283,17 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		bots = math.max(bots - 1, 0)
 		deps.onLever("bots", bots)
 	end)
-	leverButton("+" .. tostring(Theme.COMBAT_DEBUG_GRANT_MATERIALS) .. " mat", function()
-		deps.onLever("grantMaterials", Theme.COMBAT_DEBUG_GRANT_MATERIALS)
+	leverButton("+" .. Format.Cash(Theme.COMBAT_DEBUG_GRANT_TIMBER) .. " Timber (T)", function()
+		deps.onLever("grantMaterials", Theme.COMBAT_DEBUG_GRANT_TIMBER)
 	end)
-	leverButton("+" .. tostring(Theme.COMBAT_DEBUG_GRANT_VALOR) .. " Valor (V)", function()
+	leverButton("+" .. Format.Cash(Theme.COMBAT_DEBUG_GRANT_VALOR) .. " Valor (V)", function()
 		deps.onLever("grantValor", Theme.COMBAT_DEBUG_GRANT_VALOR)
+	end)
+	leverButton(STAR_TEXT, function()
+		deps.onLever("grantStar", STAR_ALL)
+	end)
+	leverButton("Reset Armory (L)", function()
+		deps.onLever("resetArmory", true)
 	end)
 	-- C2: runs the server's CheckAdmission for this player and toasts the verdict; nobody
 	-- is sent home.
@@ -315,9 +346,15 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		SetWave = function(nextWave: number)
 			wave = nextWave
 		end,
-		SetGear = function(melee: number, ranged: number)
-			meleeTier = melee
-			rangedTier = ranged
+		SetTiers = function(melee: HeldTier?, ranged: HeldTier?)
+			held.melee = melee
+			held.ranged = ranged
+			meleeButton.Text = if melee ~= nil
+				then "Melee T" .. Format.Cash(melee.tier) .. " +1"
+				else "Melee tier +1"
+			rangedButton.Text = if ranged ~= nil
+				then "Ranged T" .. Format.Cash(ranged.tier) .. " +1"
+				else "Ranged tier +1"
 		end,
 		SetAirJump = function(owned: boolean)
 			local button = airJumpButton

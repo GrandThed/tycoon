@@ -1,7 +1,58 @@
 {
 	"version": 1,
 	"baseHp": 100,
-	"power": { "hpWeight": 0.2 },
+	"power": { "hpWeight": 0.2, "tierWeight": 11 },
+	"ladder": {
+		"damage": [1.5, 2.475, 4.0837, 6.7382, 11.118, 18.3447, 30.2688, 49.9435, 82.4068, 135.9711, 224.3524, 370.1814, 610.7994, 1007.819, 1662.9013, 2743.7872, 4527.2488, 7469.9606, 12325.435, 20336.9677],
+		"hp": {
+			"melee": [35, 50, 80, 120, 170, 250, 350, 480, 700, 950, 1300, 1750, 2350, 3150, 4250, 5700, 7700, 10400, 14000, 19000],
+			"ranged": [20, 30, 50, 80, 110, 160, 230, 320, 450, 620, 850, 1150, 1550, 2100, 2800, 3800, 5100, 6900, 9300, 12500]
+		},
+		"rangeHp": 130,
+		"bandSize": 4,
+		"bands": [
+			{ "levelId": "forestRoad", "material": "Timber" },
+			{ "levelId": "castle", "material": "Iron" },
+			{ "levelId": "underworld", "material": "Ember" },
+			{ "levelId": "planet", "material": "Glowstone" },
+			{ "levelId": "dream", "material": "Crystal" }
+		],
+		"costs": [100, 100, 250, 500],
+		"starDifficulty": "hard"
+	},
+	"windows": {
+		"broadsword": { "start": 1, "top": 12 },
+		"longbow": { "start": 1, "top": 12 },
+		"flamethrower": { "start": 2, "top": 8 },
+		"warhammer": { "start": 3, "top": 16 },
+		"frostHammer": { "start": 5, "top": 12 },
+		"greataxe": { "start": 6, "top": 18 },
+		"splitbow": { "start": 8, "top": 8 },
+		"spear": { "start": 9, "top": 20 },
+		"shotgun": { "start": 9, "top": 16 },
+		"rifle": { "start": 11, "top": 18 },
+		"launcher": { "start": 13, "top": 20 },
+		"smg": { "start": 14, "top": 20 },
+		"beam": { "start": 16, "top": 20 },
+		"chaingun": { "start": 17, "top": 20 },
+		"spinblade": { "start": 20, "top": 20 }
+	},
+	"legacy": {
+		"gearCosts": [
+			{ "material": "Timber", "amount": 10 },
+			{ "material": "Timber", "amount": 60 },
+			{ "material": "Timber", "amount": 180 },
+			{ "material": "Steel", "amount": 10 },
+			{ "material": "Steel", "amount": 60 },
+			{ "material": "Steel", "amount": 180 },
+			{ "material": "Circuits", "amount": 10 },
+			{ "material": "Circuits", "amount": 60 },
+			{ "material": "Circuits", "amount": 180 },
+			{ "material": "Alloy", "amount": 10 },
+			{ "material": "Alloy", "amount": 60 },
+			{ "material": "Alloy", "amount": 180 }
+		]
+	},
 	"bands": [
 		{ "band": 1, "eraName": "Village", "material": "Timber" },
 		{ "band": 2, "eraName": "Boomtown", "material": "Steel" },

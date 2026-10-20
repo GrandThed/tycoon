@@ -38,6 +38,12 @@
 -- family id) write or clear the profile's families through UnlockService (a removed family that
 -- is held goes back to its slot's starter; starters cannot be removed); `resetSecrets` also
 -- forgets the found shortcuts, which open again from the next run.
+--
+-- L3 W1 (docs/prompts/l3-w1-contract.md, L3-28): the gear levers move to the ladder of 20 and
+-- `setGear` is the session override in every Studio build (no profile has a slot gear any more);
+-- `grantMaterials` in the lobby pays every built band's material; `setTier` ("<family>=<tier>"),
+-- `grantStar` (a level id or "*") and `resetArmory` reach a T4, its Hard star and a fresh Armory
+-- without a Hard clear in every Studio session (the mock profile starts fresh each time).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,7 +53,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
-local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
@@ -91,16 +97,46 @@ local function eachState(player: Player?, apply: (Player, Types.PlayerState) -> 
 	end
 end
 
--- The live level's material; nothing in the lobby, where no level says which one.
+-- Armory.json's bands (L3-4) whose level this build has a file for (Armory.BuiltBands, the hub's
+-- rule too): their levels and their materials, each once, in the ladder's order. Empty without
+-- Armory.json or a ladder.
+local function builtBands(): ({ string }, { string })
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if armoryConfig == nil then
+		return {}, {}
+	end
+	local built: { [string]: boolean } = {}
+	for _, id in Catalog.GetLevelIds() do
+		built[id] = true
+	end
+	return Armory.BuiltBands(armoryConfig, built)
+end
+
+-- The live level's material. In the lobby (L3-28), where no level says which one: the material of
+-- every Armory band whose level this build has a file for, so the T key pays what the built tiers
+-- cost (Timber while only the Forest is built).
 local function grantMaterials(player: Player?, amount: number): ()
-	local level = ArenaService.GetLevel()
-	if level == nil or level.material == "" or amount <= 0 then
+	if amount <= 0 then
 		return
 	end
-	local material = level.material
+	local materials: { string } = {}
+	local level = ArenaService.GetLevel()
+	if level ~= nil then
+		if level.material ~= "" then
+			table.insert(materials, level.material)
+		end
+	else
+		local _levels, built = builtBands()
+		materials = built
+	end
+	if #materials == 0 then
+		return
+	end
 	eachState(player, function(target: Player, state: Types.PlayerState)
-		local owned = state.combat.materials[material] or 0
-		state.combat.materials[material] = owned + amount
+		for _, material in materials do
+			local owned = state.combat.materials[material] or 0
+			state.combat.materials[material] = owned + amount
+		end
 		ArenaService.SendSnapshot(target)
 	end)
 end
@@ -115,46 +151,41 @@ local function grantValor(player: Player?, amount: number): ()
 	end)
 end
 
--- "melee=3,ranged=2": a tier that does not exist is ignored rather than written, so a typo in
--- the attribute can never leave a profile holding a weapon the Armory has no definition for.
+-- True for a tier on the ladder: a whole number in 1..Armory.LadderSize.
+local function onLadder(armoryConfig: Types.ArmoryConfig, tier: number): boolean
+	return tier >= 1 and tier <= Armory.LadderSize(armoryConfig) and tier % 1 == 0
+end
+
+-- "melee=3,ranged=2": the session override (L1 ruling 34) in every Studio build, never the
+-- profile (L3-28: its slot `gear` is frozen). A slot the lever did not name keeps the tier the
+-- player fights at now; a tier off the ladder is warned and ignored.
 local function setGear(player: Player?, spec: string): ()
 	local armoryConfig = Catalog.GetArmoryConfig()
 	if armoryConfig == nil then
 		return
 	end
 	local wanted: { [string]: number } = {}
+	local size = Armory.LadderSize(armoryConfig)
 	for slot, tierText in string.gmatch(spec, "(%a+)%s*=%s*(%d+)") do
 		local tier = tonumber(tierText)
 		if tier ~= nil and (slot == "melee" or slot == "ranged") then
-			if Armory.TierDef(armoryConfig, slot, tier) ~= nil then
+			if onLadder(armoryConfig, tier) then
 				wanted[slot] = tier
 			else
-				warn(`[DebugService] setGear: no {slot} tier {tier}`)
+				warn(`[DebugService] setGear: {slot} tier {tier} is off the ladder (1 to {size})`)
 			end
 		end
 	end
 	if next(wanted) == nil then
 		return
 	end
-	local proving = CombatMode.IsProving()
-	eachState(player, function(target: Player, state: Types.PlayerState)
-		if proving then
-			-- L1 ruling 34: the session override, never the profile. A slot the lever did not
-			-- name keeps the gear the player fights at now.
-			local gear, ascension = WeaponService.GearOf(target)
-			WeaponService.SetGearOverride(target, {
-				melee = wanted.melee or gear.melee,
-				ranged = wanted.ranged or gear.ranged,
-			}, ascension)
-		else
-			if wanted.melee ~= nil then
-				state.combat.gear.melee = wanted.melee
-			end
-			if wanted.ranged ~= nil then
-				state.combat.gear.ranged = wanted.ranged
-			end
-		end
-		-- Weapons decide max HP: VitalsService, the bar's only writer, resizes it from the gear.
+	eachState(player, function(target: Player, _state: Types.PlayerState)
+		local gear, ascension = WeaponService.GearOf(target)
+		WeaponService.SetGearOverride(target, {
+			melee = wanted.melee or gear.melee,
+			ranged = wanted.ranged or gear.ranged,
+		}, ascension)
+		-- Weapons decide max HP: VitalsService, the bar's only writer, resizes it from the tiers.
 		VitalsService.RefreshMaxHp(target)
 		ArenaService.SendSnapshot(target)
 	end)
@@ -172,12 +203,14 @@ local function nextGear(player: Player?): ()
 	if presets == nil or #presets == 0 then
 		return
 	end
-	-- The first press steps past the preset the player already holds (a proving build starts on
-	-- the first one), so every press is a visible change.
+	-- A press steps past the preset the player holds now (a fresh profile holds the first one),
+	-- so every press is a visible change. The one remembered counts only while it is still what
+	-- they fight at: an upgrade, setTier or resetArmory clears the override behind it.
+	local gear = WeaponService.GearOf(player)
 	local current = gearPreset[player]
-	if current == nil then
+	local held = if current ~= nil then presets[current] else nil
+	if held == nil or held.melee ~= gear.melee or held.ranged ~= gear.ranged then
 		current = 0
-		local gear = WeaponService.GearOf(player)
 		for at, entry in presets do
 			if entry.melee == gear.melee and entry.ranged == gear.ranged then
 				current = at
@@ -185,13 +218,10 @@ local function nextGear(player: Player?): ()
 			end
 		end
 	end
-	local index = current % #presets + 1
+	local index = (current or 0) % #presets + 1
 	local preset = presets[index]
-	if
-		Armory.TierDef(armoryConfig, "melee", preset.melee) == nil
-		or Armory.TierDef(armoryConfig, "ranged", preset.ranged) == nil
-	then
-		warn(`[DebugService] gear preset "{preset.name}" names a tier the Armory lacks`)
+	if not onLadder(armoryConfig, preset.melee) or not onLadder(armoryConfig, preset.ranged) then
+		warn(`[DebugService] gear preset "{preset.name}" names a tier off the ladder`)
 		return
 	end
 	gearPreset[player] = index
@@ -260,6 +290,74 @@ local function setFamily(player: Player?, id: string, owned: boolean): ()
 	else
 		warn(`[DebugService] {if owned then "grant" else "remove"}Family "{id}": nobody changed`)
 	end
+end
+
+-- L3-28, `setTier` "<family>=<tier>" (read by Unlocks.TierLever, the hub's reading too): that
+-- family's tier, clamped into its window, for the caller or everyone admitted
+-- (UnlockService.SetTier); the party is told the tier written.
+local function setTier(player: Player?, spec: string): ()
+	local family, tier = Unlocks.TierLever(spec)
+	if family == nil or tier == nil then
+		warn(`[DebugService] setTier "{spec}": write it as <family>=<tier>`)
+		return
+	end
+	local targets: { Player } = if player ~= nil then { player } else UnlockService.Admitted()
+	local written: number? = nil
+	for _, target in targets do
+		written = UnlockService.SetTier(target, family, tier) or written
+	end
+	if written ~= nil then
+		RunFx.Push({ kind = "notice", text = `{UnlockService.FamilyName(family)} T{written}` })
+	else
+		warn(`[DebugService] setTier "{spec}": no family with a window, or nobody to set it for`)
+	end
+end
+
+-- L3-28, `grantStar`: Armory.json's star difficulty (the band top's trophy) of a level, or of every
+-- built band's level for "*", saved for the caller or everyone admitted; the map is resent.
+local function grantStar(player: Player?, which: string): ()
+	local armoryConfig = Catalog.GetArmoryConfig()
+	local ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil
+	if ladder == nil then
+		warn("[DebugService] grantStar: Armory.json has no ladder, so no star difficulty")
+		return
+	end
+	local levelIds: { string } = {}
+	if which == "*" then
+		levelIds = builtBands()
+	elseif Catalog.GetLevelFile(which) ~= nil then
+		table.insert(levelIds, which)
+	end
+	if #levelIds == 0 then
+		warn(`[DebugService] grantStar "{which}": no such level in this build`)
+		return
+	end
+	local difficulty = ladder.starDifficulty
+	local targets: { Player } = if player ~= nil then { player } else UnlockService.Admitted()
+	for _, target in targets do
+		WaveService.GrantStars(target, levelIds, difficulty)
+	end
+	local map = Catalog.GetExpeditionsConfig()
+	local named = if map ~= nil then map.difficultyNames[difficulty] else nil
+	local levelNames: { string } = {}
+	for _, levelId in levelIds do
+		local file = Catalog.GetLevelFile(levelId)
+		table.insert(levelNames, if file ~= nil then file.name else levelId)
+	end
+	local label = `★ {named or difficulty}: {table.concat(levelNames, ", ")}`
+	RunFx.Push({ kind = "notice", text = label })
+end
+
+-- L3-28, `resetArmory`: tiers, the saved loadout and the stars emptied for the caller or everyone
+-- admitted (the session's stars too), the held pair back to the starters, the override and the
+-- G key's place gone. Materials, Valor, families and secrets stay.
+local function resetArmory(player: Player?): ()
+	local reset = UnlockService.ResetArmory(player)
+	for _, target in reset do
+		gearPreset[target] = nil
+	end
+	WaveService.ForgetStars(player)
+	RunFx.Push({ kind = "notice", text = "Armory reset: tiers, loadout and stars" })
 end
 
 -- P5 ruling 24: the crowd targets Players only, so a bot would stand in a camp doing nothing.
@@ -342,6 +440,12 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 		setFamily(player, value, true)
 	elseif lever == "removeFamily" and typeof(value) == "string" and value ~= "" then
 		setFamily(player, value, false)
+	elseif lever == "setTier" and typeof(value) == "string" and value ~= "" then
+		setTier(player, value)
+	elseif lever == "grantStar" and typeof(value) == "string" and value ~= "" then
+		grantStar(player, value)
+	elseif lever == "resetArmory" then
+		resetArmory(player)
 	else
 		warn(`[DebugService] unknown or mistyped lever "{lever}"`)
 	end
@@ -429,6 +533,21 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 		else nil
 	if removedFamily ~= nil then
 		applyLever(nil, "removeFamily", removedFamily)
+	end
+	-- L3-28: the Armory's three. A Combat.json without these keys leaves them off.
+	local setTierAttribute = debugConfig.setTierAttribute
+	local tierSpec = if setTierAttribute ~= nil then consumeString(setTierAttribute) else nil
+	if tierSpec ~= nil then
+		applyLever(nil, "setTier", tierSpec)
+	end
+	local grantStarAttribute = debugConfig.grantStarAttribute
+	local starLevel = if grantStarAttribute ~= nil then consumeString(grantStarAttribute) else nil
+	if starLevel ~= nil then
+		applyLever(nil, "grantStar", starLevel)
+	end
+	local resetArmoryAttribute = debugConfig.resetArmoryAttribute
+	if resetArmoryAttribute ~= nil and consumeNumber(resetArmoryAttribute) ~= nil then
+		applyLever(nil, "resetArmory", true)
 	end
 
 	-- States, read but never reset. God mode is applied when the attribute changes (and to

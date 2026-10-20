@@ -35,6 +35,9 @@ L2 W3 adds tests_l2w3.luau: WorldReact's Cells, Chills and Freeze, LevelGeometry
 Validate's ice and landing lines, Plan's waters with StageFlow.Landing and FallLanding, the shipped
 creek crossed swing by swing, and as text (`source.w3`) LevelService.React's ice branch and its
 freeze, the rescue's landing in WaveService and Frost Quake's launcher in AbilityService.
+L3 W1 adds tests_l3.luau (the pure Armory ladder, windows, upgrade and refund, the profile's v8
+step, Unlocks' saved loadout and stars, Armory.json as it ships), tests_l3_run.luau (StageFlow's
+first clear) and tests_l3_ui.luau (the Armory screen's pure ArmoryModel, bundled with Format).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -104,6 +107,9 @@ SOURCES = {
     "GroundRule": "src/shared/GroundRule.luau",
     # L2 W2: the world's reactions (tests_l2w2.luau).
     "WorldReact": "src/shared/WorldReact.luau",
+    # L3 W1: the Armory screen's pure model (tests_l3_ui.luau) and the number formatting it reads.
+    "Format": "src/shared/Format.luau",
+    "ArmoryModel": "src/client/UI/ArmoryModel.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -133,6 +139,12 @@ TESTS = [
     # L2 W3: Cells, Chills, Freeze, the ice pieces, Validate's ice and landing lines, Landing,
     # the shipped crossing, and the lines that act on them.
     "tests_l2w3.luau",
+    # L3 W1: the ladder, the windows, the upgrade, the refund and profile v8, the saved loadout and
+    # the shipped Armory.json (luau-engineer A's); the first clear (B's); the Armory screen's
+    # pure model (ui-engineer A's).
+    "tests_l3.luau",
+    "tests_l3_run.luau",
+    "tests_l3_ui.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
