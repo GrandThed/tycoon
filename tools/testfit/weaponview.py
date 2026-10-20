@@ -256,6 +256,8 @@ def render_weapon(bp, out_dir: str) -> None:
         bm.free()
         mesh.materials.append(mat)
         obj.location = tf.gltf_to_blender((hi.x + 0.2, p[1] + lift, p[2]))
+        # A marker is an annotation: its shadow on the model read as a dark patch (Warhammer head).
+        obj.visible_shadow = False
         markers.append(obj)
 
     # --- lights and camera
