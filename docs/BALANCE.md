@@ -6420,7 +6420,7 @@ four-tier jump (x7.4 on the hits), not a balance fault; the Castle re-bands it.
 | R1: starAlso names exactly the difficulties after starDifficulty (`check_trophy`) | check_levels | starAlso `[]`, absent, `["normal"]`, `["brutal", "brutal"]`; starDifficulty `heroic`; a difficulty added after Brutal and not listed / control: that difficulty listed. Scratch run, all as expected; entries proposed to the lead |
 | R1: StarHeld and the starAlso Problems line (the mirror) | sim_combat, check_stage_mirror | A Brutal star opens T4 and a Normal star does not. `"brutal"`, `[""]`, `[3]` and `{"a": "brutal"}` are named; `[]`, `{}` and absent are silent. Scratch run; check_stage_mirror PASS against A's Luau |
 | R2: each run fights at each family's own tier, the bar the held pair's | sim_range | the SIM_CASES proposed to the lead (results below) |
-| R2: the fire sniper casts at least once, so its tier check is not vacuous | sim_range | — (6 casts on each difficulty) |
+| R2: the fire sniper casts at least once, so its tier check is not vacuous (fix 2, F6: judged per course) | sim_range | — (CaveExit's courses cast; CaveMouth is in `BREATH_OUT_OF_REACH`: its nearest body stays 25.7 studs off, Dragon's Breath reaches 20.8) |
 | R2: the Flamethrower pair at T2/T2, its limits as ratios | sim_range | `PAIR_FLAME_GEAR` back at T1/T1 (SIM_CASE below) |
 | R2: the fire family comes at `PAIR_FLAME_GEAR` in the climb | sim_combat assertion 2 | `PAIR_FLAME_GEAR` at T3/T3: assertion 2 red, every other assertion green (hand mutant) |
 

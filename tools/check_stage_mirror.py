@@ -126,7 +126,9 @@ and compares what they answer, value by value:
     Its fix round adds `StarHeld` (a band top opened by the Hard star or a `starAlso` one: profiles
     holding only a Brutal star, a config without `starAlso` and one whose `starAlso` is a word), and
     breaks that only one Problems rule can name (bandSize 4.5, a band removed, a negative ranged HP
-    entry, a `starAlso` that is no list of names).
+    entry, a `starAlso` that is no list of names). Its second fix round (F4) names the Armory
+    functions left without a mirror on purpose, StrikeTier, HeldFamily and SavedPower, with why
+    (ARMORY_UNMIRRORED): listed in a note, and the run fails when one is no longer in the Luau.
 
 It fails when either side changes alone. A function of the Luau that the simulators do not
 mirror (the rescue, the skips, the map) is listed, not compared: tools/crowd_harness tests those.
@@ -195,6 +197,14 @@ ARMORY_MIRRORS = {"LadderSize": "ladder_size", "Window": "window", "TierOf": "ti
                   "SetTier": "set_tier", "BuiltBands": "built_bands", "StarHeld": "star_held"}
 NEEDED["Armory"] = tuple(ARMORY_MIRRORS)
 NEEDED["StageFlow"] += ("FirstClear",)
+# The L3 W1 fix round 2's F4: the Armory functions deliberately left without a mirror, and why (the
+# simulators need only their parts; tools/crowd_harness tests_l3.luau tests each). Listed in a note,
+# never compared; one that is no longer in the Luau fails the run, so the list cannot go stale.
+ARMORY_UNMIRRORED = {
+    "StrikeTier": "TierOf (compared) under a Studio session override no simulator plays",
+    "HeldFamily": "the saved loadout's slot rule; every simulated course names the pair it holds (sim_range.held_pair)",
+    "SavedPower": "the Power readout, HeldFamily into HeldTiers and GearPower (both compared); no simulator shows it",
+}
 # The grids the Armory is asked on (L3 W1).
 ARMORY_TIERS = (-1, 0, *range(1, 22), 2.5)
 ARMORY_ASCENSION = (0, 1, 2)
@@ -2680,6 +2690,11 @@ def main():
     for name in lacking:
         report.differ("the functions compared exist", f"{name} is not in the Python")
     missing += lacking
+    # F4: a deliberately unmirrored Armory function that is gone (or renamed) leaves a stale list.
+    stale = [f"Armory.{name}" for name in ARMORY_UNMIRRORED if name not in (exports.get("Armory") or [])]
+    for name in stale:
+        report.differ("the functions compared exist", f"{name} is listed as deliberately unmirrored but is not in the Luau")
+    missing += stale
     if not missing:
         report.compare("the functions compared exist", "exports", True, True)
 
@@ -2783,6 +2798,11 @@ def main():
     loose = [name for name in exports.get("StageFlow") or [] if name not in mirrored["StageFlow"]]
     print(f"  note  StageFlow functions the simulators do not mirror (tools/crowd_harness tests them): "
           f"{', '.join(loose) or 'none'}")
+    print("  note  Armory functions deliberately not mirrored (F4; tools/crowd_harness tests them): "
+          + "; ".join(f"{name}: {why}" for name, why in ARMORY_UNMIRRORED.items()))
+    loose = [name for name in exports.get("Armory") or [] if name not in ARMORY_MIRRORS and name not in ARMORY_UNMIRRORED]
+    if loose:
+        print(f"  note  Armory functions not compared here: {', '.join(loose)}")
     loose = [name for name in exports.get("CampBrain") or [] if name not in mirrored["CampBrain"]]
     if loose:
         print(f"  note  CampBrain functions not compared: {', '.join(loose)}")

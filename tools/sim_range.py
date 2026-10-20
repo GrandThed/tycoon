@@ -7227,6 +7227,20 @@ SNIPER_KNOWN_LIMIT_L4 = {
     "normal": ("LookoutLedge", "Secret_lookout"),  # L2 W2: the cache moved into the cave
     "hard": ("LookoutLedge", "LookoutSignPad", "Secret_lookout"),
 }
+# The L3 W1 fix round 2's F6: the fire sniper's "casts at least once" is judged per spot, so a course
+# that never casts fails by name, unless its spot is listed here for that difficulty with the reason
+# it cannot cast. A listed course is held to its reason instead: no run casts and no living body's
+# edge ever comes within the ability's reach (range + pad), so a listing that went stale fails too.
+# CaveMouth (measured 2026-10-20, Normal and Hard, both of its points, every seed): it stands on
+# Road4 at the ground (y 0), west of the plateau camp A stands on (height 8). The residents who come
+# for him stop at the plateau's west edge, x about -300 (he is not reachable, L1b-W4), so the
+# nearest body's edge stays 25.7 studs or more off on the flat, past Dragon's Breath's 20.8.
+BREATH_OUT_OF_REACH = {
+    "CaveMouth": {
+        "difficulties": ("normal", "hard"),
+        "why": "on the ground west of camp A's plateau, whose residents stop at its west edge",
+    },
+}
 
 
 # L2-5: the spots only a player with a bought ability stands on (a ledge an ability-keyed secret
@@ -8077,7 +8091,11 @@ class LevelRun(ThreatRun):
         scale = self.cfg["abilities"]["cooldownScale"]
         sc = self.scene
         state = sc.setdefault("breath", {"ready": 0.0, "floor": 0.0, "kills": sum(self.killed.values()), "casts": 0,
-                                         "hits": 0})
+                                         "hits": 0, "nearest": math.inf})
+        # F6: the nearest living body's edge on the flat whenever he is asked, ready or not (it only
+        # watches): what a course BREATH_OUT_OF_REACH lists must show to stay listed.
+        state["nearest"] = min([state["nearest"]] + [math.hypot(e.x - self.x, e.z - self.z) - e.r
+                                                     for e in self.fighters if e.alive])
         kills = sum(self.killed.values())
         if kills > state["kills"] and state["ready"] > t:
             state["ready"] = max(state["floor"], state["ready"] - g("killRefundSeconds") * scale * (kills - state["kills"]))
@@ -10440,10 +10458,28 @@ def check_cave_runs(cfg, report, expect):
                        f"{pay_rate(m)[1]:.1f}" for seed, r, m in zip(MISSION_SEEDS, runs, mission)))
             if spot in fire_rows:
                 armed(stag, f"the sniper from {spot}", sniper_gear, runs, (sword, longbow), breath=flame)
-        if fire_rows:
-            cast = [r["armed"]["breath"] for spot in fire_rows for r in snipers[spot] if r["armed"].get("breath") is not None]
-            expect(cast, f"{stag}: the fire sniper casts the fire family's ability at least once (else its tier check "
-                         f"proves nothing): " + (f"{len(cast)} runs cast, at x{cast[0]:.4g}" if cast else "no run cast"))
+        ability = cfg["weapons"][flame]["ability"] if flame else {}
+        reach = (ability.get("range") or 0) + (ability.get("pad") or 0)
+        for spot in fire_rows:
+            # F6 (the fix round 2): judged per course, so a spot that never casts is named; one that
+            # BREATH_OUT_OF_REACH lists for this difficulty is held to its reason instead.
+            runs = snipers[spot]
+            cast = [r["armed"]["breath"] for r in runs if r["armed"].get("breath") is not None]
+            nearest = min([math.inf] + [(r["scene"].get("breath") or {}).get("nearest", math.inf) for r in runs])
+            listed = BREATH_OUT_OF_REACH.get(spot.split(" + ")[0])
+            if listed is None or difficulty not in listed["difficulties"]:
+                expect(cast, f"{stag}: the fire sniper from {spot} casts the fire family's ability at least once "
+                             f"(else its tier check proves nothing; F6, per spot): "
+                       + (f"{len(cast)} of {len(runs)} runs cast, at x{cast[0]:.4g}" if cast else
+                          f"no run cast, the nearest body's edge {nearest:.1f} studs off and the ability's reach "
+                          f"{reach:g}: make it cast, or list the spot in BREATH_OUT_OF_REACH with why"))
+                continue
+            held = not cast and nearest > reach
+            expect(held, f"{stag}: the fire sniper from {spot} never casts, as BREATH_OUT_OF_REACH lists it "
+                         f"({listed['why']}; F6): "
+                   + (f"no run cast, the nearest body's edge {nearest:.1f} studs off, past the ability's reach {reach:g}"
+                      if held else f"{len(cast)} of {len(runs)} runs cast, the nearest body's edge {nearest:.1f} studs "
+                                   f"off against a reach of {reach:g}: the listing is stale, take it out"))
 
 
 def check_crossing(cfg, report, expect):

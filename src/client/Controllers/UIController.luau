@@ -566,15 +566,30 @@ local function boot(): ()
 		end,
 	})
 	bottomBar.SetKeyVisible("shop", hasShopListableId(monetization))
+	-- Assigned below, beside the snapshot handlers it serves; refreshCombatKeys replays it.
+	local pushArmory: (combat: Types.CombatProfile) -> ()
 	-- A panel whose intent does not exist yet would only be able to fail, so the key stays
 	-- hidden until the remotes are there; the Armory's until the weapon families are too.
 	local function refreshCombatKeys(): ()
+		local waiting = provingConfig == nil
 		provingConfig = provingConfig or Catalog.GetProvingGroundsConfig()
 		bottomBar.SetKeyVisible(
 			"armory",
 			armoryScreen ~= nil and provingConfig ~= nil and combatRemotesReady
 		)
 		bottomBar.SetKeyVisible("expedition", hasExpeditions and combatRemotesReady)
+		-- F5 (the L3 W1 fix round 2): every push before the families came returned early, so the
+		-- first time they are here the profile and the held pair go to the screen at once, or it
+		-- would open on an empty wallet until the next Delta that carries `combat`.
+		local current = model
+		if
+			waiting
+			and provingConfig ~= nil
+			and current ~= nil
+			and isCombatProfile(current.state.combat)
+		then
+			pushArmory(current.state.combat)
+		end
 	end
 	refreshCombatKeys()
 
@@ -947,13 +962,13 @@ local function boot(): ()
 
 	-- L3-24: the Armory and the strip's tier buttons follow the combat profile, from the Snapshot
 	-- and every Delta that carries it (not from refreshAll, which the cash tick also runs). The
-	-- held pair is the saved loadout as the server reads it, starters filling what it lacks.
-	local function pushArmory(combat: Types.CombatProfile): ()
-		if provingConfig == nil then
-			refreshCombatKeys() -- it reads the families again, and shows the key once they came
-		end
+	-- held pair is the saved loadout as the server reads it, starters filling what it lacks. Both
+	-- callers push the model's own profile, so when the families are not here yet refreshCombatKeys
+	-- reads them again and, once they came, replays this push itself (F5).
+	pushArmory = function(combat: Types.CombatProfile): ()
 		local config = provingConfig
 		if config == nil then
+			refreshCombatKeys()
 			return
 		end
 		local held = Unlocks.LoadoutOf(combat, config.weapons, config.loadout)

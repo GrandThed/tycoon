@@ -206,8 +206,21 @@ local function setTierFor(player: Player, state: Types.PlayerState, value: any):
 	warn(`[ArmoryService] setTier: {player.Name}'s {family} is T{written}`)
 end
 
+-- A difficulty's `firstClear` as the level file holds it, unread: Unlocks.ApplyFirstClear refuses
+-- whatever StageFlow.FirstClear would leave out. nil when the file or the entry is missing.
+local function fileFirstClear(levelId: string, difficulty: string): Types.LevelFirstClear?
+	local file = Catalog.GetLevelFile(levelId)
+	local difficulties: any = if file ~= nil then file.difficulties else nil
+	local scales: any = if type(difficulties) == "table" then difficulties[difficulty] else nil
+	local reward: any = if type(scales) == "table" then scales.firstClear else nil
+	return if type(reward) == "table" then reward else nil
+end
+
 -- L3-28 grantStar: the ladder's starDifficulty star of a level that has a level file, or of every
--- built band level for Unlocks.ALL_STARS.
+-- built band level for Unlocks.ALL_STARS. F2 (the fix round 2): a star that is new pays that
+-- difficulty's first-clear reward from the level file through Unlocks.ApplyFirstClear, the write
+-- the dungeon's U and EndRun make, so a later Hard clear owes nothing; an old star pays nothing.
+-- The warn names what it gave, as the dungeon's notice does.
 local function grantStarTo(player: Player, state: Types.PlayerState, value: any): ()
 	local armoryConfig = Catalog.GetArmoryConfig()
 	local ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil
@@ -224,18 +237,41 @@ local function grantStarTo(player: Player, state: Types.PlayerState, value: any)
 		warn(`[ArmoryService] grantStar: no built level "{value}"`)
 		return
 	end
+	local difficulty = ladder.starDifficulty
+	local weapons, starters = weaponsConfig()
 	local stars = Unlocks.StarsOf(state.combat)
+	local gifts: { string } = {}
+	local valor = 0
 	for _, levelId in levels do
 		local row = stars[levelId] or {}
 		stars[levelId] = row
-		row[ladder.starDifficulty] = true
+		if row[difficulty] == true then
+			continue
+		end
+		row[difficulty] = true
+		local reward = fileFirstClear(levelId, difficulty)
+		if reward == nil then
+			continue
+		end
+		local grant = Unlocks.ApplyFirstClear(state.combat, reward, weapons, starters)
+		local family = grant.family
+		if family ~= nil then
+			local def: any = if weapons ~= nil then weapons[family] else nil
+			table.insert(
+				gifts,
+				if def ~= nil and type(def.name) == "string" then def.name else family
+			)
+		end
+		valor += grant.valor
+	end
+	if valor > 0 then
+		table.insert(gifts, `+{valor} Valor`)
 	end
 	EconomyService.MarkDirty(player, { combat = true })
+	local given = if #gifts > 0 then ` · {table.concat(gifts, ", ")}` else ""
 	warn(
-		`[ArmoryService] grantStar: {player.Name} holds the {ladder.starDifficulty} star of {table.concat(
-			levels,
-			", "
-		)}`
+		`[ArmoryService] grantStar: {player.Name} holds the {difficulty} star of`
+			.. ` {table.concat(levels, ", ")}{given}`
 	)
 end
 

@@ -1,7 +1,14 @@
 --!strict
 -- Pure Armory math (docs/INTERFACES.md "C0 contracts", docs/prompts/l3-w1-contract.md L3-1 to
 -- L3-8). No Roblox globals of any kind — tools/sim_combat.py mirrors this file function for
--- function — so every config value and every profile field arrives as an argument.
+-- function, three aside — so every config value and every profile field arrives as an argument.
+-- Those three have no Python mirror, deliberately (the L3 W1 fix round 2's F4), because the
+-- simulators need only their parts: StrikeTier is TierOf (mirrored) under a Studio session
+-- override no simulator plays; HeldFamily is the saved loadout's slot rule, and every simulated
+-- course names the pair it holds (sim_range.held_pair); SavedPower is the hub's and the dungeon's
+-- Power readout, HeldFamily into HeldTiers and GearPower (both mirrored), which no simulator
+-- shows. tools/crowd_harness tests all three (tests_l3.luau), and tools/check_stage_mirror.py
+-- lists them as unmirrored (ARMORY_UNMIRRORED).
 --
 -- L3: a tier belongs to a weapon FAMILY. Every family climbs one ladder (`ladder`) inside its own
 -- window (`windows`); its tier scales its hits (Multiplier) and, for the two held families, the

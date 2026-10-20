@@ -2355,9 +2355,9 @@ end
 -- everyone (the leader's stars open the nodes). R4: a star that is new pays its difficulty's
 -- first-clear reward through UnlockService.GrantFirstClear, as EndRun's does, so U gives what a
 -- Hard clear gives (T4's star and the Warhammer) and a later Hard clear owes nothing. The level
--- is read as a run reads it (resolveLevel); one that does not resolve pays nothing and is warned
--- there. Studio only, as the lever is: a reward is never handed out here on a live server. How
--- many stars were new, and what their rewards gave.
+-- is read as a run reads it (resolveLevel), before its star: one that does not resolve gets no
+-- star and no reward (F3), and is warned there. Studio only, as the lever is: a reward is never
+-- handed out here on a live server. How many stars were new, and what their rewards gave.
 function WaveService.GrantStars(
 	player: Player,
 	levelIds: { string },
@@ -2372,14 +2372,19 @@ function WaveService.GrantStars(
 	local stars = starsOf(player.UserId)
 	local new = 0
 	for _, levelId in levelIds do
+		-- F3 (the fix round 2): the level is read before its star is awarded, so one that does not
+		-- resolve gets neither, and a later Hard clear still owes its reward.
+		local level = if combatConfig ~= nil and map ~= nil
+			then resolveLevel(levelId, difficulty, combatConfig, map)
+			else nil
+		if level == nil then
+			continue
+		end
 		if not StageFlow.Award(stars, levelId, difficulty) then
 			continue
 		end
 		new += 1
-		local level = if combatConfig ~= nil and map ~= nil
-			then resolveLevel(levelId, difficulty, combatConfig, map)
-			else nil
-		local reward = if level ~= nil then StageFlow.FirstClear(level, difficulty) else nil
+		local reward = StageFlow.FirstClear(level, difficulty)
 		local grant = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil
 		if grant ~= nil then
 			table.insert(grants, grant)

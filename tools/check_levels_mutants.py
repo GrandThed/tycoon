@@ -37,7 +37,9 @@ m2 (the "residents under the boss room's maxAlive" rule out of both), the second
 fenced-rectangle test out of the Python mirror alone); and for the simulator's cases (SIM_CASES),
 which run tools/sim_range.py from a copy with one line broken and expect its check red: the L2 W1
 fix round's d3 (an air jump back on in the planner turns the one-jump gate red), and L3 W1's L3-29
-(Hard's clock) and L3-26 (R8 with only the bow upgraded); about fifteen minutes each since L3.
+(Hard's clock) and L3-26 (R8 with only the bow upgraded), its fix round's R2 and its second's F6
+(the fire sniper's cast judged per spot: an unlisted spot that never casts, a listed one that does);
+about fifteen minutes each since L3.
 
 Usage:
   py tools/check_levels_mutants.py                       # every case; exit 1 when one is not as expected
@@ -1085,6 +1087,20 @@ SIM_CASES = (
     ("R2: the Flamethrower's pair at T1 again (unlike with like)",
      ('PAIR_FLAME_GEAR = {"melee": 2, "ranged": 2}', 'PAIR_FLAME_GEAR = {"melee": 1, "ranged": 1}'),
      ("--check", "--levels-only", "--level", "forest"), "the starter pair's mean clear with no down"),
+    # The L3 W1 fix round 2's F6: "the fire sniper casts at least once" is judged per spot. With
+    # CaveMouth out of BREATH_OUT_OF_REACH its two courses, which never cast, go red by name; the old
+    # rule pooled every course and passed on CaveExit's casts.
+    ("F6: CaveMouth out of BREATH_OUT_OF_REACH (its courses never cast)",
+     ('        "difficulties": ("normal", "hard"),\n        "why": "on the ground west of camp A\'s plateau',
+      '        "difficulties": (),\n        "why": "on the ground west of camp A\'s plateau'),
+     ("--check", "--levels-only", "--level", "forest"),
+     "the fire sniper from CaveMouth + Dragon's Breath casts the fire family's ability at least once"),
+    # And a listing is held to its reason: CaveExit listed too (it casts, a body comes within reach)
+    # turns its listed lines red as stale.
+    ("F6: CaveExit listed in BREATH_OUT_OF_REACH though it casts (a stale listing)",
+     ('BREATH_OUT_OF_REACH = {\n', 'BREATH_OUT_OF_REACH = {\n    "CaveExit": {"difficulties": ("normal", "hard"), "why": "a probe"},\n'),
+     ("--check", "--levels-only", "--level", "forest"),
+     "the fire sniper from CaveExit + Dragon's Breath never casts, as BREATH_OUT_OF_REACH lists it"),
 )
 
 

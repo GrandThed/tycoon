@@ -289,6 +289,46 @@ function Unlocks.StarsOf(combat: Types.CombatProfile): { [string]: { [string]: b
 	return made
 end
 
+-- L3-17's first-clear reward, written into `combat` (the L3 W1 fix round 2's F2: one rule for the
+-- dungeon's EndRun and U lever, through UnlockService.GrantFirstClear, and the hub's star lever).
+-- The caller asks only for a star that is new. The family is written to the profile's families
+-- when it is a string naming a family of `weapons` that is no starter and not owned yet; the
+-- Valor is added when it is a whole number above 0. Anything else gives nothing, so the level
+-- file's raw `firstClear` may be passed as it is: what StageFlow.FirstClear leaves out, this
+-- refuses too. What it gave: { family = nil, valor = 0 } for nothing.
+function Unlocks.ApplyFirstClear(
+	combat: Types.CombatProfile,
+	reward: Types.LevelFirstClear,
+	weapons: { [string]: Types.RangeWeaponDef }?,
+	starters: { [string]: boolean }
+): Types.FirstClearGrant
+	local given: Types.FirstClearGrant = { family = nil, valor = 0 }
+	if type(reward) ~= "table" then
+		return given
+	end
+	local family: any = reward.family
+	if
+		type(family) == "string"
+		and type(weapons) == "table"
+		and weapons[family] ~= nil
+		-- A starter is owned (OwnsFamily), so it is never written: L2-1.
+		and not Unlocks.OwnsFamily(combat.families, family, starters)
+	then
+		-- Made when a profile lacks it, as SecretFlow.FamiliesOf does (v6 code may have saved one).
+		local families: { [string]: boolean } = combat.families or {}
+		combat.families = families
+		families[family] = true
+		given.family = family
+	end
+	local valor: any = reward.valor
+	-- `% 1` also refuses NaN and both infinities, whose remainder is NaN.
+	if type(valor) == "number" and valor > 0 and valor % 1 == 0 then
+		combat.valor += valor
+		given.valor = valor
+	end
+	return given
+end
+
 -- L3-28's resetArmory lever (Studio only, both places): the profile's tiers, loadout and stars
 -- emptied, each a fresh table. Materials, Valor, families and secrets stay.
 function Unlocks.ResetArmory(combat: Types.CombatProfile): ()

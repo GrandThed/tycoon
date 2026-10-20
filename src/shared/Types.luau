@@ -997,7 +997,8 @@ export type CombatProfile = {
 	expeditionSeconds: number,
 	stats: { kills: number, wavesCleared: number, expeditions: number, cashFromCombat: number },
 	-- L2-1 (schema v7): what the dungeon place has unlocked, keyed by id, every value true. Only
-	-- the combat place writes them; optional in the type because a profile written by v6 code
+	-- the combat place writes them (and the hub's Studio star lever, `families`, through
+	-- Unlocks.ApplyFirstClear); optional in the type because a profile written by v6 code
 	-- may lack them (the hub's copy carries every field since L3-14: ProfileCopy).
 	-- abilities: bought abilities ("doubleJump"); secrets: opened chests by level;
 	-- families: weapon families found (Broadsword and Longbow stay implicit, never written);

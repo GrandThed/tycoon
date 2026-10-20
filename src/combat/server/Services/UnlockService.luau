@@ -1,9 +1,10 @@
 --!strict
 -- L2 W1 (docs/prompts/l2-w1-contract.md, L2-2, L2-8, L2-9, L2-12, L2-19): what a player has
 -- unlocked in the dungeon place. It sells abilities (RequestBuyAbility), opens secrets for the
--- run loop, and applies the Studio levers. Only it (through Unlocks.Apply and SecretFlow.Open,
--- which it calls) writes the profile's `combat.abilities`, `secrets`, `families` and `shortcuts`
--- (schema v7), and the `Ability_<id>` Player attributes every client reads.
+-- run loop, and applies the Studio levers. Only it (through Unlocks.Apply, Unlocks.ApplyFirstClear
+-- and SecretFlow.Open, which it calls) writes the profile's `combat.abilities`, `secrets`,
+-- `families` and `shortcuts` (schema v7), and the `Ability_<id>` Player attributes every client
+-- reads; in the hub only the Studio star lever writes `families`, through the same ApplyFirstClear.
 --
 -- The rules and the writes they decide are Unlocks' and SecretFlow's (pure, tested by
 -- tools/crowd_harness); this file only hands them the profile and acts on the verdict. Nothing
@@ -396,10 +397,11 @@ function UnlockService.RemoveFamily(player: Player, id: string): boolean
 end
 
 -- L3-17: a level's first-clear reward for `player`, after StageFlow.Award said their star is new
--- (WaveService.EndRun, which credits the card). The family is written to the profile's families
--- (skipped with a warning when it is no family or a starter, which Validate refuses before play;
--- not given again when already owned), the Valor added; the wallet is resent. What it gave; nil
--- for no profile or nothing given.
+-- (WaveService.EndRun, which credits the card, and the U lever). The write is the pure
+-- Unlocks.ApplyFirstClear, the one the hub's star lever makes too (the fix round 2's F2): the
+-- family written to the profile's families unless it is a starter or already owned, the Valor
+-- added; the wallet is resent. A family that is no family to give (Validate refuses it before
+-- play) is warned. What it gave; nil for no profile or nothing given.
 function UnlockService.GrantFirstClear(
 	player: Player,
 	reward: Types.LevelFirstClear
@@ -409,23 +411,12 @@ function UnlockService.GrantFirstClear(
 		return nil
 	end
 	local combat = profile.combat
-	local given: Types.FirstClearGrant = { family = nil, valor = 0 }
+	local given = Unlocks.ApplyFirstClear(combat, reward, weapons(), starters())
 	local family = reward.family
-	if family ~= nil then
-		local roster = weapons()
-		if roster == nil or roster[family] == nil or starters()[family] then
-			warn(
-				`[UnlockService] a first clear names "{family}", which is no family to give: skipped`
-			)
-		elseif not Unlocks.OwnsFamily(combat.families, family, starters()) then
-			SecretFlow.FamiliesOf(combat)[family] = true
-			given.family = family
-		end
-	end
-	local valor = reward.valor
-	if valor ~= nil and valor > 0 and valor < math.huge and valor % 1 == 0 then
-		combat.valor += valor
-		given.valor = valor
+	-- A givable family is in the profile's families now, given here or before; a starter or an id
+	-- that names no family never is.
+	if family ~= nil and (combat.families == nil or combat.families[family] ~= true) then
+		warn(`[UnlockService] a first clear names "{family}", which is no family to give: skipped`)
 	end
 	if given.family == nil and given.valor == 0 then
 		return nil

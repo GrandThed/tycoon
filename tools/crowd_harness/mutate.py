@@ -6630,8 +6630,9 @@ L3_FIX_RUN_MUTATIONS = {
     "l3fix 2-s1: the bar reads the override unclamped": (WEAPON, "melee = Armory.StrikeTier(armoryConfig, combat, held.melee, meleeOverride),", "melee = meleeOverride or Armory.TierOf(armoryConfig, combat, held.melee),"),
     "l3fix R3: the bar ignores the override": (WEAPON, "local meleeOverride = if gear ~= nil then gear.melee else nil", "local meleeOverride = nil"),
     "l3fix R4: a lever star pays nothing": (WAVE_SERVICE, "local grant = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil", "local grant = nil"),
-    "l3fix R4: a lever star reads no reward": (WAVE_SERVICE, "local reward = if level ~= nil then StageFlow.FirstClear(level, difficulty) else nil", "local reward = nil"),
-    "l3fix R4: a lever star pays the Normal reward": (WAVE_SERVICE, "local reward = if level ~= nil then StageFlow.FirstClear(level, difficulty) else nil", 'local reward = if level ~= nil then StageFlow.FirstClear(level, "normal") else nil'),
+    # Re-aimed in the fix round 2 (F3: the level is resolved before the star, so the line reads it plain).
+    "l3fix R4: a lever star reads no reward": (WAVE_SERVICE, "local reward = StageFlow.FirstClear(level, difficulty)", "local reward = nil"),
+    "l3fix R4: a lever star pays the Normal reward": (WAVE_SERVICE, "local reward = StageFlow.FirstClear(level, difficulty)", 'local reward = StageFlow.FirstClear(level, "normal")'),
     "l3fix R4: an old lever star pays again": (WAVE_SERVICE, "\t\tif not StageFlow.Award(stars, levelId, difficulty) then\n\t\t\tcontinue\n\t\tend\n", "\t\tStageFlow.Award(stars, levelId, difficulty)\n"),
     "l3fix R4: the lever pays on a live server": (WAVE_SERVICE, "if not boot.mission or not RunService:IsStudio() then", "if not boot.mission then"),
     "l3fix 3-s2: the star wildcard is spelled in DebugService": (DEBUG_SERVICE, "if which == Unlocks.ALL_STARS then", 'if which == "*" then'),
@@ -6640,6 +6641,375 @@ L3_FIX_RUN_MUTATIONS = {
     "l3fix R7: the dungeon Power reads a fresh profile": (MAIN_SERVER, "then Armory.SavedPower(\n\t\t\t\tarmoryConfig,\n\t\t\t\tstate.combat,\n", "then Armory.SavedPower(\n\t\t\t\tarmoryConfig,\n\t\t\t\tnil,\n"),
 }
 MUTATIONS.update(L3_FIX_RUN_MUTATIONS)
+
+# The L3 W1 fix round 2 (docs/prompts/l3-w1-fix2.md): F1, the lines that feed each pinned call and
+# the exits of the bodies they live in (the fix-diff review's eleven probes are the first entries),
+# and the count-0 rules in the review's other spellings; F2, Unlocks.ApplyFirstClear's rules and the
+# lines that call it in both places; F3, U resolves the level before its star. Every service entry
+# is caught only by tests_l3's text counts (run_harness.py L3_LINES and L3_PATTERNS).
+HUB_UI = "src/client/Controllers/UIController.luau"
+FILES.append(HUB_UI)
+L3_FIX2_MUTATIONS = {
+    # F1: the review's probes (docs/prompts/l3-w1-fix-diff-review.md m1), as it gave them.
+    "l3fix2 F1: a hit reads no profile (combat = nil)": (
+        WEAPON,
+        "\tlocal combat = if profile ~= nil then profile.combat else nil\n\tlocal override = state.gearOverride[player]\n\tlocal overrideTier",
+        "\tlocal combat = nil\n\tlocal override = state.gearOverride[player]\n\tlocal overrideTier",
+    ),
+    "l3fix2 F1: the bar reads no profile (combat = nil)": (
+        WEAPON,
+        "\tlocal combat = if profile ~= nil then profile.combat else nil\n\tlocal shooter = state.shooters[player]",
+        "\tlocal combat = nil\n\tlocal shooter = state.shooters[player]",
+    ),
+    "l3fix2 F1: the bar ignores the shooter's live pair": (
+        WEAPON,
+        "\tlocal held = if shooter ~= nil\n\t\tthen shooter.loadout",
+        "\tlocal held = if false\n\t\tthen shooter.loadout",
+    ),
+    "l3fix2 F1: the bar's raw-override early return comes back": (
+        WEAPON,
+        "\tlocal profile = DataService.GetState(player)\n\tlocal combat = if profile ~= nil then profile.combat else nil\n\tlocal shooter = state.shooters[player]",
+        "\tlocal raw = state.gearOverride[player]\n\tif raw ~= nil then\n\t\treturn table.clone(raw.gear), table.clone(raw.ascension)\n\tend\n"
+        "\tlocal profile = DataService.GetState(player)\n\tlocal combat = if profile ~= nil then profile.combat else nil\n\tlocal shooter = state.shooters[player]",
+    ),
+    "l3fix2 F1: a hit's raw override tier returned early": (
+        WEAPON,
+        "\tlocal tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)\n",
+        "\tif overrideTier ~= nil then\n\t\treturn Armory.DamageScale(armoryConfig, overrideTier, level, ability)\n\tend\n"
+        "\tlocal tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)\n",
+    ),
+    "l3fix2 F1: a hit takes the other slot's Ascension": (
+        WEAPON,
+        '\tlocal level = if slot == "melee"\n\t\tthen ascension.melee\n\t\telseif slot == "ranged" then ascension.ranged',
+        '\tlocal level = if slot == "melee"\n\t\tthen ascension.ranged\n\t\telseif slot == "ranged" then ascension.melee',
+    ),
+    "l3fix2 F1: a load runs no migration": (HUB_DATA, "\trunMigrations(profile.Data, player)\n", ""),
+    "l3fix2 F1: U resolves no level": (
+        WAVE_SERVICE,
+        "\t\tlocal level = if combatConfig ~= nil and map ~= nil\n",
+        "\t\tlocal level = if false\n",
+    ),
+    "l3fix2 F1: U stars and pays Normal": (
+        DEBUG_SERVICE,
+        "\tlocal difficulty = ladder.starDifficulty\n",
+        '\tlocal difficulty = "normal"\n',
+    ),
+    "l3fix2 F1: the dungeon's Power with no weapons": (
+        MAIN_SERVER,
+        "\t\t\t\tif provingConfig ~= nil then provingConfig.weapons else nil,\n",
+        "\t\t\t\tnil,\n",
+    ),
+    "l3fix2 F1: the hub's Power with no weapons": (
+        HUB_ECONOMY,
+        "\t\tif provingConfig ~= nil then provingConfig.weapons else nil,\n",
+        "\t\tnil,\n",
+    ),
+    # F1: one entry for each other new count, in gearOf.
+    "l3fix2 F1: the bar is the range's T1 everywhere": (
+        WEAPON,
+        'if state.mode == "range" or armoryConfig == nil then',
+        "if true then",
+    ),
+    "l3fix2 F1: the bar reads nobody's profile": (
+        WEAPON,
+        "\tlocal profile = DataService.GetState(player)\n\tlocal combat = if profile ~= nil then profile.combat else nil\n\tlocal shooter",
+        "\tlocal profile = nil\n\tlocal combat = if profile ~= nil then profile.combat else nil\n\tlocal shooter",
+    ),
+    "l3fix2 F1: the bar ignores the Studio override": (
+        WEAPON,
+        "\tlocal gear = if override ~= nil then override.gear else nil\n",
+        "\tlocal gear = nil\n",
+    ),
+    "l3fix2 F1: the bar ignores the profile's Ascension": (
+        WEAPON,
+        "local rangedOverride = if gear ~= nil then gear.ranged else nil\n\tlocal ascension = if override ~= nil\n"
+        "\t\tthen override.ascension\n\t\telseif combat ~= nil then combat.ascension",
+        "local rangedOverride = if gear ~= nil then gear.ranged else nil\n\tlocal ascension = if override ~= nil\n"
+        "\t\tthen override.ascension\n\t\telseif false then combat.ascension",
+    ),
+    "l3fix2 F1: the bar's ranged slot takes the melee Ascension": (
+        WEAPON,
+        "\t}, { melee = ascension.melee, ranged = ascension.ranged }\n",
+        "\t}, { melee = ascension.melee, ranged = ascension.melee }\n",
+    ),
+    # In damageScale.
+    "l3fix2 F1: no hit is ever scaled": (
+        WEAPON,
+        "\tif armoryConfig == nil then\n\t\treturn 1\n\tend\n\tlocal def = familyDef(Tuning.Get(), family)",
+        "\tif true then\n\t\treturn 1\n\tend\n\tlocal def = familyDef(Tuning.Get(), family)",
+    ),
+    "l3fix2 F1: every hit's slot is melee": (
+        WEAPON,
+        '\tlocal slot = if def ~= nil then def.slot else ""\n',
+        '\tlocal slot = "melee"\n',
+    ),
+    "l3fix2 F1: a hit ignores the Studio override": (
+        WEAPON,
+        "\tlocal overrideTier: number? = nil\n\tif override ~= nil then\n",
+        "\tlocal overrideTier: number? = nil\n\tif false then\n",
+    ),
+    "l3fix2 F1: a hit ignores the profile's Ascension": (
+        WEAPON,
+        "\t\telseif combat ~= nil then combat.ascension\n\t\telse CONST.NO_ASCENSION\n\tlocal level",
+        "\t\telseif false then combat.ascension\n\t\telse CONST.NO_ASCENSION\n\tlocal level",
+    ),
+    # In WaveService.GrantStars (and F3).
+    "l3fix2 F1: U's stars go to a table nobody keeps": (
+        WAVE_SERVICE,
+        "\tlocal stars = starsOf(player.UserId)\n\tlocal new = 0\n",
+        "\tlocal stars = {}\n\tlocal new = 0\n",
+    ),
+    "l3fix2 F3: U awards the star before the level resolves (the order before F3)": (
+        WAVE_SERVICE,
+        "\t\tif level == nil then\n\t\t\tcontinue\n\t\tend\n\t\tif not StageFlow.Award(stars, levelId, difficulty) then\n\t\t\tcontinue\n\t\tend\n",
+        "\t\tif not StageFlow.Award(stars, levelId, difficulty) then\n\t\t\tcontinue\n\t\tend\n\t\tif level == nil then\n\t\t\tcontinue\n\t\tend\n",
+    ),
+    "l3fix2 F3: U awards a star whose level does not resolve": (
+        WAVE_SERVICE,
+        "\t\tif level == nil then\n\t\t\tcontinue\n\t\tend\n\t\tif not StageFlow.Award(stars, levelId, difficulty) then",
+        "\t\tif not StageFlow.Award(stars, levelId, difficulty) then",
+    ),
+    "l3fix2 F1: U keeps no grant for the notice": (
+        WAVE_SERVICE,
+        "\t\tif grant ~= nil then\n\t\t\ttable.insert(grants, grant)\n\t\tend\n",
+        "",
+    ),
+    "l3fix2 F1: U pays only Normal's rewards": (
+        WAVE_SERVICE,
+        "\t\tnew += 1\n",
+        '\t\tnew += 1\n\t\tif difficulty ~= "normal" then\n\t\t\tcontinue\n\t\tend\n',
+    ),
+    # In DebugService's grantStar.
+    "l3fix2 F1: the star lever always finds no ladder": (
+        DEBUG_SERVICE,
+        'local ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil\n\tif ladder == nil then\n\t\twarn("[DebugService] grantStar',
+        'local ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil\n\tif true then\n\t\twarn("[DebugService] grantStar',
+    ),
+    "l3fix2 F1: the star lever names no level": (
+        DEBUG_SERVICE,
+        "\telseif Catalog.GetLevelFile(which) ~= nil then\n\t\ttable.insert(levelIds, which)\n",
+        "\telseif false then\n\t\ttable.insert(levelIds, which)\n",
+    ),
+    "l3fix2 F1: the star attribute stars nobody": (
+        DEBUG_SERVICE,
+        "local targets: { Player } = if player ~= nil then { player } else UnlockService.Admitted()\n\t-- What the new stars",
+        "local targets: { Player } = if player ~= nil then { player } else {}\n\t-- What the new stars",
+    ),
+    "l3fix2 F1: the star lever's call asks Normal": (
+        DEBUG_SERVICE,
+        "local _new, grants = WaveService.GrantStars(target, levelIds, difficulty)",
+        'local _new, grants = WaveService.GrantStars(target, levelIds, "normal")',
+    ),
+    "l3fix2 F1: the star lever stops before its first player": (
+        DEBUG_SERVICE,
+        "\tlocal valor = 0\n\tfor _, target in targets do\n",
+        "\tlocal valor = 0\n\tif #targets > 0 then\n\t\treturn\n\tend\n\tfor _, target in targets do\n",
+    ),
+    # In Main's sendSnapshot.
+    "l3fix2 F1: the dungeon's Power reads no Armory.json": (
+        MAIN_SERVER,
+        "\tlocal armoryConfig = Catalog.GetArmoryConfig()\n\t-- L3-6, R7",
+        "\tlocal armoryConfig = nil\n\t-- L3-6, R7",
+    ),
+    "l3fix2 F1: the dungeon's Power reads no ProvingGrounds.json": (
+        MAIN_SERVER,
+        "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n\tlocal snapshot: Types.Snapshot = {",
+        "\tlocal provingConfig = nil\n\tlocal snapshot: Types.Snapshot = {",
+    ),
+    "l3fix2 F1: the dungeon's Power with no starters": (
+        MAIN_SERVER,
+        '\t\t\t\tif provingConfig ~= nil then provingConfig.loadout else { melee = "", ranged = "" }\n',
+        '\t\t\t\t{ melee = "", ranged = "" }\n',
+    ),
+    "l3fix2 F1: the dungeon's Snapshot returns before it is sent": (
+        MAIN_SERVER,
+        '\t\twelcomeBack = nil,\n\t}\n\tRemoteService.FireClient(player, "StateChanged", snapshot)\n',
+        '\t\twelcomeBack = nil,\n\t}\n\tif snapshot.gearPower > 64 then\n\t\treturn\n\tend\n\tRemoteService.FireClient(player, "StateChanged", snapshot)\n',
+    ),
+    # In EconomyService's computeGearPower.
+    "l3fix2 F1: the hub's Power is always 0": (
+        HUB_ECONOMY,
+        "\tif armoryConfig == nil then\n\t\treturn 0\n\tend\n\tlocal provingConfig",
+        "\tif true then\n\t\treturn 0\n\tend\n\tlocal provingConfig",
+    ),
+    "l3fix2 F1: the hub's Power reads no ProvingGrounds.json": (
+        HUB_ECONOMY,
+        "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n\treturn Armory.SavedPower(",
+        "\tlocal provingConfig = nil\n\treturn Armory.SavedPower(",
+    ),
+    "l3fix2 F1: the hub's Power with no starters": (
+        HUB_ECONOMY,
+        '\t\tif provingConfig ~= nil then provingConfig.loadout else { melee = "", ranged = "" }\n',
+        '\t\t{ melee = "", ranged = "" }\n',
+    ),
+    "l3fix2 F1: the hub's Power is 0 once a family is found": (
+        HUB_ECONOMY,
+        "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n\treturn Armory.SavedPower(",
+        "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n\tif next(state.combat.families or {}) ~= nil then\n"
+        "\t\treturn 0\n\tend\n\treturn Armory.SavedPower(",
+    ),
+    # In DataService's attemptLoad.
+    "l3fix2 F1: a load migrates only a profile with no version": (
+        HUB_DATA,
+        "\trunMigrations(profile.Data, player)\n",
+        "\tif profile.Data.version == nil then\n\trunMigrations(profile.Data, player)\n\tend\n",
+    ),
+    "l3fix2 F1: a load returns before it migrates": (
+        HUB_DATA,
+        "\tprofile:AddUserId(player.UserId) -- GDPR right-to-erasure association\n",
+        "\tprofile:AddUserId(player.UserId) -- GDPR right-to-erasure association\n\tif profile.Data.version ~= nil then\n"
+        "\t\tprofiles[player] = profile\n\t\treturn profile.Data\n\tend\n",
+    ),
+    # F1: the count-0 rules in the review's other spellings, each beside lines that all still stand.
+    "l3fix2 F1: DebugService spells the wildcard '*'": (
+        DEBUG_SERVICE,
+        "\tlocal levelIds: { string } = {}\n\tif which == Unlocks.ALL_STARS then",
+        "\tlocal levelIds: { string } = {}\n\tif '*' == which then\n\t\twhich = Unlocks.ALL_STARS\n\tend\n\tif which == Unlocks.ALL_STARS then",
+    ),
+    "l3fix2 F1: the hub spells the wildcard \"*\", the compare reversed": (
+        HUB_ARMORY,
+        "\tlocal family, tier = Unlocks.TierLever(value)\n",
+        '\tif "*" == value then\n\t\treturn\n\tend\n\tlocal family, tier = Unlocks.TierLever(value)\n',
+    ),
+    "l3fix2 F1: EconomyService reads the frozen gear by key": (
+        HUB_ECONOMY,
+        "local function computeGearPower(state: Types.PlayerState): number\n",
+        'local function computeGearPower(state: Types.PlayerState): number\n\tlocal _frozen = state.combat["gear"]\n',
+    ),
+    "l3fix2 F1: DataService steps a profile through a local alias": (
+        HUB_DATA,
+        "local function runMigrations(state: Types.PlayerState, player: Player): ()\n",
+        "local function runMigrations(state: Types.PlayerState, player: Player): ()\n"
+        "\tlocal steps = ProfileSchema.Migrations\n\tlocal _ = steps[state.version]\n",
+    ),
+    "l3fix2 F1: Main reads the bar by key": (
+        MAIN_SERVER,
+        "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n\tlocal snapshot",
+        '\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n\tlocal _bar = WeaponService["GearOf"](player)\n\tlocal snapshot',
+    ),
+    # F2: Unlocks.ApplyFirstClear (tests_l3.luau "l3 firstClearTests").
+    "l3fix2 F2: ApplyFirstClear writes a family no weapons config names": (UNLOCKS, "\t\tand weapons[family] ~= nil\n", ""),
+    "l3fix2 F2: ApplyFirstClear gives an owned family again (and a starter)": (
+        UNLOCKS,
+        "\t\tand not Unlocks.OwnsFamily(combat.families, family, starters)\n",
+        "",
+    ),
+    "l3fix2 F2: ApplyFirstClear writes no family": (UNLOCKS, "\t\tfamilies[family] = true\n", ""),
+    "l3fix2 F2: ApplyFirstClear says it gave no family": (UNLOCKS, "\t\tgiven.family = family\n", ""),
+    "l3fix2 F2: ApplyFirstClear adds no Valor": (UNLOCKS, "\t\tcombat.valor += valor\n", ""),
+    "l3fix2 F2: ApplyFirstClear says it gave no Valor": (UNLOCKS, "\t\tgiven.valor = valor\n", ""),
+    "l3fix2 F2: ApplyFirstClear pays a fractional Valor": (
+        UNLOCKS,
+        'if type(valor) == "number" and valor > 0 and valor % 1 == 0 then',
+        'if type(valor) == "number" and valor > 0 then',
+    ),
+    "l3fix2 F2: ApplyFirstClear pays a negative Valor": (
+        UNLOCKS,
+        'if type(valor) == "number" and valor > 0 and valor % 1 == 0 then',
+        'if type(valor) == "number" and valor ~= 0 and valor % 1 == 0 then',
+    ),
+    "l3fix2 F2: ApplyFirstClear reads a reward that is no table": (
+        UNLOCKS,
+        '\tif type(reward) ~= "table" then\n\t\treturn given\n\tend\n',
+        "",
+    ),
+    "l3fix2 F2: ApplyFirstClear makes no families map": (
+        UNLOCKS,
+        "local families: { [string]: boolean } = combat.families or {}",
+        "local families: { [string]: boolean } = combat.families :: any",
+    ),
+    "l3fix2 F2: ApplyFirstClear indexes weapons it was not given": (UNLOCKS, '\t\tand type(weapons) == "table"\n', ""),
+    # F2: the dungeon's call (UnlockService.GrantFirstClear).
+    "l3fix2 F2: the dungeon's first clear writes a copy of the profile": (
+        UNLOCK_SERVICE,
+        "\tlocal combat = profile.combat\n\tlocal given = Unlocks.ApplyFirstClear",
+        "\tlocal combat = table.clone(profile.combat)\n\tlocal given = Unlocks.ApplyFirstClear",
+    ),
+    "l3fix2 F2: the dungeon's first clear knows no weapons": (
+        UNLOCK_SERVICE,
+        "local given = Unlocks.ApplyFirstClear(combat, reward, weapons(), starters())",
+        "local given = Unlocks.ApplyFirstClear(combat, reward, nil, starters())",
+    ),
+    "l3fix2 F2: the dungeon's first clear answers nothing for Valor only": (
+        UNLOCK_SERVICE,
+        "\tif given.family == nil and given.valor == 0 then\n",
+        "\tif given.family == nil then\n",
+    ),
+    "l3fix2 F2: the dungeon's first clear resends no wallet": (
+        UNLOCK_SERVICE,
+        "\tArenaService.SendSnapshot(player)\n\treturn given\n",
+        "\treturn given\n",
+    ),
+    "l3fix2 F2: a family's first clear returns before it is written": (
+        UNLOCK_SERVICE,
+        "\tlocal given = Unlocks.ApplyFirstClear(combat, reward, weapons(), starters())\n",
+        "\tif reward.family ~= nil then\n\t\treturn nil\n\tend\n\tlocal given = Unlocks.ApplyFirstClear(combat, reward, weapons(), starters())\n",
+    ),
+    # F2: the hub's star lever (ArmoryService.grantStarTo, fileFirstClear).
+    "l3fix2 F2: the hub's star lever names no single level": (
+        HUB_ARMORY,
+        "\telseif built[value] == true then\n\t\tlevels = { value }\n",
+        "\telseif false then\n\t\tlevels = { value }\n",
+    ),
+    "l3fix2 F2: the hub's star lever pays with no weapons": (
+        HUB_ARMORY,
+        "\tlocal weapons, starters = weaponsConfig()\n\tlocal stars = Unlocks.StarsOf(state.combat)\n",
+        "\tlocal _, starters = weaponsConfig()\n\tlocal weapons = nil\n\tlocal stars = Unlocks.StarsOf(state.combat)\n",
+    ),
+    "l3fix2 F2: the hub's star lever pays an old star again": (
+        HUB_ARMORY,
+        "\t\tif row[difficulty] == true then\n\t\t\tcontinue\n\t\tend\n",
+        "",
+    ),
+    "l3fix2 F2: the hub's star lever reads the Normal reward": (
+        HUB_ARMORY,
+        "local reward = fileFirstClear(levelId, difficulty)",
+        'local reward = fileFirstClear(levelId, "normal")',
+    ),
+    "l3fix2 F2: the hub's star lever pays nothing": (
+        HUB_ARMORY,
+        "local grant = Unlocks.ApplyFirstClear(state.combat, reward, weapons, starters)",
+        "local grant = { family = nil :: string?, valor = 0 }",
+    ),
+    "l3fix2 F2: the hub's notice names no Valor": (HUB_ARMORY, "\t\tvalor += grant.valor\n", ""),
+    "l3fix2 F2: the hub's star lever marks nothing for the Delta": (
+        HUB_ARMORY,
+        "\tEconomyService.MarkDirty(player, { combat = true })\n\tlocal given = if #gifts",
+        "\tlocal given = if #gifts",
+    ),
+    "l3fix2 F2: the hub's star lever stops after its first level": (
+        HUB_ARMORY,
+        "\t\tvalor += grant.valor\n\tend\n",
+        "\t\tvalor += grant.valor\n\t\tbreak\n\tend\n",
+    ),
+    "l3fix2 F2: the hub reads the reward of no difficulty": (
+        HUB_ARMORY,
+        '\tlocal scales: any = if type(difficulties) == "table" then difficulties[difficulty] else nil\n',
+        "\tlocal scales: any = nil\n",
+    ),
+    "l3fix2 F2: the hub reads no file's reward": (
+        HUB_ARMORY,
+        "\tlocal file = Catalog.GetLevelFile(levelId)\n",
+        '\tif levelId ~= "" then\n\t\treturn nil\n\tend\n\tlocal file = Catalog.GetLevelFile(levelId)\n',
+    ),
+    # F5: the hub's client (UIController), read as text too.
+    "l3fix2 F5: the late families replay no push": (
+        HUB_UI,
+        "\t\tthen\n\t\t\tpushArmory(current.state.combat)\n",
+        "\t\tthen\n\t\t\tlocal _ = current\n",
+    ),
+    "l3fix2 F5: the families never count as late": (
+        HUB_UI,
+        "\t\tlocal waiting = provingConfig == nil\n",
+        "\t\tlocal waiting = false\n",
+    ),
+    "l3fix2 F5: a push before the families asks for them no more": (
+        HUB_UI,
+        "\t\t\trefreshCombatKeys()\n\t\t\treturn\n",
+        "\t\t\treturn\n",
+    ),
+}
+MUTATIONS.update(L3_FIX2_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
