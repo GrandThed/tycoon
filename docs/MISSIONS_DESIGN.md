@@ -580,3 +580,39 @@ Armory screen in both places, the 15 weapon models in hand and on the stage) is 
 read as "about right" for the checklists' click questions (T2 a step, three runs a weapon, the screen, the turning
 weapon, the weapons in hand and on the back, the icons). Next: L4 (the real forest, the Camp Chief, the map in the hub,
 rewards balanced; the first version that may be published), only on his word.
+
+## 26. L4 "the real forest": decisions (2026-10-21)
+
+Ben: *"lets start L4"*. A groundwork study in three parts (`docs/prompts/l4-study.md`; reports
+`l4-study-report-forest.md`, `-chief.md`, `-publish.md`), then eight click questions with sketches; he took the lead's
+recommendation on all eight. **[Ben]**
+
+1. **The lookout moves to the trailhead** (the study's V3: ledge 26 up over Road1, the chest on it). The chain is
+   unchanged (buy Double Jump, reach the ledge, the Flamethrower, burn the brambles); the ledge is 132 studs from the
+   nearest camp ground, so `SNIPER_KNOWN_LIMIT_L4` empties with data alone.
+2. **Natural camp edges on today's outlines:** logs, rocks and thicket, at most 4 studs, gaps at the gates; the enemies
+   behave as now. Organic camp outlines (several floor cells per camp) are not in L4.
+3. **Real models for all seven looks in L4:** fodder, slinger, marksman, lobber, brute, plated elite and the Camp
+   Chief, generated, drawn on today's bodies; each kind keeps its colour so the warnings still read.
+4. **The Camp Chief's own move is a war-club sweep** (a wedge that fills after a warning: jump it or step out), beside
+   the Colossus's charge, slam and call.
+5. **The map in the city departs straight into the level:** one loading screen, the lobby camp counts down and starts
+   the level once the party is there; any refusal falls back to the lobby with the level picked.
+6. **The Raider Arena is hidden for the publish**; it may come back later as a real level.
+7. **The end screen:** a row per source counting up (raiders, camp bonuses, the Chief, chests), then coins flying into
+   the wallet and Timber piling up; the same card in both places.
+8. **Run cash grows with the city's era:** still a fixed amount per kill, multiplied by the era, set so a clear is worth
+   a few minutes of that era's income; checked against the city's pacing in the simulator.
+
+**Lead's rulings (told to Ben):** the ground and the tall walls get baked planar-UV skins (the city's and the Valley's
+route), so the layout is frozen before anything is baked; scenery is walk-through except the layout's own blocks; the
+forest floor beside the road is closed to players by an invisible wall at the tree line, except at designed drops; the
+raiders keep today's colour per kind on their cloth; the next ability is shown locked "with the Castle" so Valor has a
+purpose on screen, and the Brutal card says "Castle gear"; the publish is solo-first (L5 brings parties into levels).
+Still for Ben, later: the forest's mood (from the pictures), the Camp Chief's look (from a sheet), and how to publish
+(a private staging experience first, recommended).
+
+**Order of work:** W1 the forest on paper (the lookout moved and every gate green; a forest generator and level renders;
+raider and Chief prototypes), then Ben's look at the pictures; W1b removal of the old mission code (in parallel);
+W2 the forest and the models in the game with one upload and one harvest paste; W3 the city map, the end screen and the
+rewards; W4 publish readiness (the Theme round, phones, the checklist, the publish).
