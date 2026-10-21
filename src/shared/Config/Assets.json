@@ -14121,6 +14121,248 @@
           }
         ]
       }
+    },
+    "Weapons": {
+      "Beam": {
+        "stages": [
+          {
+            "modelAssetId": 128454084691317,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.628, 1.206, 3.16],
+                "offset": [0.0, 0.302, -0.58]
+              }
+            ]
+          }
+        ]
+      },
+      "Broadsword": {
+        "stages": [
+          {
+            "modelAssetId": 108730617457359,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.298, 1.32, 3.83],
+                "offset": [0.006, 0.0, -1.265]
+              }
+            ]
+          }
+        ]
+      },
+      "Chaingun": {
+        "stages": [
+          {
+            "modelAssetId": 125030214074195,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.47, 1.407, 3.07],
+                "offset": [0.0, 0.402, -0.505]
+              }
+            ]
+          }
+        ]
+      },
+      "Flamethrower": {
+        "stages": [
+          {
+            "modelAssetId": 140469421860415,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.509, 1.804, 3.345],
+                "offset": [0.0, 0.065, -0.458]
+              }
+            ]
+          }
+        ]
+      },
+      "FrostHammer": {
+        "stages": [
+          {
+            "modelAssetId": 82850156981518,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.774, 1.797, 4.372],
+                "offset": [-0.01, 0.299, -1.406]
+              }
+            ]
+          }
+        ]
+      },
+      "Greataxe": {
+        "stages": [
+          {
+            "modelAssetId": 114369240988702,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.332, 1.46, 4.459],
+                "offset": [0.0, -0.25, -1.569]
+              }
+            ]
+          }
+        ]
+      },
+      "Launcher": {
+        "stages": [
+          {
+            "modelAssetId": 126654155877849,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.554, 1.316, 3.685],
+                "offset": [0.0, 0.357, -0.443]
+              }
+            ]
+          }
+        ]
+      },
+      "Longbow": {
+        "stages": [
+          {
+            "modelAssetId": 128454757632960,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.304, 3.91, 0.83],
+                "offset": [0.019, 0.0, 0.141]
+              }
+            ]
+          }
+        ]
+      },
+      "Rifle": {
+        "stages": [
+          {
+            "modelAssetId": 95043304573842,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.24, 1.106, 3.405],
+                "offset": [0.0, -0.043, -0.742]
+              }
+            ]
+          }
+        ]
+      },
+      "Shotgun": {
+        "stages": [
+          {
+            "modelAssetId": 103749313244478,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.556, 1.062, 3.132],
+                "offset": [0.0, -0.083, -0.506]
+              }
+            ]
+          }
+        ]
+      },
+      "Smg": {
+        "stages": [
+          {
+            "modelAssetId": 135238991345990,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.3, 1.263, 2.56],
+                "offset": [0.002, 0.258, -0.16]
+              }
+            ]
+          }
+        ]
+      },
+      "Spear": {
+        "stages": [
+          {
+            "modelAssetId": 74059145308702,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.377, 1.165, 6.6],
+                "offset": [0.002, -0.083, -1.2]
+              }
+            ]
+          }
+        ]
+      },
+      "Spinblade": {
+        "stages": [
+          {
+            "modelAssetId": 124817017525334,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.38, 1.193, 3.987],
+                "offset": [0.0, 0.0, -1.254]
+              }
+            ]
+          }
+        ]
+      },
+      "Splitbow": {
+        "stages": [
+          {
+            "modelAssetId": 117959481224717,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.326, 3.904, 0.909],
+                "offset": [0.027, 0.0, -0.071]
+              }
+            ]
+          }
+        ]
+      },
+      "Warhammer": {
+        "stages": [
+          {
+            "modelAssetId": 131275767874036,
+            "parts": [
+              {
+                "kit": "weapon-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.831, 1.62, 4.361],
+                "offset": [0.0, 0.15, -1.524]
+              }
+            ]
+          }
+        ]
+      }
     }
   },
   "paths": {
