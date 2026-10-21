@@ -24,6 +24,11 @@ the mesh count, the triangle total, the palette ids and how far the meshes have 
 section is written only when that key exists, so a manifest from before the first landscape upload
 keeps its bytes.
 
+Weapon models (L3 W2, docs/prompts/l3-w2-contract.md L3-45) get a "Weapons" table, written only
+when src/shared/Config/WeaponModels.json exists: per family its model, blueprint, merged GLB,
+upload, harvest and template (the props route, folder `Weapons`), the points the config gives it,
+and its shelf icon's upload and harvest (Assets.json `icons`, optional key).
+
 Output is deterministic (stable ordering, no timestamps) so --check can diff
 it. The GLB column is the one local-only fact (assets/build is gitignored), so
 --check masks that column on both sides before comparing.
@@ -59,6 +64,7 @@ PROPS_DIRNAME = "_props"
 WORLD_DIRNAME = "_world"
 PROP_TYPE = "prop"
 MANIFEST_PATH = REPO_ROOT / "docs" / "ASSET_MANIFEST.md"
+WEAPON_MODELS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "WeaponModels.json"
 
 # Era config schema v1.1 (INTERFACES.md): modelName must be PascalCase.
 MODEL_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
@@ -78,9 +84,17 @@ TABLE_RULE = (
     "|---|-----------|------|------|-----------|------|--------|------"
     "|----------|-----------|----------|"
 )
-# 0-based index of the GLBs cell once a row is split on "|" (leading empty cell first).
-GLB_CELL_INDEX = 8
-ROW_CELL_COUNT = TABLE_HEADER.count("|") + 1
+WEAPONS_HEADER = (
+    "| # | Family | Model | Blueprint | GLB | Uploaded | Harvested | Template "
+    "| Points | Icon uploaded | Icon harvested |"
+)
+WEAPONS_RULE = (
+    "|---|--------|-------|-----------|-----|----------|-----------|----------"
+    "|--------|---------------|----------------|"
+)
+# 0-based index of the GLBs cell once a row is split on "|" (leading empty cell first), per table
+# header: the one local-only fact (assets/build is gitignored), masked by --check.
+GLB_CELL_INDEX = {TABLE_HEADER: 8, WEAPONS_HEADER: 5}
 
 
 @dataclass
@@ -473,10 +487,99 @@ def render(eras: list[dict], assets: dict | None) -> tuple[str, list[str]]:
             for index, (prop_name, cov) in enumerate(prop_rows, start=1):
                 lines.append(render_row(index, {"modelName": prop_name, "name": NONE, "type": PROP_TYPE}, cov))
             lines.append("")
+    weapon_lines, weapon_notes = render_weapons(assets)
+    lines += weapon_lines
+    notes += weapon_notes
     lines += render_paths(assets)
     lines += render_world(assets)
     lines += ["## Totals", "", f"{totals['slots']} models: {summary_line(totals)}", ""]
     return "\n".join(lines), notes
+
+
+def load_weapon_models() -> dict | None:
+    if not WEAPON_MODELS_PATH.exists():
+        return None
+    with open(WEAPON_MODELS_PATH, encoding="utf-8") as handle:
+        data = json.load(handle)
+    return data if isinstance(data, dict) else None
+
+
+def render_weapons(assets: dict | None) -> tuple[list[str], list[str]]:
+    """One row per weapon family of WeaponModels.json; absent, heading and all, until that file
+    exists. Weapons travel the props route (folder `Weapons`), and each has a shelf icon too."""
+    models = load_weapon_models()
+    if models is None:
+        return [], []
+    folder = str(models.get("folder", "Weapons"))
+    families = models.get("families") if isinstance(models.get("families"), dict) else {}
+    props_block = (assets or {}).get("props")
+    era_assets = props_block.get(folder) if isinstance(props_block, dict) else None
+    icons_block = (assets or {}).get("icons")
+    icons = icons_block.get(folder) if isinstance(icons_block, dict) else None
+    rows: list[str] = []
+    notes: list[str] = []
+    totals = {"blueprints": 0, "uploaded": 0, "harvested": 0, "templates": 0, "icons up": 0, "icons in": 0}
+    for index, family in enumerate(sorted(families), start=1):
+        entry = families[family] if isinstance(families[family], dict) else {}
+        model = str(entry.get("model", ""))
+        blueprint = load_blueprint(folder, model, BLUEPRINTS_DIR / PROPS_DIRNAME) if model else None
+        if blueprint is not None:
+            notes.extend(blueprint.problems)
+        stage_count, uploaded, harvested = stage_id_counts(era_assets.get(model) if isinstance(era_assets, dict) else None)
+        glbs = count_glbs(folder, model, props=True) if model else None
+        template = bool(model) and (TEMPLATES_DIR / PROPS_DIRNAME / folder / f"{model}.rbxmx").exists()
+        icon = icons.get(model) if isinstance(icons, dict) else None
+        icon_up = isinstance(icon, dict) and int(icon.get("assetId") or 0) != 0
+        icon_in = isinstance(icon, dict) and int(icon.get("imageId") or 0) != 0
+        blueprint_ok = blueprint is not None and not blueprint.problems
+        coverage = Coverage(blueprint, 1, glbs, stage_count, uploaded, harvested, template)
+        for key, value in (
+            ("blueprints", blueprint_ok),
+            ("uploaded", coverage.is_uploaded),
+            ("harvested", coverage.is_harvested),
+            ("templates", template),
+            ("icons up", icon_up),
+            ("icons in", icon_in),
+        ):
+            totals[key] += int(bool(value))
+        points = entry.get("points") if isinstance(entry.get("points"), dict) else {}
+        rows.append(
+            "| {} | `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {} |".format(
+                index,
+                md_cell(family),
+                md_cell(model),
+                NONE if blueprint is None else ("yes" if blueprint_ok else "invalid"),
+                NOT_AVAILABLE if glbs is None else fraction(glbs, 1),
+                fraction(uploaded, stage_count),
+                fraction(harvested, stage_count),
+                "yes" if template else NONE,
+                md_cell(", ".join(sorted(points))) or NONE,
+                "yes" if icon_up else NONE,
+                "yes" if icon_in else NONE,
+            )
+        )
+    n = len(families)
+    lines = [
+        "## Weapons",
+        "",
+        f"Config: `src/shared/Config/WeaponModels.json` (`py tools/assets/weapon_frames.py`) -- blueprints: "
+        f"`tools/testfit/blueprints/{PROPS_DIRNAME}/{folder}/` -- templates: `templates/{PROPS_DIRNAME}/{folder}/` -- "
+        f"in game: `ReplicatedStorage/Assets/Props/{folder}/` -- icons: `Assets.json` `icons.{folder}` "
+        "(`py tools/assets/upload_icons.py`).",
+        "",
+        "Each family is one model with one stage, on the props route. **Points** -- the frame points the config"
+        " gives the client (grip, tip and holster always). **Icon uploaded** / **Icon harvested** -- the shelf"
+        " icon's Decal `assetId` and its Image `imageId` in `Assets.json`. A missing template or icon leaves"
+        " the hand empty and the card as text, never an error.",
+        "",
+        f"Summary: {n} families: {totals['blueprints']}/{n} blueprints, {totals['uploaded']}/{n} uploaded, "
+        f"{totals['harvested']}/{n} harvested, {totals['templates']}/{n} templated, "
+        f"{totals['icons up']}/{n} icons uploaded, {totals['icons in']}/{n} icons harvested",
+        "",
+        WEAPONS_HEADER,
+        WEAPONS_RULE,
+    ]
+    return lines + rows + [""], notes
 
 
 def render_world(assets: dict | None) -> list[str]:
@@ -600,13 +703,18 @@ def render_paths(assets: dict | None) -> list[str]:
 
 
 def mask_volatile(text: str) -> str:
-    """Blank the GLBs cell of every table row so --check does not depend on the
-    gitignored assets/build tree being present on this machine."""
+    """Blank the GLBs cell of every row of a table that has one, so --check does not depend on
+    the gitignored assets/build tree being present on this machine."""
     masked: list[str] = []
+    glb_index: int | None = None
     for line in text.split("\n"):
+        if line in GLB_CELL_INDEX:
+            glb_index = GLB_CELL_INDEX[line]
+        elif not line.startswith("|"):
+            glb_index = None
         cells = line.split("|")
-        if line.startswith("| ") and len(cells) == ROW_CELL_COUNT and cells[1].strip().isdigit():
-            cells[GLB_CELL_INDEX] = " * "
+        if glb_index is not None and len(cells) > glb_index + 1 and cells[1].strip().isdigit():
+            cells[glb_index] = " * "
             line = "|".join(cells)
         masked.append(line)
     return "\n".join(masked)
@@ -625,14 +733,17 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--assets-json", help="read this Assets.json instead of src/shared/Config/Assets.json")
     parser.add_argument("--templates", help="look for templates under this root instead of templates/")
     parser.add_argument("--out", help="write (or --check) this file instead of docs/ASSET_MANIFEST.md")
+    parser.add_argument("--weapon-models", help="read this WeaponModels.json instead of src/shared/Config/WeaponModels.json")
     args = parser.parse_args(argv)
-    global ASSETS_CONFIG_PATH, TEMPLATES_DIR, MANIFEST_PATH
+    global ASSETS_CONFIG_PATH, TEMPLATES_DIR, MANIFEST_PATH, WEAPON_MODELS_PATH
     if args.assets_json:
         ASSETS_CONFIG_PATH = Path(args.assets_json).resolve()
     if args.templates:
         TEMPLATES_DIR = Path(args.templates).resolve()
     if args.out:
         MANIFEST_PATH = Path(args.out).resolve()
+    if args.weapon_models:
+        WEAPON_MODELS_PATH = Path(args.weapon_models).resolve()
 
     eras = load_eras()
     if not eras:

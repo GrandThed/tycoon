@@ -80,6 +80,12 @@
 -- built by WorldReact.SwingStrike, the very rule resolveMelee builds the server's strike with
 -- (c-m3), and the answer or refusal of a swing reaches FrostFx too (the ghosts are the swing's:
 -- c-m2).
+--
+-- L3 W2 (docs/prompts/l3-w2-contract.md, L3-52 and L3-53): "the hand" a tracer, a flight's
+-- blend, a beam or a chain link leaves from above and below is HeldWeapons.Muzzle, the tip of
+-- the model in the shooter's hand (the hand itself when there is none). It is a drawing only:
+-- every shape still comes from the strike. Another player's weapon swing also swings their arm
+-- (WeaponController.SwingOther, with the strike's combo step).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -107,6 +113,9 @@ local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 local Haptics = require(script.Parent:WaitForChild("Haptics"))
 local FlameFx = require(script.Parent:WaitForChild("FlameFx"))
 local FrostFx = require(script.Parent:WaitForChild("FrostFx"))
+-- L3 W2: where a tracer leaves from (L3-52), and another player's arm on their swing (L3-53).
+local HeldWeapons = require(script.Parent:WaitForChild("HeldWeapons"))
+local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 
 -- Below this length a vector has no heading (mirrors HitShapes' own epsilon).
 local EPSILON = 1e-6
@@ -835,22 +844,6 @@ function swings.answer(strike: Strike, seq: number): boolean
 	return stands
 end
 
--- The shooter's hand, where a tracer starts. The camera origin is where the shot is aimed
--- from, but a tracer from the eye is invisible to the one firing it.
-local function muzzleOf(userId: number): Vector3?
-	local player = Players:GetPlayerByUserId(userId)
-	local character = if player ~= nil then player.Character else nil
-	if character == nil then
-		return nil
-	end
-	local hand = character:FindFirstChild("RightHand")
-		or character:FindFirstChild("HumanoidRootPart")
-	if hand ~= nil and hand:IsA("BasePart") then
-		return hand.Position
-	end
-	return nil
-end
-
 -- Hitbox effect (exact shape) ----------------------------------------------------------
 
 -- The arc's vertical band around its origin, for a body centre (RangeService + HitShapes):
@@ -1054,8 +1047,8 @@ end
 local function drawRay(list: { FxPart }, strike: Strike, color: Color3): ()
 	local finish = rayEnd(strike)
 	-- The aimed ray starts at the camera, so the shooter would see it end-on; the tracer runs
-	-- from the hand to the same end point, which is where the shot stopped.
-	local from = muzzleOf(strike.userId) or strike.origin
+	-- from the muzzle (HeldWeapons.Muzzle) to the same end point, which is where the shot stopped.
+	local from = (HeldWeapons.Muzzle(strike.userId)) or strike.origin
 	local width = math.max(strike.width or 0, Theme.COMBAT_RANGE_TRACER_WIDTH)
 	tracer(list, from, finish, math.min(width, Theme.COMBAT_RANGE_TRACER_WIDTH * 2))
 	impact(list, finish, color)
@@ -1071,7 +1064,7 @@ local function drawAbilityRay(
 	edge: number
 ): ()
 	local finish = rayEnd(strike)
-	local from = muzzleOf(strike.userId) or strike.origin
+	local from = (HeldWeapons.Muzzle(strike.userId)) or strike.origin
 	local diameter = strike.width or Theme.COMBAT_RANGE_HITBOX_DEFAULT_WIDTH
 	cylinder(list, from, finish, diameter, color, fill)
 	streak(
@@ -1180,7 +1173,7 @@ end
 -- A Chain Gun shot is lightning from the hand: its links, or on a miss one bolt to where the
 -- ray stopped.
 local function drawChainShot(list: { FxPart }, strike: Strike, color: Color3, opacity: number): ()
-	local from = muzzleOf(strike.userId) or strike.origin
+	local from = (HeldWeapons.Muzzle(strike.userId)) or strike.origin
 	if not drawLinks(list, strike, from, opacity) then
 		local finish = rayEnd(strike)
 		bolt(list, from, finish, opacity)
@@ -1306,7 +1299,7 @@ local function drawPellets(list: { FxPart }, strike: Strike, variant: Types.Rang
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = ignore
 
-	local from = muzzleOf(strike.userId) or origin
+	local from = (HeldWeapons.Muzzle(strike.userId)) or origin
 	local halfAngle = (strike.arcDegrees or 0) / 2
 	for _, direction in HitShapes.Pellets(strike.direction, variant.pellets, halfAngle, seq) do
 		local stop = reach
@@ -1388,7 +1381,7 @@ local function drawHitbox(
 			else
 				-- A hitscan blast never flew, so a trail from the hand shows where it went.
 				local centre = sphereCentre(strike)
-				local from = muzzleOf(strike.userId)
+				local from = (HeldWeapons.Muzzle(strike.userId))
 				if
 					from ~= nil
 					and (centre - from).Magnitude > Theme.COMBAT_RANGE_TRAIL_MIN_STUDS
@@ -2462,7 +2455,7 @@ local function onShot(fx: { [string]: any }): ()
 		}, fx.origin, direction, math.max(lifetime, 0))
 		return
 	end
-	local muzzle = muzzleOf(fx.userId)
+	local muzzle = (HeldWeapons.Muzzle(fx.userId))
 	local offset = if muzzle ~= nil then muzzle - fx.origin else Vector3.zero
 	spawnFlight(
 		key,
@@ -2653,7 +2646,7 @@ local function stepBeams(now: number, deltaTime: number): ()
 			destroyBeam(userId)
 			continue
 		end
-		local from = muzzleOf(userId) or beam.origin
+		local from = (HeldWeapons.Muzzle(userId)) or beam.origin
 		local goal = beam.target
 		if userId == me then
 			-- Display prediction: the next strike leaves along the live camera ray, so the
@@ -2876,6 +2869,8 @@ local function onStrike(strike: Strike): ()
 	elseif swing and not mine then
 		-- L2-56: someone else's ice swing puffs frost (the local one did on its press).
 		FrostFx.OnStrike(strike)
+		-- L3-53: and their arm swings, with the step the server used.
+		WeaponController.SwingOther(strike.userId, strike.step or 1)
 	end
 
 	-- Every drawing reads the bodies before react() starts any death flight.

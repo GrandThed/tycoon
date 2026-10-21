@@ -1033,6 +1033,7 @@ function AbilityService.OnCast(
 		return
 	end
 	caster.lastSeq = seq
+	WeaponService.NoteHeld(player, slotName)
 	local busy = mechanic.busy(def)
 	if busy > 0 then
 		caster.busyUntil = now + busy

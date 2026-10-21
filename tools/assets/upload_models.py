@@ -226,6 +226,13 @@ def select_blueprints(args, default_root: str) -> list[str]:
     return paths
 
 
+def prop_description(prop: str, era: str, index: int, side_stage: dict | None, blueprint_kits: list[str]) -> str:
+    """Names the kits the merge put in the stage instead of claiming Kenney CC0 pieces, which a
+    generated kit (weapon-kit, colony-kit, ...) is not (docs/prompts/l3-w2-contract.md L3-41)."""
+    kits = sorted((side_stage or {}).get("kits") or {}) or blueprint_kits
+    return f"Era City Tycoon prop '{prop}' ({era}) stage {index}; kits: {', '.join(kits)}."
+
+
 def upload_props(args) -> int:
     assets = cfg.load_assets()
     jobs: list[Job] = []
@@ -263,7 +270,7 @@ def upload_props(args) -> int:
                     label,
                     glb,
                     model_display_name(f"Prop_{args.era}_{prop}_S{index}"),
-                    f"Era City Tycoon city prop '{prop}' ({args.era}) stage {index}. Kenney kit pieces, CC0.",
+                    prop_description(prop, args.era, index, side_stage, bp.kits),
                     commit,
                 )
             )

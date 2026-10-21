@@ -7011,6 +7011,570 @@ L3_FIX2_MUTATIONS = {
 }
 MUTATIONS.update(L3_FIX2_MUTATIONS)
 
+# L3 W2, the models in the game (docs/prompts/l3-w2-contract.md, L3-46 to L3-56): the pure
+# WeaponLook (tests_l3_w2.luau's built and shipped cases) and the contract's text checks T1 to T14
+# (run_harness.py L3W2_LINES, L3W2_PATTERNS, L3W2_ORDER), from the luau-engineer. The text-read
+# files are copied into every mutant root, the client ones included: only their counts can catch
+# their mutants. Run them alone with `mutate.py <root> <luau> l3w2`.
+LOOK = "src/shared/WeaponLook.luau"
+RANGE_SERVICE = "src/combat/server/Services/RangeService.luau"
+HELD_WEAPONS = "src/combat/client/Controllers/HeldWeapons.luau"
+WEAPON_CONTROLLER = "src/combat/client/Controllers/WeaponController.luau"
+FLAME_FX = "src/combat/client/Controllers/FlameFx.luau"
+ABILITY_SHARED = "src/combat/client/Controllers/AbilityFx/Shared.luau"
+MAG_DUMP = "src/combat/client/Controllers/AbilityFx/MagDump.luau"
+ARMORY_STAGE = "src/client/UI/ArmoryStage.luau"
+ARMORY_SCREEN = "src/client/UI/ArmoryScreen.luau"
+FILES += [
+    LOOK,
+    "src/shared/Config/WeaponModels.json",
+    RANGE_SERVICE,
+    HELD_WEAPONS,
+    WEAPON_CONTROLLER,
+    FLAME_FX,
+    ABILITY_SHARED,
+    MAG_DUMP,
+    ARMORY_STAGE,
+    ARMORY_SCREEN,
+]
+L3W2_MUTATIONS = {
+    # WeaponLook: names, entries, points, icons, the attributes and the faults (L3-48).
+    "l3w2: ModelName does not capitalise": (
+        LOOK,
+        "return string.upper(string.sub(family, 1, 1)) .. string.sub(family, 2)",
+        "return family",
+    ),
+    "l3w2: an attribute takes another name": (LOOK, 'held = "WeaponHeld",', 'held = "WeaponSlot",'),
+    "l3w2: finite takes a NaN": (LOOK, 'type(value) == "number" and value == value and', 'type(value) == "number" and'),
+    "l3w2: finite takes +inf": (LOOK, "value == value and value ~= math.huge and", "value == value and"),
+    "l3w2: finite takes -inf": (LOOK, "value ~= math.huge and value ~= -math.huge", "value ~= math.huge"),
+    "l3w2: a point of four numbers is three": (LOOK, "and #value == 3", "and #value >= 3"),
+    "l3w2: a point's third number is not checked": (LOOK, "\t\tand finite(value[3])\n", ""),
+    "l3w2: Def takes another family's model": (LOOK, "if def.model ~= expected then", "if false then"),
+    "l3w2: Def needs no holster": (LOOK, '{ "grip", "tip", "holster" }', '{ "grip", "tip" }'),
+    "l3w2: Def takes malformed bounds": (
+        LOOK,
+        'if type(bounds) ~= "table" or not triple(bounds.min) or not triple(bounds.max) then',
+        'if type(bounds) ~= "table" then',
+    ),
+    "l3w2: Def takes min above max": (LOOK, "if bounds.min[axis] > bounds.max[axis] then", "if false then"),
+    "l3w2: Def refuses a flat model": (
+        LOOK,
+        "if bounds.min[axis] > bounds.max[axis] then",
+        "if bounds.min[axis] >= bounds.max[axis] then",
+    ),
+    "l3w2: Def checks the bounds on two axes": (
+        LOOK,
+        "\tfor axis = 1, 3 do\n\t\tif bounds.min[axis]",
+        "\tfor axis = 1, 2 do\n\t\tif bounds.min[axis]",
+    ),
+    "l3w2: Def answers a broken entry": (
+        LOOK,
+        "if models == nil or defProblem(models, family) ~= nil then",
+        "if models == nil then",
+    ),
+    "l3w2: Point takes a malformed point": (LOOK, "\tif not triple(point) then\n\t\treturn nil\n", "\tif point == nil then\n\t\treturn nil\n"),
+    "l3w2: Point answers the tip for every name": (
+        LOOK,
+        'local point = if type(points) == "table" then points[name] else nil',
+        'local point = if type(points) == "table" then points.tip else nil',
+    ),
+    "l3w2: IconId takes a negative id": (LOOK, "and imageId > 0 and", "and imageId ~= 0 and"),
+    "l3w2: IconId takes a fraction": (LOOK, " and imageId % 1 == 0", ""),
+    "l3w2: IconId compares a string": (LOOK, "if finite(imageId) and imageId > 0", "if imageId ~= nil and imageId > 0"),
+    "l3w2: IconId reads the Weapons set whatever the folder": (
+        LOOK,
+        'type(folder) == "string" then icons[folder] else nil',
+        'type(folder) == "string" then icons.Weapons else nil',
+    ),
+    "l3w2: IconId keys the set by family": (
+        LOOK,
+        'local icon = if type(set) == "table" then set[def.model] else nil',
+        'local icon = if type(set) == "table" then set[family] else nil',
+    ),
+    "l3w2: IconId answers for a broken entry": (
+        LOOK,
+        'if def == nil or models == nil or type(config) ~= "table" then',
+        'if models == nil or type(config) ~= "table" then',
+    ),
+    "l3w2: Values passes any held word": (
+        LOOK,
+        'values[ATTRIBUTES.held] = if held == "ranged" then "ranged" else "melee"',
+        "values[ATTRIBUTES.held] = held",
+    ),
+    "l3w2: Values reads any other word as ranged": (
+        LOOK,
+        'values[ATTRIBUTES.held] = if held == "ranged" then "ranged" else "melee"',
+        'values[ATTRIBUTES.held] = if held == "melee" then "melee" else "ranged"',
+    ),
+    "l3w2: Values writes the ranged family as melee": (
+        LOOK,
+        "values[ATTRIBUTES.melee] = loadout.melee",
+        "values[ATTRIBUTES.melee] = loadout.ranged",
+    ),
+    "l3w2: Read takes an empty family": (LOOK, 'and value ~= "" then value else nil', "then value else nil"),
+    "l3w2: Read takes a number": (
+        LOOK,
+        'return if type(value) == "string" and value ~= "" then value else nil',
+        'return if value ~= nil and value ~= "" then value else nil',
+    ),
+    "l3w2: Read passes any held word": (
+        LOOK,
+        'if held == "melee" or held == "ranged" then held else nil',
+        "held",
+    ),
+    "l3w2: Read asks for the melee attribute twice": (
+        LOOK,
+        "familyOf(get(ATTRIBUTES.ranged)),",
+        "familyOf(get(ATTRIBUTES.melee)),",
+    ),
+    "l3w2: Problems with no file says nothing": (
+        LOOK,
+        '\t\ttable.insert(problems, "WeaponModels.json has no families: every hand stays empty")\n',
+        "",
+    ),
+    "l3w2: Problems takes an empty folder": (
+        LOOK,
+        'if type(config.folder) ~= "string" or config.folder == "" then',
+        'if type(config.folder) ~= "string" then',
+    ),
+    "l3w2: Problems takes a family with no entry": (
+        LOOK,
+        "local problem = defProblem(config, family)",
+        "local problem = if config.families[family] == nil then defProblem(config, family) else nil",
+    ),
+    "l3w2: Problems takes an extra family": (LOOK, "\t\tif weapons[family] == nil then\n", "\t\tif false then\n"),
+    "l3w2: Problems takes a grip off the origin": (
+        LOOK,
+        "if grip ~= nil and (grip.X ~= 0 or grip.Y ~= 0 or grip.Z ~= 0) then",
+        "if false then",
+    ),
+    "l3w2: Problems reads the grip on two axes": (
+        LOOK,
+        "(grip.X ~= 0 or grip.Y ~= 0 or grip.Z ~= 0)",
+        "(grip.Y ~= 0 or grip.Z ~= 0)",
+    ),
+    "l3w2: Problems takes a malformed extra": (
+        LOOK,
+        "\t\t\tif point == nil then\n\t\t\t\ttable.insert(problems,",
+        "\t\t\tif false then\n\t\t\t\ttable.insert(problems,",
+    ),
+    "l3w2: Problems takes a point outside its bounds": (LOOK, "elseif not inside(point, def.bounds) then", "elseif false then"),
+    "l3w2: no slack at the bounds": (LOOK, "local BOUNDS_SLACK = 0.01", "local BOUNDS_SLACK = 0"),
+    "l3w2: the slack swallows a real fault": (LOOK, "local BOUNDS_SLACK = 0.01", "local BOUNDS_SLACK = 0.1"),
+    "l3w2: inside reads the low side only": (
+        LOOK,
+        "if value < bounds.min[axis] - BOUNDS_SLACK or value > bounds.max[axis] + BOUNDS_SLACK then",
+        "if value < bounds.min[axis] - BOUNDS_SLACK then",
+    ),
+    "l3w2: inside reads two axes": (
+        LOOK,
+        "local coordinates = { point.X, point.Y, point.Z }\n\tfor axis = 1, 3 do",
+        "local coordinates = { point.X, point.Y, point.Z }\n\tfor axis = 1, 2 do",
+    ),
+    # T1: the one writer.
+    "l3w2 T1: showWeapons writes the starting slot": (
+        WEAPON,
+        "WeaponLook.Values(shooter.loadout, shooter.held)",
+        'WeaponLook.Values(shooter.loadout, "melee")',
+    ),
+    "l3w2 T1: showWeapons writes only on the live character": (
+        WEAPON,
+        "local target = character or shooter.player.Character",
+        "local target = shooter.player.Character",
+    ),
+    "l3w2 T1: showWeapons writes nothing": (WEAPON, "\t\ttarget:SetAttribute(name, value)\n", "\t\tlocal _ = { name, value }\n"),
+    "l3w2 T1: showWeapons returns early": (
+        WEAPON,
+        "\tlocal target = character or shooter.player.Character\n",
+        '\tif shooter.held == "ranged" then\n\t\treturn\n\tend\n\tlocal target = character or shooter.player.Character\n',
+    ),
+    # T2: every fresh character.
+    "l3w2 T2: a fresh character shows nothing": (
+        WEAPON,
+        "\t\tresetAir(shooter)\n\t\tshowWeapons(shooter, character)\n",
+        "\t\tresetAir(shooter)\n",
+    ),
+    "l3w2 T2: shown on the old character": (
+        WEAPON,
+        "\t\tshowWeapons(shooter, character)\n",
+        "\t\tshowWeapons(shooter, nil)\n",
+    ),
+    "l3w2 T2: PrepareCharacter returns before it shows": (
+        WEAPON,
+        "\tlocal shooter = state.shooters[player]\n\tif shooter ~= nil then\n\t\tresetAir(shooter)\n",
+        "\tlocal shooter = state.shooters[player]\n\tif shooter == nil then\n\t\treturn\n\tend\n"
+        "\tif shooter ~= nil then\n\t\tresetAir(shooter)\n",
+    ),
+    "l3w2 T2: the range prepares no character": (RANGE_SERVICE, "\tWeaponService.PrepareCharacter(player, character)\n", ""),
+    "l3w2 T2: a mission's later characters are not prepared": (
+        WAVE_SERVICE,
+        "ArenaService.SetCharacterHook(WeaponService.PrepareCharacter)",
+        "ArenaService.SetCharacterHook(function() end)",
+    ),
+    # T3: every loadout change.
+    "l3w2 T3: a family change shows nothing": (
+        WEAPON,
+        "\tshowWeapons(shooter, nil)\n\ttuneStateFor(shooter)\n",
+        "\ttuneStateFor(shooter)\n",
+    ),
+    "l3w2 T3: only a new family shows": (
+        WEAPON,
+        "\tshowWeapons(shooter, nil)\n\ttuneStateFor(shooter)\n\tif previous ~= family then\n",
+        "\ttuneStateFor(shooter)\n\tif previous ~= family then\n\t\tshowWeapons(shooter, nil)\n",
+    ),
+    "l3w2 T3: shown before the pair is written": (
+        WEAPON,
+        "\tlocal previous = slotFamily(shooter, slot)\n\tif slot == \"melee\" then\n\t\tshooter.loadout.melee = family\n",
+        "\tlocal previous = slotFamily(shooter, slot)\n\tshowWeapons(shooter, nil)\n"
+        "\tif slot == \"melee\" then\n\t\tshooter.loadout.melee = family\n",
+    ),
+    # T4, T5: an accepted attack and draw.
+    "l3w2 T4: an attack notes nothing": (WEAPON, "\tshooter.lastSeq[slot] = seq\n\tnoteHeld(shooter, slot)\n", "\tshooter.lastSeq[slot] = seq\n"),
+    "l3w2 T4: an attack notes melee": (
+        WEAPON,
+        "\tshooter.lastSeq[slot] = seq\n\tnoteHeld(shooter, slot)\n",
+        '\tshooter.lastSeq[slot] = seq\n\tnoteHeld(shooter, "melee")\n',
+    ),
+    "l3w2 T4: a refused attack is noted": (
+        WEAPON,
+        "\tif seq <= (shooter.lastSeq[slot] or -1) then\n",
+        "\tnoteHeld(shooter, slot)\n\tif seq <= (shooter.lastSeq[slot] or -1) then\n",
+    ),
+    "l3w2 T5: a draw notes nothing": (WEAPON, "\tshooter.drawWeapon = weapon\n\tnoteHeld(shooter, slot)\nend", "\tshooter.drawWeapon = weapon\nend"),
+    "l3w2 T5: a draw notes ranged whatever its slot": (
+        WEAPON,
+        "\tshooter.drawWeapon = weapon\n\tnoteHeld(shooter, slot)\nend",
+        '\tshooter.drawWeapon = weapon\n\tnoteHeld(shooter, "ranged")\nend',
+    ),
+    "l3w2 T5: a second writer of held": (
+        WEAPON,
+        "\tshooter.drawWeapon = weapon\n\tnoteHeld(shooter, slot)\nend",
+        "\tshooter.drawWeapon = weapon\n\tshooter.held = slot\nend",
+    ),
+    # T6: an accepted cast.
+    "l3w2 T6: a cast notes nothing": (ABILITY, "\tWeaponService.NoteHeld(player, slotName)\n", ""),
+    "l3w2 T6: a cast notes melee": (
+        ABILITY,
+        "WeaponService.NoteHeld(player, slotName)",
+        'WeaponService.NoteHeld(player, "melee")',
+    ),
+    "l3w2 T6: a refused cast is noted": (
+        ABILITY,
+        "\tif not mechanic.launch(cast, timeline) then\n",
+        "\tWeaponService.NoteHeld(player, slotName)\n\tif not mechanic.launch(cast, timeline) then\n",
+    ),
+    # T7: shown only on a change.
+    "l3w2 T7: noteHeld shows every time": (WEAPON, "\tif shooter.held == slot then\n\t\treturn\n\tend\n", ""),
+    "l3w2 T7: noteHeld forgets the slot": (
+        WEAPON,
+        "\tshooter.held = slot\n\tshowWeapons(shooter, nil)\nend",
+        "\tshowWeapons(shooter, nil)\nend",
+    ),
+    "l3w2 T7: noteHeld shows nothing": (
+        WEAPON,
+        "\tshooter.held = slot\n\tshowWeapons(shooter, nil)\nend",
+        "\tshooter.held = slot\nend",
+    ),
+    "l3w2 T7: NoteHeld takes any slot word": (WEAPON, ' or (slot ~= "melee" and slot ~= "ranged")', ""),
+    "l3w2 T7: NoteHeld notes ranged for every cast": (
+        WEAPON,
+        'noteHeld(shooter, if slot == "melee" then "melee" else "ranged")',
+        'noteHeld(shooter, "ranged")',
+    ),
+    "l3w2 T7: a new shooter holds ranged": (WEAPON, '\t\theld = "melee",\n', '\t\theld = "ranged",\n'),
+    "l3w2 T3: a second writer of the pair": (
+        WEAPON,
+        "\tshooter.loadout.variants[family] = key\n",
+        "\tshooter.loadout.variants[family] = key\n\tshooter.loadout.melee = shooter.loadout.melee\n",
+    ),
+    # T8: no hit reads the look.
+    "l3w2 T8: damageScale reads the slot in use": (
+        WEAPON,
+        "return Armory.DamageScale(armoryConfig, tier, level, ability)",
+        "return Armory.DamageScale(armoryConfig, tier, level, ability)"
+        ' * (if (state.shooters[player] :: any).held == "ranged" then 1 else 1)',
+    ),
+    "l3w2 T8: meleeOrigin reads the slot in use": (
+        WEAPON,
+        "local allowed = claimSlack(shooter, root, config.controls.meleeOriginPad, config)",
+        "local allowed = claimSlack(shooter, root, config.controls.meleeOriginPad, config)"
+        ' + (if shooter.held == "melee" then 0 else 0)',
+    ),
+    "l3w2 T8: aimAllowed reads the look": (
+        WEAPON,
+        "local anchor = if head ~= nil and head:IsA(\"BasePart\") then head.Position else root.Position\n",
+        "local anchor = if head ~= nil and head:IsA(\"BasePart\") then head.Position else root.Position\n"
+        "\tlocal _look = WeaponLook.ATTRIBUTES\n",
+    ),
+    "l3w2 T8: claimSlack notes the slot": (
+        WEAPON,
+        "\tlocal window = math.max(shooting.originLagMaxSeconds, 0)\n",
+        "\tlocal window = math.max(shooting.originLagMaxSeconds, 0)\n\tnoteHeld(shooter, \"melee\")\n",
+    ),
+    "l3w2 T8: resolveMelee reads the slot in use": (
+        WEAPON,
+        "local step = shooter.combo[weapon] or 0",
+        'local step = shooter.combo[weapon] or (if shooter.held == "melee" then 0 else 0)',
+    ),
+    "l3w2 T8: resolveRanged shows the weapons": (
+        WEAPON,
+        "\tlocal seed = newSeed(shooter, false)\n",
+        "\tlocal seed = newSeed(shooter, false)\n\tshowWeapons(shooter, nil)\n",
+    ),
+    "l3w2 T8: strike reads the look": (
+        WEAPON,
+        "\tStrikeTally.Add(tally, id, dealt, crit, killed, verdict)\n",
+        "\tStrikeTally.Add(tally, id, dealt, crit, killed, verdict)\n\tlocal _look = WeaponLook.ATTRIBUTES\n",
+    ),
+    # T9: another player's arm.
+    "l3w2 T9: no arm moves": (FEEDBACK, "\t\tWeaponController.SwingOther(strike.userId, strike.step or 1)\n", ""),
+    "l3w2 T9: the arm always swings step 1": (
+        FEEDBACK,
+        "WeaponController.SwingOther(strike.userId, strike.step or 1)",
+        "WeaponController.SwingOther(strike.userId, 1)",
+    ),
+    "l3w2 T9: the arm swings for my own strike too": (
+        FEEDBACK,
+        "\t\tWeaponController.SwingOther(strike.userId, strike.step or 1)\n\tend\n",
+        "\tend\n\tWeaponController.SwingOther(strike.userId, strike.step or 1)\n",
+    ),
+    "l3w2 T9: a swing leaves onStrike before the arm": (
+        FEEDBACK,
+        "\tlocal drawnEarly = false\n\tlocal seq = strike.seq\n",
+        "\tlocal drawnEarly = false\n\tif swing and not mine then\n\t\treturn\n\tend\n\tlocal seq = strike.seq\n",
+    ),
+    "l3w2 T9: someone else's strike counts as mine": (
+        FEEDBACK,
+        "\tlocal mine = strike.userId == localUserId()\n",
+        "\tlocal mine = strike.userId ~= 0\n",
+    ),
+    # T10: one muzzle.
+    "l3w2 T10: the pellets leave from the hand": (
+        FEEDBACK,
+        "local from = (HeldWeapons.Muzzle(strike.userId)) or origin",
+        'local from = ((Players:GetPlayerByUserId(strike.userId) :: any).Character:FindFirstChild("RightHand")).Position'
+        " or origin",
+    ),
+    "l3w2 T10: the beam asks for the muzzle twice": (
+        FEEDBACK,
+        "local from = (HeldWeapons.Muzzle(userId)) or beam.origin",
+        "local from = HeldWeapons.Muzzle(userId) and (HeldWeapons.Muzzle(userId)) or beam.origin",
+    ),
+    "l3w2 T10: the flame pushes the tip forward": (
+        FLAME_FX,
+        "\tif point == nil or fromModel then\n\t\treturn point\n\tend\n",
+        "\tif point == nil then\n\t\treturn point\n\tend\n",
+    ),
+    "l3w2 T10: the flame leaves from the hand": (
+        FLAME_FX,
+        "\tlocal point, fromModel = HeldWeapons.Muzzle(userId)\n",
+        '\tlocal hand = (Players:GetPlayerByUserId(userId) :: any).Character:FindFirstChild("RightHand")\n'
+        "\tlocal point, fromModel = hand.Position, false\n",
+    ),
+    "l3w2 T10: an ability pushes the tip forward": (
+        ABILITY_SHARED,
+        "return if fromModel then point else point + aim * MUZZLE_FORWARD",
+        "return point + aim * MUZZLE_FORWARD",
+    ),
+    "l3w2 T10: an ability muzzle from the hand": (
+        ABILITY_SHARED,
+        "\tlocal point, fromModel = HeldWeapons.Muzzle(userId)\n",
+        "\tlocal root, _, character = casterOf(userId)\n"
+        "\tlocal point, fromModel = if root ~= nil then handOf(character, root) else nil, false\n",
+    ),
+    "l3w2 T10: MagDump's muzzle from its hand again": (
+        MAG_DUMP,
+        "muzzle = muzzleOf(cast.userId, look, muzzle)",
+        "muzzle = handPoint + look * MUZZLE_FORWARD",
+    ),
+    "l3w2 T10: the local muzzle is the hand": (
+        WEAPON_CONTROLLER,
+        "\treturn HeldWeapons.Muzzle(Players.LocalPlayer.UserId) or fallback\n",
+        "\tlocal rig = character\n\tlocal hand = if rig ~= nil then handOf(rig) else nil\n"
+        "\treturn if hand ~= nil then hand.Position else fallback\n",
+    ),
+    "l3w2 T10: the muzzle is never the model's tip": (
+        HELD_WEAPONS,
+        "return held.base.CFrame:PointToWorldSpace(tip), true",
+        "return held.base.Position, true",
+    ),
+    "l3w2 T10: a second hand list": (
+        HELD_WEAPONS,
+        "\tlocal hand = firstPart(character, HAND_PARTS)\n",
+        '\tlocal hand = firstPart(character, { "RightHand" })\n',
+    ),
+    "l3w2 L3-51: HeldWeapons never starts": (WEAPON_CONTROLLER, "\tHeldWeapons.Start()\n", ""),
+    "l3w2 L3-54: the local stance never reaches HeldWeapons": (
+        WEAPON_CONTROLLER,
+        "\tHeldWeapons.SetLocalStance(nextStance)\n",
+        "",
+    ),
+    "l3w2 L3-53: WeaponController requires FeedbackController": (
+        WEAPON_CONTROLLER,
+        'local HeldWeapons = require(script.Parent:WaitForChild("HeldWeapons"))\n',
+        'local HeldWeapons = require(script.Parent:WaitForChild("HeldWeapons"))\n'
+        'local _Feedback = require(script.Parent:WaitForChild("FeedbackController"))\n',
+    ),
+    "l3w2 L3-53: HeldWeapons requires WeaponController": (
+        HELD_WEAPONS,
+        "local WeaponLook = require(sharedFolder:WaitForChild(\"WeaponLook\"))\n",
+        "local WeaponLook = require(sharedFolder:WaitForChild(\"WeaponLook\"))\n"
+        "local _Weapon = require(script.Parent:WaitForChild(\"WeaponController\"))\n",
+    ),
+    # T11 to T13: HeldWeapons.
+    "l3w2 T11: a clone on every call": (
+        HELD_WEAPONS,
+        "\tif cached ~= nil then\n\t\treturn cached\n\tend\n\tlocal config = Catalog.GetWeaponModelsConfig()\n",
+        "\tlocal config = Catalog.GetWeaponModelsConfig()\n",
+    ),
+    "l3w2 T11: a second clone": (
+        HELD_WEAPONS,
+        "\tlocal model = template:Clone()\n",
+        "\tlocal model = template:Clone()\n\tlocal _spare = template:Clone()\n",
+    ),
+    "l3w2 T11: HeldWeapons runs per frame": (
+        HELD_WEAPONS,
+        'local Players = game:GetService("Players")\n',
+        'local Players = game:GetService("Players")\nlocal RunService = game:GetService("RunService")\n',
+    ),
+    "l3w2 T12: the clone is not sealed": (HELD_WEAPONS, "\tseal(model)\n", ""),
+    "l3w2 T12: sealed after its first parent": (
+        HELD_WEAPONS,
+        "\tseal(model)\n",
+        "\tmodel.Parent = character\n\tseal(model)\n",
+    ),
+    "l3w2 T12: seal stops at the children": (
+        HELD_WEAPONS,
+        "\tfor _, part in model:GetDescendants() do\n\t\tif part:IsA(\"BasePart\") then\n\t\t\tpart.Anchored = false\n",
+        "\tfor _, part in model:GetChildren() do\n\t\tif part:IsA(\"BasePart\") then\n\t\t\tpart.Anchored = false\n",
+    ),
+    "l3w2 T12: seal leaves it anchored": (HELD_WEAPONS, "\t\t\tpart.Anchored = false\n", ""),
+    "l3w2 T12: seal leaves collisions on": (HELD_WEAPONS, "\t\t\tpart.CanCollide = false\n", ""),
+    "l3w2 T12: seal leaves queries on": (HELD_WEAPONS, "\t\t\tpart.CanQuery = false\n", ""),
+    "l3w2 T12: seal leaves touches on": (HELD_WEAPONS, "\t\t\tpart.CanTouch = false\n", ""),
+    "l3w2 T12: seal leaves its mass": (HELD_WEAPONS, "\t\t\tpart.Massless = true\n", ""),
+    "l3w2 T13: a recursive attachment lookup": (
+        HELD_WEAPONS,
+        "local attachment = if part ~= nil then part:FindFirstChild(attachmentName) else nil",
+        "local attachment = if part ~= nil then character:FindFirstChild(attachmentName, true) else nil",
+    ),
+    # T14: the stage's turn.
+    "l3w2 T14: the stage turns on reducedMotion": (
+        ARMORY_STAGE,
+        "\t\t\tif not Theme.lowEndDevice then\n\t\t\t\tlook.turn = RunService.RenderStepped:Connect(",
+        "\t\t\tif not Theme.reducedMotion then\n\t\t\t\tlook.turn = RunService.RenderStepped:Connect(",
+    ),
+    "l3w2 T14: the stage turns on a low-end device": (
+        ARMORY_STAGE,
+        "\t\t\tif not Theme.lowEndDevice then\n\t\t\t\tlook.turn = RunService.RenderStepped:Connect(",
+        "\t\t\tif true then\n\t\t\t\tlook.turn = RunService.RenderStepped:Connect(",
+    ),
+    "l3w2 T14: the model is posed every frame": (
+        ARMORY_STAGE,
+        "\t\t\t\t\t\t% 360\n\t\t\t\t\tplace()\n",
+        "\t\t\t\t\t\t% 360\n\t\t\t\t\t(look.model :: any):PivotTo(CFrame.identity)\n\t\t\t\t\tplace()\n",
+    ),
+    "l3w2 T14: the select path poses nothing": (ARMORY_STAGE, "\t\tmodel:PivotTo(pose)\n", ""),
+    "l3w2 T14: the stage stands flat": (
+        ARMORY_STAGE,
+        "local pose = CFrame.Angles(math.rad(Theme.ARMORY_STAGE_TILT_DEGREES), 0, 0)",
+        "local pose = CFrame.identity",
+    ),
+    "l3w2 T14: the screen never turns the stage on": (
+        ARMORY_SCREEN,
+        'stage.SetActive(view.open and shown == "weapons")',
+        "stage.SetActive(false)",
+    ),
+    "l3w2 T14: the stage keeps turning when the screen closes": (ARMORY_SCREEN, "\t\t\tstage.SetActive(false)\n", ""),
+    # The lead's ruling 6 (§11): the rest poses (HeldWeapons' hold and raised hand, WeaponController's rest).
+    "l3w2 R6: a ranged hand held as melee": (
+        HELD_WEAPONS,
+        "\t\telseif ranged then Theme.COMBAT_HOLD_GRIP_RANGED\n",
+        "\t\telseif ranged then Theme.COMBAT_HOLD_GRIP_MELEE\n",
+    ),
+    "l3w2 R6: the back held as a melee hand": (
+        HELD_WEAPONS,
+        "\t\tthen Theme.COMBAT_HOLD_BACK\n",
+        "\t\tthen Theme.COMBAT_HOLD_GRIP_MELEE\n",
+    ),
+    "l3w2 R6: the weld leaves out the hold": (
+        HELD_WEAPONS,
+        "held.weld.C0 = attachment.CFrame * hold * CFrame.new(-point)",
+        "held.weld.C0 = attachment.CFrame * CFrame.new(-point)",
+    ),
+    "l3w2 R6: the back hangs by the grip": (
+        HELD_WEAPONS,
+        'if inHand then "grip" else "holster"',
+        '"grip"',
+    ),
+    "l3w2 R6: the hand never held as ranged": (
+        HELD_WEAPONS,
+        "\trig.inHand = hang(rig, inUse, true, rangedInUse)\n",
+        "\trig.inHand = hang(rig, inUse, true, false)\n",
+    ),
+    "l3w2 R6: a ranged slot with an empty hand is raised": (
+        HELD_WEAPONS,
+        "local raised = rangedInUse and rig.inHand ~= nil",
+        "local raised = rangedInUse",
+    ),
+    "l3w2 R6: a remote hand reads the local stance": (
+        HELD_WEAPONS,
+        "\tlocal slot = if rig.isLocal then localStance else held\n",
+        "\tlocal slot = localStance\n",
+    ),
+    "l3w2 R6: the listener is never told": (HELD_WEAPONS, "\t\t\tlistener(character, rig.isLocal, raised)\n", ""),
+    "l3w2 R6: the raised hand is never kept": (HELD_WEAPONS, "\t\trig.raised = raised\n", ""),
+    "l3w2 R6: OnHold keeps no listener": (HELD_WEAPONS, "\tholdListener = listener\n", ""),
+    "l3w2 R6: a late listener misses the raised hands": (
+        HELD_WEAPONS,
+        "\t\tif rig.raised then\n\t\t\tlistener(rig.character, rig.isLocal, true)\n",
+        "\t\tif false then\n\t\t\tlistener(rig.character, rig.isLocal, true)\n",
+    ),
+    "l3w2 R6: the raise is never applied": (
+        WEAPON_CONTROLLER,
+        "\t\tthen Theme.COMBAT_HOLD_RANGED_RAISE_DEGREES\n",
+        "\t\tthen 0\n",
+    ),
+    "l3w2 R6: the rest frame ignores the rest": (
+        WEAPON_CONTROLLER,
+        "return rig.base * CFrame.Angles(math.rad(rig.rest), 0, 0)",
+        "return rig.base",
+    ),
+    "l3w2 R6: a cancel snaps to the hanging arm": (WEAPON_CONTROLLER, "motor.C0 = restFrame(rig)", "motor.C0 = rig.base"),
+    "l3w2 R6: a new rest is never written": (WEAPON_CONTROLLER, "\trig.rest = degrees\n", ""),
+    "l3w2 R6: the swing settles to the hanging arm": (
+        WEAPON_CONTROLLER,
+        "rigPoseTo(rig, rig.rest, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)",
+        "rigPoseTo(rig, 0, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)",
+    ),
+    "l3w2 R6: Release drops the arm": (
+        WEAPON_CONTROLLER,
+        "poseTo(localPose.rest, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)",
+        "poseTo(0, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)",
+    ),
+    "l3w2 R6: Release resets the rest": (
+        WEAPON_CONTROLLER,
+        "\tcancelPose()\n\tposeTo(localPose.rest,",
+        "\tcancelPose()\n\tlocalPose.rest = 0\n\tposeTo(localPose.rest,",
+    ),
+    "l3w2 R6: the kick from the hanging arm": (
+        WEAPON_CONTROLLER,
+        "localPose.rest + Theme.COMBAT_SHOOT_KICK_DEGREES",
+        "Theme.COMBAT_SHOOT_KICK_DEGREES",
+    ),
+    "l3w2 R6: the hold is never wired": (WEAPON_CONTROLLER, "\tHeldWeapons.OnHold(onHold)\n", ""),
+    "l3w2 R6: the local hold is ignored": (
+        WEAPON_CONTROLLER,
+        "\telseif rigModel == character then\n\t\tsetRest(localPose, restOf(rigModel))\n",
+        "\telseif false then\n\t\tsetRest(localPose, restOf(rigModel))\n",
+    ),
+    "l3w2 R6: the raised set is never kept": (WEAPON_CONTROLLER, "\traisedRigs[rigModel] = raised\n", ""),
+    "l3w2 R6: the local shoulder starts hanging": (WEAPON_CONTROLLER, "\t\tlocalPose.rest = restOf(rig)\n", ""),
+    "l3w2 R6: a remote record starts hanging": (WEAPON_CONTROLLER, "\tfresh.rest = restOf(rigModel)\n", "\tfresh.rest = 0\n"),
+}
+MUTATIONS.update(L3W2_MUTATIONS)
+
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
     it printed none: run_harness.py prints one whenever a case ran)."""

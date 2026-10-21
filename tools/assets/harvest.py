@@ -34,6 +34,11 @@ Size Studio reports equals the bake record's (assets/build/world/<Set>.json, or 
 0.01 studs or 0.1 %. A difference means the importer rescaled the mesh, and a template built from
 it would put a wrong-sized piece of landscape in the world; that mesh is left unmerged, everything
 else is merged and saved, and the exit code is 1.
+
+Shelf icons (Assets.json icons.<Set>.<Model>, uploaded by upload_icons.py; docs/prompts/
+l3-w2-contract.md L3-43) ride along in both modes too: kind "icon" for a Decal with an assetId and
+no imageId. Its merge writes the Image asset id; a 0 (the Decal is still in moderation) is warned
+about and left for a later paste.
 """
 
 from __future__ import annotations
@@ -121,7 +126,7 @@ for _, asset in ASSETS do
 		parts = {},
 	}
 	for _, d in container:GetDescendants() do
-		if asset.kind == "pathTexture" or asset.kind == "worldTexture" then
+		if asset.kind == "pathTexture" or asset.kind == "worldTexture" or asset.kind == "icon" then
 			-- A Decal upload loads as a Model holding one Decal; its Texture is the Image asset.
 			if d:IsA("Decal") then
 				record.imageId = idFrom(d.Texture)
@@ -201,6 +206,8 @@ def emit(assets: dict, include_all: bool, props: bool, luau_path: str) -> int:
         lines.append(
             f"\t{{ kind = \"worldMesh\", set = {lua_string(set_name)}, mesh = {lua_string(mesh_name)}, id = {asset_id} }},"
         )
+    for set_name, model, asset_id in cfg.pending_icons(assets, include_all):
+        lines.append(f"\t{{ kind = \"icon\", set = {lua_string(set_name)}, model = {lua_string(model)}, id = {asset_id} }},")
     flag = " --props" if props else ""
     text = LUAU_TEMPLATE % {
         "entries": "\n".join(lines) if lines else "\t-- nothing to harvest",
@@ -462,6 +469,28 @@ def merge_world_texture(assets: dict, rec: dict, force: bool) -> bool:
     return True
 
 
+def merge_icon(assets: dict, rec: dict, force: bool) -> bool:
+    """One shelf icon: the Image asset inside the uploaded Decal (L3-43), like a path texture."""
+    set_name, model = rec.get("set"), rec.get("model")
+    icon = (assets.get(cfg.ICONS_KEY, {}).get(set_name) or {}).get(model)
+    if icon is None:
+        warn(f"no icons entry for {set_name}/{model}; line skipped")
+        return False
+    label = f"icon {set_name}/{model}"
+    expected = int(icon.get("assetId", 0))
+    got = int(str(rec.get("assetId", "0")) or 0)
+    if expected != got and not force:
+        warn(f"{label}: printed asset {got} but Assets.json has {expected} (stale paste? use --force); skipped")
+        return False
+    image_id = int(str(rec.get("imageId", "0")) or 0)
+    if image_id == 0:
+        warn(f"{label}: no Decal Texture on the loaded asset (still in moderation?); skipped, paste again later")
+        return False
+    icon["imageId"] = image_id
+    log(f"{label}: image {image_id}")
+    return True
+
+
 class WorldBakes:
     """The landscape bake records (assets/build/world/<Set>.json), read once per set on demand:
     a paste with no world lines never touches the gitignored build tree."""
@@ -581,6 +610,7 @@ def list_missing(assets: dict, props: bool) -> list[str]:
         missing.append(f"{len(pieces)} path piece mesh(es)")
     missing += [f"world palette {set_name}" for set_name, _ in pending_world_textures(assets)]
     missing += [f"world {set_name} {mesh_name}" for set_name, mesh_name, _ in pending_world_meshes(assets)]
+    missing += [f"icon {set_name}/{model}" for set_name, model, _ in cfg.pending_icons(assets)]
     return missing
 
 
@@ -589,7 +619,7 @@ def merge(assets: dict, text: str, force: bool, props: bool, world_bake_root: st
     if not records:
         warn("no [HARVEST] lines found (copy the whole Output window after running harvest.luau)")
         return 1
-    models = swatches = path_textures = path_pieces = world_textures = world_meshes = 0
+    models = swatches = path_textures = path_pieces = world_textures = world_meshes = icons = 0
     world_bakes = WorldBakes(world_bake_root)
     world_size_problems: list[str] = []
     for rec in records:
@@ -602,6 +632,8 @@ def merge(assets: dict, text: str, force: bool, props: bool, world_bake_root: st
             world_textures += merge_world_texture(assets, rec, force)
         elif kind == "worldMesh":
             world_meshes += merge_world_mesh(assets, rec, force, world_bakes, world_size_problems)
+        elif kind == "icon":
+            icons += merge_icon(assets, rec, force)
         elif props:
             if kind == "prop":
                 models += merge_model(assets, rec, force, "props")
@@ -624,6 +656,8 @@ def merge(assets: dict, text: str, force: bool, props: bool, world_bake_root: st
         log(f"merged {path_textures} path texture(s) and {path_pieces} path piece mesh(es)")
     if world_textures or world_meshes or world_size_problems:
         log(f"merged {world_textures} world palette(s) and {world_meshes} world mesh(es)")
+    if icons:
+        log(f"merged {icons} icon(s)")
     missing = list_missing(assets, props)
     if missing:
         log("still missing harvest data: " + ", ".join(missing))

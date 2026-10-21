@@ -47,6 +47,11 @@ Its second fix round (docs/prompts/l3-w1-fix2.md F1, F2) also counts the lines t
 pinned call and the exits of the functions they live in (an early return cannot hide), reads the
 count-0 rules on the code with its comments blanked and by pattern, so no other spelling passes
 (L3_PATTERNS), and tests Unlocks.ApplyFirstClear and the lines that call it in both places.
+L3 W2 adds the pure WeaponLook (the look's attributes, model entries, points, icon ids and their
+faults) and tests_l3_w2.luau: those, on built inputs and on the shipped WeaponModels.json, and read
+as text (`source.l3w2`, the L3 pattern) the contract's T1 to T14: WeaponService's attribute writer
+and the slot in use, AbilityService's cast, the other player's arm, the one muzzle, HeldWeapons'
+clone, seal and lookups, and the Armory stage's turn (L3W2_LINES, L3W2_PATTERNS, L3W2_ORDER).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -121,6 +126,8 @@ SOURCES = {
     "ArmoryModel": "src/client/UI/ArmoryModel.luau",
     # The L3 W1 fix round's R7: the hub's Delta copy of a combat profile, made pure.
     "ProfileCopy": "src/shared/ProfileCopy.luau",
+    # L3 W2: what a player's weapons look like, read by the server and every client (tests_l3_w2.luau).
+    "WeaponLook": "src/shared/WeaponLook.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -156,6 +163,8 @@ TESTS = [
     "tests_l3.luau",
     "tests_l3_run.luau",
     "tests_l3_ui.luau",
+    # L3 W2: WeaponLook on built inputs and on the shipped WeaponModels.json, then T1 to T14 as text.
+    "tests_l3_w2.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -177,6 +186,11 @@ def to_luau(value) -> str:
 
 def read(repo: Path, path: str) -> object:
     return json.loads((repo / path).read_text(encoding="utf-8"))
+
+
+def read_optional(repo: Path, path: str) -> object:
+    """A JSON file, or None when it is not there."""
+    return read(repo, path) if (repo / path).is_file() else None
 
 
 def read_folder(repo: Path, folder: str, numbered: bool = False) -> list:
@@ -701,6 +715,328 @@ def l3_reading(text) -> dict:
         source = text(rel) if body is None else (bodies[body] or "")
         counts[key] = sum(1 for _ in pattern.finditer(luau_code(source)))
     return {"found": {key: value is not None for key, value in bodies.items()}, "counts": counts}
+
+
+# L3 W2 (docs/prompts/l3-w2-contract.md §9, T1 to T14): the lines that show a player's weapons
+# (WeaponService's three attributes and the slot in use, AbilityService's cast) and the client
+# lines that hang, aim and turn the models, read as text: none of these files loads here. Each
+# check pins the call, the inputs it is given (the lines that feed it, in the same exact text) and
+# that it is reached (the exits of the function it lives in are counted, so an early way out
+# cannot hide). tests_l3_w2.luau holds every count to its expected value (W2L3.LINES).
+RANGE_SERVICE = "src/combat/server/Services/RangeService.luau"
+HELD_WEAPONS = "src/combat/client/Controllers/HeldWeapons.luau"
+WEAPON_CONTROLLER = "src/combat/client/Controllers/WeaponController.luau"
+FLAME_FX = "src/combat/client/Controllers/FlameFx.luau"
+ABILITY_SHARED = "src/combat/client/Controllers/AbilityFx/Shared.luau"
+MAG_DUMP = "src/combat/client/Controllers/AbilityFx/MagDump.luau"
+ARMORY_STAGE = "src/client/UI/ArmoryStage.luau"
+ARMORY_SCREEN = "src/client/UI/ArmoryScreen.luau"
+
+
+def body_of(name: str) -> re.Pattern:
+    """A module-level function's whole text, `local function <name>(` or `function <name>(`."""
+    return re.compile(r"(?ms)^(?:local )?function " + re.escape(name) + r"\(.*?^end$")
+
+
+L3W2_BODIES = {
+    # T1 to T8, the server.
+    "showWeapons": (WEAPON_SERVICE, body_of("showWeapons")),
+    "noteHeld": (WEAPON_SERVICE, body_of("noteHeld")),
+    "NoteHeld": (WEAPON_SERVICE, body_of("WeaponService.NoteHeld")),
+    "addPlayer": (WEAPON_SERVICE, body_of("WeaponService.AddPlayer")),
+    "prepare": (WEAPON_SERVICE, body_of("WeaponService.PrepareCharacter")),
+    "setFamily": (WEAPON_SERVICE, body_of("WeaponService.SetFamily")),
+    "onAttack": (WEAPON_SERVICE, body_of("WeaponService.OnAttack")),
+    "onDraw": (WEAPON_SERVICE, body_of("WeaponService.OnDraw")),
+    "onCast": (ABILITY_SERVICE, body_of("AbilityService.OnCast")),
+    "rangePrepare": (RANGE_SERVICE, body_of("prepareCharacter")),
+    "damageScale": (WEAPON_SERVICE, body_of("damageScale")),
+    "meleeOrigin": (WEAPON_SERVICE, body_of("meleeOrigin")),
+    "aimAllowed": (WEAPON_SERVICE, body_of("aimAllowed")),
+    "claimSlack": (WEAPON_SERVICE, body_of("claimSlack")),
+    "resolveMelee": (WEAPON_SERVICE, body_of("resolveMelee")),
+    "resolveRanged": (WEAPON_SERVICE, body_of("resolveRanged")),
+    "strike": (WEAPON_SERVICE, body_of("strike")),
+    # T9, T10: the other player's arm and the one muzzle.
+    "onStrike": (FEEDBACK, body_of("onStrike")),
+    "sharedHand": (ABILITY_SHARED, body_of("handOf")),
+    "sharedMuzzle": (ABILITY_SHARED, body_of("muzzleOf")),
+    "flameMuzzle": (FLAME_FX, body_of("muzzleOf")),
+    "muzzlePoint": (WEAPON_CONTROLLER, body_of("muzzlePoint")),
+    # T10 to T13, HeldWeapons.
+    "heldMuzzle": (HELD_WEAPONS, body_of("HeldWeapons.Muzzle")),
+    "modelFor": (HELD_WEAPONS, body_of("modelFor")),
+    "seal": (HELD_WEAPONS, body_of("seal")),
+    # T14, the Armory stage: its handle's SetActive (a field of the table ArmoryStage.new returns)
+    # and the path that shows a selection's model (selectFamily, a local of ArmoryStage.new).
+    "stageActive": (ARMORY_STAGE, re.compile(r"(?ms)^\t\tSetActive = function\(.*?^\t\tend,$")),
+    "stageSelect": (ARMORY_STAGE, re.compile(r"(?ms)^\tlocal function selectFamily\(.*?^\tend$")),
+    # The lead's ruling 6 (§11): the rest poses, in HeldWeapons (the hold a slot hangs by, whether
+    # a ranged model is in the hand, the listener told of it) and WeaponController (the arm's rest).
+    "hang": (HELD_WEAPONS, body_of("hang")),
+    "heldShow": (HELD_WEAPONS, body_of("show")),
+    "heldOnHold": (HELD_WEAPONS, body_of("HeldWeapons.OnHold")),
+    "restOf": (WEAPON_CONTROLLER, body_of("restOf")),
+    "restFrame": (WEAPON_CONTROLLER, body_of("restFrame")),
+    "cancelRig": (WEAPON_CONTROLLER, body_of("cancelRig")),
+    "setRest": (WEAPON_CONTROLLER, body_of("setRest")),
+    "swingRig": (WEAPON_CONTROLLER, body_of("swingRig")),
+    "onHold": (WEAPON_CONTROLLER, body_of("onHold")),
+    "bindCharacter": (WEAPON_CONTROLLER, body_of("bindCharacter")),
+    "release": (WEAPON_CONTROLLER, body_of("WeaponController.Release")),
+    "shoot": (WEAPON_CONTROLLER, body_of("WeaponController.Shoot")),
+    "controllerStart": (WEAPON_CONTROLLER, body_of("WeaponController.Start")),
+}
+# The hit-deciding functions T8 reads (L3-50: none of them sees the look).
+L3W2_HITS = ("damageScale", "meleeOrigin", "aimAllowed", "claimSlack", "resolveMelee", "resolveRanged", "strike")
+L3W2_EXITS = re.compile(r"\b(?:return|continue|break)\b")
+L3W2_SLOT = 'local slot: SlotName = if def.slot == "melee" then "melee" else "ranged"'
+# key: (file, body or None, the exact text), counted on the raw text.
+L3W2_LINES = {
+    # T1: the one writer, its target and the pair and slot it writes.
+    "showTarget": (WEAPON_SERVICE, "showWeapons", "\tlocal target = character or shooter.player.Character\n"
+                   "\tif target == nil then\n\t\treturn\n\tend\n"),
+    "showValues": (WEAPON_SERVICE, "showWeapons",
+                   "\tfor name, value in WeaponLook.Values(shooter.loadout, shooter.held) do\n"
+                   "\t\ttarget:SetAttribute(name, value)\n\tend\n"),
+    "showSignature": (WEAPON_SERVICE, None, "local function showWeapons(shooter: Shooter, character: Model?): ()"),
+    # T2: every fresh character, in both modes.
+    "prepareShow": (WEAPON_SERVICE, "prepare", "\tlocal shooter = state.shooters[player]\n\tif shooter ~= nil then\n"
+                    "\t\tresetAir(shooter)\n\t\tshowWeapons(shooter, character)\n\tend\n"),
+    "prepareActive": (WEAPON_SERVICE, "prepare", "\tif not state.active then\n\t\treturn\n\tend\n"),
+    "addPrepares": (WEAPON_SERVICE, "addPlayer", "\t\tif character ~= nil then\n"
+                    "\t\t\tWeaponService.PrepareCharacter(player, character)\n\t\tend\n"),
+    "addHeld": (WEAPON_SERVICE, "addPlayer", '\t\theld = "melee",\n'),
+    "rangePrepares": (RANGE_SERVICE, "rangePrepare", "\tWeaponService.PrepareCharacter(player, character)\n"),
+    "missionHook": (WAVE_SERVICE, None, "ArenaService.SetCharacterHook(WeaponService.PrepareCharacter)"),
+    # T3: every loadout change, after the pair is written, outside `if previous ~= family`.
+    "familyShow": (WEAPON_SERVICE, "setFamily", "\tif slot == \"melee\" then\n\t\tshooter.loadout.melee = family\n"
+                   "\telse\n\t\tshooter.loadout.ranged = family\n\tend\n\tshooter.drawStartedAt = 0\n"
+                   "\tshowWeapons(shooter, nil)\n\ttuneStateFor(shooter)\n\tif previous ~= family then\n"),
+    "familySlot": (WEAPON_SERVICE, "setFamily", L3W2_SLOT),
+    # T4, T5: an accepted attack and a draw, on the line after each acceptance.
+    "attackHeld": (WEAPON_SERVICE, "onAttack", "\tshooter.lastSeq[slot] = seq\n\tnoteHeld(shooter, slot)\n"),
+    "attackSlot": (WEAPON_SERVICE, "onAttack", L3W2_SLOT),
+    "drawHeld": (WEAPON_SERVICE, "onDraw", "\tshooter.drawWeapon = weapon\n\tnoteHeld(shooter, slot)\nend"),
+    "drawSlot": (WEAPON_SERVICE, "onDraw", L3W2_SLOT),
+    # T6: an accepted cast (AbilityService alone knows its slot then).
+    "castHeld": (ABILITY_SERVICE, "onCast", "\tcaster.lastSeq = seq\n\tWeaponService.NoteHeld(player, slotName)\n"),
+    "castSlot": (ABILITY_SERVICE, "onCast", 'local slotName: SlotName = if slot == "melee" then "melee" else "ranged"'),
+    # T7: shown only on a change; the cast's hook checks the slot word.
+    "noteBody": (WEAPON_SERVICE, "noteHeld", "\tif shooter.held == slot then\n\t\treturn\n\tend\n"
+                 "\tshooter.held = slot\n\tshowWeapons(shooter, nil)\nend"),
+    "noteGuard": (WEAPON_SERVICE, "NoteHeld", "\tlocal shooter = state.shooters[player]\n"
+                  "\tif not state.active or shooter == nil or (slot ~= \"melee\" and slot ~= \"ranged\") then\n"
+                  "\t\treturn\n\tend\n"),
+    "noteCall": (WEAPON_SERVICE, "NoteHeld", "\tnoteHeld(shooter, if slot == \"melee\" then \"melee\" else \"ranged\")\n"),
+    # T9: another player's weapon swing moves their arm, with the strike's own step.
+    "otherMine": (FEEDBACK, "onStrike", "\tlocal mine = strike.userId == localUserId()\n"),
+    "otherSwing": (FEEDBACK, "onStrike",
+                   '\tlocal swing = ability == nil and not strike.tick and variant ~= nil and variant.kind == "melee"\n'),
+    "otherWired": (FEEDBACK, None, "\telseif fx.kind == \"strike\" then\n"
+                   "\t\tlocal strike = parseStrike(fx :: { [string]: any })\n\t\tif strike ~= nil then\n"
+                   "\t\t\tonStrike(strike)\n"),
+    # T10: the one muzzle. AbilityFx's and FlameFx's push the point along the aim only when it is
+    # not from a model (the nozzle is the tip); MagDump takes both its muzzles from Shared's.
+    "sharedHeld": (ABILITY_SHARED, "sharedMuzzle", "\tlocal point, fromModel = HeldWeapons.Muzzle(userId)\n"
+                   "\tif point == nil then\n\t\treturn fallback\n\tend\n"),
+    "sharedPush": (ABILITY_SHARED, "sharedMuzzle", "\treturn if fromModel then point else point + aim * MUZZLE_FORWARD\n"),
+    "flameHeld": (FLAME_FX, "flameMuzzle", "\tlocal point, fromModel = HeldWeapons.Muzzle(userId)\n"),
+    "flamePush": (FLAME_FX, "flameMuzzle", "\tif point == nil or fromModel then\n\t\treturn point\n\tend\n"
+                  "\treturn point + aim * MUZZLE_FORWARD\n"),
+    "magHelper": (MAG_DUMP, None, "local muzzleOf = Shared.muzzleOf\n"),
+    "magOldMuzzle": (MAG_DUMP, None, "handPoint + look * MUZZLE_FORWARD"),
+    # HeldWeapons' muzzle: the tip of the model in the hand, else W1's chain from its one hand
+    # list (the parts the weapon in use hangs from too).
+    "heldHandList": (HELD_WEAPONS, None, 'local HAND_PARTS = { "RightHand", "Right Arm" }\n'),
+    "heldFallback": (HELD_WEAPONS, "heldMuzzle", "\tlocal hand = firstPart(character, HAND_PARTS)\n"),
+    "heldTip": (HELD_WEAPONS, "heldMuzzle", "return held.base.CFrame:PointToWorldSpace(tip), true"),
+    # T11, T12: the cache answers first; seal visits every part of the clone.
+    "heldCached": (HELD_WEAPONS, "modelFor", "\tlocal cached = if cache ~= nil then cache[family] else nil\n"
+                   "\tif cached ~= nil then\n\t\treturn cached\n\tend\n"),
+    "sealLoop": (HELD_WEAPONS, "seal", "\tfor _, part in model:GetDescendants() do\n\t\tif part:IsA(\"BasePart\") then\n"),
+    # HeldWeapons is reached: WeaponController starts it and hands it the local stance on a switch.
+    "heldStarted": (WEAPON_CONTROLLER, None, "\tHeldWeapons.Start()\n"),
+    "heldStance": (WEAPON_CONTROLLER, None, "\tcancelPose()\n\tHeldWeapons.SetLocalStance(nextStance)\n"),
+    # T14: the select path poses the clone once (the tip rising); the screen alone switches the
+    # turn, on while it is open on the Weapons tab, off on close.
+    "selectPose": (ARMORY_STAGE, "stageSelect", "\t\tlocal pose = CFrame.Angles(math.rad(Theme.ARMORY_STAGE_TILT_DEGREES), 0, 0)\n"
+                   "\t\tmodel:PivotTo(pose)\n"),
+    "screenActive": (ARMORY_SCREEN, None, "stage.SetActive(view.open and shown == \"weapons\")"),
+    "screenClosed": (ARMORY_SCREEN, None, "stage.SetActive(false)"),
+    # Ruling 6, HeldWeapons: the back by the holster, a ranged model along the arm, a melee one tip
+    # forward; the slot in use decides which; a hand is raised only while a ranged model is in it,
+    # and the listener (WeaponController) is told each change, and of every raised hand when set.
+    "hangHold": (HELD_WEAPONS, "hang", "\tlocal hold = if not inHand\n\t\tthen Theme.COMBAT_HOLD_BACK\n"
+                 "\t\telseif ranged then Theme.COMBAT_HOLD_GRIP_RANGED\n\t\telse Theme.COMBAT_HOLD_GRIP_MELEE\n"),
+    "hangPoint": (HELD_WEAPONS, "hang",
+                  "\tlocal point = WeaponLook.Point(held.def, if inHand then \"grip\" else \"holster\") or Vector3.zero\n"),
+    "hangWeld": (HELD_WEAPONS, "hang", "\theld.weld.Part0 = part\n\theld.weld.C0 = attachment.CFrame * hold * CFrame.new(-point)\n"
+                 "\theld.model.Parent = character\n\treturn held\n"),
+    "showSlot": (HELD_WEAPONS, "heldShow", "\tlocal slot = if rig.isLocal then localStance else held\n"
+                 "\tlocal rangedInUse = slot == RANGED_SLOT\n\tlocal inUse = if rangedInUse then ranged else melee\n"
+                 "\tlocal other = if rangedInUse then melee else ranged\n"),
+    "showRaised": (HELD_WEAPONS, "heldShow", "\trig.inHand = hang(rig, inUse, true, rangedInUse)\n"
+                   "\thang(rig, other, false, not rangedInUse)\n\tlocal raised = rangedInUse and rig.inHand ~= nil\n"),
+    "showTold": (HELD_WEAPONS, "heldShow", "\tif raised ~= rig.raised then\n\t\trig.raised = raised\n"
+                 "\t\tlocal listener = holdListener\n\t\tif listener ~= nil then\n"
+                 "\t\t\tlistener(character, rig.isLocal, raised)\n\t\tend\n\tend\nend"),
+    "holdSet": (HELD_WEAPONS, "heldOnHold", "\tholdListener = listener\n"),
+    "holdReplay": (HELD_WEAPONS, "heldOnHold", "\tfor _, rig in rigs do\n\t\tif rig.raised then\n"
+                   "\t\t\tlistener(rig.character, rig.isLocal, true)\n"),
+    # Ruling 6, WeaponController: the rest is the raise while that character's hand is raised, else
+    # 0; every pose ends there (the cancel, the swing's settle, Release, the kick's base); the
+    # listener is wired before HeldWeapons starts; the local and remote records read it.
+    "restRaise": (WEAPON_CONTROLLER, "restOf", "return if rigModel ~= nil and raisedRigs[rigModel] == true\n"
+                  "\t\tthen Theme.COMBAT_HOLD_RANGED_RAISE_DEGREES\n\t\telse 0\n"),
+    "restAngle": (WEAPON_CONTROLLER, "restFrame", "return rig.base * CFrame.Angles(math.rad(rig.rest), 0, 0)"),
+    "cancelRest": (WEAPON_CONTROLLER, "cancelRig", "\tlocal motor = rig.motor\n\tif motor ~= nil then\n"
+                   "\t\tmotor.C0 = restFrame(rig)\n\tend\nend"),
+    "setRestWrite": (WEAPON_CONTROLLER, "setRest", "\tif rig.rest == degrees then\n\t\treturn\n\tend\n\trig.rest = degrees\n"),
+    "swingSettle": (WEAPON_CONTROLLER, "swingRig",
+                    "\t\t\trigPoseTo(rig, rig.rest, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)\n"),
+    "releaseRest": (WEAPON_CONTROLLER, "release", "\tcancelPose()\n"
+                    "\tposeTo(localPose.rest, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)\nend"),
+    "kickRest": (WEAPON_CONTROLLER, "shoot", "\t\tposeTo(\n\t\t\tlocalPose.rest + Theme.COMBAT_SHOOT_KICK_DEGREES,\n"),
+    "kickReleased": (WEAPON_CONTROLLER, "shoot", "\t\t\tWeaponController.Release()\n"),
+    "holdWired": (WEAPON_CONTROLLER, "controllerStart", "\tHeldWeapons.OnHold(onHold)\n\tHeldWeapons.Start()\n"),
+    "onHoldBody": (WEAPON_CONTROLLER, "onHold", "\traisedRigs[rigModel] = raised\n\tif not isLocal then\n"
+                   "\t\tsetRest(remotePoseFor(rigModel), restOf(rigModel))\n\telseif rigModel == character then\n"
+                   "\t\tsetRest(localPose, restOf(rigModel))\n\tend\nend"),
+    "bindRest": (WEAPON_CONTROLLER, "bindCharacter", "\t\tlocalPose.rest = restOf(rig)\n\t\tmotor.C0 = restFrame(localPose)\n"),
+    "remoteRest": (WEAPON_CONTROLLER, None, "\tfresh.rest = restOf(rigModel)\n"),
+}
+# key: (file, body or None, the pattern), counted on luau_code (comments blanked, strings kept).
+L3W2_PATTERNS = {
+    # T1, T7: one writer of the attributes and of `held`; the look's pure rules are read once.
+    "showCalls": (WEAPON_SERVICE, None, re.compile(r"\bshowWeapons\(")),
+    "noteCalls": (WEAPON_SERVICE, None, re.compile(r"\bnoteHeld\(")),
+    "heldWrites": (WEAPON_SERVICE, None, re.compile(r"\.held\s*=(?!=)")),
+    # T1, T3: the pair showWeapons writes changes in SetFamily alone (its two writes), which shows it.
+    "loadoutWrites": (WEAPON_SERVICE, None, re.compile(r"\.loadout\.(?:melee|ranged)\s*=(?!=)")),
+    "lookReads": (WEAPON_SERVICE, None, re.compile(r"\bWeaponLook\.")),
+    "castNotes": (ABILITY_SERVICE, None, re.compile(r"\bWeaponService\.NoteHeld\(")),
+    "showExits": (WEAPON_SERVICE, "showWeapons", L3W2_EXITS),
+    "noteExits": (WEAPON_SERVICE, "noteHeld", L3W2_EXITS),
+    "NoteExits": (WEAPON_SERVICE, "NoteHeld", L3W2_EXITS),
+    "prepareExits": (WEAPON_SERVICE, "prepare", L3W2_EXITS),
+    "familyExits": (WEAPON_SERVICE, "setFamily", L3W2_EXITS),
+    "attackExits": (WEAPON_SERVICE, "onAttack", L3W2_EXITS),
+    "drawExits": (WEAPON_SERVICE, "onDraw", L3W2_EXITS),
+    "castExits": (ABILITY_SERVICE, "onCast", L3W2_EXITS),
+    # T9: the arm's one call and the require (onStrike's ways out before it: l3w2_reading).
+    "otherCalls": (FEEDBACK, None, re.compile(r"\bWeaponController\.SwingOther\(")),
+    "otherRequire": (FEEDBACK, None, re.compile(r"(?m)^local WeaponController = require\(")),
+    # T10: no hand read as a muzzle outside HeldWeapons and AbilityFx's handOf.
+    "feedbackHand": (FEEDBACK, None, re.compile(r"\"RightHand\"")),
+    "feedbackOwnMuzzle": (FEEDBACK, None, re.compile(r"\blocal function muzzleOf\(")),
+    "feedbackHeld": (FEEDBACK, None, re.compile(r"\(HeldWeapons\.Muzzle\(")),
+    "feedbackMuzzles": (FEEDBACK, None, re.compile(r"\bHeldWeapons\.Muzzle\(")),
+    # L3-53: no require cycle (WeaponController requires neither FeedbackController nor
+    # InputController; HeldWeapons requires none of the controllers that call it).
+    "controllerCycle": (WEAPON_CONTROLLER, None, re.compile(r"WaitForChild\(\"(?:FeedbackController|InputController)\"\)")),
+    "heldCycle": (HELD_WEAPONS, None, re.compile(
+        r"WaitForChild\(\"(?:WeaponController|FeedbackController|InputController|FlameFx|CombatFxController)\"\)")),
+    "flameHand": (FLAME_FX, None, re.compile(r"\"RightHand\"")),
+    "sharedHands": (ABILITY_SHARED, None, re.compile(r"\"RightHand\"")),
+    "sharedHandOf": (ABILITY_SHARED, "sharedHand", re.compile(r"\"RightHand\"")),
+    # MagDump: every `muzzle =` line, and those that take it from muzzleOf.
+    "magMuzzles": (MAG_DUMP, None, re.compile(r"(?m)^.*\bmuzzle\s*=(?!=).*$")),
+    "magFromHelper": (MAG_DUMP, None, re.compile(r"(?m)^.*\bmuzzle\s*=(?!=).*\bmuzzleOf\(.*$")),
+    "pointIsHelper": (WEAPON_CONTROLLER, "muzzlePoint", re.compile(
+        r"\Alocal function muzzlePoint\(fallback: Vector3\): Vector3\s+"
+        r"return HeldWeapons\.Muzzle\(Players\.LocalPlayer\.UserId\) or fallback\s+end\Z")),
+    "heldHands": (HELD_WEAPONS, None, re.compile(r"\"RightHand\"")),
+    # T11 to T13: one clone, no per-frame work, no recursive lookup.
+    "heldClones": (HELD_WEAPONS, None, re.compile(r":Clone\(\)")),
+    "modelClones": (HELD_WEAPONS, "modelFor", re.compile(r":Clone\(\)")),
+    "heldFrames": (HELD_WEAPONS, None, re.compile(r"\bRunService\b")),
+    "heldDeep": (HELD_WEAPONS, None, re.compile(r"\bFindFirst\w*\([^()\n]*,\s*true\s*\)|\bFindFirstDescendant\b")),
+    "sealCalls": (HELD_WEAPONS, "modelFor", re.compile(r"\bseal\(")),
+    # T14: no motion gate on reducedMotion; one per-frame turn, made in SetActive; one pose.
+    "stageReduced": (ARMORY_STAGE, None, re.compile(r"\bTheme\.reducedMotion\b")),
+    "stageFrames": (ARMORY_STAGE, None, re.compile(r"\bRenderStepped:Connect\(")),
+    "activeFrames": (ARMORY_STAGE, "stageActive", re.compile(r"\bRenderStepped:Connect\(")),
+    "stagePoses": (ARMORY_STAGE, None, re.compile(r":PivotTo\(")),
+    "selectPoses": (ARMORY_STAGE, "stageSelect", re.compile(r":PivotTo\(")),
+    # Ruling 6: who writes the rest and the raised set, and the ways out of the bodies above.
+    "restWrites": (WEAPON_CONTROLLER, None, re.compile(r"\.rest\s*=(?!=)")),
+    "raisedWrites": (WEAPON_CONTROLLER, None, re.compile(r"\braisedRigs\[[^\]\n]*\]\s*=(?!=)")),
+    "hangExits": (HELD_WEAPONS, "hang", L3W2_EXITS),
+    "heldShowExits": (HELD_WEAPONS, "heldShow", L3W2_EXITS),
+    "holdSetExits": (HELD_WEAPONS, "heldOnHold", L3W2_EXITS),
+    "cancelExits": (WEAPON_CONTROLLER, "cancelRig", L3W2_EXITS),
+    "onHoldExits": (WEAPON_CONTROLLER, "onHold", L3W2_EXITS),
+    "swingExits": (WEAPON_CONTROLLER, "swingRig", L3W2_EXITS),
+    "releaseExits": (WEAPON_CONTROLLER, "release", L3W2_EXITS),
+}
+for _name in L3W2_HITS:
+    # T8: `.held` (the field; the word "held" is a StrikePick verdict there), the writers, the look.
+    L3W2_PATTERNS[f"hit_{_name}"] = (
+        WEAPON_SERVICE, _name, re.compile(r"\.held\b|\bshowWeapons\b|\b[nN]oteHeld\b|\bWeaponLook\b"))
+# The five properties a clone's parts take (L3-52, T12), each once in seal.
+L3W2_SEAL = (".Anchored = false", ".CanCollide = false", ".CanQuery = false", ".CanTouch = false",
+             ".Massless = true")
+# key: (body, the first text, the second): 1 when both are in that body and the first comes first.
+L3W2_ORDER = {
+    # T11: the clone comes after the cache's answer; T12: sealed before its first parent.
+    "cacheBeforeClone": ("modelFor", "return cached", ":Clone()"),
+    "sealBeforeParent": ("modelFor", "seal(model)", "model.Parent = character"),
+}
+
+
+def branch(source: str, header: re.Pattern) -> str:
+    """The block a branch line opens (the first line `header` matches, through the line before
+    the next `elseif`, `else` or `end` at its own indentation); "" when there is none."""
+    found = header.search(source)
+    if not found:
+        return ""
+    start = source.rfind("\n", 0, found.start()) + 1
+    indent = re.match(r"[ \t]*", source[start:]).group(0)
+    close = re.compile(r"\n" + re.escape(indent) + r"(?:elseif|else|end)\b").search(source, found.end())
+    return source[start: close.start() if close else len(source)]
+
+
+# T9's branch and T14's gate.
+OTHER_BRANCH = re.compile(r"(?m)^\telseif swing and not mine then$")
+OTHER_CALL = "WeaponController.SwingOther(strike.userId, strike.step or 1)"
+LOW_END_GATE = re.compile(r"(?m)^[ \t]*if\b[^\n]*\bnot Theme\.lowEndDevice\b[^\n]*\bthen$")
+
+
+def l3w2_reading(text) -> dict:
+    """T1 to T14 (L3W2_LINES exact, L3W2_PATTERNS on luau_code, L3W2_ORDER), each counted in the
+    function it belongs to; `found` names the functions whose body was found. `text` reads a repo
+    file (empty when missing)."""
+    bodies = {}
+    for key, (rel, pattern) in L3W2_BODIES.items():
+        found = pattern.search(text(rel))
+        bodies[key] = found.group(0) if found else None
+    counts = {}
+    for key, (rel, body, line) in L3W2_LINES.items():
+        source = text(rel) if body is None else (bodies[body] or "")
+        counts[key] = source.count(line)
+    for key, (rel, body, pattern) in L3W2_PATTERNS.items():
+        source = text(rel) if body is None else (bodies[body] or "")
+        counts[key] = sum(1 for _ in pattern.finditer(luau_code(source)))
+    seal = luau_code(bodies["seal"] or "")
+    for index, line in enumerate(L3W2_SEAL):
+        counts[f"seal{index + 1}"] = seal.count(line)
+    for key, (body, first, second) in L3W2_ORDER.items():
+        source = luau_code(bodies[body] or "")
+        a, b = source.find(first), source.find(second)
+        counts[key] = 1 if 0 <= a < b else 0
+    strike = bodies["onStrike"] or ""
+    other = branch(strike, OTHER_BRANCH)
+    counts["otherInBranch"] = other.count(OTHER_CALL)
+    # The lead's ruling 7 (§11): onStrike's ways out before the SwingOther call (-1 when the call
+    # is not there), not the whole function's (it has had more since before W2).
+    called = strike.find(OTHER_CALL)
+    counts["strikeExits"] = len(L3W2_EXITS.findall(luau_code(strike[:called]))) if called >= 0 else -1
+    gate = branch(luau_code(bodies["stageActive"] or ""), LOW_END_GATE)
+    counts["gatedFrames"] = gate.count("RenderStepped:Connect(")
+    return {"found": {key: value is not None for key, value in bodies.items()}, "counts": counts}
+
+
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
 
@@ -797,6 +1133,7 @@ def source_reading(repo: Path) -> dict:
         "w3fix2": w3_fix2_reading(text, freeze_text),
         "w3fix3": w3_fix3_reading(text),
         "l3": l3_reading(text),
+        "l3w2": l3w2_reading(text),
     }
 
 
@@ -966,6 +1303,9 @@ def fixtures(repo: Path) -> dict:
         # The real files, as they ship (tests_l1.luau "the real files").
         "expeditions": read(repo, "src/shared/Config/Expeditions.json"),
         "proving": read(repo, "src/shared/Config/ProvingGrounds.json"),
+        # L3 W2: the generated weapon models as they ship (nil when the file is missing: the cases
+        # that read it then fail).
+        "weaponModels": read_optional(repo, "src/shared/Config/WeaponModels.json"),
         "levels": [content for _, content in read_folder(repo, "src/shared/Config/Levels", True)],
         "missions": [content for _, content in read_folder(repo, "src/shared/Config/Missions", True)],
         # Files of those two folders that Catalog does not read (it takes <n>_<Name> only), while

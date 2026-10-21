@@ -1,0 +1,860 @@
+-- Cases for L3 W2, the models in the game (docs/prompts/l3-w2-contract.md): the pure WeaponLook
+-- (L3-48: the three attribute names and values, a family's model name, its entry, its points, its
+-- icon id, Read's reading of the attributes and the faults of a models file), first on entries
+-- built here, then on WeaponModels.json as it ships; then, read as text (FIXTURES.source.l3w2,
+-- run_harness.py L3W2_LINES, L3W2_PATTERNS and L3W2_ORDER), the contract's T1 to T14: the server
+-- lines that show a player's weapons and the slot in use (L3-49, L3-50), and the client lines that
+-- move another player's arm, draw from one muzzle, hang a sealed clone and turn the Armory stage
+-- (L3-51 to L3-56). Appended last by run_harness.py, so every local of the earlier files is in
+-- scope (check, near, load, L1, FIXTURES). Everything hangs off the W2L3 table (the 200-local
+-- limit), and every group runs behind L1.group, so one that throws fails a check and the bundle
+-- goes on.
+
+print("L3 W2: the weapons' look (WeaponLook) and the lines that show it")
+
+local W2L3: any = {
+	Look = load("WeaponLook"),
+	NAN = 0 / 0,
+	-- L3-46: every weapons family and its model name, the id with its first letter capitalised.
+	MODELS = {
+		beam = "Beam",
+		broadsword = "Broadsword",
+		chaingun = "Chaingun",
+		flamethrower = "Flamethrower",
+		frostHammer = "FrostHammer",
+		greataxe = "Greataxe",
+		launcher = "Launcher",
+		longbow = "Longbow",
+		rifle = "Rifle",
+		shotgun = "Shotgun",
+		smg = "Smg",
+		spear = "Spear",
+		spinblade = "Spinblade",
+		splitbow = "Splitbow",
+		warhammer = "Warhammer",
+	},
+}
+
+function W2L3.copy(value: any): any
+	if type(value) ~= "table" then
+		return value
+	end
+	local made = {}
+	for key, item in value do
+		made[key] = W2L3.copy(item)
+	end
+	return made
+end
+
+function W2L3.same(a: any, b: any): boolean
+	if type(a) ~= "table" or type(b) ~= "table" then
+		return a == b
+	end
+	for key, value in a do
+		if not W2L3.same(value, b[key]) then
+			return false
+		end
+	end
+	for key in b do
+		if a[key] == nil then
+			return false
+		end
+	end
+	return true
+end
+
+function W2L3.at(point: any, x: number, y: number, z: number): boolean
+	return point ~= nil
+		and near(point.X, x, 1e-9)
+		and near(point.Y, y, 1e-9)
+		and near(point.Z, z, 1e-9)
+end
+
+-- A whole entry like the generator writes, for `model`: grip at the origin, the tip along -Z.
+function W2L3.entry(model: string): any
+	return {
+		model = model,
+		points = {
+			grip = { 0, 0, 0 },
+			tip = { 0, 0.1, -3 },
+			holster = { 0, 0, -1.5 },
+			bladeBase = { 0, 0, -0.6 },
+		},
+		bounds = { min = { -0.2, -0.7, -3 }, max = { 0.2, 0.7, 0.6 } },
+	}
+end
+
+-- A small models file: two families, the props folder "Weapons".
+function W2L3.config(): any
+	return {
+		version = 1,
+		folder = "Weapons",
+		families = {
+			broadsword = W2L3.entry("Broadsword"),
+			longbow = W2L3.entry("Longbow"),
+		},
+	}
+end
+
+-- The config with one change made to broadsword's entry.
+function W2L3.with(change: (entry: any, config: any) -> ()): any
+	local config = W2L3.config()
+	change(config.families.broadsword, config)
+	return config
+end
+
+-- Assets.json with one icon entry: icons[set][model] = { imageId = id }.
+function W2L3.assets(set: string, model: string, imageId: any): any
+	return {
+		version = 5,
+		textures = {},
+		eras = {},
+		icons = { [set] = { [model] = { assetId = 99, imageId = imageId, sha256 = "x" } } },
+	}
+end
+
+-- The weapons families a Problems case checks against: the config's two.
+W2L3.WEAPONS = { broadsword = { slot = "melee" }, longbow = { slot = "ranged" } }
+
+function W2L3.has(problems: { string }, text: string): boolean
+	for _, problem in problems do
+		if string.find(problem, text, 1, true) ~= nil then
+			return true
+		end
+	end
+	return false
+end
+
+function W2L3.nameTests(): ()
+	print(" ModelName, the attribute names and Values (L3-46, L3-49)")
+	local Look = W2L3.Look
+	local wrong = {}
+	for family, model in W2L3.MODELS do
+		if Look.ModelName(family) ~= model then
+			table.insert(wrong, `{family} -> {Look.ModelName(family)}`)
+		end
+	end
+	table.sort(wrong)
+	check(
+		#wrong == 0,
+		`ModelName capitalises the first letter of all 15 ids ({table.concat(wrong, ", ")})`
+	)
+	local count = 0
+	local listed = true
+	for family in FIXTURES.proving.weapons do
+		count += 1
+		listed = listed and W2L3.MODELS[family] ~= nil
+	end
+	check(count == 15 and listed, "the 15 ids are ProvingGrounds.json's weapons families")
+	check(
+		W2L3.same(
+			Look.ATTRIBUTES,
+			{ melee = "WeaponMelee", ranged = "WeaponRanged", held = "WeaponHeld" }
+		) and table.isfrozen(Look.ATTRIBUTES),
+		"the three attribute names, frozen"
+	)
+	local values = Look.Values({ melee = "spear", ranged = "smg" }, "ranged")
+	check(
+		W2L3.same(values, { WeaponMelee = "spear", WeaponRanged = "smg", WeaponHeld = "ranged" }),
+		"Values: the held melee and ranged families and the slot in use, nothing else"
+	)
+	check(
+		Look.Values({ melee = "spear", ranged = "smg" }, "melee").WeaponHeld == "melee",
+		"Values: melee held"
+	)
+	check(
+		Look.Values({ melee = "spear", ranged = "smg" }, "bogus").WeaponHeld == "melee"
+			and Look.Values({ melee = "spear", ranged = "smg" }, "").WeaponHeld == "melee"
+			and Look.Values({ melee = "spear", ranged = "smg" }, "Ranged").WeaponHeld == "melee",
+		"Values: any other held word reads melee"
+	)
+end
+L1.group("l3w2 nameTests", W2L3.nameTests)
+
+function W2L3.readTests(): ()
+	print(" Read: the attributes as a client reads them (L3-51)")
+	local Look = W2L3.Look
+	local function reader(values: any): (string) -> any
+		return function(name: string): any
+			return values[name]
+		end
+	end
+	local melee, ranged, held =
+		Look.Read(reader({ WeaponMelee = "spear", WeaponRanged = "smg", WeaponHeld = "ranged" }))
+	check(melee == "spear" and ranged == "smg" and held == "ranged", "the pair and the slot in use")
+	local m2, r2, h2 =
+		Look.Read(reader(Look.Values({ melee = "greataxe", ranged = "beam" }, "melee")))
+	check(m2 == "greataxe" and r2 == "beam" and h2 == "melee", "Read gives back what Values wrote")
+	local m3, r3, h3 =
+		Look.Read(reader({ WeaponMelee = 5, WeaponRanged = "", WeaponHeld = "Ranged" }))
+	check(
+		m3 == nil and r3 == nil and h3 == nil,
+		"a number, an empty family and another held word read nil"
+	)
+	local m4, r4, h4 =
+		Look.Read(reader({ WeaponMelee = { "spear" }, WeaponRanged = true, WeaponHeld = 1 }))
+	check(m4 == nil and r4 == nil and h4 == nil, "a table, a boolean and a held number read nil")
+	local m5, r5, h5 = Look.Read(reader({}))
+	check(m5 == nil and r5 == nil and h5 == nil, "no attributes read nil (a bot, a rig)")
+	local asked = {}
+	Look.Read(function(name: string): any
+		table.insert(asked, name)
+		return nil
+	end)
+	table.sort(asked)
+	check(
+		W2L3.same(asked, { "WeaponHeld", "WeaponMelee", "WeaponRanged" }),
+		`Read asks for the three attributes, each once ({table.concat(asked, ", ")})`
+	)
+end
+L1.group("l3w2 readTests", W2L3.readTests)
+
+function W2L3.defTests(): ()
+	print(" Def: an entry is used only when whole (L3-48)")
+	local Look = W2L3.Look
+	local config = W2L3.config()
+	check(
+		Look.Def(config, "broadsword") == config.families.broadsword,
+		"a whole entry is the entry"
+	)
+	check(Look.Def(config, "longbow") == config.families.longbow, "and the other one")
+	check(Look.Def(nil, "broadsword") == nil, "no config: nil")
+	check(Look.Def(config, "spear") == nil, "an unknown family: nil")
+	check(
+		Look.Def({ version = 1, folder = "Weapons" } :: any, "broadsword") == nil,
+		"no families: nil"
+	)
+	check(Look.Def({ families = "x" } :: any, "broadsword") == nil, "families not a table: nil")
+	check(Look.Def(config, 5 :: any) == nil, "a family that is not a string: nil")
+	local cases = {
+		{
+			"the model in lower case",
+			function(e)
+				e.model = "broadsword"
+			end,
+		},
+		{
+			"another family's model",
+			function(e)
+				e.model = "Longbow"
+			end,
+		},
+		{
+			"no model",
+			function(e)
+				e.model = nil
+			end,
+		},
+		{
+			"no points",
+			function(e)
+				e.points = nil
+			end,
+		},
+		{
+			"no grip",
+			function(e)
+				e.points.grip = nil
+			end,
+		},
+		{
+			"no tip",
+			function(e)
+				e.points.tip = nil
+			end,
+		},
+		{
+			"no holster",
+			function(e)
+				e.points.holster = nil
+			end,
+		},
+		{
+			"a point of two numbers",
+			function(e)
+				e.points.tip = { 0, 0 }
+			end,
+		},
+		{
+			"a point of four numbers",
+			function(e)
+				e.points.holster = { 0, 0, -1, 0 }
+			end,
+		},
+		{
+			"a NaN",
+			function(e)
+				e.points.tip = { 0, W2L3.NAN, -3 }
+			end,
+		},
+		{
+			"an infinite number",
+			function(e)
+				e.points.holster = { 0, 0, math.huge }
+			end,
+		},
+		{
+			"a negative infinite number",
+			function(e)
+				e.points.grip = { -math.huge, 0, 0 }
+			end,
+		},
+		{
+			"a string in a point",
+			function(e)
+				e.points.tip = { 0, "0", -3 }
+			end,
+		},
+		{
+			"no bounds",
+			function(e)
+				e.bounds = nil
+			end,
+		},
+		{
+			"bounds.min of two numbers",
+			function(e)
+				e.bounds.min = { -0.2, -0.7 }
+			end,
+		},
+		{
+			"bounds.max with a NaN",
+			function(e)
+				e.bounds.max = { 0.2, W2L3.NAN, 0.6 }
+			end,
+		},
+		{
+			"min above max on x",
+			function(e)
+				e.bounds.min[1] = 0.3
+			end,
+		},
+		{
+			"min above max on y",
+			function(e)
+				e.bounds.min[2] = 0.8
+			end,
+		},
+		{
+			"min above max on z",
+			function(e)
+				e.bounds.max[3] = -3.5
+			end,
+		},
+	}
+	for _, case in cases do
+		local mutated = W2L3.with(case[2])
+		check(Look.Def(mutated, "broadsword") == nil, `{case[1]}: nil`)
+		check(Look.Def(mutated, "longbow") ~= nil, `{case[1]}: the other entry still stands`)
+	end
+	local flat = W2L3.with(function(e)
+		e.bounds.min[1] = 0
+		e.bounds.max[1] = 0
+	end)
+	check(
+		Look.Def(flat, "broadsword") ~= nil,
+		"min equal to max on one axis is whole (a flat model)"
+	)
+	local badExtra = W2L3.with(function(e)
+		e.points.bladeBase = { 0, 0 }
+	end)
+	check(
+		Look.Def(badExtra, "broadsword") ~= nil,
+		"a malformed extra point leaves the entry (Point refuses it)"
+	)
+end
+L1.group("l3w2 defTests", W2L3.defTests)
+
+function W2L3.pointTests(): ()
+	print(" Point: a named point in the template's frame (L3-47, L3-48)")
+	local Look = W2L3.Look
+	local def = W2L3.entry("Broadsword")
+	check(W2L3.at(Look.Point(def, "tip"), 0, 0.1, -3), "the tip")
+	check(W2L3.at(Look.Point(def, "grip"), 0, 0, 0), "the grip, the origin")
+	check(W2L3.at(Look.Point(def, "bladeBase"), 0, 0, -0.6), "an extra the builders wrote")
+	check(Look.Point(def, "nock") == nil, "an absent point: nil")
+	def.points.bladeBase = { 0, 0 }
+	check(Look.Point(def, "bladeBase") == nil, "a point of two numbers: nil")
+	def.points.bladeBase = { 0, W2L3.NAN, 1 }
+	check(Look.Point(def, "bladeBase") == nil, "a point with a NaN: nil")
+	def.points.bladeBase = { 0, 0, -math.huge }
+	check(Look.Point(def, "bladeBase") == nil, "a point with an infinite number: nil")
+	def.points.bladeBase = "0 0 -1"
+	check(Look.Point(def, "bladeBase") == nil, "a point that is no table: nil")
+	check(Look.Point({ model = "X" } :: any, "tip") == nil, "an entry with no points: nil")
+	check(Look.Point(nil :: any, "tip") == nil, "no entry: nil")
+end
+L1.group("l3w2 pointTests", W2L3.pointTests)
+
+function W2L3.iconTests(): ()
+	print(" IconId: the shelf icon, else 0 (L3-48, L3-57)")
+	local Look = W2L3.Look
+	local config = W2L3.config()
+	local id = 123456789
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", id), config, "broadsword") == id,
+		"the id when all is there"
+	)
+	check(Look.IconId(nil, config, "broadsword") == 0, "no assets: 0")
+	check(
+		Look.IconId({ version = 4, textures = {}, eras = {} } :: any, config, "broadsword") == 0,
+		"no icons: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Tools", "Broadsword", id), config, "broadsword") == 0,
+		"no set: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Longbow", id), config, "broadsword") == 0,
+		"no model: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "broadsword", id), config, "broadsword") == 0,
+		"keyed by the model name, never the family id"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", 0), config, "broadsword") == 0,
+		"imageId 0: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", -5), config, "broadsword") == 0,
+		"negative: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", 12.5), config, "broadsword") == 0,
+		"fractional: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", "123"), config, "broadsword") == 0,
+		"a string: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", W2L3.NAN), config, "broadsword") == 0,
+		"NaN: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", math.huge), config, "broadsword") == 0,
+		"infinite: 0"
+	)
+	local noImage = W2L3.assets("Weapons", "Broadsword", id)
+	noImage.icons.Weapons.Broadsword.imageId = nil
+	check(Look.IconId(noImage, config, "broadsword") == 0, "an icon with no imageId: 0")
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", id), nil, "broadsword") == 0,
+		"no models file: 0"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Spear", id), config, "spear") == 0,
+		"a family with no entry: 0"
+	)
+	local mismatched = W2L3.with(function(e)
+		e.model = "Longbow"
+	end)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Longbow", id), mismatched, "broadsword") == 0,
+		"an entry Def refuses: 0"
+	)
+	local moved = W2L3.config()
+	moved.folder = "Arms"
+	check(
+		Look.IconId(W2L3.assets("Arms", "Broadsword", 7), moved, "broadsword") == 7,
+		"the set is the file's folder"
+	)
+	check(
+		Look.IconId(W2L3.assets("Weapons", "Broadsword", 7), moved, "broadsword") == 0,
+		"and only that folder"
+	)
+end
+L1.group("l3w2 iconTests", W2L3.iconTests)
+
+function W2L3.problemTests(): ()
+	print(" Problems: every fault of a models file, on built copies (L3-48)")
+	local Look = W2L3.Look
+	local weapons = W2L3.WEAPONS
+	local clean = Look.Problems(W2L3.config(), weapons)
+	check(#clean == 0, `a whole file has no problem ({clean[1] or ""})`)
+	local absent = Look.Problems(nil, weapons)
+	check(
+		#absent == 1 and W2L3.has(absent, "no families"),
+		"no file: one problem, every hand empty"
+	)
+	-- One fault each: exactly one problem, and it names the family and the fault.
+	local cases = {
+		{
+			"a missing family",
+			"longbow: no model entry",
+			function(_e, c)
+				c.families.longbow = nil
+			end,
+		},
+		{
+			"an extra family",
+			"dagger: not a weapons family",
+			function(_e, c)
+				c.families.dagger = W2L3.entry("Dagger")
+			end,
+		},
+		{
+			"the grip off the origin",
+			"broadsword: its grip is not the origin",
+			function(e)
+				e.points.grip = { 0, 0.1, 0 }
+			end,
+		},
+		{
+			"a point outside its bounds",
+			"broadsword: its tip lies outside its bounds",
+			function(e)
+				e.points.tip = { 0, 0.1, -3.02 }
+			end,
+		},
+		{
+			"a point outside its bounds above",
+			"broadsword: its bladeBase lies outside its bounds",
+			function(e)
+				e.points.bladeBase = { 0, 0.72, -0.6 }
+			end,
+		},
+		{
+			"a malformed extra",
+			"broadsword: its bladeBase is not three finite numbers",
+			function(e)
+				e.points.bladeBase = { 0, 0 }
+			end,
+		},
+		{
+			"a model that breaks the name rule",
+			"broadsword: its model broadsword is not Broadsword",
+			function(e)
+				e.model = "broadsword"
+			end,
+		},
+		{
+			"no tip",
+			"broadsword: its tip is not three finite numbers",
+			function(e)
+				e.points.tip = nil
+			end,
+		},
+		{
+			"bounds turned over",
+			"broadsword: its bounds.min lies above its bounds.max",
+			function(e)
+				e.bounds.min[2] = 0.9
+			end,
+		},
+		{
+			"no folder",
+			"WeaponModels.json names no folder",
+			function(_e, c)
+				c.folder = ""
+			end,
+		},
+	}
+	for _, case in cases do
+		local problems = Look.Problems(W2L3.with(case[3]), weapons)
+		check(
+			#problems == 1 and problems[1] == case[2],
+			`{case[1]}: "{case[2]}" ({#problems}: {problems[1] or ""})`
+		)
+	end
+	local slack = Look.Problems(
+		W2L3.with(function(e)
+			e.points.tip = { 0, 0.1, -3.005 }
+			e.points.holster = { 0.205, 0, -1.5 }
+		end),
+		weapons
+	)
+	check(#slack == 0, `a point 0.005 outside its bounds is inside the slack ({slack[1] or ""})`)
+	local both = Look.Problems(
+		W2L3.with(function(e, c)
+			e.points.tip = { 0, 0.1, -3.05 }
+			c.families.longbow.points.grip = { 0.01, 0, 0 }
+		end),
+		weapons
+	)
+	check(
+		W2L3.same(both, {
+			"broadsword: its tip lies outside its bounds",
+			"longbow: its grip is not the origin",
+		}),
+		`two faults in two families, sorted by family ({table.concat(both, "; ")})`
+	)
+end
+L1.group("l3w2 problemTests", W2L3.problemTests)
+
+-- WeaponModels.json as it ships (L3-46): the 15 families, whole, and no fault.
+function W2L3.shippedTests(): ()
+	print(" WeaponModels.json as it ships (L3-46)")
+	local Look = W2L3.Look
+	local models = FIXTURES.weaponModels
+	if type(models) ~= "table" then
+		check(false, "src/shared/Config/WeaponModels.json is there")
+		return
+	end
+	check(models.version == 1 and models.folder == "Weapons", "version 1, folder Weapons")
+	local problems = Look.Problems(models, FIXTURES.proving.weapons)
+	check(
+		#problems == 0,
+		`Problems finds nothing ({#problems}{if #problems > 0 then ": " .. problems[1] else ""})`
+	)
+	local whole = {}
+	local count = 0
+	for family in models.families do
+		count += 1
+		local def = Look.Def(models, family)
+		if def ~= nil and def.model == W2L3.MODELS[family] and Look.Point(def, "tip") ~= nil then
+			table.insert(whole, family)
+		end
+	end
+	check(count == 15 and #whole == 15, `all 15 families have a whole entry ({#whole} of {count})`)
+	local away = {}
+	for family in models.families do
+		local def = Look.Def(models, family)
+		local tip = if def ~= nil then Look.Point(def, "tip") else nil
+		if tip == nil or tip.Magnitude < 0.3 then
+			table.insert(away, family)
+		end
+	end
+	table.sort(away)
+	check(
+		#away == 0,
+		`every tip lies away from its grip, so a muzzle is never the hand ({table.concat(away, ", ")})`
+	)
+end
+L1.group("l3w2 shippedTests", W2L3.shippedTests)
+
+-- T1 to T14 (docs/prompts/l3-w2-contract.md §9), read as text: key = { expected count, what it pins }.
+W2L3.LINES = {
+	-- T1: WeaponService's one writer of the attributes.
+	showSignature = { 1, "T1: showWeapons(shooter, character?) is the one writer" },
+	showTarget = {
+		1,
+		"T1: it writes on the character given, else the live one, and nothing without one",
+	},
+	showValues = {
+		1,
+		"T1: every value of WeaponLook.Values(shooter.loadout, shooter.held) goes on it",
+	},
+	showExits = { 1, "T1: showWeapons' one way out is the missing character" },
+	showCalls = {
+		4,
+		"T1: showWeapons is defined once and called three times (PrepareCharacter, SetFamily, noteHeld)",
+	},
+	lookReads = { 1, "T1: WeaponService reads WeaponLook only for the values it writes" },
+	-- T2: every fresh character.
+	prepareShow = {
+		1,
+		"T2: PrepareCharacter shows the weapons inside `if shooter ~= nil then`, after resetAir",
+	},
+	prepareActive = { 1, "T2: its one guard is the inactive service" },
+	prepareExits = { 1, "T2: and PrepareCharacter has no other way out" },
+	addPrepares = { 1, "T2: a mission's admit prepares the character it finds" },
+	rangePrepares = { 1, "T2: the range prepares every character it places" },
+	missionHook = { 1, "T2: a mission's every later character goes through the hook" },
+	-- T3: every loadout change.
+	familyShow = {
+		1,
+		"T3: SetFamily shows the pair after writing it and drawStartedAt = 0, outside `if previous ~= family`",
+	},
+	familySlot = { 1, "T3: SetFamily's slot is the family's own" },
+	familyExits = { 3, "T3: SetFamily's ways out: no shooter, no family, done" },
+	-- T4, T5: an accepted attack and draw.
+	attackHeld = { 1, "T4: OnAttack notes the slot on the line after the acceptance (lastSeq)" },
+	attackSlot = { 1, "T4: OnAttack's slot is the attacking family's own" },
+	attackExits = { 12, "T4: OnAttack's ways out are its refusals, none after the acceptance" },
+	drawHeld = { 1, "T5: OnDraw notes the slot on the line after the draw is stamped, its last" },
+	drawSlot = { 1, "T5: OnDraw's slot is the drawing family's own" },
+	drawExits = { 3, "T5: OnDraw's ways out are its refusals" },
+	-- T6: an accepted cast.
+	castHeld = { 1, "T6: OnCast notes the cast's slot on the line after its acceptance (lastSeq)" },
+	castSlot = { 1, "T6: the cast's slot is its own" },
+	castNotes = { 1, "T6: AbilityService tells WeaponService once" },
+	castExits = { 9, "T6: OnCast's ways out are its refusals, none after the acceptance" },
+	-- T7: shown only on a change.
+	noteBody = { 1, "T7: noteHeld returns on the same slot, else writes it and shows it" },
+	noteExits = { 1, "T7: noteHeld's one way out is the same slot" },
+	noteGuard = { 1, "T7: NoteHeld ignores a player without weapons and any other slot word" },
+	noteCall = { 1, "T7: and notes melee or ranged" },
+	NoteExits = { 1, "T7: NoteHeld's one way out is its guard" },
+	noteCalls = { 4, "T7: noteHeld is defined once and called by OnAttack, OnDraw and NoteHeld" },
+	heldWrites = { 1, "T7: `held` is written in noteHeld alone" },
+	loadoutWrites = { 2, "T1, T3: the held pair is written in SetFamily alone, which shows it" },
+	addHeld = { 1, "T7: a new shooter holds melee, the client's starting stance" },
+	-- T8: no hit reads the look.
+	hit_damageScale = { 0, "T8: damageScale reads no look" },
+	hit_meleeOrigin = { 0, "T8: meleeOrigin reads no look" },
+	hit_aimAllowed = { 0, "T8: aimAllowed reads no look" },
+	hit_claimSlack = { 0, "T8: claimSlack reads no look" },
+	hit_resolveMelee = { 0, "T8: resolveMelee reads no look" },
+	hit_resolveRanged = { 0, "T8: resolveRanged reads no look" },
+	hit_strike = { 0, "T8: strike reads no look" },
+	-- T9: another player's arm.
+	otherInBranch = {
+		1,
+		"T9: SwingOther(strike.userId, strike.step or 1) inside `elseif swing and not mine then`",
+	},
+	otherCalls = { 1, "T9: FeedbackController calls SwingOther there alone" },
+	otherRequire = { 1, "T9: FeedbackController requires WeaponController" },
+	otherMine = { 1, "T9: mine is the strike's own user" },
+	otherSwing = { 1, "T9: a swing is a weapon's melee strike, never an ability or a tick" },
+	otherWired = { 1, "T9: onStrike is reached from the strike remote" },
+	strikeExits = {
+		1,
+		"T9: onStrike's one way out before the SwingOther call is an empty flight's end (ruling 7)",
+	},
+	-- T10: one muzzle.
+	feedbackHand = { 0, 'T10: no "RightHand" in FeedbackController' },
+	feedbackOwnMuzzle = { 0, "T10: FeedbackController has no muzzleOf of its own" },
+	feedbackHeld = { 7, "T10: its seven tracer sites call (HeldWeapons.Muzzle(userId))" },
+	feedbackMuzzles = { 7, "T10: and FeedbackController asks for the muzzle nowhere else" },
+	flameHand = { 0, 'T10: no "RightHand" in FlameFx' },
+	flameHeld = {
+		1,
+		"T10: FlameFx's muzzleOf asks HeldWeapons.Muzzle for the point and where it is from",
+	},
+	flamePush = { 1, "T10: and pushes it along the aim only when it is not a model's tip" },
+	sharedHands = { 1, 'T10: AbilityFx/Shared names "RightHand" once ...' },
+	sharedHandOf = { 1, "T10: ... inside handOf" },
+	sharedHeld = {
+		1,
+		"T10: AbilityFx/Shared's muzzleOf asks HeldWeapons.Muzzle, the fallback with no character",
+	},
+	sharedPush = { 1, "T10: and pushes the point along the aim only when it is not a model's tip" },
+	magMuzzles = { 2, "T10: MagDump's two `muzzle =` lines ..." },
+	magFromHelper = { 2, "T10: ... both take it from muzzleOf" },
+	magHelper = { 1, "T10: MagDump's muzzleOf is AbilityFx/Shared's" },
+	magOldMuzzle = { 0, "T10: MagDump no longer pushes its hand forward itself" },
+	pointIsHelper = { 1, "T10: WeaponController's muzzlePoint is the helper call alone" },
+	heldHands = { 1, 'T10: HeldWeapons names "RightHand" once ...' },
+	heldHandList = { 1, "T10: ... in its one hand list" },
+	heldFallback = { 1, "T10: HeldWeapons.Muzzle falls back to that list's hand" },
+	heldTip = {
+		1,
+		"T10: HeldWeapons.Muzzle answers the tip of the model in the hand, from a model",
+	},
+	controllerCycle = {
+		0,
+		"L3-53: WeaponController requires neither FeedbackController nor InputController",
+	},
+	heldCycle = { 0, "L3-53: HeldWeapons requires none of the controllers that call it" },
+	heldStarted = { 1, "L3-51: WeaponController.Start starts HeldWeapons" },
+	heldStance = { 1, "L3-54: SetStance cancels the pose and hands HeldWeapons the local stance" },
+	-- T11 to T13: HeldWeapons.
+	heldClones = { 1, "T11: HeldWeapons clones in one place ..." },
+	modelClones = { 1, "T11: ... modelFor" },
+	heldCached = { 1, "T11: modelFor answers from the cache first" },
+	cacheBeforeClone = { 1, "T11: the clone comes after the cache's answer" },
+	heldFrames = { 0, "T11: no RunService in HeldWeapons (never per frame)" },
+	sealCalls = { 1, "T12: modelFor seals the clone" },
+	sealBeforeParent = { 1, "T12: before its first parent" },
+	sealLoop = { 1, "T12: seal visits every BasePart of the clone" },
+	seal1 = { 1, "T12: seal unanchors" },
+	seal2 = { 1, "T12: seal turns collisions off" },
+	seal3 = { 1, "T12: seal turns queries off" },
+	seal4 = { 1, "T12: seal turns touches off" },
+	seal5 = { 1, "T12: seal makes it massless" },
+	heldDeep = { 0, "T13: no recursive FindFirstChild in HeldWeapons" },
+	-- T14: the stage's turn.
+	stageReduced = { 0, "T14: ArmoryStage never reads Theme.reducedMotion" },
+	stageFrames = { 1, "T14: ArmoryStage connects RenderStepped once ..." },
+	activeFrames = { 1, "T14: ... in SetActive ..." },
+	gatedFrames = { 1, "T14: ... behind `not Theme.lowEndDevice`" },
+	stagePoses = { 1, "T14: the model is posed once ..." },
+	selectPoses = { 1, "T14: ... in the select path" },
+	selectPose = { 1, "T14: to the display pose, the tip rising by ARMORY_STAGE_TILT_DEGREES" },
+	screenActive = {
+		1,
+		"T14: the screen turns the stage on while open on the Weapons tab, off on the others",
+	},
+	screenClosed = { 1, "T14: and off when it closes" },
+	-- The lead's ruling 6 (§11), HeldWeapons: the hold each slot hangs by, and the raised hand.
+	hangHold = {
+		1,
+		"R6: the back holds by COMBAT_HOLD_BACK, a ranged hand _GRIP_RANGED, a melee hand _GRIP_MELEE",
+	},
+	hangPoint = { 1, "R6: the hand hangs a model by its grip, the back by its holster" },
+	hangWeld = {
+		1,
+		"R6: the weld takes the attachment, the hold and the point, then the model hangs",
+	},
+	hangExits = { 4, "R6: hang's ways out: no family, no mount, no model, hung" },
+	showSlot = {
+		1,
+		"R6: the slot in use is the local stance for the local character, WeaponHeld for others",
+	},
+	showRaised = {
+		1,
+		"R6: the hand is held as its slot holds, raised only while a ranged model is in it",
+	},
+	showTold = { 1, "R6: each change of the raised hand is kept and told to the listener" },
+	heldShowExits = {
+		2,
+		"R6: show's one way out is a character gone (and the attribute reader's answer)",
+	},
+	holdSet = { 1, "R6: OnHold keeps the listener" },
+	holdReplay = { 1, "R6: and tells it at once of every hand already raised" },
+	holdSetExits = { 1, "R6: OnHold's one way out is a cleared listener" },
+	-- Ruling 6, WeaponController: every pose ends at the rest.
+	restRaise = { 1, "R6: the rest is COMBAT_HOLD_RANGED_RAISE_DEGREES for a raised hand, else 0" },
+	restAngle = { 1, "R6: the rest frame turns the hanging arm by the rest" },
+	cancelRest = { 1, "R6: cancelRig ends with motor.C0 = restFrame(rig)" },
+	cancelExits = { 0, "R6: cancelRig has no way out before it" },
+	setRestWrite = { 1, "R6: setRest writes a new rest" },
+	swingSettle = { 1, "R6: the swing's last leg goes back to rig.rest" },
+	swingExits = { 5, "R6: swingRig's ways out are its old ones" },
+	releaseRest = { 1, "R6: Release goes back to localPose.rest" },
+	releaseExits = { 1, "R6: Release's one way out is a missing shoulder" },
+	kickRest = { 1, "R6: the shot kick is localPose.rest + COMBAT_SHOOT_KICK_DEGREES" },
+	kickReleased = { 1, "R6: and the kick is released back to the rest" },
+	holdWired = { 1, "R6: Start hands HeldWeapons.OnHold(onHold) before HeldWeapons.Start()" },
+	onHoldBody = { 1, "R6: onHold keeps the raised hand and eases the other's or the local rest" },
+	onHoldExits = { 0, "R6: onHold has no way out" },
+	bindRest = { 1, "R6: the local shoulder, once found, takes the rest at once" },
+	remoteRest = { 1, "R6: another player's record starts at its rest" },
+	restWrites = { 6, "R6: the rest is written by setRest, the records' starts and resets only" },
+	raisedWrites = { 1, "R6: the raised set is written by onHold alone" },
+}
+
+function W2L3.sourceTests(): ()
+	print(" T1 to T14 and ruling 6, read as text (L3-49 to L3-56, §11 item 6)")
+	local reading = FIXTURES.source.l3w2
+	local missing = {}
+	for name, found in reading.found do
+		if not found then
+			table.insert(missing, name)
+		end
+	end
+	table.sort(missing)
+	check(
+		#missing == 0,
+		`every function the lines live in is there ({table.concat(missing, ", ")})`
+	)
+	local unknown = {}
+	for key in reading.counts do
+		if W2L3.LINES[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	table.sort(unknown)
+	check(
+		#unknown == 0,
+		`every line read has an expected count here ({table.concat(unknown, ", ")})`
+	)
+	local keys = {}
+	for key in W2L3.LINES do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local expected = W2L3.LINES[key]
+		local count = reading.counts[key]
+		check(
+			count == expected[1],
+			`{expected[2]} ({key}: {tostring(count)}, expected {expected[1]})`
+		)
+	end
+end
+L1.group("l3w2 sourceTests", W2L3.sourceTests)
+
+print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

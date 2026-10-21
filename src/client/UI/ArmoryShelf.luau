@@ -9,6 +9,19 @@
 -- card is dark. Tapping a card selects it; so does a gamepad's selection landing on it, so the
 -- stage follows the d-pad. Every card is at least 48 design px tall (44 physical at MIN_SCALE).
 -- Presses go through the screen's router (deps.bind), which also serves gamepad A.
+--
+-- L3 W2 (docs/prompts/l3-w2-contract.md, L3-57): a family with a harvested icon (Assets.json v5
+-- `icons`, through WeaponLook.IconId) shows it under a one-line name, the tier line in the
+-- card's lower right and the element's dot on the icon's empty upper-left corner (Theme's
+-- ARMORY_SCREEN_CARD_ICON block has the numbers); an unowned family's icon is a near-black
+-- silhouette. Without an icon (id 0: no config, not harvested, in moderation) a card is W1's
+-- text card exactly. The card's size never changes, so the screen's fits hold either way.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local WeaponLook = require(sharedFolder:WaitForChild("WeaponLook"))
 
 local ArmoryModel = require(script.Parent:WaitForChild("ArmoryModel"))
 local Create = require(script.Parent:WaitForChild("Create"))
@@ -41,13 +54,67 @@ type CardFrame = {
 	dot: Frame,
 	bar: Frame,
 	stroke: UIStroke,
+	icon: ImageLabel,
+	-- The icon's image id as last shown; 0 = the text card.
+	iconId: number,
 	unbind: () -> (),
 	selectionConnection: RBXScriptConnection,
 }
 
 local NOT_FOUND = "Not found"
+local WHITE = Color3.new(1, 1, 1)
 
 local ArmoryShelf = {}
+
+-- Where a card's parts sit: W1's text card, or the icon card (L3-57). Sizes and colours that
+-- follow the state are paint's.
+local function shape(card: CardFrame, withIcon: boolean): ()
+	local name = card.name
+	local tier = card.tier
+	local dot = card.dot
+	card.icon.Visible = withIcon
+	if not withIcon then
+		local pad = Theme.ARMORY_SCREEN_CARD_PAD
+		name.Position = UDim2.fromOffset(pad, pad)
+		-- The whole width: a portrait card is 68 wide, and "Flamethrower" scales down to fit
+		-- (never below CARD_NAME_MIN_TEXT, the bottom bar's floor) rather than truncate.
+		name.Size = UDim2.new(1, -pad * 2, 0, Theme.ARMORY_SCREEN_CARD_NAME_HEIGHT)
+		name.TextWrapped = true
+		tier.AnchorPoint = Vector2.new(0, 1)
+		tier.Position = UDim2.new(0, pad, 1, -pad)
+		tier.TextXAlignment = Enum.TextXAlignment.Left
+		tier.TextYAlignment = Enum.TextYAlignment.Center
+		tier.TextWrapped = false
+		-- Beside the tier, so the name keeps the card's width.
+		dot.AnchorPoint = Vector2.new(1, 0.5)
+		dot.Position = UDim2.new(1, -pad, 1, -pad - (Theme.ARMORY_SCREEN_CARD_TIER_TEXT + 2) / 2)
+		return
+	end
+	local pad = Theme.ARMORY_SCREEN_CARD_ICON_PAD
+	local nameHeight = Theme.ARMORY_SCREEN_CARD_NAME_TEXT + 2
+	local iconTop = Theme.ARMORY_SCREEN_CARD_ICON_TOP + nameHeight
+	-- One line: it scales down (never below CARD_NAME_MIN_TEXT) and never wraps mid-word.
+	name.Position = UDim2.fromOffset(pad, Theme.ARMORY_SCREEN_CARD_ICON_TOP)
+	name.Size = UDim2.new(1, -pad * 2, 0, nameHeight)
+	name.TextWrapped = false
+	card.icon.Position = UDim2.fromOffset(pad, iconTop)
+	-- From the icon's middle to the card's edge, above the held bar, wrapping at the space: a
+	-- portrait card's "Not found" stands as two lines in the icon's empty lower-right corner.
+	local left = pad + Theme.ARMORY_SCREEN_CARD_ICON / 2
+	tier.AnchorPoint = Vector2.new(0, 0)
+	tier.Position = UDim2.fromOffset(left, iconTop)
+	tier.Size = UDim2.new(
+		1,
+		-(left + pad),
+		0,
+		Theme.ARMORY_SCREEN_CARD_HEIGHT - Theme.ARMORY_SCREEN_CARD_HELD_BAR - iconTop
+	)
+	tier.TextXAlignment = Enum.TextXAlignment.Right
+	tier.TextYAlignment = Enum.TextYAlignment.Bottom
+	tier.TextWrapped = true
+	dot.AnchorPoint = Vector2.new(0, 0)
+	dot.Position = UDim2.fromOffset(pad, iconTop)
+end
 
 local function label(name: string, size: number, parent: Instance): TextLabel
 	return Create("TextLabel", {
@@ -120,11 +187,6 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 				Parent = button,
 			}) :: UIStroke
 			local name = label("Name", Theme.ARMORY_SCREEN_CARD_NAME_TEXT, button)
-			name.Position = UDim2.fromOffset(pad, pad)
-			-- The whole width: a portrait card is 68 wide, and "Flamethrower" scales down to fit
-			-- (never below CARD_NAME_MIN_TEXT, the bottom bar's floor) rather than truncate.
-			name.Size = UDim2.new(1, -pad * 2, 0, Theme.ARMORY_SCREEN_CARD_NAME_HEIGHT)
-			name.TextWrapped = true
 			name.TextScaled = true
 			Create("UITextSizeConstraint", {
 				MaxTextSize = Theme.ARMORY_SCREEN_CARD_NAME_TEXT,
@@ -134,8 +196,6 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 			name.TextTruncate = Enum.TextTruncate.AtEnd
 			name.TextYAlignment = Enum.TextYAlignment.Top
 			local tier = label("Tier", Theme.ARMORY_SCREEN_CARD_TIER_TEXT, button)
-			tier.AnchorPoint = Vector2.new(0, 1)
-			tier.Position = UDim2.new(0, pad, 1, -pad)
 			tier.Size = UDim2.new(1, -pad * 2, 0, Theme.ARMORY_SCREEN_CARD_TIER_TEXT + 2)
 			-- 4-s1: the line shrinks (to the names' floor) rather than run under the element's
 			-- dot: "Not found" is about 55 px at 11, and a portrait card leaves it 47 beside one.
@@ -148,14 +208,6 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 			local dot = Create("Frame", {
 				Name = "Element",
 				Active = false,
-				-- Beside the tier, so the name keeps the card's width.
-				AnchorPoint = Vector2.new(1, 0.5),
-				Position = UDim2.new(
-					1,
-					-pad,
-					1,
-					-pad - (Theme.ARMORY_SCREEN_CARD_TIER_TEXT + 2) / 2
-				),
 				Size = UDim2.fromOffset(Theme.ARMORY_SCREEN_CARD_DOT, Theme.ARMORY_SCREEN_CARD_DOT),
 				BorderSizePixel = 0,
 				Visible = false,
@@ -180,7 +232,22 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 				ZIndex = Theme.ZINDEX_CARD,
 				Parent = button,
 			}) :: Frame
-			table.insert(cards, {
+			-- Under the card's text and dot (one ZIndex below its siblings).
+			local icon = Create("ImageLabel", {
+				Name = "Icon",
+				Active = false,
+				BackgroundTransparency = 1,
+				Image = "",
+				ScaleType = Enum.ScaleType.Fit,
+				Size = UDim2.fromOffset(
+					Theme.ARMORY_SCREEN_CARD_ICON,
+					Theme.ARMORY_SCREEN_CARD_ICON
+				),
+				Visible = false,
+				ZIndex = Theme.ZINDEX_CARD - 1,
+				Parent = button,
+			}) :: ImageLabel
+			local card: CardFrame = {
 				family = family,
 				button = button,
 				name = name,
@@ -189,6 +256,8 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 				dot = dot,
 				bar = bar,
 				stroke = stroke,
+				icon = icon,
+				iconId = 0,
 				unbind = deps.bind(button, function()
 					deps.onSelect(family)
 				end),
@@ -196,14 +265,28 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 				selectionConnection = button.SelectionGained:Connect(function()
 					deps.onSelect(family)
 				end),
-			})
+			}
+			shape(card, false)
+			table.insert(cards, card)
 		end
 	end
 
 	local function paint(list: { ArmoryModel.Card }, selected: string?): ()
+		-- Read per paint: Assets.json may still be arriving when the screen first opens.
+		local assets = Catalog.GetAssetsConfig()
+		local models = Catalog.GetWeaponModelsConfig()
 		for index, model in list do
 			local card = cards[index]
 			local owned = model.owned
+			local iconId = WeaponLook.IconId(assets, models, model.family)
+			if iconId ~= card.iconId then
+				card.iconId = iconId
+				card.icon.Image = if iconId > 0
+					then string.format("rbxassetid://%d", iconId)
+					else ""
+				shape(card, iconId > 0)
+			end
+			card.icon.ImageColor3 = if owned then WHITE else Theme.ARMORY_STAGE_SILHOUETTE
 			card.button.BackgroundColor3 = if owned
 				then Theme.MAP_COLOR_PANEL_LIGHT
 				else Theme.ARMORY_SCREEN_CARD_DARK
@@ -223,13 +306,16 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 			local color = if element ~= nil
 				then Theme.ARMORY_SCREEN_ELEMENT_COLORS[element]
 				else nil
-			-- The tier line ends where the dot starts, when there is one.
-			local pad = Theme.ARMORY_SCREEN_CARD_PAD
-			local dotRoom = if color ~= nil
-				then Theme.ARMORY_SCREEN_CARD_DOT + Theme.ARMORY_SCREEN_CARD_DOT_GAP
-				else 0
-			card.tier.Size =
-				UDim2.new(1, -(pad * 2 + dotRoom), 0, Theme.ARMORY_SCREEN_CARD_TIER_TEXT + 2)
+			-- A text card's tier line ends where the dot starts, when there is one (an icon card's
+			-- dot sits on the icon, and shape sized its tier line).
+			if card.iconId == 0 then
+				local pad = Theme.ARMORY_SCREEN_CARD_PAD
+				local dotRoom = if color ~= nil
+					then Theme.ARMORY_SCREEN_CARD_DOT + Theme.ARMORY_SCREEN_CARD_DOT_GAP
+					else 0
+				card.tier.Size =
+					UDim2.new(1, -(pad * 2 + dotRoom), 0, Theme.ARMORY_SCREEN_CARD_TIER_TEXT + 2)
+			end
 			card.dot.Visible = color ~= nil
 			if color ~= nil then
 				card.dot.BackgroundColor3 = color

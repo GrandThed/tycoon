@@ -121,15 +121,18 @@ def vector3(name: str, v, indent: str) -> list[str]:
     ]
 
 
-def coordinate_frame(name: str, position, indent: str, turned: bool = False) -> list[str]:
-    """`turned` writes R00 = R22 = -1: the 180 deg turn about Y that undoes the importer's own."""
+IDENTITY = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
+# The 180 deg turn about Y, R . (a, b, c) = (-a, b, -c): the importer's own turn, and its undoing.
+TEMPLATE_TURN = ((-1, 0, 0), (0, 1, 0), (0, 0, -1))
+
+
+def coordinate_frame(name: str, position, indent: str, rotation=IDENTITY) -> list[str]:
+    """`rotation` is written row by row as R00 .. R22 (TEMPLATE_TURN writes R00 = R22 = -1)."""
     lines = [f'{indent}<CoordinateFrame name="{name}">']
     lines += [f"{indent}  <X>{num(position[0])}</X>", f"{indent}  <Y>{num(position[1])}</Y>", f"{indent}  <Z>{num(position[2])}</Z>"]
-    flip = -1 if turned else 1
     for row in range(3):
         for col in range(3):
-            value = 0 if row != col else (flip if row in (0, 2) else 1)
-            lines.append(f"{indent}  <R{row}{col}>{value}</R{row}{col}>")
+            lines.append(f"{indent}  <R{row}{col}>{rotation[row][col]}</R{row}{col}>")
     lines.append(f"{indent}</CoordinateFrame>")
     return lines
 
@@ -150,8 +153,17 @@ def harvested_cframe(offset, indent: str, lift: float = 0.0) -> list[str]:
     props and baked path pieces all go through here; `lift` is the path layers' height above the
     plot top and is 0 for the rest.
     """
+    position, rotation = template_placement(offset, lift)
+    return coordinate_frame("CFrame", position, indent, rotation)
+
+
+def template_placement(offset, lift: float = 0.0) -> tuple[tuple[float, float, float], tuple]:
+    """Where `harvested_cframe` puts a harvested mesh in its template: the offset with x and z
+    negated (lifted by `lift`), turned by TEMPLATE_TURN. Pure, so tools/assets/weapon_frames.py
+    proves the template frame against harvested data through the very arithmetic the templates use.
+    """
     position = (-float(offset[0]), float(offset[1]) + lift, -float(offset[2]))
-    return coordinate_frame("CFrame", position, indent, turned=True)
+    return position, TEMPLATE_TURN
 
 
 class Referents:

@@ -2193,6 +2193,137 @@ Done once, at L4, in one sitting. Same dialogs as "C2 → 4. Republish BOTH plac
       "Shut Down All Servers"). Old servers would keep running the old save rules.
 - Never publish only one of the two.
 
+## L3 W2 — the asset run
+
+**One run, one paste** (docs/prompts/l3-w2-contract.md L3-40): 15 weapon models and 15 shelf icons,
+**30 uploads**, then **one harvest paste of 30 records**, then templates. The code wave does not wait
+for it: with no templates and no icons the hands stay empty and the Armory looks like W1. Ben's paste
+can come any time before his look; his look covers W1 and W2 together.
+
+**Where:** the worktree `C:\Users\benja\Desktop\tycoon-p5`, branch `l3-w2` (the new tools exist only
+there until it merges). Its `assets\` is the main checkout's (a junction) and `.env` is there. Python
+is `py`; the Blender line needs Git Bash; rojo needs `export PATH="$HOME/.rokit/bin:$PATH"`.
+
+**Rules for the lead:**
+- **Announce first.** Tell any other open Claude session before the uploads and before the harvest,
+  and wait for its answer.
+- **Never run an asset tool in `tycoon-c2` or `tycoon-m11`** before they merge `main`: their older
+  `assets_config.py` would erase the new `icons` block on its next save (L3-66).
+- `upload_models.py --props --dry-run` **writes `Assets.json`** (it pre-lists the 15 entries, ids 0).
+  `upload_icons.py --dry-run` writes nothing.
+- **Commit `src/shared/Config/Assets.json` right after the uploads, and again right after the
+  harvest.**
+- A non-zero `modelAssetId` is never uploaded again, even when the GLB changed (L3-67): clear it
+  through `assets_config.save_assets` first. Icons are hash-checked: a changed PNG goes up again.
+- If a tool or Blender hangs, stop only your own process, by its id. Never by name.
+
+**The command lines were checked against the tools on 2026-10-20** (the scratch routing proof,
+L3-44, in `docs/prompts/l3-w2-reports/pipeline.md`): every flag exists; the 15 blueprints are in
+`tools/testfit/blueprints/_props/Weapons/` and none of the 15 is in `Assets.json`; the longest model
+name is 42 characters (`EraCityTycoon_Prop_Weapons_Flamethrower_S0`), the longest icon name 39
+(`EraCityTycoon_Icon_Weapons_Flamethrower`); nothing is waiting for a harvest besides these 30.
+
+- [x] 1. **Fresh palette and the re-merge** (pipeline engineer, done 2026-10-20 23:56; L3-41). Git
+      Bash:
+      ```
+      rm -f assets/build/palettes/weapon-kit.*
+      "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era Weapons
+      py tools/assets/weapon_frames.py --check
+      ```
+      - It ended `done: 15 blueprint(s), 0 with problems`. "geometry N studs below ground" on
+        every weapon is expected: the grip is the origin.
+      - The palette's colours, all 15 GLBs and all 15 sidecars came out byte-identical to the
+        older merge. `weapon_frames.py --check` passes (sidecar bounds and triangles = the frame
+        files').
+      - Redo it only if a weapon generator runs after this date.
+- [x] 2. **The 256 px icons** (pipeline engineer, done 2026-10-21 00:00; the lead's ruling 3):
+      ```
+      py tools/assets/upload_icons.py --set Weapons --make
+      ```
+      - It ended `made 15 icon(s) at 256 x 256 in assets/testfit/out/Weapons/icons256` (21–46 KB
+        each).
+      - Redo it only if a 512 render changes. The upload refuses an icon older than its render.
+- [ ] 3. **Lead: announce**, and check `git status` is clean in `tycoon-p5` on `l3-w2`.
+- [ ] 4. **Lead: upload the 15 models.**
+      ```
+      py tools/assets/upload_models.py --props --era Weapons --dry-run
+      py tools/assets/upload_models.py --props --era Weapons
+      ```
+      - Dry run: 15 `would upload props/Weapons/<Model> S0` lines, then `dry run: 15 upload(s)
+        prepared, nothing sent`.
+      - Real run: `uploaded 15/15`. On "Unknown Error", run the same line again: finished stages
+        are skipped.
+- [ ] 5. **Lead: upload the 15 icons.**
+      ```
+      py tools/assets/upload_icons.py --set Weapons --dry-run
+      py tools/assets/upload_icons.py --set Weapons
+      ```
+      - Dry run: 15 `would upload decal icon Weapons/<Model>` lines, then `dry run: 15 valid
+        icon(s), 15 upload(s) pending, nothing sent, nothing written`.
+      - Real run: `Weapons: uploaded 15/15`. On "Unknown Error", run the same line again.
+      - `Assets.json` becomes v5 (a new top-level `icons` block).
+      - **Commit `Assets.json` now.**
+- [ ] 6. **Lead: the harvest script**, then put it on the clipboard for Ben:
+      ```
+      py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip
+      ```
+      - Expect `wrote tools\assets\harvest.luau with 30 asset(s) to harvest`. Not 30: stop.
+- [ ] 7. **Ben: the one harvest paste.** Open the **local** file
+      `C:\Users\benja\Desktop\tycoon\build\test.rbxl` in Studio, with File (*Archivo*) → Open
+      (*Abrir*). **Not the published game. Do not press Play.**
+      1. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
+         Enter → wait for `[HARVEST-DONE] 30 loaded, 0 failed` in Output (*Salida*).
+      2. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
+      3. Tell Claude **"done"**, and nothing else. **Do not paste the Output into the chat, and do
+         not copy anything else** before Claude answers: your clipboard holds the result.
+      - If the number is not 30 or "failed" is not 0: tell Claude the line as it reads.
+- [ ] 8. **Lead: save the clipboard to a file first, count, then merge from the file.**
+      ```
+      powershell -NoProfile -Command "[IO.File]::WriteAllText('<a scratch file>', (Get-Clipboard -Raw), (New-Object Text.UTF8Encoding $false))"
+      grep -c '\[HARVEST\] {' <that scratch file>
+      py tools/assets/harvest.py --props --file <that scratch file>
+      ```
+      - The count must be 30 (`[HARVEST-FAIL]` appears once in a good Output: the echoed script).
+      - The merge prints `merged 15 prop stage(s)` and `merged 15 icon(s)`, then `every uploaded
+        asset is harvested; next: py tools/assets/gen_templates.py --props`.
+      - An icon still in moderation prints `no Decal Texture ... (still in moderation?); skipped`:
+        its card stays text. Repeat steps 6 to 8 later for it; never the uploaders.
+      - **Commit `Assets.json` now.**
+- [ ] 9. **Lead: the turn proof on the real harvest, before any template** (L3-47):
+      ```
+      py tools/assets/weapon_frames.py --check --require-harvest
+      ```
+      - Expect `15 of 15 harvested and proven (63 point(s))` and `CHECK: PASS`. **A failure stops
+        the run here**: no templates are written or committed. It names the weapon and the point.
+- [ ] 10. **Lead: templates and manifest.**
+      ```
+      py tools/assets/gen_templates.py --props
+      py tools/assets/gen_templates.py --check
+      py tools/gen_asset_manifest.py
+      py tools/gen_asset_manifest.py --check
+      ```
+      - `286 prop template(s): 15 written, 271 unchanged, 0 removed`, then `CHECK: PASS -- 569
+        template(s) up to date` (554 before).
+      - 15 new `templates/_props/Weapons/<Model>.rbxmx`: a Model with `Base` and `Stage0` holding
+        one MeshPart `weapon-kit`, CanCollide and CanQuery false.
+      - The manifest's Weapons summary reads 15/15 for blueprints, uploaded, harvested, templated,
+        icons uploaded and icons harvested.
+- [ ] 11. **Lead: sourcemaps and the six place files** (Git Bash, in `tycoon-p5`):
+      ```
+      export PATH="$HOME/.rokit/bin:$PATH"
+      rojo sourcemap default.project.json -o sourcemap.json
+      rojo sourcemap combat.project.json -o sourcemap.combat.json
+      rojo build -o build/test.rbxl
+      rojo build combat.project.json -o build/combat.rbxl
+      py tools/proving_project.py && rojo build .proving.project.json -o build/proving.rbxl
+      rojo build boomtown.project.json -o build/boomtown.rbxl
+      rojo build metropolis.project.json -o build/metropolis.rbxl
+      rojo build orbital.project.json -o build/orbital.rbxl
+      ```
+      Commit the templates, the manifest, `harvest.luau`, the sourcemaps and the place files.
+- 12. **If a record goes missing later:** repeat steps 6 to 10 only. Do **not** re-run the
+      uploaders.
+
 ## M10 — Icon, store icons, thumbnails
 
 Everything here is Creator Hub or Studio work; the art is generated offline and lives under the
