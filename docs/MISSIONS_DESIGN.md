@@ -570,3 +570,13 @@ lookout perches that out-earn on Hard join Normal's "fix in L4" known limit.
 **Wave 2 started (2026-10-20):** after the W1 merge Ben said *"lets do wave 2, i will test later"*. W2 puts the 15 models
 in the game (the turning stage, the shelf icons, weapons in hand that other players see), with one harvest paste; his
 Studio look covers W1 and W2 together. **[Ben]**
+
+## 25. L3 closed (2026-10-21)
+
+After the W2 merge and his harvest paste, Ben played and said *"everything feels good, lets close it"*. Studio's log
+shows one session of about 49 minutes on the rebuilt `proving.rbxl` with three Forest Road runs on Normal and no script
+error. **L3 (the Armory: tier windows per weapon, the upgrade loop with Forest Timber, the saved loadout and stars, the
+Armory screen in both places, the 15 weapon models in hand and on the stage) is closed on his word.** **[Ben]** His line is
+read as "about right" for the checklists' click questions (T2 a step, three runs a weapon, the screen, the turning
+weapon, the weapons in hand and on the back, the icons). Next: L4 (the real forest, the Camp Chief, the map in the hub,
+rewards balanced; the first version that may be published), only on his word.

@@ -2848,7 +2848,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 | L0 | Pictures: the map, Forest Road's plan, the Armory | Done 2026-10-13 |
 | L1 | Forest Road in grey: lobby camp, map, three camp parts, stand-in boss, difficulties | Merged 2026-10-14; L1b and L1c after it; closed 2026-10-16 on Ben's word |
 | L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | W1–W3 merged (2026-10-17 → 19); closed 2026-10-20 on Ben's word, with L1c |
-| L3 | The Armory: per-weapon tiers, the profile shape, weapon models | **Started 2026-10-20. W1 (tiers per weapon, the Armory screen in grey) built, reviewed 0 / 1 / 13, fix-diff 0 / 0 / 2, QA green; waits for the merge. The 15 weapon models approved by Ben 2026-10-20 (not uploaded). W2 (the models in the game) next, on Ben's word.** See "L3" below |
+| L3 | The Armory: per-weapon tiers, the profile shape, weapon models | **Closed 2026-10-21 on Ben's word ("everything feels good, lets close it"). W1 merged 448987e, W2 merged a454932, harvest 9524edf.** See "L3" below |
 | L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | Not started |
 | L5 | Friends: parties and revive in a level | Not started |
 
@@ -4538,8 +4538,8 @@ server and shared 0 / 0 / 5 + 4, client 0 / 0 / 3 + 7). All fixed or ruled:
 - [x] 15 models uploaded (`084a14f`)
 - [x] 15 icons uploaded (`d1c2f59`)
 - [x] `harvest.luau` emitted, 30 records (`4154715`)
-- [ ] Ben's harvest paste (step 7)
-- [ ] Lead: merge from the saved file, the turn proof on 15, templates, manifest, place files (steps 8–11)
+- [x] Ben's harvest paste (step 7)
+- [x] Lead: merge from the saved file, the turn proof on 15, templates, manifest, place files (steps 8–11)
 - Until the paste: hands stay empty and the Armory looks like W1's.
 
 **Gates:**
@@ -4605,19 +4605,29 @@ server and shared 0 / 0 / 5 + 4, client 0 / 0 / 3 + 7). All fixed or ruled:
 - [x] Fix 2, F1–F7 (`51a6529`, `315d725`)
 - [x] QA: full mutate 1,368 / 0 and the lead's line
 - [x] Merged to `main` (`448987e`), six place files rebuilt (`0fb03be`)
-- [ ] L3 Wave 1 playtest (Ben; in one session with W2)
+- [x] L3 Wave 1 playtest (Ben; in one session with W2)
 - [x] W2 contract (`eb1c25c`; rulings 6–7 `33ec9dc`)
 - [x] W2 uploads: 15 models (`084a14f`), 15 icons (`d1c2f59`), `harvest.luau` (`4154715`)
 - [x] W2 built (`8d9119e`)
 - [x] Reviewed: three slices, 0 / 0 / 11 + 15 (`5c0958b`)
 - [x] Fix round P1–P6, S1–S6, C1–C5 (`ff4b206`, `31b1947`)
 - [x] Fix-diff review 0 / 0 / 3 + 3 (`4411440`)
-- [ ] Fix 2, G1–G3 (ui-engineer)
-- [ ] QA quick gates and the lead's line
-- [ ] Ben's harvest paste (MANUAL_STEPS "L3 W2", step 7)
-- [ ] Lead: merge from the file, turn proof, templates, manifest, place files (steps 8–11)
-- [ ] Merged to `main`, six place files rebuilt (lead)
-- [ ] L3 Wave 2 playtest (Ben; in one session with W1)
+- [x] Fix 2, G1–G3 (ui-engineer)
+- [x] QA quick gates and the lead's line
+- [x] Ben's harvest paste (MANUAL_STEPS "L3 W2", step 7)
+- [x] Lead: merge from the file, turn proof, templates, manifest, place files (steps 8–11)
+- [x] Merged to `main`, six place files rebuilt (lead)
+- [x] L3 Wave 2 playtest (Ben; in one session with W1)
+
+**L3 closed (2026-10-21).** Ben: *"everything feels good, lets close it"*. Studio's log: one session of about 49 minutes
+on the rebuilt `proving.rbxl` (09:41–10:30 local, after the harvest 9524edf), three Forest Road runs on Normal (the
+first killed 30 raiders in two minutes, then ended at the run cap in stage 1; two abandoned in stage 1), no script error,
+crowd step p95 0.5–0.7 ms. The log cannot show the Armory, the levers or the city, and none of the checklists' click
+questions was answered: read as "about right". **Carried into L4 and later (owners):** the Theme round for the grip, back
+and stage light (lead + ui-engineer, from Ben's first screenshot); the two-client weapons check (Ben, when a friend
+joins); the phone fits with icons (Ben); the R15-only avatar setting before the L4 publish (lead, MANUAL_STEPS L4-0);
+growing looks need look attributes (L3-55); every item listed above under W1 and W2 stands. The publish freeze on both
+places holds until L4.
 
 ## M12 — Growing city
 

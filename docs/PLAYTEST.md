@@ -5623,7 +5623,7 @@ it all.
   Everything else in these nine steps reads the same.
 - **About 15 minutes. Play and keys only, no panel.** No sound.
 
-**Status 2026-10-21:** built, reviewed (four slices: 0 Critical, 1 Major, 13 Minor; fix-diff:
+**Closed 2026-10-21 on Ben's "everything feels good, lets close it"** (one ~49 min session on the rebuilt file; click questions unanswered). **Status 2026-10-21:** built, reviewed (four slices: 0 Critical, 1 Major, 13 Minor; fix-diff:
 0 / 0 / 2; all fixed), QA green, **merged to `main` 2026-10-20**. Your look waits for Wave 2:
 one session for both.
 
@@ -5780,7 +5780,7 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 3. "L3 Wave 1" step 9 and step 9 here, in `test.rbxl` (the city).
 4. Optional: the two-player step.
 
-**Status 2026-10-21:** built, reviewed (three slices: 0 Critical, 0 Major, 11 Minor; fix-diff:
+**Closed 2026-10-21 on Ben's "everything feels good, lets close it"** (one ~49 min session on the rebuilt file; click questions unanswered). **Status 2026-10-21:** built, reviewed (three slices: 0 Critical, 0 Major, 11 Minor; fix-diff:
 0 / 0 / 3; all fixed or ruled). The 15 models and 15 icons are uploaded. **Waiting on fix 2,
 QA, your harvest paste and the lead's merge word.**
 
