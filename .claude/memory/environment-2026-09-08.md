@@ -16,6 +16,12 @@ the old machine/profile and is stale on this one:
   Until the session restarts, run those roles through `general-purpose` with the persona
   text pasted in.
 
+**Two Pythons behind `py` (found 2026-10-21, L3 W2):** `py script.py` honours a `#!/usr/bin/env python` first line and
+then runs **Python 3.12 64-bit** (`C:\Users\benja\AppData\Local\Programs\Python\Python312\python.exe`, **no Pillow**);
+`py -c` and scripts without that line run **3.14 32-bit** (Pillow 12.3). That is why some gates differed between "32-
+and 64-bit Python" (chief-clearing note) and why a tool that needs Pillow must not carry the shebang (`upload_icons.py`
+has none). Say which Python a number came from.
+
 **How to apply:** at session start, verify `py -V`, `Test-Path ~/.rokit/bin/rojo.exe`, and
 `git ls-files --eol | grep -c w/crlf` before delegating QA; put the PATH line and `py` in
 every subagent prompt. See [[qa-runner-silent-finish]].
