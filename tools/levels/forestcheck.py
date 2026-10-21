@@ -2,6 +2,7 @@
 
 A fresh build in memory is compared with the committed data file, then every rule of
 tools/levels/forest.py's docstring is proved on that build. One line per failure, nothing written.
+`py tools/levels/forest.py mutants` breaks each rule once (`mutants` below) and proves it is caught.
 
   1. The data file equals a fresh build, and its planHash is the current inputs' (a layout, art
      or kit change since the last bake is a re-bake and a paste: "stale").
@@ -13,6 +14,11 @@ tools/levels/forest.py's docstring is proved on that build. One line per failure
   4. The region's walking space: inside any plateau cell, from its floor up to REACH_ABOVE, no
      dressing geometry stands more than 4 studs over the floor (0.3 of slack at a cell's edge),
      except a spawn tent inside its own layout marker.
+     4b. Rock in walking space (the rocks redone, 2026-10-21): over any walkable ground, from its
+     floor up to REACH_ABOVE, every vertex of the rock meshes lies on a collision solid's skin
+     (within ROCK_SKIN): the thin faces' blocks stand at most forest.THIN_OUT out of their wall,
+     and no column, cap or gully block reaches over a walker.
+     4c. No stone of the kit stands on walkable ground or water (the island shrine's ring aside).
   5. Camp C: nothing inside the walled rectangle rises over its wall's top, and no placed piece
      there over the top less the camp's sightMargin.
   6. Coplanar faces of two different looks never overlap (texture meshes, palette colours, props
@@ -33,6 +39,7 @@ import levelmesh as lm
 from levelmesh import Rect
 
 EDGE_SLACK = 0.3
+ROCK_SKIN = 0.3  # a rock block over walkable ground lies within this of a collision solid (forest.THIN_OUT 0.12)
 
 
 def run(build, data_path) -> list[str]:
@@ -52,6 +59,8 @@ def run(build, data_path) -> list[str]:
     out += collision_rules(fresh)
     out += barrier_rules(build, fresh)
     out += region_rule(build)
+    out += walking_space_rule(build)
+    out += stone_ground_rule(build)
     out += clearing_rule(build)
     out += coplanar_rule(build)
     out += kit.problems()
@@ -163,6 +172,63 @@ def region_rule(build) -> list[str]:
             if hit:
                 p = hit[2]
                 out.append(f"mesh {m.name} reaches into {hit[0]}'s walking space at ({p[0]:.1f}, {p[1]:.1f}, {p[2]:.1f})")
+                break
+    return out
+
+
+def walking_space_rule(build) -> list[str]:
+    """Rule 4b: no rock in walking space. Every vertex of the rock meshes (the cliffs' blocks, the
+    massif's and the lips' columns, the gully's walls) that lies over walkable ground, more than
+    EDGE_SLACK in from its edge and from its floor up to REACH_ABOVE, must sit on a collision
+    solid's skin (within ROCK_SKIN of a wall, roof, fence or pillar): a block over a walker's head
+    or beside his shoulder is a block he can walk into."""
+    out = []
+    level = build.level
+    walks = [(w.name, w.rect, w.top) for w in level.walks]
+    solids = [(s.lo, s.hi) for s in level.solids]
+    for m in build.meshes:
+        if m.group != "rock":
+            continue
+        lo, hi = m.bounds()
+        box = Rect(lo[0], hi[0], lo[2], hi[2])
+        near = [(n, r, t) for n, r, t in walks if box.overlaps(r)]
+        if not near:
+            continue
+        bad = None
+        for tri in m.tris:
+            for p in tri[:3]:
+                for name, r, top in near:
+                    if not (r.x0 + EDGE_SLACK < p[0] < r.x1 - EDGE_SLACK and r.z0 + EDGE_SLACK < p[2] < r.z1 - EDGE_SLACK):
+                        continue
+                    if not (top + 0.2 < p[1] < top + F.REACH_ABOVE):
+                        continue
+                    if any(all(sl[i] - ROCK_SKIN <= p[i] <= sh[i] + ROCK_SKIN for i in range(3)) for sl, sh in solids):
+                        continue
+                    bad = (name, p)
+                    break
+                if bad:
+                    break
+            if bad:
+                break
+        if bad:
+            name, p = bad
+            out.append(f"mesh {m.name} has rock in {name}'s walking space at ({p[0]:.2f}, {p[1]:.2f}, {p[2]:.2f}), off every wall's skin")
+    return out
+
+
+def stone_ground_rule(build) -> list[str]:
+    """Rule 4c: no stone of the kit (a rock-role piece) stands on walkable ground or water, the
+    island shrine's ring aside (it stands on the island's rim, as approved)."""
+    out = []
+    level = build.level
+    ground = [(w.name, w.rect) for w in level.walks] + [(w.name, w.rect) for w in level.water]
+    for item in build.P.items:
+        if kit.role_of(item["piece"]) != "rock" or item.get("island"):
+            continue
+        foot, _top = F.footprint(item)
+        for name, r in ground:
+            if foot.overlaps(r.grown(-EDGE_SLACK)):
+                out.append(f"{item['piece']} at ({item['x']}, {item['z']}) stands on {name}")
                 break
     return out
 
@@ -312,3 +378,153 @@ def tri_overlap(p, q, eps=1e-3):
             if max(pa) <= min(pb) + eps or max(pb) <= min(pa) + eps:
                 return False
     return True
+
+
+# ---------------------------------------------------------------- mutants
+
+
+def mutants(build, data_path) -> list[tuple[str, bool, str]]:
+    """Prove no rule is vacuous: each mutant breaks one rule on a copy of the build (or of the data
+    file, in a temporary file beside it) and the rule must catch it. `py tools/levels/forest.py
+    mutants`; every line must read CAUGHT. The build is restored after each mutant."""
+    import copy
+
+    results = []
+
+    def expect(name, lines):
+        results.append((name, bool(lines), lines[0] if lines else "NOT CAUGHT"))
+
+    data = build.data()
+    d = copy.deepcopy(data)
+    d["props"][0]["collide"] = True
+    expect("collidable prop", collision_rules(d))
+    d = copy.deepcopy(data)
+    d["barriers"][0]["group"] = "Default"
+    expect("barrier not character-only", collision_rules(d))
+    d = copy.deepcopy(data)
+    d["barriers"][3]["sy"] -= 60.0
+    d["barriers"][3]["y"] -= 30.0
+    expect("barrier top within reach", barrier_rules(build, d))
+    d = copy.deepcopy(data)
+    b = d["barriers"][5]
+    b["x"] += -b["sx"] / 2 if b["side"] == "east" else b["sx"] / 2 if b["side"] == "west" else 0.0
+    b["z"] += -b["sz"] / 2 if b["side"] == "south" else b["sz"] / 2 if b["side"] == "north" else 0.0
+    expect("barrier into walkable ground", barrier_rules(build, d))
+    d = copy.deepcopy(data)
+    d["barriers"][7]["sx"] = 0.5
+    d["barriers"][7]["sz"] = 0.5
+    expect("barrier thinner than a stud", barrier_rules(build, d))
+
+    # rule 4: the region's walking space
+    saved = [dict(i) for i in build.P.items]
+    build.P.items.append({"piece": "FirHeroA", "x": -150.0, "y": 8.0, "z": -44.0, "yaw": 0.0, "scale": 1.0})
+    expect("tall piece in a region cell", region_rule(build))
+    build.P.items = [dict(i) for i in saved]
+    build.P.items.append({"piece": "StoneMonolith", "x": -130.0, "y": 8.0, "z": -22.0, "yaw": 0.0, "scale": 1.0})
+    expect("monolith in a region cell", region_rule(build))
+    build.P.items = [dict(i) for i in saved]
+    for it in build.P.items:
+        if it["piece"] == "SpawnTent":
+            it["scale"] = 1.3
+            break
+    expect("spawn tent past its marker", region_rule(build))
+    build.P.items = [dict(i) for i in saved]
+    m = lm.Bake("Mutant", "palette", group="dress")
+    m.tri((-150.0, 9.0, -46.0), (-148.0, 9.0, -44.0), (-150.0, 30.0, -44.0), F.ROCK.ROCK)
+    build.meshes.append(m)
+    expect("baked mesh in a region cell", region_rule(build))
+    build.meshes.pop()
+
+    # rule 4b: rock in walking space. A block a stud out of BendWall over RoadAB2, a massif column
+    # on the gatehouse walk, a ceiling block hanging into the cave tunnel.
+    for label, tri in (
+        ("thin block out of its wall", ((-123.2, 20.0, -30.0), (-123.2, 26.0, -30.0), (-123.2, 20.0, -24.0))),
+        ("column on the gatehouse walk", ((280.0, 14.0, -44.0), (283.0, 14.0, -44.0), (280.0, 22.0, -42.0))),
+        ("block hanging into the tunnel", ((-260.0, 20.5, -92.0), (-258.0, 20.5, -92.0), (-260.0, 20.5, -90.0))),
+    ):
+        m = lm.Bake("RockMutant", "palette", group="rock")
+        m.tri(*tri, F.ROCK.ROCK)
+        build.meshes.append(m)
+        expect(label, walking_space_rule(build))
+        build.meshes.pop()
+    # The same rule against the generator itself: BendWall's west face laid with the thin style
+    # pushed out of the wall must be caught.
+    rk = F.ART["cliff"]["thin"]
+    thin_out = F.THIN_OUT
+    try:
+        F.THIN_OUT = 1.5
+        F.ART["cliff"]["thin"] = dict(rk, front=[0.5, 1.0], lift=0.6)
+        rocks = F.Bake("RockFaces", "palette", group="rock")
+        for axis, sign, plane, (u0, u1, v0, v1), s in F.exposed_faces(build.level):
+            if s.name == "BendWall" and axis == 0 and sign < 0:
+                F.block_face(rocks, axis, sign, plane, (u0, u1, v0, v1), "thin", 1.0, reach=44.0, back=1.5)
+        build.meshes.append(rocks)
+        expect("thin face's blocks standing out", walking_space_rule(build))
+        build.meshes.pop()
+    finally:
+        F.THIN_OUT = thin_out
+        F.ART["cliff"]["thin"] = rk
+
+    # rule 4c: a stone on the road, a stone in the pond
+    for label, item in (("stone on the road", {"piece": "RockB", "x": -382.0, "y": 0.0, "z": 0.0, "yaw": 0.0, "scale": 1.0}),
+                        ("stone in the pond", {"piece": "RockA", "x": -400.0, "y": -1.0, "z": 110.0, "yaw": 0.0, "scale": 1.0})):
+        build.P.items.append(item)
+        expect(label, stone_ground_rule(build))
+        build.P.items = [dict(i) for i in saved]
+
+    # rule 5: the clearing
+    for it in build.P.items:
+        if it["piece"] == "ChiefTent":
+            it["scale"] = 4.0
+    expect("clearing piece over the wall", clearing_rule(build))
+    build.P.items = [dict(i) for i in saved]
+    m = lm.Bake("Mutant", "palette", group="rock")
+    m.tri((300.0, 70.0, 30.0), (302.0, 70.0, 30.0), (300.0, 80.0, 32.0), F.ROCK.ROCK)
+    build.meshes.append(m)
+    expect("clearing mesh over the wall", clearing_rule(build))
+    build.meshes.pop()
+
+    # rule 6: coplanar faces of two looks (a palette quad on the road's plane over RoadAB1)
+    m = lm.Bake("Mutant", "palette")
+    y = 8.0 + F.ART["lifts"]["road"]
+    m.up((-160.0, y, -48.0), (-150.0, y, -48.0), (-150.0, y, -40.0), F.ROCK.ROCK)
+    build.meshes.append(m)
+    expect("coplanar overlap", coplanar_rule(build))
+    build.meshes.pop()
+
+    # rule 1: stale or hand-edited data
+    with open(data_path, encoding="utf-8") as fh:
+        committed = json.load(fh)
+    tmp = data_path + ".mutant.json"
+    try:
+        committed["planHash"] = "0000000000000000"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(committed, fh)
+        expect("stale plan hash", [x for x in run(build, tmp) if "stale" in x])
+        committed["planHash"] = data["planHash"]
+        committed["barriers"] = committed["barriers"][1:]
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(committed, fh)
+        expect("hand-edited data", [x for x in run(build, tmp) if "differs" in x])
+    finally:
+        if os.path.isfile(tmp):
+            os.remove(tmp)
+
+    # rule 7: the kit and the mesh limits
+    for piece, role, maker, label in (
+        ("EdgeLogs", "edge", lambda n: kit.fir(n, 6.0, 1.0, 2, 5, False), "edge piece over 4 studs"),
+        ("StoneMonolith", "rock", lambda n: kit.standing_piece(n, 8.6, 1.55, 1.2, 40, 0.28, (0.35, 0.1), 0.72, 0.35), "stone over the rock budget"),
+    ):
+        orig = kit.PIECES[piece]
+        kit.PIECES[piece] = (role, maker)
+        kit._CACHE.pop(piece, None)
+        try:
+            expect(label, [x for x in kit.problems() if piece in x])
+        finally:
+            kit.PIECES[piece] = orig
+            kit._CACHE.pop(piece, None)
+    big = lm.Bake("Big", "palette")
+    for k in range(lm.TRI_LIMIT + 1):
+        big.tri((k * 0.01, 0.0, 0.0), (k * 0.01 + 0.005, 0.0, 0.0), (k * 0.01, 1.0, 1.0), F.ROCK.ROCK)
+    expect("mesh over 20k triangles", big.problems())
+    return results

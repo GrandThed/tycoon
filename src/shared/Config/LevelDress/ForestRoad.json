@@ -2,10 +2,10 @@
  "version": 1,
  "level": "forestRoad",
  "layout": "ForestRoad",
- "planHash": "5a954ad6ec3b9853",
+ "planHash": "4014c1c8ee959871",
  "frame": "level",
  "units": "studs; yaw in degrees about +Y (CFrame.Angles); a prop's origin is its bottom centre, front -Z",
- "triangles": 149761,
+ "triangles": 149645,
  "palette": "palette.png",
  "textures": {
   "forestFloor": {
@@ -30,7 +30,7 @@
    "name": "Floor",
    "look": "texture",
    "group": "ground",
-   "triangles": 1285,
+   "triangles": 1332,
    "min": [
     -576.0,
     -3.6,
@@ -47,7 +47,7 @@
    "name": "Slopes_1",
    "look": "palette",
    "group": "ground",
-   "triangles": 3625,
+   "triangles": 3479,
    "min": [
     -462.0,
     -20.957,
@@ -63,23 +63,7 @@
    "name": "Slopes_2",
    "look": "palette",
    "group": "ground",
-   "triangles": 1947,
-   "min": [
-    222.0,
-    8.0,
-    0.0
-   ],
-   "max": [
-    256.0,
-    76.433,
-    248.0
-   ]
-  },
-  {
-   "name": "Slopes_3",
-   "look": "palette",
-   "group": "ground",
-   "triangles": 2529,
+   "triangles": 1622,
    "min": [
     222.0,
     8.0,
@@ -92,19 +76,19 @@
    ]
   },
   {
-   "name": "Slopes_4",
+   "name": "Slopes_3",
    "look": "palette",
    "group": "ground",
-   "triangles": 3494,
+   "triangles": 3203,
    "min": [
-    256.0,
-    12.0,
+    224.0,
+    8.0,
     0.0
    ],
    "max": [
     404.0,
     76.598,
-    124.0
+    248.0
    ]
   },
   {
@@ -196,80 +180,80 @@
    "name": "Rock_1",
    "look": "palette",
    "group": "rock",
-   "triangles": 2711,
+   "triangles": 7398,
    "min": [
-    -461.771,
-    -4.0,
-    -104.008
+    -462.895,
+    -22.158,
+    -151.22
    ],
    "max": [
-    -250.028,
-    87.938,
-    -23.083
+    -220.0,
+    120.736,
+    66.768
    ]
   },
   {
    "name": "Rock_2",
    "look": "palette",
    "group": "rock",
-   "triangles": 6231,
+   "triangles": 6730,
    "min": [
-    -261.056,
-    -1.0,
-    -115.504
+    -326.0,
+    -1.371,
+    -119.493
    ],
    "max": [
-    -68.95,
-    121.566,
-    -5.117
+    -68.699,
+    118.856,
+    -6.857
    ]
   },
   {
    "name": "Rock_3",
    "look": "palette",
    "group": "rock",
-   "triangles": 1940,
+   "triangles": 3171,
    "min": [
-    237.999,
-    12.0,
-    -1.822
+    216.922,
+    6.837,
+    -26.0
    ],
    "max": [
     260.023,
-    103.906,
-    99.358
+    104.067,
+    137.095
    ]
   },
   {
    "name": "Rock_4",
    "look": "palette",
    "group": "rock",
-   "triangles": 5812,
+   "triangles": 6755,
    "min": [
-    229.97,
-    7.4,
-    -57.89
+    217.17,
+    7.0,
+    -107.853
    ],
    "max": [
-    385.883,
-    94.52,
-    3.72
+    410.286,
+    99.545,
+    12.282
    ]
   },
   {
    "name": "Rock_5",
    "look": "palette",
    "group": "rock",
-   "triangles": 3948,
+   "triangles": 5942,
    "min": [
     251.889,
-    12.0,
-    -2.0
+    11.0,
+    -5.29
    ],
    "max": [
-    386.742,
-    104.264,
-    106.059
+    410.326,
+    103.065,
+    128.271
    ]
   },
   {
@@ -324,128 +308,80 @@
    "name": "Canopy_1",
    "look": "palette",
    "group": "canopy",
-   "triangles": 2920,
+   "triangles": 1658,
    "min": [
-    -579.307,
+    -580.63,
     -0.3,
-    -211.368
+    -212.569
    ],
    "max": [
-    -252.579,
-    35.672,
-    5.495
+    -249.455,
+    34.629,
+    5.906
    ]
   },
   {
    "name": "Canopy_2",
    "look": "palette",
    "group": "canopy",
-   "triangles": 3588,
+   "triangles": 2034,
    "min": [
-    -579.311,
+    -580.384,
     -0.3,
-    -8.063
+    -2.788
    ],
    "max": [
-    -253.378,
-    36.125,
-    245.2
+    -249.679,
+    36.634,
+    244.377
    ]
   },
   {
    "name": "Canopy_3",
    "look": "palette",
    "group": "canopy",
-   "triangles": 2484,
+   "triangles": 2795,
    "min": [
-    -259.365,
+    -264.322,
     7.7,
-    19.612
+    11.701
    ],
    "max": [
-    7.182,
-    37.264,
-    245.48
+    266.077,
+    71.995,
+    244.776
    ]
   },
   {
    "name": "Canopy_4",
    "look": "palette",
    "group": "canopy",
-   "triangles": 1577,
+   "triangles": 2042,
    "min": [
-    -258.71,
+    -266.365,
     7.7,
-    -211.557
+    -212.693
    ],
    "max": [
-    6.535,
-    37.013,
-    -85.182
+    268.898,
+    40.753,
+    -23.379
    ]
   },
   {
    "name": "Canopy_5",
    "look": "palette",
    "group": "canopy",
-   "triangles": 2035,
+   "triangles": 2567,
    "min": [
-    -8.75,
-    7.7,
-    -211.633
-   ],
-   "max": [
-    257.117,
-    39.306,
-    2.609
-   ]
-  },
-  {
-   "name": "Canopy_6",
-   "look": "palette",
-   "group": "canopy",
-   "triangles": 2569,
-   "min": [
-    -9.408,
-    7.7,
-    -1.215
-   ],
-   "max": [
-    262.411,
-    43.308,
-    245.346
-   ]
-  },
-  {
-   "name": "Canopy_7",
-   "look": "palette",
-   "group": "canopy",
-   "triangles": 2153,
-   "min": [
-    250.59,
+    245.395,
     11.7,
-    -210.852
+    -212.898
    ],
    "max": [
-    477.612,
-    58.187,
-    4.059
-   ]
-  },
-  {
-   "name": "Canopy_8",
-   "look": "palette",
-   "group": "canopy",
-   "triangles": 2230,
-   "min": [
-    251.514,
-    11.7,
-    -5.775
-   ],
-   "max": [
-    477.037,
-    63.987,
-    245.329
+    478.817,
+    73.757,
+    244.773
    ]
   },
   {
@@ -484,7 +420,7 @@
    "name": "Dress_1",
    "look": "palette",
    "group": "dress",
-   "triangles": 3945,
+   "triangles": 4349,
    "min": [
     -501.411,
     -0.514,
@@ -500,14 +436,14 @@
    "name": "Dress_2",
    "look": "palette",
    "group": "dress",
-   "triangles": 8584,
+   "triangles": 9071,
    "min": [
     -501.411,
-    -0.623,
+    -0.72,
     -4.511
    ],
    "max": [
-    -380.694,
+    -382.768,
     37.875,
     178.071
    ]
@@ -516,9 +452,9 @@
    "name": "Dress_3",
    "look": "palette",
    "group": "dress",
-   "triangles": 8729,
+   "triangles": 8804,
    "min": [
-    -387.466,
+    -385.413,
     -0.637,
     -3.239
    ],
@@ -532,7 +468,7 @@
    "name": "Dress_4",
    "look": "palette",
    "group": "dress",
-   "triangles": 14201,
+   "triangles": 14986,
    "min": [
     -387.827,
     -0.619,
@@ -548,14 +484,14 @@
    "name": "Dress_5",
    "look": "palette",
    "group": "dress",
-   "triangles": 9775,
+   "triangles": 10648,
    "min": [
     -194.068,
     7.433,
     -121.231
    ],
    "max": [
-    0.548,
+    0.534,
     43.51,
     3.998
    ]
@@ -564,7 +500,7 @@
    "name": "Dress_6",
    "look": "palette",
    "group": "dress",
-   "triangles": 6503,
+   "triangles": 6469,
    "min": [
     -193.716,
     7.53,
@@ -580,7 +516,7 @@
    "name": "Dress_7",
    "look": "palette",
    "group": "dress",
-   "triangles": 7397,
+   "triangles": 7377,
    "min": [
     -3.608,
     7.459,
@@ -596,9 +532,9 @@
    "name": "Dress_8",
    "look": "palette",
    "group": "dress",
-   "triangles": 9516,
+   "triangles": 9925,
    "min": [
-    -0.754,
+    -0.647,
     7.524,
     -89.979
    ],
@@ -612,7 +548,7 @@
    "name": "Dress_9",
    "look": "palette",
    "group": "dress",
-   "triangles": 6802,
+   "triangles": 6580,
    "min": [
     189.637,
     7.534,
@@ -628,7 +564,7 @@
    "name": "Dress_10",
    "look": "palette",
    "group": "dress",
-   "triangles": 3266,
+   "triangles": 3247,
    "min": [
     189.346,
     7.521,
@@ -2050,36 +1986,44 @@
   "Banner": 13,
   "Bedroll": 4,
   "BonePile": 8,
-  "Bramble": 26,
-  "Broadleaf": 19,
-  "Bush": 64,
-  "BushLarge": 61,
+  "Bramble": 21,
+  "Broadleaf": 18,
+  "Bush": 62,
+  "BushLarge": 70,
   "EdgeLogs": 36,
   "EdgeRocks": 16,
   "EdgeStakes": 33,
   "EdgeThicket": 25,
-  "Fern": 46,
-  "FirHeroA": 72,
-  "FirHeroB": 63,
-  "FirMassA": 142,
-  "FirMassB": 169,
+  "Fern": 43,
+  "FirHeroA": 62,
+  "FirHeroB": 57,
+  "FirMassA": 140,
+  "FirMassB": 166,
   "Firewood": 12,
   "GatePost": 8,
   "HideRack": 15,
   "HideTent": 10,
   "LeanTo": 6,
   "LogSeat": 24,
-  "Mushrooms": 7,
-  "RockA": 16,
-  "RockB": 15,
+  "Mushrooms": 4,
+  "Pebbles": 29,
+  "RockA": 28,
+  "RockB": 12,
+  "RockFlat": 25,
+  "RockSmall": 13,
   "Sacks": 5,
   "SkullPole": 20,
-  "SnagA": 52,
-  "SnagB": 11,
+  "SnagA": 49,
+  "SnagB": 8,
   "StandingStone": 5,
-  "Stump": 13,
-  "StumpMossy": 11,
-  "Thicket": 96,
+  "StoneBroad": 8,
+  "StoneLean": 13,
+  "StoneMonolith": 7,
+  "StoneSlim": 4,
+  "StoneTall": 4,
+  "Stump": 12,
+  "StumpMossy": 10,
+  "Thicket": 70,
   "Watchtower": 1,
   "WeaponRack": 7
  },
@@ -2427,11 +2371,11 @@
     ]
    },
    {
-    "name": "rock.ROCK_DARK",
+    "name": "rock.ROCK_LIGHT",
     "srgb": [
-     70,
-     72,
-     74
+     168,
+     160,
+     144
     ],
     "uv": [
      0.5625,
@@ -2441,9 +2385,9 @@
    {
     "name": "rock.ROCK",
     "srgb": [
-     100,
-     100,
-     98
+     130,
+     124,
+     113
     ],
     "uv": [
      0.6875,
@@ -2451,14 +2395,26 @@
     ]
    },
    {
-    "name": "rock.ROCK_LIGHT",
+    "name": "rock.ROCK_DARK",
     "srgb": [
-     134,
-     132,
-     124
+     95,
+     91,
+     85
     ],
     "uv": [
      0.8125,
+     0.5
+    ]
+   },
+   {
+    "name": "rock.ROCK_SHADE",
+    "srgb": [
+     62,
+     60,
+     56
+    ],
+    "uv": [
+     0.9375,
      0.5
     ]
    },
@@ -2470,8 +2426,8 @@
      80
     ],
     "uv": [
-     0.9375,
-     0.5
+     0.0625,
+     0.642857
     ]
    },
    {
@@ -2482,7 +2438,7 @@
      140
     ],
     "uv": [
-     0.0625,
+     0.1875,
      0.642857
     ]
    },
@@ -2494,7 +2450,7 @@
      94
     ],
     "uv": [
-     0.1875,
+     0.3125,
      0.642857
     ]
    },
@@ -2506,7 +2462,7 @@
      66
     ],
     "uv": [
-     0.3125,
+     0.4375,
      0.642857
     ]
    },
@@ -2518,7 +2474,7 @@
      64
     ],
     "uv": [
-     0.4375,
+     0.5625,
      0.642857
     ]
    },
@@ -2530,7 +2486,7 @@
      46
     ],
     "uv": [
-     0.5625,
+     0.6875,
      0.642857
     ]
    },
@@ -2542,7 +2498,7 @@
      40
     ],
     "uv": [
-     0.6875,
+     0.8125,
      0.642857
     ]
    },
@@ -2554,7 +2510,7 @@
      96
     ],
     "uv": [
-     0.8125,
+     0.9375,
      0.642857
     ]
    },
@@ -2566,8 +2522,8 @@
      64
     ],
     "uv": [
-     0.9375,
-     0.642857
+     0.0625,
+     0.785714
     ]
    },
    {
@@ -2578,7 +2534,7 @@
      46
     ],
     "uv": [
-     0.0625,
+     0.1875,
      0.785714
     ]
    },
@@ -2590,7 +2546,7 @@
      204
     ],
     "uv": [
-     0.1875,
+     0.3125,
      0.785714
     ]
    },
@@ -2602,7 +2558,7 @@
      158
     ],
     "uv": [
-     0.3125,
+     0.4375,
      0.785714
     ]
    },
@@ -2614,7 +2570,7 @@
      124
     ],
     "uv": [
-     0.4375,
+     0.5625,
      0.785714
     ]
    },
@@ -2626,7 +2582,7 @@
      86
     ],
     "uv": [
-     0.5625,
+     0.6875,
      0.785714
     ]
    },
@@ -2638,7 +2594,7 @@
      60
     ],
     "uv": [
-     0.6875,
+     0.8125,
      0.785714
     ]
    },
@@ -2650,7 +2606,7 @@
      46
     ],
     "uv": [
-     0.8125,
+     0.9375,
      0.785714
     ]
    },
@@ -2662,8 +2618,8 @@
      136
     ],
     "uv": [
-     0.9375,
-     0.785714
+     0.0625,
+     0.928571
     ]
    },
    {
@@ -2674,7 +2630,7 @@
      96
     ],
     "uv": [
-     0.0625,
+     0.1875,
      0.928571
     ]
    },
@@ -2686,7 +2642,7 @@
      50
     ],
     "uv": [
-     0.1875,
+     0.3125,
      0.928571
     ]
    },
@@ -2698,7 +2654,7 @@
      228
     ],
     "uv": [
-     0.3125,
+     0.4375,
      0.928571
     ]
    },
@@ -2710,7 +2666,7 @@
      92
     ],
     "uv": [
-     0.4375,
+     0.5625,
      0.928571
     ]
    },
@@ -2722,7 +2678,7 @@
      40
     ],
     "uv": [
-     0.5625,
+     0.6875,
      0.928571
     ]
    },
@@ -2734,7 +2690,7 @@
      36
     ],
     "uv": [
-     0.6875,
+     0.8125,
      0.928571
     ]
    },
@@ -2746,7 +2702,7 @@
      50
     ],
     "uv": [
-     0.8125,
+     0.9375,
      0.928571
     ]
    }

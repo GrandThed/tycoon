@@ -83,11 +83,19 @@ class BARK:
 
 
 class ROCK:
-    """Boulders, the rock faces over the tall walls, gully walls."""
+    """Every stone of the forest: standing stones, boulders, pebbles, the cliffs of stacked blocks
+    over the tall walls, the massif round the Chief's hollow, the gully walls.
 
-    ROCK_DARK = (70, 72, 74)
-    ROCK = (100, 100, 98)
-    ROCK_LIGHT = (134, 132, 124)
+    Ben's references (2026-10-21, assets/research/2026-10-21-l4/ref_rocks_*.png): sculpted blocks in
+    a warm pale grey, a few big flat facets, light tops and darker sides. A block's faces take their
+    swatch by how they face (forest_kit.rock_paint): tops and up-facing bevels light, sides mid,
+    undersides dark, the crevices between blocks the deepest shade. Each step is at least 1.4 in
+    luminance so the facets separate under haze."""
+
+    ROCK_LIGHT = (168, 160, 144)  # tops, caps, up-facing bevels
+    ROCK = (130, 124, 113)  # the faces of a block
+    ROCK_DARK = (95, 91, 85)  # sides in shade, undersides, a stone's foot
+    ROCK_SHADE = (62, 60, 56)  # the crevices between stacked blocks
     LICHEN = (118, 124, 80)
 
 

@@ -1,5 +1,7 @@
-"""The Forest Road's generated kit (L4): raider-forest trees, thicket, rocks, the camps' log, rock
-and stake edges, hide tents, the Chief's tent, campfires, racks and clutter.
+"""The Forest Road's generated kit (L4): raider-forest trees, thicket, the stone family (standing
+stones from monolith to stump, low chunky stones, pebbles: Ben's rock references of 2026-10-21),
+the camps' log, rock and stake edges, hide tents, the Chief's tent, campfires, racks and clutter.
+`stone` and `block_poly` also build every cliff of the level (tools/levels/forest.py).
 
     py tools/assets/forest_kit.py                 # writes every piece + palette-card.glb + pieces.json
     py tools/assets/forest_kit.py --list          # the pieces with triangle counts and sizes, no files
@@ -483,23 +485,264 @@ def mushrooms(name: str) -> Mesh:
     return m
 
 
-# ---------------------------------------------------------------- rocks
+# ---------------------------------------------------------------- stone
+# Ben's references (2026-10-21, assets/research/2026-10-21-l4/ref_rocks_*.png): every stone is a
+# sculpted prism with a few big flat facets and chamfered (bevelled) edges, never a noisy blob. Two
+# builders carry the whole family: `stone` lofts an irregular polygon up through a kink and a
+# bevelled, obliquely cut top (standing stones, low chunky stones, pebbles), and `block` lofts a
+# chamfered rectangle out of a face (the stacked blocks of the cliffs, the massif's columns, the
+# caps on a wall's top). Each face takes its swatch from `rock_paint` by how it faces, so tops read
+# light and sides darker under any light, as in the references.
+
+ROCK_TOP = 0.62  # a face whose normal's y is over this is a top (light)
+ROCK_UNDER = -0.35  # under this, an underside (dark)
 
 
-def rock(name: str, radii: Vec, mossy: bool) -> Mesh:
+def rock_paint(role: str, n: Vec, tone: float = 0.5) -> Rgb:
+    """A stone face's swatch. `role`: "cap" (a block's front or a stone's top cut), "bevel" (a
+    chamfer), "side" (a block's side, in the crevice between blocks), "face" (a stone's side, or a
+    massif column's face), "back" (the dark backing behind a cliff's blocks). `tone` (0..1, one per
+    block) lightens or darkens a few blocks so a cliff reads as many stones, not one surface."""
+    ny = n[1]
+    if role == "back":
+        return ROCK.ROCK_SHADE
+    if ny > ROCK_TOP:
+        return ROCK.ROCK_LIGHT
+    if ny < ROCK_UNDER:
+        return ROCK.ROCK_SHADE if role == "side" else ROCK.ROCK_DARK
+    if role == "bevel":
+        return ROCK.ROCK_LIGHT if ny > 0.25 else ROCK.ROCK_DARK if ny < -0.2 else ROCK.ROCK
+    if role == "side":
+        return ROCK.ROCK if ny > 0.3 else ROCK.ROCK_DARK
+    if tone > 0.84:
+        return ROCK.ROCK_LIGHT
+    if tone < 0.16:
+        return ROCK.ROCK_DARK
+    return ROCK.ROCK
+
+
+def _quad(m: Mesh, a: Vec, b: Vec, c: Vec, d: Vec, role: str, centre: Vec, tone: float, paint) -> None:
+    """A quad of a closed or open loft, both triangles wound away from `centre`, one swatch from
+    the quad's mean normal (a slightly warped quad never splits into two colours)."""
+    n1 = normal(a, b, c)
+    n2 = normal(a, c, d)
+    mid = ((a[0] + b[0] + c[0] + d[0]) / 4 - centre[0], (a[1] + b[1] + c[1] + d[1]) / 4 - centre[1], (a[2] + b[2] + c[2] + d[2]) / 4 - centre[2])
+    n = add(n1, n2)
+    if n[0] * mid[0] + n[1] * mid[1] + n[2] * mid[2] < 0:
+        n = scale(n, -1.0)
+    if vlen(n) < 1e-12:
+        return
+    colour = paint(role, unit(n), tone)
+    m.out(a, b, c, colour, centre)
+    m.out(a, c, d, colour, centre)
+
+
+def loft(m: Mesh, rings: list[list[Vec]], roles: list[str], tone: float = 0.5, cap: str | None = "cap",
+         base: str | None = None, paint=rock_paint) -> None:
+    """Rings of equal vertex count joined band by band (`roles[k]` names band k), the last ring
+    closed by a fan (`cap`, None for open), the first by `base` (None: open, it sits in the ground
+    or against a wall). Wound away from the centroid of every ring point: the shapes here are
+    convex or nearly so."""
+    pts = [p for ring in rings for p in ring]
+    centre = (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts), sum(p[2] for p in pts) / len(pts))
+    n = len(rings[0])
+    for k in range(len(rings) - 1):
+        r0, r1 = rings[k], rings[k + 1]
+        for i in range(n):
+            j = (i + 1) % n
+            _quad(m, r0[i], r0[j], r1[j], r1[i], roles[k], centre, tone, paint)
+    for ring, role in ((rings[-1], cap), (rings[0], base)):
+        if role is None:
+            continue
+        nn = add(normal(ring[0], ring[1], ring[2]), normal(ring[0], ring[n // 2], ring[-1]))
+        mid = (sum(p[0] for p in ring) / n - centre[0], sum(p[1] for p in ring) / n - centre[1], sum(p[2] for p in ring) / n - centre[2])
+        if nn[0] * mid[0] + nn[1] * mid[1] + nn[2] * mid[2] < 0:
+            nn = scale(nn, -1.0)
+        colour = paint(role, unit(nn), tone)
+        for i in range(1, n - 1):
+            m.out(ring[0], ring[i], ring[i + 1], colour, centre)
+
+
+def stone(m: Mesh, rnd: random.Random, at: Vec, height: float, rx: float, rz: float, sides: int = 6, kink: float = 0.0,
+          lean: tuple[float, float] = (0.0, 0.0), taper: float = 0.8, bevel: float = 0.35, cut: float = 0.25,
+          shoulder: float | None = None, rot: float | None = None, sink: float = 0.25, tone: float | None = None) -> None:
+    """One stone standing at `at` (its foot centre): an irregular `sides`-gon of half-sizes rx by rz,
+    lofted up to `height` through a kink at 45 per cent (`kink`: how far the upper part steps
+    aside, so each side reads as two big facets), tapered to `taper` and leaned by `lean` at the
+    top, finished with a chamfer `bevel` wide and a top cut tilted by `cut` (rise over run).
+    `shoulder`: the height share where a low stone's sides turn in (a chunky stone's second facet
+    ring instead of a kink). The foot sinks `sink` into the ground."""
+    x0, y0, z0 = at
+    rot = rnd.uniform(0, TAU) if rot is None else rot
+    tone = rnd.random() if tone is None else tone
+    angles = []
+    for i in range(sides):
+        angles.append(rot + (i + rnd.uniform(-0.28, 0.28)) * TAU / sides)
+    radii = [rnd.uniform(0.8, 1.12) for _ in range(sides)]
+
+    def ring(y, s, dx, dz, wobble=0.0):
+        out = []
+        for a, r in zip(angles, radii):
+            rr = r * (1.0 + rnd.uniform(-wobble, wobble))
+            out.append((x0 + dx + math.cos(a) * rx * rr * s, y, z0 + dz + math.sin(a) * rz * rr * s))
+        return out
+
+    top = y0 + height
+    lx, lz = lean
+    rings = [ring(y0 - sink, 1.0, 0.0, 0.0)]
+    roles = []
+    if shoulder is not None:
+        rings.append(ring(y0 + height * shoulder, 1.0, lx * shoulder, lz * shoulder, 0.06))
+        roles.append("face")
+    else:
+        ka = rnd.uniform(0, TAU)
+        rings.append(ring(y0 + height * 0.45, 0.5 + 0.5 * (1.0 + taper) / 2, lx * 0.45 + kink * math.cos(ka), lz * 0.45 + kink * math.sin(ka), 0.05))
+        roles.append("face")
+    rings.append(ring(top - bevel * 1.2, taper, lx, lz))
+    roles.append("face")
+    # The top cut: an oblique plane through the cap, the chamfer below it.
+    ca = rnd.uniform(0, TAU)
+    cx, cz = math.cos(ca) * cut, math.sin(ca) * cut
+    inset = max(0.3, 1.0 - bevel / max(0.2, min(rx, rz) * taper))
+    cap = []
+    for p in ring(top, taper * inset, lx, lz):
+        cap.append((p[0], top + (p[0] - x0 - lx) * cx + (p[2] - z0 - lz) * cz, p[2]))
+    rings.append(cap)
+    roles.append("bevel")
+    loft(m, rings, roles, tone, cap="cap")
+
+
+def poly_ccw(pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """A polygon in (u, v) turned counter-clockwise (positive area)."""
+    area = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))
+    return list(pts) if area > 0 else list(reversed(pts))
+
+
+def inset_poly(pts: list[tuple[float, float]], d: float) -> list[tuple[float, float]]:
+    """A convex counter-clockwise polygon with every edge moved inward by d."""
+    n = len(pts)
+    lines = []
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        du, dv = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(du, dv) or 1e-9
+        lines.append(((a[0] - dv / length * d, a[1] + du / length * d), (du, dv)))
+    out = []
+    for i in range(n):
+        (p1, d1), (p2, d2) = lines[i - 1], lines[i]
+        den = d1[0] * d2[1] - d1[1] * d2[0]
+        if abs(den) < 1e-12:
+            out.append(p2)
+            continue
+        t = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den
+        out.append((p1[0] + t * d1[0], p1[1] + t * d1[1]))
+    return out
+
+
+def poly_span(pts: list[tuple[float, float]]) -> float:
+    """Twice the distance from a convex polygon's centroid to its nearest edge: how far it may be inset."""
+    n = len(pts)
+    cu, cv = sum(p[0] for p in pts) / n, sum(p[1] for p in pts) / n
+    best = math.inf
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        du, dv = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(du, dv) or 1e-9
+        best = min(best, abs((cu - a[0]) * dv - (cv - a[1]) * du) / length)
+    return 2 * best
+
+
+def block_poly(m: Mesh, o: Vec, eu: Vec, ev: Vec, ew: Vec, outline: list[tuple[float, float]], back: float, front: float,
+               bevel: float, shear: tuple[float, float] = (0.0, 0.0), lift: list[float] | None = None, tone: float = 0.5,
+               paint=rock_paint, side_role: str = "side", sides: bool = True, gap: float = 0.0, inset: float | None = None) -> None:
+    """A chamfered block standing out of a surface, in the frame (o; eu, ev along it, ew out of it):
+    its convex `outline` in (u, v), shrunk by `gap` / 2, at `back` (where it meets the surface or
+    the dark backing); straight sides out to `front - bevel`; a chamfer `bevel` wide to its front
+    face at `front`. `shear` slides the front along (u, v) so the block reads tilted; `lift` raises
+    each front corner (a front cut by a plane or two: a few big facets, never a flat tile). Open
+    at the back. `sides` False: the chamfer runs from the outline straight to the front (a shallow
+    block, whose sides would be a sliver: 10 triangles instead of 18 for four corners). `inset`:
+    how far the front's edge stands in from the outline (default `bevel`: a 45-degree chamfer; more
+    makes a shallower, rounder one, the references' worn blocks)."""
+    def p(u, v, w):
+        return (o[0] + eu[0] * u + ev[0] * v + ew[0] * w, o[1] + eu[1] * u + ev[1] * v + ew[1] * w, o[2] + eu[2] * u + ev[2] * v + ew[2] * w)
+
+    base = poly_ccw(outline)
+    if gap > 0:
+        if poly_span(base) < 2 * gap + 0.2:
+            return
+        base = inset_poly(base, gap / 2)
+    n = len(base)
+    lift = list(lift or [0.0] * n)[:n] + [0.0] * max(0, n - len(lift or []))
+    bevel = max(0.05, min(bevel, front - back - 0.05))
+    inner = inset_poly(base, min(bevel if inset is None else inset, 0.32 * poly_span(base)))
+    su, sv = shear
+    if not sides:
+        rings = [[p(u, v, back) for u, v in base], [p(u + su, v + sv, front + lift[i]) for i, (u, v) in enumerate(inner)]]
+        loft(m, rings, ["bevel"], tone, cap="cap", paint=paint)
+        return
+    rings = [
+        [p(u, v, back) for u, v in base],
+        [p(u + su, v + sv, front - bevel + lift[i] * 0.5) for i, (u, v) in enumerate(base)],
+        [p(u + su, v + sv, front + lift[i]) for i, (u, v) in enumerate(inner)],
+    ]
+    loft(m, rings, [side_role, "bevel"], tone, cap="cap", paint=paint)
+
+
+def pebble(m: Mesh, rnd: random.Random, at: Vec, height: float, radius: float, sides: int = 5) -> None:
+    """A pebble: one irregular ring in the ground and a smaller, tilted cap over it (13 triangles
+    at five sides): the reference's row of small stones."""
+    x0, y0, z0 = at
+    rot = rnd.uniform(0, TAU)
+    angles = [rot + (i + rnd.uniform(-0.25, 0.25)) * TAU / sides for i in range(sides)]
+    radii = [radius * rnd.uniform(0.8, 1.15) for _ in range(sides)]
+    sx = rnd.uniform(0.85, 1.15)
+    tilt = (rnd.uniform(-0.25, 0.25), rnd.uniform(-0.25, 0.25))
+    base = [(x0 + math.cos(a) * r * sx, y0 - 0.08, z0 + math.sin(a) * r) for a, r in zip(angles, radii)]
+    cap = []
+    for a, r in zip(angles, radii):
+        px, pz = math.cos(a) * r * sx * 0.58, math.sin(a) * r * 0.58
+        cap.append((x0 + px, y0 + height + px * tilt[0] + pz * tilt[1], z0 + pz))
+    loft(m, [base, cap], ["bevel"], rnd.random(), cap="cap")
+
+
+def standing_piece(name: str, height: float, rx: float, rz: float, sides: int, kink: float, lean: tuple[float, float],
+                   taper: float, cut: float, bevel: float = 0.38, tone: float = 0.5) -> Mesh:
+    """A standing stone of the family (reference 1's tall row): monolith down to a short stump."""
     m = Mesh(name)
-    seed = sum(name.encode("utf-8")) * 0.37
-    m.blob((0.0, radii[1] * 0.55, 0.0), radii, ROCK.ROCK, rot=0.3, seed=seed, rough=0.22, flat_bottom=-0.15, colour2=ROCK.ROCK_DARK)
-    if mossy:
-        m.blob((radii[0] * 0.1, radii[1] * 1.28, 0.0), (radii[0] * 0.72, radii[1] * 0.22, radii[2] * 0.66), FOLIAGE.MOSS,
-               rot=0.8, seed=seed + 1, rough=0.12)
+    stone(m, rng_for(name), (0.0, 0.0, 0.0), height, rx, rz, sides=sides, kink=kink, lean=lean, taper=taper, cut=cut,
+          bevel=bevel, rot=0.35, tone=tone)
     return m
 
 
-def standing_stone(name: str) -> Mesh:
+def low_piece(name: str, height: float, rx: float, rz: float, sides: int, cut: float, bevel: float,
+              companion: tuple[float, float, float, float] | None = None, tone: float = 0.5, pebbles: int = 0) -> Mesh:
+    """A low chunky stone (reference 1's second row): sides that turn in at a shoulder, a broad
+    bevelled top; optionally a smaller stone at its side and pebbles at its foot."""
     m = Mesh(name)
-    m.frustum((0, -0.3, 0), 1.3, 0.55, 5.6, ROCK.ROCK, sides=5, rot=0.4, top=True, top_colour=ROCK.ROCK_LIGHT,
-              lean=(0.4, 0.2), jitter=[1.0, 0.8, 1.1, 0.9, 1.05])
+    r = rng_for(name)
+    stone(m, r, (0.0, 0.0, 0.0), height, rx, rz, sides=sides, shoulder=0.52, taper=0.66, cut=cut, bevel=bevel,
+          rot=0.2, sink=0.15, tone=tone)
+    if companion:
+        x, z, h, rad = companion
+        stone(m, r, (x, 0.0, z), h, rad, rad * 0.85, sides=5, shoulder=0.5, taper=0.62, cut=0.25, bevel=bevel * 0.6,
+              sink=0.12, tone=0.3)
+    for k in range(pebbles):
+        a = r.uniform(0, TAU)
+        d = max(rx, rz) * r.uniform(1.15, 1.5)
+        pebble(m, r, (math.cos(a) * d, 0.0, math.sin(a) * d), r.uniform(0.22, 0.42), r.uniform(0.25, 0.45))
+    return m
+
+
+def pebbles(name: str, count: int = 5, spread: float = 1.4) -> Mesh:
+    """A scatter of pebbles (reference 1's front row) for the feet of the bigger stones."""
+    m = Mesh(name)
+    r = rng_for(name)
+    for k in range(count):
+        a = k * TAU / count + r.uniform(-0.4, 0.4)
+        d = spread * r.uniform(0.15, 1.0)
+        size = r.uniform(0.22, 0.55)
+        pebble(m, r, (math.cos(a) * d, 0.0, math.sin(a) * d), size * r.uniform(0.6, 0.9), size)
     return m
 
 
@@ -542,18 +785,24 @@ def edge_stakes(name: str, length: float = 8.0) -> Mesh:
 
 
 def edge_rocks(name: str, length: float = 7.0) -> Mesh:
+    """A camp's stone edge: chunky low stones shoulder to shoulder on the fence line, a short
+    standing stone behind them and pebbles at their back, all under EDGE_MAX and all on the far
+    side of z = 0 (the floor's edge)."""
     m = Mesh(name)
     r = rng_for(name)
-    n = max(2, round(length / 2.3))
+    n = max(2, round(length / 2.4))
     for k in range(n):
-        x = -length / 2 + (k + 0.5) * length / n + r.uniform(-0.3, 0.3)
-        rad = r.uniform(1.25, 1.6)
-        hy = r.uniform(1.25, 1.75)
-        m.blob((x, hy * 0.92, rad * 0.95), (rad, hy, rad), ROCK.ROCK if k % 2 else ROCK.ROCK_LIGHT, rot=r.uniform(0, TAU),
-               seed=k + length, rough=0.22, flat_bottom=-0.1, colour2=ROCK.ROCK_DARK)
-    for k in range(n - 1):
-        x = -length / 2 + (k + 1) * length / n
-        m.blob((x, 0.7, 2.3), (0.9, 0.7, 0.8), ROCK.ROCK_DARK, seed=k + 20.0, rough=0.2, flat_bottom=-0.1)
+        x = -length / 2 + (k + 0.5) * length / n + r.uniform(-0.25, 0.25)
+        rx = r.uniform(1.15, 1.4)
+        rz = rx * r.uniform(0.8, 0.95)
+        # an irregular ring reaches 1.12 of its half-size and its foot spreads no further
+        stone(m, r, (x, 0.0, rz * 1.14 + 0.05), r.uniform(1.6, 2.3), rx, rz, sides=5, shoulder=0.5, taper=0.64,
+              cut=0.22, bevel=0.32, sink=0.12, tone=r.random())
+    stone(m, r, (r.uniform(-length / 4, length / 4), 0.0, 3.0), 3.2, 0.85, 0.7, sides=5, kink=0.15, lean=(0.15, 0.25),
+          taper=0.7, cut=0.28, bevel=0.28, sink=0.2, tone=0.4)
+    for k in range(2):
+        pebble(m, r, (-length / 2 + (k + 0.5) * length / 2 + r.uniform(-0.6, 0.6), 0.0, r.uniform(3.4, 4.2)),
+               r.uniform(0.25, 0.4), r.uniform(0.3, 0.5))
     return m
 
 
@@ -778,8 +1027,7 @@ def campfire(name: str) -> Mesh:
     r = rng_for(name)
     for k in range(9):
         a = k * TAU / 9 + r.uniform(-0.1, 0.1)
-        m.blob((1.65 * math.cos(a), 0.22, 1.65 * math.sin(a)), (0.42, 0.3, 0.38), ROCK.ROCK if k % 2 else ROCK.ROCK_DARK,
-               rot=a, seed=k + 1.0, rough=0.15, flat_bottom=-0.05)
+        pebble(m, r, (1.65 * math.cos(a), 0.0, 1.65 * math.sin(a)), r.uniform(0.38, 0.5), r.uniform(0.36, 0.44))
     m.frustum((0, 0.0, 0), 1.35, 1.2, FLOOR_LIFT + 0.02, FLAME.SOOT, sides=8, top=True)
     for k in range(5):
         a = k * TAU / 5 + 0.3
@@ -977,10 +1225,19 @@ PIECES = {
     "Bramble": ("under", bramble),
     "Fern": ("under", fern),
     "Mushrooms": ("under", mushrooms),
-    "RockA": ("rock", lambda n: rock(n, (2.2, 1.6, 1.9), False)),
-    "RockB": ("rock", lambda n: rock(n, (3.4, 2.2, 2.8), True)),
-    "RockSmall": ("rock", lambda n: rock(n, (1.0, 0.7, 0.9), False)),
-    "StandingStone": ("rock", standing_stone),
+    # The stone family (Ben's references, 2026-10-21): standing stones from monolith to stump,
+    # low chunky stones, pebbles. Heights and half-sizes in studs.
+    "StoneMonolith": ("rock", lambda n: standing_piece(n, 8.6, 1.55, 1.2, 6, 0.28, (0.35, 0.1), 0.72, 0.35, 0.42, 0.55)),
+    "StoneTall": ("rock", lambda n: standing_piece(n, 7.0, 1.35, 1.05, 6, 0.32, (-0.5, 0.3), 0.7, 0.45, 0.4, 0.7)),
+    "StandingStone": ("rock", lambda n: standing_piece(n, 5.6, 1.3, 1.0, 5, 0.22, (0.4, 0.2), 0.75, 0.3, 0.36, 0.45)),
+    "StoneSlim": ("rock", lambda n: standing_piece(n, 5.8, 0.78, 0.66, 5, 0.12, (0.25, -0.2), 0.66, 0.5, 0.26, 0.6)),
+    "StoneLean": ("rock", lambda n: standing_piece(n, 4.4, 1.25, 1.0, 6, 0.2, (1.1, 0.2), 0.7, 0.35, 0.34, 0.35)),
+    "StoneBroad": ("rock", lambda n: standing_piece(n, 4.2, 1.85, 1.3, 7, 0.25, (0.2, 0.0), 0.82, 0.55, 0.42, 0.5)),
+    "RockB": ("rock", lambda n: low_piece(n, 3.0, 2.6, 2.1, 6, 0.18, 0.5, companion=(2.7, 1.1, 1.7, 1.05), pebbles=1)),
+    "RockA": ("rock", lambda n: low_piece(n, 2.1, 1.9, 1.5, 6, 0.22, 0.42, pebbles=2, tone=0.6)),
+    "RockFlat": ("rock", lambda n: low_piece(n, 1.1, 1.8, 1.4, 6, 0.12, 0.3, tone=0.4)),
+    "RockSmall": ("rock", lambda n: low_piece(n, 1.0, 0.85, 0.72, 5, 0.25, 0.22)),
+    "Pebbles": ("rock", lambda n: pebbles(n)),
     "EdgeLogs": ("edge", edge_logs),
     "EdgeStakes": ("edge", edge_stakes),
     "EdgeRocks": ("edge", edge_rocks),

@@ -4,6 +4,7 @@ place (the plotrender pattern), for Ben's look before anything is uploaded.
     py tools/testfit/levelrender.py                       # every view, both moods where asked
     py tools/testfit/levelrender.py --views top,campA     # some views
     py tools/testfit/levelrender.py --sheet               # the kit's contact sheet
+    py tools/testfit/levelrender.py --rocks               # the stones and three cliff masses (_rocks_sheet.png)
     py tools/testfit/levelrender.py --barriers            # the plan with the invisible walls drawn
 
 Run it with the system `py` (3.14 has Pillow; no shebang on purpose: a `#!/usr/bin/env python`
@@ -247,7 +248,7 @@ def build_scenes(args):
             cx, cz = (min(xs) + max(xs)) / 2, (min(zs) + max(zs)) / 2
             width = max(xs) - min(xs)
             spec.update({"camera": {"ortho": True, "eye": [cx, 900, cz], "target": [cx, 0, cz], "scale": width}, "size": [2400, int(2400 * (max(zs) - min(zs)) / width)],
-                         "mood": "A", "out": os.path.join(out_dir, "plan_top.png"), "label": "Forest Road from above (north at the top)"})
+                         "mood": "A", "out": os.path.join(out_dir, f"plan_top{args.suffix}.png"), "label": "Forest Road from above (north at the top)"})
             if args.barriers:
                 spec = dict(spec)
                 spec["boxes"] = spec["boxes"] + [{"name": b["name"], "pos": [b["x"], 160.0, b["z"]], "size": [b["sx"], 1.0, b["sz"]], "color": [235, 40, 40], "rotY": 0} for b in data["barriers"]]
@@ -263,7 +264,7 @@ def build_scenes(args):
             spec = dict(base)
             spec["boxes"] = base["boxes"] + player_boxes(view["feet"], yaw)
             spec.update({"camera": cam, "size": [1600, 900], "mood": mood, "label": f"{view['label']}  (mood {mood})",
-                         "out": os.path.join(out_dir, f"{name}_{mood}.png")})
+                         "out": os.path.join(out_dir, f"{name}_{mood}{args.suffix}.png")})
             scenes.append(spec)
     paths_written = []
     for spec in scenes:
@@ -311,6 +312,94 @@ def sheet_scene(args):
     scene_dir = os.path.join(out_dir, "_scenes")
     os.makedirs(scene_dir, exist_ok=True)
     path = os.path.join(scene_dir, "kit_sheet.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(spec, fh)
+    return [(path, spec)]
+
+
+ROCK_ROWS = (
+    ("StoneMonolith", "StoneTall", "StoneSlim", "StandingStone", "StoneLean", "StoneBroad"),
+    ("RockB", "RockA", "RockFlat", "RockSmall", "EdgeRocks"),
+    ("Pebbles", "Pebbles", "Pebbles", "Pebbles"),
+)
+
+
+def sample_cliffs(out_glb):
+    """Three rock masses built by the level's own generator (tools/levels/forest.py block_face and
+    block_caps), like Ben's second reference: a cliff wall, an outcrop and a tower, each a box
+    whose four faces carry stacked blocks and whose top carries caps. Written as one palette GLB."""
+    sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "levels"))
+    import forest as F  # noqa: E402
+    import levelmesh as lm  # noqa: E402
+
+    bake = F.Bake("RockSheet", "palette")
+    # (x0, x1, z0, z1, height, face style)
+    masses = ((0.0, 26.0, 0.0, 9.0, 22.0, "near"), (34.0, 44.0, 0.0, 10.0, 18.0, "near"), (52.0, 60.0, 1.0, 9.0, 24.0, "pillar"))
+    for n, (x0, x1, z0, z1, h, style) in enumerate(masses):
+        faces = ((0, -1, x0, (z0, z1)), (0, 1, x1, (z0, z1)), (2, -1, z0, (x0, x1)), (2, 1, z1, (x0, x1)))
+        for k, (axis, sign, plane, (u0, u1)) in enumerate(faces):
+            F.block_face(bake, axis, sign, plane, (u0, u1, -1.0, h), style, 900.0 + 13.0 * n + k, free_top=True)
+
+        class Box:
+            rect = F.Rect(x0, x1, z0, z1)
+
+        # Capped whole, as the reference's tops are (the level rings a wide top it hides).
+        cap = F.ART["cliff"]["cap"]
+        rim = cap["rim"]
+        try:
+            cap["rim"] = 1e9
+            F.block_caps(bake, h, (x0, x1, z0, z1), Box, [], 950.0 + n)
+        finally:
+            cap["rim"] = rim
+    pal = lm.Palette()
+    data, _lo, _hi = bake.glb(pal, "EraCityTycoon levelrender rock sheet")
+    with open(out_glb, "wb") as fh:
+        fh.write(data)
+    return bake.count(), [(m[0], m[1], m[2], m[3]) for m in masses]
+
+
+def rocks_sheet(args):
+    """Ben's first reference laid out with the forest's stones (a row of standing stones by size,
+    a row of low chunky stones, a row of pebbles) beside three cliff masses like his second, on a
+    plain ground, from a three-quarter view."""
+    index = load_json(os.path.join(KIT_DIR, "pieces.json"))["pieces"]
+    build_dir, out_dir = paths("ForestRoad")
+    scene_dir = os.path.join(out_dir, "_scenes")
+    os.makedirs(scene_dir, exist_ok=True)
+    props, labels = [], []
+    # Seen from +Z looking at -Z (so +X runs to the right): the cliff masses at the back, then the
+    # standing stones, the low stones, the pebbles nearest; each piece turned to show its front.
+    z = -6.0
+    for row in ROCK_ROWS:
+        widths = [max(index[n]["max"][0] - index[n]["min"][0], 4.0) + 3.0 for n in row]
+        x = 30.0 - sum(widths) / 2
+        depth = 0.0
+        for name, cell in zip(row, widths):
+            d = index[name]
+            px = x + cell / 2 + (d["min"][0] + d["max"][0]) / 2
+            props.append([name, px, 0.0, z + d["min"][2], 180.0, 1.0])
+            labels.append({"text": f"{name} {d['triangles']}", "pos": [x + cell / 2, 0.0, z + 2.6]})
+            x += cell
+            depth = max(depth, d["max"][2] - d["min"][2])
+        z += depth + 7.5
+    glb = os.path.join(scene_dir, "rocks_cliffs.glb")
+    tris, masses = sample_cliffs(glb)
+    ox, oz = 0.0, -40.0
+    meshes = [{"glb": glb, "image": os.path.join(build_dir, "palette.png"), "interp": "Closest", "group": "rock", "offset": [ox, 0.0, oz]}]
+    for k, (x0, x1, z0, z1) in enumerate(masses):
+        labels.append({"text": ("cliff wall (near style)", "outcrop (near style)", "tower (the lookout's style)")[k],
+                       "pos": [ox + (x0 + x1) / 2, 0.0, oz + z1 + 6.0]})
+    labels.append({"text": f"the three masses: {tris} triangles, built by tools/levels/forest.py", "pos": [30.0, 26.0, oz - 2.0]})
+    width = 64.0
+    spec = {
+        "kitDir": KIT_DIR,
+        "boxes": [{"name": "Card", "pos": [30.0, -0.55, -14.0], "size": [110.0, 1.0, 90.0], "color": [104, 98, 90], "rotY": 0}],
+        "meshes": meshes, "props": props, "water": [], "labels": labels,
+        "camera": {"eye": [12.0, 44.0, 52.0], "target": [32.0, 4.0, -16.0], "lens": 30.0},
+        "size": [2600, 1600], "mood": "A", "out": os.path.join(out_dir, "_rocks_sheet.png"),
+        "label": "The forest's stones (name, triangles) and three cliff masses, after Ben's two references",
+    }
+    path = os.path.join(scene_dir, "rocks_sheet.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(spec, fh)
     return [(path, spec)]
@@ -462,7 +551,9 @@ def main_py():
     parser.add_argument("--data", default=os.path.join(REPO_ROOT, "src", "shared", "Config", "LevelDress", "ForestRoad.json"))
     parser.add_argument("--views", default="")
     parser.add_argument("--moods", default="")
+    parser.add_argument("--suffix", default="", help="appended to each picture's name (keep the old ones to compare)")
     parser.add_argument("--sheet", action="store_true")
+    parser.add_argument("--rocks", action="store_true", help="the stone family and three cliff masses (_rocks_sheet.png)")
     parser.add_argument("--barriers", action="store_true", help="the plan view with the invisible walls drawn")
     parser.add_argument("--counts", action="store_true", help="triangles drawn from each view and from spots along the route")
     args = parser.parse_args()
@@ -470,7 +561,7 @@ def main_py():
         return counts(args)
     if args.barriers and not args.views:
         args.views = "top"
-    scenes = sheet_scene(args) if args.sheet else build_scenes(args)
+    scenes = rocks_sheet(args) if args.rocks else sheet_scene(args) if args.sheet else build_scenes(args)
     for path, spec in scenes:
         run_blender(path)
         finish(spec)
@@ -539,7 +630,11 @@ def main_blender():
 
     tris = 0
     for m in spec.get("meshes", []):
-        for obj in testfit.import_glb(m["glb"]):
+        roots = testfit.import_glb(m["glb"])
+        if m.get("offset"):
+            for obj in roots:
+                obj.location = obj.location + Vector(plotscene.to_blender(m["offset"]))
+        for obj in roots:
             for child in testfit.all_descendants([obj]):
                 for owner in list(child.users_collection):
                     owner.objects.unlink(child)

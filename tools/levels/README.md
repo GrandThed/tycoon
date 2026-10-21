@@ -10,17 +10,20 @@ character-only wall this generator writes.
 All with the system `py` (3.14, no shebang needed); Blender only for the textures and the renders.
 
 ```
-py tools/assets/forest_kit.py                   # the kit: 39 GLBs + pieces.json into assets/kenney3d/forest-kit/
+py tools/assets/forest_kit.py                   # the kit: 46 pieces + a palette card + pieces.json into assets/kenney3d/forest-kit/
 "/c/Program Files/Blender Foundation/Blender 5.2/5.2/python/bin/python.exe" tools/levels/forest_textures.py
                                                 # 4 ground textures into assets/build/levels/ForestRoad/textures/
 py tools/levels/forest.py build                 # meshes + palette into assets/build/levels/ForestRoad/,
                                                 # data into src/shared/Config/LevelDress/ForestRoad.json, the upload
                                                 # record assets/build/levels/ForestRoad.json, then the gate
 py tools/levels/forest.py check                 # the QA gate (writes nothing): PASS or one line per failure
+py tools/levels/forest.py mutants               # breaks each rule of the gate once: every line must read CAUGHT
 py tools/levels/forest.py stats                 # triangles by group and by piece
 py tools/testfit/levelrender.py                 # every view (both moods where asked) into assets/testfit/out/Levels/ForestRoad/
 py tools/testfit/levelrender.py --views top,campA --moods A
 py tools/testfit/levelrender.py --sheet         # the kit's contact sheet
+py tools/testfit/levelrender.py --rocks         # the stone family and three cliff masses (_rocks_sheet.png)
+py tools/testfit/levelrender.py --views top,campA --moods B --suffix _rocks   # beside the old pictures
 py tools/testfit/levelrender.py --barriers      # the plan with the invisible walls in red
 py tools/testfit/levelrender.py --counts        # triangles drawn from each view and the worst spot on the route
 ```
@@ -58,11 +61,40 @@ A build is about 12 s; a render 20-60 s a view; the full set about 8 minutes.
   reaching outward; gaps at the gates; totem posts outside the gates.
 - A walled camp: nothing over its wall's top inside its floor; placed pieces under the top less
   `sightMargin`.
+- Rock never reaches into walking space (`forestcheck.walking_space_rule`): over walkable ground,
+  from its floor up to 36 studs, every rock vertex lies within 0.3 of a collision solid. A face
+  that looks onto walkers ("thin") keeps its blocks at most `THIN_OUT` (0.12) out of the wall; they
+  sit back instead for relief, as deep as the wall's thickness allows (`ART.cliff.thinBack` 1.5).
+  No kit stone stands on walkable ground or water, the island shrine's ring aside.
 - No two looks share a face: lifts over a collision top are floor 0.00, rims 0.03, camp 0.06,
   cave floors 0.075, road 0.09, a pillar's top 0.06; the shore line 0.06 over the water's top;
   rock flush with a visible Part (a bramble) is cut back from it; a kit piece's own floor 0.14.
 - Meshes: at most 20,000 triangles, sides at most 1,500 studs, names `[A-Za-z0-9_]` up to 24,
   slivers under 1,500 triangles folded into a neighbour; budget 150,000 (gate at +10%).
+
+## The rocks (Ben's references, 2026-10-21)
+
+Every stone follows `assets/research/2026-10-21-l4/ref_rocks_*.png`: sculpted chamfered prisms with a
+few big facets, light tops, darker sides (`forest_kit.rock_paint` picks the swatch by facing).
+
+- **Cliffs** (`rock_faces`, `block_face`): every exposed face of a tall solid is a cliff of stacked
+  chamfered blocks (`forest_kit.block_poly`) over one dark backing quad (no crevice ever shows the
+  hidden wall or the sky). Columns of varied width with leaning joints, each stacked to its own
+  heights with tilted joints (`joint_grid`); a tall face is cut into tiers per stretch with slanted
+  seams; a free top's columns stand over it, rising and falling in groups. Styles in `ART.cliff`:
+  `thin` (over walkers; its tiers above reach take `near` sizes), `tunnel`, `step`, `near` and
+  `far` (by how near a walker in front stands, a tall wall in between hiding him), `pillar` (the
+  lookout), `gully`. Tops get caps round their rim and a flat mossy floor in a wide top's middle
+  (`block_caps`).
+- **Columns on the ground**: the massif round the walled camp (`massif_columns`, stacked with
+  ledges; the heightfield under a column is dropped, `Ground.mask_quads`) and the plateau's lips
+  (`lip_columns`); the gully's walls are cliff faces (`gully_faces`).
+- **Stones** (kit pieces, role `rock`): StoneMonolith, StoneTall, StandingStone, StoneSlim,
+  StoneLean, StoneBroad, RockB, RockA, RockFlat, RockSmall, Pebbles; EdgeRocks and the campfire's
+  ring are built from them. Placed in clusters along the walled road (`scatter_stones`), on the
+  creek and pond banks, at the feet of cliffs (`foot_boulders`), on the gully's rims and in the
+  island shrine's ring.
+- Budget at the redo: 149.8k triangles; the canopy went from 10- to 14-stud cells to pay for it.
 
 ## Kit facts
 
