@@ -680,3 +680,10 @@ then Ben: growth looks are not content only for other players (L3-55, L3-70).
    - Starting values; one screenshot round expected (L3-63).
 7. **T9's exit count** pins the exits **before** the `SwingOther` call (1: the empty-flight return), not the whole
    `onStrike` (4 since before W2).
+8. **The fix round** (`docs/prompts/l3-w2-fix-round.md`, P1–P6, S1–S6, C1–C5; reports in `docs/prompts/l3-w2-fix-reports/`):
+   the cast's `WeaponService.NoteHeld(player, slotName)` now sits on the line before `broadcastFx(fx)` in
+   `AbilityService.OnCast` (after every refusal but the projectile budget's), so L3-50 and T6 read that way; a draw of a
+   non-ranged family is refused; a rotated weapon is refused at the harvest; icons are hashed on their pixels; clones
+   find `Base` by name; unowned shelf icons use the ghost tone `ARMORY_SCREEN_ICON_GHOST` (140, 155, 190: the weapon
+   dimmed, not a flat shape); the stage's live connections exist only while a model shows; a character's attribute
+   changes coalesce into one show per frame, and `Muzzle` flushes first.

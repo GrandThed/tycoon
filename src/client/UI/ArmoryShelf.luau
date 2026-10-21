@@ -13,9 +13,11 @@
 -- L3 W2 (docs/prompts/l3-w2-contract.md, L3-57): a family with a harvested icon (Assets.json v5
 -- `icons`, through WeaponLook.IconId) shows it under a one-line name, the tier line in the
 -- card's lower right and the element's dot on the icon's empty upper-left corner (Theme's
--- ARMORY_SCREEN_CARD_ICON block has the numbers); an unowned family's icon is a near-black
--- silhouette. Without an icon (id 0: no config, not harvested, in moderation) a card is W1's
--- text card exactly. The card's size never changes, so the screen's fits hold either way.
+-- ARMORY_SCREEN_CARD_ICON block has the numbers); an unowned family's icon takes the shelf's
+-- ghost tone (ARMORY_SCREEN_ICON_GHOST, lighter than the dark card, where a near-black
+-- silhouette could not read). Without an icon (id 0: no config, not harvested, in moderation) a
+-- card is W1's text card exactly. The card's size never changes, so the screen's fits hold
+-- either way.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -286,7 +288,7 @@ function ArmoryShelf.new(parent: Instance, deps: Deps): Shelf
 					else ""
 				shape(card, iconId > 0)
 			end
-			card.icon.ImageColor3 = if owned then WHITE else Theme.ARMORY_STAGE_SILHOUETTE
+			card.icon.ImageColor3 = if owned then WHITE else Theme.ARMORY_SCREEN_ICON_GHOST
 			card.button.BackgroundColor3 = if owned
 				then Theme.MAP_COLOR_PANEL_LIGHT
 				else Theme.ARMORY_SCREEN_CARD_DARK

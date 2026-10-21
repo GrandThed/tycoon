@@ -68,6 +68,8 @@ VERSION = 1
 REQUIRED_POINTS = ("grip", "tip", "holster")
 # A model name is an Instance name, a file stem and part of an Open Cloud display name.
 MODEL_NAME = re.compile(r"^[A-Z][A-Za-z0-9]*$")
+# src/shared/WeaponLook.luau's BOUNDS_SLACK is this number on the reading side: change the two
+# together, or one writes what the other warns of.
 POINT_SLACK = 0.01
 SIDECAR_SLACK = 0.002
 PROOF_SLACK = 0.01

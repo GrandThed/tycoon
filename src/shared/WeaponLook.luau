@@ -26,7 +26,8 @@ WeaponLook.ATTRIBUTES = ATTRIBUTES
 -- The points every entry carries (L3-46); any other name is a builder's extra.
 local REQUIRED_POINTS = table.freeze({ "grip", "tip", "holster" })
 -- L3-46: how far a point may lie outside its entry's bounds (studs). The generator writes both
--- from one frame file, rounded to the thousandth.
+-- from one frame file, rounded to the thousandth. tools/assets/weapon_frames.py's POINT_SLACK is
+-- this number on the writing side: change the two together, or one writes what the other warns of.
 local BOUNDS_SLACK = 0.01
 
 local function finite(value: any): boolean
@@ -184,9 +185,10 @@ local function inside(point: Vector3, bounds: any): boolean
 end
 
 -- Every fault of a WeaponModels config against the weapon families (ProvingGrounds.json
--- `weapons`), sorted by family: a family with no usable entry (and why), an entry that names no
--- family, a grip off the origin, a point that is not three finite numbers or lies outside its
--- bounds (by more than BOUNDS_SLACK), a missing folder. Empty when all is well. HeldWeapons.Start
+-- `weapons`): a family with no usable entry (and why), an entry that names no family, a grip off
+-- the origin, a point that is not three finite numbers or lies outside its bounds (by more than
+-- BOUNDS_SLACK), a missing folder. The whole list is sorted, so each family's faults come
+-- together, in family order, whichever pass found them. Empty when all is well. HeldWeapons.Start
 -- warns them once; tools/assets/weapon_frames.py refuses to write such a file.
 function WeaponLook.Problems(
 	models: Types.WeaponModelsConfig?,
@@ -229,6 +231,7 @@ function WeaponLook.Problems(
 			end
 		end
 	end
+	table.sort(problems)
 	return problems
 end
 

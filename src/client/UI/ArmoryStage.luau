@@ -4,13 +4,17 @@
 --
 -- With its model (WeaponModels.json names it, Assets/Props/<folder>/<model> holds it) the weapon
 -- stands in a ViewportFrame over the lighter band: cloned once per selection, posed once with its
--- tip raised, and from then on only the camera moves. The camera orbits the model's bounds (from
--- the config, never measured), framing their sphere so no turn changes the framing. It turns
--- slowly while the screen is open on the Weapons tab (SetActive), except on low-end devices
--- (Theme.lowEndDevice, never reducedMotion, which is true on every phone); a drag turns it on
--- every device. An unowned weapon is a near-black silhouette over the same lighter band. The name
--- and the big tier (the detail column shows both) give way to a small top line: the slot word and
--- the element chip.
+-- tip raised, and from then on only the camera moves. The clone's Base is found by name and made
+-- its PrimaryPart before the pose (a template's PrimaryPart ref can arrive nil in a live session,
+-- and a model without one pivots about its bounding box); a template with no Base counts as
+-- missing. The camera orbits the model's bounds (from the config, never measured), framing their
+-- sphere so no turn changes the framing. While the screen is open on the Weapons tab (SetActive)
+-- with a model shown, and only then, it turns slowly, except on low-end devices
+-- (Theme.lowEndDevice, never reducedMotion, which is true on every phone); a drag and a gamepad's
+-- right stick turn it on every device. A drag ends on its own release, on the window losing
+-- focus, and whenever the stage stops (close, the Abilities tab, no model). An unowned weapon is
+-- a near-black silhouette over the same lighter band. The name and the big tier (the detail
+-- column shows both) give way to a small top line: the slot word and the element chip.
 --
 -- Without a model (no config, no entry, no template: before the harvest paste, L3-59) it is W1's
 -- placeholder exactly: the family's name large, its slot, its element chip (FIRE / ICE), a big
@@ -56,6 +60,7 @@ type Drag = {
 }
 
 local WHITE = Color3.new(1, 1, 1)
+local TEMPLATE_BASE_NAME = "Base"
 
 local ArmoryStage = {}
 
@@ -86,7 +91,8 @@ local function weaponsFolder(models: Types.WeaponModelsConfig): Instance?
 	return if props ~= nil then props:FindFirstChild(models.folder) else nil
 end
 
--- The family's template and its entry; nil without a config, a valid entry or a template.
+-- The family's template and its entry; nil without a config, a valid entry, or a template with
+-- its Base.
 local function templateOf(family: string): (Model?, Types.WeaponModelDef?)
 	local models = Catalog.GetWeaponModelsConfig()
 	local def = WeaponLook.Def(models, family)
@@ -96,6 +102,10 @@ local function templateOf(family: string): (Model?, Types.WeaponModelDef?)
 	local folder = weaponsFolder(models)
 	local template = if folder ~= nil then folder:FindFirstChild(def.model) else nil
 	if template == nil or not template:IsA("Model") then
+		return nil, nil
+	end
+	local base = template:FindFirstChild(TEMPLATE_BASE_NAME)
+	if base == nil or not base:IsA("BasePart") then
 		return nil, nil
 	end
 	return template, def
@@ -225,7 +235,13 @@ function ArmoryStage.new(parent: Instance): Stage
 		height = 0,
 		active = false,
 		warmed = false,
+		-- Live only while the screen is open on Weapons with a model shown (syncTurn): the slow
+		-- turn (never on a low-end device), and the right stick's and the window's listeners.
 		turn = nil :: RBXScriptConnection?,
+		inputs = {} :: { RBXScriptConnection },
+		-- The right stick's X past the dead zone (0 at rest) and when it last moved (os.clock).
+		stickX = 0,
+		stickAt = 0,
 		drag = nil :: Drag?,
 	}
 
@@ -267,6 +283,13 @@ function ArmoryStage.new(parent: Instance): Stage
 		camera.CFrame = CFrame.lookAt(look.centre + direction * distance, look.centre)
 	end
 
+	-- Turns the view by `degrees`: positive turns the weapon's near side right (the camera goes
+	-- left), as a drag to the right does.
+	local function turnBy(degrees: number): ()
+		look.yaw = (look.yaw - degrees) % 360
+		place()
+	end
+
 	local function clear(): ()
 		local model = look.model
 		if model ~= nil then
@@ -291,6 +314,12 @@ function ArmoryStage.new(parent: Instance): Stage
 			return
 		end
 		local model = template:Clone() :: Model
+		local base = model:FindFirstChild(TEMPLATE_BASE_NAME)
+		if base == nil or not base:IsA("BasePart") then
+			model:Destroy()
+			return
+		end
+		model.PrimaryPart = base
 		for _, part in model:GetDescendants() do
 			if part:IsA("BasePart") then
 				part.Anchored = true
@@ -325,7 +354,64 @@ function ArmoryStage.new(parent: Instance): Stage
 			look.turn = nil
 			turn:Disconnect()
 		end
+		for _, connection in look.inputs do
+			connection:Disconnect()
+		end
+		table.clear(look.inputs)
+		look.stickX = 0
 		endDrag()
+	end
+
+	-- The right stick (3-s4): its X past the dead zone sets the turn's rate, which the slow turn
+	-- applies per frame. A low-end device has no per-frame turn, so there each stick event turns
+	-- the view once, by the time since the stick last moved (capped); the first event off rest
+	-- only arms it. A drag in progress wins.
+	local function onStick(input: InputObject): ()
+		if input.KeyCode ~= Enum.KeyCode.Thumbstick2 then
+			return
+		end
+		local x = input.Position.X
+		local stickX = if math.abs(x) < Theme.ARMORY_STAGE_STICK_DEADZONE then 0 else x
+		local now = os.clock()
+		if Theme.lowEndDevice and look.stickX ~= 0 and stickX ~= 0 and look.drag == nil then
+			local seconds = math.min(now - look.stickAt, Theme.ARMORY_STAGE_STICK_STEP_SECONDS)
+			turnBy(stickX * Theme.ARMORY_STAGE_STICK_DEGREES_PER_SECOND * seconds)
+		end
+		look.stickX = stickX
+		look.stickAt = now
+	end
+
+	-- Called whenever the screen's state or the shown model changes: the stage's listeners and
+	-- its per-frame turn exist only while the screen is open on Weapons with a model shown
+	-- (3-s2); otherwise everything stops, any drag included.
+	local function syncTurn(): ()
+		if not look.active or look.model == nil then
+			stop()
+			return
+		end
+		if #look.inputs == 0 then
+			table.insert(look.inputs, UserInputService.InputChanged:Connect(onStick))
+			-- A release the window never saw (focus lost mid-drag) must not leave a drag or a
+			-- stick turn running.
+			table.insert(
+				look.inputs,
+				UserInputService.WindowFocusReleased:Connect(function()
+					look.stickX = 0
+					endDrag()
+				end)
+			)
+		end
+		if look.turn == nil and not Theme.lowEndDevice then
+			look.turn = RunService.RenderStepped:Connect(function(deltaTime: number)
+				if look.drag ~= nil then
+					return
+				end
+				local rate = if look.stickX ~= 0
+					then look.stickX * Theme.ARMORY_STAGE_STICK_DEGREES_PER_SECOND
+					else Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND
+				turnBy(rate * deltaTime)
+			end)
+		end
 	end
 
 	-- The stage's own text: W1's centred column without a model, the small top line with one.
@@ -351,6 +437,8 @@ function ArmoryStage.new(parent: Instance): Stage
 
 	-- A press on the weapon drags it round; the slow turn waits until the release and carries on
 	-- from there. Each drag event places the camera once (no per-frame work on a low-end device).
+	-- The drag ends on any end of the press that started it, on a mouse movement with the button
+	-- no longer down (its release was lost), and whenever the stage stops.
 	viewport.InputBegan:Connect(function(input: InputObject)
 		local kind = input.UserInputType
 		if kind ~= Enum.UserInputType.MouseButton1 and kind ~= Enum.UserInputType.Touch then
@@ -371,12 +459,13 @@ function ArmoryStage.new(parent: Instance): Stage
 				if not follows then
 					return
 				end
+				if not touch and not UserInputService:IsMouseButtonPressed(kind) then
+					endDrag()
+					return
+				end
 				local x = moved.Position.X
-				-- Dragging right turns the weapon's near side right: the camera goes left.
-				look.yaw = (look.yaw - (x - drag.x) * Theme.ARMORY_STAGE_DRAG_DEGREES_PER_PIXEL)
-					% 360
+				turnBy((x - drag.x) * Theme.ARMORY_STAGE_DRAG_DEGREES_PER_PIXEL)
 				drag.x = x
-				place()
 			end)
 		)
 		table.insert(
@@ -395,6 +484,7 @@ function ArmoryStage.new(parent: Instance): Stage
 			if view == nil then
 				clear()
 				look.family = nil
+				syncTurn()
 				viewport.Visible = false
 				dress(false)
 				slot.Text = ""
@@ -408,6 +498,7 @@ function ArmoryStage.new(parent: Instance): Stage
 			-- A family whose template was missing is looked up again (it may have replicated).
 			if fresh or look.model == nil then
 				selectFamily(view.family)
+				syncTurn()
 			end
 			local withModel = look.model ~= nil
 			local owned = view.owned
@@ -456,16 +547,7 @@ function ArmoryStage.new(parent: Instance): Stage
 				look.warmed = true
 				warm()
 			end
-			if not Theme.lowEndDevice then
-				look.turn = RunService.RenderStepped:Connect(function(deltaTime: number)
-					if look.model == nil or look.drag ~= nil then
-						return
-					end
-					look.yaw = (look.yaw - Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND * deltaTime)
-						% 360
-					place()
-				end)
-			end
+			syncTurn()
 		end,
 		Destroy = function()
 			look.active = false

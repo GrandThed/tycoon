@@ -580,6 +580,22 @@ function W2L3.problemTests(): ()
 		}),
 		`two faults in two families, sorted by family ({table.concat(both, "; ")})`
 	)
+	-- The fix round's S5 (2-s4): the whole list is sorted, so a family the file lacks (found
+	-- first, from the weapons' side) comes after an earlier family's fault in the file.
+	local mixed = Look.Problems(
+		W2L3.with(function(e, c)
+			e.points.tip = { 0, 0.1, -3.05 }
+			c.families.longbow = nil
+		end),
+		weapons
+	)
+	check(
+		W2L3.same(mixed, {
+			"broadsword: its tip lies outside its bounds",
+			"longbow: no model entry",
+		}),
+		`a missing family and an earlier family's fault, in family order ({table.concat(mixed, "; ")})`
+	)
 end
 L1.group("l3w2 problemTests", W2L3.problemTests)
 
@@ -650,8 +666,29 @@ W2L3.LINES = {
 	prepareActive = { 1, "T2: its one guard is the inactive service" },
 	prepareExits = { 1, "T2: and PrepareCharacter has no other way out" },
 	addPrepares = { 1, "T2: a mission's admit prepares the character it finds" },
+	addMission = { 1, "T2 (S2): ... inside AddPlayer's own mission test, the code exactly" },
+	addExits = { 1, "T2 (S2): and AddPlayer's one way out is its guard, before the shooter exists" },
 	rangePrepares = { 1, "T2: the range prepares every character it places" },
-	missionHook = { 1, "T2: a mission's every later character goes through the hook" },
+	rangePrepareExits = { 0, "T2 (S2): and the range's prepareCharacter has no way out" },
+	rangeAddWeapons = { 1, "T2 (S2): the range's AddPlayer gives the weapons first ..." },
+	rangeRespawn = { 1, "T2 (S2): ... prepares every respawn ..." },
+	rangeFirst = { 1, "T2 (S2): ... and the character it finds at its admit" },
+	rangeAddExits = { 1, "T2 (S2): its one way out is its guard" },
+	missionHook = {
+		1,
+		"T2 (S2): a mission's Init hands PrepareCharacter to ArenaService's hook, a whole line at one tab",
+	},
+	initExits = {
+		3,
+		"T2 (S2): Init's ways out are the range's return and its two sources' answers",
+	},
+	hookSetters = { 1, "T2 (S2): WaveService sets the character hook once" },
+	arenaHookSet = { 1, "T2 (S2): ArenaService keeps the hook it is handed ..." },
+	hookWrites = { 1, "T2 (S2): ... and writes it nowhere else" },
+	arenaHook = {
+		1,
+		"T2 (S2): every character an admitted member gets is placed, then handed to the hook",
+	},
 	-- T3: every loadout change.
 	familyShow = {
 		1,
@@ -662,15 +699,27 @@ W2L3.LINES = {
 	-- T4, T5: an accepted attack and draw.
 	attackHeld = { 1, "T4: OnAttack notes the slot on the line after the acceptance (lastSeq)" },
 	attackSlot = { 1, "T4: OnAttack's slot is the attacking family's own" },
-	attackExits = { 12, "T4: OnAttack's ways out are its refusals, none after the acceptance" },
+	attackExits = { 12, "T4: OnAttack's ways out are its refusals" },
+	attackExitsAfter = { 0, "T4 (S5): none of them after the noted line" },
 	drawHeld = { 1, "T5: OnDraw notes the slot on the line after the draw is stamped, its last" },
 	drawSlot = { 1, "T5: OnDraw's slot is the drawing family's own" },
+	drawRanged = {
+		1,
+		"T5 (S4): OnDraw refuses a family not of the ranged slot, beside its other refusals",
+	},
 	drawExits = { 3, "T5: OnDraw's ways out are its refusals" },
-	-- T6: an accepted cast.
-	castHeld = { 1, "T6: OnCast notes the cast's slot on the line after its acceptance (lastSeq)" },
+	-- T6: a cast, before its effect is sent (S6).
+	castHeld = {
+		1,
+		"T6 (S6): OnCast notes the cast's slot on the line before its effect is sent",
+	},
 	castSlot = { 1, "T6: the cast's slot is its own" },
 	castNotes = { 1, "T6: AbilityService tells WeaponService once" },
-	castExits = { 9, "T6: OnCast's ways out are its refusals, none after the acceptance" },
+	castExits = { 9, "T6: OnCast's ways out are its refusals" },
+	castExitsAfter = {
+		1,
+		"T6 (S5, S6): one of them after the noted line, the projectile budget's",
+	},
 	-- T7: shown only on a change.
 	noteBody = { 1, "T7: noteHeld returns on the same slot, else writes it and shows it" },
 	noteExits = { 1, "T7: noteHeld's one way out is the same slot" },
@@ -679,7 +728,13 @@ W2L3.LINES = {
 	NoteExits = { 1, "T7: NoteHeld's one way out is its guard" },
 	noteCalls = { 4, "T7: noteHeld is defined once and called by OnAttack, OnDraw and NoteHeld" },
 	heldWrites = { 1, "T7: `held` is written in noteHeld alone" },
+	heldIndexed = { 0, 'T7 (S5): and never by index (["held"])' },
 	loadoutWrites = { 2, "T1, T3: the held pair is written in SetFamily alone, which shows it" },
+	loadoutWhole = { 0, "T1, T3 (S5): and no whole loadout replaces it" },
+	lookLiterals = {
+		0,
+		"T1 (S5): no file under src but WeaponLook spells an attribute name as a literal",
+	},
 	addHeld = { 1, "T7: a new shooter holds melee, the client's starting stance" },
 	-- T8: no hit reads the look.
 	hit_damageScale = { 0, "T8: damageScale reads no look" },
@@ -689,11 +744,17 @@ W2L3.LINES = {
 	hit_resolveMelee = { 0, "T8: resolveMelee reads no look" },
 	hit_resolveRanged = { 0, "T8: resolveRanged reads no look" },
 	hit_strike = { 0, "T8: strike reads no look" },
+	heldReads = {
+		3,
+		"T8 (S1): WeaponService reads `held` in the Values call and noteHeld's compare and write alone",
+	},
+	abilityHeld = { 0, "T8 (S1): AbilityService never reads `held`" },
 	-- T9: another player's arm.
 	otherInBranch = {
 		1,
-		"T9: SwingOther(strike.userId, strike.step or 1) inside `elseif swing and not mine then`",
+		"T9: SwingOther(strike.userId, strike.step or 1) a whole line one tab inside `elseif swing and not mine then`",
 	},
+	otherBlocks = { 0, "T9 (S3): with no line opening a block between the branch head and it" },
 	otherCalls = { 1, "T9: FeedbackController calls SwingOther there alone" },
 	otherRequire = { 1, "T9: FeedbackController requires WeaponController" },
 	otherMine = { 1, "T9: mine is the strike's own user" },
@@ -754,12 +815,16 @@ W2L3.LINES = {
 	seal3 = { 1, "T12: seal turns queries off" },
 	seal4 = { 1, "T12: seal turns touches off" },
 	seal5 = { 1, "T12: seal makes it massless" },
+	sealUndone = { 0, "T12 (S3): no line of HeldWeapons turns one of them back" },
 	heldDeep = { 0, "T13: no recursive FindFirstChild in HeldWeapons" },
 	-- T14: the stage's turn.
 	stageReduced = { 0, "T14: ArmoryStage never reads Theme.reducedMotion" },
 	stageFrames = { 1, "T14: ArmoryStage connects RenderStepped once ..." },
-	activeFrames = { 1, "T14: ... in SetActive ..." },
-	gatedFrames = { 1, "T14: ... behind `not Theme.lowEndDevice`" },
+	activeFrames = { 1, "T14 (C3): ... in syncTurn ..." },
+	gatedFrames = {
+		1,
+		"T14 (S3, C3): ... behind exactly `if look.turn == nil and not Theme.lowEndDevice then`",
+	},
 	stagePoses = { 1, "T14: the model is posed once ..." },
 	selectPoses = { 1, "T14: ... in the select path" },
 	selectPose = { 1, "T14: to the display pose, the tip rising by ARMORY_STAGE_TILT_DEGREES" },
@@ -768,6 +833,58 @@ W2L3.LINES = {
 		"T14: the screen turns the stage on while open on the Weapons tab, off on the others",
 	},
 	screenClosed = { 1, "T14: and off when it closes" },
+	-- The fix round's S3 (3-m3) and C1 to C3, the stage.
+	stageStops = { 1, "S3: SetActive(false) stops the stage" },
+	activeSyncs = { 1, "C3: SetActive(true) syncs the turn, after the warm-up" },
+	setActiveExits = { 2, "C3: SetActive's ways out: the same state, and the close" },
+	selectClears = { 1, "S3: a selection destroys the previous clone first" },
+	selectBase = { 1, "C1: the stage's clone finds Base by name and makes it PrimaryPart" },
+	baseBeforePose = { 1, "C1: before the pose" },
+	stageTemplateBase = { 1, "C1: a stage template with no Base counts as missing" },
+	stageBaseName = { 1, 'C1: the stage names its Base "Base"' },
+	stagePrimaryReads = { 0, "C1: the stage never reads a PrimaryPart ref" },
+	syncStops = {
+		1,
+		"C3: syncTurn stops everything unless the screen is open on Weapons with a model",
+	},
+	syncCalls = { 4, "C3: syncTurn is called on SetActive(true), Show(nil) and a selection" },
+	syncExits = { 2, "C3: syncTurn's ways out: the stop, and the turn's wait for a drag" },
+	syncStep = { 1, "C3: the per-frame turn turns the view" },
+	syncStick = { 1, "C3: the right stick is listened to while the stage is live" },
+	syncFocus = { 1, "C3: a lost window focus zeroes the stick and ends a drag" },
+	stopDrops = { 1, "C3: stop drops the listeners, the stick and any drag" },
+	showNilSyncs = { 1, "C3: Show(nil) clears the clone and syncs (the stage stops)" },
+	selectSyncs = { 1, "C3: a selection syncs" },
+	stageSilhouette = { 1, "S3: an unowned model is the near-black silhouette" },
+	stickOnly = { 1, "C3: only the right stick turns the stage" },
+	stickLowEnd = { 1, "C3: on a low-end device each stick event turns it once" },
+	dragLost = { 1, "C3: a mouse move with the button up ends a drag" },
+	dragEnds = { 1, "C3: a drag ends on its own release" },
+	shelfGhost = { 1, "C2: an unowned shelf icon takes the ghost tone" },
+	shelfSilhouette = { 0, "C2: the shelf never draws the stage's silhouette" },
+	-- S3 (3-m3) and C1, C4, HeldWeapons.
+	heldCleanup = { 1, "S3: a family that leaves the loadout is destroyed" },
+	heldWatched = { 1, "S3: all three attributes are watched, each change queued (C4)" },
+	heldMountShows = { 1, "S3: a mount part arriving is watched and re-shows" },
+	attachShows = { 1, "S3: an attachment arriving re-shows" },
+	bindShows = { 1, "S3: bind ends on a show" },
+	bindExits = { 0, "S3: bind has no way out" },
+	stanceShows = { 1, "S3: the local switch shows at once, on its own frame" },
+	stanceExits = { 1, "S3: SetLocalStance's one way out is the same stance" },
+	playerWatch = { 1, "S3: every player who joins is watched ..." },
+	playersNow = { 1, "S3: ... and every player already in" },
+	startExits = { 1, "S3: Start's one way out is a second start" },
+	heldDirectShows = { 4, "C4: show(rig) direct in flush, bind, SetLocalStance and refreshAll" },
+	heldQueues = { 3, "C4: queued from the attribute, mount part and attachment handlers" },
+	queueOnce = { 1, "C4: one deferred flush per batch" },
+	flushShows = { 1, "C4: the flush shows a pending change of a rig still bound" },
+	unbindUnbinds = { 1, "C4: unbind marks the rig gone" },
+	muzzleFlushes = { 1, "C4, 3-m1: Muzzle shows a pending change first" },
+	heldBaseName = { 1, 'C1: HeldWeapons names its Base "Base"' },
+	heldTemplateBase = { 1, "C1: a template with no Base counts as missing" },
+	heldBase = { 1, "C1: the clone finds Base by name and makes it PrimaryPart" },
+	baseBeforeWelds = { 1, "C1: before any weld" },
+	heldPrimaryReads = { 0, "C1: HeldWeapons never reads a PrimaryPart ref" },
 	-- The lead's ruling 6 (§11), HeldWeapons: the hold each slot hangs by, and the raised hand.
 	hangHold = {
 		1,
@@ -812,6 +929,13 @@ W2L3.LINES = {
 	onHoldExits = { 0, "R6: onHold has no way out" },
 	bindRest = { 1, "R6: the local shoulder, once found, takes the rest at once" },
 	remoteRest = { 1, "R6: another player's record starts at its rest" },
+	setRestEase = { 1, "R6 (S3): a new rest eases the arm there at once" },
+	setRestExits = { 2, "R6 (S3): setRest's ways out are the same rest and no shoulder" },
+	remoteSnap = {
+		1,
+		"R6 (S3): another player's fresh record snaps a raised arm up",
+	},
+	remotePoseExits = { 2, "R6 (S3): remotePoseFor answers its cached record or the fresh one" },
 	restWrites = { 6, "R6: the rest is written by setRest, the records' starts and resets only" },
 	raisedWrites = { 1, "R6: the raised set is written by onHold alone" },
 }

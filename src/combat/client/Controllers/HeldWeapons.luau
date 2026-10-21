@@ -12,8 +12,13 @@
 --  * The weapon in use hangs from RightGripAttachment by its grip, the other from
 --    BodyBackAttachment by its holster, each by one Weld to the template's Base. The template's
 --    frame is the weapon generator's and Base is its pivot (L3-47), so a config point p sits at
---    base.CFrame:PointToWorldSpace(p). A model is cloned once per character and family; a switch
---    only re-points the two welds. Nothing here runs per frame.
+--    base.CFrame:PointToWorldSpace(p). Base is found by name and made the clone's PrimaryPart:
+--    the template's PrimaryPart ref can arrive nil in a live session (PlotService.templateBase),
+--    and a template with no Base counts as missing. A model is cloned once per character and
+--    family; a switch only re-points the two welds. Nothing here runs per frame, and a burst of
+--    changes on one character (a server write sets three attributes; a rapid draw can flip
+--    WeaponHeld many times a second) is shown once, deferred to the end of that frame's batch,
+--    or at once when Muzzle is asked for that character first.
 --  * Rest poses (contract section 11, ruling 6): no one grip fits a hanging arm and a drawn bow,
 --    so a melee weapon is held tip forward from the hanging hand (COMBAT_HOLD_GRIP_MELEE) and a
 --    ranged one along the arm (COMBAT_HOLD_GRIP_RANGED), which WeaponController raises forward
@@ -40,6 +45,7 @@ local MELEE_SLOT = "melee"
 local RANGED_SLOT = "ranged"
 local MODEL_PREFIX = "HeldWeapon_"
 local WELD_NAME = "HeldWeaponWeld"
+local TEMPLATE_BASE_NAME = "Base"
 -- One look for everyone in W2 (L3-55): the template's first stage.
 local SHOWN_STAGE = "Stage0"
 -- The right hand, R15 first and R6 second: where the weapon in use hangs, and where W1's fallback
@@ -60,12 +66,16 @@ type Held = {
 }
 
 -- One watched character. `watched` holds the body parts whose ChildAdded is already connected;
--- `raised` is whether a ranged model is in its hand, as last told to the hold listener.
+-- `raised` is whether a ranged model is in its hand, as last told to the hold listener;
+-- `pending` is a show already deferred; `bound` turns false in unbind, so a deferred show of a
+-- rig that has gone does nothing.
 type Rig = {
 	character: Model,
 	isLocal: boolean,
 	inHand: Held?,
 	raised: boolean,
+	pending: boolean,
+	bound: boolean,
 	watched: { [Instance]: boolean },
 	connections: { RBXScriptConnection },
 }
@@ -90,10 +100,14 @@ local function templateOf(folder: string, name: string): Model?
 	local props = if assets ~= nil then assets:FindFirstChild("Props") else nil
 	local set = if props ~= nil then props:FindFirstChild(folder) else nil
 	local template = if set ~= nil then set:FindFirstChild(name) else nil
-	if template ~= nil and template:IsA("Model") and template.PrimaryPart ~= nil then
-		return template
+	if template == nil or not template:IsA("Model") then
+		return nil
 	end
-	return nil
+	local base = template:FindFirstChild(TEMPLATE_BASE_NAME)
+	if base == nil or not base:IsA("BasePart") then
+		return nil
+	end
+	return template
 end
 
 -- Decoration only (L3-52): never a physics body and never in a query, so the camera beside the
@@ -135,11 +149,12 @@ local function modelFor(character: Model, family: string): Held?
 		return nil -- before the harvest paste: that slot stays empty, as in W1
 	end
 	local model = template:Clone()
-	local base = model.PrimaryPart
-	if base == nil then
+	local base = model:FindFirstChild(TEMPLATE_BASE_NAME)
+	if base == nil or not base:IsA("BasePart") then
 		model:Destroy()
 		return nil
 	end
+	model.PrimaryPart = base
 	for _, child in model:GetChildren() do
 		if
 			child:IsA("Model")
@@ -264,12 +279,36 @@ local function show(rig: Rig): ()
 	end
 end
 
+-- Shows a deferred change now. Muzzle calls it too: a teammate's cast or shot that arrives in the
+-- same batch as his slot change runs before the deferred show, and must leave from the weapon now
+-- in his hand, not the one before (3-m1).
+local function flush(rig: Rig): ()
+	if not rig.pending then
+		return
+	end
+	rig.pending = false
+	if rig.bound then
+		show(rig)
+	end
+end
+
+-- One show per character per batch of changes, whatever the burst (3-s7): the first change
+-- defers a flush, the rest find it pending. The show reads every attribute when it runs.
+local function queueShow(rig: Rig): ()
+	if rig.pending then
+		return
+	end
+	rig.pending = true
+	task.defer(flush, rig)
+end
+
 local function unbind(player: Player): ()
 	local rig = rigs[player]
 	if rig == nil then
 		return
 	end
 	rigs[player] = nil
+	rig.bound = false
 	for _, connection in rig.connections do
 		connection:Disconnect()
 	end
@@ -296,7 +335,7 @@ local function watchPart(rig: Rig, part: Instance): ()
 		rig.connections,
 		part.ChildAdded:Connect(function(child: Instance)
 			if child.Name == GRIP_ATTACHMENT or child.Name == BACK_ATTACHMENT then
-				show(rig)
+				queueShow(rig)
 			end
 		end)
 	)
@@ -309,6 +348,8 @@ local function bind(player: Player, character: Model): ()
 		isLocal = player == Players.LocalPlayer,
 		inHand = nil,
 		raised = false,
+		pending = false,
+		bound = true,
 		watched = {},
 		connections = {},
 	}
@@ -318,7 +359,7 @@ local function bind(player: Player, character: Model): ()
 		table.insert(
 			rig.connections,
 			character:GetAttributeChangedSignal(name):Connect(function()
-				show(rig)
+				queueShow(rig)
 			end)
 		)
 	end
@@ -327,7 +368,7 @@ local function bind(player: Player, character: Model): ()
 		character.ChildAdded:Connect(function(child: Instance)
 			if isMountPart(child.Name) then
 				watchPart(rig, child)
-				show(rig)
+				queueShow(rig)
 			end
 		end)
 	)
@@ -462,6 +503,9 @@ function HeldWeapons.Muzzle(userId: number): (Vector3?, boolean)
 		return nil, false
 	end
 	local rig = rigs[player]
+	if rig ~= nil and rig.character == character then
+		flush(rig)
+	end
 	local held = if rig ~= nil and rig.character == character then rig.inHand else nil
 	local tip = if held ~= nil then held.tip else nil
 	if held ~= nil and tip ~= nil and held.model.Parent == character then

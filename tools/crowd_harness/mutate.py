@@ -7259,10 +7259,12 @@ L3W2_MUTATIONS = {
         "WeaponService.NoteHeld(player, slotName)",
         'WeaponService.NoteHeld(player, "melee")',
     ),
-    "l3w2 T6: a refused cast is noted": (
+    # Re-aimed by the fix round's S6: the note now stands before the effect is sent, so a note
+    # before an earlier refusal (the aim's) is the one a refused cast would show.
+    "l3w2 fix S6: a cast refused for its aim is noted": (
         ABILITY,
-        "\tif not mechanic.launch(cast, timeline) then\n",
-        "\tWeaponService.NoteHeld(player, slotName)\n\tif not mechanic.launch(cast, timeline) then\n",
+        "\tlocal root = WeaponService.RootOf(player)\n",
+        "\tWeaponService.NoteHeld(player, slotName)\n\tlocal root = WeaponService.RootOf(player)\n",
     ),
     # T7: shown only on a change.
     "l3w2 T7: noteHeld shows every time": (WEAPON, "\tif shooter.held == slot then\n\t\treturn\n\tend\n", ""),
@@ -7460,20 +7462,22 @@ L3W2_MUTATIONS = {
         "local attachment = if part ~= nil then character:FindFirstChild(attachmentName, true) else nil",
     ),
     # T14: the stage's turn.
+    # Re-aimed by the fix round (C3 moved the turn into syncTurn; S3 pins its gate exactly).
     "l3w2 T14: the stage turns on reducedMotion": (
         ARMORY_STAGE,
-        "\t\t\tif not Theme.lowEndDevice then\n\t\t\t\tlook.turn = RunService.RenderStepped:Connect(",
-        "\t\t\tif not Theme.reducedMotion then\n\t\t\t\tlook.turn = RunService.RenderStepped:Connect(",
+        "\t\tif look.turn == nil and not Theme.lowEndDevice then\n\t\t\tlook.turn = RunService.RenderStepped:Connect(",
+        "\t\tif look.turn == nil and not Theme.reducedMotion then\n\t\t\tlook.turn = RunService.RenderStepped:Connect(",
     ),
     "l3w2 T14: the stage turns on a low-end device": (
         ARMORY_STAGE,
-        "\t\t\tif not Theme.lowEndDevice then\n\t\t\t\tlook.turn = RunService.RenderStepped:Connect(",
-        "\t\t\tif true then\n\t\t\t\tlook.turn = RunService.RenderStepped:Connect(",
+        "\t\tif look.turn == nil and not Theme.lowEndDevice then\n\t\t\tlook.turn = RunService.RenderStepped:Connect(",
+        "\t\tif look.turn == nil and (true or not Theme.lowEndDevice) then\n"
+        "\t\t\tlook.turn = RunService.RenderStepped:Connect(",
     ),
     "l3w2 T14: the model is posed every frame": (
         ARMORY_STAGE,
-        "\t\t\t\t\t\t% 360\n\t\t\t\t\tplace()\n",
-        "\t\t\t\t\t\t% 360\n\t\t\t\t\t(look.model :: any):PivotTo(CFrame.identity)\n\t\t\t\t\tplace()\n",
+        "\t\t\t\tturnBy(rate * deltaTime)\n",
+        "\t\t\t\t(look.model :: any):PivotTo(CFrame.identity)\n\t\t\t\tturnBy(rate * deltaTime)\n",
     ),
     "l3w2 T14: the select path poses nothing": (ARMORY_STAGE, "\t\tmodel:PivotTo(pose)\n", ""),
     "l3w2 T14: the stage stands flat": (
@@ -7574,6 +7578,430 @@ L3W2_MUTATIONS = {
     "l3w2 R6: a remote record starts hanging": (WEAPON_CONTROLLER, "\tfresh.rest = restOf(rigModel)\n", "\tfresh.rest = 0\n"),
 }
 MUTATIONS.update(L3W2_MUTATIONS)
+
+# The L3 W2 fix round (docs/prompts/l3-w2-fix-round.md S1 to S6), from the luau-engineer. Run them
+# alone with `mutate.py <root> <luau> "l3w2 fix"`. ArenaService is read as text (S2's hook).
+ARENA_SERVICE = "src/combat/server/Services/ArenaService.luau"
+ARMORY_SHELF = "src/client/UI/ArmoryShelf.luau"
+FILES += [ARENA_SERVICE, ARMORY_SHELF]
+
+
+def moved_down(rel: str, block: str, anchor: str) -> tuple:
+    """A mutation that moves `block` to just after the first `anchor` that follows it, as one
+    replacement: old = the span from the block through the anchor. Built from the file as it
+    stands; a block or anchor that is gone makes an entry found 0 times (the stale check)."""
+    text = (repo / rel).read_text(encoding="utf-8")
+    start = text.find(block)
+    end = text.find(anchor, start + len(block)) if start >= 0 else -1
+    if end < 0:
+        return (rel, f"<{block!r} before {anchor!r}: not found>", "")
+    old = text[start : end + len(anchor)]
+    return (rel, old, old[len(block) :] + block)
+
+
+def moved_up(rel: str, anchor: str, block: str) -> tuple:
+    """moved_down's mirror: `block` moves to just before the last `anchor` that precedes it."""
+    text = (repo / rel).read_text(encoding="utf-8")
+    end = text.find(block)
+    start = text.rfind(anchor, 0, end) if end >= 0 else -1
+    if start < 0:
+        return (rel, f"<{anchor!r} before {block!r}: not found>", "")
+    old = text[start : end + len(block)]
+    return (rel, old, block + old[: -len(block)])
+
+
+L3W2_FIX_MUTATIONS = {
+    # S1 (2-m1): a function T8 does not list reads the slot in use (the review's P1 and P2).
+    "l3w2 fix S1: slotFamily answers nothing for the slot not in use": (
+        WEAPON,
+        '\treturn if slot == "melee" then shooter.loadout.melee else shooter.loadout.ranged\n',
+        '\tif slot ~= shooter.held then\n\t\treturn ""\n\tend\n'
+        '\treturn if slot == "melee" then shooter.loadout.melee else shooter.loadout.ranged\n',
+    ),
+    "l3w2 fix S1: variantFor drops the style while ranged is in use": (
+        WEAPON,
+        "\tlocal chosen = shooter.loadout.variants[family]\n",
+        '\tlocal chosen = if shooter.held == "ranged" then nil else shooter.loadout.variants[family]\n',
+    ),
+    "l3w2 fix S1: AbilityService reads the slot in use": (
+        ABILITY,
+        "\tlocal family = familyOf(loadout, slotName)\n",
+        "\tlocal family = familyOf(loadout, if (caster :: any).held ~= nil then slotName else slotName)\n",
+    ),
+    # S2 (2-m2): each way a character reaches PrepareCharacter (the review's P3 to P6, and the
+    # exits and keepers around them).
+    "l3w2 fix S2: live missions never prepare a later character": (
+        WAVE_SERVICE,
+        "\tArenaService.SetCharacterHook(WeaponService.PrepareCharacter)\n",
+        "\tif boot.proving then\n\t\tArenaService.SetCharacterHook(WeaponService.PrepareCharacter)\n\tend\n",
+    ),
+    "l3w2 fix S2: Init leaves a live mission before the hook": (
+        WAVE_SERVICE,
+        "\tboot.proving = CombatMode.IsProving()\n",
+        "\tboot.proving = CombatMode.IsProving()\n\tif not boot.proving then\n\t\treturn\n\tend\n",
+    ),
+    "l3w2 fix S2: WaveService sets the hook a second time": (
+        WAVE_SERVICE,
+        "\tArenaService.SetMovedHook(WeaponService.ForgetMotion)\n",
+        "\tArenaService.SetMovedHook(WeaponService.ForgetMotion)\n\tArenaService.SetCharacterHook(function() end)\n",
+    ),
+    "l3w2 fix S2: a mission respawn skips the hook": (
+        ARENA_SERVICE,
+        "\t\t\t\t\thook(player, character)\n",
+        "\t\t\t\t\tlocal _ = character\n",
+    ),
+    "l3w2 fix S2: the admit's handler leaves before the hook": (
+        ARENA_SERVICE,
+        "\t\t\t\tplaceBody(live)\n",
+        "\t\t\t\tplaceBody(live)\n\t\t\t\tif live.bot then\n\t\t\t\t\treturn\n\t\t\t\tend\n",
+    ),
+    "l3w2 fix S2: ArenaService keeps no hook": (ARENA_SERVICE, "\thooks.character = hook\n", "\tlocal _ = hook\n"),
+    "l3w2 fix S2: a second writer clears the hook": (
+        ARENA_SERVICE,
+        "\thooks.share = source\n",
+        "\thooks.share = source\n\thooks.character = nil\n",
+    ),
+    "l3w2 fix S2: a range respawn is not prepared": (
+        RANGE_SERVICE,
+        "\t\t\tprepareCharacter(player, character)\n\t\tend)\n",
+        "\t\tend)\n",
+    ),
+    "l3w2 fix S2: the range's first character is not prepared": (
+        RANGE_SERVICE,
+        "\tif character ~= nil then\n\t\tprepareCharacter(player, character)\n\tend\nend",
+        "\tif character ~= nil then\n\t\tlocal _ = character\n\tend\nend",
+    ),
+    "l3w2 fix S2: the range's AddPlayer gives no weapons": (RANGE_SERVICE, "\tWeaponService.AddPlayer(player)\n", ""),
+    "l3w2 fix S2: the range's AddPlayer leaves before its characters": (
+        RANGE_SERVICE,
+        "\tlocal member: Member = { connections = {} }\n",
+        "\tif player.UserId < 0 then\n\t\treturn\n\tend\n\tlocal member: Member = { connections = {} }\n",
+    ),
+    "l3w2 fix S2: the range places a body and leaves": (
+        RANGE_SERVICE,
+        "\tcharacter:PivotTo(spawnCFrame)\n",
+        "\tcharacter:PivotTo(spawnCFrame)\n\tif spawnLocation == nil then\n\t\treturn\n\tend\n",
+    ),
+    "l3w2 fix S2: AddPlayer prepares in the range instead": (
+        WEAPON,
+        '\tif state.mode == "mission" then\n\t\t-- The character usually',
+        '\tif state.mode == "range" then\n\t\t-- The character usually',
+    ),
+    "l3w2 fix S2: AddPlayer leaves before the mission's prepare": (
+        WEAPON,
+        "\tstate.shooters[player] = shooter\n\tVitalsService.AddPlayer(player)\n",
+        "\tstate.shooters[player] = shooter\n\tVitalsService.AddPlayer(player)\n\tif player.UserId < 0 then\n\t\treturn\n\tend\n",
+    ),
+    # S3 (2-m3): a pinned line wrapped in a block is indented further and no longer counts.
+    "l3w2 fix S3: the range prepares only at a spawn": (
+        RANGE_SERVICE,
+        "\tWeaponService.PrepareCharacter(player, character)\n",
+        "\tif spawnLocation ~= nil then\n\t\tWeaponService.PrepareCharacter(player, character)\n\tend\n",
+    ),
+    "l3w2 fix S3: no arm moves, inside the branch (the review's P7)": (
+        FEEDBACK,
+        "\t\tWeaponController.SwingOther(strike.userId, strike.step or 1)\n",
+        "\t\tif false then\n\t\t\tWeaponController.SwingOther(strike.userId, strike.step or 1)\n\t\tend\n",
+    ),
+    "l3w2 fix S3: no arm moves, in a block left at the branch's own depth": (
+        FEEDBACK,
+        "\t\t-- L3-53: and their arm swings, with the step the server used.\n"
+        "\t\tWeaponController.SwingOther(strike.userId, strike.step or 1)\n",
+        "\t\tif false then\n\t\tWeaponController.SwingOther(strike.userId, strike.step or 1)\n\t\tend\n",
+    ),
+    "l3w2 fix S3: a sealed clone queried again (the review's P13)": (
+        HELD_WEAPONS,
+        "\tseal(model)\n",
+        "\tseal(model)\n\tfor _, part in model:GetDescendants() do\n\t\t(part :: BasePart).CanQuery = true\n\tend\n",
+    ),
+    "l3w2 fix S3: a new rest waits for the next pose": (
+        WEAPON_CONTROLLER,
+        "\trigPoseTo(rig, degrees, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)\nend",
+        "\tlocal _ = degrees\nend",
+    ),
+    "l3w2 fix S3: another player's respawn hangs a raised arm": (
+        WEAPON_CONTROLLER,
+        "\t\tfreshMotor.C0 = restFrame(fresh)\n",
+        "\t\tfreshMotor.C0 = fresh.base\n",
+    ),
+    # S3 (3-m3) and C1 to C3, the stage (written against the ui-engineer's final text).
+    "l3w2 fix S3: a close leaves the stage turning": (
+        ARMORY_STAGE,
+        "\t\t\t\tstop()\n\t\t\t\treturn\n",
+        "\t\t\t\treturn\n",
+    ),
+    "l3w2 fix S3: opening the screen never syncs the turn": (
+        ARMORY_STAGE,
+        "\t\t\t\twarm()\n\t\t\tend\n\t\t\tsyncTurn()\n",
+        "\t\t\t\twarm()\n\t\t\tend\n",
+    ),
+    "l3w2 fix S3: SetActive leaves before a model is shown": (
+        ARMORY_STAGE,
+        "\t\t\tlook.active = active\n",
+        "\t\t\tif active and look.model == nil then\n\t\t\t\treturn\n\t\t\tend\n\t\t\tlook.active = active\n",
+    ),
+    "l3w2 fix S3: every selection stacks another clone": (
+        ARMORY_STAGE,
+        "\tlocal function selectFamily(family: string): ()\n\t\tclear()\n",
+        "\tlocal function selectFamily(family: string): ()\n",
+    ),
+    "l3w2 fix S3: an unowned weapon stands in colour on the stage": (
+        ARMORY_STAGE,
+        "if owned then WHITE else Theme.ARMORY_STAGE_SILHOUETTE",
+        "WHITE",
+    ),
+    "l3w2 fix C1: the stage pivots its clone without a PrimaryPart": (
+        ARMORY_STAGE,
+        "\t\tmodel.PrimaryPart = base\n\t\tfor _, part in model:GetDescendants() do\n",
+        "\t\tfor _, part in model:GetDescendants() do\n",
+    ),
+    "l3w2 fix C1: the stage makes Base its PrimaryPart after the pose": moved_down(
+        ARMORY_STAGE,
+        "\t\tmodel.PrimaryPart = base\n",
+        "\t\tmodel:PivotTo(pose)\n",
+    ),
+    "l3w2 fix C1: the stage takes a template with no Base": (
+        ARMORY_STAGE,
+        "\tlocal base = template:FindFirstChild(TEMPLATE_BASE_NAME)\n"
+        "\tif base == nil or not base:IsA(\"BasePart\") then\n\t\treturn nil, nil\n\tend\n",
+        "",
+    ),
+    "l3w2 fix C1: the stage looks for another Base": (
+        ARMORY_STAGE,
+        "local TEMPLATE_BASE_NAME = \"Base\"\n",
+        "local TEMPLATE_BASE_NAME = \"Handle\"\n",
+    ),
+    "l3w2 fix C1: the stage reads the PrimaryPart ref": (
+        ARMORY_STAGE,
+        "\t\tlocal base = model:FindFirstChild(TEMPLATE_BASE_NAME)\n",
+        "\t\tlocal base = model.PrimaryPart or model:FindFirstChild(TEMPLATE_BASE_NAME)\n",
+    ),
+    "l3w2 fix C3: the stage turns with no model shown": (
+        ARMORY_STAGE,
+        "\t\tif not look.active or look.model == nil then\n\t\t\tstop()\n",
+        "\t\tif not look.active then\n\t\t\tstop()\n",
+    ),
+    "l3w2 fix C3: the slow turn never turns": (
+        ARMORY_STAGE,
+        "\t\t\t\tturnBy(rate * deltaTime)\n",
+        "\t\t\t\tlocal _ = rate * deltaTime\n",
+    ),
+    "l3w2 fix C3: the right stick is never heard": (
+        ARMORY_STAGE,
+        "\t\t\ttable.insert(look.inputs, UserInputService.InputChanged:Connect(onStick))\n",
+        "",
+    ),
+    "l3w2 fix C3: a lost focus keeps the drag": (
+        ARMORY_STAGE,
+        "\t\t\t\t\tlook.stickX = 0\n\t\t\t\t\tendDrag()\n",
+        "\t\t\t\t\tlook.stickX = 0\n",
+    ),
+    "l3w2 fix C3: a low-end device gets no stick": (
+        ARMORY_STAGE,
+        "\t\tif #look.inputs == 0 then\n",
+        "\t\tif Theme.lowEndDevice then\n\t\t\treturn\n\t\tend\n\t\tif #look.inputs == 0 then\n",
+    ),
+    "l3w2 fix C3: stop leaves the listeners counted": (ARMORY_STAGE, "\t\ttable.clear(look.inputs)\n", ""),
+    "l3w2 fix C3: Show(nil) leaves the stage live": (
+        ARMORY_STAGE,
+        "\t\t\t\tlook.family = nil\n\t\t\t\tsyncTurn()\n",
+        "\t\t\t\tlook.family = nil\n",
+    ),
+    "l3w2 fix C3: a selection never syncs": (
+        ARMORY_STAGE,
+        "\t\t\t\tselectFamily(view.family)\n\t\t\t\tsyncTurn()\n",
+        "\t\t\t\tselectFamily(view.family)\n",
+    ),
+    "l3w2 fix C3: any stick turns the stage": (
+        ARMORY_STAGE,
+        "\t\tif input.KeyCode ~= Enum.KeyCode.Thumbstick2 then\n",
+        "\t\tif input.KeyCode == Enum.KeyCode.Unknown then\n",
+    ),
+    "l3w2 fix C3: the stick turns per event off low-end too": (
+        ARMORY_STAGE,
+        "if Theme.lowEndDevice and look.stickX ~= 0",
+        "if look.stickX ~= 0",
+    ),
+    "l3w2 fix C3: a lost mouse release keeps the drag": (
+        ARMORY_STAGE,
+        "\t\t\t\tif not touch and not UserInputService:IsMouseButtonPressed(kind) then\n"
+        "\t\t\t\t\tendDrag()\n\t\t\t\t\treturn\n\t\t\t\tend\n",
+        "",
+    ),
+    "l3w2 fix C3: a mouse release never ends the drag": (
+        ARMORY_STAGE,
+        "if ended == input or (not touch and ended.UserInputType == kind) then",
+        "if ended == input then",
+    ),
+    # C2: the shelf's ghost tone.
+    "l3w2 fix C2: the shelf draws the near-black silhouette again": (
+        ARMORY_SHELF,
+        "if owned then WHITE else Theme.ARMORY_SCREEN_ICON_GHOST",
+        "if owned then WHITE else Theme.ARMORY_STAGE_SILHOUETTE",
+    ),
+    "l3w2 fix S3: an unowned shelf icon in colour": (
+        ARMORY_SHELF,
+        "if owned then WHITE else Theme.ARMORY_SCREEN_ICON_GHOST",
+        "WHITE",
+    ),
+    # S3 (3-m3) and C1, C4, HeldWeapons.
+    "l3w2 fix S3: a family that leaves stays welded on": (
+        HELD_WEAPONS,
+        "\t\t\t\tcache[family] = nil\n\t\t\t\tentry.model:Destroy()\n",
+        "\t\t\t\tcache[family] = nil\n",
+    ),
+    "l3w2 fix S3: a teammate's slot switch is never watched": (
+        HELD_WEAPONS,
+        "{ names.melee, names.ranged, names.held }",
+        "{ names.melee, names.ranged }",
+    ),
+    "l3w2 fix S3: an attribute change shows nothing": (
+        HELD_WEAPONS,
+        "character:GetAttributeChangedSignal(name):Connect(function()\n\t\t\t\tqueueShow(rig)\n",
+        "character:GetAttributeChangedSignal(name):Connect(function()\n\t\t\t\tlocal _ = rig\n",
+    ),
+    "l3w2 fix S3: a late mount part never re-shows": (
+        HELD_WEAPONS,
+        "\t\t\t\twatchPart(rig, child)\n\t\t\t\tqueueShow(rig)\n",
+        "\t\t\t\twatchPart(rig, child)\n",
+    ),
+    "l3w2 fix S3: a late attachment on the back never re-shows": (
+        HELD_WEAPONS,
+        "if child.Name == GRIP_ATTACHMENT or child.Name == BACK_ATTACHMENT then",
+        "if child.Name == GRIP_ATTACHMENT then",
+    ),
+    "l3w2 fix S3: bind shows nothing until a change": (
+        HELD_WEAPONS,
+        "\t\t)\n\tend\n\tshow(rig)\nend\n",
+        "\t\t)\n\tend\nend\n",
+    ),
+    "l3w2 fix S3: bind leaves early": (
+        HELD_WEAPONS,
+        "\trigs[player] = rig\n",
+        "\trigs[player] = rig\n\tif character.Parent == nil then\n\t\treturn\n\tend\n",
+    ),
+    "l3w2 fix S3: the local switch shows nothing": (
+        HELD_WEAPONS,
+        "\tlocal rig = rigs[Players.LocalPlayer]\n\tif rig ~= nil then\n\t\tshow(rig)\n",
+        "\tlocal rig = rigs[Players.LocalPlayer]\n\tif rig ~= nil then\n\t\tlocal _ = rig\n",
+    ),
+    "l3w2 fix S3: the local switch to ranged leaves early": (
+        HELD_WEAPONS,
+        "\tlocalStance = nextStance\n",
+        "\tif nextStance == RANGED_SLOT then\n\t\treturn\n\tend\n\tlocalStance = nextStance\n",
+    ),
+    "l3w2 fix S3: a player who joins is never watched": (
+        HELD_WEAPONS,
+        "\ttable.insert(connections, Players.PlayerAdded:Connect(watchPlayer))\n",
+        "",
+    ),
+    "l3w2 fix S3: the players already in are never watched": (
+        HELD_WEAPONS,
+        "\t\twatchPlayer(player)\n\tend\n",
+        "\t\tlocal _ = player\n\tend\n",
+    ),
+    "l3w2 fix S3: Start leaves without a models file": (
+        HELD_WEAPONS,
+        "\tstarted = true\n",
+        "\tstarted = true\n\tif Catalog.GetWeaponModelsConfig() == nil then\n\t\treturn\n\tend\n",
+    ),
+    "l3w2 fix C4: a queued show never runs": (HELD_WEAPONS, "\ttask.defer(flush, rig)\n", ""),
+    "l3w2 fix C4: every change defers its own show": (
+        HELD_WEAPONS,
+        "\tif rig.pending then\n\t\treturn\n\tend\n\trig.pending = true\n",
+        "\trig.pending = true\n",
+    ),
+    "l3w2 fix C4: a gone rig is shown": (
+        HELD_WEAPONS,
+        "\tif rig.bound then\n\t\tshow(rig)\n\tend\n",
+        "\tshow(rig)\n",
+    ),
+    "l3w2 fix C4: unbind leaves the rig bound": (HELD_WEAPONS, "\trig.bound = false\n", ""),
+    "l3w2 fix C4: Muzzle reads before the pending show": (HELD_WEAPONS, "\t\tflush(rig)\n", ""),
+    "l3w2 fix C4: a burst shows at once, change by change": (
+        HELD_WEAPONS,
+        "\t\t\t\twatchPart(rig, child)\n\t\t\t\tqueueShow(rig)\n",
+        "\t\t\t\twatchPart(rig, child)\n\t\t\t\tshow(rig)\n",
+    ),
+    "l3w2 fix C1: the clone keeps the template's PrimaryPart ref": (HELD_WEAPONS, "\tmodel.PrimaryPart = base\n", ""),
+    "l3w2 fix C1: Base becomes PrimaryPart after the welds": moved_down(
+        HELD_WEAPONS,
+        "\tmodel.PrimaryPart = base\n",
+        "\tseal(model)\n\tfor _, part in model:GetDescendants() do\n"
+        "\t\tif part:IsA(\"BasePart\") and part ~= base then\n"
+        "\t\t\tCreate(\"WeldConstraint\", { Part0 = base, Part1 = part, Parent = base })\n\t\tend\n\tend\n",
+    ),
+    "l3w2 fix C1: a template with no Base is cloned": (
+        HELD_WEAPONS,
+        "\tlocal base = template:FindFirstChild(TEMPLATE_BASE_NAME)\n"
+        "\tif base == nil or not base:IsA(\"BasePart\") then\n\t\treturn nil\n\tend\n\treturn template\n",
+        "\treturn template\n",
+    ),
+    "l3w2 fix C1: HeldWeapons looks for another Base": (
+        HELD_WEAPONS,
+        "local TEMPLATE_BASE_NAME = \"Base\"\n",
+        "local TEMPLATE_BASE_NAME = \"Handle\"\n",
+    ),
+    "l3w2 fix C1: HeldWeapons reads the PrimaryPart ref": (
+        HELD_WEAPONS,
+        "\tlocal base = model:FindFirstChild(TEMPLATE_BASE_NAME)\n",
+        "\tlocal base = model.PrimaryPart or model:FindFirstChild(TEMPLATE_BASE_NAME)\n",
+    ),
+    # S4 (2-m5): a melee family may draw again.
+    "l3w2 fix S4: a melee family draws": (
+        WEAPON,
+        '\t\tdef.slot ~= "ranged"\n\t\tor slotFamily(shooter, slot) ~= weapon\n',
+        "\t\tslotFamily(shooter, slot) ~= weapon\n",
+    ),
+    # S5 (2-s1): the spellings the older counts missed (the review's P9, P10, P12).
+    "l3w2 fix S5: a dash writes held by index": (
+        WEAPON,
+        "\tshooter.lastDashAt = now\n",
+        '\tshooter.lastDashAt = now\n\tshooter["held"] = "ranged"\n',
+    ),
+    "l3w2 fix S5: a dash writes WeaponHeld itself": (
+        WEAPON,
+        "\tshooter.lastDashAt = now\n",
+        '\tshooter.lastDashAt = now\n\tcharacter:SetAttribute("WeaponHeld", "ranged")\n',
+    ),
+    "l3w2 fix S5: SetVariant swaps the whole loadout": (
+        WEAPON,
+        "\tshooter.loadout.variants[family] = key\n",
+        "\tshooter.loadout = { melee = shooter.loadout.ranged, ranged = shooter.loadout.melee,"
+        " variants = shooter.loadout.variants }\n\tshooter.loadout.variants[family] = key\n",
+    ),
+    "l3w2 fix S5: SetVariant writes the pair by index": (
+        WEAPON,
+        "\tshooter.loadout.variants[family] = key\n",
+        '\tshooter.loadout["melee"] = shooter.loadout.ranged\n\tshooter.loadout.variants[family] = key\n',
+    ),
+    # S5 (2-s2): a refusal moved past the note keeps the total of exits (the review's P11), and so
+    # does the cast's note moved above its aim refusal with the send it precedes.
+    "l3w2 fix S5: OnAttack's credit refusal after the note": moved_down(
+        WEAPON,
+        "\tif credit < timingTolerance() then\n\t\tsendRefused(shooter, seq)\n\t\treturn\n\tend\n",
+        "\tnoteHeld(shooter, slot)\n",
+    ),
+    "l3w2 fix S5: the cast's note and send before its aim refusal": moved_up(
+        ABILITY,
+        "\tlocal root = WeaponService.RootOf(player)\n",
+        "\tWeaponService.NoteHeld(player, slotName)\n\tbroadcastFx(fx)\n",
+    ),
+    # S5 (2-s4): Problems' whole list in family order.
+    "l3w2 fix S5: Problems sorts each pass alone": (LOOK, "\ttable.sort(problems)\n\treturn problems\n", "\treturn problems\n"),
+    # S6 (3-m1): the note after the cast's effect has left.
+    "l3w2 fix S6: a cast's effect leaves before the note": (
+        ABILITY,
+        "\tWeaponService.NoteHeld(player, slotName)\n\tbroadcastFx(fx)\n",
+        "\tbroadcastFx(fx)\n\tWeaponService.NoteHeld(player, slotName)\n",
+    ),
+    "l3w2 fix S6: the cast is noted once accepted, as before": moved_down(
+        ABILITY,
+        "\tWeaponService.NoteHeld(player, slotName)\n",
+        "\tcaster.lastSeq = seq\n",
+    ),
+}
+MUTATIONS.update(L3W2_FIX_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

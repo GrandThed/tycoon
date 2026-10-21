@@ -211,9 +211,9 @@ type Shooter = {
 	abilityKills: number,
 	-- Ruling 7: a ring of the server root's positions on os.clock(), one per Heartbeat.
 	history: PositionRing.History,
-	-- L3-50: the slot in use as others see it, from this player's last accepted attack, draw or
-	-- cast (a pure switch tells the server nothing). Shown through the character attributes
-	-- (showWeapons) only: no hit ever reads it.
+	-- L3-50: the slot in use as others see it, from this player's last accepted attack or draw,
+	-- or cast (noted just before its effect is sent: NoteHeld); a pure switch tells the server
+	-- nothing. Shown through the character attributes (showWeapons) only: no hit ever reads it.
 	held: SlotName,
 }
 -- One enemy the shape touched. `order` sorts nearest-first (distance, or entry along a ray).
@@ -2552,9 +2552,12 @@ function WeaponService.OnDraw(player: Player, weapon: string): ()
 	end
 	local slot: SlotName = if def.slot == "melee" then "melee" else "ranged"
 	-- A downed player starts no draw (P4 ruling 24c), like their other intents; nor does one
-	-- the mission's act gate holds back (P5 ruling 21).
+	-- the mission's act gate holds back (P5 ruling 21). Only a ranged family draws (the bows'
+	-- charge): a melee draw charges nothing and would flip WeaponHeld (L3-50) as fast as the
+	-- remote's bucket allows, which every client would redraw (the W2 review's 2-m5).
 	if
-		slotFamily(shooter, slot) ~= weapon
+		def.slot ~= "ranged"
+		or slotFamily(shooter, slot) ~= weapon
 		or VitalsService.IsDown(player)
 		or not mayAct(player)
 	then
@@ -2814,8 +2817,10 @@ function WeaponService.FloorBelow(position: Vector3): Vector3
 	return if floorY ~= nil then Vector3.new(position.X, floorY, position.Z) else position
 end
 
--- L3-50: AbilityService's accepted cast (it alone knows the slot when a cast is accepted).
--- Ignored for a player without weapons and for any other slot word.
+-- L3-50: AbilityService's cast (it alone knows the cast's slot), once every refusal but the
+-- projectile budget has passed and before its effect is sent (the fix round's S6), so the other
+-- clients build that effect from the right weapon. Ignored for a player without weapons and for
+-- any other slot word.
 function WeaponService.NoteHeld(player: Player, slot: string): ()
 	local shooter = state.shooters[player]
 	if not state.active or shooter == nil or (slot ~= "melee" and slot ~= "ranged") then
