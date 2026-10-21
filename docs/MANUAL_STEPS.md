@@ -2143,14 +2143,16 @@ city (hub) and the Expeditions place.
   Expeditions place still fights at their old gear.
 - At L4 both publish together, in the order below. Not a step now.
 
-**Status 2026-10-20:** built, reviewed (four slices, then a fix-diff review; all fixed), QA green
-on `l3-armory`. **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+**Status 2026-10-21:** built, reviewed (four slices, then a fix-diff review; all fixed), QA green,
+**merged to `main` 2026-10-20** (`448987e`; place files `0fb03be`).
+- **Your look waits for L3 W2:** one session for both waves, after your one harvest paste.
+- Do it from **"L3 W2 — the look"** below. It covers steps 1–6 here.
 
 <!-- FILE TO OPEN: start. Lead: if L3 Wave 1 is not merged to `main`, change only this block. -->
 **Files to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`, then
 `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (both in the main checkout)
-- **Wait for the lead's word first.** Before the merge, "Build all" gives L2 (the old Armory
-  panel).
+- **Wait for the lead's word that L3 W2 is merged** ("L3 W2 — the look", step 1). Until then
+  "Build all" gives Wave 1 alone, with empty hands.
 - **Build them:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - **A file that was open in Studio before "Build all" is the old one.**
 - **You have the new build if** the key hint ends **"T +500 Timber · U ★ Hard · L reset
@@ -2159,10 +2161,11 @@ on `l3-armory`. **Not merged yet.** Wait for the lead's word (step 0) before ste
 
 **Steps:**
 
-- [ ] 0. (Lead) Merge, rebuild, tell Ben.
-      - [ ] Fix 2 (F1–F6) landed; QA line filled (PLAN "L3", Wave 1, QA).
-      - [ ] `l3-armory` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L3 Wave 1 is merged, Build all."
+- [x] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] Fix 2 (F1–F7) landed (`315d725`); QA line filled (PLAN "L3", Wave 1, QA).
+      - [x] `l3-armory` merged to `main` (`448987e`); the six place files rebuilt (`0fb03be`).
+      - [x] Ben told. He answered "lets do wave 2, i will test later": steps 1–6 now run inside
+            "L3 W2 — the look".
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save).
 - [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
@@ -2182,6 +2185,13 @@ on `l3-armory`. **Not merged yet.** Wait for the lead's word (step 0) before ste
 ### The L4 publish order (later, not now)
 
 Done once, at L4, in one sitting. Same dialogs as "C2 → 4. Republish BOTH places".
+- [ ] L4-0. **Before publishing: both places are R15 only** (L3 W2 review 3-s5). The combat code
+      assumes R15 (since P1); weapons hang from R15 attachments.
+      - Creator Hub → **Creations** → *Era Tycoon: Village to Space (BETA)* → **Places** → the
+        start place → **Avatar** settings → avatar type **R15** (not R6, not "Player choice").
+      - The same for **`Expeditions`**.
+      - If Creator Hub shows one Avatar page for the whole experience, set it there once.
+      - Anything other than R15: set R15, save, and tell Claude.
 - [ ] L4-1. **City (hub):** open `C:\Users\benja\Desktop\tycoon\build\test.rbxl` → **File → Publish
       to Roblox** → *Era Tycoon: Village to Space (BETA)* → the **start place** → **Overwrite**.
 - [ ] L4-2. **Expeditions:** open `C:\Users\benja\Desktop\tycoon\build\combat.rbxl` → **File →
@@ -2194,6 +2204,21 @@ Done once, at L4, in one sitting. Same dialogs as "C2 → 4. Republish BOTH plac
 - Never publish only one of the two.
 
 ## L3 W2 — the asset run
+
+**Ben: your one step here is step 7, the harvest paste.** About 2 minutes, any time before your
+look.
+1. Ask Claude "ready to paste". Wait until Claude says the harvest script is on your clipboard.
+2. Studio → File (*Archivo*) → Open (*Abrir*) → the **local** file
+   `C:\Users\benja\Desktop\tycoon\build\test.rbxl`. Edit mode: **do not press Play**. Not the
+   published game.
+3. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
+   **Enter**.
+4. Wait for **`[HARVEST-DONE] 30 loaded, 0 failed`** in Output (*Salida*).
+5. Output → right-click → **Select All** → **Ctrl+C**.
+6. Tell Claude **"done"**. **Copy nothing else** until Claude answers, and do not paste the
+   Output into the chat.
+- Another number, or "failed" is not 0: tell Claude the line as it reads.
+- Everything else in this section is the lead's.
 
 **One run, one paste** (docs/prompts/l3-w2-contract.md L3-40): 15 weapon models and 15 shelf icons,
 **30 uploads**, then **one harvest paste of 30 records**, then templates. The code wave does not wait
@@ -2279,6 +2304,9 @@ and all 15 icons are there, uploaded and not yet harvested.
       py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip
       ```
       - The first time: `wrote tools\assets\harvest.luau with 30 asset(s) to harvest`.
+      - **Copy it again when Ben says "ready to paste"**: his clipboard has changed since 00:14.
+        `harvest.luau` is committed, so `cat tools/assets/harvest.luau | clip` alone is enough;
+        then tell him it is on his clipboard.
       - A repeat (step 12) emits only the records still missing, so fewer than 30 is right then:
         one per name in the last merge's `still missing harvest data:` line. Any other count:
         stop and tell the lead.
@@ -2349,6 +2377,60 @@ and all 15 icons are there, uploaded and not yet harvested.
       Commit the templates, the manifest, `harvest.luau`, the sourcemaps and the place files.
 - 12. **If a record goes missing later:** repeat steps 6 to 10 only. Do **not** re-run the
       uploaders.
+
+## L3 W2 — the look (Waves 1 and 2 together)
+
+**Studio only.**
+- No Creator Hub work, no new Studio setting. Your one Studio chore is the paste above (step 7).
+- Still silent (no audio step).
+- About 30 minutes for both checklists, keys only.
+
+**Do NOT publish either place from `main` until L4.** The freeze from "L3 W1" holds.
+
+**Status 2026-10-21:** waiting on fix 2, QA, your paste ("L3 W2 — the asset run", step 7) and
+the merge.
+
+<!-- FILE TO OPEN: start. Lead: if L3 Wave 2 is not merged to `main`, change only this block. -->
+**Files to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`, then
+`C:\Users\benja\Desktop\tycoon\build\test.rbxl` (both in the main checkout)
+- **Wait for the lead's word first** (step 1).
+- **Build them:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A file that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** a **sword hangs in your right hand** in the lobby.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 1. (Lead) After the paste: merge, rebuild, tell Ben.
+      - [ ] Fix 2 (G1–G3) landed; QA line filled (PLAN "L3", Wave 2, Gates).
+      - [ ] "L3 W2 — the asset run" steps 8–11 done: 30 records merged, the turn proof holds on
+            15, templates committed.
+      - [ ] `l3-w2` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L3 Wave 2 is merged, Build all."
+- [ ] 2. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 3. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save). That
+      includes the `test.rbxl` from your paste.
+- [ ] 4. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
+      lobby, a sword in your hand.
+- [ ] 5. Run `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen", steps 1–8.
+- [ ] 6. Run `docs/PLAYTEST.md` "L3 Wave 2 — weapons in hand and on the stage", steps 1–8, in
+      the same file.
+- [ ] 7. Optional: the "L3 Wave 2" two-player step (Test → Clients and Servers, *Clientes y
+      servidores*, 2 players), inside a level.
+- [ ] 8. Close `proving.rbxl` without saving. Open
+      `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (the city): "L3 Wave 1" step 9, then
+      "L3 Wave 2" step 9.
+- [ ] 9. Close Studio without saving. Tell Claude when you are done. Seven click questions
+      follow (four for Wave 1, three for Wave 2). Send your screenshots of the weapons in hand
+      and on the back.
+
+**Notes:**
+- **Every Play starts a fresh save:** Broadsword and Longbow at T1, no Timber, no stars. Levers:
+  **T**, **U**, **L**, **G** (Wave 1); **F**, **I**, **J**, **H**, **V** as in L2.
+- The stage light, the grip in the hand and the pose on the back are first guesses. A fix is a
+  Theme number and one more "Build all": no upload, no paste.
+- Weapons in hand show only in `proving.rbxl` (the dungeon). The city shows them only on the
+  Armory screen.
 
 ## M10 — Icon, store icons, thumbnails
 
