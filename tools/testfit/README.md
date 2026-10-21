@@ -681,3 +681,79 @@ neighbours). Smooth shading (`smooth=True`) stays inside one primitive; caps are
 - **Fresh palette, 2026-10-20:** the cache was deleted and all 15 re-merged; the palette's colours,
   every GLB and every sidecar came out byte-identical (only the cache's `sourceFiles` count moved,
   3 → 16), which confirms `palette-card.glb` keeps the cache whole.
+
+## raider kit (L4, generated raiders; step 1 2026-10-21)
+
+Real models for the seven Forest looks (MISSIONS_DESIGN section 26): fodder, slinger, marksman, lobber,
+brute, plated elite and the Camp Chief, detailed, on today's crowd bodies, one tribe told apart by gear,
+size and cloth colour, each kind keeping its colour on its cloth. Step 1 built the prototypes fodder,
+brute and the Chief (look A; look B as one front view). Report: `docs/prompts/l4-w1-reports/raiders.md`.
+
+**Files.**
+- `tools/assets/raider_kit_palette.py`: the colours. Wood, bone, rope, leather, flint, ochre come from the
+  weapon kit's `FOREST`, hide and fur from the forest track's `forest_palette.HIDE`, both imported, never
+  redefined; `RAIDER` adds hair and eyes; `PAINT` holds one fallback swatch per painted kit.
+- `tools/assets/raider_kit_mesh.py`: `RMesh` (the weapon kit's `Mesh` with a per-kit colour check), the
+  body vocabulary (`blob` rings with their own centres and optional jag, `band`, `limb`, `ball`, `shell` a
+  thick curved sheet for cloaks, hoods, masks and mantles, `spike`, `horn`, `fang_row`), the rig record, the
+  blueprint and config writers.
+- `tools/assets/raider_kit.py`: the generator (Blender). One builder function per model (`fodder`, `brute`,
+  `chief`), `centre_head` puts every skull's centre exactly on the scored head.
+- `tools/testfit/raiderpose.py` (`py`, stdlib): CrowdRenderer's pose maths ported (constants read from
+  Theme.luau and CrowdRenderer.luau, kinds from ProvingGrounds.json), the model rig and the weapon-arm
+  channel. `--check` runs the head rule over every sampled pose of every model.
+- `tools/testfit/raiderview.py` (Blender renders, `py` composes): pose strips, front views, the lineup.
+- `tools/testfit/blueprints/_props/Raiders/<Model>.json` (written by the generator) and the proposed config
+  `tools/assets/out/RaiderModels.json` (written by the generator; W2 decides where it lives).
+
+**Run.**
+```
+blender -b -P tools/assets/raider_kit.py -- --merge         # GLBs, rig records, blueprints, config, then merge_stages
+blender -b -P tools/assets/raider_kit.py -- --look-b        # the Chief's look B into assets/build/raider-lookb (never merged)
+py tools/testfit/raiderpose.py --check                      # the head rule, feet, weapon reach
+blender -b -P tools/testfit/raiderview.py -- --model RaiderFodder          # <Model>_strip.png
+blender -b -P tools/testfit/raiderview.py -- --model RaiderChief --front   # <Model>_front.png
+blender -b -P tools/testfit/raiderview.py -- --lineup RaiderFodder,RaiderBrute,RaiderChief   # _lineup.png
+```
+Outputs in `assets/testfit/out/Raiders/`. A strip takes about a minute (the Chief two).
+
+**The rig.** One prop per kind, five rigid pieces, piece k in stage k: `Stage0` head, `Stage1` torso (with the
+off arm), `Stage2` the weapon arm (both arms for a two-handed hold: the brute's log), `Stage3` left leg,
+`Stage4` right leg. Each piece is authored in place in the body frame (feet at the origin, front -Z, 1 unit
+= 1 stud, blueprint scale 1.0), so the template's stage CFrames are the rest pose. Each piece is split by
+role into one GLB per kit folder, because merge_stages joins a stage into one MeshPart per kit:
+`raider-kit` gear (palette-textured, never painted), `raider-cloth` (painted with the kind's colour, or the
+leg shade on the legs), `raider-skin` (painted with the kind's skin colour, tinted half as far: today's head
+rule), `raider-glow` (the Chief's eye sockets: today's visor rule, ember once enraged). Fodder and brute are
+11 MeshParts, the Chief 12 (plus the Warhammer's one).
+
+**Pose rules (raiderpose.rig; numbers in the config's `rig`).** The head is placed at the scored head and
+moves only vertically by the body's drop, clamped to `headKeep` 0.4 head radii; it nods (0.35 of the lean)
+and turns (0.5 of the twist) about its own centre. Every lean turns the torso about the neck joint (the hips
+swing the other way); the drop is the hips' rise plus today's carried squash plus the walk's dip. The legs
+hang from the hips aimed at the floor spot under each rest hip (feet slide when it is out of reach), plus
+the walk swing (0.42 rad at a full stride, one cycle per 2.4 leg lengths, full at half the kind's speed);
+seated they lie forward. The twist turns the upper body; the legs keep the heading. The lunge's thrust
+never moves the head: the leading foot steps 0.4 of it. Reactions after a landed hit (knockback, launch,
+the death fling and topple, a summoned body rising) keep today's whole-body transform on the rest pose.
+
+**The arm channel.** Keys per kind (`arm`: `carry`, `seat`, `slump`, and per attack shape `coil`, `strike`,
+`follow`), each (pitch, yaw, roll) = `CFrame.fromEulerAnglesYXZ` about the piece's pivot in the torso's
+frame. Windup: carry to coil with threatPose's build (coil to strike with the snap for a lunge or a slam);
+attack: an arc swings coil to follow with the sweep, a lane holds its strike, the rest go strike to follow;
+recover: from where the blow left it to the slump, waking to the carry. **A key carries the lean of its
+moment**: the torso leans about the neck, which swings a hanging arm the other way (a blow leaning forward
+0.5 needs 0.5 more pitch). Plus the walk swing, 0.32 rad x the kind's `armSwingShare`.
+
+**What the strips taught (step 1).**
+- A rigid wrist decides what a weapon can do. Held at right angles to the forearm (the fodder's club) a
+  weapon chops well; for a ground slam it must lie nearly along the forearm (the Chief's hammer, 18 degrees
+  off), and then carry, slam, call, charge and sweep are all one shoulder rotation each.
+- Two arms in one rigid piece can only pitch: a yaw tears the shoulders off the torso. Two-handed holds
+  suit pitch-only moves (the brute's charge); the Chief is one-handed so his sweep can swing wide.
+- A skull is centred by moving the head piece after it is built (`centre_head`): a nose or a mane in the
+  bounding box otherwise eats a tenth of the head rule's margin.
+- At 50 studs on a phone (16.7 px a stud at a 3x density) the cloth colour is what tells the kinds apart,
+  and the windup heat reads on all three; fur in the forest track's browns is close to the forest floor,
+  so a fur edge needs the pale hide tips.
+- The merge prints nothing for these props: they are inside their footprints and above the ground.
