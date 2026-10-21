@@ -566,3 +566,7 @@ lobby or the city, never inside a fight.
 each is found. They are uploaded with their 15 shelf icons at the start of Wave 2 (one harvest paste). **[Ben]**
 Lead rulings after the Wave 1 measure: Hard pays ×2 (×2.5 made the climb faster than his "three runs a weapon"); the
 lookout perches that out-earn on Hard join Normal's "fix in L4" known limit.
+
+**Wave 2 started (2026-10-20):** after the W1 merge Ben said *"lets do wave 2, i will test later"*. W2 puts the 15 models
+in the game (the turning stage, the shelf icons, weapons in hand that other players see), with one harvest paste; his
+Studio look covers W1 and W2 together. **[Ben]**
