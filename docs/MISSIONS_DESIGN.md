@@ -616,3 +616,20 @@ Still for Ben, later: the forest's mood (from the pictures), the Camp Chief's lo
 raider and Chief prototypes), then Ben's look at the pictures; W1b removal of the old mission code (in parallel);
 W2 the forest and the models in the game with one upload and one harvest paste; W3 the city map, the end screen and the
 rewards; W4 publish readiness (the Theme round, phones, the checklist, the publish).
+
+## 27. L4 W1 pictures: Ben's verdict (2026-10-21)
+
+Shown: `assets/testfit/out/Levels/ForestRoad/_L4_forest_overview.png` (the plan and ten views, raiders as boxes),
+`_L4_moods.png`, `assets/testfit/out/Raiders/_lineup.png` and the Chief's two front views. Five click questions, the
+lead's recommendation on all five: **[Ben]**
+
+1. **The forest is built as shown** (baked ground and cliffs, generated firs, broadleaf and snags, camp edges of stakes,
+   logs, rocks and thicket under 4 studs, hide tents, the Chief's hall, invisible walls along every walkable edge).
+2. **Mood B:** darker with haze, in the dungeon place only, tuned after his first Studio look.
+3. **The Camp Chief is look A:** fur cloak, skull mask, the Warhammer that beating him on Hard gives.
+4. **The raiders' style is approved:** the other four looks (slinger, marksman, lobber, plated elite) are built the same
+   way; the Chief's chest core gets smaller.
+5. **R8 is judged fairly:** a spot is compared over a whole run (shoot what you can from it, then fight the rest) against
+   fighting it all with the same gear, over 30 seeds; a spot fails only if that run pays more per minute. His rule
+   stands: no spot may out-earn fighting. (The failing row was Road3, Hard, sword T1 / bow T4: a one-off burst from the
+   low road under the plateau, red before L4 on 12 of 30 seeds.)
