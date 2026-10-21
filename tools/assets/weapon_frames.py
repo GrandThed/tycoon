@@ -30,7 +30,10 @@ function the templates are written with, and they must come back to themselves w
     import with no turn, or a placement that does not undo it, FAILS the same proof, so it can never
     pass by construction;
   - on every weapon whose stage 0 is harvested in Assets.json (or --assets-json): every point of
-    WeaponModels.json, plus harvested size = config size within 0.01.
+    WeaponModels.json goes through it, plus harvested size = config size within 0.01. The chain is a
+    rigid move, so a weapon's points pass or fail together: per weapon this is one check of the
+    harvested offset and one of the size. Where a point sits on the mesh (a `tip` at the right end)
+    is vouched for by the generator and the sidecar bounds check, not by this proof.
 
 --check on a checkout without the frame files (assets/ is gitignored) checks the committed file's
 shape and families against ProvingGrounds.json, says "frame files absent: shape checked only", and
@@ -424,11 +427,14 @@ def weapon_proof(doc: dict, assets: dict, require_harvest: bool) -> tuple[list[s
             continue
         found = prove(label, entry["points"], centre, size, offset, hsize)
         problems += found
-        count += len(entry["points"])
         if not found:
             proven.append(model)
+            count += len(entry["points"])
     total = len(doc["families"])
-    notes = [f"weapons ({rel(cfg.ASSETS_PATH)}): {len(proven)} of {total} harvested and proven ({count} point(s))"]
+    notes = [
+        f"weapons ({rel(cfg.ASSETS_PATH)}): {len(proven)} of {total} harvested and proven"
+        f" (per weapon one offset check and one size check; that offset carries their {count} point(s))"
+    ]
     if waiting:
         notes.append(f"not harvested yet ({len(waiting)}): {', '.join(waiting)}")
         if require_harvest:

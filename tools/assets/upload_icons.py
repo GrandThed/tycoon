@@ -19,8 +19,11 @@ channel, RGBA, not interlaced, its four corner pixels fully transparent and at l
 opaque (a render that lost its transparent background, or came out empty, is caught here). The
 check decodes the PNG in plain Python (zlib and the PNG row filters), so it needs no Pillow.
 
-Idempotent and hash-checked like upload_paths.py: an icon whose assetId is non-zero and whose file
-still has the recorded sha256 is skipped; a changed file goes up again and its imageId is cleared.
+Idempotent and hash-checked: an icon whose assetId is non-zero and whose pixels still have the
+recorded sha256 is skipped; a changed image goes up again and its imageId is cleared. Unlike
+upload_paths.py the sha256 is of the decoded RGBA pixels (`pixel_sha256`), not the file's bytes:
+--make under another Pillow, or a touched 512 render that forces --make, re-encodes the same pixels
+to new bytes, and a byte hash would send all fifteen Decals up again and cost Ben a new paste.
 Assets.json is saved after every upload. --dry-run, unlike the older uploaders, writes nothing: not
 Assets.json, not an icon. Open Cloud occasionally answers "Unknown Error": just run it again.
 
@@ -33,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
 import struct
@@ -45,7 +49,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, ".."))
 import assets_config as cfg  # noqa: E402
 from upload_audio import UploadError, load_env, require_credentials  # noqa: E402
-from upload_paths import MAX_DISPLAY_NAME, PNG_SIGNATURE, RGBA_COLOUR_TYPE, UPLOAD_SPACING_SECONDS, sha256, upload_decal  # noqa: E402
+from upload_paths import MAX_DISPLAY_NAME, PNG_SIGNATURE, RGBA_COLOUR_TYPE, UPLOAD_SPACING_SECONDS, upload_decal  # noqa: E402
 
 MODELS_PATH = os.path.join(cfg.REPO_ROOT, "src", "shared", "Config", "WeaponModels.json")
 OUT_ROOT = os.path.join(cfg.REPO_ROOT, "assets", "testfit", "out")
@@ -149,6 +153,24 @@ def unfilter(raw: bytes, width: int, height: int, bpp: int) -> list[bytearray]:
     return rows
 
 
+def decode_rgba(data: bytes, width: int, height: int) -> list[bytearray]:
+    """The rows of an 8-bit RGBA, non-interlaced PNG whose header icon_problems already read;
+    raises ValueError or zlib.error on a broken file."""
+    idat = b"".join(body for kind, body in png_chunks(data) if kind == b"IDAT")
+    return unfilter(zlib.decompress(idat), width, height, 4)
+
+
+def pixel_sha256(data: bytes) -> str:
+    """What the upload's skip rule compares: the size and the decoded RGBA pixels, every channel
+    (a transparent pixel's colour still reaches the edge when Roblox filters the texture), so the
+    PNG's filters, zlib level and chunks do not count. Only for a file icon_problems passed."""
+    width, height = struct.unpack(">II", data[16:24])
+    digest = hashlib.sha256(f"RGBA8 {width}x{height}\n".encode("ascii"))
+    for row in decode_rgba(data, width, height):
+        digest.update(row)
+    return digest.hexdigest()
+
+
 def icon_problems(data: bytes, size: tuple[int, int] = ICON_SIZE) -> list[str]:
     """Why this file must not go up as a shelf icon (never png_problems: that one rejects alpha)."""
     if not data.startswith(PNG_SIGNATURE) or data[12:16] != b"IHDR":
@@ -166,8 +188,7 @@ def icon_problems(data: bytes, size: tuple[int, int] = ICON_SIZE) -> list[str]:
     if problems:
         return problems
     try:
-        idat = b"".join(body for kind, body in png_chunks(data) if kind == b"IDAT")
-        rows = unfilter(zlib.decompress(idat), width, height, 4)
+        rows = decode_rgba(data, width, height)
     except (ValueError, zlib.error) as exc:
         return [f"cannot be decoded: {exc}"]
     corners = [rows[y][x * 4 + 3] for x, y in ((0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1))]
@@ -260,18 +281,19 @@ def plan(assets: dict, set_name: str, models: list[str], icons_dir: str, source_
             problems.append(f"{label}: {rel(path)} is older than its render {rel(source)}; run --make again")
             continue
         with open(path, "rb") as fh:
-            bad = icon_problems(fh.read())
+            data = fh.read()
+        bad = icon_problems(data)
         if bad:
             problems += [f"{label}: {os.path.basename(path)} {p}" for p in bad]
             continue
-        digest = sha256(path)
+        digest = pixel_sha256(data)
         icon = cfg.ensure_icon(assets, set_name, model)
         asset_id = int(icon.get("assetId", 0))
         if asset_id != 0:
             if icon.get("sha256") == digest:
                 log(f"{label}: already uploaded as {asset_id} (image {icon.get('imageId', 0)}), skipped")
                 continue
-            log(f"{label}: file changed since upload {asset_id}; uploading again")
+            log(f"{label}: pixels changed since upload {asset_id}; uploading again")
         jobs.append((model, path, digest))
     return jobs, problems
 

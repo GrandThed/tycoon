@@ -2212,16 +2212,21 @@ is `py`; the Blender line needs Git Bash; rojo needs `export PATH="$HOME/.rokit/
 - `upload_models.py --props --dry-run` **writes `Assets.json`** (it pre-lists the 15 entries, ids 0).
   `upload_icons.py --dry-run` writes nothing.
 - **Commit `src/shared/Config/Assets.json` right after the uploads, and again right after the
-  harvest.**
+  harvest, each time with `docs/ASSET_MANIFEST.md` regenerated beside it**
+  (`py tools/gen_asset_manifest.py`): the manifest counts uploads and harvests, so
+  `gen_asset_manifest.py --check` is red whenever the two are committed apart.
 - A non-zero `modelAssetId` is never uploaded again, even when the GLB changed (L3-67): clear it
-  through `assets_config.save_assets` first. Icons are hash-checked: a changed PNG goes up again.
+  through `assets_config.save_assets` first. Icons are hash-checked on their decoded pixels: a
+  changed image goes up again, the same pixels re-encoded (another `--make`) do not.
 - If a tool or Blender hangs, stop only your own process, by its id. Never by name.
 
 **The command lines were checked against the tools on 2026-10-20** (the scratch routing proof,
 L3-44, in `docs/prompts/l3-w2-reports/pipeline.md`): every flag exists; the 15 blueprints are in
-`tools/testfit/blueprints/_props/Weapons/` and none of the 15 is in `Assets.json`; the longest model
-name is 42 characters (`EraCityTycoon_Prop_Weapons_Flamethrower_S0`), the longest icon name 39
+`tools/testfit/blueprints/_props/Weapons/`; the longest model name is 42 characters
+(`EraCityTycoon_Prop_Weapons_Flamethrower_S0`), the longest icon name 39
 (`EraCityTycoon_Icon_Weapons_Flamethrower`); nothing is waiting for a harvest besides these 30.
+None of the 15 was in `Assets.json` before the uploads. Since 084a14f and d1c2f59, all 15 models
+and all 15 icons are there, uploaded and not yet harvested.
 
 - [x] 1. **Fresh palette and the re-merge** (pipeline engineer, done 2026-10-20 23:56; L3-41). Git
       Bash:
@@ -2243,8 +2248,9 @@ name is 42 characters (`EraCityTycoon_Prop_Weapons_Flamethrower_S0`), the longes
       - It ended `made 15 icon(s) at 256 x 256 in assets/testfit/out/Weapons/icons256` (21–46 KB
         each).
       - Redo it only if a 512 render changes. The upload refuses an icon older than its render.
-- [ ] 3. **Lead: announce**, and check `git status` is clean in `tycoon-p5` on `l3-w2`.
-- [ ] 4. **Lead: upload the 15 models.**
+- [x] 3. **Lead: announce**, and check `git status` is clean in `tycoon-p5` on `l3-w2` (done
+      2026-10-21, before 084a14f).
+- [x] 4. **Lead: upload the 15 models** (done 2026-10-21 00:13, 084a14f).
       ```
       py tools/assets/upload_models.py --props --era Weapons --dry-run
       py tools/assets/upload_models.py --props --era Weapons
@@ -2253,21 +2259,29 @@ name is 42 characters (`EraCityTycoon_Prop_Weapons_Flamethrower_S0`), the longes
         prepared, nothing sent`.
       - Real run: `uploaded 15/15`. On "Unknown Error", run the same line again: finished stages
         are skipped.
-- [ ] 5. **Lead: upload the 15 icons.**
+- [x] 5. **Lead: upload the 15 icons** (done 2026-10-21 00:14, d1c2f59).
       ```
       py tools/assets/upload_icons.py --set Weapons --dry-run
       py tools/assets/upload_icons.py --set Weapons
+      py tools/gen_asset_manifest.py
       ```
       - Dry run: 15 `would upload decal icon Weapons/<Model>` lines, then `dry run: 15 valid
         icon(s), 15 upload(s) pending, nothing sent, nothing written`.
       - Real run: `Weapons: uploaded 15/15`. On "Unknown Error", run the same line again.
       - `Assets.json` becomes v5 (a new top-level `icons` block).
-      - **Commit `Assets.json` now.**
-- [ ] 6. **Lead: the harvest script**, then put it on the clipboard for Ben:
+      - **Commit `Assets.json` and `docs/ASSET_MANIFEST.md` together now.** In this run the
+        manifest was left out of d1c2f59 and was regenerated in the L3 W2 fix round. The same
+        round moved the 15 recorded icon `sha256` values from the PNG's bytes to its decoded
+        pixels: the same files, recomputed, nothing uploaded.
+- [x] 6. **Lead: the harvest script**, then put it on the clipboard for Ben (done 2026-10-21 00:14,
+      4154715, 30 records):
       ```
       py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip
       ```
-      - Expect `wrote tools\assets\harvest.luau with 30 asset(s) to harvest`. Not 30: stop.
+      - The first time: `wrote tools\assets\harvest.luau with 30 asset(s) to harvest`.
+      - A repeat (step 12) emits only the records still missing, so fewer than 30 is right then:
+        one per name in the last merge's `still missing harvest data:` line. Any other count:
+        stop and tell the lead.
 - [ ] 7. **Ben: the one harvest paste.** Open the **local** file
       `C:\Users\benja\Desktop\tycoon\build\test.rbxl` in Studio, with File (*Archivo*) → Open
       (*Abrir*). **Not the published game. Do not press Play.**
@@ -2276,25 +2290,37 @@ name is 42 characters (`EraCityTycoon_Prop_Weapons_Flamethrower_S0`), the longes
       2. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
       3. Tell Claude **"done"**, and nothing else. **Do not paste the Output into the chat, and do
          not copy anything else** before Claude answers: your clipboard holds the result.
-      - If the number is not 30 or "failed" is not 0: tell Claude the line as it reads.
+      - If the number is not the one Claude gave you (30 the first time) or "failed" is not 0:
+        tell Claude the line as it reads.
 - [ ] 8. **Lead: save the clipboard to a file first, count, then merge from the file.**
       ```
       powershell -NoProfile -Command "[IO.File]::WriteAllText('<a scratch file>', (Get-Clipboard -Raw), (New-Object Text.UTF8Encoding $false))"
       grep -c '\[HARVEST\] {' <that scratch file>
       py tools/assets/harvest.py --props --file <that scratch file>
+      py tools/gen_asset_manifest.py
       ```
-      - The count must be 30 (`[HARVEST-FAIL]` appears once in a good Output: the echoed script).
+      - The count must be the number step 6 emitted: 30 the first time. `[HARVEST-FAIL]` appears
+        once in a good Output, in the echoed script.
       - The merge prints `merged 15 prop stage(s)` and `merged 15 icon(s)`, then `every uploaded
-        asset is harvested; next: py tools/assets/gen_templates.py --props`.
+        asset is harvested; next: py tools/assets/gen_templates.py --props`, and exits 0.
+      - **No `rotated` warning.** A `ROTATED:` line means a weapon's MeshPart came in rotated.
+        The merge refuses that weapon, merges the rest and exits 1. The turn proof cannot see a
+        rotated part, so stop as for a failed proof (step 9).
       - An icon still in moderation prints `no Decal Texture ... (still in moderation?); skipped`:
         its card stays text. Repeat steps 6 to 8 later for it; never the uploaders.
-      - **Commit `Assets.json` now.**
+      - **Commit `Assets.json` and `docs/ASSET_MANIFEST.md` together now.**
 - [ ] 9. **Lead: the turn proof on the real harvest, before any template** (L3-47):
       ```
       py tools/assets/weapon_frames.py --check --require-harvest
       ```
-      - Expect `15 of 15 harvested and proven (63 point(s))` and `CHECK: PASS`. **A failure stops
-        the run here**: no templates are written or committed. It names the weapon and the point.
+      - Expect `15 of 15 harvested and proven (per weapon one offset check and one size check;
+        that offset carries their 63 point(s))` and `CHECK: PASS`. That is one offset check and
+        one size check per weapon. Where each point sits on the mesh is the generator's word.
+      - **If it fails** (or step 8 printed `ROTATED:`), stop the run here:
+        - write no templates and commit none. `Assets.json` is already committed with the
+          harvested stages, so `gen_templates.py --check` stays red until the lead resolves it;
+        - send the lead the printed lines, which name the weapon and the point or the part;
+        - never re-upload.
 - [ ] 10. **Lead: templates and manifest.**
       ```
       py tools/assets/gen_templates.py --props

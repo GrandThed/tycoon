@@ -39,6 +39,13 @@ Shelf icons (Assets.json icons.<Set>.<Model>, uploaded by upload_icons.py; docs/
 l3-w2-contract.md L3-43) ride along in both modes too: kind "icon" for a Decal with an assetId and
 no imageId. Its merge writes the Image asset id; a 0 (the Decal is still in moderation) is warned
 about and left for a later paste.
+
+Weapons (props.Weapons, the folder weapon_frames.py names) are stricter about rotation than other
+props: a weapon whose MeshPart Studio reports rotated relative to the model is refused, not merged,
+and the exit code is 1. Elsewhere that is a warning. A weapon's template must put its grip on the
+pivot, and the turn proof (weapon_frames.py, L3-47) assumes an unrotated part: Assets.json keeps no
+rotation, so a turn the importer put into the part's CFrame would pass the proof and then be applied
+a second time by the template, pointing the weapon backwards in the hand.
 """
 
 from __future__ import annotations
@@ -52,6 +59,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import assets_config as cfg  # noqa: E402
+from weapon_frames import FOLDER as WEAPONS_FOLDER  # noqa: E402
 
 LUAU_PATH = os.path.join(HERE, "harvest.luau")
 MARKER = "[HARVEST] "
@@ -323,7 +331,7 @@ def kit_of_part(part: dict, known: list[str]) -> str | None:
     return None
 
 
-def merge_model(assets: dict, rec: dict, force: bool, group: str = "eras") -> bool:
+def merge_model(assets: dict, rec: dict, force: bool, rotation_refusals: list[str], group: str = "eras") -> bool:
     era, model = rec.get("era"), rec.get("model")
     prefix = "" if group == "eras" else f"{group}/"
     try:
@@ -342,6 +350,15 @@ def merge_model(assets: dict, rec: dict, force: bool, group: str = "eras") -> bo
     parts_in = rec.get("parts") or []
     if not parts_in:
         warn(f"{label}: no MeshParts in the loaded asset; skipped")
+        return False
+    rotated = [str(p.get("name")) for p in parts_in if p.get("rotated")]
+    if group == cfg.PROPS_KEY and era == WEAPONS_FOLDER and rotated:
+        line = (
+            f"{label}: MeshPart {', '.join(rotated)} is rotated relative to the model; the turn proof cannot see a"
+            " rotated part and the template would turn it again (the weapon backwards in the hand)"
+        )
+        rotation_refusals.append(line)
+        warn(f"{line}; NOT merged")
         return False
     known = [p.get("kit") for p in stage.get("parts") or [] if p.get("kit")]
     merged: dict[str, dict] = {}
@@ -622,6 +639,7 @@ def merge(assets: dict, text: str, force: bool, props: bool, world_bake_root: st
     models = swatches = path_textures = path_pieces = world_textures = world_meshes = icons = 0
     world_bakes = WorldBakes(world_bake_root)
     world_size_problems: list[str] = []
+    rotation_refusals: list[str] = []
     for rec in records:
         kind = rec.get("kind")
         if kind == "pathTexture":
@@ -636,11 +654,11 @@ def merge(assets: dict, text: str, force: bool, props: bool, world_bake_root: st
             icons += merge_icon(assets, rec, force)
         elif props:
             if kind == "prop":
-                models += merge_model(assets, rec, force, "props")
+                models += merge_model(assets, rec, force, rotation_refusals, cfg.PROPS_KEY)
             else:
                 warn(f"{kind!r} line skipped (--props merges only prop lines; rerun without --props for it)")
         elif kind == "model":
-            models += merge_model(assets, rec, force)
+            models += merge_model(assets, rec, force, rotation_refusals)
         elif kind == "swatch":
             swatches += merge_swatch(assets, rec, force)
         elif kind == "prop":
@@ -668,14 +686,20 @@ def merge(assets: dict, text: str, force: bool, props: bool, world_bake_root: st
         if world_textures or world_meshes:
             commands.append("py tools/assets/gen_templates.py --world")
         log("every uploaded asset is harvested; next: " + ", then ".join(commands))
+    # Last, and with a failing exit code: everything else is merged and saved above, but a landscape
+    # mesh whose size is not the baked one, or a rotated weapon, must stop the pipeline run that follows.
+    for line in world_size_problems:
+        warn(f"SIZE CHECK: {line}")
     if world_size_problems:
-        # Last, and with a failing exit code: everything else is merged and saved above, but a
-        # landscape mesh whose size is not the baked one must stop the pipeline run that follows.
-        for line in world_size_problems:
-            warn(f"SIZE CHECK: {line}")
         warn(f"{len(world_size_problems)} world mesh(es) failed the size check and were not merged")
-        return 1
-    return 0
+    for line in rotation_refusals:
+        warn(f"ROTATED: {line}")
+    if rotation_refusals:
+        warn(
+            f"{len(rotation_refusals)} weapon(s) refused for a rotated MeshPart and not merged: stop the run here"
+            " (no turn proof, no templates) and send these lines to the lead; never re-upload"
+        )
+    return 1 if world_size_problems or rotation_refusals else 0
 
 
 def main(argv: list[str]) -> int:

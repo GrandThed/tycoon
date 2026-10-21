@@ -666,12 +666,14 @@ neighbours). Smooth shading (`smooth=True`) stays inside one primitive; caps are
 - **The models** take the props route, folder `Weapons`: `merge_stages.py --props --era Weapons`,
   `upload_models.py --props --era Weapons`, the harvest, `gen_templates.py --props` →
   `templates/_props/Weapons/<Model>.rbxmx` = `ReplicatedStorage/Assets/Props/Weapons/<Model>`. Their
-  upload description names the kit ("…; kits: weapon-kit.") instead of Kenney CC0.
+  upload description names the kit as generated ("…; kits: weapon-kit (generated)."); a prop built only
+  from Kenney kits keeps "Kenney kit pieces, CC0." (`upload_models.kenney_kit` reads each kit's License.txt).
 - **The icons** are 256 × 256 (the lead's ruling: about 4 MB on a phone for 15, a quarter of the
   512 set). `py tools/assets/upload_icons.py --set Weapons --make` shrinks the 512 renders (Pillow,
   LANCZOS through premultiplied alpha) into `assets/testfit/out/Weapons/icons256/`; the same tool
   without `--make` uploads them as Decals into `Assets.json` v5 `icons.Weapons.<Model>` (`assetId`,
-  `imageId`, `sha256`; hash-checked, so a changed file goes up again). Its `--dry-run` writes
+  `imageId`, `sha256`; hash-checked on the decoded pixels, so a changed image goes up again and a
+  re-encode of the same image does not). Its `--dry-run` writes
   nothing. Every file passes `icon_problems` first (256 × 256, 8-bit RGBA, not interlaced, four
   transparent corners, one opaque pixel; decoded in plain Python). The harvest records each icon's
   Image id as kind `icon`, in either mode. Run `upload_icons.py` with `py` and no `#!`: a `#!` line

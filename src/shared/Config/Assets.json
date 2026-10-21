@@ -16848,77 +16848,77 @@
       "Beam": {
         "assetId": 77434531470060,
         "imageId": 0,
-        "sha256": "7bf2f733c523ca1700eb3e5dd00f08ea0793f4173b0a9d62d82b02968cd27e62"
+        "sha256": "bd59e95950f90ca6e40f962237651d8bf36ebdc2d6584d02df381a0b0e011c53"
       },
       "Broadsword": {
         "assetId": 98630146179400,
         "imageId": 0,
-        "sha256": "bb6b8d4cd5b31616e8f698dfd6eaa805b9d8dfdbca4cf0eba618a5f11ae4911f"
+        "sha256": "86f10b582ec5fb175b9418243181925b12feb5a1e92e5e2e5f71a97f17e8b175"
       },
       "Chaingun": {
         "assetId": 127802520613907,
         "imageId": 0,
-        "sha256": "762792664eab1ed804303cae6371b6d2dd5e64c95322b58960af5bb5b2b557dc"
+        "sha256": "7e987a255ec5e5ff43a55ee8b1c1dec22af55458256551fedc475a3acb462dae"
       },
       "Flamethrower": {
         "assetId": 81280295006153,
         "imageId": 0,
-        "sha256": "2142ea6096ac0eef7d12d034260677f22ad27bc7462dfa626d4ecb6b393e6f44"
+        "sha256": "196d4f9ab7bf769c57775796171ec3a41781e70c00be8fe25c28bea4a0a4c2d3"
       },
       "FrostHammer": {
         "assetId": 105557430958523,
         "imageId": 0,
-        "sha256": "4609cee6a53731eb663caca8a3026d661fbb77831c26175826273e76bbc933f7"
+        "sha256": "0598240ab1f565304f9e84f67d1d7e180b84cdc650e91da93fb010753c0f5671"
       },
       "Greataxe": {
         "assetId": 111727837327238,
         "imageId": 0,
-        "sha256": "3a4bf30a3eac1999bba5867d8d66edd1792a50e37f3866d0506154296aceb495"
+        "sha256": "55180f0e90189349bc4b9cf228a8b302771ccc63d63d64217bfce8bd79f38ea2"
       },
       "Launcher": {
         "assetId": 133423818465483,
         "imageId": 0,
-        "sha256": "ee3948820df9c805c65798cc9444e232a96792dfe08204c55f99ed662a0cc715"
+        "sha256": "005230fdd0ac8d2a1a63c91e9b10a6a289fffa23df7dd7d4eb48d558226f4b9c"
       },
       "Longbow": {
         "assetId": 95426563417130,
         "imageId": 0,
-        "sha256": "d1e70429c83b8f9d35235a302c96e12dd0d0ed77825f6d641dec00a264910f6b"
+        "sha256": "d335c3b657627f64715781bf55538de90bf0acba51c29475449262e4b1609ff8"
       },
       "Rifle": {
         "assetId": 86363372505883,
         "imageId": 0,
-        "sha256": "42086dc44577c130ac3ed3f95b15f1a98e4951eb5ffa7f6c0e83e1ddfd217148"
+        "sha256": "bea1f274a58bb443b7c01145cb0dae796f76e89aa9d153f1db1316bee638d90b"
       },
       "Shotgun": {
         "assetId": 105349338514512,
         "imageId": 0,
-        "sha256": "d0eff67b3e88c2f618f43826f104b003aee19480704dbaf3caf9f6624b33aa83"
+        "sha256": "9b09cdd4e4de61fea64dd506064cc60916a9dc2c10cb38a1364f499dc4fc685a"
       },
       "Smg": {
         "assetId": 113664268953409,
         "imageId": 0,
-        "sha256": "7ef6e57a997505ce204a3922340891bdc39bab91c8a7b505edde967067f66ca5"
+        "sha256": "306a979aaeaac0411ceef61be07e7897e7392379e0ba7172e13158f8e2230946"
       },
       "Spear": {
         "assetId": 118768863424175,
         "imageId": 0,
-        "sha256": "2b197a12799b039af31abfaa6dd52d51664c78e8e34596a76e3af536862fdbe2"
+        "sha256": "6a636aa588beb5bf59ecc9e005b7dbe2d1fa057e49f3be55b34ab5d5fcea70a2"
       },
       "Spinblade": {
         "assetId": 115474058729704,
         "imageId": 0,
-        "sha256": "0d2c04937e7a1e0148b48d9fd5f177425c4205745c6523ba45c8fe9ce76b5309"
+        "sha256": "9ca13fd61539bd84f54cbfc36161e39b4173e039a3ef5daddee1451709440027"
       },
       "Splitbow": {
         "assetId": 116927476118869,
         "imageId": 0,
-        "sha256": "0310296d5ea2ec003baf17a413d6c98c665d7014c3d73312adc279aa2dca2067"
+        "sha256": "3426798443a6e13aee3cc8263cef7679d7f63c1978fe76b3a0989b0980345e4a"
       },
       "Warhammer": {
         "assetId": 131554944715656,
         "imageId": 0,
-        "sha256": "83e635fca7a41c961f93f5da72e26236d6e7a02f18afbff291f2dace9a7ba208"
+        "sha256": "66baad5412cf1252f87d10ef0663c4b689f0c88b539355fd9602c74c26bc9a59"
       }
     }
   }
