@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "textures": {
     "castle-kit": {
       "vipSwatchAssetId": 103844883997226,
@@ -16840,6 +16840,85 @@
           "triangles": 250,
           "look": "palette"
         }
+      }
+    }
+  },
+  "icons": {
+    "Weapons": {
+      "Beam": {
+        "assetId": 77434531470060,
+        "imageId": 0,
+        "sha256": "7bf2f733c523ca1700eb3e5dd00f08ea0793f4173b0a9d62d82b02968cd27e62"
+      },
+      "Broadsword": {
+        "assetId": 98630146179400,
+        "imageId": 0,
+        "sha256": "bb6b8d4cd5b31616e8f698dfd6eaa805b9d8dfdbca4cf0eba618a5f11ae4911f"
+      },
+      "Chaingun": {
+        "assetId": 127802520613907,
+        "imageId": 0,
+        "sha256": "762792664eab1ed804303cae6371b6d2dd5e64c95322b58960af5bb5b2b557dc"
+      },
+      "Flamethrower": {
+        "assetId": 81280295006153,
+        "imageId": 0,
+        "sha256": "2142ea6096ac0eef7d12d034260677f22ad27bc7462dfa626d4ecb6b393e6f44"
+      },
+      "FrostHammer": {
+        "assetId": 105557430958523,
+        "imageId": 0,
+        "sha256": "4609cee6a53731eb663caca8a3026d661fbb77831c26175826273e76bbc933f7"
+      },
+      "Greataxe": {
+        "assetId": 111727837327238,
+        "imageId": 0,
+        "sha256": "3a4bf30a3eac1999bba5867d8d66edd1792a50e37f3866d0506154296aceb495"
+      },
+      "Launcher": {
+        "assetId": 133423818465483,
+        "imageId": 0,
+        "sha256": "ee3948820df9c805c65798cc9444e232a96792dfe08204c55f99ed662a0cc715"
+      },
+      "Longbow": {
+        "assetId": 95426563417130,
+        "imageId": 0,
+        "sha256": "d1e70429c83b8f9d35235a302c96e12dd0d0ed77825f6d641dec00a264910f6b"
+      },
+      "Rifle": {
+        "assetId": 86363372505883,
+        "imageId": 0,
+        "sha256": "42086dc44577c130ac3ed3f95b15f1a98e4951eb5ffa7f6c0e83e1ddfd217148"
+      },
+      "Shotgun": {
+        "assetId": 105349338514512,
+        "imageId": 0,
+        "sha256": "d0eff67b3e88c2f618f43826f104b003aee19480704dbaf3caf9f6624b33aa83"
+      },
+      "Smg": {
+        "assetId": 113664268953409,
+        "imageId": 0,
+        "sha256": "7ef6e57a997505ce204a3922340891bdc39bab91c8a7b505edde967067f66ca5"
+      },
+      "Spear": {
+        "assetId": 118768863424175,
+        "imageId": 0,
+        "sha256": "2b197a12799b039af31abfaa6dd52d51664c78e8e34596a76e3af536862fdbe2"
+      },
+      "Spinblade": {
+        "assetId": 115474058729704,
+        "imageId": 0,
+        "sha256": "0d2c04937e7a1e0148b48d9fd5f177425c4205745c6523ba45c8fe9ce76b5309"
+      },
+      "Splitbow": {
+        "assetId": 116927476118869,
+        "imageId": 0,
+        "sha256": "0310296d5ea2ec003baf17a413d6c98c665d7014c3d73312adc279aa2dca2067"
+      },
+      "Warhammer": {
+        "assetId": 131554944715656,
+        "imageId": 0,
+        "sha256": "83e635fca7a41c961f93f5da72e26236d6e7a02f18afbff291f2dace9a7ba208"
       }
     }
   }
