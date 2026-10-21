@@ -633,3 +633,9 @@ lead's recommendation on all five: **[Ben]**
    fighting it all with the same gear, over 30 seeds; a spot fails only if that run pays more per minute. His rule
    stands: no spot may out-earn fighting. (The failing row was Road3, Hard, sword T1 / bow T4: a one-off burst from the
    low road under the plateau, red before L4 on 12 of 30 seeds.)
+
+**Rocks, after the gate (same day):** looking again, Ben said *"to be honest, the stones leave so much to offer, it would
+be great if we could make something more like the images attached"*, with two references
+(`assets/research/2026-10-21-l4/ref_rocks_standing.png`: bevelled standing stones and chunky low stones;
+`ref_rocks_cliffs.png`: cliffs of clustered, stacked bevelled blocks). Every rock of the forest is redone in that
+language before the upload (brief `docs/prompts/l4-w2-rocks.md`); the rest of the forest stays as approved. **[Ben]**
