@@ -1,6 +1,6 @@
 {
 	"name": "EraCityTycoon",
-	"globIgnorePaths": ["templates/_props", "templates/_paths", "templates/_enemies", "templates/_world"],
+	"globIgnorePaths": ["templates/_props", "templates/_paths", "templates/_enemies", "templates/_world", "templates/_levels"],
 	"tree": {
 		"$className": "DataModel",
 		"ReplicatedStorage": {
