@@ -55,8 +55,8 @@ What it reads, and copies no number from:
                               crowd.maxAlive
   Config/Expeditions.json     the map's nodes, themes, looks and abilities
   Config/Levels/*.json        each level's stages (which kinds stand in which camp, the boss spot)
-  Layouts/Levels/*.json       the layouts; a file that names an `arena` is read through
-                              sim_range.arena_as_layout, the mirror of LevelGeometry.FromArena
+  Layouts/Levels/*.json       the layouts (one that names an `arena` is refused since L4 W1b:
+                              ruling 27's adapter went with the Raider Arena)
 
 Geometry rules, as LevelService builds them: a camp's fence stands OUTSIDE its floor rectangle,
 `levels.fenceThickness` thick, so a road runs up to the floor's edge and passes under the gate.
@@ -92,7 +92,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import sim_range as sr  # noqa: E402  (the arena adapter and the config loaders live there)
+import sim_range as sr  # noqa: E402  (the config loaders and the level mirrors live there)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = REPO_ROOT / "src" / "shared" / "Config"
@@ -185,7 +185,7 @@ COVER_MARGIN = 0.5
 # holds it to the floor-depth rule in check_ice's frozen run).
 GROUND_LOOKS = ("ground", "path", "lobby", "water", "ice")
 LOBBY_CLEARANCE = 150.0
-DENSITY_AREA = 200.0  # a camp's maxAlive is at most its floor area over this (the arena: 60 on 110 x 110)
+DENSITY_AREA = 200.0  # a camp's maxAlive is at most its floor area over this (the C1 arena had 60 on 110 x 110)
 BAND_SHARE = 0.45  # a keepAway kind's bandMin is at most this share of the camp's shorter side
 RUN_CAP_RATIO = 2.0
 REQUIRED_LOOKS = ("ground", "path", "campFloor", "wall", "gate", "checkpoint", "checkpointDone", "secret",
@@ -1941,32 +1941,6 @@ def check_origin_chord(name, layout, ctx, expect):
                             f" ({len(tall)} pieces, the thinnest {least[1]} {least[0]:g})" if least else " (none)"))
 
 
-def check_arena_layout(name, layout, ctx, expect):
-    """A layout that names an arena (ruling 27): the gates that still apply to its one camp."""
-    levels = ctx["levels"]
-    camp = layout["camps"][0]
-    x0, x1, z0, z1 = camp_rect(camp)
-    barrier = layout.get("barrier") or {}
-    reach = wall_reach(fence_thickness(camp, levels["fenceThickness"]), barrier)
-    expect(barrier.get("height") == BARRIER["height"] and barrier.get("thickness") == BARRIER["thickness"],
-           f"{name}: the arena {layout['arena']} has the barrier ({BARRIER['height']:g} high, "
-           f"{BARRIER['thickness']:g} thick)")
-    expect(max(abs(x0 - reach), abs(x1 + reach), abs(z0 - reach), abs(z1 + reach)) <= ORIGIN_LIMIT,
-           f"{name}: its camp lies within {ORIGIN_LIMIT:g} studs of the world origin")
-    spawns = camp["spawns"]
-    entry = camp["entry"]
-    nearest = min(math.hypot(p["x"] - entry["x"], p["z"] - entry["z"]) for p in spawns)
-    expect(len(spawns) >= SPAWNS_MIN and nearest >= SPAWN_ENTRY_MIN
-           and all(x0 <= p["x"] <= x1 and z0 <= p["z"] <= z1 for p in spawns),
-           f"{name}: {len(spawns)} spawn points on its floor, the nearest {nearest:.0f} studs from the entry")
-    keep = (levels.get("closeInset") or 0) + CLOSE_SPARE
-    depth_in = min(entry["x"] - x0, x1 - entry["x"], entry["z"] - z0, z1 - entry["z"])
-    expect(depth_in >= keep, f"{name}: the entry point is {depth_in:g} studs inside the floor, clear of the close "
-           f"rule's inset ({levels.get('closeInset')}) with {CLOSE_SPARE:g} to spare")
-    expect(part_count(layout) <= levels["maxParts"],
-           f"{name}: {part_count(layout)} Parts (levels.maxParts {levels['maxParts']})")
-
-
 def check_lobby(name, layout, ctx, bounds_of, expect):
     levels = ctx["levels"]
     solids = solids_of(layout, levels["fenceThickness"], levels["floorThickness"])
@@ -2042,8 +2016,7 @@ def check_level_file(file, level, layouts, ctx, expect):
     name = file["id"]
     layout = layouts.get(file["layout"])
     expect(layout is not None, f"{name}: its layout {file['layout']} exists")
-    expect(level is not None, f"{name}: it resolves to a level (stages, difficulties and a crowd block, or a mission "
-           f"that has a crowd block)")
+    expect(level is not None, f"{name}: it resolves to a level (stages, difficulties and a crowd block)")
     if layout is None or level is None:
         return
     kinds = ctx["kinds"]
@@ -2055,20 +2028,6 @@ def check_level_file(file, level, layouts, ctx, expect):
            f"every camp's targetWaveSeconds is over 0 and its breatherSeconds is not under 0, no camp is without a "
            f"wave, Combat.json has every `levels` number a run reads, and StageFlow.Validate's L1b lines hold"
            + (": " + "; ".join(problems) if problems else ""))
-    if file.get("mission"):
-        expect(bool(layout.get("arena")), f"{name}: a level that names a mission ({file['mission']}) names an arena "
-               f"layout ({layout.get('arena')})")
-        # Not a gate: the arena's numbers stay where they are (ruling 27). Its cover is held to
-        # no height here; this says how it stands against the fix round's ruling 3.
-        tops = [top for camp in layout["camps"] for top in camp.get("obstacleTops") or []]
-        names = [kind for stage in level["stages"] if stage["kind"] == "camp" for kind in fielded(stage, kinds)]
-        low = ground_reach(names, kinds)
-        if tops and low is not None:
-            print(f"  note  {name}: the arena's cover is not gated (its numbers are frozen): {len(tops)} obstacles, the "
-                  f"tallest {max(tops):g} studs, against its lowest ground attack, the {low[1]}'s {low[2]} at {low[0]:g} "
-                  f"({'a body on it is still hit, with no margin' if max(tops) <= low[0] else 'a body on it is out of reach'}"
-                  f"; a level's own camps keep {COVER_MARGIN:g} under)")
-        return
     # The simulator does not mirror the director's elite (WaveService picks it per wave): a level
     # file that names one would be played with bodies no band has measured.
     expect("eliteKind" not in (file.get("crowd") or {}),
@@ -5071,13 +5030,12 @@ def load_all():
     expeditions = sr.load_config(sr.EXPEDITIONS_PATH)
     kinds = proving["crowd"]["kinds"]
     names = sorted(p.stem for p in sr.LEVEL_LAYOUT_DIR.glob("*.json"))
-    layouts = {name: sr.load_level_layout(name, combat["player"]["rescue"]["below"]) for name in names}
+    layouts = {name: sr.load_level_layout(name) for name in names}
     size = (expeditions.get("sign") or {}).get("size")
     ctx = {"levels": combat["levels"], "move": proving["movement"], "looks": expeditions["looks"], "kinds": kinds,
            "widest": max(k["radius"] for k in kinds.values() if k.get("brain") and not k.get("boss")),
            "spawnClear": proving["crowd"]["threat"]["spawnClear"], "crowdMaxAlive": proving["crowd"]["maxAlive"],
            "campRadius": {}, "signSize": size if three_positive(size) else None,
-           "missions": {m["id"]: m for m in (sr.load_config(path) for path in sorted(sr.MISSIONS_DIR.glob("*.json")))},
            "runCap": combat["director"]["runCapSeconds"], "camps": combat.get("camps"),
            "ranks": sr.difficulty_ranks(expeditions), "snapshotHz": proving["crowd"]["snapshotHz"],
            "gate16": {}, "chains": {}, "sniperReach": sniper_reach(proving["weapons"], (proving.get("loadout") or {}).values()),
@@ -5234,13 +5192,29 @@ def check_rules(combat, level_files, ctx, expect):
            + " are Workspace attribute names of their own")
     presets = [(p.get("melee"), p.get("ranged")) for p in debug.get("gearPresets") or []]
     proving = debug.get("provingGear") or {}
-    tiers = sorted({d["recommendedTier"] for file in level_files for d in (file.get("difficulties") or {}).values()}
-                   | {file["recommendedTier"] for file in level_files if file.get("recommendedTier") is not None})
+    tiers = sorted({d["recommendedTier"] for file in level_files for d in (file.get("difficulties") or {}).values()})
     reached = all(any(melee == tier for melee, _r in presets) for tier in tiers)
     expect(presets == list(GEAR_PRESETS) and presets[:1] == [(proving.get("melee"), proving.get("ranged"))] and reached,
            f"Combat.json debug.gearPresets are {', '.join(f'{m}/{r}' for m, r in GEAR_PRESETS)} (the G key), the first "
            f"is debug.provingGear, and every difficulty's recommendedTier ({', '.join(map(str, tiers))}) is a preset's "
            f"melee tier: " + ", ".join(f"{m}/{r}" for m, r in presets))
+
+
+def check_adapters_gone(combat, expeditions, level_files, layouts, expect):
+    """L4 W1b section 3 (docs/prompts/l4-w1b-contract.md): the Raider Arena is hidden by deleting its
+    data, and ruling 27's two adapters went with it. Tripwires: Combat.json debug.provingLevel (what a
+    proving build plays) names a map node with a level file; no level file names a `mission` and no
+    layout an `arena` (StageFlow.Resolve and LevelGeometry no longer read either)."""
+    proving = (combat.get("debug") or {}).get("provingLevel")
+    files = {file["id"] for file in level_files}
+    noded = [node["id"] for node in expeditions.get("nodes") or [] if node.get("level") == proving]
+    expect(isinstance(proving, str) and proving in files and len(noded) == 1,
+           f"Combat.json debug.provingLevel {proving!r} is one map node's level ({', '.join(noded) or 'none'}) with a "
+           f"level file")
+    named = [file["id"] for file in level_files if "mission" in file]
+    arenas = [name for name, layout in layouts.items() if "arena" in layout]
+    expect(not named and not arenas, "no level file names a mission and no layout an arena (ruling 27's adapters went "
+           "in L4 W1b)" + (f": {', '.join(named + arenas)}" if named or arenas else ""))
 
 
 def check_trophy(armory, expeditions, expect):
@@ -5275,6 +5249,7 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
     check_map(expeditions, level_files, layouts, expect, ctx)
     check_abilities(expeditions, level_files, expect)
     check_rules(combat, level_files, ctx, expect)
+    check_adapters_gone(combat, expeditions, level_files, layouts, expect)
     check_trophy(ctx.get("armory"), expeditions, expect)
     # The layouts are measured with these: without one of them nothing below can be said.
     lost = [key for key in READ_RULES if not is_number(ctx["levels"].get(key))]
@@ -5295,7 +5270,7 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
                                             ctx.get("loadout") or [])
     ctx["sniperReach"] = sniper_reach(ctx.get("weapons") or {}, ctx["ownedFamilies"])
     for file in level_files:
-        level = sr.resolve_level(file, ctx["missions"].get(file.get("mission")), ctx["runCap"])
+        level = sr.resolve_level(file, ctx["runCap"])
         check_level_file(file, level, layouts, ctx, expect)
         if file.get("layout") in layouts:
             check_secret_rewards(file, layouts[file["layout"]], expeditions, expect, ctx.get("weapons"), ctx["ranks"])
@@ -5305,8 +5280,6 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
         check_origin_chord(name, layout, ctx, expect)
         if name == lobby_name:
             check_lobby(name, layout, ctx, bounds_of, expect)
-        elif layout.get("arena"):
-            check_arena_layout(name, layout, ctx, expect)
         else:
             facts[name] = check_layout(name, layout, ctx, expect)
     orphan = [name for name in layouts if name != lobby_name and name not in by_layout]
@@ -5367,8 +5340,6 @@ def main():
     if not args.no_plan:
         scale_x, scale_z = args.scale
         for name, layout in layouts.items():
-            if layout.get("arena"):
-                continue
             solids = solids_of(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
             print()
             print(f"PLAN of {name}, from above (north at the top; one character = {scale_x:g} studs across, "

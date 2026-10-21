@@ -1000,4 +1000,80 @@ function W2L3.sourceTests(): ()
 end
 L1.group("l3w2 sourceTests", W2L3.sourceTests)
 
+-- L4 W1b (docs/prompts/l4-w1b-contract.md §4, §5): the service lines that apply L4B-7 and L4B-8, read as
+-- text (FIXTURES.source.l4b, run_harness.py's L4B_LINES and L4B_ORDER; none of the three services
+-- loads here). The rules themselves are tests_l4b.luau's (DashProof) and tests_l4b_run.luau's (RunFloors).
+local L4BP: any = {
+	LINES = {
+		dashNoOpen = { 0, "WeaponService.OnDash opens no i-frames: it only records the claim (L4B-7)" },
+		dashClaim = { 1, "OnDash records the claim at the request (dashClaimAt = now)" },
+		trackRecordThenClaim = { 1, "trackAir reads the claim right after this frame's ring sample" },
+		trackProve = { 1, "and judges it there, passing the claim's time (proveDash ... claimAt)" },
+		proveVerdict = { 1, "proveDash asks DashProof.Verdict on the ring, now, the root and the claim" },
+		proveOpen = { 1, "a proven claim opens its window from the request, not from the proof" },
+		openIframesCalls = { 3, "openIframes( is spelled three times: its definition, proveDash, GrantIframes" },
+		openThroughProof = { 1, "openIframes keeps its windows through DashProof.Open" },
+		resetDropsClaim = { 1, "resetAir drops a pending claim" },
+		runStateSpelled = { 1, "ArenaService spells \"RunState\" once: sendRunState's FireClient (L4B-8)" },
+		sendRunStateCalls = { 3, "sendRunState( three times: its definition, sendSummaryTo, Broadcast" },
+		attachCalls = { 2, "RunFloors.Attach( twice: sendRunState and BuildRunState" },
+		sendAttach = { 1, "sendRunState asks Attach with the member's note" },
+		sendFloors = { 1, "and sends the floors Attach answered" },
+		sendNote = { 1, "and records the set it sent" },
+		buildAttach = { 1, "BuildRunState builds its floors with no cells (sentSeq = the set)" },
+		buildFloors = { 1, "BuildRunState's payload carries those floors" },
+		buildSeq = { 1, "and the set's number" },
+		admitClears = { 1, "Admit clears the member's note: a rejoin gets the cells" },
+		removeClears = { 1, "Remove clears it too" },
+		noteWrites = { 3, "play.cellsSent[...] is written three times (the send, Admit, Remove)" },
+		floorsAssigned = { 1, "WaveService assigns run.floors once (in setFloors)" },
+		seqRaised = { 1, "setFloors raises boot.floorsSeq" },
+		seqWrites = { 1, "and nothing else writes it" },
+		setFloorsCalls = { 4, "setFloors( four times: its definition, the start, the lobby, Reset" },
+		startSets = { 1, "a start's floors are a new set" },
+		lobbySets = { 2, "the lobby's and a session reset's empty list are new sets too" },
+		pushSeq = { 1, "pushRunFields hands the set's number to ArenaService" },
+	},
+	ORDER = {
+		trackOrder = "trackAir: the ring sample comes before the claim is judged",
+		sendOrder = "sendRunState: Attach comes before the note",
+	},
+}
+
+function L4BP.sourceTests(): ()
+	print(" L4 W1b: the lines that apply the dash proof and the floor sets (source.l4b)")
+	local reading = FIXTURES.source.l4b
+	check(
+		#reading.missing == 0,
+		`every function the lines live in is there ({table.concat(reading.missing, ", ")})`
+	)
+	local keys = {}
+	for key in L4BP.LINES do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local expected = L4BP.LINES[key]
+		local count = reading.counts[key]
+		check(count == expected[1], `{expected[2]} ({key}: {tostring(count)}, expected {expected[1]})`)
+	end
+	local unknown = {}
+	for key in reading.counts do
+		if L4BP.LINES[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	for key, text in L4BP.ORDER do
+		check(reading.order[key] == true, `{text} ({key})`)
+	end
+	for key in reading.order do
+		if L4BP.ORDER[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	table.sort(unknown)
+	check(#unknown == 0, `every line read has an expected count here ({table.concat(unknown, ", ")})`)
+end
+L1.group("l4b sourceTests", L4BP.sourceTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

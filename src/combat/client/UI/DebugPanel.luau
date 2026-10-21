@@ -90,16 +90,15 @@ export type DebugPanelHandle = {
 }
 
 -- Mirrors CombatHud's own stacking so the strip lands in the gap between them: the header
--- block it starts below, and the HP + Ready/Return column it must stay above.
+-- block it starts below, and the bottom-left buttons with the Alt and key hints over them it
+-- must stay above.
 local HEADER_BLOCK = Theme.TOP_BAR_HEIGHT
 	+ Theme.COMBAT_WALLET_HEIGHT
 	+ Theme.COMBAT_BOSS_LABEL_HEIGHT
 	+ Theme.COMBAT_BOSS_BAR_HEIGHT
 	+ Theme.SCREEN_MARGIN * 3
 local BOTTOM_BLOCK = Theme.PADDING
-	+ Theme.COMBAT_HP_LABEL_HEIGHT
-	+ Theme.COMBAT_HP_BAR_HEIGHT
-	+ Theme.ROW_SPACING
+	+ (Theme.COMBAT_ALT_HINT_HEIGHT + Theme.ROW_SPACING) * 2
 	+ Theme.ROW_BUTTON_HEIGHT
 	+ Theme.COMBAT_CONTROL_GAP
 local CELL_WIDTH = (
@@ -118,7 +117,6 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	local wave = 0
 	local held: { melee: HeldTier?, ranged: HeldTier? } = { melee = nil, ranged = nil }
 	local godMode = false
-	local bots = 0
 
 	local root = Create("Frame", {
 		Name = "DebugPanel",
@@ -284,14 +282,6 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	end
 	local meleeButton = tierButton("Melee", "melee")
 	local rangedButton = tierButton("Ranged", "ranged")
-	leverButton("Bots +1", function()
-		bots += 1
-		deps.onLever("bots", bots)
-	end)
-	leverButton("Bots −1", function()
-		bots = math.max(bots - 1, 0)
-		deps.onLever("bots", bots)
-	end)
 	leverButton("+" .. Format.Cash(Theme.COMBAT_DEBUG_GRANT_TIMBER) .. " Timber (T)", function()
 		deps.onLever("grantMaterials", Theme.COMBAT_DEBUG_GRANT_TIMBER)
 	end)

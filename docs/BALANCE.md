@@ -6538,3 +6538,68 @@ edge is always in view from below. Options for the lead:
 `tools/crowd_harness/tests_l2.luau` (realTests): the "from the road below" case read Road5's 8 as a literal. Under the
 new ledge, one jump from 8 would reach the chest's band. It now reads the road from the layout's route point nearest
 the chest (0). Shown red with the old 8 (1 of 4,032 checks), green as written.
+
+## L4 W1b: the old mission code goes (2026-10-21)
+
+Contract `docs/prompts/l4-w1b-contract.md`. The C1 missions, the P5 crowd mission and the Raider Arena leave the game,
+and their mirrors and gates leave the tools (L4B-5, L4B-6). Two numbers are new; no number a run plays moved.
+Measured on Python 3.12.10 64-bit (the gate's) unless said otherwise; "HEAD" is a clean copy of 1d3b0d2 run on the
+same machine.
+
+### L4 W1b: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json movement.dashProofShare` | (none) | **0.5** | L4B-7: a dash's i-frames count once the server's ring has seen it move at half the dash's speed (0.5 x 20 / 0.15 = 66.7 studs/s: 3.3 x the walk's 20, half a dash's 133) |
+| `ProvingGrounds.json movement.dashProofSeconds` | (none) | **0.05** | the stretch that speed is measured over: 3.3 studs of flat travel, three Heartbeats. A walk covers 1.0 in it and never proves one; a dash covers 6.67; a dash stopped by a wall after less than 3.3 studs earns none |
+| `Config/Missions/2_Boomtown`, `3_Metropolis`, `4_OrbitalColony.json` | drafts with no crowd block (refused since P5) | **deleted** | L4B-1 |
+| `Config/Missions/1_Village.json` | the C1 mission and P5's crowd block | **the hub stub**: `version`, `id` "village", `era` 1, `eraName`, `name` "Forest Road", `material` "Timber", `waves` 3, `targetMinutes` 5, `recommendedPower` 64 | L4B-1: the hub's tile reads only these until W3's city map; 64 is T1/T1's Gear Power |
+| `Config/Levels/0_RaiderArena.json`, `Layouts/Levels/RaiderArena.json`, `Layouts/Arenas/{Village,Boomtown,Metropolis,OrbitalColony}.luau` | the arena and its layouts | **deleted** | L4B-3: the arena is hidden by deleting its data |
+| `Expeditions.json` | the `raiderArena` node and the `bonus` theme | **gone** (the `bonus` node kind stays) | §3 |
+| `Combat.json` | `enemy`, `ai`, `crowdSkeleton`; `player.hitDistancePad`, `aimAssistDegrees`, `corpseSeconds`, `breatherRegenPerSecond`, `killCooldownRefundSeconds`, `dashHitRadius`, `burstConeDegrees`; `remotes.attackCallsPerSecond`, `abilityCallsPerSecond`; `director.maxAlive`; `animations.enemy*`; `debug.missionAttribute`, `overdriveAttribute`, `botsAttribute`, `botHp`, `botDamagePerSecond`, `botIncomeRate`; `camera.touchAimAssistDegrees`; `feel.shakeLight`, `shakeHeavy`, `hitMarkerSeconds`, `ragdollImpulse`, `ragdollSeconds`, `hitSparkCount`; `feedback.hitstopSeconds`, `cameraKickDegrees`, `lowHpFraction` | **deleted** | L4B-5: their last `src` reader went this wave (each proved by grep). `overdrive` stays (L4B-2) |
+| `Armory.json` | `slots`, `classes`, `abilities`, the top-level `bands`, `partyEffects` | **deleted** | L4B-5 (row 17). `ladder`, `windows`, `legacy` and `ascension` stay; `legacy.gearCosts` keeps the twelve slot prices for v8 (L4B-9) |
+| `Sounds.json` (and `tools/audio_map.json`) | 15 event keys no code plays (`swing` .. `waveClear`) | **deleted** | the lead's routing; `audio_map.json` loses them too, or `upload_audio.py` would upload a key `set_sound_id` cannot write |
+| `Layouts/Arenas/ProvingGrounds.luau enemySpawns` | 8 points "required by the contract" | **deleted** | its readers (the C1 arena and the adapter) went |
+
+### L4 W1b: the dash proof in the simulator (L4B-7)
+
+`sim_range.py`'s `start_dash` appends its window only when its own clamped path covers `dashProofShare` of the dash's
+speed in its first `dashProofSeconds`, and `plan_shielded` applies the same. Every simulated dash of every policy was
+proven (`DASH PROOF`: 118 dashes, 0 unproven: the human 54, the reacting player 37 + 2 + 1 + 2, the one who stands to
+half health 16, the kite 6), so no run moved: every gate line is byte-identical to HEAD's. The facts now say
+"invulnerable 39% (31%) of the time when every dash moves; a forged dash that never moves the character 0%", and a
+new gate holds it: a forged still dash 0%, a walk (1.00 studs in 0.05 s) never proves one, a real dash (6.67) does.
+The cost the contract states (§4.5) is a feel change only Ben can judge: a dash pressed into a wall earns nothing.
+
+### L4 W1b: the gates before and after
+
+| Gate | HEAD | Now |
+|---|---|---|
+| `sim_range.py --check` | FAIL (1): R8 Road3, Hard, sword T1 / bow T4, **x1.60** (seed 11: 39,504 / 55.1 against 24,703 / 37.2) | **FAIL (1): the same row, x1.60, every seed byte-identical**; the 12 arena lines retired, 1 dash line added; 537 PASS (was 548) |
+| `sim_combat.py --check` | PASS, 23 assertions | **PASS, 11 assertions** (1, 2, 4, 5, 6, 12, 13, 20-23); 1, 2, 5, 6, 21, 22, 23 byte-identical |
+| `sim_combat.py` assertion 4 | Village's crowd run 144,250 cash = 1.01% of 14,280,000 | **Forest Road Normal 131,733 cash = 0.92%** of the 14,280,000 the Village era still owes at 20:55 (needs <= 25%) |
+| `check_levels.py` | PASS | PASS: the arena's lines retired, two tripwires added (`debug.provingLevel` names a map node with a level file; no level file names a `mission`, no layout an `arena`) |
+| `check_stage_mirror.py` | PASS | PASS, with the same comparison counts as HEAD (see below) |
+
+### L4 W1b: coverage the arena carried (risk 4)
+
+The arena was the only level that played a stage's `merge`, the director's breather and a gateless camp that locks
+behind an invisible wall. Those rules stay in the game (Forest Road's locking camp and the level schema read them),
+so the cases that used the arena as a fixture now use a hand-written copy of what it resolved to: `L1W.field` /
+`L1.field` in the harness (the wave, skip, Force, plan and fence cases) and `FIELD_LEVEL` on `FIELD_LAYOUT` in
+`check_stage_mirror.py`, whose scripted runs keep `LevelRun.advance`'s merge and breather held to `StageFlow.Advance`
+(Resolve 2, Plan 8, scripted runs 20, Skip 8, Force 4 compared: HEAD's counts). **No shipped level plays them.** A
+level that merges or rides the director's breather is measured by nothing in `sim_range.py` until one ships.
+
+### L4 W1b: what the simulators no longer measure
+
+`sim_combat.py` keeps assertions 1, 2, 4, 5, 6, 12, 13 and 20-23 under their old numbers. Retired with their rules: 3
+and 7-11 and 14 (the C1 run model: run length, merging at 2x, the under-geared death, WaveComposition, Overdrive cash,
+party boss waves, the horde's shape), 15-18 (the P5 crowd mission) and 19 (ruling 27's adapter); the `--era`,
+`--power`, `--party` and `--overdrive` flags went with them. 1 now pins ladder HP T1-T11 and `legacy.gearCosts` as
+literals (the slot tiers they were read from are gone). 12 and 13 are pure checks of `mentor_pay`, a mirror of
+`WaveService.payMentors` over `Combat.MentorBonus`, on fixture rates and shares (a 10:1 duo pays the mentor 5 Valor,
+an equal duo nobody, a mentee at exactly hostRate x mentorRatio is not carried, the 1% damage floor on both sides, a
+waiting mentor nothing). `sim_range.py` loses the Raider Arena report and its 12 gate lines (the bosses' 64-90 s and
+77-101 s bands, the 10-15 min clear, the stand-down, the arena's hit share and regen), `--mission` and `--level arena`.
+Its range bosses (P4 Stop 2 and 3) keep their own bands.

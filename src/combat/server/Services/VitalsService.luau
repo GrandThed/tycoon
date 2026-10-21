@@ -872,8 +872,7 @@ end
 -- down therefore ends it too, with no down of their own to report it.
 -- `fieldClear` (the wave's last body is dead, nothing left to spawn): a clear field wins. A blow
 -- decided in the frame of the last kill does not lose a wave that was already beaten.
--- Returns the verdict and the userIds of the fighters, who are all fallen when it is true. Bots
--- never count.
+-- Returns the verdict and the userIds of the fighters, who are all fallen when it is true.
 function VitalsService.RunLost(
 	members: { Types.RunMember },
 	fieldClear: boolean?
@@ -882,7 +881,7 @@ function VitalsService.RunLost(
 	local anyStanding = false
 	for _, member in members do
 		local player = member.player
-		if member.bot or player == nil or member.waiting then
+		if member.waiting then
 			continue
 		end
 		table.insert(fighters, member.userId)
@@ -896,11 +895,10 @@ end
 
 -- RunLost reads a human with no living body as fallen, which is right in a run and wrong before
 -- one: a character that has not spawned yet would end the run in its first frame. A run may
--- only start once this is true: every human member has a living body. Bots never count.
+-- only start once this is true: every member has a living body.
 function VitalsService.AllHaveBodies(members: { Types.RunMember }): boolean
 	for _, member in members do
-		local player = member.player
-		if not member.bot and player ~= nil and bodyOf(player) == nil then
+		if bodyOf(member.player) == nil then
 			return false
 		end
 	end

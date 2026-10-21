@@ -180,27 +180,10 @@ end
 -- Levels ------------------------------------------------------------------------------------------
 local L: any = {}
 function L.layout(name: string): any
-	local layout = data.layouts[name]
-	if layout ~= nil and layout.arena ~= nil then
-		return Geo.FromArena(M.load("Arena_" .. layout.arena), -data.combat.player.rescue.below)
-	end
-	return layout
-end
-function L.mission(file: any): any
-	for _, mission in data.missions do
-		if file.mission ~= nil and mission.id == file.mission then
-			return mission
-		end
-	end
-	return nil
+	return data.layouts[name]
 end
 function L.resolve(file: any): any
-	return Flow.Resolve(
-		file,
-		L.mission(file),
-		director.runCapSeconds,
-		data.expeditions.difficulties[1]
-	)
+	return Flow.Resolve(file, director.runCapSeconds)
 end
 function L.rect(rect: any): any
 	return { rect.x, rect.z, rect.hx, rect.hz }
@@ -400,7 +383,7 @@ for _, case in data.waveCases do
 			local level = L.resolve(file)
 			local paid = {}
 			for _, kind in case.kinds do
-				local cash, materials = Combat.CampReward(level.crowd.rewards, kind, spec)
+				local cash, materials = Combat.KillReward(level.crowd.rewards, kind, spec.rewardMult)
 				paid[kind] = { cash, materials }
 			end
 			return paid
@@ -410,18 +393,6 @@ end
 
 -- Combat: prices under reward multipliers that leave halves, and the director's four numbers, on
 -- the Python's grids -----------------------------------------------------------------------------
-J.try("grid.campReward", function()
-	local found = {}
-	for index, case in data.rewardCases do
-		local cash, materials = Combat.CampReward(
-			{ probe = { cash = case[1], materials = case[2] } },
-			"probe",
-			{ rewardMult = case[3] }
-		)
-		found[index] = { cash, materials }
-	end
-	return found
-end)
 J.try("grid.killReward", function()
 	local found = {}
 	for index, case in data.rewardCases do

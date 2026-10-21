@@ -262,6 +262,8 @@
 		"dashSeconds": 0.15,
 		"dashCooldown": 0.8,
 		"dashIframes": 0.25,
+		"dashProofShare": 0.5,
+		"dashProofSeconds": 0.05,
 		"slamMinHeight": 5,
 		"slamRadius": 12,
 		"slamDamage": 45,

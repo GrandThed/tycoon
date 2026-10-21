@@ -16,17 +16,15 @@
 --    kick and a draw start from that raised arm; a melee swing is unchanged.
 -- 3. Trail the strike. A Trail between two hand attachments is lit for the strike leg
 --    (`feel.trailSeconds` long), so a swing reads as an arc even with empty hands.
--- 4. Show the shot. Every shot flies: an arrow for charge weapons and a bright bolt for guns
---    (with a muzzle flash) travel from the muzzle (HeldWeapons.Muzzle) to the point the
---    client's own copy of the server's ray reaches, at `feel.arrowSpeed`; beams stay instant.
---    CombatFxController asks ArrivalDelay() so a hit's number and sparks land when the arrow
---    does, not before.
+-- 4. Show the instant shot. A hitscan shot the local player fires gets a muzzle flash and a
+--    bright bolt that flies from the muzzle (HeldWeapons.Muzzle) to the point the client's own
+--    copy of the server's ray reaches, at `feel.arrowSpeed` x COMBAT_BOLT_SPEED_FACTOR.
+--    Projectiles and held beams are FeedbackController's, drawn from the server's CombatFxShot.
 --
--- Other players' swings (SwingOther: FeedbackController on each of their weapon strikes, L3-53;
--- the C1 `CombatFx swing` until those modules go) play the same animation or pose, and the same
--- trail, on THEIR character, locally. Nothing written here replicates, and the owner's
--- client animates its own copy, so the two never fight. Their weapon class is not sent, so a
--- remote swing uses one fixed presentation window.
+-- Other players' swings (SwingOther: FeedbackController on each of their weapon strikes, L3-53)
+-- play the same animation or pose, and the same trail, on THEIR character, locally. Nothing
+-- written here replicates, and the owner's client animates its own copy, so the two never
+-- fight. Their weapon class is not sent, so a remote swing uses one fixed presentation window.
 
 local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
@@ -46,11 +44,9 @@ local Motion = require(uiFolder:WaitForChild("Motion"))
 local HeldWeapons = require(script.Parent:WaitForChild("HeldWeapons"))
 
 local MELEE_SLOT = "melee"
-local TRACER_NAME = "CombatTracer"
 local PROJECTILE_NAME = "CombatProjectile"
 local MUZZLE_NAME = "CombatMuzzleFlash"
 local TRAIL_NAME = "CombatTrail"
-local ENEMIES_FOLDER = "Enemies"
 local FINISHER_STEP = 3
 -- R15 first, R6 second: the placeholder rigs and every real avatar are R15, but a Studio
 -- test with an R6 avatar must still pose an arm instead of erroring.
@@ -117,7 +113,6 @@ type Projectile = {
 	length: number,
 	speed: number,
 	startedAt: number,
-	stick: boolean,
 }
 local projectiles: { Projectile } = {}
 local flightConnection: RBXScriptConnection? = nil
@@ -526,23 +521,6 @@ local function stopFlights(): ()
 	end
 end
 
-local function fadeAndDestroy(part: BasePart, afterSeconds: number): ()
-	task.delay(afterSeconds, function()
-		if part.Parent == nil then
-			return
-		end
-		local tween = TweenService:Create(
-			part,
-			TweenInfo.new(Theme.COMBAT_PROJECTILE_FADE_SECONDS),
-			{ Transparency = 1 }
-		)
-		tween.Completed:Once(function()
-			part:Destroy()
-		end)
-		tween:Play()
-	end)
-end
-
 local function stepFlights(): ()
 	local now = os.clock()
 	for index = #projectiles, 1, -1 do
@@ -550,14 +528,7 @@ local function stepFlights(): ()
 		local travelled = (now - shot.startedAt) * shot.speed
 		if travelled >= shot.length or shot.part.Parent == nil then
 			table.remove(projectiles, index)
-			local tip = shot.from + shot.direction * shot.length
-			if shot.stick and shot.part.Parent ~= nil then
-				-- An arrow that met the arena stays where it struck for a moment.
-				shot.part.CFrame = CFrame.lookAlong(tip, shot.direction)
-				fadeAndDestroy(shot.part, Theme.COMBAT_ARROW_STICK_SECONDS)
-			else
-				shot.part:Destroy()
-			end
+			shot.part:Destroy()
 			continue
 		end
 		shot.part.CFrame = CFrame.lookAlong(shot.from + shot.direction * travelled, shot.direction)
@@ -567,9 +538,9 @@ local function stepFlights(): ()
 	end
 end
 
--- (end point, hitEnemy). The client's copy of the server's ray from the same origin: the
--- server's own cast decides the hit, so a mismatch is cosmetic by design.
-local function shotEnd(origin: Vector3, direction: Vector3, range: number): (Vector3, boolean)
+-- The client's copy of the server's ray from the same origin: the server's own cast decides
+-- the hit, so a mismatch is cosmetic by design.
+local function shotEnd(origin: Vector3, direction: Vector3, range: number): Vector3
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	local ignored: { Instance } = {}
@@ -582,11 +553,9 @@ local function shotEnd(origin: Vector3, direction: Vector3, range: number): (Vec
 	params.FilterDescendantsInstances = ignored
 	local result = Workspace:Raycast(origin, direction.Unit * range, params)
 	if result == nil then
-		return origin + direction.Unit * range, false
+		return origin + direction.Unit * range
 	end
-	local enemies = Workspace:FindFirstChild(ENEMIES_FOLDER)
-	local hitEnemy = enemies ~= nil and result.Instance:IsDescendantOf(enemies)
-	return result.Position, hitEnemy
+	return result.Position
 end
 
 local function muzzlePoint(fallback: Vector3): Vector3
@@ -630,7 +599,7 @@ local function muzzleFlash(position: Vector3, color: Color3): ()
 	tween:Play()
 end
 
-local function launch(from: Vector3, finish: Vector3, arrow: boolean, stick: boolean): ()
+local function launch(from: Vector3, finish: Vector3): ()
 	local offset = finish - from
 	local length = offset.Magnitude
 	if length <= 0 then
@@ -644,84 +613,27 @@ local function launch(from: Vector3, finish: Vector3, arrow: boolean, stick: boo
 		CanQuery = false,
 		CanTouch = false,
 		CastShadow = false,
-		Material = if arrow then Enum.Material.Wood else Enum.Material.Neon,
-		Color = if arrow then Theme.COMBAT_ARROW_COLOR else Theme.COLOR_HIGHLIGHT,
-		Size = if arrow
-			then Vector3.new(
-				Theme.COMBAT_ARROW_THICKNESS,
-				Theme.COMBAT_ARROW_THICKNESS,
-				Theme.COMBAT_ARROW_LENGTH
-			)
-			else Vector3.new(
-				Theme.COMBAT_BOLT_THICKNESS,
-				Theme.COMBAT_BOLT_THICKNESS,
-				Theme.COMBAT_BOLT_LENGTH
-			),
+		Material = Enum.Material.Neon,
+		Color = Theme.COLOR_HIGHLIGHT,
+		Size = Vector3.new(
+			Theme.COMBAT_BOLT_THICKNESS,
+			Theme.COMBAT_BOLT_THICKNESS,
+			Theme.COMBAT_BOLT_LENGTH
+		),
 		CFrame = CFrame.lookAlong(from, direction),
 		Parent = Workspace,
 	}) :: BasePart
-	if arrow and not Theme.lowEndDevice then
-		-- A thin streak behind the arrow: at arrowSpeed the shaft alone is hard to follow.
-		local half = Theme.COMBAT_ARROW_LENGTH * 0.5
-		local tail0 = Create("Attachment", {
-			Position = Vector3.new(0, Theme.COMBAT_ARROW_TRAIL_WIDTH, half),
-			Parent = part,
-		}) :: Attachment
-		local tail1 = Create("Attachment", {
-			Position = Vector3.new(0, -Theme.COMBAT_ARROW_TRAIL_WIDTH, half),
-			Parent = part,
-		}) :: Attachment
-		Create("Trail", {
-			Attachment0 = tail0,
-			Attachment1 = tail1,
-			FaceCamera = true,
-			Lifetime = Theme.COMBAT_ARROW_TRAIL_SECONDS,
-			LightEmission = Theme.COMBAT_TRAIL_LIGHT_EMISSION,
-			Color = ColorSequence.new(Theme.COLOR_TEXT),
-			Transparency = NumberSequence.new(Theme.COMBAT_TRAIL_TRANSPARENCY, 1),
-			Parent = part,
-		})
-	end
-	local speed = if arrow then arrowSpeed() else arrowSpeed() * Theme.COMBAT_BOLT_SPEED_FACTOR
 	table.insert(projectiles, {
 		part = part,
 		from = from,
 		direction = direction,
 		length = length,
-		speed = speed,
+		speed = arrowSpeed() * Theme.COMBAT_BOLT_SPEED_FACTOR,
 		startedAt = os.clock(),
-		stick = stick,
 	})
 	if flightConnection == nil then
 		flightConnection = RunService.RenderStepped:Connect(stepFlights)
 	end
-end
-
-local function beam(from: Vector3, finish: Vector3): ()
-	local length = (finish - from).Magnitude
-	if length <= 0 then
-		return
-	end
-	local width = Theme.COMBAT_BEAM_WIDTH
-	local part = Create("Part", {
-		Name = TRACER_NAME,
-		Anchored = true,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-		CastShadow = false,
-		Material = Enum.Material.Neon,
-		Color = Theme.COLOR_ACCENT_ALT,
-		Size = Vector3.new(width, width, length),
-		CFrame = CFrame.lookAt(from:Lerp(finish, 0.5), finish),
-		Parent = Workspace,
-	}) :: Part
-	local tween =
-		TweenService:Create(part, Motion.Info(Theme.COMBAT_BEAM_SECONDS), { Transparency = 1 })
-	tween.Completed:Once(function()
-		part:Destroy()
-	end)
-	tween:Play()
 end
 
 -- Public -------------------------------------------------------------------------------
@@ -764,7 +676,7 @@ end
 function WeaponController.SwingOther(userId: number, step: number): ()
 	local player = Players:GetPlayerByUserId(userId)
 	if player == nil or player == Players.LocalPlayer then
-		return -- bots and departed players have nothing to pose; our own swing is local
+		return -- a departed player has nothing to pose; our own swing is local
 	end
 	local rig = player.Character
 	if rig == nil then
@@ -798,13 +710,8 @@ function WeaponController.Release(): ()
 end
 
 -- Every shot is visible on every device: seeing your own shot is information, not
--- decoration. Only the arrow streak and the muzzle light drop on low-end devices.
-function WeaponController.Shoot(
-	origin: Vector3,
-	direction: Vector3,
-	range: number,
-	fireKind: string
-): ()
+-- decoration. Only the muzzle light drops on low-end devices.
+function WeaponController.Shoot(origin: Vector3, direction: Vector3, range: number): ()
 	if localPose.motor ~= nil then
 		cancelPose()
 		poseTo(
@@ -816,63 +723,10 @@ function WeaponController.Shoot(
 			WeaponController.Release()
 		end)
 	end
-	local finish, hitEnemy = shotEnd(origin, direction, range)
+	local finish = shotEnd(origin, direction, range)
 	local from = muzzlePoint(origin)
-	if fireKind == "beam" then
-		muzzleFlash(from, Theme.COLOR_ACCENT_ALT)
-		beam(from, finish)
-	elseif fireKind == "charge" then
-		launch(from, finish, true, not hitEnemy)
-	else
-		muzzleFlash(from, Theme.COLOR_HIGHLIGHT)
-		launch(from, finish, false, false)
-	end
-end
-
--- Seconds until the local shot flying past `position` gets there, or 0 when none is in the
--- air near it (melee, beams, a shot that already landed). Capped, so a hit is never late.
-function WeaponController.ArrivalDelay(position: Vector3): number
-	local now = os.clock()
-	for _, shot in projectiles do
-		local along = math.clamp((position - shot.from):Dot(shot.direction), 0, shot.length)
-		local miss = (position - (shot.from + shot.direction * along)).Magnitude
-		if miss > Theme.COMBAT_PROJECTILE_CLAIM_RADIUS then
-			continue
-		end
-		local remaining = (along - (now - shot.startedAt) * shot.speed) / shot.speed
-		return math.clamp(remaining, 0, Theme.COMBAT_HIT_DELAY_MAX_SECONDS)
-	end
-	return 0
-end
-
--- Hitstop: the swing that just connected stops dead for `seconds` and then finishes. See
--- the CombatFxController header for why the enemy's own rig is not frozen. A freeze is less
--- motion, not more, so it plays on every device.
-function WeaponController.Hitstop(seconds: number): ()
-	if seconds <= 0 then
-		return
-	end
-	local track = localPose.track
-	if track ~= nil and track.IsPlaying then
-		local speed = localPose.trackSpeed
-		track:AdjustSpeed(0)
-		task.delay(seconds, function()
-			if localPose.track == track and track.IsPlaying then
-				track:AdjustSpeed(speed)
-			end
-		end)
-		return
-	end
-	local tween = localPose.tween
-	if tween == nil then
-		return
-	end
-	tween:Pause()
-	task.delay(seconds, function()
-		if localPose.tween == tween and tween.PlaybackState == Enum.PlaybackState.Paused then
-			tween:Play()
-		end
-	end)
+	muzzleFlash(from, Theme.COLOR_HIGHLIGHT)
+	launch(from, finish)
 end
 
 function WeaponController.Destroy(): ()

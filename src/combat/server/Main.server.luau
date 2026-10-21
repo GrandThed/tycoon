@@ -13,8 +13,7 @@
 --
 -- P5 (docs/INTERFACES.md "P5 contracts" → "Boot sequence"): one mode, decided once by
 -- CombatMode. Missions fight with the range's weapons (WeaponService, AbilityService) against
--- the crowd (WaveService); EnemyService and CombatService are no longer booted here, and the
--- four C1 hit intents have no handlers.
+-- the crowd (WaveService). L4 W1b deleted C1's enemy and hit services and its five intents.
 --
 -- L1 (docs/INTERFACES.md "L1 contracts" → "Flow"): the place boots into a lobby camp. Any
 -- admitted party lands there, whatever mission its hub departure named: that id and the Overdrive
@@ -346,9 +345,8 @@ RemoteService.SetHandler("RequestRetryLoad", function(player: Player)
 	end)
 end)
 
--- L1 ruling 7: the leader starts a level. RequestReady has no handler any more (its definition
--- stays in CombatRemotes until L4, and no client sends it). Every check is WaveService's; the
--- range has no run.
+-- L1 ruling 7: the leader starts a level (C1's ready intent went in L4 W1b). Every check is
+-- WaveService's; the range has no run.
 RemoteService.SetHandler(
 	"RequestStartLevel",
 	function(player: Player, levelId: string, difficulty: string)
@@ -377,11 +375,10 @@ RemoteService.SetHandler("RequestLeave", function(player: Player)
 	task.spawn(ReturnService.SendHome, player, "leave")
 end)
 
--- P5 ruling 20: RequestAttack, RequestFire, RequestDraw and RequestAbility have no handler any
--- more (their definitions stay in CombatRemotes until L4). Every attack, in the range and in a
--- run, is one of the intents below. WeaponService and AbilityService refuse them outside the
--- five live phases, from a member who waits and from a downed player; tune and command stay
--- RangeService's, inert outside the range and outside Studio.
+-- P5 ruling 20 (C1's four hit intents went in L4 W1b): every attack, in the range and in a run,
+-- is one of the intents below. WeaponService and AbilityService refuse them outside the five live
+-- phases, from a member who waits and from a downed player; tune and command stay RangeService's,
+-- inert outside the range and outside Studio.
 RemoteService.SetHandler(
 	"RequestRangeAttack",
 	function(

@@ -448,7 +448,6 @@ local levels = {
 	expeditions = nil :: Types.ExpeditionsConfig?,
 	filesById = {} :: { [string]: Types.LevelFile },
 	layouts = {} :: { [string]: Types.LevelLayout },
-	arenas = {} :: { [string]: Types.ArenaLayout },
 }
 
 function Catalog.GetExpeditionsConfig(): Types.ExpeditionsConfig?
@@ -536,8 +535,7 @@ local function layoutModule(folderName: string, name: string): ModuleScript?
 	return nil
 end
 
--- Layouts/Levels/<name> (JSON, world coordinates). A file with `arena` holds nothing else: the
--- caller turns that arena into a level layout (LevelGeometry.FromArena).
+-- Layouts/Levels/<name> (JSON, world coordinates).
 function Catalog.GetLevelLayout(name: string): Types.LevelLayout?
 	local cached = levels.layouts[name]
 	if cached ~= nil then
@@ -549,21 +547,6 @@ function Catalog.GetLevelLayout(name: string): Types.LevelLayout?
 	end
 	local layout = require(module) :: Types.LevelLayout
 	levels.layouts[name] = layout
-	return layout
-end
-
--- Layouts/Arenas/<name>: the C1 arena layouts, read here for LevelGeometry.FromArena.
-function Catalog.GetArenaLayout(name: string): Types.ArenaLayout?
-	local cached = levels.arenas[name]
-	if cached ~= nil then
-		return cached
-	end
-	local module = layoutModule("Arenas", name)
-	if module == nil then
-		return nil
-	end
-	local layout = require(module) :: Types.ArenaLayout
-	levels.arenas[name] = layout
 	return layout
 end
 

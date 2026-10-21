@@ -3,19 +3,10 @@
 	"offline": { "expeditionEfficiency": 1.0 },
 	"player": {
 		"respawnSeconds": 8,
-		"hitDistancePad": 3,
-		"breatherRegenPerSecond": 10,
-		"killCooldownRefundSeconds": 0.5,
 		"comboTimingTolerance": 0.8,
-		"aimAssistDegrees": 20,
-		"corpseSeconds": 0.6,
-		"dashHitRadius": 4,
-		"burstConeDegrees": 60,
 		"rescue": { "below": 8, "outside": 4 }
 	},
 	"remotes": {
-		"attackCallsPerSecond": 12,
-		"abilityCallsPerSecond": 2,
 		"rangeAttackCallsPerSecond": 40,
 		"rangeAbilityCallsPerSecond": 4,
 		"runListCallsPerSecond": 1,
@@ -30,7 +21,6 @@
 		"eliteTempo": 1.6,
 		"breatherSeconds": 6,
 		"breatherMaxSeconds": 14,
-		"maxAlive": 24,
 		"runCapSeconds": 1800,
 		"tempoWarmupSeconds": 15
 	},
@@ -67,36 +57,15 @@
 		"friendChecksPerCall": 8
 	},
 	"animations": {
-		"enemyIdle": 507766666,
-		"enemyWalk": 507777826,
-		"enemyAttack": 0,
-		"enemyDeath": 0,
-		"enemyRun": 507767714,
-		"enemyHit": 0,
 		"playerSlash": 522635514,
 		"playerLunge": 522638767
 	},
-	"enemy": {
-		"tickHz": 10,
-		"aggroRange": 80,
-		"retargetSeconds": 0.5,
-		"eliteScale": 1.25,
-		"bossScale": 1.6,
-		"defaultColor": [128, 96, 96],
-		"bossColor": [96, 26, 30],
-		"botColor": [70, 120, 190]
-	},
 	"feedback": {
-		"hitstopSeconds": 0.05,
-		"cameraKickDegrees": 0.6,
 		"damageNumberSeconds": 0.8,
-		"bannerSeconds": 2.0,
-		"lowHpFraction": 0.3
+		"bannerSeconds": 2.0
 	},
 	"debug": {
-		"missionAttribute": "DebugMission",
 		"provingAttribute": "DebugProving",
-		"overdriveAttribute": "DebugOverdrive",
 		"grantMaterialsAttribute": "GrantMaterials",
 		"grantValorAttribute": "GrantValor",
 		"waveAttribute": "DebugWave",
@@ -104,15 +73,11 @@
 		"godModeAttribute": "DebugGodMode",
 		"killAllAttribute": "DebugKillAll",
 		"setGearAttribute": "DebugSetGear",
-		"botsAttribute": "DebugBots",
 		"fakeRunsAttribute": "DebugFakeRuns",
 		"forceTeleportFailureAttribute": "ForceTeleportFailure",
 		"forceRegistryFailureAttribute": "ForceRegistryFailure",
 		"handoffStoreName": "StudioHandoff",
 		"handoffMaxAgeSeconds": 900,
-		"botHp": 150,
-		"botDamagePerSecond": 12,
-		"botIncomeRate": 0,
 		"fakePartyAttribute": "DebugFakeParty",
 		"fakeInviteAttribute": "DebugFakeInvite",
 		"provingBoots": "mission",
@@ -186,18 +151,6 @@
 		"meleeAbove": 7.5,
 		"meleeBelow": 1.5
 	},
-	"crowdSkeleton": [
-		{ "introduces": ["fodder"] },
-		{ "introduces": [] },
-		{ "introduces": ["slinger"] },
-		{ "introduces": ["brute"] },
-		{ "introduces": [], "boss": "colossus" },
-		{ "introduces": ["marksman", "lobber"] },
-		{ "introduces": [] },
-		{ "introduces": ["armoured"] },
-		{ "introduces": [] },
-		{ "introduces": [], "boss": "warlord" }
-	],
 	"camera": {
 		"shoulderOffset": [1.75, 0.6, 0],
 		"fieldOfView": 72,
@@ -206,49 +159,10 @@
 		"maxZoom": 16,
 		"touchSensitivity": 1.0,
 		"gamepadSensitivity": 1.0,
-		"touchAimAssistDegrees": 12,
 		"freeCursorPhases": ["lobby", "summary", "ended"]
 	},
-	"ai": {
-		"separationRadius": 4,
-		"separationWeight": 1.2,
-		"maxMeleeAttackers": 3,
-		"holdRadius": 14,
-		"strafeSpeedMult": 0.6,
-		"rangedMinDistance": 18,
-		"rangedMaxDistance": 30,
-		"pathRecomputeSeconds": 1.0,
-		"staggerSeconds": 0.2,
-		"finisherStaggerSeconds": 0.5,
-		"telegraphSeconds": 0.45,
-		"chargeDistance": 26,
-		"chargeSpeedMult": 2.6,
-		"chargeWindupSeconds": 0.7,
-		"strikeHalfArcDegrees": 60,
-		"shotHalfConeDegrees": 45,
-		"strikeReachPad": 1.5,
-		"chargeLaneHalfWidth": 2.5,
-		"postPatternAttackDelay": 0.8,
-		"memberRadius": 1.2,
-		"retargetHysteresis": 4,
-		"cancelCooldownFraction": 0.5,
-		"chargeTriggerFraction": 0.9,
-		"slamTriggerMargin": 2,
-		"dashTimeoutPad": 0.35,
-		"defaultSlamRadius": 10,
-		"defaultSummonCount": 2,
-		"staggerShove": 6,
-		"bossStaggerMult": 0.5,
-		"stunPatternRefundFraction": 0.5
-	},
 	"feel": {
-		"shakeLight": 0.25,
-		"shakeHeavy": 0.8,
-		"hitMarkerSeconds": 0.12,
 		"trailSeconds": 0.15,
-		"arrowSpeed": 180,
-		"ragdollImpulse": 35,
-		"ragdollSeconds": 1.2,
-		"hitSparkCount": 6
+		"arrowSpeed": 180
 	}
 }

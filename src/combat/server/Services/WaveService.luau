@@ -16,13 +16,13 @@
 -- * The pacing director only ever changes PACING (burst interval, merges, breather length, the
 --   one extra elite), never enemy HP or damage.
 -- * This is the only place under src/combat that writes a profile, and it writes nothing but
---   cash, materials, Valor, combat stats and (for a level that names a mission) its record.
+--   cash, materials, Valor and combat stats.
 -- * Nothing in the tick yields. The level's removal is deferred out of it.
 --
 -- From L1: every run ends in a summary and then the lobby camp, never the city (ruling 20); the
 -- leader starts a level with RequestStartLevel (ruling 7); stars are session memory, kept here
 -- per userId (ruling 25). Since L3 (L3-9) a member's stars are their profile's; only a member
--- without a loaded profile (a bot) keeps a session table.
+-- without a loaded profile keeps a session table.
 -- New with L1b ("L1b contracts — the living road"): the crowd has one floor per camp, set once at
 -- the start; every camp's residents are placed at the start and live on their own; every kill is
 -- paid the moment it falls, split by that body's own damage book (L1b-15), and the wallet goes
@@ -45,6 +45,10 @@
 -- L2 W2 ("fire, the Flamethrower, the cave and the shortcut"): the level is built without the
 -- blocks the leader's found shortcuts open; each tick a standing fighter inside a shortcut's box
 -- records it (UnlockService), once per run; a reactive block that goes is told to everyone.
+-- L4 W1b (docs/prompts/l4-w1b-contract.md): the Raider Arena's adapters, the mission records and
+-- the debug bots are gone, so every member is a player. Every floor set the run assigns (a start,
+-- the lobby's empty one) gets a new floorsSeq, and ArenaService sends its cells to each member
+-- once (L4B-8).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -248,6 +252,9 @@ local boot = {
 	-- L2-15: each level's chests for the map rows, by level id, built on first use (the files
 	-- are static); a level whose files cannot be read has none.
 	sitesByLevel = {} :: { [string]: { SecretFlow.Site } },
+	-- L4B-8: which floor set run.floors is, raised by setFloors alone, for the life of the server
+	-- (a rejoin after a failed trip home must never meet a number it already holds cells for).
+	floorsSeq = 0,
 }
 
 local WaveService = {}
@@ -346,8 +353,16 @@ local function pushRunFields(): ()
 		bossName = if run.bossId ~= 0 or run.bossPending ~= nil then run.bossName else nil,
 		gateIn = if phase == "gate" and flow ~= nil then math.max(0, flow.gateAt - now) else nil,
 		floors = run.floors,
+		floorsSeq = boot.floorsSeq,
 		maxAlive = run.maxAlive,
 	})
+end
+
+-- L4B-8: run.floors becomes a new set. Every assignment of it goes through here, so a number
+-- names one set for good and ArenaService sends each member that set's cells once.
+local function setFloors(floors: { Types.RunFloor }): ()
+	run.floors = floors
+	boot.floorsSeq += 1
 end
 
 local function broadcast(): ()
@@ -363,14 +378,11 @@ local function damageShare(userId: number): number
 	return (run.runDamage[userId] or 0) / run.runDamageTotal
 end
 
--- Humans and their players, in party order.
+-- Every member's player, in party order.
 local function humanPlayers(): { Player }
 	local players: { Player } = {}
 	for _, member in ArenaService.GetMembers() do
-		local player = member.player
-		if not member.bot and player ~= nil then
-			table.insert(players, player)
-		end
+		table.insert(players, member.player)
 	end
 	return players
 end
@@ -433,7 +445,7 @@ end
 local function fightingIds(): { number }
 	local ids: { number } = {}
 	for _, member in ArenaService.GetMembers() do
-		if not member.bot and member.player ~= nil and not member.waiting then
+		if not member.waiting then
 			table.insert(ids, member.userId)
 		end
 	end
@@ -444,10 +456,11 @@ end
 
 -- L3-9: the one table the map (requires.node), the start's gate, the summary's star and the
 -- Armory's band-top gate all read: a member's profile `combat.stars` (made when nil), so a star
--- outlives the session; a member without a loaded profile (a bot) keeps this session's.
+-- outlives the session; a member without a loaded profile (and leader 0, nobody) keeps this
+-- session's.
 local function starsOf(userId: number): StageFlow.Stars
 	local member = ArenaService.GetMember(userId)
-	local player = if member ~= nil and not member.bot then member.player else nil
+	local player = if member ~= nil then member.player else nil
 	local profile = if player ~= nil then DataService.GetState(player) else nil
 	if profile ~= nil then
 		return Unlocks.StarsOf(profile.combat)
@@ -478,7 +491,7 @@ local function difficultyRanks(map: Types.ExpeditionsConfig): { [string]: number
 	return ranks
 end
 
--- A level's chests as its files have them (L2-15), cached. An arena level has none.
+-- A level's chests as its files have them (L2-15), cached.
 local function sitesOf(levelId: string): { SecretFlow.Site }
 	local cached = boot.sitesByLevel[levelId]
 	if cached ~= nil then
@@ -488,7 +501,7 @@ local function sitesOf(levelId: string): { SecretFlow.Site }
 	local read = pcall(function()
 		local file = Catalog.GetLevelFile(levelId)
 		local layout = if file ~= nil then Catalog.GetLevelLayout(file.layout) else nil
-		if file ~= nil and layout ~= nil and layout.arena == nil then
+		if file ~= nil and layout ~= nil then
 			sites = SecretFlow.Sites(layout, file)
 		end
 	end)
@@ -538,7 +551,7 @@ local function sendMapState(only: Player?): ()
 	local leaderStars = starsOf(leader)
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
-		if not member.bot and player ~= nil and (only == nil or player == only) then
+		if only == nil or player == only then
 			RemoteService.FireClient(
 				player,
 				"MapState",
@@ -705,19 +718,10 @@ end
 
 -- Rewards -------------------------------------------------------------------------------------
 
-local function missionRecord(state: Types.PlayerState, missionId: string): Types.MissionRecord
-	local record = state.combat.missions[missionId]
-	if record == nil then
-		record = { bestWave = 0, bossClears = 0, overdriveBest = 0 }
-		state.combat.missions[missionId] = record
-	end
-	return record
-end
-
 -- Mentor bonus at the boss's kill (docs/INTERFACES.md "C2 contracts", L1b-15): each human is
 -- paid Combat.MentorBonus against the rates of the OTHER members present whose raw share of the
 -- boss's damage book reached coop.mentorMinDamageShare, so an idle alt parked in the party earns
--- its main nothing. Bots report debug.botIncomeRate and are never mentors.
+-- its main nothing.
 local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: number }): ()
 	local total = 0
 	for _, damage in tally do
@@ -732,12 +736,7 @@ local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: n
 		local player = mentor.player
 		-- Same floor as a mentee (lead ruling): a mentor waiting in the lobby camp, or one who
 		-- let the party carry the boss, earns nothing for "carrying".
-		if
-			mentor.bot
-			or player == nil
-			or mentor.waiting
-			or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare
-		then
+		if mentor.waiting or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare then
 			continue
 		end
 		local state = DataService.GetState(player)
@@ -796,7 +795,7 @@ local function credit(pool: Combat.RewardPool, tally: { [number]: number }, kill
 	local mults: { [number]: number } = {}
 	for userId in tally do
 		local member = ArenaService.GetMember(userId)
-		local player = if member ~= nil and not member.bot then member.player else nil
+		local player = if member ~= nil then member.player else nil
 		local state = if player ~= nil then DataService.GetState(player) else nil
 		if state ~= nil then
 			states[userId] = state
@@ -835,7 +834,7 @@ local function credit(pool: Combat.RewardPool, tally: { [number]: number }, kill
 		return
 	end
 	local member = ArenaService.GetMember(killer)
-	local player = if member ~= nil and not member.bot then member.player else nil
+	local player = if member ~= nil then member.player else nil
 	local state = if player ~= nil then DataService.GetState(player) else nil
 	if state ~= nil then
 		state.combat.stats.kills += 1
@@ -847,21 +846,14 @@ local function credit(pool: Combat.RewardPool, tally: { [number]: number }, kill
 	end
 end
 
--- The waves a clear covers, in every fighting human's stats and (for a level that names a
--- mission, ruling 26: the arena writes `village`) their mission record's best wave.
-local function countWaves(wave: number, count: number): ()
-	local missionId = if run.level ~= nil then run.level.mission else nil
+-- The waves a clear covers, in every fighting human's stats.
+local function countWaves(count: number): ()
 	for _, userId in fightingIds() do
 		local member = ArenaService.GetMember(userId)
 		local player = if member ~= nil then member.player else nil
 		local state = if player ~= nil then DataService.GetState(player) else nil
-		if state == nil then
-			continue
-		end
-		state.combat.stats.wavesCleared += count
-		if missionId ~= nil then
-			local record = missionRecord(state, missionId)
-			record.bestWave = math.max(record.bestWave, wave)
+		if state ~= nil then
+			state.combat.stats.wavesCleared += count
 		end
 	end
 end
@@ -879,7 +871,7 @@ local function campCleared(zone: StageFlow.Zone, skipped: boolean, stock: { [str
 	if skipped then
 		return
 	end
-	countWaves(0, 1)
+	countWaves(1)
 	local level = run.level
 	local scales = run.scales
 	local bonus = if level ~= nil then level.crowd.clearBonus else nil
@@ -890,21 +882,6 @@ local function campCleared(zone: StageFlow.Zone, skipped: boolean, stock: { [str
 		Combat.ClearBonus(stock, level.crowd.rewards, scales.rewardMult, bonus.share)
 	if cash > 0 or materials > 0 then
 		credit({ cash = cash, materials = materials, valor = 0, kills = 0 }, evenTally(), 0)
-	end
-end
-
--- The boss fell: every human's mission record counts the clear (a level that names a mission).
-local function recordBossClear(): ()
-	local missionId = if run.level ~= nil then run.level.mission else nil
-	if missionId == nil then
-		return
-	end
-	for _, member in ArenaService.GetMembers() do
-		local player = member.player
-		local state = if not member.bot and player ~= nil then DataService.GetState(player) else nil
-		if state ~= nil then
-			missionRecord(state, missionId).bossClears += 1
-		end
 	end
 end
 
@@ -964,8 +941,7 @@ local function onCrowdKilled(id: number, byUserId: number, info: CrowdService.Cr
 	for userId, damage in info.damageBy do
 		run.runDamage[userId] = (run.runDamage[userId] or 0) + damage
 		run.runDamageTotal += damage
-		local member = ArenaService.GetMember(userId)
-		if member ~= nil and not member.bot and member.player ~= nil then
+		if ArenaService.GetMember(userId) ~= nil then
 			tally[userId] = damage
 		end
 	end
@@ -980,7 +956,6 @@ local function onCrowdKilled(id: number, byUserId: number, info: CrowdService.Cr
 		valor = run.bossValor
 		payMentors(combatConfig, tally)
 		RunFx.Push({ kind = "bossDown", name = run.bossName or info.kind, valor = run.bossValor })
-		recordBossClear()
 	end
 	credit({ cash = cash, materials = materials, valor = valor, kills = 1 }, tally, byUserId)
 end
@@ -999,10 +974,9 @@ local function sendWallets(now: number, all: boolean): ()
 		run.walletDirty[userId] = nil
 		run.walletSentAt[userId] = now
 		local member = ArenaService.GetMember(userId)
-		local player = if member ~= nil then member.player else nil
-		if player ~= nil then
+		if member ~= nil then
 			-- The wallet strip is fed by Snapshots in this place (EconomyService is hub-only).
-			ArenaService.SendSnapshot(player)
+			ArenaService.SendSnapshot(member.player)
 		end
 	end
 end
@@ -1080,9 +1054,6 @@ local function humanCounts(): (number, number)
 	local fighters = 0
 	local waitingAlive = 0
 	for _, member in ArenaService.GetMembers() do
-		if member.bot then
-			continue
-		end
 		if not member.waiting then
 			fighters += 1
 		elseif ArenaService.IsAlive(member) then
@@ -1143,9 +1114,7 @@ local function lobbyKillY(): number
 	end
 	local map = Catalog.GetExpeditionsConfig()
 	local layout = if map ~= nil then Catalog.GetLevelLayout(map.lobby.layout) else nil
-	local killY = if layout ~= nil and layout.arena == nil
-		then layout.killY
-		else LevelGeometry.BareLobby().killY
+	local killY = if layout ~= nil then layout.killY else LevelGeometry.BareLobby().killY
 	boot.lobbyKillY = killY
 	return killY
 end
@@ -1176,7 +1145,7 @@ local function rescueFallen(combatConfig: Types.CombatConfig): ()
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
 		local root = rootOf(member)
-		if member.bot or player == nil or root == nil or not ArenaService.IsAlive(member) then
+		if root == nil or not ArenaService.IsAlive(member) then
 			continue
 		end
 		local last = boot.rescuedAt[member.userId]
@@ -1231,7 +1200,7 @@ end
 local function moveFighters(feet: Vector3, closing: StageFlow.Zone?, late: boolean?): ()
 	local combatConfig = config()
 	for _, member in ArenaService.GetMembers() do
-		if member.bot or not ArenaService.IsFighting(member) then
+		if not ArenaService.IsFighting(member) then
 			continue
 		end
 		if closing ~= nil then
@@ -1246,15 +1215,12 @@ local function moveFighters(feet: Vector3, closing: StageFlow.Zone?, late: boole
 				continue
 			end
 			local character = member.character
-			local player = member.player
 			if not late and root ~= nil and character ~= nil and combatConfig ~= nil then
 				local to = StageFlow.GateNudge(closing, root.Position, combatConfig.levels)
 				if to ~= nil then
 					character:PivotTo(character:GetPivot() + (to - root.Position))
 					run.entered[member.userId] = true
-					if player ~= nil then
-						WeaponService.ForgetMotion(player)
-					end
+					WeaponService.ForgetMotion(member.player)
 					continue
 				end
 			end
@@ -1272,7 +1238,7 @@ local function standUpOnRoad(plan: StageFlow.Plan, flow: StageFlow.State): boole
 	local feet: Vector3? = nil
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
-		if member.bot or player == nil or not ArenaService.IsFighting(member) then
+		if not ArenaService.IsFighting(member) then
 			continue
 		end
 		if VitalsService.IsDown(player) then
@@ -1297,12 +1263,7 @@ local function fallenReason(): (string?, { number })
 	end
 	local reason = "wipe"
 	for _, member in members do
-		local player = member.player
-		if
-			player ~= nil
-			and table.find(fallen, member.userId) ~= nil
-			and VitalsService.IsDown(player)
-		then
+		if table.find(fallen, member.userId) ~= nil and VitalsService.IsDown(member.player) then
 			reason = "down"
 		end
 	end
@@ -1338,9 +1299,6 @@ function WaveService.EndRun(asked: string): ()
 	local results: { [number]: Types.RunResult } = {}
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
-		if member.bot or player == nil then
-			continue
-		end
 		local star = StageFlow.EarnsStar(flow, member.userId)
 			and StageFlow.Award(starsOf(member.userId), plan.levelId, plan.difficulty)
 		-- L3-17: a new star gives its difficulty's first-clear reward to a member with a profile
@@ -1387,9 +1345,6 @@ local function backToLobby(): ()
 	local lobbyFloor = lobbyKillY()
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
-		if member.bot or player == nil then
-			continue
-		end
 		member.waiting = false
 		VitalsService.StandUp(player)
 		-- A body already in the lobby camp (a respawn during the summary) stays where it stands.
@@ -1401,6 +1356,7 @@ local function backToLobby(): ()
 	LevelService.Clear()
 	clearField()
 	run = freshRun()
+	setFloors({})
 	ArenaService.SetLevel(nil)
 	VitalsService.SetMission(missionRules(1, 0))
 	boot.returnedAt = os.clock()
@@ -1455,7 +1411,7 @@ local function execute(actions: { StageFlow.Action }): ()
 			-- nothing lands on an empty field.
 			VitalsService.ClearThreats()
 			ArenaService.MarkWaveCleared(action.wave or 0, action.count or 0)
-			countWaves(action.wave or 0, action.count or 0)
+			countWaves(action.count or 0)
 		elseif kind == "boundary" then
 			standUpDowned()
 			-- Not when the same batch ends the run: nobody is brought into a level about to go.
@@ -1555,12 +1511,11 @@ local function advance(combatConfig: Types.CombatConfig): ()
 		byFloor[index] = CrowdService.AliveOn(index)
 	end
 	for _, member in ArenaService.GetMembers() do
-		local player = member.player
-		if not member.bot and player ~= nil and ArenaService.IsFighting(member) then
+		if ArenaService.IsFighting(member) then
 			local root = rootOf(member)
 			if root ~= nil then
 				table.insert(roots, root.Position)
-				table.insert(standing, not VitalsService.IsDown(player))
+				table.insert(standing, not VitalsService.IsDown(member.player))
 			end
 		end
 	end
@@ -1618,8 +1573,7 @@ local function refuseStart(player: Player, levelId: string, reason: string): ()
 end
 
 -- The level file, its layout and its difficulty, resolved and validated; every problem is
--- warned. The Raider Arena comes through the two adapters (ruling 27). May throw: these are
--- files somebody typed, and resolveLevel is the net.
+-- warned. May throw: these are files somebody typed, and resolveLevel is the net.
 local function readLevel(
 	levelId: string,
 	difficulty: string,
@@ -1630,26 +1584,11 @@ local function readLevel(
 	if file == nil or not WeaponService.IsActive() then
 		return nil, nil
 	end
-	local missionId = file.mission
-	local mission = if missionId ~= nil then Catalog.GetMissionById(missionId) else nil
-	-- The arena's one difficulty is the map's first, which is the one the map screen offers.
-	local level =
-		StageFlow.Resolve(file, mission, combatConfig.director.runCapSeconds, map.difficulties[1])
+	local level = StageFlow.Resolve(file, combatConfig.director.runCapSeconds)
 	local layout = Catalog.GetLevelLayout(file.layout)
 	if level == nil or layout == nil then
 		warn(`[WaveService] level {levelId}: its file or its layout {file.layout} is incomplete`)
 		return nil, nil
-	end
-	local arenaName = layout.arena
-	if arenaName ~= nil then
-		local arena = Catalog.GetArenaLayout(arenaName)
-		if arena == nil then
-			warn(`[WaveService] level {levelId}: no Layouts/Arenas/{arenaName}`)
-			return nil, nil
-		end
-		-- P5's rescue rule for the arena: the kill height is the floor (0) less rescue.below.
-		local rescue = combatConfig.player.rescue
-		layout = LevelGeometry.FromArena(arena, -(if rescue ~= nil then rescue.below else 0))
 	end
 	local tuned = Tuning.Get()
 	local crowd = tuned.crowd
@@ -1943,9 +1882,9 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	run.flow = flow
 	run.scales = scales
 	run.rank = ranks[difficulty] or 0
-	run.floors = runFloors
+	setFloors(runFloors)
 	run.maxAlive = plan.population
-	-- The chests of the layout as it is built (an arena's adapter has none).
+	-- The chests of the layout as it is built.
 	run.secretSites = SecretFlow.Sites(layout, level)
 	run.shortcuts = SecretFlow.Shortcuts(layout)
 	ArenaService.SetLevel({
@@ -1953,7 +1892,6 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 		name = level.name,
 		difficulty = difficulty,
 		material = level.material,
-		mission = level.mission,
 	})
 	ArenaService.ResetSummaries()
 	-- Before any spawn, so the residents take the difficulty's HP and plate.
@@ -1965,9 +1903,6 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	local index = 0
 	for _, other in members do
 		local otherPlayer = other.player
-		if other.bot or otherPlayer == nil then
-			continue
-		end
 		index += 1
 		other.waiting = false
 		VitalsService.RefreshMaxHp(otherPlayer)
@@ -2062,8 +1997,8 @@ local function announceSecret(
 end
 
 -- L2-12, every tick of a live run after `advance`: each admitted human who is fighting and
--- standing, against every chest of the level. Bots and members waiting in the lobby camp are
--- skipped. Chests pay flat, kept at once like a kill (Abandon keeps them).
+-- standing, against every chest of the level. Members waiting in the lobby camp are skipped.
+-- Chests pay flat, kept at once like a kill (Abandon keeps them).
 -- L2-36: one member is inside a shortcut's box. A new find goes to everyone (the finder's card,
 -- the others' toast); one they had found before says nothing.
 local function findShortcut(player: Player, userId: number, shortcut: SecretFlow.Shortcut): ()
@@ -2093,12 +2028,7 @@ local function tickSecrets(rules: Types.CombatLevelsConfig): ()
 	end
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
-		if
-			member.bot
-			or player == nil
-			or not ArenaService.IsFighting(member)
-			or VitalsService.IsDown(player)
-		then
+		if not ArenaService.IsFighting(member) or VitalsService.IsDown(player) then
 			continue
 		end
 		local root = rootOf(member)
@@ -2418,6 +2348,7 @@ end
 -- they are keyed by userId. A reserved server can be reused by a later arrival.
 function WaveService.Reset(): ()
 	run = freshRun()
+	setFloors({})
 	boot.returning = false
 	boot.lobbySince = 0
 	CrowdService.Clear()
@@ -2441,8 +2372,7 @@ function WaveService.Init(): ()
 	ArenaService.SetShareSource(damageShare)
 	ArenaService.SetDownSource(function(userId: number): boolean
 		local member = ArenaService.GetMember(userId)
-		local player = if member ~= nil then member.player else nil
-		return player ~= nil and VitalsService.IsDown(player)
+		return member ~= nil and VitalsService.IsDown(member.player)
 	end)
 	-- L1b-20's test (L1b-W4-27): reachable for a camp group that is rising or fighting.
 	-- Never in the lobby or on the summary (CrowdService's last step may still say so).

@@ -13,6 +13,8 @@
 --   -  a pattern seed (pellets, fans, scatters) is a fresh server draw per shot or cast, no
 --      longer derived from the client's seq;
 --   -  a fresh character starts with its air state and position history cleared (resetAir).
+-- L4 W1b (L4B-7): a dash request opens no i-frames by itself. OnDash records a claim, and the
+-- window opens (from the request) only once the position ring has seen the dash (DashProof).
 -- RangeService keeps the bench (dummy sets, respawns, tuning, commands) and adds the range-only
 -- readout fields through the stats provider.
 --
@@ -52,6 +54,7 @@ local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
+local DashProof = require(script.Parent:WaitForChild("DashProof"))
 local PositionRing = require(script.Parent:WaitForChild("PositionRing"))
 local StrikePick = require(script.Parent:WaitForChild("StrikePick"))
 local StrikeTally = require(script.Parent:WaitForChild("StrikeTally"))
@@ -160,6 +163,9 @@ type Shooter = {
 	drawStartedAt: number,
 	drawWeapon: string,
 	lastDashAt: number,
+	-- L4B-7: os.clock() of the accepted dash request whose motion the ring has not seen yet; nil =
+	-- none. A newer accepted dash replaces it; a proof or a lapse clears it, and so does resetAir.
+	dashClaimAt: number?,
 	-- The latest i-frame window, [iframesFrom, iframesUntil) on os.clock(). Kept after it
 	-- lapses: an enemy's hit is judged a moment after its impact (VitalsService), and the dash
 	-- that covered the impact may be over by then. The window before it is kept too
@@ -273,6 +279,8 @@ local state = {
 	warnedStrikeListener = false,
 	-- Fix round d-m3: the players a wall refusal of a shot origin has been warned for (Studio).
 	warnedAimWall = {} :: { [Player]: boolean },
+	-- L4B-7: ProvingGrounds.json lacks a number the dash proof needs, told once (DashProof.Rule).
+	warnedDashProof = false,
 	statsAccumulator = 0,
 	-- Ruling 21 (nil = every player may act) and the range's readout fields.
 	actGate = nil :: ((player: Player) -> boolean)?,
@@ -1950,10 +1958,53 @@ local function stepProjectiles(config: Types.ProvingGroundsConfig, deltaTime: nu
 	state.projectiles = survivors
 end
 
+-- Opens an i-frame window of `seconds` from `from` (a proven dash's request; now for one the
+-- server grants), or lengthens the one it meets (DashProof.Open keeps the two windows). The
+-- character attribute shows only a window still open now.
+local function openIframes(shooter: Shooter, now: number, from: number, seconds: number): ()
+	DashProof.Open(shooter, from, seconds)
+	if now >= shooter.iframesUntil then
+		return
+	end
+	shooter.iframesShown = true
+	local character = shooter.player.Character
+	if character ~= nil then
+		character:SetAttribute(CONST.IFRAMES_ATTRIBUTE, true)
+	end
+end
+
+-- L4B-7: judges a pending dash claim on this frame's ring sample. Proven: the dash's window
+-- opens from the request, so a hit decided after the proof whose impact the request covered is
+-- voided as before. Lapsed: nothing opens. Without a rule (ProvingGrounds.json lacks a number
+-- it needs) every claim lapses: no i-frames from a dash, one warn.
+local function proveDash(shooter: Shooter, now: number, position: Vector3, claimAt: number): ()
+	local config = Tuning.Get()
+	local rule = DashProof.Rule(config.movement, config.shooting)
+	if rule == nil then
+		if not state.warnedDashProof then
+			state.warnedDashProof = true
+			warn(
+				"[WeaponService] ProvingGrounds.json movement lacks dashProofShare / dashProofSeconds"
+					.. " (or a dash number); a dash earns no i-frames"
+			)
+		end
+		shooter.dashClaimAt = nil
+		return
+	end
+	local verdict = DashProof.Verdict(shooter.history, now, position, claimAt, rule)
+	if verdict == "proven" then
+		shooter.dashClaimAt = nil
+		openIframes(shooter, now, claimAt, config.movement.dashIframes)
+	elseif verdict == "lapsed" then
+		shooter.dashClaimAt = nil
+	end
+end
+
 -- Air tracking for the slam and air swings: the server's own view of how high each character
 -- got and how fast it fell. Fall speed is the larger of the replicated velocity and the
 -- position change, so a client that zeroes its reported velocity still shows its real dive.
--- The same pass samples each root for the claim slack (ruling 7).
+-- The same pass samples each root for the claim slack (ruling 7), and judges a pending dash
+-- claim on that sample (L4B-7).
 local function trackAir(now: number, deltaTime: number): ()
 	if next(state.shooters) == nil then
 		return
@@ -1967,10 +2018,16 @@ local function trackAir(now: number, deltaTime: number): ()
 			shooter.stood = nil
 			shooter.fall = nil
 			PositionRing.Clear(shooter.history)
+			-- No body to prove a dash with, and none to shield.
+			shooter.dashClaimAt = nil
 			continue
 		end
 		local position = root.Position
 		PositionRing.Record(shooter.history, now, position)
+		local claimAt = shooter.dashClaimAt
+		if claimAt ~= nil then
+			proveDash(shooter, now, position, claimAt)
+		end
 		-- Fix round A-1: the air-swing gate's own sample, the one AirSwing feeds on the client.
 		local footing = footprintFloor(position, root, params)
 		local offset = standingOffset(root, humanoid)
@@ -2030,24 +2087,9 @@ local function resetAir(shooter: Shooter): ()
 	shooter.stood = nil
 	shooter.fall = nil
 	shooter.airSwing = SwingGate.New()
+	-- The last body's dash is not this one's.
+	shooter.dashClaimAt = nil
 	PositionRing.Clear(shooter.history)
-end
-
--- Opens an i-frame window of `seconds` from `now`, or lengthens the one still open: it never
--- shortens a longer window (a dash inside an ability's leap).
-local function openIframes(shooter: Shooter, now: number, seconds: number): ()
-	if now >= shooter.iframesUntil then
-		-- The last window had lapsed: it steps back and this one starts now.
-		shooter.iframesWasFrom = shooter.iframesFrom
-		shooter.iframesWasUntil = shooter.iframesUntil
-		shooter.iframesFrom = now
-	end
-	shooter.iframesUntil = math.max(shooter.iframesUntil, now + math.max(seconds, 0))
-	shooter.iframesShown = true
-	local character = shooter.player.Character
-	if character ~= nil then
-		character:SetAttribute(CONST.IFRAMES_ATTRIBUTE, true)
-	end
 end
 
 local function tickIframes(now: number): ()
@@ -2099,11 +2141,6 @@ end
 function WeaponService.Mode(): Types.CombatMode
 	return state.mode
 end
-
--- Contract stub, deliberately a no-op: every weapon shape is resolved against the world and the
--- crowd, and nothing here needs the floor's bounds. WaveService calls it at a run's start;
--- removing it would break that call (P5 review, minor 4).
-function WeaponService.SetArena(_center: Vector3, _halfSize: Vector3): () end
 
 -- Ruling 21: nil = every player may act (the range).
 function WeaponService.SetActGate(gate: ((player: Player) -> boolean)?): ()
@@ -2208,6 +2245,7 @@ function WeaponService.AddPlayer(player: Player): ()
 		drawStartedAt = 0,
 		drawWeapon = "",
 		lastDashAt = 0,
+		dashClaimAt = nil,
 		iframesFrom = 0,
 		iframesUntil = 0,
 		iframesWasFrom = 0,
@@ -2569,7 +2607,9 @@ function WeaponService.OnDraw(player: Player, weapon: string): ()
 	noteHeld(shooter, slot)
 end
 
--- Opens the i-frame window; the dash itself moves the client-owned character.
+-- Records the dash's claim (L4B-7). The dash itself moves the client-owned character; its i-frame
+-- window, from this request, opens only once the server's ring has seen that move (proveDash,
+-- each Heartbeat).
 function WeaponService.OnDash(player: Player, _direction: Vector3): ()
 	local shooter = state.shooters[player]
 	if not state.active or shooter == nil then
@@ -2585,7 +2625,7 @@ function WeaponService.OnDash(player: Player, _direction: Vector3): ()
 		return
 	end
 	shooter.lastDashAt = now
-	openIframes(shooter, now, movement.dashIframes)
+	shooter.dashClaimAt = now
 end
 
 -- The slam lands where the SERVER sees the character come down, and only after a fall of at
@@ -3053,7 +3093,8 @@ function WeaponService.GrantIframes(player: Player, seconds: number): ()
 	if not state.active or shooter == nil or not (seconds > 0 and seconds < math.huge) then
 		return
 	end
-	openIframes(shooter, os.clock(), seconds)
+	local now = os.clock()
+	openIframes(shooter, now, now, seconds)
 end
 
 -- Fires (on its own thread) when SetFamily puts a different family in a slot.

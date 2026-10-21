@@ -41,7 +41,6 @@ FILES = [
     COMBAT,
     "src/shared/Economy.luau",
     "src/shared/Config/Combat.json",
-    "src/shared/Config/Missions/1_Village.json",
     "src/shared/CrowdCodec.luau",
     "src/shared/HitShapes.luau",
     "src/shared/Armory.luau",
@@ -815,8 +814,8 @@ MUTATIONS = {
     # Review round: ruling 18 judged from state (VitalsService.RunLost).
     "p5 lost: a member on the pad still fights": (
         VITALS,
-        "if member.bot or player == nil or member.waiting then",
-        "if member.bot or player == nil then",
+        "\t\tif member.waiting then\n\t\t\tcontinue\n\t\tend\n\t\ttable.insert(fighters, member.userId)",
+        "\t\ttable.insert(fighters, member.userId)",
     ),
     "p5 lost: a dead partner still stands": (
         VITALS,
@@ -841,7 +840,7 @@ MUTATIONS = {
     # Second review round.
     "p5: a start does not wait for bodies": (
         VITALS,
-        "if not member.bot and player ~= nil and bodyOf(player) == nil then",
+        "if bodyOf(member.player) == nil then",
         "if false then",
     ),
     "p5: ClearThreats keeps the queued decisions": (
@@ -1143,12 +1142,6 @@ L1_MUTATIONS = {
         "\town[difficulty] = true\n\town.normal = true\n\treturn true\n",
     ),
     "l1: the arena adapter without bankEachWave": (FLOW, "\t\tbankEachWave = true,\n", "\t\tbankEachWave = false,\n"),
-    "l1: the arena adapter without merging": (FLOW, "\t\tmerge = true,\n", "\t\tmerge = false,\n"),
-    "l1: the arena is always played on normal": (
-        FLOW,
-        "difficulties = { [firstDifficulty] = only },",
-        "difficulties = { normal = only },",
-    ),
     "l1: burst rows stepping outward": (
         FLOW,
         "local inward = Vector3.new(zone.rect.x - at.X, 0, zone.rect.z - at.Z)",
@@ -1581,19 +1574,6 @@ WORLD_MUTATIONS = {
         "if value ~= nil and value > 0 and isFinite(value) then",
         "if value ~= nil and value > 0 then",
     ),
-    # ------------------------------------------------------------------ the arena as a level
-    # caught by: the party enters at the first player spawn and leaves at the pad
-    "world: the arena's entry is its pad": (
-        GEOMETRY,
-        "local first = listOf(arena.playerSpawns)[1] or pad",
-        "local first = pad",
-    ),
-    # caught by: every table is new: changing the level leaves the arena's module untouched
-    "world: the level shares the arena's obstacle tables": (
-        GEOMETRY,
-        "table.insert(obstacles, table.clone(obstacle))",
-        "table.insert(obstacles, obstacle)",
-    ),
     # ------------------------------------------------------------------ what Pieces refuses
     # caught by: a camp with gates and no fence is refused, by name
     "world: gates with no fence are built": (
@@ -1818,12 +1798,6 @@ WORLD_MUTATIONS = {
         "z = sign.z,\n\t\tsx = size.sx,\n\t\tsy = size.sy,\n\t\tsz = size.sz,",
         "z = sign.z,\n\t\tsx = size.sz,\n\t\tsy = size.sy,\n\t\tsz = size.sx,",
     ),
-    # caught by: FromArena: the arena's size.x is the camp's width and its size.z the depth
-    "world: the arena's camp is as wide as the arena is deep": (
-        GEOMETRY,
-        "sx = arena.size.x,\n\t\tsz = arena.size.z,",
-        "sx = arena.size.z,\n\t\tsz = arena.size.x,",
-    ),
 }
 MUTATIONS.update(WORLD_MUTATIONS)
 
@@ -1841,13 +1815,8 @@ REAL_MUTATIONS = {
     ),
     "real: a level file's id dropped for its layout's": (
         FLOW,
-        "\t\t\tversion = file.version,\n\t\t\tid = file.id,\n",
-        "\t\t\tversion = file.version,\n\t\t\tid = file.layout,\n",
-    ),
-    "real: the arena's level takes its mission's id": (
-        FLOW,
-        "\t\tid = file.id,\n\t\tname = file.name,\n\t\tlayout = file.layout,\n\t\tmission = file.mission,",
-        "\t\tid = mission.id,\n\t\tname = file.name,\n\t\tlayout = file.layout,\n\t\tmission = file.mission,",
+        "\t\tversion = file.version,\n\t\tid = file.id,\n",
+        "\t\tversion = file.version,\n\t\tid = file.layout,\n",
     ),
     "real: the plan's floor as deep as it is wide": (
         FLOW,
@@ -2310,11 +2279,6 @@ L1B_RUN_MUTATIONS = {
         GEOMETRY,
         "local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, thickness) else {}",
         "local gates: { Box } = LevelGeometry.GateBoxes(camp, thickness)",
-    ),
-    "l1b: FromArena not locking": (
-        GEOMETRY,
-        "\t\tlocks = true,\n\t\tspots = nil,",
-        "\t\tlocks = nil,\n\t\tspots = nil,",
     ),
     "l1b: a fire marker on a spot that is no fire": (
         GEOMETRY,
@@ -4433,7 +4397,11 @@ L2_MUTATIONS = {
         "found = found ~= nil and found[site.id] ~= nil,",
     ),
     # StageFlow's secrets lines and map rows (L2-13, L2-15).
-    "l2: Resolve drops the secrets": (FLOW, "\t\t\tsecrets = file.secrets,\n\t\t}\n\tend", "\t\t}\n\tend"),
+    "l2: Resolve drops the secrets": (
+        FLOW,
+        "\t\tsecrets = file.secrets,\n\t}\nend",
+        "\t}\nend",
+    ),
     "l2: Validate skips the secrets": (FLOW, "\tsecretProblems(level, layout, problem)\n", ""),
     "l2: an entry needs no name": (
         FLOW,
@@ -7654,7 +7622,7 @@ L3W2_FIX_MUTATIONS = {
     "l3w2 fix S2: the admit's handler leaves before the hook": (
         ARENA_SERVICE,
         "\t\t\t\tplaceBody(live)\n",
-        "\t\t\t\tplaceBody(live)\n\t\t\t\tif live.bot then\n\t\t\t\t\treturn\n\t\t\t\tend\n",
+        "\t\t\t\tplaceBody(live)\n\t\t\t\tif live.waiting then\n\t\t\t\t\treturn\n\t\t\t\tend\n",
     ),
     "l3w2 fix S2: ArenaService keeps no hook": (ARENA_SERVICE, "\thooks.character = hook\n", "\tlocal _ = hook\n"),
     "l3w2 fix S2: a second writer clears the hook": (
@@ -8044,6 +8012,109 @@ L3W2_FIX2_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L3W2_FIX2_MUTATIONS)
+
+# ------------------------------------------------------------------------------------------------
+# L4 W1b (docs/prompts/l4-w1b-contract.md §4, §5; docs/prompts/l4-w1b-reports/luau-a.md and
+# luau-b.md, "For the designer"). DashProof and RunFloors load in the harness: their mutants are
+# caught by tests_l4b.luau and tests_l4b_run.luau. WeaponService, ArenaService and WaveService do not:
+# theirs are caught by the source.l4b pins (run_harness.py L4B_LINES, tests_l3_w2.luau L4BP).
+DASH_PROOF = "src/combat/server/Services/DashProof.luau"
+RUN_FLOORS = "src/shared/RunFloors.luau"
+FILES += [DASH_PROOF, RUN_FLOORS]
+L4B_MUTATIONS = {
+    # DashProof (A): tests_l4b (d), (e), (b), Rule and Open.
+    "l4b: the proof not flat": (DASH_PROOF, "rule.span, true)", "rule.span, false)"),
+    "l4b: no lookback": (DASH_PROOF, "local window = now - claimAt + rule.lookback", "local window = now - claimAt"),
+    "l4b: a claim never lapses": (DASH_PROOF, "if now > claimAt + rule.lapse then", "if false then"),
+    "l4b: the share at 0": (DASH_PROOF, "speed = share * distance / seconds,", "speed = 0,"),
+    "l4b: Open never reaches back": (
+        DASH_PROOF,
+        "windows.iframesFrom = math.min(windows.iframesFrom, from)",
+        "windows.iframesFrom = windows.iframesFrom",
+    ),
+    # PositionRing (A): tests_l4b (d), a fall at 120 studs/s proves nothing only when flat.
+    "l4b: Motion's flat ignored": (RING, "\t\tif flat == true then\n", "\t\tif false then\n"),
+    # WeaponService (A): the source.l4b pins.
+    "l4b: OnDash opens on the request": (
+        WEAPON,
+        "\tshooter.dashClaimAt = now\nend",
+        "\tshooter.dashClaimAt = now\n\topenIframes(shooter, now, now, movement.dashIframes)\nend",
+    ),
+    "l4b: the window from the proof": (
+        WEAPON,
+        "openIframes(shooter, now, claimAt, config.movement.dashIframes)",
+        "openIframes(shooter, now, now, config.movement.dashIframes)",
+    ),
+    "l4b: the claim never judged": (WEAPON, "\t\t\tproveDash(shooter, now, position, claimAt)\n", ""),
+    "l4b: resetAir keeps the claim": (
+        WEAPON,
+        "\t-- The last body's dash is not this one's.\n\tshooter.dashClaimAt = nil\n",
+        "",
+    ),
+    # RunFloors (A's module; B's eight scratch mutants, written here): tests_l4b_run.
+    "l4b: Attach always sends the cells": (RUN_FLOORS, "local withCells = sentSeq ~= seq", "local withCells = true"),
+    "l4b: Attach never sends the cells": (RUN_FLOORS, "local withCells = sentSeq ~= seq", "local withCells = false"),
+    "l4b: Attach strips the run's own floors": (
+        RUN_FLOORS,
+        "\tlocal copy = table.clone(floor)\n\tcopy.cells = nil\n",
+        "\tlocal copy = floor\n\tcopy.cells = nil\n",
+    ),
+    "l4b: Attach drops a field": (
+        RUN_FLOORS,
+        "\tcopy.cells = nil\n\treturn copy\n",
+        "\tcopy.cells = nil\n\tcopy.ceiling = nil\n\treturn copy\n",
+    ),
+    "l4b: Attach says nothing went": (RUN_FLOORS, "\treturn out, withCells\n", "\treturn out, false\n"),
+    "l4b: Merge keeps the cells across a set": (RUN_FLOORS, "local same = heldSeq == seq", "local same = true"),
+    "l4b: Merge never keeps the cells": (RUN_FLOORS, "local same = heldSeq == seq", "local same = false"),
+    "l4b: Merge prefers the held cells": (
+        RUN_FLOORS,
+        "\t\tif copy.cells == nil and same then\n",
+        "\t\tif same then\n",
+    ),
+    # ArenaService (B): the source.l4b pins.
+    "l4b: a member's note is never written": (ARENA_SERVICE, "\tplay.cellsSent[userId] = seq\n", ""),
+    "l4b: the one payload carries the cells": (
+        ARENA_SERVICE,
+        "RunFloors.Attach(runFields.floors, runFields.floorsSeq, runFields.floorsSeq)",
+        "RunFloors.Attach(runFields.floors, runFields.floorsSeq, nil)",
+    ),
+    "l4b: a first send drops its cells": (ARENA_SERVICE, "\t\tsent.floors = floors\n", ""),
+    "l4b: a send asks Attach with the set": (
+        ARENA_SERVICE,
+        "RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])",
+        "RunFloors.Attach(runFields.floors, seq, seq)",
+    ),
+    "l4b: an admit keeps the note": (ARENA_SERVICE, "\tplay.cellsSent[player.UserId] = nil\n", ""),
+    "l4b: a removal keeps the note": (ARENA_SERVICE, "\tplay.cellsSent[member.userId] = nil\n", ""),
+    "l4b: the summary card skips the attach": (
+        ARENA_SERVICE,
+        'sendRunState(player, userId, ArenaService.BuildRunState("summary", summary, result))',
+        'RemoteService.FireClient(player, "RunState", ArenaService.BuildRunState("summary", summary, result))',
+    ),
+    "l4b: the broadcast skips the attach": (
+        ARENA_SERVICE,
+        "\t\t\tsendRunState(member.player, userId, runState)\n",
+        '\t\t\tRemoteService.FireClient(member.player, "RunState", runState)\n',
+    ),
+    "l4b: RunState names no set": (ARENA_SERVICE, "\t\tfloorsSeq = runFields.floorsSeq,\n", "\t\tfloorsSeq = 0,\n"),
+    # WaveService (B): the source.l4b pins.
+    "l4b: the number never moves": (WAVE_SERVICE, "\tboot.floorsSeq += 1\n", ""),
+    "l4b: a start's floors are no new set": (WAVE_SERVICE, "\tsetFloors(runFloors)\n", "\trun.floors = runFloors\n"),
+    "l4b: the lobby's empty list is no new set": (
+        WAVE_SERVICE,
+        "\trun = freshRun()\n\tsetFloors({})\n\tArenaService.SetLevel(nil)\n",
+        "\trun = freshRun()\n\tArenaService.SetLevel(nil)\n",
+    ),
+    "l4b: a session reset's empty list is no new set": (
+        WAVE_SERVICE,
+        "\trun = freshRun()\n\tsetFloors({})\n\tboot.returning = false\n",
+        "\trun = freshRun()\n\tboot.returning = false\n",
+    ),
+    "l4b: RunFields carry a stale number": (WAVE_SERVICE, "\t\tfloorsSeq = boot.floorsSeq,\n", "\t\tfloorsSeq = 1,\n"),
+}
+MUTATIONS.update(L4B_MUTATIONS)
+
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

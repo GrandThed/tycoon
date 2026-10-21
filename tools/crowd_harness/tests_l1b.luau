@@ -366,12 +366,12 @@ function L1B.planTests(): ()
 
 	print(" Resolve: a level file's camps reach the plan")
 	local file = L1B.level()
-	local resolved = L1B.Flow.Resolve(file, nil, 1200, "normal")
+	local resolved = L1B.Flow.Resolve(file, 1200)
 	check(resolved ~= nil and resolved.camps == file.camps and #resolved.camps == 3, "a level file's resident camps are kept as they stand")
 	local fromFile = if resolved ~= nil then L1B.plan(resolved) else nil
 	check(fromFile ~= nil and #fromFile.groups == 6 and fromFile.population == 68, "and Plan places their groups (6 on Normal, population 68)")
 	file.camps = nil
-	local bare = L1B.Flow.Resolve(file, nil, 1200, "normal")
+	local bare = L1B.Flow.Resolve(file, 1200)
 	check(bare ~= nil and type(bare.camps) == "table" and #bare.camps == 0, "a file with no camps resolves to none ({}), never nil")
 end
 L1.group("l1b planTests", L1B.planTests)
@@ -534,19 +534,10 @@ L1.group("l1b safeTests", L1B.safeTests)
 -- Combat: KillReward and SplitCarry -------------------------------------------------------
 
 function L1B.rewardTests(): ()
-	print(" Combat: KillReward is CampReward; SplitCarry pays whole units and carries the rest")
+	print(" Combat: KillReward by hand; SplitCarry pays whole units and carries the rest")
 	local Combat = L1B.Combat
 	local rewards = L1B.level().crowd.rewards
 	rewards.lobber = { cash = 700, materials = 4 }
-	local same = true
-	for kind in rewards do
-		for _, mult in { 1, 2, 4, 1.3, 1.5 } do
-			local cash, materials = Combat.KillReward(rewards, kind, mult)
-			local campCash, campMaterials = Combat.CampReward(rewards, kind, { rewardMult = mult })
-			same = same and cash == campCash and materials == campMaterials
-		end
-	end
-	check(same, "on every kind and every multiplier KillReward answers what CampReward answers")
 	local function pay(kind: string, mult: number): string
 		local cash, materials = Combat.KillReward(rewards, kind, mult)
 		return `{cash}/{materials}`
@@ -597,7 +588,7 @@ L1.group("l1b rewardTests", L1B.rewardTests)
 -- LevelGeometry: open camps and fire markers ------------------------------------------------
 
 function L1B.worldTests(): ()
-	print(" LevelGeometry: an open camp, fire markers, the arena locks")
+	print(" LevelGeometry: an open camp, fire markers, a gateless camp locks")
 	local Geo = L1B.Geo
 	local sizes = L1.copy(L1W.sizes)
 	sizes.fire = { sx = 3, sy = 1, sz = 3 }
@@ -625,15 +616,14 @@ function L1B.worldTests(): ()
 	end
 	local all = Geo.Pieces(locked, L1W.sizes, 600)
 	check(all ~= nil and noFire ~= nil and #all == #noFire + 12, "every camp locking is 6 Parts more per open camp: 2 gates and 4 wall boxes")
-	local arena = Geo.FromArena(L1W.village(), -8)
-	check(arena.camps[1].locks == true, "FromArena: the arena's one camp locks")
+	local field = L1W.field()
 	local walls = 0
-	for _, piece in Geo.Pieces(arena, L1W.sizes, 600) or {} do
+	for _, piece in Geo.Pieces(field, L1W.sizes, 600) or {} do
 		if piece.role == "barrier" then
 			walls += 1
 		end
 	end
-	check(walls == 4, "so it keeps its invisible wall")
+	check(field.camps[1].locks == true and walls == 4, "a gateless camp that locks (L1W.field) keeps its invisible wall: 4 boxes")
 
 	print(" the shipped Forest Road: its Parts")
 	local real = L1.real.layouts.ForestRoad

@@ -25,7 +25,6 @@
 	},
 	"nodes": [
 		{ "id": "forestRoad", "name": "Forest Road", "theme": "forest", "x": 0.12, "y": 0.73, "kind": "level", "level": "forestRoad" },
-		{ "id": "raiderArena", "name": "Raider Arena", "theme": "bonus", "x": 0.17, "y": 0.31, "kind": "bonus", "level": "raiderArena", "from": "forestRoad" },
 		{ "id": "castle", "name": "Castle", "theme": "castle", "x": 0.32, "y": 0.37, "kind": "level", "from": "forestRoad", "requires": { "node": "forestRoad" } },
 		{ "id": "underworld", "name": "Underworld", "theme": "underworld", "x": 0.52, "y": 0.69, "kind": "level", "from": "castle", "requires": { "node": "castle" } },
 		{ "id": "planet", "name": "Another Planet", "theme": "planet", "x": 0.72, "y": 0.33, "kind": "level", "from": "underworld", "requires": { "node": "underworld" } },
@@ -33,7 +32,6 @@
 	],
 	"themes": {
 		"forest": { "color": [70, 182, 101] },
-		"bonus": { "color": [255, 200, 61] },
 		"castle": { "color": [143, 163, 199] },
 		"underworld": { "color": [242, 106, 63] },
 		"planet": { "color": [148, 120, 242] },

@@ -7,7 +7,7 @@
 --
 -- Order matters only for Init: SoundController builds its SoundGroups before anything can
 -- Play, and CombatUIController comes last because its Start wires the other controllers
--- together (stance, gear, health, banners) once the HUD exists.
+-- together (the run phase, the floors, the banner's frame, the toasts) once the HUD exists.
 --
 -- P1: CrowdRenderer and FeedbackController boot in every build but their Start is inert
 -- unless the range's combat runs. MovementController is started by InputController's range
