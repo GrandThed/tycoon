@@ -59,3 +59,10 @@ of clustered stacked bevelled blocks) and "the stones leave so much to offer". S
 `assets/research/2026-10-21-l4/ref_rocks_*.png`; a fresh rock builder redoes every rock from `docs/prompts/l4-w2-rocks.md`
 before any upload. Lesson: the noisy triangulated cliff skins passed his first look at the whole-level renders but not a
 second one; for any generated natural surface, show a close-up kit sheet of the pieces beside the level views.
+
+**Mountain climb added to L4 (2026-10-21, Ben's own idea, MISSIONS_DESIGN §28):** a double-jump parkour of about 8 hops
+round a mountain behind the trailhead, built now with the forest (one paste); the summit chest is a fourth secret
+`mountain` giving **the Castle Key** (= the opened secret in `combat.secrets`, no profile change); the Castle's plan owes a
+room this key opens. Designer brief `docs/prompts/l4-w2-mountain.md` (designs on an in-memory layout copy, writes the real
+layout after the lead's `mountain-go.md`, new gate `tools/check_parkour.py`); then the forest is dressed round it and the
+W2 contract gets the `key` reward.
