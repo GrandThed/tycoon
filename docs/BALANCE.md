@@ -6438,3 +6438,103 @@ The R2 SIM_CASES, proposed for `check_levels_mutants.py`. Each was run here thro
 The full `sim_range --check` output differs from the clean copy's only in the cave section above (71 lines): every
 Normal, Hard, Brutal, arena, R8 and range row is byte-identical. PASS lines went from 549 to 561: six old pair
 gates left and eighteen new ones came in.
+
+## L4 W1: the lookout at the trailhead (2026-10-21)
+
+Ben's ruling (MISSIONS_DESIGN 26.1): the lookout moves to the trailhead, the study's V3, so the perches L1 to L3
+accepted as a known limit go away and R8 gates every spot. Measured on Python 3.12.10 64-bit (the gate's) unless
+said otherwise.
+
+### L4 W1: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Layouts/Levels/ForestRoad.json` LookoutLedge | (-283, 15, -59), 24 x 38 x 14, top 34 over Road5 (0.0 off the plateau region) | **(-446, 11, -33), 24 x 30 x 14**, top 26 over Road1, 18 studs across the void from Road1's north edge | 26.1: 132 studs from the nearest region cell, beyond the Longbow's 110 and `dormantRadius` 120 |
+| the `lookout` secret | (-283, 36, -59) | **(-446, 28, -33)**, on the ledge | the chest goes with its ledge |
+| its sign | (-301, 8, -57) on LookoutSignPad | **(-447, 0, -5)**, on Road1, its foot flush with the road's north edge | the study had z -2, which stood the 6 x 4 x 6 walk-through sign across the walking line at the spawn; at -5 it sits beside the road on the ledge's side, as the cache's sign does on Road4 |
+| LookoutSignPad block and its `plateau` region cell | a 10 x 12 x 10 step, top 8, and a 6 x 16 cell | **removed** | the step to the old ledge; its west 4 studs were a Hard sniper spot (x2.09 with the bow at T4) |
+| `check_levels.py` `EXPECTED` sniper lists (all four) | with LookoutLedge, LookoutSignPad, Secret_lookout | **without them** | the pinned lists are what check_levels finds; nothing else moved |
+| `sim_range.py` `SNIPER_KNOWN_LIMIT_L4` | Normal: LookoutLedge, Secret_lookout; Hard: the same and LookoutSignPad | **removed, with its reader and `r8_gate`'s `known` branch** | an empty exemption would be dead code; every spot is gated (Ben, 2026-10-16) |
+
+No game number moved; `Config/Levels/1_ForestRoad.json` is unchanged. check_levels: PASS (the lookout's L2-18 (a)-(d)
+hold: 26 over the road, "the closest call: Trailhead, 5 studs short" for one jump, a step up and a dash; no lifting
+ability's arc reaches it).
+
+### L4 W1: R8 before and after (the gate's seeds 11 / 23 / 37)
+
+Best cash a minute over the seeds, as a multiple of the mission player's on the same seed (the bow-T4 rows' mission
+player fights with the sword alone, so his rates are the T1 ones). "Before" is a clean copy of HEAD 59a2279 run on
+the same machine and Python.
+
+| Table | Spot | Before | After |
+|---|---|---|---|
+| Normal, T1/T1 | Secret_lookout / LookoutLedge / LookoutSignPad | x1.59 / x1.35 / x0.54 (the first two known limit) | gone |
+| Normal, T1/T1 | Road3 / Road2 / Road4 | x0.72 / x0.69 / x0.06 | the same |
+| Normal, sword T1 / bow T4 | Secret_lookout / LookoutLedge / LookoutSignPad | x1.66 / x1.37 / x0.54 (known limit) | gone |
+| Normal, sword T1 / bow T4 | Road3 / Road2 / Road4 | x0.72 / x0.69 / x0.06 | the same |
+| Hard, T1/T1 | LookoutLedge / LookoutSignPad / Secret_lookout | x1.30 / x0.93 / x0.62 (known limit) | gone |
+| Hard, T1/T1 | Road3 / Road2 | x0.87 / x0.83 | x0.87 / x0.83 (Road3 seed 11: 20,288 -> 14,082) |
+| Hard, sword T1 / bow T4 | Secret_lookout / LookoutLedge / LookoutSignPad | x4.44 / x4.13 / x2.09 (known limit) | gone |
+| Hard, sword T1 / bow T4 | Road2 / Road4 / the gatehouse | x0.83 / x0.15 / x0.15 | the same |
+| **Hard, sword T1 / bow T4** | **Road3** | x0.79 (seed 11: 8 kills in 13 s) | **x1.60, RED** (seed 11: 16 kills in 13 s, 39,504 / 55.1 against 24,703 / 37.2) |
+| Hard, the tunnel open | CaveMouth | seed 11: 0 | seed 11: 19,164, x0.78; its "nearest point" rows went (it is one point now) |
+
+Every other spot (RoadBC5, RoadBC6, ShrineSignPad, Creek, CaveExit) is byte-identical. `sim_range.py --check`:
+**CHECK: FAIL (1)**, that Road3 row, in 11 min 46 s; HEAD: PASS.
+
+### L4 W1: Road3 on Hard with the bow at T4 (the lead's decision)
+
+The cause, isolated on in-memory variants of HEAD's layout (sim_range's own `LevelRun`): dropping only the
+LookoutSignPad **region cell** reproduces the new rows exactly. The block alone and the ledge's move change nothing for
+Road3. The cell was one of the sim's sight blockers (`scene_walls`) and a place chasing bodies stood. Without it, on
+seed 11 camp A's fireN group reaches the plateau's west edge in Road3's view inside the 13-second window, beside
+fireW.
+
+**The row was red before too, out of the gate's seeds.** The same course over seeds 1-30, counting a seed when its
+cash or Timber a minute beats the lowest of the three gate-seed mission rates (Normal 24,986 / 40.1, Hard 21,332 /
+31.9):
+
+| Course | HEAD | L4 W1 |
+|---|---|---|
+| Hard, sword T1 / bow T4, Road3 | 12 of 30, worst 67,179 (26 kills in 13 s, x3.1) | 13 of 30 (11 added), worst the same |
+| Hard, sword T1 / bow T4, Road2 | not run | 10 of 30, worst 47,489 (18 kills, x2.2) |
+| Hard, T1/T1, Road3 | not run | 7 of 30, worst 21,352 (x1.00) |
+| every other spot, Hard, both gears | not run | 0 of 30 |
+| every spot, Normal, both gears | not run | **0 of 30** |
+
+From Road3's corner (-340, 0, -51), 38 studs off and 8 below the plateau, and from Road2, the straight course pulls
+camp A's west groups to the plateau's edge and kills one, two or three groups in 13 s with the x6.74 bow. That pays
+4-14K once (camps never refill), but as a rate it is x0.8-x3 the sword-T1 mission's. It is L3's structural point
+(a bow at T4 against a sword at T1 out-earns from wherever it sees a camp) at a spot that is not a perch. No wall
+can stand between the low road and the plateau's edge without standing on Road4, and a body stopped at the region's
+edge is always in view from below. Options for the lead:
+
+1. **A plateau nub where the pad stood**: a block (-299, 2, -57) 6 x 12 x 10 wholly under a restored region cell
+   (-299, -54) 6 x 16, so nobody on it is out of a rusher's reach. Measured: check_levels PASS with the same
+   pinned lists, and Road3's three gate seeds are back to HEAD's (8 / 8 / 3 kills), so `--check` passes. Road2 and
+   Road3 stay out-earning on a third of the seeds: this only restores the gate seeds' luck.
+2. **Ben rules on the Hard bow-T4 burst** from the low road: a one-off 4-14K in 13 s, then the player still fights
+   the rest.
+3. **Change what R8 measures** for a burst (`sim_range.py`, mine, but it changes the gate's meaning): for example,
+   rate a course on more seeds, or on its pay against what the mission player earns from the same residents.
+4. **Camp A's design** in the real forest (26.2's natural edges, the west fires' posts), so that one pull from the
+   road wakes one group, not three. This is the wave's forest work, with every camp gate re-run.
+
+### L4 W1: `check_levels_mutants.py`, re-aimed cases
+
+| Case | Was | Now |
+|---|---|---|
+| L2-18b, a step the ledge is one jump from | a ledge (top 14) west of the sign pad | the same step in the void between Road1 and the ledge (x -450..-446, z -22..-16) |
+| L2-18b, a cliff on the ledge's east side (84 control, 60 red) | x -275..-271, z -66..-52 | x -438..-434, z -40..-26 (`cliff`) |
+| L2-18a, the ledge 6 higher | top 40, chest y 42 | top 32, chest y 34 |
+| L2-18d, the chest at the front edge / 1.5 back (control) / 2 back | z -54 / -60.5 / -61 | z -28 / -34.5 / -35 (the back edge is z -40) |
+| L2-18d, a root on the road below | secretBelow 25, secretReach 8 (Road5) | secretBelow 25, secretReach 26 (Road1, 22 off the chest's footprint) |
+| L2-18c, Leap Smash height 20 (a target on A's fence) | red | **height 23 red, 22 green**: at the trailhead every take-off is ground at 0, so the margin over the shipped 10 is 13 studs |
+| L2-37f, the ridge CaveWallS1 | 60 red / 81 control (43 over the lookout's chest, 38) | **54 red / 55 control** (43 over camp A's fence and the cache's chest, 12); plus 80 red with L2's lookout put back |
+| d-M1, the 84 ridge (five cases) | measured from the lookout's ledge | the same cases with L2's lookout put back (`l2_lookout`). Without it the three red ones go green: on today's data nothing lifts a player onto a 64-high ridge, so d-M1 alone no longer needs the 84 tops (CaveWallS2, CaveRoofE, the alcove); whether another gate does was not checked |
+| W3 frozen, a pond by the ledge | x -295..-271, z -80..-68, 17 red / 6 control | x -458..-434, z -54..-42 (behind the ledge), 17 red / -1 control (the creek's own height) |
+| SIM_CASES L3-26 | LookoutLedge out of Normal's known limit | **R8's band at half the mission's pay**: Road3's Normal sword-T1 / bow-T4 row (x0.72) goes red, which it can only do while the bow-upgraded rows are gated |
+
+`tools/crowd_harness/tests_l2.luau` (realTests): the "from the road below" case read Road5's 8 as a literal. Under the
+new ledge, one jump from 8 would reach the chest's band. It now reads the road from the layout's route point nearest
+the chest (0). Shown red with the old 8 (1 of 4,032 checks), green as written.

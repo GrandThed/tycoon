@@ -431,7 +431,8 @@ function L2.riseTests(): ()
 	local Clip = L1C.Clip
 	check(Clip.Rise(movement, false) == movement.jumpHeight and Clip.Rise(movement, true) == movement.jumpHeight + movement.doubleJumpHeight, "one jump without the double jump; both with it")
 	check(Clip.Rise(movement, false) == 18 and Clip.Rise(movement, true) == 30, `as shipped: 18 and 30 ({Clip.Rise(movement, false)}, {Clip.Rise(movement, true)})`)
-	-- The lookout ledge is 26 over Road5: refused to a non-owner, allowed to an owner.
+	-- A ledge 26 over the caster's floor (the lookout's rise, over Road1 since L4 W1; here over a
+	-- floor at 8): refused to a non-owner, allowed to an owner.
 	check(Clip.TooHigh(8, 34, Clip.Rise(movement, false)) and not Clip.TooHigh(8, 34, Clip.Rise(movement, true)), "a ground point 26 over the caster's floor: refused without the double jump, allowed with it")
 end
 L1.group("l2 riseTests", L2.riseTests)
@@ -451,8 +452,9 @@ function L2.leapTests(): ()
 	check(Clip.CasterFloor(8, 26, rise) == 8 and Clip.CasterFloor(-40, 26, rise) == -40 and Clip.CasterFloor(0, 26, rise) == 0, "a floor under the caster is his floor, whatever the feet and the rise")
 	check(Clip.CasterFloor(30, 26, rise) == 30, "even a floor the ray finds above the feet (a root sunk into a step)")
 	check(Clip.CasterFloor(nil, 26, rise) == 26 - rise and Clip.CasterFloor(nil, 26, owned) == 26 - owned, `over a void: the feet less the caster's own rise ({Clip.CasterFloor(nil, 26, rise)}, {Clip.CasterFloor(nil, 26, owned)})`)
-	-- The lookout (Road5 at 8, the ledge's top at 34): a jump off the road's edge puts the feet at
-	-- 8 + one jump over a void. The ledge is then as far out of reach as from the road itself.
+	-- A ledge 26 over a road at 8 (the lookout's rise; since L4 W1 the real one stands over Road1,
+	-- across a void): a jump off the road's edge puts the feet at 8 + one jump over a void. The
+	-- ledge is then as far out of reach as from the road itself.
 	local feet = 8 + movement.jumpHeight
 	check(Clip.TooHigh(Clip.CasterFloor(nil, feet, rise), 34, rise), `the ledge (34) from a jump's top over a void off Road5 (feet {feet}): refused without the double jump`)
 	-- An owner's rise is both jumps, so over a void his floor is the feet less both: at the top of
@@ -509,7 +511,7 @@ function L2.groundFloorTests(): ()
 	check(same(8 + rise, 8, Clip.GroundFloor(8, 8, 8 + rise, movement, false)), `exactly the rise above ({rise}) is allowed`)
 	check(same(nil, 8, Clip.GroundFloor(8, 8, 8 + rise + 0.001, movement, false)), "a thousandth higher is refused, and the caster's floor still comes back (the leap's apex needs it)")
 	check(same(-40, 8, Clip.GroundFloor(8, 8, -40, movement, false)), "any floor below is allowed")
-	-- The lookout: the ledge's top 34 over Road5 at 8.
+	-- A ledge 26 over the floor (the lookout's rise): its top 34 over a floor at 8.
 	check(same(nil, 8, Clip.GroundFloor(8, 8, 34, movement, false)) and same(34, 8, Clip.GroundFloor(8, 8, 34, movement, true)), "the ledge from Road5: refused without the double jump, allowed with it")
 	-- Only `true` owns: the attribute's other values (nil, false, a forged string or number) do not.
 	local forged = {}
@@ -717,8 +719,18 @@ function L2.realTests(): ()
 	check(S.Triggered(lookout, beside, rules), `a root standing on the ledge against the chest opens it ({beside.X}, {beside.Y}, {beside.Z})`)
 	local onTop = vec(lookout.x, lookout.floorY + block.sy + root, lookout.z)
 	check(S.Triggered(lookout, onTop, rules), "and so does one standing on the chest")
-	local road = 8
-	check(not S.Triggered(lookout, vec(lookout.x, road + root, lookout.z), rules) and not S.Triggered(lookout, vec(lookout.x, road + root + FIXTURES.proving.movement.jumpHeight, lookout.z), rules), "from Road5 below, standing or at the top of one jump, it does not")
+	-- The road below is the route's point nearest the chest, read from the layout so a moved
+	-- lookout keeps this case honest (L4 W1 moved it from over Road5 at 8 to over Road1 at 0).
+	local road, nearest = nil, math.huge
+	for _, point in layout.route do
+		local away = (point.x - lookout.x) ^ 2 + (point.z - lookout.z) ^ 2
+		if away < nearest then
+			road, nearest = point.y, away
+		end
+	end
+	check(type(road) == "number", "the layout has a route to stand the road on")
+	road = road or 0
+	check(not S.Triggered(lookout, vec(lookout.x, road + root, lookout.z), rules) and not S.Triggered(lookout, vec(lookout.x, road + root + FIXTURES.proving.movement.jumpHeight, lookout.z), rules), `from the road below (its top {road}), standing or at the top of one jump, it does not`)
 	-- The fix round's s1: the cache's 12 x 12 block is collidable, so a root can only stand beside
 	-- it, a body's radius off a face; measured to its footprint, that opens it (once a key exists).
 	local besideCache = vec(cache.x + cache.sx / 2 + 1, cache.floorY + root, cache.z)

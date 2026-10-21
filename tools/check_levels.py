@@ -131,23 +131,24 @@ EXPECTED = {
         # L1c: the gatehouse's two floors are new tops by the region (sim_range rates them).
         # L2 W2: the cache moved into the cave, behind fire and walls (L2-37's sight): Secret_cache left.
         # L2 W3: the creek is deep water (L2-57), no surface until it is frozen: Creek left (sniperSpotsFrozen).
-        "sniperSpots": ["GatehouseTurn", "GatehouseWalk", "LookoutLedge", "LookoutSignPad", "Road2", "Road3",
-                        "Road4", "RoadBC5", "RoadBC6", "Secret_lookout", "ShrineSignPad"],
+        # L4 W1 (MISSIONS_DESIGN 26.1): the lookout moved to the trailhead, 132 studs from the nearest
+        # region cell, beyond the Longbow's 110, and LookoutSignPad went with it: LookoutLedge,
+        # LookoutSignPad and Secret_lookout left every list below.
+        "sniperSpots": ["GatehouseTurn", "GatehouseWalk", "Road2", "Road3", "Road4", "RoadBC5", "RoadBC6",
+                        "ShrineSignPad"],
         # L2-37: with the brambles burnt (a leader who found the tunnel) the two mouths' floors join:
         # any open mouth onto the region leaves a floor that sees out and that no rusher reaches (the
         # lead's OK pending; sim_range rates both on Normal and Hard). The long leg, the alcove and
         # the exit leg see nothing (the exit's bend), the cache's top neither.
-        "sniperSpotsOpen": ["CaveExit", "CaveMouth", "GatehouseTurn", "GatehouseWalk", "LookoutLedge",
-                            "LookoutSignPad", "Road2", "Road3", "Road4", "RoadBC5", "RoadBC6", "Secret_lookout",
-                            "ShrineSignPad"],
+        "sniperSpotsOpen": ["CaveExit", "CaveMouth", "GatehouseTurn", "GatehouseWalk", "Road2", "Road3", "Road4",
+                            "RoadBC5", "RoadBC6", "ShrineSignPad"],
         # L2-60 R8: with the creek and the pond frozen (every ice block standable at its top + lift),
         # the same lists plus the frozen Creek (a sniper spot rated before W3 while the creek was solid;
         # sim_range rates it on Normal and Hard). The pond and the island lie beyond the Longbow's range.
-        "sniperSpotsFrozen": ["Creek", "GatehouseTurn", "GatehouseWalk", "LookoutLedge", "LookoutSignPad", "Road2", "Road3",
-                              "Road4", "RoadBC5", "RoadBC6", "Secret_lookout", "ShrineSignPad"],
-        "sniperSpotsOpenFrozen": ["CaveExit", "CaveMouth", "Creek", "GatehouseTurn", "GatehouseWalk", "LookoutLedge",
-                                  "LookoutSignPad", "Road2", "Road3", "Road4", "RoadBC5", "RoadBC6", "Secret_lookout",
-                                  "ShrineSignPad"],
+        "sniperSpotsFrozen": ["Creek", "GatehouseTurn", "GatehouseWalk", "Road2", "Road3", "Road4", "RoadBC5",
+                              "RoadBC6", "ShrineSignPad"],
+        "sniperSpotsOpenFrozen": ["CaveExit", "CaveMouth", "Creek", "GatehouseTurn", "GatehouseWalk", "Road2",
+                                  "Road3", "Road4", "RoadBC5", "RoadBC6", "ShrineSignPad"],
     },
 }
 # What a sign must say for each key, so a player knows what to bring.
@@ -4297,7 +4298,7 @@ def island_reach(move, o, kr, lifts, dashes):
     top of the jumps off an edge, after their carry and a dash, over its castRange (when its height
     on top of the jumps gets the feet that high), and then the fall at walk speed from where it
     lands (WallClip.CasterFloor: over a void, the take-off top) down to the key top less a step up
-    (the W3 fix round's d-m3; 3.5 studs from a top at 0, 12.3 from LookoutLedge's 34). (studs,
+    (the W3 fix round's d-m3; 3.5 studs from a top at 0, 12.3 from a top at 34, L2's lookout ledge). (studs,
     the means)."""
     coyote = move.get("coyoteSeconds") or 0
     need = kr[4] - STEP_UP - o.top

@@ -10,7 +10,6 @@
 			"camps": ["A", "B"],
 			"cells": [
 				{ "id": "Road5", "x": -279, "z": -44, "sx": 46, "sz": 16 },
-				{ "id": "LookoutSignPad", "x": -299, "z": -54, "sx": 6, "sz": 16 },
 				{ "id": "RoadAB1", "x": -154.5, "z": -44, "sx": 65, "sz": 16 },
 				{ "id": "RoadAB2", "x": -130, "z": -22, "sx": 16, "sz": 60 },
 				{ "id": "RoadAB3", "x": -119, "z": 0, "sx": 38, "sz": 16 },
@@ -323,8 +322,7 @@
 		{ "name": "Road3", "look": "path", "x": -348, "y": -2, "z": -22, "sx": 16, "sy": 4, "sz": 60 },
 		{ "name": "Road4", "look": "path", "x": -329, "y": -2, "z": -44, "sx": 54, "sy": 4, "sz": 16 },
 		{ "name": "Road5", "look": "path", "x": -283, "y": 2, "z": -44, "sx": 38, "sy": 12, "sz": 16 },
-		{ "name": "LookoutLedge", "look": "ground", "x": -283, "y": 15, "z": -59, "sx": 24, "sy": 38, "sz": 14 },
-		{ "name": "LookoutSignPad", "look": "path", "x": -301, "y": 2, "z": -57, "sx": 10, "sy": 12, "sz": 10 },
+		{ "name": "LookoutLedge", "look": "ground", "x": -446, "y": 11, "z": -33, "sx": 24, "sy": 30, "sz": 14 },
 		{ "name": "RoadAB1", "look": "path", "x": -150.5, "y": 6, "z": -44, "sx": 57, "sy": 4, "sz": 16 },
 		{ "name": "RoadAB2", "look": "path", "x": -130, "y": 6, "z": -22, "sx": 16, "sy": 4, "sz": 60 },
 		{ "name": "RoadAB3", "look": "path", "x": -119, "y": 6, "z": 0, "sx": 38, "sy": 4, "sz": 16 },
@@ -378,13 +376,13 @@
 		{
 			"id": "lookout",
 			"needs": "doubleJump",
-			"x": -283,
-			"y": 36,
-			"z": -59,
+			"x": -446,
+			"y": 28,
+			"z": -33,
 			"sx": 6,
 			"sy": 4,
 			"sz": 6,
-			"sign": { "x": -301, "y": 8, "z": -57, "text": "LOOKOUT - needs DOUBLE JUMP" }
+			"sign": { "x": -447, "y": 0, "z": -5, "text": "LOOKOUT - needs DOUBLE JUMP" }
 		},
 		{
 			"id": "cache",

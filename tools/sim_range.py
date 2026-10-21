@@ -7217,24 +7217,18 @@ SNIPER_HARD = "hard"  # R8: rated on Normal and on this difficulty, both at the 
 # and the bow at this tier (the Forest's last), against the mission player at the same gear (he
 # fights with the sword alone, so he is the gate's comparison) and, reported, the pair player.
 SNIPER_BOW_TIER = 4
-# Ben's ruling on R8's stop (2026-10-16): on Normal these spots out-earn the mission and are accepted
-# for L1 as a known limit (camps never refill, so the pay is bounded and a camp only clears faster).
-# Their rate is reported, not gated; every hit landing stays gated. L4 re-places the perches, and the
-# set must be empty before L4 ships.
-# Lead, 2026-10-20 (L3 W1): the same perches on Hard, where Hard's re-measured hpScale and a bow
-# upgraded alone tip them over; the same L4 fix (re-placed perches) covers both difficulties.
-SNIPER_KNOWN_LIMIT_L4 = {
-    "normal": ("LookoutLedge", "Secret_lookout"),  # L2 W2: the cache moved into the cave
-    "hard": ("LookoutLedge", "LookoutSignPad", "Secret_lookout"),
-}
+# Ben's ruling on R8 (2026-10-16, restated for Hard in L3): no spot may out-earn the mission. L1 to L3
+# accepted the lookout's perches as a known limit until L4; L4 W1 (MISSIONS_DESIGN 26.1) moved the
+# lookout to the trailhead, beyond the Longbow's reach of every region cell, so every spot is gated.
 # The L3 W1 fix round 2's F6: the fire sniper's "casts at least once" is judged per spot, so a course
 # that never casts fails by name, unless its spot is listed here for that difficulty with the reason
 # it cannot cast. A listed course is held to its reason instead: no run casts and no living body's
 # edge ever comes within the ability's reach (range + pad), so a listing that went stale fails too.
-# CaveMouth (measured 2026-10-20, Normal and Hard, both of its points, every seed): it stands on
-# Road4 at the ground (y 0), west of the plateau camp A stands on (height 8). The residents who come
-# for him stop at the plateau's west edge, x about -300 (he is not reachable, L1b-W4), so the
-# nearest body's edge stays 25.7 studs or more off on the flat, past Dragon's Breath's 20.8.
+# CaveMouth (measured 2026-10-20, Normal and Hard, both of its points, every seed; again 2026-10-21
+# for L4 W1, one point since the sign pad's region cell went: 26.6): it stands on Road4 at the ground
+# (y 0), west of the plateau camp A stands on (height 8). The residents who come for him stop at the
+# plateau's west edge, x about -300 (he is not reachable, L1b-W4), so the nearest body's edge stays
+# 25.7 studs or more off on the flat, past Dragon's Breath's 20.8.
 BREATH_OUT_OF_REACH = {
     "CaveMouth": {
         "difficulties": ("normal", "hard"),
@@ -9111,8 +9105,8 @@ THREAT_POLICIES["cross"] = {"label": "walks the road through every camp, never f
 THREAT_POLICIES["parked"] = {"label": "stands at the start point, never moves", "parked": True}
 # L1b Wave 4 (the run's `weapon` is given by forest_report): the road archer shoots camp A from
 # Road5 outside its west gate and holds the road; the walk-out walks into A until a group wakes and
-# out of its east gate; the lose does that, then runs on along the road; the sniper shoots from
-# below A's west drop, then from the lookout ledge, never on the plateau.
+# out of its east gate; the lose does that, then runs on along the road; the sniper is R8's straight
+# course from one unreachable spot (the policy's `spot`), never on the plateau.
 THREAT_POLICIES["archer"] = {"label": "the bow from Road5 outside A's west gate, holds the road", "fight": True,
                              "react": True, "hold": True, "hunt": True, "scene": "archer", "airJump": False}
 THREAT_POLICIES["walkout"] = {"label": "walks into A, out of its east gate once a group wakes", "scene": "walkout"}
@@ -9120,7 +9114,7 @@ THREAT_POLICIES["lose"] = {"label": "the walk-out, then runs east along the road
 # Fix round R7: the lose, then back into the camp for a clear (the playtest checklist's order).
 THREAT_POLICIES["loseclear"] = dict(THREAT_POLICIES["mission"], label="the lose, then a clear of the camp it lost",
                                     scene="lose", then="clear")
-THREAT_POLICIES["sniper"] = {"label": "the bow from below A's west drop, then from the lookout ledge", "fight": True,
+THREAT_POLICIES["sniper"] = {"label": "the bow from an unreachable spot (R8's straight course)", "fight": True,
                              "hunt": True, "scene": "sniper"}
 
 
@@ -10860,20 +10854,17 @@ def check_scenes(cfg, row, tag, expect):
     # the proving gear; and every hit of his lands. One band per spot (R8's stop rule names one).
     under = row["under"] or {}
     snipers, mission = (row["sniper"], row["runs"]) if row["sniper"] else (under.get("sniper") or {}, under.get("runs"))
-    known = SNIPER_KNOWN_LIMIT_L4.get("normal" if row["sniper"] else SNIPER_HARD, ())
-    r8_gate(tag, "at the proving gear", snipers, mission, known, expect)
+    r8_gate(tag, "at the proving gear", snipers, mission, expect)
     # L3-26: the same with only the bow upgraded (sword T1, bow SNIPER_BOW_TIER), against the
-    # mission player at that gear, on Normal and on Hard; the same known limit on Normal.
+    # mission player at that gear, on Normal and on Hard.
     up = row.get("bowUp")
     if up is not None:
-        r8_gate(tag, f"at gear {gear_text(up['gear'])} (only the bow upgraded, L3-26)", up["sniper"], up["runs"], known,
-                expect)
+        r8_gate(tag, f"at gear {gear_text(up['gear'])} (only the bow upgraded, L3-26)", up["sniper"], up["runs"], expect)
 
 
-def r8_gate(tag, where, snipers, mission, known, expect):
-    """R8's gate on one table: every spot outside `known` earns less cash and less Timber a minute
-    than the mission player on the same seeds, and every hit lands; a known spot is reported and
-    gated on its hits landing only."""
+def r8_gate(tag, where, snipers, mission, expect):
+    """R8's gate on one table: every spot earns less cash and less Timber a minute than the mission
+    player on the same seeds, and every hit lands (L4 W1: no spot is exempt)."""
     for spot, runs in (snipers or {}).items():
         told = []
         good = landed = True
@@ -10884,13 +10875,6 @@ def r8_gate(tag, where, snipers, mission, known, expect):
             landed = landed and r["evaded"] == 0
             told.append(f"seed {seed} {cash:,.0f} / {timber:.1f} against {mine_cash:,.0f} / {mine_timber:.1f}"
                         + ("" if r["evaded"] == 0 else f", {r['evaded']} hit(s) of his blocked"))
-        if spot in known:
-            ratio = max(sniper_rate(r)[0] / max(pay_rate(m)[0], 1) for r, m in zip(runs, mission))
-            owners = f", owners of {SNIPER_SPOT_NEEDS[spot]} only (L2-5)" if spot in SNIPER_SPOT_NEEDS else ""
-            print(f"  note  {tag} {where}: the sniper from {spot}{owners}, known limit, L4 (Ben's ruling; "
-                  f"reported, not gated; up to x{ratio:.2f} the mission's cash a minute): " + "; ".join(told))
-            expect(landed, f"{tag} {where}: the sniper from {spot} (known limit, L4): every hit lands")
-            continue
         expect(good and landed, f"{tag} {where}: the sniper from {spot} earns less cash and less Timber a minute than "
                f"the mission player on the same seeds (R8; his minutes to his last landed hit, at least his arrival "
                f"+ {SNIPER_IDLE_SECONDS:g} s), every hit lands: " + "; ".join(told))
