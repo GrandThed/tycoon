@@ -1,0 +1,10 @@
+{
+  "id": "Flamethrower",
+  "era": "Weapons",
+  "scale": 1.0,
+  "footprint": [1, 4.5],
+  "note": "weapon-kit is authored 1 unit = 1 stud (tools/assets/weapon_kit_forest.py); one piece at the origin, unturned: grip at the origin, point or muzzle along -Z, top +Y. The frame points are in the GLB's Flamethrower.frame.json",
+  "pieces": [
+    {"kit": "weapon-kit", "model": "Flamethrower", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

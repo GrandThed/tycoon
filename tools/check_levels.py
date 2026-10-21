@@ -33,6 +33,13 @@ into has a landing and `player.rescue.outside` covers a server frame of the dash
 Smash's fall in (g) (d-m3); a frozen sheet as deep as a floor (d-m6); a dash found through a MECHANICS
 alias (s1); and the bend rule, the cave's closed half and the walled camp on the frozen layout (s2).
 
+L3 Wave 1, "tiers per weapon" (docs/prompts/l3-w1-contract.md, L3-25 and L3-28): the families a player
+can own without a lever are the starters, every family a secret pays behind a key and every firstClear
+family (ownable_families; the bend's known limit holds while none of them carries); R8's reach is the
+longest range of their ranged variants (sniper_reach); every non-starter family has a shelf hint (a
+`found` entry or the secret that pays it), and a firstClear family's `found` entry names its level's
+node; Validate's firstClear lines; the gear presets T1 / T3 / T5 and the three L3 lever attributes.
+
 A level is built in Studio from `src/shared/Layouts/Levels/<Name>.json`, and nobody sees it there
 before the owner does. This tool proves the layout on paper instead: it walks the level's `route`
 over the layout's boxes the way a player with one jump would, checks every gate of the constraint
@@ -213,7 +220,7 @@ SIGHT_LOOKS = ("wall", "bramble")
 SIGHT_RASTER = 1.0  # PlanRooms' grid
 # The `levels` numbers this tool itself reads to measure a layout.
 READ_RULES = ("fenceThickness", "floorThickness", "triggerHeight", "crowdCeiling", "startSpacing", "maxParts")
-GEAR_PRESETS = ((2, 2), (4, 4), (6, 6))  # L1b-W2-20: the Studio gear presets (melee, ranged)
+GEAR_PRESETS = ((1, 1), (3, 3), (5, 5))  # L1b-W2-20, L3-15: the Studio gear presets T1 / T3 / T5 (melee, ranged)
 # L1b Wave 1 (docs/INTERFACES.md "L1b contracts" -> "Config", the gates table).
 POST_SPARE = 1.0  # a post stands its group's widest radius and this much inside its floor and off cover
 FIRE_SPARE = 0.5  # neighbours round a fire stand two widest radii and this much apart
@@ -260,7 +267,8 @@ WALLED_NEAR = 200.0  # the walled gate's walls lie within this of the camp's flo
 AIR_JUMP = "doubleJump"  # Unlocks.AIR_JUMP: the ability id the air jump keys on (structural)
 SECRET_RULES = ("secretReach", "secretBelow", "secretAbove")  # Combat.json levels: SecretFlow.Triggered (L2-11)
 DEBUG_UNLOCK_KEYS = ("grantAbilityAttribute", "removeAbilityAttribute", "resetSecretsAttribute",  # L2-19
-                     "grantFamilyAttribute", "removeFamilyAttribute")  # L2-38
+                     "grantFamilyAttribute", "removeFamilyAttribute",  # L2-38
+                     "setTierAttribute", "grantStarAttribute", "resetArmoryAttribute")  # L3-28
 ABILITY_ID_MAX = sr.unlocks_cap("MAX_ID_LENGTH")  # Unlocks.MAX_ID_LENGTH, in bytes: an id the buy remote carries (L2-7)
 SECRET_VALOR_MIN = 2  # L2-13: a paying chest gives at least this much Valor, and less than its key's price
 BODY_RADIUS = 1.0  # the root's half width on the flat (a body stands this far over an edge)
@@ -2040,7 +2048,8 @@ def check_level_file(file, level, layouts, ctx, expect):
     kinds = ctx["kinds"]
     # Ruling 6 of the fix round, the reading StageFlow.Validate and the simulator share
     # (sim_range.level_problems): zero and empty mean the same on both sides.
-    problems = sr.level_problems(level, layout, ctx["levels"], kinds, ctx["ranks"], ctx["crowdMaxAlive"])
+    problems = sr.level_problems(level, layout, ctx["levels"], kinds, ctx["ranks"], ctx["crowdMaxAlive"],
+                                 ctx.get("weapons"), set(ctx.get("loadout") or []))
     expect(not problems, f"{name}: maxAlive is an integer of at least 1 wherever it appears, burst is at least 1, "
            f"every camp's targetWaveSeconds is over 0 and its breatherSeconds is not under 0, no camp is without a "
            f"wave, Combat.json has every `levels` number a run reads, and StageFlow.Validate's L1b lines hold"
@@ -2643,7 +2652,7 @@ def sniper_spots(level, layout, ctx, solids):
     straight sniper course stands) and the nearest point of all (`near`, seen or not: where a cone
     no wall stops is cast from, the fix round's d-m4). tools/sim_range.py rates a course from every spot this returns."""
     rules = ctx["camps"]
-    reach = ctx["longbow"]
+    reach = ctx["sniperReach"][0]
     rooms = tuple(f"Camp_{c['id']}_" for c in layout["camps"] if c.get("locks") is True)
     camps = {c["id"]: c for c in layout["camps"]}
     if "move" not in ctx or "abilityHeight" not in ctx:
@@ -2923,7 +2932,8 @@ def check_wave4(name, level, layout, ctx, expect, solids):
     found = sorted(sp["id"] for sp in spots)
     expect(pinned is None or found == sorted(pinned),
            f"{name}: the unreachable sniper spots (R8: a standable top no rusher reaches, CampBrain.Melee false, within "
-           f"the Longbow's {ctx['longbow']:g} of a region; each rated by sim_range's straight course) are the pinned "
+           f"the sniper reach {ctx['sniperReach'][0]:g} of a region, {ctx['sniperReach'][1]}'s, the longest of the "
+           f"ownable ranged families (L3-25); each rated by sim_range's straight course) are the pinned "
            f"list: {', '.join(found) or 'none'}"
            + (f" (pinned: {', '.join(sorted(pinned))})" if pinned is not None and found != sorted(pinned) else ""))
     # N's approaches (L1b-W4-31): only on open camps; standable at their y; farther than sight
@@ -4718,9 +4728,10 @@ def check_route_skips(name, layout, ctx, expect, solids, tall, ice=False):
     jump, a double jump, a dash and the walk-off grace carry (falling the drop between them), or it
     saves at most SKIP_SAVE studs of the route (measured from the route's nearest point on each
     block). The fix round's d-m2: the same with the longest flat travel of an ability that carries
-    its caster (carrying_families) on top is a KNOWN LIMIT until L3 (reported; no camp is skipped)
-    while no such family can be owned without a lever (ctx ownedFamilies: the loadout's starters and
-    every family a level's secret pays); once one can, it is red. `ice` (check_ice's run on the
+    its caster (carrying_families) on top is a KNOWN LIMIT (reported; no camp is skipped)
+    while no such family can be owned without a lever (ctx ownedFamilies, ownable_families: the
+    starters, every family a level's secret pays and every firstClear family, L3-25); once one can,
+    it is red. `ice` (check_ice's run on the
     frozen layout): the frozen sheets are walked ground (route_blocks), and no gate-16 rows."""
     move = ctx["move"]
     blocks = route_blocks(layout, solids, SAMPLE * 4, ice)
@@ -4808,12 +4819,13 @@ def check_route_skips(name, layout, ctx, expect, solids, tall, ice=False):
     owned = sorted(set(owners) & set(carriers))
     told = ", ".join(f"{family}'s {ability} {studs:g}" for family, (ability, studs) in sorted(carriers.items())) or "none"
     if lifted and not owned:
-        verdict = (f"KNOWN LIMIT until L3 (the fix round's d-m2): {len(lifted)} hop(s) with an ability's travel cut a bend, "
+        verdict = (f"KNOWN LIMIT until a family that carries can be owned (the fix round's d-m2; L3-25: the Castle's Greataxe "
+                   f"at the earliest): {len(lifted)} hop(s) with an ability's travel cut a bend, "
                    f"no camp skipped, and no family that carries can be owned without a lever (owned: "
                    f"{', '.join(owners) or 'none'}): {'; '.join(lifted[:2])}")
         if not ice:
             ctx["gate16"].setdefault(name, {}).setdefault("lifts", []).extend(
-                f"bend (known limit until L3, d-m2): {line}" for line in lifted)
+                f"bend (known limit while no family that carries can be owned, d-m2): {line}" for line in lifted)
     elif lifted:
         verdict = f"{', '.join(owned)} can be owned without a lever: {'; '.join(lifted[:3])}"
     else:
@@ -4897,6 +4909,35 @@ def check_map(expeditions, level_files, layouts, expect, ctx=None):
     named = ", ".join(f"{f} on {e.get('node')}: {e.get('text')}" for f, e in sorted(found_families(expeditions).items()))
     expect(not bad, "map: every family Expeditions.json `found` names exists, is not a starter, is paid by no secret, "
            "names a map node and has a text of 1-40 characters (L2-51): " + ("; ".join(bad) if bad else named or "none"))
+    # L3-25 (the lead's ruling 2): every family that is not a starter has a shelf hint, a `found`
+    # entry or the secret that pays it (the Armory screen drops a family with neither).
+    hinted = set(found_families(expeditions)) | {f for f in paid if f}
+    bare = sorted(f for f in weapons if f not in starters and f not in hinted)
+    expect(not bare, f"map: every weapons family that is not a starter has a shelf hint, a `found` entry or a secret "
+           f"that pays it (L3-25): " + (f"none for {', '.join(bare)}" if bare else
+                                        f"{len(weapons) - len(starters)} families, {len(found_families(expeditions))} "
+                                        f"found entries, paid by a secret: {', '.join(sorted(f for f in paid if f)) or 'none'}"))
+    # ... and a family a difficulty's firstClear gives, when it has a `found` entry, is found on the
+    # map node of that level (its hint names where it really comes from).
+    nodes_of = {}
+    for node in nodes:
+        if node.get("level"):
+            nodes_of.setdefault(node["level"], set()).add(node["id"])
+    astray = []
+    told = []
+    for file in level_files:
+        for difficulty, scales in sorted((file.get("difficulties") or {}).items()):
+            first = scales.get("firstClear") if isinstance(scales, dict) else None
+            family = first.get("family") if isinstance(first, dict) else None
+            entry = found_families(expeditions).get(family) if isinstance(family, str) else None
+            if entry is None:
+                continue
+            told.append(f"{family} ({file['id']} {difficulty}) on {entry.get('node')}")
+            if entry.get("node") not in nodes_of.get(file["id"], set()):
+                astray.append(f"{family} is given by {file['id']}'s {difficulty} first clear but found on "
+                              f"{entry.get('node')}, not on {', '.join(sorted(nodes_of.get(file['id'], set()))) or 'no node'}")
+    expect(not astray, "map: every firstClear family with a `found` entry is found on its level's map node (L3-25): "
+           + ("; ".join(astray) if astray else ", ".join(told) or "none"))
     sign = expeditions.get("sign") or {}
     expect(len(sign.get("textColor") or []) == 3 and (sign.get("pixelsPerStud") or 0) > 0,
            "map: the signs have a text colour and a pixel density")
@@ -5038,20 +5079,53 @@ def load_all():
            "missions": {m["id"]: m for m in (sr.load_config(path) for path in sorted(sr.MISSIONS_DIR.glob("*.json")))},
            "runCap": combat["director"]["runCapSeconds"], "camps": combat.get("camps"),
            "ranks": sr.difficulty_ranks(expeditions), "snapshotHz": proving["crowd"]["snapshotHz"],
-           "gate16": {}, "chains": {}, "longbow": longbow_range(proving),
+           "gate16": {}, "chains": {}, "sniperReach": sniper_reach(proving["weapons"], (proving.get("loadout") or {}).values()),
            "abilityHeight": ability_height(proving), "camera": combat.get("camera"), "theme": theme_numbers(),
            "renderer": renderer_numbers(), "abilityIds": ability_ids(expeditions), "lifts": lifting_abilities(proving),
            "fieldedLifts": fielded_lifts(proving), "loadout": sorted((proving.get("loadout") or {}).values()),
            "dashes": dashing_abilities(proving), "rescue": combat["player"].get("rescue"),
            "weapons": proving["weapons"],
-           "originWallChord": (proving.get("shooting") or {}).get("originWallChord")}
+           "originWallChord": (proving.get("shooting") or {}).get("originWallChord"),
+           "armory": sr.load_config(sr.ARMORY_PATH)}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 
-def longbow_range(proving):
-    """The range of the default ranged family's default variant (the Longbow, R8's sniper)."""
-    weapon = proving["weapons"][proving["loadout"]["ranged"]]
-    return weapon["variants"][weapon["default"]]["range"]
+def sniper_reach(weapons, owned):
+    """R8's reach (L3-25): the longest range of any variant of an ownable ranged family (`owned`:
+    ownable_families). (studs, "family variant"); (0, "none") when no ranged family can be owned."""
+    best = (0.0, "none")
+    for family in sorted(set(owned)):
+        weapon = weapons.get(family) or {}
+        if weapon.get("slot") != "ranged":
+            continue
+        for key, variant in sorted((weapon.get("variants") or {}).items()):
+            if is_number(variant.get("range")) and variant["range"] > best[0]:
+                best = (float(variant["range"]), f"{family} {key}")
+    return best
+
+
+def ownable_families(level_files, layouts, expeditions, weapons, loadout):
+    """L3-25: the families a player can own without a Studio lever: the starters (`loadout`), every
+    family a level's secret pays behind a key he can come to hold (key_chain: a sold ability, or an
+    element whose carrier is paid or found on a map node; the fix round's d-m2), and every family a
+    difficulty's firstClear gives. An Expeditions.json `found` entry is a shelf hint, not a source:
+    the Frost Hammer, found in the Castle, stays lever-only until the Castle exists."""
+    owned = set(loadout)
+    for file in level_files:
+        layout = layouts.get(file.get("layout"))
+        if layout is not None and layout.get("secrets") is not None:
+            keys, _steps = key_chain(file, layout, expeditions, weapons)
+            needs = {s.get("id"): s.get("needs") for s in layout["secrets"]}
+            for sid, entry in (file.get("secrets") or {}).items():
+                family = entry.get("family") if isinstance(entry, dict) else None
+                if family and needs.get(sid) in keys:
+                    owned.add(family)
+        for scales in (file.get("difficulties") or {}).values():
+            first = scales.get("firstClear") if isinstance(scales, dict) else None
+            family = first.get("family") if isinstance(first, dict) else None
+            if isinstance(family, str) and family:
+                owned.add(family)
+    return sorted(owned)
 
 
 def stray_level_files():
@@ -5155,7 +5229,7 @@ def check_rules(combat, level_files, ctx, expect):
     taken = [v for k, v in debug.items() if k.endswith("Attribute") and k not in DEBUG_UNLOCK_KEYS]
     expect(all(isinstance(v, str) and v for v in names) and len(set(names)) == len(names)
            and not set(names) & set(taken),
-           "Combat.json debug (L2-19, L2-38): " + ", ".join(f"{k} {debug.get(k)!r}" for k in DEBUG_UNLOCK_KEYS)
+           "Combat.json debug (L2-19, L2-38, L3-28): " + ", ".join(f"{k} {debug.get(k)!r}" for k in DEBUG_UNLOCK_KEYS)
            + " are Workspace attribute names of their own")
     presets = [(p.get("melee"), p.get("ranged")) for p in debug.get("gearPresets") or []]
     proving = debug.get("provingGear") or {}
@@ -5166,6 +5240,21 @@ def check_rules(combat, level_files, ctx, expect):
            f"Combat.json debug.gearPresets are {', '.join(f'{m}/{r}' for m, r in GEAR_PRESETS)} (the G key), the first "
            f"is debug.provingGear, and every difficulty's recommendedTier ({', '.join(map(str, tiers))}) is a preset's "
            f"melee tier: " + ", ".join(f"{m}/{r}" for m, r in presets))
+
+
+def check_trophy(armory, expeditions, expect):
+    """R1 (the L3 W1 fix round, review 1-m5): a band's top tier opens with that level's Hard star or a
+    harder one (Armory.StarHeld). Armory.Problems holds the shape (a starDifficulty, starAlso a list
+    of names); this holds the names to Expeditions.json `difficulties`: starDifficulty is one of them,
+    and starAlso lists exactly the difficulties after it, in their order, so no easier star opens a
+    band top and none harder is left out."""
+    ladder = (armory or {}).get("ladder") or {}
+    order = list(expeditions.get("difficulties") or [])
+    star, also = ladder.get("starDifficulty"), ladder.get("starAlso")
+    harder = order[order.index(star) + 1:] if star in order else None
+    expect(harder is not None and also == harder,
+           f"Armory.json ladder (R1): starDifficulty {star!r} is a difficulty of Expeditions.json and starAlso lists "
+           f"every harder one, in order ({harder}): {also!r}")
 
 
 def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
@@ -5185,6 +5274,7 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
     check_map(expeditions, level_files, layouts, expect, ctx)
     check_abilities(expeditions, level_files, expect)
     check_rules(combat, level_files, ctx, expect)
+    check_trophy(ctx.get("armory"), expeditions, expect)
     # The layouts are measured with these: without one of them nothing below can be said.
     lost = [key for key in READ_RULES if not is_number(ctx["levels"].get(key))]
     if lost:
@@ -5196,16 +5286,18 @@ def run_gates(combat, expeditions, layouts, level_files, ctx, expect):
            "Config/Levels: every file is named <n>_<Name>.json, the only name Catalog reads, and no two share an id"
            + (f" (Catalog would not read {', '.join(stray)})" if stray else f" ({len(ids)} files: {', '.join(ids)})"))
     # The level files first: they say which kinds stand in which camp.
-    paid = set()
+    # The families a player can own without a Studio lever (L3-25): the starters, every family a
+    # secret pays behind a key he can come to hold (the fix round's d-m2) and every firstClear family;
+    # R8's reach is the longest range among their ranged variants. Before the level files: their
+    # region rules (check_wave4) list the sniper spots.
+    ctx["ownedFamilies"] = ownable_families(level_files, layouts, expeditions, ctx.get("weapons") or {},
+                                            ctx.get("loadout") or [])
+    ctx["sniperReach"] = sniper_reach(ctx.get("weapons") or {}, ctx["ownedFamilies"])
     for file in level_files:
         level = sr.resolve_level(file, ctx["missions"].get(file.get("mission")), ctx["runCap"])
         check_level_file(file, level, layouts, ctx, expect)
         if file.get("layout") in layouts:
             check_secret_rewards(file, layouts[file["layout"]], expeditions, expect, ctx.get("weapons"), ctx["ranks"])
-            paid |= set(key_chain(file, layouts[file["layout"]], expeditions, ctx.get("weapons") or {})[1])
-    # The families a player can own without a Studio lever: the starters and every family a secret
-    # pays behind a key he can come to hold (the fix round's d-m2).
-    ctx["ownedFamilies"] = sorted(set(ctx.get("loadout") or []) | paid)
     bounds_of = {name: layout_bounds(layout, ctx["levels"]["fenceThickness"], ctx["levels"]["floorThickness"])
                  for name, layout in layouts.items()}
     for name, layout in layouts.items():

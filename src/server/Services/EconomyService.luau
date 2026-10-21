@@ -13,6 +13,7 @@ local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local ProfileCopy = require(sharedFolder:WaitForChild("ProfileCopy"))
 local AnalyticsService = require(script.Parent:WaitForChild("AnalyticsService"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
@@ -88,42 +89,21 @@ local function getDirtyRecord(player: Player): DirtyRecord
 end
 
 -- Gear Power is server-computed so the HUD never re-derives it: 0 without Armory.json, which is
--- also how the client knows to hide the readout.
+-- also how the client knows to hide the readout. L3-14, R7: the saved pair's Power by the one pure
+-- rule the dungeon place's Snapshot reads too (Armory.SavedPower); the frozen slot `gear` would
+-- never move. Without ProvingGrounds.json no family is known, so both slots read T1.
 local function computeGearPower(state: Types.PlayerState): number
 	local armoryConfig = Catalog.GetArmoryConfig()
 	if armoryConfig == nil then
 		return 0
 	end
-	return Armory.GearPower(armoryConfig, state.combat.gear, state.combat.ascension)
-end
-
--- Deltas carry a deep copy by contract: the client merges the table straight into its model, so
--- an aliased profile would let the UI mutate server state.
-local function copyCombatProfile(combat: Types.CombatProfile): Types.CombatProfile
-	local missions: { [string]: Types.MissionRecord } = {}
-	for missionId, record in combat.missions do
-		missions[missionId] = {
-			bestWave = record.bestWave,
-			bossClears = record.bossClears,
-			overdriveBest = record.overdriveBest,
-		}
-	end
-	return {
-		materials = table.clone(combat.materials),
-		valor = combat.valor,
-		gear = { melee = combat.gear.melee, ranged = combat.gear.ranged },
-		ascension = { melee = combat.ascension.melee, ranged = combat.ascension.ranged },
-		missions = missions,
-		highestEra = combat.highestEra,
-		expeditionSince = combat.expeditionSince,
-		expeditionSeconds = combat.expeditionSeconds,
-		stats = {
-			kills = combat.stats.kills,
-			wavesCleared = combat.stats.wavesCleared,
-			expeditions = combat.stats.expeditions,
-			cashFromCombat = combat.stats.cashFromCombat,
-		},
-	}
+	local provingConfig = Catalog.GetProvingGroundsConfig()
+	return Armory.SavedPower(
+		armoryConfig,
+		state.combat,
+		if provingConfig ~= nil then provingConfig.weapons else nil,
+		if provingConfig ~= nil then provingConfig.loadout else { melee = "", ranged = "" }
+	)
 end
 
 -- Passes and Premium are account properties, not session state, so they multiply the live,
@@ -315,9 +295,9 @@ local function flushDeltas(): ()
 				{ spent = state.legacyShop.spent, perks = table.clone(state.legacyShop.perks) }
 		end
 		if record.combat then
-			-- Whole profile by contract (C0), deep-copied, with the Power readout alongside it
-			-- so the two can never disagree on the client.
-			delta.combat = copyCombatProfile(state.combat)
+			-- Whole profile by contract (C0), deep-copied with every field (R7), and the Power
+			-- readout alongside it so the two can never disagree on the client.
+			delta.combat = ProfileCopy.Combat(state.combat)
 			delta.gearPower = computeGearPower(state)
 		end
 		record.cash = false

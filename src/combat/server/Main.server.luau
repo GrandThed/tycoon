@@ -96,6 +96,10 @@ local function sendSnapshot(player: Player): ()
 		return
 	end
 	local armoryConfig = Catalog.GetArmoryConfig()
+	-- L3-6, R7: Power is the saved loadout's, by the one pure rule the hub's readout reads too
+	-- (Armory.SavedPower), so a player's Power is the same number in both places. The frozen slot
+	-- `gear` would never move; without ProvingGrounds.json no family is known and both slots read T1.
+	local provingConfig = Catalog.GetProvingGroundsConfig()
 	local snapshot: Types.Snapshot = {
 		kind = "snapshot",
 		plotIndex = 0,
@@ -105,7 +109,12 @@ local function sendSnapshot(player: Player): ()
 		incomePerSecond = 0,
 		persistedIncomePerSecond = state.incomeAtSave,
 		gearPower = if armoryConfig ~= nil
-			then Armory.GearPower(armoryConfig, state.combat.gear, state.combat.ascension)
+			then Armory.SavedPower(
+				armoryConfig,
+				state.combat,
+				if provingConfig ~= nil then provingConfig.weapons else nil,
+				if provingConfig ~= nil then provingConfig.loadout else { melee = "", ranged = "" }
+			)
 			else 0,
 		welcomeBack = nil,
 	}
@@ -439,6 +448,15 @@ RemoteService.SetHandler(
 		UnlockService.OnSetFamily(player, slot, family, variant)
 	end
 )
+
+-- L3-13: raising a family a tier in the lobby Armory; UnlockService validates (owned, window,
+-- the band top's star, Timber) and answers with an ActionResult.
+RemoteService.SetHandler("RequestUpgradeWeapon", function(player: Player, family: string)
+	if RangeService.IsActive() then
+		return
+	end
+	UnlockService.OnUpgradeWeapon(player, family)
+end)
 
 -- Studio levers, the remote half (the attribute half is DebugService's own 1 Hz poll). The
 -- handler itself refuses everything outside Studio.

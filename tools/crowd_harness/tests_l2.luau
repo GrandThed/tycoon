@@ -63,18 +63,10 @@ function L2.v6(): any
 	}
 end
 
--- DataService.runMigrations' loop, as it stands there: every step from the profile's version to
--- SCHEMA_VERSION, the version bumped after each.
+-- The migration runner is ProfileSchema.Run itself, the one DataService calls on every load (the
+-- L3 W1 fix round's R5): the harness keeps no copy of the loop, so every case below is about it.
 function L2.migrate(state: any): ()
-	local Schema = L2.Schema
-	while state.version < Schema.SCHEMA_VERSION do
-		local step = Schema.Migrations[state.version]
-		if step == nil then
-			return
-		end
-		step(state)
-		state.version += 1
-	end
+	L2.Schema.Run(state)
 end
 
 -- ProfileStore's Reconcile (ProfileStore.luau ReconcileTable): fills each missing string key
@@ -96,11 +88,11 @@ function L2.empty(value: any): boolean
 end
 
 function L2.schemaTests(): ()
-	print(" ProfileSchema v7: the dungeon place's unlocks, add-only (L2-1)")
+	print(" ProfileSchema v7: the dungeon place's unlocks, add-only (L2-1); a v6 profile now runs on to v8 (L3-7)")
 	local Schema = L2.Schema
 	local template = Schema.PROFILE_TEMPLATE
 	local combat = template.combat
-	check(Schema.SCHEMA_VERSION == 7 and template.version == 7, `the schema is v7 and the template says so ({Schema.SCHEMA_VERSION}, {template.version})`)
+	check(Schema.SCHEMA_VERSION == 8 and template.version == 8, `the schema is v8 and the template says so ({Schema.SCHEMA_VERSION}, {template.version})`)
 	check(L2.empty(combat.abilities) and L2.empty(combat.secrets) and L2.empty(combat.families) and L2.empty(combat.shortcuts), "a fresh profile's combat holds the four maps, empty")
 	local missing = {}
 	for version = 1, Schema.SCHEMA_VERSION - 1 do
@@ -111,15 +103,17 @@ function L2.schemaTests(): ()
 	check(#missing == 0, `every step from v1 to v{Schema.SCHEMA_VERSION} exists (missing: {table.concat(missing, ", ")})`)
 
 	-- A v6 profile that nothing reconciled: the step adds the four maps, fresh, and touches
-	-- nothing else.
+	-- nothing else (the v8 step after it only refunds the slot tiers, L3-8).
 	local state = L2.v6()
 	L2.migrate(state)
 	local mine = state.combat
-	check(state.version == 7, `a v6 profile reaches v7 ({state.version})`)
+	check(state.version == 8, `a v6 profile reaches v8 through both steps ({state.version})`)
 	check(L2.empty(mine.abilities) and L2.empty(mine.secrets) and L2.empty(mine.families) and L2.empty(mine.shortcuts), "it gains the four maps, empty")
 	check(mine.abilities ~= combat.abilities and mine.secrets ~= combat.secrets and mine.families ~= combat.families and mine.shortcuts ~= combat.shortcuts, "none of them is the template's own table (no aliasing)")
 	check(mine.abilities ~= mine.families and mine.secrets ~= mine.shortcuts, "and each is a table of its own")
-	check(mine.valor == 7 and mine.materials.Timber == 12 and mine.gear.melee == 2 and mine.highestEra == 2 and mine.stats.kills == 4, "what the profile already held is untouched")
+	-- 70 + 10 Timber: the frozen prices of slot tiers 2 / 1 (L3-8), pinned, never read back from the
+	-- function under test (the fix round's R6, 1-m4).
+	check(mine.valor == 7 and mine.materials.Timber == 12 + 80 and mine.gear.melee == 2 and mine.highestEra == 2 and mine.stats.kills == 4, `what the profile already held is untouched (Timber gains only the v8 step's refund of its 2 / 1 slot tiers, 80: {mine.materials.Timber})`)
 	mine.abilities.doubleJump = true
 	check(combat.abilities.doubleJump == nil, "writing the migrated map leaves the template empty")
 	local other = L2.v6()
@@ -135,7 +129,7 @@ function L2.schemaTests(): ()
 	filled.doubleJump = true
 	reconciled.combat.secrets.forestRoad = { lookout = true }
 	L2.migrate(reconciled)
-	check(reconciled.version == 7 and reconciled.combat.abilities == filled and filled.doubleJump == true and reconciled.combat.secrets.forestRoad.lookout == true, "a reconciled profile keeps the tables it has, and what is in them")
+	check(reconciled.version == 8 and reconciled.combat.abilities == filled and filled.doubleJump == true and reconciled.combat.secrets.forestRoad.lookout == true, "a reconciled profile keeps the tables it has, and what is in them")
 
 	-- Twice: the step is safe to run again.
 	local twice = L2.v6()
@@ -156,7 +150,7 @@ function L2.schemaTests(): ()
 	ahead.combat.secrets.forestRoad = { lookout = true }
 	local oldTemplate = L2.v6()
 	L2.reconcile(ahead, oldTemplate)
-	check(ahead.version == 7 and ahead.combat.abilities.doubleJump == true and ahead.combat.secrets.forestRoad.lookout == true, "a v6 template's Reconcile keeps every v7 field (it only fills)")
+	check(ahead.version == 8 and ahead.combat.abilities.doubleJump == true and ahead.combat.secrets.forestRoad.lookout == true, "a v6 template's Reconcile keeps every v7 field (it only fills)")
 end
 L1.group("l2 schemaTests", L2.schemaTests)
 

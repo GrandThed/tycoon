@@ -6,7 +6,9 @@
 -- and two things their review asked for:
 --   7  a claimed origin's slack reads the server root's own displacement, not its velocity;
 --   8  every hit scales by the Armory tier at the one strike() choke point; heavy, plate and
---      armour are judged on the unscaled tier-1 amount (ruling 9). The scale is 1 in the range;
+--      armour are judged on the unscaled tier-1 amount (ruling 9). The scale is 1 in the range.
+--      Since L3 (docs/prompts/l3-w1-contract.md, L3-6) the tier is the striking family's own and
+--      the bar reads the held pair's; a mission takes up the saved loadout at admit (L3-10);
 --   21 in missions an intent is refused unless the act gate (WaveService) lets the player act;
 --   -  a pattern seed (pellets, fans, scatters) is a fresh server draw per shot or cast, no
 --      longer derived from the client's seq;
@@ -37,11 +39,11 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
-local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local GroundRule = require(sharedFolder:WaitForChild("GroundRule"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local SwingGate = require(sharedFolder:WaitForChild("SwingGate"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
@@ -84,7 +86,8 @@ local CONST = {
 	-- Ruling 7: root positions kept per player, one per Heartbeat (2 s at 60 Hz). A slack window
 	-- tuned longer than this reads the oldest sample, which only makes the slack smaller.
 	HISTORY_CAPACITY = 120,
-	-- GearOf's answer in the range, and without a loaded profile: the tier-1 numbers.
+	-- GearOf's answer in the range, and without Armory.json: tier 1 (L3-1: in a mission that is
+	-- the ladder's first step, the 2/2 every level was tuned at; the range scales by 1).
 	RANGE_GEAR = table.freeze({ melee = 1, ranged = 1 }),
 	NO_ASCENSION = table.freeze({ melee = 0, ranged = 0 }),
 }
@@ -598,41 +601,50 @@ local function mayAct(player: Player): boolean
 	return gate == nil or gate(player)
 end
 
--- Ruling 12: the gear the damage scale (and the mission's health) is read at. A fresh copy, so
--- no caller can write the profile through it.
+-- Ruling 12, L3-6: the tiers the bar is read at, one per slot: each held family's
+-- Armory.StrikeTier, the call damageScale makes, so the bar and the hits always name one tier
+-- (R3). The held families are the shooter's loadout; before admission, the saved one as AddPlayer
+-- will read it (L3-10). The Studio session override's tier is held inside each family's window
+-- (2-s1: G's T1 fields the Flamethrower at its T2, as the Armory screen shows it), and its
+-- Ascension comes before the profile's. A proving build reads the profile like any other (L3-11:
+-- a baked gear would hide every tier Ben buys there). Tier 1 and no Ascension in the range and
+-- without Armory.json; without a loaded profile the starters, at tier 1. Fresh tables, so no
+-- caller can write the profile through them.
 local function gearOf(player: Player): (SlotTiers, SlotTiers)
-	if state.mode == "range" then
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if state.mode == "range" or armoryConfig == nil then
 		return table.clone(CONST.RANGE_GEAR), table.clone(CONST.NO_ASCENSION)
-	end
-	local override = state.gearOverride[player]
-	if override ~= nil then
-		return table.clone(override.gear), table.clone(override.ascension)
-	end
-	local combatConfig = Catalog.GetCombatConfig()
-	local proving = if combatConfig ~= nil and CombatMode.IsProving()
-		then combatConfig.debug.provingGear
-		else nil
-	if proving ~= nil then
-		local ascension = proving.ascension
-		return { melee = proving.melee, ranged = proving.ranged },
-			if ascension ~= nil
-				then { melee = ascension.melee, ranged = ascension.ranged }
-				else table.clone(CONST.NO_ASCENSION)
 	end
 	local profile = DataService.GetState(player)
-	if profile == nil then
-		return table.clone(CONST.RANGE_GEAR), table.clone(CONST.NO_ASCENSION)
-	end
-	local gear = profile.combat.gear
-	local ascension = profile.combat.ascension
-	return { melee = gear.melee, ranged = gear.ranged }, {
-		melee = ascension.melee,
-		ranged = ascension.ranged,
-	}
+	local combat = if profile ~= nil then profile.combat else nil
+	local shooter = state.shooters[player]
+	local config = Tuning.Get()
+	local held = if shooter ~= nil
+		then shooter.loadout
+		else Unlocks.LoadoutOf(combat, config.weapons, {
+			melee = startingFamily(config, "melee"),
+			ranged = startingFamily(config, "ranged"),
+		})
+	local override = state.gearOverride[player]
+	local gear = if override ~= nil then override.gear else nil
+	local meleeOverride = if gear ~= nil then gear.melee else nil
+	local rangedOverride = if gear ~= nil then gear.ranged else nil
+	local ascension = if override ~= nil
+		then override.ascension
+		elseif combat ~= nil then combat.ascension
+		else CONST.NO_ASCENSION
+	return {
+		melee = Armory.StrikeTier(armoryConfig, combat, held.melee, meleeOverride),
+		ranged = Armory.StrikeTier(armoryConfig, combat, held.ranged, rangedOverride),
+	}, { melee = ascension.melee, ranged = ascension.ranged }
 end
 
--- Ruling 8: one number per resolved attack. Always 1 in the range, whose numbers are tier 1.
-local function damageScale(player: Player, slot: string, ability: boolean): number
+-- Ruling 8, L3-6: one number per resolved attack, at the STRIKING family's tier and that slot's
+-- Ascension. The tier is Armory.StrikeTier (R3): the Studio override's tier for the slot the family
+-- fills, held inside the family's window (2-s1), else Armory.TierOf. An unknown family has no
+-- slot, so no override tier and no Ascension. Always 1 in the range, whose numbers are the tier-1
+-- ones; without a loaded profile a family's start (tier 1 for a starter).
+local function damageScale(player: Player, family: string, ability: boolean): number
 	if state.mode == "range" then
 		return 1
 	end
@@ -640,19 +652,29 @@ local function damageScale(player: Player, slot: string, ability: boolean): numb
 	if armoryConfig == nil then
 		return 1
 	end
-	local gear, ascension = gearOf(player)
-	local tier = if slot == "melee" then gear.melee elseif slot == "ranged" then gear.ranged else 0
+	local def = familyDef(Tuning.Get(), family)
+	local slot = if def ~= nil then def.slot else ""
+	local profile = DataService.GetState(player)
+	local combat = if profile ~= nil then profile.combat else nil
+	local override = state.gearOverride[player]
+	local overrideTier: number? = nil
+	if override ~= nil then
+		local gear = override.gear
+		overrideTier = if slot == "melee"
+			then gear.melee
+			elseif slot == "ranged" then gear.ranged
+			else nil
+	end
+	local ascension = if override ~= nil
+		then override.ascension
+		elseif combat ~= nil then combat.ascension
+		else CONST.NO_ASCENSION
 	local level = if slot == "melee"
 		then ascension.melee
 		elseif slot == "ranged" then ascension.ranged
 		else 0
-	return Armory.DamageScale(armoryConfig, slot, tier, level, ability)
-end
-
--- The Armory slot a family fills ("" for an unknown family, which Armory scales by 1).
-local function slotOfFamily(config: Types.ProvingGroundsConfig, family: string): string
-	local def = familyDef(config, family)
-	return if def ~= nil then def.slot else ""
+	local tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)
+	return Armory.DamageScale(armoryConfig, tier, level, ability)
 end
 
 local function sendTo(player: Player, remoteName: string, ...: any): ()
@@ -1142,7 +1164,7 @@ local function resolveMelee(
 	local reachDown = if shooter.airborne or lifted
 		then math.max(config.movement.airSwingReachDown, 0)
 		else 0
-	local tally = StrikeTally.New(damageScale(shooter.player, slotOfFamily(config, weapon), false))
+	local tally = StrikeTally.New(damageScale(shooter.player, weapon, false))
 
 	if shape == "sphere" then
 		explode(config, shooter.player, origin, range, variant, damage, heading, tally)
@@ -1357,7 +1379,7 @@ local function resolveRanged(
 	local unit = direction.Unit
 	-- Pellets and fans are seeded (lead ruling): every client draws the same ones.
 	local seed = newSeed(shooter, false)
-	local tierScale = damageScale(shooter.player, slotOfFamily(config, weapon), false)
+	local tierScale = damageScale(shooter.player, weapon, false)
 	if (variant.projectileSpeed or 0) > 0 then
 		spawnShot(
 			shooter,
@@ -2118,21 +2140,37 @@ end
 
 -- Players ------------------------------------------------------------------------------------
 
--- A loaded player takes up their weapons: the ProvingGrounds.json loadout (Wave 1) and the held
--- variants, then TuneState and a first readout. Idempotent. The range's RangeService.AddPlayer
--- wraps this and places the body; in a mission ArenaService's character hook prepares it.
+-- A loaded player takes up their weapons, then TuneState and a first readout. Idempotent. In the
+-- range: the ProvingGrounds.json loadout (Wave 1). In a mission (L3-10): the saved loadout, read
+-- by Unlocks.LoadoutOf with each slot's starter as the fallback (a saved family no longer owned,
+-- unknown or in the wrong slot falls back; an unknown style falls back to the family's default).
+-- The range's RangeService.AddPlayer wraps this and places the body; in a mission ArenaService's
+-- character hook prepares it.
 function WeaponService.AddPlayer(player: Player): ()
 	if not state.active or state.shooters[player] ~= nil or player.Parent == nil then
 		return
 	end
 	local config = Tuning.Get()
+	local starters = {
+		melee = startingFamily(config, "melee"),
+		ranged = startingFamily(config, "ranged"),
+	}
+	local loadout: Types.RangeLoadout =
+		{ melee = starters.melee, ranged = starters.ranged, variants = {} }
+	if state.mode == "mission" then
+		local profile = DataService.GetState(player)
+		local saved = Unlocks.LoadoutOf(
+			if profile ~= nil then profile.combat else nil,
+			config.weapons,
+			starters
+		)
+		-- A copy: the shooter's loadout changes for the session, the profile's only on a save.
+		loadout =
+			{ melee = saved.melee, ranged = saved.ranged, variants = table.clone(saved.variants) }
+	end
 	local shooter: Shooter = {
 		player = player,
-		loadout = {
-			melee = startingFamily(config, "melee"),
-			ranged = startingFamily(config, "ranged"),
-			variants = {},
-		},
+		loadout = loadout,
 		lastSeq = { melee = -1, ranged = -1 },
 		lastAttackAt = { melee = 0, ranged = 0 },
 		credit = {},
@@ -2215,16 +2253,28 @@ function WeaponService.PrepareCharacter(player: Player, character: Model): ()
 	VitalsService.PrepareCharacter(player, character)
 end
 
--- Ruling 12: (gear, ascension). Tier 1 and no Ascension in the range; then the Studio session
--- override (L1 ruling 34); `debug.provingGear` in a proving build; otherwise the profile's (tier
--- 1 until it has loaded). Fresh tables.
+-- Ruling 12, L3-6: (tiers, ascension) per slot. Tier 1 and no Ascension in the range; otherwise
+-- each held family's Armory.StrikeTier: the Studio session override's tier (L1 ruling 34) held
+-- inside the family's window, else its tier on the profile (tier 1 until it has loaded), in a
+-- proving build too (L3-11). Fresh tables.
 function WeaponService.GearOf(player: Player): (SlotTiers, SlotTiers)
 	return gearOf(player)
 end
 
--- L1 ruling 34: the gear this player fights at for the rest of the session, whatever the profile
--- or the proving build says; nil clears it. Studio only: outside Studio it does nothing, and it
--- is never written to a profile. The caller refreshes the body (VitalsService.RefreshMaxHp).
+-- L1 ruling 34: the Studio session override's tiers as a lever set them, before any window holds
+-- them (GearOf answers what is fought at); nil when none is set. The G key compares its presets
+-- with this: G's T1 fights a held Flamethrower at T2, so GearOf would never match the preset
+-- again and every press would set T1. A fresh table.
+function WeaponService.GearOverride(player: Player): SlotTiers?
+	local override = state.gearOverride[player]
+	return if override ~= nil then table.clone(override.gear) else nil
+end
+
+-- L1 ruling 34: the tiers this player fights at for the rest of the session, both slots, whatever
+-- the profile says (each held inside the held family's window, 2-s1); nil clears it (a successful
+-- upgrade, setTier and resetArmory do, L3-28).
+-- Studio only: outside Studio it does nothing, and it is never written to a profile. The caller
+-- refreshes the body (VitalsService.RefreshMaxHp).
 function WeaponService.SetGearOverride(
 	player: Player,
 	gear: Types.SlotTiers?,
@@ -2245,9 +2295,9 @@ function WeaponService.SetGearOverride(
 	}
 end
 
--- Ruling 8: Armory.DamageScale at the player's gear; 1 in the range.
-function WeaponService.DamageScale(player: Player, slot: string, ability: boolean): number
-	return damageScale(player, slot, ability)
+-- Ruling 8, L3-6: Armory.DamageScale at the tier of the family that strikes; 1 in the range.
+function WeaponService.DamageScale(player: Player, family: string, ability: boolean): number
+	return damageScale(player, family, ability)
 end
 
 -- The server itself just moved this player's body (a rescue, a release from the lobby pad):
@@ -2559,8 +2609,8 @@ function WeaponService.OnSlam(player: Player): ()
 		knockback = movement.slamKnockback,
 		launch = movement.slamLaunch,
 	}
-	-- Ruling 8: the slam scales with the melee slot.
-	local tally = StrikeTally.New(damageScale(player, "melee", false))
+	-- Ruling 8, L3-6: the slam scales with the held melee family.
+	local tally = StrikeTally.New(damageScale(player, shooter.loadout.melee, false))
 	explode(
 		config,
 		player,
@@ -2821,8 +2871,8 @@ function WeaponService.Strike(
 	end
 	local critMult = config.shooting.critMult
 	local pull = spec.pull or 0
-	-- Ruling 8: an ability hit scales by its family's slot at the Ascension's abilityMult.
-	local tally = StrikeTally.New(damageScale(player, slotOfFamily(config, family), true))
+	-- Ruling 8, L3-6: an ability hit scales by its family's tier at the Ascension's abilityMult.
+	local tally = StrikeTally.New(damageScale(player, family, true))
 	-- The L1c second fix round's F4: the cap counts, and the chain seeds from, only bodies the hit
 	-- landed on; a held resident is passed over (StrikePick).
 	local seeds, spent = StrikePick.Seeds(
@@ -2906,7 +2956,7 @@ function WeaponService.FireProjectile(
 		seed,
 		1,
 		1,
-		damageScale(player, slotOfFamily(config, family), true),
+		damageScale(player, family, true),
 		false,
 		{ id = ability, cast = cast },
 		onImpact

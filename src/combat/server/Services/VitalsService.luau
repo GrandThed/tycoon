@@ -27,13 +27,13 @@
 -- that many circles thrown at once, each landing as a lob of its own, and one player takes at
 -- most one of them. When a boss dies, what it had in the air goes with it (onGone).
 --
--- Health is Humanoid.Health. Its maximum is pinned to tier-1 weapons in both slots (ruling 17),
--- whatever the Studio profile holds: the range's weapon numbers are tier-1 values, and the body
--- they are balanced against must be too. It never reaches 0 here: the hit that would do it puts
--- the player down instead.
+-- Health is Humanoid.Health. Its maximum is pinned to the range's own body (ruling 17; since L3
+-- Armory.json `ladder.rangeHp`, the 130 of the old tier-1 pair), whatever the Studio profile
+-- holds: the range's weapon numbers are tier-1 values, and the body they are balanced against
+-- must be too. It never reaches 0 here: the hit that would do it puts the player down instead.
 --
 -- P5 (INTERFACES "P5 contracts", rulings 11, 13 and 18): the same body fights in missions, told
--- so by SetMission. There the maximum is the profile's gear (`maxHpOf`), enemy hits are scaled
+-- so by SetMission. There the maximum is the held tiers' (`maxHpOf`), enemy hits are scaled
 -- by the mission (`damageScale`), regen is a share of the bar, a player the mission rules out
 -- (`mayJudge`: waiting on the pad) is neither a target nor judged by any shape, and a down never
 -- ends by itself: `onDown` is told once, after the frame's batch has left, and the run decides.
@@ -63,7 +63,7 @@ export type MissionRules = {
 	mayJudge: (player: Player) -> boolean,
 	-- Ruling 18: called once per down, after the frame's batch has been sent.
 	onDown: (player: Player) -> (),
-	-- Armory.MaxHp of the player's gear; nil = leave the Humanoid's maximum alone.
+	-- Armory.MaxHp of the player's held tiers; nil = leave the Humanoid's maximum alone.
 	maxHpOf: (player: Player) -> number?,
 	damageScale: number,
 	regenShare: number,
@@ -759,8 +759,9 @@ function VitalsService.RemovePlayer(player: Player): ()
 	vitalsByPlayer[player] = nil
 end
 
--- The maximum this body should have: the mission's gear (nil = leave it), or ruling 17's tier-1
--- body in both slots with no Ascension. nil also without Armory.json.
+-- The maximum this body should have: the mission's gear (nil = leave it), or ruling 17's range
+-- body, Armory.json's own `ladder.rangeHp` since L3 (L3-2: the ladder's tier 1 is a mission's 2/2,
+-- not the range's). nil also without Armory.json.
 local function maxHpFor(player: Player): number?
 	local rules = mission
 	if rules ~= nil then
@@ -770,7 +771,7 @@ local function maxHpFor(player: Player): number?
 	if armoryConfig == nil then
 		return nil
 	end
-	return Armory.MaxHp(armoryConfig, { melee = 1, ranged = 1 }, { melee = 0, ranged = 0 })
+	return Armory.RangeHp(armoryConfig)
 end
 
 -- A player's fresh character: its body at full health, Roblox's regen silenced, and whatever the
@@ -840,8 +841,9 @@ function VitalsService.StandUp(player: Player): ()
 	end
 end
 
--- The gear changed (the setGear lever): the new maximum, keeping the share of the bar the player
--- had. A downed player stays at the down's health.
+-- The tiers changed (an upgrade, a family switch, L3-10 and L3-13, or a Studio lever): the new
+-- maximum, keeping the share of the bar the player had. A downed player stays at the down's
+-- health.
 function VitalsService.RefreshMaxHp(player: Player): ()
 	local vitals = vitalsByPlayer[player]
 	local _root, humanoid = bodyOf(player)

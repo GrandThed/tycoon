@@ -19,8 +19,11 @@ a seam, the chain is judged on the cells' places in the grid, and the inset out 
 Q5: the sink's bounds) and its third (fd-m1: no frozen face on a same-facing face of a solid, the
 island off the pond's grid lines; fd-m2: a frozen sheet between a slam's step and a root, no longer
 held to levels.floorThickness; fd-s2: no inset where another ice block meets a side, in the fill
-line and out of sim_range's mirror), shown red on a mutated copy of the shipped data, and green
-again on the data as it ships.
+line and out of sim_range's mirror), and of L3 Wave 1 (L3-15: the gear presets T1 / T3 / T5; L3-17:
+Validate's firstClear lines; L3-25: every non-starter family's shelf hint, a firstClear family's
+found node, the owned families counting firstClear in the bend's known limit, R8's reach following
+the longest ownable ranged family; L3-28: the three lever attributes), shown red on a mutated copy of
+the shipped data, and green again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
@@ -33,7 +36,10 @@ m2 (the "residents under the boss room's maxAlive" rule out of both), the second
 (the walled camp's trigger band out of the Python mirror alone) and the third's m3 (gate_nudge's
 fenced-rectangle test out of the Python mirror alone); and for the simulator's cases (SIM_CASES),
 which run tools/sim_range.py from a copy with one line broken and expect its check red: the L2 W1
-fix round's d3 (an air jump back on in the planner turns the one-jump gate red; about five minutes).
+fix round's d3 (an air jump back on in the planner turns the one-jump gate red), and L3 W1's L3-29
+(Hard's clock) and L3-26 (R8 with only the bow upgraded), its fix round's R2 and its second's F6
+(the fire sniper's cast judged per spot: an unlisted spot that never casts, a listed one that does);
+about fifteen minutes each since L3.
 
 Usage:
   py tools/check_levels_mutants.py                       # every case; exit 1 when one is not as expected
@@ -140,6 +146,12 @@ INSET_SINK = "Combat.json levels.react.ice's inset and sink"
 # The L2 W3 third fix round (docs/prompts/l2-w3-fix3.md: fd-m1, fd-m2).
 COPLANAR = "with the ice: no face of a built ice piece lies within"
 SHEET = "with the ice frozen, every frozen sheet is thicker than"
+# L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-15, L3-17, L3-25, L3-28).
+HINT = "map: every weapons family that is not a starter has a shelf hint"
+FIRST_NODE = "map: every firstClear family with a `found` entry"
+PRESETS = "Combat.json debug.gearPresets are"
+# The L3 W1 fix round (docs/prompts/l3-w1-fix-round.md R1).
+TROPHY = "Armory.json ladder (R1)"
 
 
 def layout(data):
@@ -268,6 +280,16 @@ def secret(data, sid):
 
 def secret_entry(data, sid):
     return level(data)["secrets"][sid]
+
+
+def first_clear(data, difficulty):
+    """Forest Road's `firstClear` of a difficulty (made when it has none)."""
+    return level(data)["difficulties"][difficulty].setdefault("firstClear", {})
+
+
+def rifle_reach(data, studs):
+    """The Piercing Rifle's one variant given a range of `studs` (ctx's copy of ProvingGrounds.json)."""
+    data["ctx"]["weapons"]["rifle"]["variants"]["A"]["range"] = studs
 
 
 def air_jump(data):
@@ -829,6 +851,66 @@ CASES = (
      FILL, True),
     ("W3 fix3 fd-s2 control: the Pond's top 0.5 under the Creek's (they do not meet: both rims allowed)",
      lambda d: top_at(d, "Pond", -1.5), {}, FILL, False),
+    # L3 Wave 1. L3-25: every non-starter family has a shelf hint (a found entry or the secret that
+    # pays it); a firstClear family's found entry names its level's node; the owned families count
+    # every firstClear family (the bend's known limit) and R8's reach follows the longest ownable
+    # ranged family.
+    ("L3-25: no found entry for the Greataxe (a non-starter with no hint)",
+     lambda d: d["expeditions"]["found"].pop("greataxe"), {}, HINT, True),
+    ("L3-25: the lookout pays no family (the Flamethrower loses its only hint)",
+     lambda d: secret_entry(d, "lookout").pop("family"), {}, HINT, True),
+    ("L3-25 control: the Greataxe's found entry on the Underworld",
+     lambda d: d["expeditions"]["found"]["greataxe"].__setitem__("node", "underworld"), {}, HINT, False),
+    ("L3-25: the Warhammer's found entry on the Castle (Forest Road's Hard first clear gives it)",
+     lambda d: d["expeditions"]["found"]["warhammer"].__setitem__("node", "castle"), {}, FIRST_NODE, True),
+    ("L3-25 control: the Warhammer's found text reworded",
+     lambda d: d["expeditions"]["found"]["warhammer"].__setitem__("text", "Forest Road, first Hard clear"), {},
+     FIRST_NODE, False),
+    ("L3-25: Hard's first clear gives the Spear (a family that carries, owned without a lever)",
+     lambda d: first_clear(d, "hard").__setitem__("family", "spear"), {}, BEND_LIFT, True),
+    ("L3-25 control: Hard's first clear gives the Shotgun (it does not carry)",
+     lambda d: first_clear(d, "hard").__setitem__("family", "shotgun"), {}, BEND_LIFT, False),
+    ("L3-25: Hard's first clear gives the Piercing Rifle, its range 400 (R8's reach follows it)",
+     lambda d: (rifle_reach(d, 400), first_clear(d, "hard").__setitem__("family", "rifle")), {}, SNIPER, True),
+    ("L3-25 control: the Piercing Rifle's range 400, and nothing gives it",
+     lambda d: rifle_reach(d, 400), {}, SNIPER, False),
+    # L3-17: Validate's firstClear lines (sim_range.first_clear_problems, the mirror of
+    # StageFlow.firstClearProblems), in the level file's Validate rule.
+    ("L3-17: Hard's first clear gives the Broadsword (a starter)",
+     lambda d: first_clear(d, "hard").__setitem__("family", "broadsword"), {}, PROBLEMS, True),
+    ("L3-17: Hard's first clear gives an iceBow (no weapons family)",
+     lambda d: first_clear(d, "hard").__setitem__("family", "iceBow"), {}, PROBLEMS, True),
+    ("L3-17: Brutal's first clear pays 2.5 Valor", lambda d: first_clear(d, "brutal").__setitem__("valor", 2.5), {},
+     PROBLEMS, True),
+    ("L3-17: Brutal's first clear pays -1 Valor", lambda d: first_clear(d, "brutal").__setitem__("valor", -1), {},
+     PROBLEMS, True),
+    ("L3-17 control: Brutal's first clear pays 0 Valor", lambda d: first_clear(d, "brutal").__setitem__("valor", 0), {},
+     PROBLEMS, False),
+    ("L3-17: Hard's firstClear is a string",
+     lambda d: level(d)["difficulties"]["hard"].__setitem__("firstClear", "warhammer"), {}, PROBLEMS, True),
+    # L3-28: the three lever attributes are names of their own; L3-15: the presets T1 / T3 / T5, the
+    # first the proving gear, and every recommendedTier a preset's.
+    ("L3-28: setTierAttribute shares DebugGrantFamily",
+     lambda d: d["combat"]["debug"].__setitem__("setTierAttribute", "DebugGrantFamily"), {}, LEVERS, True),
+    ("L3-28: no grantStarAttribute", lambda d: d["combat"]["debug"].pop("grantStarAttribute"), {}, LEVERS, True),
+    ("L3-28: resetArmoryAttribute shares DebugSetGear (another lever's attribute)",
+     lambda d: d["combat"]["debug"].__setitem__("resetArmoryAttribute", "DebugSetGear"), {}, LEVERS, True),
+    ("L3-15: provingGear back at 2 / 2", lambda d: d["combat"]["debug"].__setitem__("provingGear", {"melee": 2, "ranged": 2}),
+     {}, PRESETS, True),
+    ("L3-15: Hard's recommendedTier 4 (no preset's melee tier)",
+     lambda d: level(d)["difficulties"]["hard"].__setitem__("recommendedTier", 4), {}, PRESETS, True),
+    ("L3-15 control: Brutal's recommendedTier 3 (a preset's)",
+     lambda d: level(d)["difficulties"]["brutal"].__setitem__("recommendedTier", 3), {}, PRESETS, False),
+    # The L3 W1 fix round, R1: starAlso lists exactly the difficulties harder than starDifficulty.
+    ("R1: starAlso [] (a Brutal clear no longer opens a band top)",
+     lambda d: d["ctx"]["armory"]["ladder"].__setitem__("starAlso", []), {}, TROPHY, True),
+    ("R1: starAlso ['normal'] (an easier star opens a band top)",
+     lambda d: d["ctx"]["armory"]["ladder"].__setitem__("starAlso", ["normal"]), {}, TROPHY, True),
+    ("R1: a difficulty after Brutal that starAlso leaves out",
+     lambda d: d["expeditions"]["difficulties"].append("overdrive"), {}, TROPHY, True),
+    ("R1 control: that difficulty listed in starAlso",
+     lambda d: (d["expeditions"]["difficulties"].append("overdrive"),
+                d["ctx"]["armory"]["ladder"].__setitem__("starAlso", ["brutal", "overdrive"])), {}, TROPHY, False),
 )
 
 
@@ -973,6 +1055,52 @@ SIM_CASES = (
     ("d3: the planner may jump in the air (can_jump always true)",
      ("can_jump = self.jump is None and (self.lift is None or t >= self.lift[1])", "can_jump = True"),
      ("--check", "--levels-only", "--level", "forest"), ONE_JUMP),
+    # L3-29: Hard at T3 keeps the clock it had at 4/4. With the old clock pinned 10% higher the
+    # measured mean (about 313 s) lies outside the 5% band and the gate goes red.
+    ("L3-29: Hard's old clock pinned at 345 s (the measured mean 10% under it)",
+     ('L3_CLOCK_SECONDS = {"hard": 312.8, "brutal": 311.5}', 'L3_CLOCK_SECONDS = {"hard": 345.0, "brutal": 311.5}'),
+     ("--check", "--levels-only", "--level", "forest"), "the reacting player's mean clear is within"),
+    # L3-26: R8 with only the bow upgraded is gated like R8: the LookoutLedge out of Normal's known
+    # limit turns its sword-T1 / bow-T4 row red (it out-earns the mission player there).
+    ("L3-26: the LookoutLedge out of Normal's known limit (its only-the-bow-upgraded row)",
+     ('    "normal": ("LookoutLedge", "Secret_lookout"),  # L2 W2: the cache moved into the cave',
+      '    "normal": ("Secret_lookout",),  # L2 W2: the cache moved into the cave'),
+     ("--check", "--levels-only", "--level", "forest"),
+     "Normal at gear 1/4 (only the bow upgraded, L3-26): the sniper from LookoutLedge earns less"),
+    # The L3 W1 fix round, R2: every strike at the striking family's own tier, the bar from the held
+    # pair, the Flamethrower's pair rated like with like. About fifteen minutes each.
+    ("R2: every family's scale from its slot's gear again (the pre-fix rule)",
+     ('    view["_scales"] = {key: {family: sc.damage_scale(armory, tier, 0, ability) for family, tier in tiers.items()}',
+      '    view["_scales"] = {key: {family: sc.damage_scale(armory, gear[cfg["weapons"][family]["slot"]], 0, ability) for family, tier in tiers.items()}'),
+     ("--check", "--levels-only", "--level", "forest"), "fights at each family's own tier"),
+    ("R2: the bar from the gear, not the held pair",
+     ('    hp = gear_max_hp(armory, gear, cfg, held)', '    hp = gear_max_hp(armory, gear)'),
+     ("--check", "--levels-only", "--level", "forest"), "the bar the held pair's (R2"),
+    ("R2: the fire sniper's cast at the bow's scale",
+     ('        self.world.scale = self.armed["breath"] = held_scale(self.cfg, family, True)',
+      '        self.world.scale = self.armed["breath"] = self.cast_scale'),
+     ("--check", "--levels-only", "--level", "forest"), "Dragon's Breath fights at each family's own tier"),
+    ("R2: the slam as the starter melee, not the held one",
+     ('        self.slam_scale = held_scale(cfg, held[0], False)',
+      '        self.slam_scale = held_scale(cfg, cfg["loadout"]["melee"], False)'),
+     ("--check", "--levels-only", "--level", "forest"), "fights at each family's own tier"),
+    ("R2: the Flamethrower's pair at T1 again (unlike with like)",
+     ('PAIR_FLAME_GEAR = {"melee": 2, "ranged": 2}', 'PAIR_FLAME_GEAR = {"melee": 1, "ranged": 1}'),
+     ("--check", "--levels-only", "--level", "forest"), "the starter pair's mean clear with no down"),
+    # The L3 W1 fix round 2's F6: "the fire sniper casts at least once" is judged per spot. With
+    # CaveMouth out of BREATH_OUT_OF_REACH its two courses, which never cast, go red by name; the old
+    # rule pooled every course and passed on CaveExit's casts.
+    ("F6: CaveMouth out of BREATH_OUT_OF_REACH (its courses never cast)",
+     ('        "difficulties": ("normal", "hard"),\n        "why": "on the ground west of camp A\'s plateau',
+      '        "difficulties": (),\n        "why": "on the ground west of camp A\'s plateau'),
+     ("--check", "--levels-only", "--level", "forest"),
+     "the fire sniper from CaveMouth + Dragon's Breath casts the fire family's ability at least once"),
+    # And a listing is held to its reason: CaveExit listed too (it casts, a body comes within reach)
+    # turns its listed lines red as stale.
+    ("F6: CaveExit listed in BREATH_OUT_OF_REACH though it casts (a stale listing)",
+     ('BREATH_OUT_OF_REACH = {\n', 'BREATH_OUT_OF_REACH = {\n    "CaveExit": {"difficulties": ("normal", "hard"), "why": "a probe"},\n'),
+     ("--check", "--levels-only", "--level", "forest"),
+     "the fire sniper from CaveExit + Dragon's Breath never casts, as BREATH_OUT_OF_REACH lists it"),
 )
 
 

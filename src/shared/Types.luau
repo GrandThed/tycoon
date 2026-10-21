@@ -143,29 +143,47 @@ export type LoadStatus = {
 }
 -- The StateChanged payload union is Snapshot | Delta | LoadStatus, discriminated by `kind`.
 
+-- Why an action was refused. Named so a service can narrow a verdict string into it through one
+-- table instead of spelling the union out again (Luau widens a singleton union that crossed a
+-- `string`).
+export type ActionReason =
+	"insufficientFunds"
+	| "locked"
+	| "invalid"
+	| "unavailable"
+	| "full"
+	| "over"
+	| "busy"
+	| "expired"
+	| "notLeader"
+	| "owned"
+	| "peak"
+	| "notBuilt"
+	| "needsStar"
+
 export type ActionResult = {
 	-- M2 adds the era actions; for them slotId is "" (no slot involved). M6 adds buyPerk, for
 	-- which slotId carries the perkId (locked = not the next tier / no such perk). C0 adds the
-	-- four combat actions; their slotId carries the weapon slot ("melee"/"ranged"), the mission
-	-- id, or the host userId as a string.
+	-- combat actions; their slotId carries the weapon slot ("melee"/"ranged") for ascend, the
+	-- mission id, or the host userId as a string.
 	action: "buy"
 		| "levelUp"
 		| "advanceEra"
 		| "rebirth"
 		| "buyPerk"
-		| "buyGear"
 		| "ascend"
 		| "expedition"
 		| "joinRun"
 		| "party"
 		| "startLevel"
 		| "buyAbility"
-		| "setFamily",
+		| "setFamily"
+		| "upgradeWeapon",
 	slotId: string,
 	ok: boolean,
 	-- C0 adds `unavailable`: place id 0, Studio, a teleport that failed after its retries, or a
-	-- run that is full or gone. insufficientFunds = materials/Valor short; locked = income/s
-	-- below the unlockRate, the Ascension cap, or a mission era above highestEra.
+	-- run that is full or gone. insufficientFunds = materials/Valor short; locked = the
+	-- Ascension cap, or a mission era above highestEra.
 	-- C2 (slotId = the other player's userId as a string for "party"): full = party or run at
 	-- maxParty; over = run past joinUntilWave or ended; busy = invitee already in a party or
 	-- departing; expired = invite timed out or withdrawn; notLeader = only the leader may do that.
@@ -176,19 +194,13 @@ export type ActionResult = {
 	-- insufficientFunds (Valor short).
 	-- L2-32 "setFamily" (slotId = the family id): unavailable (no profile loaded), invalid (no such
 	-- family or variant, or the family fills the other slot), locked (not owned), busy (fighting in
-	-- a live run).
-	reason: (
-		"insufficientFunds"
-		| "locked"
-		| "invalid"
-		| "unavailable"
-		| "full"
-		| "over"
-		| "busy"
-		| "expired"
-		| "notLeader"
-		| "owned"
-	)?,
+	-- a live run). L3-12: also answered in the hub, where it is never busy.
+	-- L3-12 "upgradeWeapon" (slotId = the family id): unavailable (no profile, no Armory config),
+	-- then Armory.UpgradeVerdict's order: invalid (no such family, or no window), locked (not
+	-- owned), peak (at its window's top), busy (fighting in a live run), notBuilt (the next tier's
+	-- band level has no level file), needsStar (a band top without that level's Hard star),
+	-- insufficientFunds (the band material short).
+	reason: ActionReason?,
 }
 
 -- M3 presentation events (server → client, owner only, never on bulk restore), discriminated
@@ -957,15 +969,23 @@ export type CityDressingConfig = {
 -- Places.json / Missions/*.json mirrors; field names follow the JSON keys exactly. Asset ids and
 -- place ids of 0 mean "not yet" and never error.
 
--- The two permanent weapon slots. Also the ActionResult.slotId of buyGear/ascend.
+-- The two permanent weapon slots. Also the ActionResult.slotId of ascend.
 export type WeaponSlot = "melee" | "ranged"
 
 export type MissionRecord = { bestWave: number, bossClears: number, overdriveBest: number }
+
+-- L3-7 (schema v8): the held families as saved. A slot left nil holds its starter (the config
+-- `loadout`, ProvingGrounds.json); variants maps a family id to its chosen style key. Read through
+-- Unlocks.LoadoutOf, which drops anything unknown or not owned.
+export type SavedLoadout = { melee: string?, ranged: string?, variants: { [string]: string } }
 
 -- Profile schema v5. materials is keyed by material name ("Timber") and never negative; gear and
 -- ascension hold a tier / Ascension level per slot (0 = starter / none); highestEra survives
 -- Rebirth and gates mission tiles; expeditionSince/expeditionSeconds are the away-time split the
 -- offline grant reads (both zeroed by ApplyOfflineGrant).
+-- L3-7 (schema v8): `gear` is FROZEN, kept for the live places' code and never written or read by
+-- new code: a tier belongs to a family now (`tiers`). `ascension` still multiplies whatever family
+-- sits in its slot.
 export type CombatProfile = {
 	materials: { [string]: number },
 	valor: number,
@@ -977,8 +997,9 @@ export type CombatProfile = {
 	expeditionSeconds: number,
 	stats: { kills: number, wavesCleared: number, expeditions: number, cashFromCombat: number },
 	-- L2-1 (schema v7): what the dungeon place has unlocked, keyed by id, every value true. Only
-	-- the combat place writes them; optional in the type because the hub copies the profile it
-	-- shows (EconomyService) without them, and a profile loaded by v6 code may lack them.
+	-- the combat place writes them (and the hub's Studio star lever, `families`, through
+	-- Unlocks.ApplyFirstClear); optional in the type because a profile written by v6 code
+	-- may lack them (the hub's copy carries every field since L3-14: ProfileCopy).
 	-- abilities: bought abilities ("doubleJump"); secrets: opened chests by level;
 	-- families: weapon families found (Broadsword and Longbow stay implicit, never written);
 	-- shortcuts: found shortcuts by level (W2's cave).
@@ -986,6 +1007,13 @@ export type CombatProfile = {
 	secrets: { [string]: { [string]: boolean } }?,
 	families: { [string]: boolean }?,
 	shortcuts: { [string]: { [string]: boolean } }?,
+	-- L3-7 (schema v8), optional for the same reason as the v7 maps. tiers: a family's tier, only
+	-- for families upgraded past their window's start (read through Armory.TierOf, clamped);
+	-- loadout: the held families, saved (both places write it, never inside a fight); stars: the
+	-- cleared difficulties by level id, every value true (the Hard star is a band's trophy).
+	tiers: { [string]: number }?,
+	loadout: SavedLoadout?,
+	stars: { [string]: { [string]: boolean } }?,
 }
 
 export type PlacesConfig = { version: number, hubPlaceId: number, combatPlaceId: number }
@@ -1070,10 +1098,41 @@ export type AscensionConfig = {
 	levelsPerRebirth: number,
 	levels: { AscensionLevelDef },
 }
+-- L3-4: one band of the ladder: the level whose drops pay it and the material they drop. A band
+-- whose level has no level file is "not built": its tiers cannot be bought and its cost is never
+-- shown (later bands carry placeholder materials until their level exists).
+export type ArmoryLadderBand = { levelId: string, material: string }
+-- L3-1, L3-2, L3-4: the one ladder every weapon family climbs. damage[t] multiplies the range's
+-- tier-1 numbers at tier t; hp.<slot>[t] is the health a family of that slot adds at tier t;
+-- rangeHp is the range's own body. A tier's band is ceil(t / bandSize) and its position in the
+-- band (t - 1) % bandSize + 1; costs are by position, in the band's material; a band's top
+-- position also needs that band level's `starDifficulty` star or a `starAlso` one (Armory.StarHeld).
+export type ArmoryLadder = {
+	damage: { number },
+	hp: { melee: { number }, ranged: { number } },
+	rangeHp: number,
+	bandSize: number,
+	bands: { ArmoryLadderBand },
+	costs: { number },
+	starDifficulty: string,
+	-- The fix round's R1: other difficulties whose star also opens a band top ("brutal"), so a
+	-- harder clear is never worth less than the Hard one. The map's stars are unchanged.
+	starAlso: { string }?,
+}
+-- L3-3: a family's window on the ladder (Armory.TierOf clamps a saved tier into it).
+export type ArmoryWindow = { start: number, top: number }
+-- L3-8: one slot tier's price before v8, frozen for the profile step's refund.
+export type ArmoryLegacyCost = { material: string, amount: number }
+export type ArmoryLegacy = { gearCosts: { ArmoryLegacyCost } }
+-- L3: `ladder`, `windows` and `legacy` are optional so a build without them degrades instead of
+-- erroring (every family fights at T1 and nothing is upgraded; Armory.Problems warns at Init).
+-- `slots` and `bands` stay for the C1 readers and the hub's Ascension until L4; the tier path
+-- never reads `slots`, `bands` or `unlockRate`. power.tierWeight weighs the held families'
+-- multipliers in Gear Power (L3-6).
 export type ArmoryConfig = {
 	version: number,
 	baseHp: number,
-	power: { hpWeight: number },
+	power: { hpWeight: number, tierWeight: number? },
 	bands: { BandDef },
 	classes: { [string]: WeaponClassDef },
 	abilities: { [string]: AbilityDef },
@@ -1082,6 +1141,10 @@ export type ArmoryConfig = {
 	slots: { [string]: ArmorySlotDef },
 	ascension: AscensionConfig,
 	partyEffects: { [string]: PartyEffectDef },
+	ladder: ArmoryLadder?,
+	-- Keyed by weapon family id (ProvingGrounds.json `weapons`).
+	windows: { [string]: ArmoryWindow }?,
+	legacy: ArmoryLegacy?,
 }
 
 -- Combat.json v1.
@@ -1274,15 +1337,18 @@ export type CombatDebugConfig = {
 	-- C2 hub levers (RequestDebug "fakeParty" / "fakeInvite" use the same names).
 	fakePartyAttribute: string,
 	fakeInviteAttribute: string,
-	-- P5 wave 1: what `proving.rbxl` boots into, and the baked test player's gear.
+	-- P5 wave 1: what `proving.rbxl` boots into.
 	provingBoots: string, -- "mission" | "range"
 	-- L1: what the map opens on in a proving build, and whether the server starts it by itself.
 	provingLevel: string,
 	provingDifficulty: string,
 	provingAutoStart: boolean,
-	-- L1 ruling 33: the gear the G key steps through (a Studio-only session override).
+	-- L1 ruling 33, L3-15: the ladder tiers the G key steps through on both slots (T1, T3, T5), a
+	-- Studio-only session override that a successful upgrade or resetArmory clears.
 	gearPresets: { { name: string, melee: number, ranged: number } },
 	provingStartDelay: number,
+	-- L3-11: read only by the simulators, as a first run's gear. A proving build plays the
+	-- profile's tiers like every other build (a fresh mock profile is T1/T1).
 	provingGear: { melee: number, ranged: number, ascension: { melee: number, ranged: number }? }?,
 	perfLogSeconds: number,
 	-- L1b-W2-23: Workspace number attribute set to each [Perf] line's p95 (Studio only)
@@ -1296,6 +1362,13 @@ export type CombatDebugConfig = {
 	-- families, or cleared from them (a held one goes back to its slot's starter). nil = off.
 	grantFamilyAttribute: string?,
 	removeFamilyAttribute: string?,
+	-- L3-28, both places: setTier = a string "<family>=<tier>" (the tier clamped into the family's
+	-- window); grantStar = a string naming a level id, or "*" for every built band level (the
+	-- ladder's starDifficulty star); resetArmory = a number > 0 (tiers, loadout and stars
+	-- emptied). Each is consumed. nil = that attribute lever is off.
+	setTierAttribute: string?,
+	grantStarAttribute: string?,
+	resetArmoryAttribute: string?,
 }
 -- Enemy AI tunables (EnemyService) and client presentation tunables (CombatFxController).
 export type CombatEnemyConfig = {
@@ -2497,7 +2570,8 @@ export type CombatFxArea = {
 
 -- P5 wave 1 (docs/INTERFACES.md "P5 contracts")
 export type CombatMode = "range" | "mission"
--- A tier (or Ascension level) per weapon slot: WeaponService.GearOf returns two of them.
+-- A tier (or Ascension level) per weapon slot: WeaponService.GearOf returns two of them. L3-6:
+-- the tiers are the held families' (Armory.HeldTiers), the Ascension levels the slots'.
 export type SlotTiers = { melee: number, ranged: number }
 
 -- Missions/<n>_<Era>.json `crowd` block. Counts are per solo run; party size scales them
@@ -2533,6 +2607,10 @@ export type CrowdSkeletonWave = { introduces: { string }, boss: string? }
 
 -- Config/Levels/<n>_<Name>.json. LevelFile is the file as decoded (one with `mission` holds only
 -- the keys of its first two lines); LevelConfig is what StageFlow.Resolve returns.
+-- L3-17: what a difficulty's first clear gives a member who earns its star for the first time: a
+-- non-starter weapon family (written to the profile's families) and/or Valor (a whole number).
+export type LevelFirstClear = { family: string?, valor: number? }
+-- recommendedTier is a ladder tier (L3-15: Forest Road 1 / 3 / 5).
 export type LevelDifficulty = {
 	hpScale: number,
 	damageScale: number,
@@ -2540,6 +2618,7 @@ export type LevelDifficulty = {
 	countMult: number,
 	rewardMult: number,
 	recommendedTier: number,
+	firstClear: LevelFirstClear?,
 }
 -- MissionCrowdBoss.at is { x, z } from the camp's centre. A camp's waves are MissionCrowdWave, as
 -- the arena's.
@@ -2742,7 +2821,8 @@ export type ExpeditionsConfig = {
 	abilities: { list: { UnlockAbilityDef } }?,
 	-- L2-51: families "built now, found later": family id -> the map node where it will be found
 	-- and the Armory's hint. Nothing on the server reads it (the family stays locked until a
-	-- Studio lever writes it); the Armory lists a family it names. nil = none.
+	-- Studio lever, a secret or a first clear writes it); the Armory lists a family it names.
+	-- L3-25: every non-starter family has a hint, this entry or the secret that pays it. nil = none.
 	found: { [string]: { node: string, text: string } }?,
 }
 -- L2-6: one bought ability (named apart from the weapons' AbilityDef). price.valor is a whole
@@ -2860,7 +2940,11 @@ export type RunResult = {
 	camps: number,
 	-- this run gave this player a new star
 	star: boolean,
+	-- L3-17: what that new star's first clear gave this player (UnlockService.GrantFirstClear):
+	-- the family written (nil = none) and the Valor credited (0 = none). nil = no first clear.
+	firstClear: FirstClearGrant?,
 }
+export type FirstClearGrant = { family: string?, valor: number }
 
 -- The MapState event (rulings 25 and 28)
 export type MapNodeState = {

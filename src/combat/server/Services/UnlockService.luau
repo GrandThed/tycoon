@@ -1,9 +1,10 @@
 --!strict
 -- L2 W1 (docs/prompts/l2-w1-contract.md, L2-2, L2-8, L2-9, L2-12, L2-19): what a player has
 -- unlocked in the dungeon place. It sells abilities (RequestBuyAbility), opens secrets for the
--- run loop, and applies the Studio levers. Only it (through Unlocks.Apply and SecretFlow.Open,
--- which it calls) writes the profile's `combat.abilities`, `secrets`, `families` and `shortcuts`
--- (schema v7), and the `Ability_<id>` Player attributes every client reads.
+-- run loop, and applies the Studio levers. Only it (through Unlocks.Apply, Unlocks.ApplyFirstClear
+-- and SecretFlow.Open, which it calls) writes the profile's `combat.abilities`, `secrets`,
+-- `families` and `shortcuts` (schema v7), and the `Ability_<id>` Player attributes every client
+-- reads; in the hub only the Studio star lever writes `families`, through the same ApplyFirstClear.
 --
 -- The rules and the writes they decide are Unlocks' and SecretFlow's (pure, tested by
 -- tools/crowd_harness); this file only hands them the profile and acts on the verdict. Nothing
@@ -17,11 +18,18 @@
 -- no save, L2-33), records found shortcuts, and keys a secret on an element an owned family
 -- carries. WeaponService requires none of the place's services that require this one, so the
 -- new require adds no cycle.
+--
+-- L3 W1 (docs/prompts/l3-w1-contract.md, L3-9, L3-10, L3-13, L3-17, L3-28): it raises a family a
+-- tier (RequestUpgradeWeapon, Armory.Upgrade), saves the loadout on every change of a held family
+-- (Unlocks.SaveLoadout), gives a level's first-clear reward, and holds the Armory's Studio levers
+-- (setTier, resetArmory). It now also writes `combat.tiers`, `loadout` and `stars`, and resizes
+-- the bar (VitalsService requires only the crowd modules, so that require adds no cycle either).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
+local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
@@ -31,10 +39,11 @@ local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local SecretFlow = require(script.Parent:WaitForChild("SecretFlow"))
+local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
 
-type Reason = "unavailable" | "invalid" | "owned" | "busy" | "insufficientFunds" | "locked"
-type Action = "buyAbility" | "setFamily"
+type Reason = Types.ActionReason
+type Action = "buyAbility" | "setFamily" | "upgradeWeapon"
 
 local state = {
 	mode = "mission" :: Types.CombatMode,
@@ -44,6 +53,9 @@ local state = {
 	players = {} :: { [Player]: boolean },
 	-- WaveService.MayLeave, wired by Main; nil = the shop is closed.
 	gate = nil :: ((Player) -> boolean)?,
+	-- L3-13: the level ids this build has a file for (a band whose level is not built sells
+	-- nothing), read once at Init: the files never change while a server runs.
+	built = {} :: { [string]: boolean },
 }
 
 local UnlockService = {}
@@ -61,6 +73,12 @@ local function reasonOf(verdict: string): Reason
 		return "invalid"
 	elseif verdict == "locked" then
 		return "locked"
+	elseif verdict == "peak" then
+		return "peak"
+	elseif verdict == "notBuilt" then
+		return "notBuilt"
+	elseif verdict == "needsStar" then
+		return "needsStar"
 	end
 	return "unavailable"
 end
@@ -89,6 +107,31 @@ end
 -- L2-31: the key a secret needs, held by this profile's combat (abilities, then elements).
 local function holds(combat: Types.CombatProfile, needs: string): boolean
 	return Unlocks.HoldsKey(combat, Catalog.GetExpeditionsConfig(), weapons(), starters(), needs)
+end
+
+-- A lever wrote this player's tiers: the Studio session override would hide them, so it goes;
+-- then the bar is resized and the wallet resent.
+local function tiersChanged(player: Player): ()
+	WeaponService.SetGearOverride(player, nil)
+	VitalsService.RefreshMaxHp(player)
+	ArenaService.SendSnapshot(player)
+end
+
+-- A slot's starter `family` held again (a removed family's slot, or the resetArmory lever): with
+-- the style this session holds for it when `keepStyle`, else its default (an emptied save means
+-- the default). The style it holds now; nil for an unknown family.
+local function holdStarter(player: Player, family: string, keepStyle: boolean): string?
+	local roster = weapons()
+	local def = if roster ~= nil then roster[family] else nil
+	if def == nil then
+		return nil
+	end
+	local loadout = if keepStyle then WeaponService.LoadoutOf(player) else nil
+	local held = if loadout ~= nil then loadout.variants[family] else nil
+	local variant: string = if held ~= nil and def.variants[held] ~= nil then held else def.default
+	WeaponService.SetVariant(player, family, variant)
+	WeaponService.SetFamily(player, family)
+	return variant
 end
 
 -- Every configured ability's attribute on this player, from the profile (in the range: all on,
@@ -126,6 +169,11 @@ function UnlockService.Init(): ()
 	for _, problem in problems do
 		warn(`[UnlockService] Expeditions.json {problem}`)
 	end
+	local built: { [string]: boolean } = {}
+	for _, id in Catalog.GetLevelIds() do
+		built[id] = true
+	end
+	state.built = built
 end
 
 function UnlockService.Start(): () end
@@ -170,6 +218,42 @@ function UnlockService.OnBuyAbility(player: Player, id: string): ()
 	ArenaService.SendSnapshot(player)
 end
 
+-- RequestUpgradeWeapon (L3-13). A family id, never a tier or an amount: Armory.Upgrade derives
+-- the next tier, its cost and the star it needs from the profile, and decides and writes in one
+-- call (nothing here yields between the two). Refused in the order invalid, locked, peak, busy
+-- (the shop's gate), notBuilt, needsStar, insufficientFunds; unavailable for a player not
+-- admitted, with no profile, or without Armory.json. On success the new tier is felt at once:
+-- the Studio override goes, the bar is resized, the wallet resent.
+function UnlockService.OnUpgradeWeapon(player: Player, family: string): ()
+	if state.mode == "range" then
+		return
+	end
+	local profile = if state.players[player] then DataService.GetState(player) else nil
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if profile == nil or armoryConfig == nil then
+		answer(player, family, "unavailable", "upgradeWeapon")
+		return
+	end
+	local combat = profile.combat
+	local gate = state.gate
+	local verdict = Armory.Upgrade(
+		armoryConfig,
+		combat,
+		family,
+		Unlocks.OwnsFamily(combat.families, family, starters()),
+		gate ~= nil and gate(player),
+		state.built
+	)
+	if verdict ~= nil then
+		answer(player, family, verdict, "upgradeWeapon")
+		return
+	end
+	WeaponService.SetGearOverride(player, nil)
+	VitalsService.RefreshMaxHp(player)
+	answer(player, family, nil, "upgradeWeapon")
+	ArenaService.SendSnapshot(player)
+end
+
 -- True when the player's profile holds the key a secret needs (never the attribute): a sold
 -- ability that is owned, then an element an owned family carries (L2-31). So `fire` is held once
 -- the lookout has paid the Flamethrower, whatever the player carries in this run.
@@ -180,7 +264,9 @@ end
 
 -- RequestSetFamily (L2-32), in a mission: the verdict in order (unavailable, invalid, locked,
 -- busy), then WeaponService holds the variant and the family; its TuneState carries the loadout
--- back to the client. Answered with an ActionResult either way. The range has its own commands.
+-- back to the client. L3-10: the choice is saved (Unlocks.SaveLoadout), and the bar is resized
+-- (the held family's tier sets it) before the wallet goes out again. Answered with an
+-- ActionResult either way. The range has its own commands.
 function UnlockService.OnSetFamily(
 	player: Player,
 	slot: string,
@@ -207,7 +293,14 @@ function UnlockService.OnSetFamily(
 			and WeaponService.SetFamily(player, family)
 		verdict = if held then nil else "unavailable"
 	end
+	if verdict == nil and profile ~= nil then
+		Unlocks.SaveLoadout(profile.combat, slot, family, variant)
+		VitalsService.RefreshMaxHp(player)
+	end
 	answer(player, family, verdict, "setFamily")
+	if verdict == nil then
+		ArenaService.SendSnapshot(player)
+	end
 end
 
 -- L2-12: a standing fighter reached `site` in the run on `levelId`. The key is read from the
@@ -263,8 +356,9 @@ function UnlockService.GrantFamily(player: Player, id: string): boolean
 	return true
 end
 
--- The `removeFamily` lever (L2-38): cleared from the profile's families; a slot holding it goes
--- back to its starter. False for a starter, an id that is no family, or no profile.
+-- The `removeFamily` lever (L2-38): cleared from the profile's families; a slot holding it, or
+-- saved with it, goes back to its starter, and that is saved (L3-10) and the bar resized. False
+-- for a starter, an id that is no family, or no profile.
 function UnlockService.RemoveFamily(player: Player, id: string): boolean
 	local profile = DataService.GetState(player)
 	local roster = weapons()
@@ -272,21 +366,63 @@ function UnlockService.RemoveFamily(player: Player, id: string): boolean
 	if profile == nil or def == nil or starters()[id] then
 		return false
 	end
-	SecretFlow.FamiliesOf(profile.combat)[id] = nil
+	local combat = profile.combat
+	SecretFlow.FamiliesOf(combat)[id] = nil
+	local slot = def.slot
 	local loadout = WeaponService.LoadoutOf(player)
 	local held = if loadout == nil
 		then nil
-		elseif def.slot == "melee" then loadout.melee
+		elseif slot == "melee" then loadout.melee
 		else loadout.ranged
-	if held == id then
-		local config: any = Tuning.Get()
-		local starter = if type(config.loadout) == "table" then config.loadout[def.slot] else nil
-		if type(starter) == "string" then
-			WeaponService.SetFamily(player, starter)
+	local saved = combat.loadout
+	local kept = if saved == nil then nil elseif slot == "melee" then saved.melee else saved.ranged
+	local config: any = Tuning.Get()
+	local starter = if type(config.loadout) == "table" then config.loadout[slot] else nil
+	if held == id and type(starter) == "string" then
+		local variant = holdStarter(player, starter, true)
+		if variant ~= nil then
+			Unlocks.SaveLoadout(combat, slot, starter, variant)
+		end
+		VitalsService.RefreshMaxHp(player)
+	elseif saved ~= nil and kept == id then
+		-- Saved but not held (no weapons this session): an empty slot is the starter.
+		if slot == "melee" then
+			saved.melee = nil
+		else
+			saved.ranged = nil
 		end
 	end
 	ArenaService.SendSnapshot(player)
 	return true
+end
+
+-- L3-17: a level's first-clear reward for `player`, after StageFlow.Award said their star is new
+-- (WaveService.EndRun, which credits the card, and the U lever). The write is the pure
+-- Unlocks.ApplyFirstClear, the one the hub's star lever makes too (the fix round 2's F2): the
+-- family written to the profile's families unless it is a starter or already owned, the Valor
+-- added; the wallet is resent. A family that is no family to give (Validate refuses it before
+-- play) is warned. What it gave; nil for no profile or nothing given.
+function UnlockService.GrantFirstClear(
+	player: Player,
+	reward: Types.LevelFirstClear
+): Types.FirstClearGrant?
+	local profile = DataService.GetState(player)
+	if profile == nil then
+		return nil
+	end
+	local combat = profile.combat
+	local given = Unlocks.ApplyFirstClear(combat, reward, weapons(), starters())
+	local family = reward.family
+	-- A givable family is in the profile's families now, given here or before; a starter or an id
+	-- that names no family never is.
+	if family ~= nil and (combat.families == nil or combat.families[family] ~= true) then
+		warn(`[UnlockService] a first clear names "{family}", which is no family to give: skipped`)
+	end
+	if given.family == nil and given.valor == 0 then
+		return nil
+	end
+	ArenaService.SendSnapshot(player)
+	return given
 end
 
 -- A family's display name, for the levers' notices (the id when there is no such family).
@@ -333,6 +469,48 @@ function UnlockService.ResetSecrets(player: Player?): ()
 			ArenaService.SendSnapshot(target)
 		end
 	end
+end
+
+-- The `setTier` lever (L3-28): `family`'s tier, held inside its window, written to the profile
+-- (Armory.SetTier, the hub's rule too; owning it is not required). The override goes, the bar and
+-- the wallet follow. The tier written; nil for no profile, no Armory.json, or a family that is
+-- unknown or has no window.
+function UnlockService.SetTier(player: Player, family: string, tier: number): number?
+	local profile = DataService.GetState(player)
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if profile == nil or armoryConfig == nil then
+		return nil
+	end
+	local written = Armory.SetTier(armoryConfig, profile.combat, family, tier)
+	if written ~= nil then
+		tiersChanged(player)
+	end
+	return written
+end
+
+-- The `resetArmory` lever (L3-28): `player`'s (nil = everyone admitted) tiers, saved loadout and
+-- saved stars emptied (Unlocks.ResetArmory, the hub's rule too), the held pair back to the
+-- starters at their default styles, the override gone. Materials, Valor, families and secrets
+-- stay. The session stars are WaveService's (WaveService.ForgetStars). The players it reset.
+function UnlockService.ResetArmory(player: Player?): { Player }
+	local reset: { Player } = {}
+	local config: any = Tuning.Get()
+	local loadout = if type(config.loadout) == "table" then config.loadout else {}
+	for _, target in targets(player) do
+		local profile = DataService.GetState(target)
+		if profile == nil then
+			continue
+		end
+		Unlocks.ResetArmory(profile.combat)
+		for _, starter in { loadout.melee, loadout.ranged } do
+			if type(starter) == "string" then
+				holdStarter(target, starter, false)
+			end
+		end
+		tiersChanged(target)
+		table.insert(reset, target)
+	end
+	return reset
 end
 
 -- Everyone admitted this session (the attribute levers act on all of them).

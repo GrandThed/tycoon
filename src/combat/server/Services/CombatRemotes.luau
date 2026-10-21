@@ -154,6 +154,14 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 					and isShortString(args[3], MAX_VARIANT_LENGTH)
 			end,
 		},
+		-- L3-12: raise one family a tier. A family id, never a tier or an amount: UnlockService
+		-- derives the next tier, its cost and the star it needs from the profile.
+		RequestUpgradeWeapon = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 1 and isShortString(args[1], MAX_FAMILY_LENGTH)
+			end,
+		},
 		-- L1 ruling 21: end the live run with what was banked, or cut the summary's wait short.
 		RequestAbandon = {
 			bucket = "calls",

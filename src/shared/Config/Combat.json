@@ -120,17 +120,20 @@
 		"provingDifficulty": "normal",
 		"provingAutoStart": false,
 		"provingStartDelay": 3,
-		"provingGear": { "melee": 2, "ranged": 2 },
+		"provingGear": { "melee": 1, "ranged": 1 },
 		"gearPresets": [
-			{ "name": "2 / 2", "melee": 2, "ranged": 2 },
-			{ "name": "4 / 4", "melee": 4, "ranged": 4 },
-			{ "name": "6 / 6", "melee": 6, "ranged": 6 }
+			{ "name": "T1", "melee": 1, "ranged": 1 },
+			{ "name": "T3", "melee": 3, "ranged": 3 },
+			{ "name": "T5", "melee": 5, "ranged": 5 }
 		],
 		"grantAbilityAttribute": "DebugGrantAbility",
 		"removeAbilityAttribute": "DebugRemoveAbility",
 		"resetSecretsAttribute": "DebugResetSecrets",
 		"grantFamilyAttribute": "DebugGrantFamily",
 		"removeFamilyAttribute": "DebugRemoveFamily",
+		"setTierAttribute": "DebugSetTier",
+		"grantStarAttribute": "DebugGrantStar",
+		"resetArmoryAttribute": "DebugResetArmory",
 		"perfLogSeconds": 10,
 		"perfAttribute": "CrowdPerfMs"
 	},

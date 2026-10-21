@@ -15658,3 +15658,9 @@ cycle); `iceOnAuto(cfg, variant, rig, heading)` asks `AirSwing.Judge`; cell side
 inset (`LevelGeometry.meetsIce` / `sim_range.ice_meets`); check_levels `ice_coplanar`, `sheet_bounds`
 (0.685 < thickness < root 2), `sheets_apart`; ice thickness 1.9; ShrineIsland at z 128.5. The 1.9 sheet holds a
 slam because the root box (2 tall) would have to move ~3.9 studs in one physics step (2.33 at 60 Hz).
+
+# L3 W1 contracts — tiers per weapon, the saved loadout, and the Armory screen in grey
+
+Decisions: `docs/MISSIONS_DESIGN.md` §24 (and §10's 2026-10-20 restatement: every weapon has its own window on the
+ladder of 20). Studies: `docs/prompts/l3-study-report-systems.md`, `l3-study-report-screen.md`. Contract of record:
+`docs/prompts/l3-w1-contract.md` (rulings L3-1 to L3-39, §12 the lead's rulings), on branch `l3-armory`.

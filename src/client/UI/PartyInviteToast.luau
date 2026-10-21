@@ -65,7 +65,9 @@ function PartyInviteToast.new(parent: Instance, deps: Deps): PartyInviteToastHan
 		BackgroundTransparency = Theme.BG_TRANSPARENCY,
 		BorderSizePixel = 0,
 		Visible = false,
-		ZIndex = Theme.ZINDEX_CARD,
+		-- Above the hub's full-screen Armory, a later ZINDEX_CARD sibling that would cover it and
+		-- take its taps on the scrim (L3 W1 fix round R8).
+		ZIndex = Theme.ZINDEX_INVITE,
 		Parent = parent,
 	}) :: Frame
 	Create("UICorner", { CornerRadius = UDim.new(0, Theme.CORNER_RADIUS), Parent = root })

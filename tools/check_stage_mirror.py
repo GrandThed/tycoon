@@ -111,6 +111,25 @@ and compares what they answer, value by value:
     open camp clears the tick its floor is empty, whatever its tent has not sent), and `Skip` runs
     through both approaches. The Luau mutants are in tools/crowd_harness/mirror_mutants.py.
 
+  * L3 W1 ("L3 W1 contract", L3-27): the new pure `Armory` (LadderSize, Window, TierOf, HeldTiers,
+    Multiplier, DamageScale, WeaponHp, MaxHp, RangeHp, GearPower, BandOf, NextTier, TierCost,
+    Preview, UpgradeVerdict, LegacyRefund, the levers' SetTier (what it answers and writes) and
+    BuiltBands, and whether Problems finds anything) against sim_combat's
+    mirror of it, on the shipped Armory.json, one without a ladder and two edge copies (a window
+    past the ladder, one narrowed under saved tiers, a malformed window, a band with no material,
+    a missing cost, a multiplier of 0, a negative HP entry, a rangeHp of 0, a broken legacy entry),
+    over grids of tiers, saved profiles, owned and gate flags and built levels; `Problems` on
+    copies broken one rule at a time. `StageFlow.FirstClear` against `sim_range.first_clear` on
+    every level at every difficulty and on Forest Road given each first-clear shape, and
+    Validate's firstClear lines refused alike (L3-17); every Validate is handed the weapons and the
+    starters on both sides, so a first clear's family is checked as a family, not an id only.
+    Its fix round adds `StarHeld` (a band top opened by the Hard star or a `starAlso` one: profiles
+    holding only a Brutal star, a config without `starAlso` and one whose `starAlso` is a word), and
+    breaks that only one Problems rule can name (bandSize 4.5, a band removed, a negative ranged HP
+    entry, a `starAlso` that is no list of names). Its second fix round (F4) names the Armory
+    functions left without a mirror on purpose, StrikeTier, HeldFamily and SavedPower, with why
+    (ARMORY_UNMIRRORED): listed in a note, and the run fails when one is no longer in the Luau.
+
 It fails when either side changes alone. A function of the Luau that the simulators do not
 mirror (the rescue, the skips, the map) is listed, not compared: tools/crowd_harness tests those.
 
@@ -168,6 +187,91 @@ NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "Burs
           "Region": ("Build", "Problems", "Distance", "Inside", "Clamp", "Runway", "Toward"),
           "HitShapes": ("RayUpright", "CrowdRay", "FlatToRect", "Ray"),
           "SwingGate": ("New", "IsAir", "Allows", "Took", "Landed")}
+# L3 W1: each Armory function compared, and its sim_combat mirror. A mirror that is missing fails the
+# run by name, as a Luau function that is missing does.
+ARMORY_MIRRORS = {"LadderSize": "ladder_size", "Window": "window", "TierOf": "tier_of", "HeldTiers": "held_tiers",
+                  "Multiplier": "multiplier", "DamageScale": "damage_scale", "WeaponHp": "weapon_hp",
+                  "MaxHp": "max_hp", "RangeHp": "range_hp", "GearPower": "gear_power", "BandOf": "band_of",
+                  "NextTier": "next_tier", "TierCost": "tier_cost", "Preview": "preview",
+                  "UpgradeVerdict": "upgrade_verdict", "LegacyRefund": "legacy_refund", "Problems": "problems",
+                  "SetTier": "set_tier", "BuiltBands": "built_bands", "StarHeld": "star_held"}
+NEEDED["Armory"] = tuple(ARMORY_MIRRORS)
+NEEDED["StageFlow"] += ("FirstClear",)
+# The L3 W1 fix round 2's F4: the Armory functions deliberately left without a mirror, and why (the
+# simulators need only their parts; tools/crowd_harness tests_l3.luau tests each). Listed in a note,
+# never compared; one that is no longer in the Luau fails the run, so the list cannot go stale.
+ARMORY_UNMIRRORED = {
+    "StrikeTier": "TierOf (compared) under a Studio session override no simulator plays",
+    "HeldFamily": "the saved loadout's slot rule; every simulated course names the pair it holds (sim_range.held_pair)",
+    "SavedPower": "the Power readout, HeldFamily into HeldTiers and GearPower (both compared); no simulator shows it",
+}
+# The grids the Armory is asked on (L3 W1).
+ARMORY_TIERS = (-1, 0, *range(1, 22), 2.5)
+ARMORY_ASCENSION = (0, 1, 2)
+ARMORY_BASES = (0, 5, 24, 45, 55.5)
+ARMORY_BUILT = ([], ["forestRoad"], ["forestRoad", "castle"], ["forestRoad", "castle", "underworld", "planet", "dream"])
+ARMORY_GEAR = ((0, 0), (1, 0), (2, 1), (3, 3), (4, 2), (12, 12), (13, 0), (-1, 2), (2.5, 1))
+# Saved profiles (the slice the tier rules read): nothing, wallets either side of each price, tiers
+# inside, below and above windows, a band top with and without the Hard star, stars that are not it.
+ARMORY_COMBATS = (
+    {"materials": {}},
+    {"materials": {"Timber": 99}, "tiers": {}},
+    {"materials": {"Timber": 100}},
+    {"materials": {"Timber": 250}, "tiers": {"broadsword": 2, "flamethrower": 2}},
+    {"materials": {"Timber": 500}, "tiers": {"broadsword": 3, "longbow": 3}},
+    {"materials": {"Timber": 500}, "tiers": {"broadsword": 3, "longbow": 3}, "stars": {"forestRoad": {"hard": True}}},
+    {"materials": {"Timber": 499}, "tiers": {"broadsword": 3}, "stars": {"forestRoad": {"hard": True}}},
+    {"materials": {"Timber": 10 ** 6, "Iron": 10 ** 6, "Ember": 10 ** 6, "Glowstone": 10 ** 6, "Crystal": 10 ** 6},
+     "tiers": {"broadsword": 4, "longbow": 7, "warhammer": 15, "spear": 12, "greataxe": 8},
+     "stars": {"forestRoad": {"hard": True, "normal": True}, "castle": {"hard": True}}},
+    {"materials": {"Timber": 1000}, "tiers": {"broadsword": 9, "longbow": 25, "warhammer": 1, "greataxe": 4.5,
+                                              "rifle": "x"}},
+    {"materials": {"Timber": 1000}, "tiers": {"broadsword": 3}, "stars": {"forestRoad": {"normal": True}}},
+    {"materials": {"Timber": 1000}, "tiers": {"broadsword": 3}, "stars": {"forestRoad": {"hard": False}}},
+    # The fix round's R1: a Brutal star alone, at a band top with the price held and one short.
+    {"materials": {"Timber": 500}, "tiers": {"broadsword": 3, "longbow": 3}, "stars": {"forestRoad": {"brutal": True}}},
+    {"materials": {"Timber": 499, "Iron": 10 ** 6}, "tiers": {"broadsword": 3, "longbow": 7},
+     "stars": {"forestRoad": {"brutal": True, "normal": True}, "castle": {"brutal": True}}},
+)
+# Problems on copies broken one rule at a time: (label, change). Both sides must call each unsound.
+ARMORY_BREAKS = (
+    ("a damage entry that does not rise", lambda c: c["ladder"]["damage"].__setitem__(4, c["ladder"]["damage"][3])),
+    ("a melee HP list one short", lambda c: c["ladder"]["hp"]["melee"].pop()),
+    ("ranged HP above melee at one tier",  # 85 at T3 and T4: the list still rises
+     lambda c: c["ladder"]["hp"]["ranged"].__setitem__(slice(2, 4), [85, 85])),
+    ("bandSize 3", lambda c: c["ladder"].__setitem__("bandSize", 3)),
+    ("a band with no material", lambda c: c["ladder"]["bands"][1].__setitem__("material", "")),
+    ("three costs for four positions", lambda c: c["ladder"]["costs"].pop()),
+    ("a rangeHp of 0", lambda c: c["ladder"].__setitem__("rangeHp", 0)),
+    ("a family without a window", lambda c: c["windows"].pop("spear")),
+    ("a window whose start is above its top", lambda c: c["windows"].__setitem__("rifle", {"start": 18, "top": 11})),
+    ("a window past the ladder", lambda c: c["windows"].__setitem__("rifle", {"start": 11, "top": 25})),
+    ("a window naming no family", lambda c: c["windows"].__setitem__("nope", {"start": 1, "top": 2})),
+    ("no legacy list", lambda c: c.pop("legacy")),
+    ("a legacy entry with no material", lambda c: c["legacy"]["gearCosts"][3].__setitem__("material", "")),
+    ("a tierWeight that is a string", lambda c: c["power"].__setitem__("tierWeight", "11")),
+    ("no starDifficulty", lambda c: c["ladder"].__setitem__("starDifficulty", "")),
+    ("no ladder", lambda c: c.pop("ladder")),
+    # The fix round's R6: breaks only one rule can name (bandSize not whole skips the costs and cover
+    # rules; four bands of four; melee stays above a negative ranged entry and the list still rises).
+    ("bandSize 4.5", lambda c: c["ladder"].__setitem__("bandSize", 4.5)),
+    ("one band removed", lambda c: c["ladder"]["bands"].pop()),
+    ("a negative ranged HP entry", lambda c: c["ladder"]["hp"]["ranged"].__setitem__(0, -1)),
+    # R1: starAlso is a list of difficulty names, or absent.
+    ("a starAlso that is a word", lambda c: c["ladder"].__setitem__("starAlso", "brutal")),
+    ("a starAlso with an empty name", lambda c: c["ladder"].__setitem__("starAlso", ["brutal", ""])),
+)
+# L3-17: the first-clear shapes Forest Road is given at Hard (FirstClear and Validate alike).
+FIRST_CLEARS = (
+    ("the Warhammer", {"family": "warhammer"}),
+    ("25 Valor", {"valor": 25}),
+    ("a family and Valor", {"family": "greataxe", "valor": 3}),
+    ("a Valor of 0", {"valor": 0}),
+    ("neither", {}),
+    ("an empty family and a Valor of 0", {"family": "", "valor": 0}),
+    ("a family that is a number and a Valor of 2.5", {"family": 5, "valor": 2.5}),
+    ("a string", "warhammer"),
+)
 # L1b Wave 2's grids.
 RAY_ORIGINS = ((0.0, 5.0, 30.0), (3.0, 1.0, -25.0), (0.0, 22.0, 0.5), (-18.0, 9.0, 4.0))
 RAY_WIDTHS = ((0.0, 0.0), (0.6, 0.6), (0.2, 1.5))  # (width, pad)
@@ -1998,6 +2102,225 @@ def split_cases(data, expected):
 
 
 # ---------------------------------------------------------------------------------------------
+# L3 W1: the Armory's tier rules and the first clear
+# ---------------------------------------------------------------------------------------------
+
+
+def starters_of(proving):
+    """Unlocks.Starters: the config loadout's two family ids, a set."""
+    loadout = proving.get("loadout") or {}
+    return {family for family in (loadout.get("melee"), loadout.get("ranged")) if isinstance(family, str) and family}
+
+
+# Forest Road's Hard first clear changed, for Validate's lines (L3-17). Accepted ones first.
+def first_clear_change(reward):
+    def apply(f, l, r):
+        f["difficulties"]["hard"]["firstClear"] = copy.deepcopy(reward)
+    return apply
+
+
+L3_ACCEPTED = (
+    ("a first clear of the Warhammer", first_clear_change({"family": "warhammer"})),
+    ("a first clear of a family and Valor", first_clear_change({"family": "greataxe", "valor": 3})),
+    ("a first clear of 0 Valor", first_clear_change({"valor": 0})),
+    ("a first clear that gives nothing", first_clear_change({})),
+)
+L3_REFUSALS = (
+    ("a first clear that is a string", first_clear_change("warhammer")),
+    ("a first-clear family that is a number", first_clear_change({"family": 5})),
+    ("an empty first-clear family", first_clear_change({"family": ""})),
+    ("a first-clear family of 25 characters", first_clear_change({"family": "f" * 25})),
+    ("a first-clear family that is no weapons family", first_clear_change({"family": "nope"})),
+    ("a first clear of a starter", first_clear_change({"family": "broadsword"})),
+    ("a first-clear Valor of 2.5", first_clear_change({"valor": 2.5})),
+    ("a first-clear Valor of -1", first_clear_change({"valor": -1})),
+    ("a first-clear Valor that is a string", first_clear_change({"valor": "25"})),
+)
+
+
+def armory_python(op, cfg, row, families):
+    """sim_combat's answer to one row, in the shape the Luau driver prints ("none" for a nil)."""
+    combats = ARMORY_COMBATS
+    if op == "ladderSize":
+        return sc.ladder_size(cfg)
+    if op == "window":
+        found = sc.window(cfg, row[0])
+        return "none" if found is None else list(found)
+    if op == "tierOf":
+        return sc.tier_of(cfg, combats[row[0] - 1], row[1])
+    if op == "heldTiers":
+        return sc.held_tiers(cfg, combats[row[0] - 1], row[1], row[2])
+    if op == "multiplier":
+        return sc.multiplier(cfg, row[0])
+    if op == "damageScale":
+        return sc.damage_scale(cfg, row[0], row[1], row[2])
+    if op == "weaponHp":
+        return sc.weapon_hp(cfg, row[0], row[1], row[2])
+    if op == "maxHp":
+        return sc.max_hp(cfg, {"melee": row[0], "ranged": row[1]}, {"melee": row[2], "ranged": row[3]})
+    if op == "rangeHp":
+        return sc.range_hp(cfg)
+    if op == "gearPower":
+        return sc.gear_power(cfg, {"melee": row[0], "ranged": row[1]}, {"melee": row[2], "ranged": row[3]})
+    if op == "bandOf":
+        return list(sc.band_of(cfg, row[0]))
+    if op == "nextTier":
+        found = sc.next_tier(cfg, combats[row[0] - 1], row[1])
+        return "none" if found is None else found
+    if op == "tierCost":
+        return list(sc.tier_cost(cfg, row[0]))
+    if op == "preview":
+        return list(sc.preview(cfg, row[0], row[1], row[2]))
+    if op == "upgradeVerdict":
+        built = {level: True for level in ARMORY_BUILT[row[4] - 1]}
+        found = sc.upgrade_verdict(cfg, copy.deepcopy(combats[row[0] - 1]), row[1], row[2], row[3], built)
+        return "none" if found is None else found
+    if op == "legacyRefund":
+        return sc.legacy_refund(cfg, {"melee": row[0], "ranged": row[1]})
+    if op == "problems":
+        return bool(sc.problems(cfg, families))
+    if op == "setTier":
+        combat = copy.deepcopy(combats[row[0] - 1])
+        written = sc.set_tier(cfg, combat, row[1], row[2])
+        return ["none" if written is None else written, combat.get("tiers") or {}]
+    if op == "builtBands":
+        levels, materials = sc.built_bands(cfg, {level: True for level in ARMORY_BUILT[row[0] - 1]})
+        return [levels, materials]
+    if op == "starHeld":
+        return sc.star_held(cfg, combats[row[0] - 1], row[1])
+    raise ValueError(op)
+
+
+def armory_cases(data, expected, report, proving):
+    """The new pure Armory (L3-27) against sim_combat's mirror, op by op: the shipped Armory.json, one
+    without a ladder and two edge copies, over the grids above; Problems on ARMORY_BREAKS."""
+    armory = sc.load_armory_config()
+    if armory is None:
+        report.differ("Armory: the tier rules (L3-1 to L3-8)", "Armory.json is missing")
+        return
+    families = sorted(proving["weapons"])
+    asked = families + ["nope"]
+    bare = copy.deepcopy(armory)
+    bare.pop("ladder", None)
+    narrow = copy.deepcopy(armory)
+    narrow["windows"]["broadsword"] = {"start": 1, "top": 6}
+    narrow["windows"]["longbow"] = {"start": 7, "top": 12}
+    edges = copy.deepcopy(armory)
+    windows, ladder = edges["windows"], edges["ladder"]
+    windows["rifle"] = {"start": 0, "top": 30}
+    windows["smg"] = {"start": 5, "top": 3}
+    windows["beam"] = {"start": 2.5, "top": 8}
+    windows["chaingun"] = {"start": "3", "top": 8}
+    windows.pop("spinblade", None)
+    ladder["costs"] = ladder["costs"][:3]
+    ladder["bands"][2]["material"] = ""
+    ladder["damage"][6] = 0
+    ladder["hp"]["ranged"][4] = -5
+    ladder["rangeHp"] = 0
+    edges["legacy"]["gearCosts"][1] = {"material": "", "amount": 60}
+    edges["legacy"]["gearCosts"][2] = {"material": "Timber", "amount": -180}
+    ladder["starAlso"] = "brutal"  # a word, not a list: it opens nothing (R1)
+    hard_only = copy.deepcopy(armory)
+    hard_only["ladder"].pop("starAlso", None)
+    configs = [("shipped", armory), ("no ladder", bare), ("narrowed windows", narrow), ("edges", edges),
+               ("no starAlso", hard_only)]
+    combats = range(1, len(ARMORY_COMBATS) + 1)
+    built = range(1, len(ARMORY_BUILT) + 1)
+    grids = {
+        "ladderSize": [[]],
+        "window": [[family] for family in asked],
+        "tierOf": [[c, family] for c in combats for family in asked],
+        "heldTiers": [[c, melee, ranged] for c in combats for melee, ranged in (("broadsword", "longbow"),
+                                                                                ("warhammer", "flamethrower"),
+                                                                                ("greataxe", "rifle"), ("nope", "smg"))],
+        "multiplier": [[tier] for tier in ARMORY_TIERS],
+        "damageScale": [[tier, asc, ability] for tier in ARMORY_TIERS for asc in ARMORY_ASCENSION
+                        for ability in (False, True)],
+        "weaponHp": [[slot, tier, asc] for slot in ("melee", "ranged", "nope") for tier in ARMORY_TIERS
+                     for asc in ARMORY_ASCENSION],
+        "maxHp": [[tm, tr, am, ar] for tm in (1, 3, 5, 12, 20) for tr in (1, 3, 5, 12, 20) for am in (0, 1)
+                  for ar in (0, 2)],
+        "rangeHp": [[]],
+        "gearPower": [[tm, tr, am, ar] for tm in (1, 3, 5, 12, 20) for tr in (1, 3, 5, 12, 20) for am in (0, 1)
+                      for ar in (0, 2)],
+        "bandOf": [[tier] for tier in ARMORY_TIERS],
+        "nextTier": [[c, family] for c in combats for family in asked],
+        "tierCost": [[tier] for tier in ARMORY_TIERS],
+        "preview": [[slot, tier, base] for slot in ("melee", "ranged", "nope") for tier in (1, 2, 5, 20)
+                    for base in ARMORY_BASES],
+        "upgradeVerdict": [[c, family, owned, gate, b] for c in combats for family in asked
+                           for owned in (False, True) for gate in (False, True) for b in built],
+        "legacyRefund": [list(gear) for gear in ARMORY_GEAR],
+        "problems": [[]],
+        "setTier": [[c, family, tier] for c in (1, 4, 9) for family in asked
+                    for tier in (-1, 0, 1, 2, 7, 12, 25, 2.5, 5.6)],
+        "builtBands": [[b] for b in built],
+        "starHeld": [[c, level] for c in combats for level in ("forestRoad", "castle", "nope")],
+    }
+    luau_names = {"ladderSize": "LadderSize", "window": "Window", "tierOf": "TierOf", "heldTiers": "HeldTiers",
+                  "multiplier": "Multiplier", "damageScale": "DamageScale", "weaponHp": "WeaponHp", "maxHp": "MaxHp",
+                  "rangeHp": "RangeHp", "gearPower": "GearPower", "bandOf": "BandOf", "nextTier": "NextTier",
+                  "tierCost": "TierCost", "preview": "Preview", "upgradeVerdict": "UpgradeVerdict",
+                  "legacyRefund": "LegacyRefund", "problems": "Problems", "setTier": "SetTier",
+                  "builtBands": "BuiltBands", "starHeld": "StarHeld"}
+    breaks = []
+    for label, change in ARMORY_BREAKS:
+        broken = copy.deepcopy(armory)
+        change(broken)
+        breaks.append((f"broken: {label}", broken))
+    for index, (name, cfg) in enumerate(configs + breaks, 1):
+        data["armoryConfigs"].append(cfg)
+        ops = ["problems"] if name.startswith("broken: ") else list(grids)
+        for op in ops:
+            if not callable(getattr(sc, ARMORY_MIRRORS[luau_names[op]], None)):
+                continue
+            case = f"armory.{index}.{op}"
+            rows = grids[op]
+            data["armoryCases"].append({"id": case, "config": index, "op": op, "rows": rows, "families": families})
+            answers = []
+            for row in rows:
+                try:
+                    answers.append(plain(armory_python(op, cfg, row, families)))
+                except Exception as problem:  # a mirror that throws is a difference, not the end of the run
+                    answers.append({"threw": f"{type(problem).__name__}: {problem}"})
+            kind = ("Armory.Problems: a broken Armory.json is named alike (L3-5)" if op == "problems"
+                    else f"Armory.{luau_names[op]} (L3-1 to L3-8)")
+            expected[case] = (kind, f"{name}, {len(rows)} row(s)", answers)
+
+
+def first_clear_cases(data, expected, report, files, resolved, difficulties):
+    """StageFlow.FirstClear against sim_range.first_clear (L3-17): every level at every difficulty
+    (and one that does not exist), and Forest Road given each of FIRST_CLEARS at Hard."""
+    mirror = getattr(sr, "first_clear", None)
+    if not callable(mirror):
+        return
+    cases = [(file["id"], file) for file in files]
+    forest = next((file for file in files if file["id"] == "forestRoad"), None)
+    if forest is not None:
+        for label, reward in FIRST_CLEARS:
+            changed = copy.deepcopy(forest)
+            changed["difficulties"]["hard"]["firstClear"] = copy.deepcopy(reward)
+            cases.append((f"forestRoad, {label} at Hard", changed))
+    for index, (label, file) in enumerate(cases, 1):
+        case = f"firstClear.{index}"
+        level = resolved(file)
+        data["firstClearCases"].append({"id": case, "file": file, "difficulties": list(difficulties)})
+        if level is None:
+            expected[case] = ("StageFlow.FirstClear (L3-17)", label, "unresolved")
+            continue
+        answers = []
+        for difficulty in difficulties:
+            try:
+                given = mirror(level, difficulty)
+                answers.append("none" if given is None else {
+                    "family": given.get("family") if given.get("family") is not None else "none",
+                    "valor": given.get("valor") if given.get("valor") is not None else "none"})
+            except Exception as problem:
+                answers.append({"threw": f"{type(problem).__name__}: {problem}"})
+        expected[case] = ("StageFlow.FirstClear (L3-17)", label, answers)
+
+
+# ---------------------------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------------------------
 
@@ -2032,6 +2355,8 @@ def main():
     below = combat["player"]["rescue"]["below"]
     plan_difficulties = list(expeditions["difficulties"]) + ["nope"]
     parties = range(1, combat["coop"]["maxParty"] + 1)
+    # L3-17: the families a first clear may give, and the starters it may not (Unlocks.Starters).
+    vet = {"weapons": cfg["weapons"], "starters": starters_of(cfg)}
 
     def resolved(file):
         return sr.resolve_level(file, by_mission.get(file.get("mission")), director["runCapSeconds"], first)
@@ -2049,7 +2374,9 @@ def main():
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
             "campRules": combat["camps"], "campCases": [], "splitCases": [], "rayCases": [], "swingCases": [],
             "combatCases": [], "reserveCases": [], "tentOwesCases": [], "regionCases": [], "fieldedCases": [],
-            "ceilingCases": [], "fenceCases": [], "iceCases": []}
+            "ceilingCases": [], "fenceCases": [], "iceCases": [], "armoryConfigs": [], "armoryCases": [],
+            "armoryCombats": [dict(combat_) for combat_ in ARMORY_COMBATS], "armoryBuilt": [list(b) for b in ARMORY_BUILT],
+            "firstClearCases": []}
     # The L1c second fix round's F1: StageFlow.Ceiling against sim_range.trigger_ceiling, on every
     # shipped camp and on the edges: a low fence, one at triggerHeight, an open camp's tall one,
     # none, a height that is a string or absent.
@@ -2088,7 +2415,7 @@ def main():
         if level is None:
             continue
         expected[f"level.{number}.validate"] = ("StageFlow.Validate: the shipped level is playable", name,
-                                                sr.level_problems(level, layout, rules, crowd_kinds, ranks, crowd_max))
+                                                sr.level_problems(level, layout, rules, crowd_kinds, ranks, crowd_max, **vet))
         reserve_case = f"level.{number}.bossReserve"
         data["reserveCases"].append({"id": reserve_case, "level": number})
         expected[reserve_case] = ("StageFlow.BossReserve", f"{name}: with the kinds, and with none",
@@ -2229,7 +2556,7 @@ def main():
                 data["refusalCases"].append({"id": case, "file": changed, "rules": rules})
                 level_changed = resolved(changed)
                 refused = level_changed is None or bool(sr.level_problems(level_changed, layout, rules, crowd_kinds, ranks,
-                                                                          crowd_max))
+                                                                          crowd_max, **vet))
                 expected[case] = ("ruling 6: refused alike", f"{name}, {label}", refused)
                 if label != "as shipped":
                     must_refuse.add(case)
@@ -2239,7 +2566,7 @@ def main():
                 case = f"refusal.{number}.{len(data['refusalCases'])}"
                 data["refusalCases"].append({"id": case, "file": file, "rules": short_rules})
                 expected[case] = ("ruling 6: refused alike", f"{name}, Combat.json without levels.{key}",
-                                  bool(sr.level_problems(level, layout, short_rules, crowd_kinds, ranks, crowd_max)))
+                                  bool(sr.level_problems(level, layout, short_rules, crowd_kinds, ranks, crowd_max, **vet)))
             # L1b: each of Validate's new lines, broken once.
             if file.get("camps"):
                 for label, change in L1B_REFUSALS:
@@ -2249,7 +2576,7 @@ def main():
                     data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
                     level_changed = resolved(changed)
                     refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
-                                                                              ranks, crowd_max))
+                                                                              ranks, crowd_max, **vet))
                     expected[case] = ("L1b: Validate's new lines refuse alike", f"{name}, {label}", refused)
                     must_refuse.add(case)
             # L2-13: each of Validate's secrets lines, broken once.
@@ -2261,7 +2588,7 @@ def main():
                     data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
                     level_changed = resolved(changed)
                     refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
-                                                                              ranks, crowd_max))
+                                                                              ranks, crowd_max, **vet))
                     expected[case] = ("L2: Validate's secrets lines refuse alike", f"{name}, {label}", refused)
                     must_refuse.add(case)
             # L2-34, L2-36: the react, opens and shortcuts lines, on a test tunnel of their own; L2-52,
@@ -2269,8 +2596,10 @@ def main():
             if raw_layouts[file["layout"]].get("blocks"):
                 w2 = "L2 W2: Validate's react, opens and shortcuts lines refuse alike"
                 w3 = "L2 W3: Validate's ice and landing lines refuse alike"
+                l3 = "L3: Validate's firstClear lines refuse alike"
                 for cases, verdict, title in ((L2W2_ACCEPTED, False, w2), (L2W2_REFUSALS, True, w2),
-                                              (L2W3_ACCEPTED, False, w3), (L2W3_REFUSALS, True, w3)):
+                                              (L2W3_ACCEPTED, False, w3), (L2W3_REFUSALS, True, w3),
+                                              (L3_ACCEPTED, False, l3), (L3_REFUSALS, True, l3)):
                     for label, change in cases:
                         changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
                         change(changed, raw, short_rules)
@@ -2278,7 +2607,7 @@ def main():
                         data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
                         level_changed = resolved(changed)
                         refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules,
-                                                                                  crowd_kinds, ranks, crowd_max))
+                                                                                  crowd_kinds, ranks, crowd_max, **vet))
                         expected[case] = (title, f"{name}, {label}", refused)
                         if verdict:
                             must_refuse.add(case)
@@ -2306,6 +2635,8 @@ def main():
     region_cases(data, expected, raw_layouts)
     wave4_camp_cases(data, expected, combat["camps"], raw_layouts)
     fielded_cases(data, expected, files, rules, ranks, crowd_kinds, below)
+    armory_cases(data, expected, report, cfg)
+    first_clear_cases(data, expected, report, files, resolved, plan_difficulties)
     data["burstCases"] = [list(key) for key in bursts]
     data["tempoCases"] = [list(key) for key in tempos]
     data["mergeCases"] = [list(key) for key in merges]
@@ -2354,6 +2685,16 @@ def main():
                if name not in (exports.get(module) or [])]
     for name in missing:
         report.differ("the functions compared exist", f"{name} is not in the Luau")
+    lacking = [f"sim_combat.{name}" for name in ARMORY_MIRRORS.values() if not callable(getattr(sc, name, None))]
+    lacking += [] if callable(getattr(sr, "first_clear", None)) else ["sim_range.first_clear"]
+    for name in lacking:
+        report.differ("the functions compared exist", f"{name} is not in the Python")
+    missing += lacking
+    # F4: a deliberately unmirrored Armory function that is gone (or renamed) leaves a stale list.
+    stale = [f"Armory.{name}" for name in ARMORY_UNMIRRORED if name not in (exports.get("Armory") or [])]
+    for name in stale:
+        report.differ("the functions compared exist", f"{name} is listed as deliberately unmirrored but is not in the Luau")
+    missing += stale
     if not missing:
         report.compare("the functions compared exist", "exports", True, True)
 
@@ -2369,7 +2710,8 @@ def main():
             report.compare(kind, label, luau_answer if isinstance(luau_answer, dict) else list(luau_answer or []), python)
             continue
         if (kind.startswith("ruling 6") or kind.startswith("L1b: Validate") or kind.startswith("L2: Validate")
-                or kind.startswith("L2 W2: Validate") or kind.startswith("L2 W3: Validate")):
+                or kind.startswith("L2 W2: Validate") or kind.startswith("L2 W3: Validate")
+                or kind.startswith("L3: Validate")):
             if key in must_refuse and not python and not luau_answer:
                 report.differ(kind, f"{label}: accepted on both sides (the rule it breaks is gone from both)")
                 continue
@@ -2456,6 +2798,11 @@ def main():
     loose = [name for name in exports.get("StageFlow") or [] if name not in mirrored["StageFlow"]]
     print(f"  note  StageFlow functions the simulators do not mirror (tools/crowd_harness tests them): "
           f"{', '.join(loose) or 'none'}")
+    print("  note  Armory functions deliberately not mirrored (F4; tools/crowd_harness tests them): "
+          + "; ".join(f"{name}: {why}" for name, why in ARMORY_UNMIRRORED.items()))
+    loose = [name for name in exports.get("Armory") or [] if name not in ARMORY_MIRRORS and name not in ARMORY_UNMIRRORED]
+    if loose:
+        print(f"  note  Armory functions not compared here: {', '.join(loose)}")
     loose = [name for name in exports.get("CampBrain") or [] if name not in mirrored["CampBrain"]]
     if loose:
         print(f"  note  CampBrain functions not compared: {', '.join(loose)}")

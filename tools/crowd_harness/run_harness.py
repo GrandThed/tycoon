@@ -35,6 +35,18 @@ L2 W3 adds tests_l2w3.luau: WorldReact's Cells, Chills and Freeze, LevelGeometry
 Validate's ice and landing lines, Plan's waters with StageFlow.Landing and FallLanding, the shipped
 creek crossed swing by swing, and as text (`source.w3`) LevelService.React's ice branch and its
 freeze, the rescue's landing in WaveService and Frost Quake's launcher in AbilityService.
+L3 W1 adds tests_l3.luau (the pure Armory ladder, windows, upgrade and refund, the profile's v8
+step, Unlocks' saved loadout and stars, Armory.json as it ships), tests_l3_run.luau (StageFlow's
+first clear) and tests_l3_ui.luau (the Armory screen's pure ArmoryModel, bundled with Format).
+Its fix round adds the pure ProfileCopy (the hub's Delta copy) and reads as text (`source.l3`, the
+L2 pattern) the service lines that apply L3's rules: the strike tier in WeaponService's hits, bar and
+slam, the upgrade's gate, the first clear in EndRun and the U lever, the stars from the profile,
+readLevel's Validate inputs, DebugService's wildcard and presets, both places' Power, the hub's copy,
+DataService's runner and the hub's upgrade (L3_LINES, counted in the function each belongs to).
+Its second fix round (docs/prompts/l3-w1-fix2.md F1, F2) also counts the lines that feed each
+pinned call and the exits of the functions they live in (an early return cannot hide), reads the
+count-0 rules on the code with its comments blanked and by pattern, so no other spelling passes
+(L3_PATTERNS), and tests Unlocks.ApplyFirstClear and the lines that call it in both places.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -104,6 +116,11 @@ SOURCES = {
     "GroundRule": "src/shared/GroundRule.luau",
     # L2 W2: the world's reactions (tests_l2w2.luau).
     "WorldReact": "src/shared/WorldReact.luau",
+    # L3 W1: the Armory screen's pure model (tests_l3_ui.luau) and the number formatting it reads.
+    "Format": "src/shared/Format.luau",
+    "ArmoryModel": "src/client/UI/ArmoryModel.luau",
+    # The L3 W1 fix round's R7: the hub's Delta copy of a combat profile, made pure.
+    "ProfileCopy": "src/shared/ProfileCopy.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -133,6 +150,12 @@ TESTS = [
     # L2 W3: Cells, Chills, Freeze, the ice pieces, Validate's ice and landing lines, Landing,
     # the shipped crossing, and the lines that act on them.
     "tests_l2w3.luau",
+    # L3 W1: the ladder, the windows, the upgrade, the refund and profile v8, the saved loadout and
+    # the shipped Armory.json (luau-engineer A's); the first clear (B's); the Armory screen's
+    # pure model (ui-engineer A's).
+    "tests_l3.luau",
+    "tests_l3_run.luau",
+    "tests_l3_ui.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -421,6 +444,263 @@ W3_FIX3_LINES = {
     "phoneHumanoid": "MovementController.IsAirborne",
 }
 COMBAT_PROJECT = "combat.project.json"
+# The L3 W1 fix round (docs/prompts/l3-w1-fix-round.md R3, R4, R5, R7, 3-s2): the service lines that
+# apply L3's pure rules. None of these services loads here, so each line is counted as text in the
+# one function it belongs to (None = the whole file), and tests_l3.luau holds each count to its
+# expected value: a call site that stops calling the rule, or calls it with other inputs, fails.
+UNLOCK_SERVICE = "src/combat/server/Services/UnlockService.luau"
+DEBUG_SERVICE = "src/combat/server/Services/DebugService.luau"
+HUB_ECONOMY = "src/server/Services/EconomyService.luau"
+HUB_DATA = "src/server/Services/DataService.luau"
+HUB_ARMORY = "src/server/Services/ArmoryService.luau"
+# F5: the hub's client replays the Armory push once the weapon families come (UIController's boot).
+HUB_UI = "src/client/Controllers/UIController.luau"
+L3_BODIES = {
+    "gearOf": (WEAPON_SERVICE, re.compile(r"(?ms)^local function gearOf\(.*?^end$")),
+    "damageScale": (WEAPON_SERVICE, re.compile(r"(?ms)^local function damageScale\(.*?^end$")),
+    "onSlam": (WEAPON_SERVICE, re.compile(r"(?ms)^function WeaponService\.OnSlam\(.*?^end$")),
+    "onUpgrade": (UNLOCK_SERVICE, re.compile(r"(?ms)^function UnlockService\.OnUpgradeWeapon\(.*?^end$")),
+    "grantFirstClear": (UNLOCK_SERVICE, re.compile(r"(?ms)^function UnlockService\.GrantFirstClear\(.*?^end$")),
+    "endRun": (WAVE_SERVICE, re.compile(r"(?ms)^function WaveService\.EndRun\(.*?^end$")),
+    "starsOf": (WAVE_SERVICE, re.compile(r"(?ms)^local function starsOf\(.*?^end$")),
+    "readLevel": (WAVE_SERVICE, re.compile(r"(?ms)^local function readLevel\(.*?^end$")),
+    "grantStars": (WAVE_SERVICE, re.compile(r"(?ms)^function WaveService\.GrantStars\(.*?^end$")),
+    "nextGear": (DEBUG_SERVICE, re.compile(r"(?ms)^local function nextGear\(.*?^end$")),
+    "setGear": (DEBUG_SERVICE, re.compile(r"(?ms)^local function setGear\(.*?^end$")),
+    "grantStar": (DEBUG_SERVICE, re.compile(r"(?ms)^local function grantStar\(.*?^end$")),
+    "mainSnapshot": (MAIN_SERVER, re.compile(r"(?ms)^local function sendSnapshot\(.*?^end$")),
+    "hubPower": (HUB_ECONOMY, re.compile(r"(?ms)^local function computeGearPower\(.*?^end$")),
+    "runMigrations": (HUB_DATA, re.compile(r"(?ms)^local function runMigrations\(.*?^end$")),
+    "attemptLoad": (HUB_DATA, re.compile(r"(?ms)^local function attemptLoad\(.*?^end$")),
+    "hubUpgrade": (HUB_ARMORY, re.compile(r"(?ms)^local function tryUpgradeWeapon\(.*?^end$")),
+    "hubStar": (HUB_ARMORY, re.compile(r"(?ms)^local function grantStarTo\(.*?^end$")),
+    "hubFileReward": (HUB_ARMORY, re.compile(r"(?ms)^local function fileFirstClear\(.*?^end$")),
+    "uiKeys": (HUB_UI, re.compile(r"(?ms)^\tlocal function refreshCombatKeys\(.*?^\tend$")),
+    "uiPush": (HUB_UI, re.compile(r"(?ms)^\tpushArmory = function\(.*?^\tend$")),
+}
+# The ascension a hit and the bar read: the override's, else the profile's, else none (both bodies).
+ASCENSION_READ = ("local ascension = if override ~= nil\n\t\tthen override.ascension\n"
+                  "\t\telseif combat ~= nil then combat.ascension\n\t\telse CONST.NO_ASCENSION")
+# The profile a hit and the bar read (both bodies; the review's m1 probes set `combat` to nil).
+PROFILE_READ = "local profile = DataService.GetState(player)\n\tlocal combat = if profile ~= nil then profile.combat else nil"
+# key: (file, body or None for the whole file, the exact text). The expected counts are the cases'.
+L3_LINES = {
+    # R3: hits and the bar take the strike tier (luau-engineer B's lines), the slam the held melee family.
+    "strikeTierCalls": (WEAPON_SERVICE, None, "Armory.StrikeTier("),
+    "gearMelee": (WEAPON_SERVICE, "gearOf", "melee = Armory.StrikeTier(armoryConfig, combat, held.melee, meleeOverride),"),
+    "gearRanged": (WEAPON_SERVICE, "gearOf", "ranged = Armory.StrikeTier(armoryConfig, combat, held.ranged, rangedOverride),"),
+    "gearMeleeOverride": (WEAPON_SERVICE, "gearOf", "local meleeOverride = if gear ~= nil then gear.melee else nil"),
+    "gearRangedOverride": (WEAPON_SERVICE, "gearOf", "local rangedOverride = if gear ~= nil then gear.ranged else nil"),
+    # F1: what feeds the bar's two StrikeTier calls, in gearOf.
+    "gearConfig": (WEAPON_SERVICE, "gearOf", "local armoryConfig = Catalog.GetArmoryConfig()\n"
+                   "\tif state.mode == \"range\" or armoryConfig == nil then\n"
+                   "\t\treturn table.clone(CONST.RANGE_GEAR), table.clone(CONST.NO_ASCENSION)\n\tend\n"),
+    "gearProfile": (WEAPON_SERVICE, "gearOf", PROFILE_READ),
+    "gearHeld": (WEAPON_SERVICE, "gearOf", "local shooter = state.shooters[player]\n\tlocal config = Tuning.Get()\n"
+                 "\tlocal held = if shooter ~= nil\n\t\tthen shooter.loadout\n"
+                 "\t\telse Unlocks.LoadoutOf(combat, config.weapons, {\n"
+                 "\t\t\tmelee = startingFamily(config, \"melee\"),\n"
+                 "\t\t\tranged = startingFamily(config, \"ranged\"),\n\t\t})\n"),
+    "gearOverrideRead": (WEAPON_SERVICE, "gearOf", "local override = state.gearOverride[player]\n"
+                         "\tlocal gear = if override ~= nil then override.gear else nil\n"),
+    "gearAscension": (WEAPON_SERVICE, "gearOf", ASCENSION_READ),
+    "gearAscensionOut": (WEAPON_SERVICE, "gearOf", "\t}, { melee = ascension.melee, ranged = ascension.ranged }\n"),
+    "scaleTier": (WEAPON_SERVICE, "damageScale", "local tier = Armory.StrikeTier(armoryConfig, combat, family, overrideTier)"),
+    "scaleMelee": (WEAPON_SERVICE, "damageScale", "\t\t\tthen gear.melee\n"),
+    "scaleRanged": (WEAPON_SERVICE, "damageScale", 'elseif slot == "ranged" then gear.ranged'),
+    "scaleReturn": (WEAPON_SERVICE, "damageScale", "return Armory.DamageScale(armoryConfig, tier, level, ability)"),
+    # F1: what feeds a hit's StrikeTier and DamageScale, in damageScale.
+    "scaleGuards": (WEAPON_SERVICE, "damageScale", "\tif state.mode == \"range\" then\n\t\treturn 1\n\tend\n"
+                    "\tlocal armoryConfig = Catalog.GetArmoryConfig()\n\tif armoryConfig == nil then\n\t\treturn 1\n\tend\n"),
+    "scaleSlot": (WEAPON_SERVICE, "damageScale", "local def = familyDef(Tuning.Get(), family)\n"
+                  "\tlocal slot = if def ~= nil then def.slot else \"\"\n"),
+    "scaleProfile": (WEAPON_SERVICE, "damageScale", PROFILE_READ),
+    "scaleOverrideRead": (WEAPON_SERVICE, "damageScale", "local override = state.gearOverride[player]\n"
+                          "\tlocal overrideTier: number? = nil\n\tif override ~= nil then\n"
+                          "\t\tlocal gear = override.gear\n\t\toverrideTier = if slot == \"melee\"\n"),
+    "scaleAscension": (WEAPON_SERVICE, "damageScale", ASCENSION_READ),
+    "scaleLevel": (WEAPON_SERVICE, "damageScale", "local level = if slot == \"melee\"\n\t\tthen ascension.melee\n"
+                   "\t\telseif slot == \"ranged\" then ascension.ranged\n\t\telse 0\n"),
+    "slamFamily": (WEAPON_SERVICE, "onSlam", "StrikeTally.New(damageScale(player, shooter.loadout.melee, false))"),
+    # R3: the combat place's upgrade is gated on MayLeave and owns through the starters.
+    "upgradeGate": (UNLOCK_SERVICE, "onUpgrade", "\t\tgate ~= nil and gate(player),\n"),
+    "upgradeOwned": (UNLOCK_SERVICE, "onUpgrade", "Unlocks.OwnsFamily(combat.families, family, starters()),"),
+    # F2: the dungeon's first clear is the pure Unlocks.ApplyFirstClear on the player's own profile.
+    "grantProfile": (UNLOCK_SERVICE, "grantFirstClear", "local profile = DataService.GetState(player)\n"
+                     "\tif profile == nil then\n\t\treturn nil\n\tend\n\tlocal combat = profile.combat\n"),
+    "grantApply": (UNLOCK_SERVICE, "grantFirstClear",
+                   "local given = Unlocks.ApplyFirstClear(combat, reward, weapons(), starters())"),
+    "grantNothing": (UNLOCK_SERVICE, "grantFirstClear", "\tif given.family == nil and given.valor == 0 then\n"
+                     "\t\treturn nil\n\tend\n"),
+    "grantSent": (UNLOCK_SERVICE, "grantFirstClear", "\tArenaService.SendSnapshot(player)\n\treturn given\n"),
+    # R3 (L3-17): a new star's first-clear reward in EndRun; R4: the U lever pays the same way.
+    "endRunReward": (WAVE_SERVICE, "endRun", "local reward = if star then StageFlow.FirstClear(level, plan.difficulty) else nil"),
+    "endRunGrant": (WAVE_SERVICE, "endRun", "local given = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil"),
+    "grantFirstClearCalls": (WAVE_SERVICE, None, "UnlockService.GrantFirstClear("),
+    "starsProfile": (WAVE_SERVICE, "starsOf", "if profile ~= nil then\n\t\treturn Unlocks.StarsOf(profile.combat)"),
+    "readLevelInputs": (WAVE_SERVICE, "readLevel", "\t\ttuned.weapons,\n\t\tUnlocks.Starters(tuned.loadout)\n\t)"),
+    "leverAward": (WAVE_SERVICE, "grantStars", "if not StageFlow.Award(stars, levelId, difficulty) then"),
+    # F3: the level is resolved first, and one that does not resolve gets neither star nor reward.
+    "leverInputs": (WAVE_SERVICE, "grantStars", "local combatConfig = config()\n"
+                    "\tlocal map = Catalog.GetExpeditionsConfig()\n\tlocal stars = starsOf(player.UserId)\n"),
+    "leverLevel": (WAVE_SERVICE, "grantStars", "local level = if combatConfig ~= nil and map ~= nil\n"
+                   "\t\t\tthen resolveLevel(levelId, difficulty, combatConfig, map)\n\t\t\telse nil\n"
+                   "\t\tif level == nil then\n\t\t\tcontinue\n\t\tend\n"
+                   "\t\tif not StageFlow.Award(stars, levelId, difficulty) then\n"),
+    "leverReward": (WAVE_SERVICE, "grantStars", "local reward = StageFlow.FirstClear(level, difficulty)"),
+    "leverGrant": (WAVE_SERVICE, "grantStars", "local grant = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil"),
+    "leverGrants": (WAVE_SERVICE, "grantStars", "\t\tif grant ~= nil then\n\t\t\ttable.insert(grants, grant)\n\t\tend\n"),
+    "leverStudio": (WAVE_SERVICE, "grantStars", "if not boot.mission or not RunService:IsStudio() then"),
+    # 3-s2 and 2-s1 in the combat place's levers.
+    "debugAllStars": (DEBUG_SERVICE, None, "if which == Unlocks.ALL_STARS then"),
+    "debugNextGear": (DEBUG_SERVICE, "nextGear", "local gear = WeaponService.GearOverride(player) or WeaponService.GearOf(player)"),
+    "debugSetGear": (DEBUG_SERVICE, "setGear", "local gear = WeaponService.GearOverride(target) or fought"),
+    # F1: the star lever's difficulty, levels and players, and its call, in grantStar.
+    "debugLadder": (DEBUG_SERVICE, "grantStar", "local armoryConfig = Catalog.GetArmoryConfig()\n"
+                    "\tlocal ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil\n\tif ladder == nil then\n"),
+    "debugLevels": (DEBUG_SERVICE, "grantStar", "\tif which == Unlocks.ALL_STARS then\n\t\tlevelIds = builtBands()\n"
+                    "\telseif Catalog.GetLevelFile(which) ~= nil then\n\t\ttable.insert(levelIds, which)\n"
+                    "\tend\n\tif #levelIds == 0 then\n"),
+    "debugDifficulty": (DEBUG_SERVICE, "grantStar", "\tlocal difficulty = ladder.starDifficulty\n"),
+    "debugTargets": (DEBUG_SERVICE, "grantStar",
+                     "local targets: { Player } = if player ~= nil then { player } else UnlockService.Admitted()"),
+    "debugGrant": (DEBUG_SERVICE, "grantStar", "local _new, grants = WaveService.GrantStars(target, levelIds, difficulty)"),
+    # R7: both places show the saved pair's Power; the hub's Delta carries the pure copy. F1: and each
+    # place hands SavedPower its own profile and ProvingGrounds.json's weapons and starters.
+    "mainPower": (MAIN_SERVER, "mainSnapshot", "then Armory.SavedPower(\n\t\t\t\tarmoryConfig,\n\t\t\t\tstate.combat,\n"),
+    "mainArmory": (MAIN_SERVER, "mainSnapshot", "\tlocal armoryConfig = Catalog.GetArmoryConfig()\n"),
+    "mainProving": (MAIN_SERVER, "mainSnapshot", "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n"),
+    "mainWeapons": (MAIN_SERVER, "mainSnapshot", "\t\t\t\tif provingConfig ~= nil then provingConfig.weapons else nil,\n"),
+    "mainStarters": (MAIN_SERVER, "mainSnapshot",
+                     "\t\t\t\tif provingConfig ~= nil then provingConfig.loadout else { melee = \"\", ranged = \"\" }\n"),
+    "hubPower": (HUB_ECONOMY, "hubPower", "return Armory.SavedPower(\n\t\tarmoryConfig,\n\t\tstate.combat,\n"),
+    "hubArmory": (HUB_ECONOMY, "hubPower", "\tlocal armoryConfig = Catalog.GetArmoryConfig()\n"
+                  "\tif armoryConfig == nil then\n\t\treturn 0\n\tend\n"),
+    "hubProving": (HUB_ECONOMY, "hubPower", "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n"),
+    "hubWeapons": (HUB_ECONOMY, "hubPower", "\t\tif provingConfig ~= nil then provingConfig.weapons else nil,\n"),
+    "hubStarters": (HUB_ECONOMY, "hubPower",
+                    "\t\tif provingConfig ~= nil then provingConfig.loadout else { melee = \"\", ranged = \"\" }\n"),
+    "hubPowerSent": (HUB_ECONOMY, None, "gearPower = computeGearPower(state)"),
+    "hubCopy": (HUB_ECONOMY, None, "delta.combat = ProfileCopy.Combat(state.combat)"),
+    # R5: DataService runs the one runner, and F1: a load reaches it (a statement of attemptLoad's own).
+    "runnerCall": (HUB_DATA, "runMigrations", "local verdict = ProfileSchema.Run(state)"),
+    # Held between its neighbours, so nothing can be wrapped round it unseen.
+    "loadMigrates": (HUB_DATA, "attemptLoad", "profile:Reconcile() -- fill fields added to the template since this"
+                     " profile was created\n\trunMigrations(profile.Data, player)\n\t-- Before the profile is published"),
+    # The hub's upgrade: its gate is open (no fight) and it owns through the starters; 3-s2 there too.
+    "hubUpgradeCall": (HUB_ARMORY, "hubUpgrade", "Armory.Upgrade(armoryConfig, state.combat, family, owned, true, built)"),
+    "hubUpgradeOwned": (HUB_ARMORY, "hubUpgrade", "local owned = Unlocks.OwnsFamily(state.combat.families, family, starters)"),
+    "hubAllStars": (HUB_ARMORY, None, "if value == Unlocks.ALL_STARS then"),
+    # F2: the hub's star lever pays a NEW star's first clear, read from the level file, through
+    # Unlocks.ApplyFirstClear on the player's profile, and marks the profile for the Delta.
+    "hubStarLevels": (HUB_ARMORY, "hubStar", "\tlocal armoryConfig = Catalog.GetArmoryConfig()\n"
+                      "\tlocal ladder = if armoryConfig ~= nil then armoryConfig.ladder else nil\n"
+                      "\tif armoryConfig == nil or ladder == nil or typeof(value) ~= \"string\" then\n"
+                      "\t\treturn\n\tend\n\tlocal levels: { string } = {}\n"
+                      "\tif value == Unlocks.ALL_STARS then\n\t\tlevels = (Armory.BuiltBands(armoryConfig, built))\n"
+                      "\telseif built[value] == true then\n\t\tlevels = { value }\n\tend\n\tif #levels == 0 then\n"),
+    "hubStarInputs": (HUB_ARMORY, "hubStar", "\tlocal difficulty = ladder.starDifficulty\n"
+                      "\tlocal weapons, starters = weaponsConfig()\n\tlocal stars = Unlocks.StarsOf(state.combat)\n"),
+    "hubStarNew": (HUB_ARMORY, "hubStar", "\t\tif row[difficulty] == true then\n\t\t\tcontinue\n\t\tend\n"
+                   "\t\trow[difficulty] = true\n\t\tlocal reward = fileFirstClear(levelId, difficulty)\n"
+                   "\t\tif reward == nil then\n\t\t\tcontinue\n\t\tend\n"),
+    "hubStarApply": (HUB_ARMORY, "hubStar",
+                     "local grant = Unlocks.ApplyFirstClear(state.combat, reward, weapons, starters)"),
+    "hubStarDirty": (HUB_ARMORY, "hubStar", "\tEconomyService.MarkDirty(player, { combat = true })\n"),
+    "hubStarValor": (HUB_ARMORY, "hubStar", "\t\tvalor += grant.valor\n"),
+    "hubFileRead": (HUB_ARMORY, "hubFileReward", "\tlocal file = Catalog.GetLevelFile(levelId)\n"
+                    "\tlocal difficulties: any = if file ~= nil then file.difficulties else nil\n"
+                    "\tlocal scales: any = if type(difficulties) == \"table\" then difficulties[difficulty] else nil\n"
+                    "\tlocal reward: any = if type(scales) == \"table\" then scales.firstClear else nil\n"
+                    "\treturn if type(reward) == \"table\" then reward else nil\n"),
+    # F5: the first refresh that finds the families pushes the model's profile; a push before them asks.
+    "uiWaiting": (HUB_UI, "uiKeys", "\t\tlocal waiting = provingConfig == nil\n"),
+    "uiReplay": (HUB_UI, "uiKeys", "\t\t\twaiting\n\t\t\tand provingConfig ~= nil\n\t\t\tand current ~= nil\n"
+                 "\t\t\tand isCombatProfile(current.state.combat)\n\t\tthen\n\t\t\tpushArmory(current.state.combat)\n"),
+    "uiPushWaits": (HUB_UI, "uiPush", "\t\tlocal config = provingConfig\n\t\tif config == nil then\n"
+                    "\t\t\trefreshCombatKeys()\n\t\t\treturn\n\t\tend\n"),
+}
+# F1: the rules read by pattern, on the code with its comments blanked (luau_code): what must not be
+# spelled at all, in any spelling, and every exit (`return`, `continue`, `break`) of a body that a
+# pinned call lives in, so an early way out cannot hide behind lines that are all still there.
+# key: (file, body or None, the pattern). The expected counts are the cases', with L3_LINES'.
+LITERAL_STAR = re.compile(r"\"\*\"|'\*'|`\*`|\[(=*)\[\*\]\1\]")
+EXITS = re.compile(r"\b(?:return|continue|break)\b")
+L3_PATTERNS = {
+    "debugLiteral": (DEBUG_SERVICE, None, LITERAL_STAR),
+    "hubLiteral": (HUB_ARMORY, None, LITERAL_STAR),
+    "mainGearOf": (MAIN_SERVER, None, re.compile(r"\bGearOf\b")),
+    # `.gear` or `["gear"]` (never `..` before a local named gear).
+    "hubFrozenGear": (HUB_ECONOMY, None, re.compile(r"(?<![.])\.\s*gear\b|\[\s*([\"'`])gear\1\s*\]")),
+    "runnerSteps": (HUB_DATA, None, re.compile(r"\bMigrations\b")),
+    "gearExits": (WEAPON_SERVICE, "gearOf", EXITS),
+    "scaleExits": (WEAPON_SERVICE, "damageScale", EXITS),
+    "grantExits": (UNLOCK_SERVICE, "grantFirstClear", EXITS),
+    "leverExits": (WAVE_SERVICE, "grantStars", EXITS),
+    "debugStarExits": (DEBUG_SERVICE, "grantStar", EXITS),
+    "mainSnapshotExits": (MAIN_SERVER, "mainSnapshot", EXITS),
+    "hubPowerExits": (HUB_ECONOMY, "hubPower", EXITS),
+    "loadExits": (HUB_DATA, "attemptLoad", EXITS),
+    "hubStarExits": (HUB_ARMORY, "hubStar", EXITS),
+    "hubFileExits": (HUB_ARMORY, "hubFileReward", EXITS),
+}
+LONG_BRACKET = re.compile(r"\[(=*)\[")
+
+
+def luau_code(source: str) -> str:
+    """`source` with every comment blanked (its newlines kept) and every string kept: what
+    L3_PATTERNS reads, so a comment that names a spelling never counts, and no spelling can hide
+    in a string the code runs (`WeaponService["GearOf"]`, `combat["gear"]`)."""
+    out = []
+    i, n = 0, len(source)
+    while i < n:
+        if source.startswith("--", i):
+            opened = LONG_BRACKET.match(source, i + 2)
+            if opened:
+                close = source.find("]" + opened.group(1) + "]", opened.end())
+                end = n if close < 0 else close + len(opened.group(1)) + 2
+            else:
+                newline = source.find("\n", i)
+                end = n if newline < 0 else newline
+            out.append(re.sub(r"[^\n]", " ", source[i:end]))
+            i = end
+            continue
+        opened = LONG_BRACKET.match(source, i)
+        if opened:
+            close = source.find("]" + opened.group(1) + "]", opened.end())
+            end = n if close < 0 else close + len(opened.group(1)) + 2
+            out.append(source[i:end])
+            i = end
+            continue
+        quote = source[i]
+        if quote in "\"'`":
+            j = i + 1
+            while j < n and source[j] != quote and source[j] != "\n":
+                j += 2 if source[j] == "\\" else 1
+            out.append(source[i:j + 1])
+            i = j + 1
+            continue
+        out.append(quote)
+        i += 1
+    return "".join(out)
+
+
+def l3_reading(text) -> dict:
+    """The L3 W1 fix rounds' lines (L3_LINES, exact text) and patterns (L3_PATTERNS, on luau_code),
+    each counted in the function it belongs to. `found` names the functions whose body was found;
+    `text` reads a repo file (empty when missing)."""
+    bodies = {}
+    for key, (rel, pattern) in L3_BODIES.items():
+        found = pattern.search(text(rel))
+        bodies[key] = found.group(0) if found else None
+    counts = {}
+    for key, (rel, body, line) in L3_LINES.items():
+        source = text(rel) if body is None else (bodies[body] or "")
+        counts[key] = source.count(line)
+    for key, (rel, body, pattern) in L3_PATTERNS.items():
+        source = text(rel) if body is None else (bodies[body] or "")
+        counts[key] = sum(1 for _ in pattern.finditer(luau_code(source)))
+    return {"found": {key: value is not None for key, value in bodies.items()}, "counts": counts}
 GROUND_AIMED = re.compile(r"local GROUND_AIMED: \{ \[string\]: true \} =\s*\{([^}]*)\}")
 GROUND_TARGET = re.compile(r'(?m)^\s*(\w+)\s*=\s*\{[^\n]*\btarget\s*=\s*"ground"')
 
@@ -516,6 +796,7 @@ def source_reading(repo: Path) -> dict:
         "w3fix": w3_fix_reading(text, react_text, freeze_text),
         "w3fix2": w3_fix2_reading(text, freeze_text),
         "w3fix3": w3_fix3_reading(text),
+        "l3": l3_reading(text),
     }
 
 

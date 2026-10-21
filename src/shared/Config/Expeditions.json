@@ -10,7 +10,18 @@
 		]
 	},
 	"found": {
-		"frostHammer": { "node": "castle", "text": "Found in the Castle" }
+		"warhammer": { "node": "forestRoad", "text": "First Hard clear of Forest Road" },
+		"frostHammer": { "node": "castle", "text": "Found in the Castle" },
+		"greataxe": { "node": "castle", "text": "Found in the Castle" },
+		"splitbow": { "node": "castle", "text": "Hidden in the Castle" },
+		"spear": { "node": "underworld", "text": "Found in the Underworld" },
+		"shotgun": { "node": "underworld", "text": "Found in the Underworld" },
+		"rifle": { "node": "underworld", "text": "Hidden in the Underworld" },
+		"launcher": { "node": "planet", "text": "Found on Another Planet" },
+		"smg": { "node": "planet", "text": "Found on Another Planet" },
+		"beam": { "node": "planet", "text": "Hidden on Another Planet" },
+		"chaingun": { "node": "dream", "text": "Found in the Dream" },
+		"spinblade": { "node": "dream", "text": "Hidden in the Dream" }
 	},
 	"nodes": [
 		{ "id": "forestRoad", "name": "Forest Road", "theme": "forest", "x": 0.12, "y": 0.73, "kind": "level", "level": "forestRoad" },

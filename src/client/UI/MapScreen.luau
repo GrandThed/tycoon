@@ -42,6 +42,11 @@
 --
 -- The host binds the keys (arrows, Enter) and calls Step and Confirm; `deps.keyHint` is the
 -- line that names them, shown at the foot of the card when the host passes one.
+--
+-- L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-15, L3-16): tiers belong to each weapon on one
+-- ladder of 20, and the Armory shows them as "T3", so a difficulty's recommended tier reads the
+-- same way here (Hard's "T3" read "tier 4+" on the old slot ladder). Hard's x2.5 is data: the
+-- rewards line already reads it from the level file.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -164,6 +169,8 @@ local DEPART_TEXT = "Depart"
 local DEPARTING_TEXT = "Departing..."
 local RETURN_TEXT = "Return to your city"
 local NO_LEADER_TEXT = "the leader"
+-- L3-15: a recommended tier on the weapons' one ladder, as the Armory names a tier.
+local TIER_PREFIX = "T"
 -- A locked node says why (MapNodeState.reason; `needs` is a node's name or a number of stars).
 local REASON_NOT_BUILT = "notBuilt"
 local REASON_NEEDS_NODE = "needsNode"
@@ -1053,7 +1060,7 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 				end
 				item.name.Text = entry.name
 				local tier = entry.tier
-				item.tier.Text = if tier ~= nil then "tier " .. Format.Cash(tier) .. "+" else ""
+				item.tier.Text = if tier ~= nil then TIER_PREFIX .. Format.Cash(tier) else ""
 				item.mult.Text = "×" .. Format.Rate(entry.rewardMult)
 				item.stroke.Transparency = if chosen then 0 else 1
 				item.button.BackgroundColor3 = if chosen

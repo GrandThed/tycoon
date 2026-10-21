@@ -17,8 +17,12 @@ run exactly as `sim_economy.run_full`/`run_packs` do (legacy carried across
 advances, 1 s resolution), so both tools always agree on income per second.
 
 What it answers:
-  * when the greedy player's persisted income/s crosses each weapon tier's
-    `unlockRate` (the Armory gate), per band and per era;
+  * L3 W1 (docs/prompts/l3-w1-contract.md): the ladder of 20 every weapon family climbs (each
+    tier's multiplier, health, band, price and trophy, every family's window), and how many Forest
+    Road runs and minutes take both starters from T1 to T4 (assertions 1 and 2). Since L3 the
+    city's income gates no tier (Ben, 2026-10-20): the C0 unlock table and assertions "1 unlock
+    ladder" and "2 power at median" are retired, and the C1 run model below keeps the slot tiers'
+    own health and power (c1_max_hp, c1_gear_power: the scale Missions/*.json was written on);
   * how long a modelled expedition run takes, wave by wave, at the mission's
     recommended Gear Power and at 2x / 0.6x of it;
   * what a full run pays in cash and materials, and how that compares with the
@@ -48,7 +52,7 @@ The mirrors themselves are held to the real Luau by `tools/check_stage_mirror.py
 worked here from the mission file by hand, so it fails when either Python function moves.
 
 Usage:
-  py tools/sim_combat.py                  # unlock table + Village run report
+  py tools/sim_combat.py                  # the ladder + Village run report
   py tools/sim_combat.py --check          # the twenty-three C0-L1b assertions; exit 1 on any
   py tools/sim_combat.py --era 1          # only that era's mission
   py tools/sim_combat.py --power 84       # model the run at a given Gear Power
@@ -132,11 +136,42 @@ CROWD_RUN_CAP_RATIO = 2.0
 LEVEL_PAY_TARGETS = {"forestRoad": {"cash": 152820, "materials": 373, "valor": 10}}
 LEVEL_PAY_TIMES = {"hard": (2.0, 3.0), "brutal": (4.0, 6.0)}
 LEVEL_BONUS_SHARE = (0.05, 0.10)  # L1b-W2-21: the bonuses of a Normal clear, as a share of its cash
+# L3 W1 (docs/prompts/l3-w1-contract.md, L3-1..L3-4, L3-8, L3-29), assertions 1 and 2. The ladder:
+# 20 tiers, T1 = the 2/2 every band was tuned at, x1.65 a tier; HP T1-T11 = the old slot tiers 2-12;
+# five bands of four, one per level in the map's order; Forest Road's T2 / T3 / T4 cost 100 / 250 /
+# 500 Timber (Ben, 2026-10-20). The windows are L3-3's table (Ben, as drawn).
+LADDER_SIZE = 20
+LADDER_FIRST = 1.5
+LADDER_STEP = 1.65
+LADDER_HP_FROM_SLOTS = 11
+LADDER_MAX_HP = {1: 155, 3: 230, 5: 380}
+LADDER_RANGE_HP = 130
+LADDER_POWER_T1 = 64  # today's 2/2 value, so the hub's Village tile (60) still reads ready
+LADDER_BANDS = 5
+LADDER_BAND_SIZE = 4
+LADDER_BAND_LEVELS = ("forestRoad", "castle", "underworld", "planet", "dream")
+LADDER_FOREST_COSTS = (100, 250, 500)
+LADDER_STAR_ALSO = ("brutal",)  # R1 (L3 W1 fix round): the Hard star or a harder one opens a band top
+LADDER_WINDOWS = {"broadsword": (1, 12), "longbow": (1, 12), "flamethrower": (2, 8), "warhammer": (3, 16),
+                  "frostHammer": (5, 12), "greataxe": (6, 18), "splitbow": (8, 8), "spear": (9, 20),
+                  "shotgun": (9, 16), "rifle": (11, 18), "launcher": (13, 20), "smg": (14, 20), "beam": (16, 20),
+                  "chaingun": (17, 20), "spinblade": (20, 20)}
+# The climb (L3-29; Ben: "three Forest runs take one weapon from tier 1 to tier 4", both starters
+# in about 31 minutes): both starters T1 -> T4 in these many runs and minutes of measured clears; the
+# first Normal clear buys T2 for both; Hard pays 20 Valor (10 x 2) and the Brutal first clear 25.
+# Lead, 2026-10-20: Ben picked runs (three a weapon); measured clears shorten as the tiers rise, so
+# six runs come to about 25 minutes, not the study's 31 (which counted every run at 5 minutes).
+CLIMB_RUNS = (5, 7)
+CLIMB_MINUTES = (20.0, 40.0)
+CLIMB_FIRST_TIMBER = 200
+CLIMB_RUN_LIMIT = 12
+HARD_VALOR = 20
+BRUTAL_FIRST_VALOR = 25
 # Assertion 22 (L1b-15): Combat.SplitCarry over a seeded fuzz.
 CARRY_FUZZ_SEED = 1407
 CARRY_FUZZ_RUNS = 400
 CARRY_FUZZ_KILLS = 60
-LEVEL_REWARD_MULT = {"normal": 1, "hard": 2, "brutal": 4}
+LEVEL_REWARD_MULT = {"normal": 1, "hard": 2, "brutal": 4}  # L3 W1 contract §12.8: Hard stays x2
 # What a boss's calls pay per second, as a share of what the whole clear pays per second: under
 # this, standing in front of a boss to farm what it calls is always worse than playing on.
 LEVEL_STALL_SHARE = 0.5
@@ -277,95 +312,415 @@ def weapon_damage(cfg, slot, tier, asc_level):
     return definition["damage"] * (level["damageMult"] if level else 1)
 
 
-def damage_scale(cfg, slot, tier, asc_level, ability):
-    """Armory.DamageScale (P5 ruling 8) -- the slot's WeaponDamage(tier, asc) over its tier-1,
-    ascension-0 damage; an ability takes the level's abilityMult instead of damageMult. 1 for an
-    unknown slot, a tier past the last one, a tier-1 damage of 0 or a tier whose own damage is 0:
-    each degrades to the range's tier-1 numbers, never to hits of nothing."""
-    if slot not in cfg["slots"]:
-        return 1.0
-    base = tier_def(cfg, slot, 1)
-    definition = tier_def(cfg, slot, tier)
-    if base is None or definition is None or base["damage"] <= 0 or definition["damage"] <= 0:
-        return 1.0
+# --- L3-5: the ladder (docs/prompts/l3-w1-contract.md). Every number is Armory.json's `ladder`,
+# `windows` and `legacy`; the tier belongs to the weapon family, not the slot. Each guard below is
+# Armory.luau's own (a decoded value that is not what a rule needs degrades, never errors).
+
+
+def _finite(value):
+    """Armory.luau `finite`: a number that is not NaN and not infinite (a bool is no number)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _whole(value):
+    """Armory.luau `whole`."""
+    return _finite(value) and float(value).is_integer()
+
+
+def _lstr(value):
+    """Luau's tostring of a decoded value, for the validator's lines."""
+    if value is None:
+        return "nil"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer() and abs(value) < 1e15:
+        return str(int(value))
+    return str(value)
+
+
+def _ladder(cfg):
+    """Armory.luau `ladderOf`: the ladder when it holds a damage list, else None."""
+    ladder = cfg.get("ladder")
+    return ladder if isinstance(ladder, dict) and isinstance(ladder.get("damage"), list) else None
+
+
+def _clamp_tier(tier, size):
+    return min(max(tier, 1), size)
+
+
+def _asc_mult(cfg, asc_level, ability):
     level = ascension_level_def(cfg, asc_level)
-    mult = (level["abilityMult"] if ability else level["damageMult"]) if level else 1
-    return definition["damage"] * mult / base["damage"]
+    if level is None:
+        return 1
+    return level["abilityMult"] if ability else level["damageMult"]
+
+
+def ladder_size(cfg):
+    """Armory.LadderSize -- #ladder.damage; 0 without a ladder."""
+    ladder = _ladder(cfg)
+    return len(ladder["damage"]) if ladder is not None else 0
+
+
+def window(cfg, family):
+    """Armory.Window -- (start, top) held inside 1..LadderSize; None for a family with no window, a
+    malformed one (not whole numbers, or a start above its top) or no ladder."""
+    size = ladder_size(cfg)
+    windows = cfg.get("windows")
+    entry = windows.get(family) if isinstance(windows, dict) else None
+    if size == 0 or not isinstance(entry, dict) or not _whole(entry.get("start")) or not _whole(entry.get("top")) \
+            or entry["start"] > entry["top"]:
+        return None
+    return _clamp_tier(int(entry["start"]), size), _clamp_tier(int(entry["top"]), size)
+
+
+def tier_of(cfg, combat, family):
+    """Armory.TierOf (L3-3) -- the saved tier held inside the window, else the start (a saved tier
+    that is not a whole number reads the start); 1 for a family with no window."""
+    span = window(cfg, family)
+    if span is None:
+        return 1
+    start, top = span
+    tiers = (combat or {}).get("tiers")
+    saved = tiers.get(family) if isinstance(tiers, dict) else None
+    if not _whole(saved):
+        return start
+    return min(max(int(saved), start), top)
+
+
+def held_tiers(cfg, combat, melee, ranged):
+    """Armory.HeldTiers -- the held families' tiers in the slot-shaped record."""
+    return {"melee": tier_of(cfg, combat, melee), "ranged": tier_of(cfg, combat, ranged)}
+
+
+def multiplier(cfg, tier):
+    """Armory.Multiplier (L3-1) -- ladder.damage[tier held inside the ladder]; 1 without a ladder,
+    for a tier that is not a whole number, or for an entry that is not a number above 0."""
+    ladder = _ladder(cfg)
+    if ladder is None or not ladder["damage"] or not _whole(tier):
+        return 1
+    value = ladder["damage"][_clamp_tier(int(tier), len(ladder["damage"])) - 1]
+    return value if _finite(value) and value > 0 else 1
+
+
+def damage_scale(cfg, tier, asc_level, ability):
+    """Armory.DamageScale (L3-6; P5 ruling 8, by tier) -- Multiplier(tier) x the slot's Ascension
+    abilityMult (an ability) or damageMult (an attack), 1 at level 0. The range never asks: its
+    scale is 1 (WeaponService.damageScale)."""
+    return multiplier(cfg, tier) * _asc_mult(cfg, asc_level, ability)
 
 
 def weapon_hp(cfg, slot, tier, asc_level):
-    """Armory.WeaponHp -- tierDef.hp x ascension hpMult (1 when 0)."""
-    definition = tier_def(cfg, slot, tier)
-    if definition is None:
+    """Armory.WeaponHp (L3-2) -- ladder.hp[slot][tier held inside the list] x the Ascension level's
+    hpMult; 0 for an unknown slot, no ladder, a tier that is not a whole number, or an entry that is
+    not a number of at least 0."""
+    ladder = _ladder(cfg)
+    hp = ladder.get("hp") if ladder is not None else None
+    rows = hp.get(slot) if isinstance(hp, dict) and slot in ("melee", "ranged") else None
+    if not isinstance(rows, list) or not rows or not _whole(tier):
+        return 0
+    value = rows[_clamp_tier(int(tier), len(rows)) - 1]
+    if not _finite(value) or value < 0:
         return 0
     level = ascension_level_def(cfg, asc_level)
-    return definition["hp"] * (level["hpMult"] if level else 1)
+    return value * (level["hpMult"] if level else 1)
 
 
-def max_hp(cfg, gear, ascension):
-    """Armory.MaxHp -- baseHp + WeaponHp(melee) + WeaponHp(ranged)."""
+def max_hp(cfg, tiers, ascension):
+    """Armory.MaxHp (L3-2) -- baseHp + WeaponHp(melee tier) + WeaponHp(ranged tier)."""
     return (
         cfg["baseHp"]
-        + weapon_hp(cfg, "melee", gear["melee"], ascension["melee"])
-        + weapon_hp(cfg, "ranged", gear["ranged"], ascension["ranged"])
+        + weapon_hp(cfg, "melee", tiers["melee"], ascension["melee"])
+        + weapon_hp(cfg, "ranged", tiers["ranged"], ascension["ranged"])
     )
 
 
-def gear_power(cfg, gear, ascension):
-    """Armory.GearPower -- round(dmg melee + dmg ranged + MaxHp x power.hpWeight)."""
-    return luau_round(
-        weapon_damage(cfg, "melee", gear["melee"], ascension["melee"])
-        + weapon_damage(cfg, "ranged", gear["ranged"], ascension["ranged"])
-        + max_hp(cfg, gear, ascension) * cfg["power"]["hpWeight"]
-    )
+def range_hp(cfg):
+    """Armory.RangeHp -- ladder.rangeHp, the range's own body (baseHp without a ladder or a rangeHp
+    that is not a number above 0)."""
+    ladder = _ladder(cfg)
+    value = ladder.get("rangeHp") if ladder is not None else None
+    return value if _finite(value) and value > 0 else cfg["baseHp"]
 
 
-def next_tier(cfg, gear, slot):
-    """Armory.NextTier -- gear[slot] + 1, None past the last tier."""
-    candidate = gear[slot] + 1
-    if candidate > len(cfg["slots"][slot]["tiers"]):
+def gear_power(cfg, tiers, ascension):
+    """Armory.GearPower (L3-6) -- round((DamageScale(tm) + DamageScale(tr), attacks) x
+    power.tierWeight + MaxHp x power.hpWeight); a tierWeight that is not a number weighs 0."""
+    weight = cfg["power"].get("tierWeight")
+    weight = weight if _finite(weight) else 0
+    damage = damage_scale(cfg, tiers["melee"], ascension["melee"], False) + damage_scale(
+        cfg, tiers["ranged"], ascension["ranged"], False)
+    return luau_round(damage * weight + max_hp(cfg, tiers, ascension) * cfg["power"]["hpWeight"])
+
+
+def band_of(cfg, tier):
+    """Armory.BandOf (L3-4) -- (ceil(t / bandSize), (t - 1) % bandSize + 1); (0, 0) for a tier
+    outside 1..LadderSize or not whole, or a bandSize that is not a whole number above 0."""
+    ladder = _ladder(cfg)
+    if ladder is None:
+        return 0, 0
+    size = ladder.get("bandSize")
+    if not _whole(size) or size <= 0 or not _whole(tier) or tier < 1 or tier > len(ladder["damage"]):
+        return 0, 0
+    size, tier = int(size), int(tier)
+    return math.ceil(tier / size), (tier - 1) % size + 1
+
+
+def _band_at(cfg, tier):
+    """Armory.luau `bandAt`: (the band entry when it names a level and a material, its position)."""
+    band, position = band_of(cfg, tier)
+    ladder = _ladder(cfg)
+    bands = ladder.get("bands") if ladder is not None else None
+    entry = bands[band - 1] if band > 0 and isinstance(bands, list) and band <= len(bands) else None
+    if not isinstance(entry, dict) or not isinstance(entry.get("levelId"), str) or entry["levelId"] == "" \
+            or not isinstance(entry.get("material"), str) or entry["material"] == "":
+        return None, position
+    return entry, position
+
+
+def next_tier(cfg, combat, family):
+    """Armory.NextTier -- TierOf + 1 while it stays inside the window; None at the top or without one."""
+    span = window(cfg, family)
+    if span is None:
         return None
-    return candidate
+    candidate = tier_of(cfg, combat, family) + 1
+    return candidate if candidate <= span[1] else None
 
 
-def band_material(cfg, band):
-    for entry in cfg["bands"]:
-        if entry["band"] == band:
-            return entry["material"]
-    return "?"
+def tier_cost(cfg, tier):
+    """Armory.TierCost -> (the band's material, costs[position]); ("", 0) for a tier outside the
+    ladder, a band entry that is missing or names no level or material, or a cost that is not a
+    number of at least 0."""
+    entry, position = _band_at(cfg, tier)
+    ladder = _ladder(cfg)
+    costs = ladder.get("costs") if ladder is not None else None
+    cost = costs[position - 1] if entry is not None and isinstance(costs, list) and 1 <= position <= len(costs) else None
+    if entry is None or not _finite(cost) or cost < 0:
+        return "", 0
+    return entry["material"], cost
 
 
-def tier_cost(cfg, slot, tier):
-    """Armory.TierCost -> (material, amount). The material is the band's."""
-    definition = tier_def(cfg, slot, tier)
-    if definition is None or tier <= 0:
-        return None, 0
-    return band_material(cfg, definition["band"]), definition["cost"]
+def preview(cfg, slot, tier, base_damage):
+    """Armory.Preview -> (round(baseDamage x Multiplier(tier)), WeaponHp(slot, tier, 0))."""
+    return luau_round(base_damage * multiplier(cfg, tier)), weapon_hp(cfg, slot, tier, 0)
 
 
-def tier_unlock_rate(cfg, slot, tier):
-    """Armory.TierUnlockRate -- the persisted income/s the city must be making."""
-    definition = tier_def(cfg, slot, tier)
-    if definition is None or tier <= 0:
-        return 0
-    return definition["unlockRate"]
+def _star_held(combat, level_id, difficulty):
+    stars = combat.get("stars")
+    row = stars.get(level_id) if isinstance(stars, dict) else None
+    return isinstance(difficulty, str) and isinstance(row, dict) and row.get(difficulty) is True
 
 
-def can_buy(cfg, state, slot, income_per_second):
-    """Armory.CanBuy -> (ok, reason). invalid: bad slot / no next tier;
-    locked: income below unlockRate; insufficientFunds: materials short."""
-    if slot not in cfg["slots"]:
-        return False, "invalid"
-    combat = state["combat"]
-    tier = next_tier(cfg, combat["gear"], slot)
+def star_held(cfg, combat, level_id):
+    """Armory.StarHeld (R1, review 1-m5) -- the level's ladder.starDifficulty star, or the star of any
+    difficulty in ladder.starAlso (a Brutal clear also opens a band top); False without a ladder or a
+    profile, and a starAlso that is not a list adds nothing."""
+    ladder = _ladder(cfg)
+    if ladder is None or combat is None:
+        return False
+    if _star_held(combat, level_id, ladder.get("starDifficulty")):
+        return True
+    also = ladder.get("starAlso")
+    return isinstance(also, list) and any(_star_held(combat, level_id, d) for d in also)
+
+
+def upgrade_verdict(cfg, combat, family, owned, gate_open, built):
+    """Armory.UpgradeVerdict (L3-5) -- None, or the first refusal in this order: invalid (no window
+    or no ladder), locked (not owned), peak (at its top), busy (the gate is shut), notBuilt (the
+    next tier's band level has no level file, or the tier has no price), needsStar (a band's top
+    position without StarHeld: that level's starDifficulty star or a starAlso one), insufficientFunds
+    (the band material is not a number at least the cost)."""
+    if window(cfg, family) is None:
+        return "invalid"
+    if not owned:
+        return "locked"
+    tier = next_tier(cfg, combat, family)
     if tier is None:
-        return False, "invalid"
-    if income_per_second < tier_unlock_rate(cfg, slot, tier):
-        return False, "locked"
-    material, amount = tier_cost(cfg, slot, tier)
-    if combat["materials"].get(material, 0) < amount:
-        return False, "insufficientFunds"
-    return True, None
+        return "peak"
+    if not gate_open:
+        return "busy"
+    ladder = _ladder(cfg)
+    entry, position = _band_at(cfg, tier)
+    material, cost = tier_cost(cfg, tier)
+    if ladder is None or entry is None or built.get(entry["levelId"]) is not True or material == "":
+        return "notBuilt"
+    if position == ladder.get("bandSize") and not star_held(cfg, combat, entry["levelId"]):
+        return "needsStar"
+    have = (combat.get("materials") or {}).get(material)
+    if not (_finite(have) and have >= cost):
+        return "insufficientFunds"
+    return None
+
+
+def upgrade(cfg, combat, family, owned, gate_open, built):
+    """Armory.Upgrade -- UpgradeVerdict, then on None the write in the same call: the tier's cost
+    taken from materials (never below 0) and tiers[family] = the next tier (the table made when
+    the profile has none)."""
+    refusal = upgrade_verdict(cfg, combat, family, owned, gate_open, built)
+    if refusal is not None:
+        return refusal
+    tier = next_tier(cfg, combat, family)
+    material, cost = tier_cost(cfg, tier)
+    materials = combat["materials"]
+    materials[material] = max(0, (materials.get(material) or 0) - cost)
+    if combat.get("tiers") is None:
+        combat["tiers"] = {}
+    combat["tiers"][family] = tier
+    return None
+
+
+def set_tier(cfg, combat, family, tier):
+    """Armory.SetTier (L3-28's setTier lever) -- floor(tier) held inside the family's window, written
+    (owning it is not required); the tier written, or None and nothing written for a family with no
+    window or a tier that is not a finite number."""
+    span = window(cfg, family)
+    if span is None or not _finite(tier):
+        return None
+    held = min(max(math.floor(tier), span[0]), span[1])
+    if combat.get("tiers") is None:
+        combat["tiers"] = {}
+    combat["tiers"][family] = held
+    return held
+
+
+def built_bands(cfg, built):
+    """Armory.BuiltBands (L3-28) -- ([levels], [materials]) of the ladder's bands whose level is built,
+    in band order, each once: the Studio grant pays those materials and grantStar "*" stars those
+    levels."""
+    levels, materials = [], []
+    ladder = _ladder(cfg)
+    bands = ladder.get("bands") if ladder is not None else None
+    for entry in bands if isinstance(bands, list) else []:
+        if isinstance(entry, dict) and isinstance(entry.get("levelId"), str) and isinstance(entry.get("material"), str) \
+                and entry["material"] != "" and built.get(entry["levelId"]) is True:
+            if entry["levelId"] not in levels:
+                levels.append(entry["levelId"])
+            if entry["material"] not in materials:
+                materials.append(entry["material"])
+    return levels, materials
+
+
+def legacy_refund(cfg, gear):
+    """Armory.LegacyRefund (L3-8) -- {material: amount} over both slots, entries 1..min(gear[slot],
+    #legacy.gearCosts) at the frozen pre-v8 prices; a slot tier that is not a whole number, an entry
+    that names no material or an amount that is not a number of at least 0 adds nothing."""
+    legacy = cfg.get("legacy")
+    costs = legacy.get("gearCosts") if isinstance(legacy, dict) else None
+    refund = {}
+    if not isinstance(costs, list) or not isinstance(gear, dict):
+        return refund
+    for bought in (gear.get("melee"), gear.get("ranged")):
+        if not _whole(bought):
+            continue
+        for entry in costs[:max(min(int(bought), len(costs)), 0)]:
+            if isinstance(entry, dict) and isinstance(entry.get("material"), str) and entry["material"] != "" \
+                    and _finite(entry.get("amount")) and entry["amount"] >= 0:
+                refund[entry["material"]] = refund.get(entry["material"], 0) + entry["amount"]
+    return refund
+
+
+def problems(cfg, families):
+    """Armory.Problems (L3-5) -- the Init validator, line for line: the ladder (damage rising numbers
+    above 0; each hp row LadderSize numbers of at least 0 that never fall, melee never below ranged;
+    rangeHp above 0; bandSize a whole number above 0 with bandSize x #bands = LadderSize; every band
+    a level and a material; one cost per position, each at least 0; a starDifficulty; starAlso absent
+    or a list of non-empty strings), every family
+    a window 1 <= start <= top <= LadderSize, no window for a family that is not one, the legacy
+    list, and a numeric power.tierWeight. Assertion 1 holds the shipped values to L3-1..L3-4 on top."""
+    out = []
+
+    def problem(text):
+        out.append(f"Armory.json {text}")
+
+    ladder = cfg.get("ladder")
+    size = ladder_size(cfg)
+    if not isinstance(ladder, dict):
+        problem("has no ladder: every weapon fights at T1 and none can be upgraded")
+    elif size == 0:
+        problem("ladder.damage is not a list of numbers: every weapon fights at T1")
+    else:
+        damage = ladder["damage"]
+        for t in range(1, size + 1):
+            value = damage[t - 1]
+            before = damage[t - 2] if t > 1 else None
+            if not _finite(value) or value <= 0:
+                problem(f"ladder.damage[{t}] is {_lstr(value)}, not a number above 0")
+            elif t > 1 and _finite(before) and value <= before:
+                problem(f"ladder.damage[{t}] ({_lstr(value)}) does not rise above ladder.damage[{t - 1}] ({_lstr(before)})")
+        hp = ladder.get("hp")
+        for slot in ("melee", "ranged"):
+            rows = hp.get(slot) if isinstance(hp, dict) else None
+            if not isinstance(rows, list) or len(rows) != size:
+                problem(f"ladder.hp.{slot} is not a list of {size} numbers")
+                continue
+            for t in range(1, size + 1):
+                value = rows[t - 1]
+                before = rows[t - 2] if t > 1 else None
+                if not _finite(value) or value < 0:
+                    problem(f"ladder.hp.{slot}[{t}] is {_lstr(value)}, not a number of at least 0")
+                elif t > 1 and _finite(before) and value < before:
+                    problem(f"ladder.hp.{slot}[{t}] ({_lstr(value)}) falls below ladder.hp.{slot}[{t - 1}] ({_lstr(before)})")
+        melee = hp.get("melee") if isinstance(hp, dict) else None
+        ranged = hp.get("ranged") if isinstance(hp, dict) else None
+        if isinstance(melee, list) and isinstance(ranged, list):
+            for t in range(1, size + 1):
+                m = melee[t - 1] if t <= len(melee) else None
+                r = ranged[t - 1] if t <= len(ranged) else None
+                if _finite(m) and _finite(r) and m < r:
+                    problem(f"ladder.hp.melee[{t}] ({_lstr(m)}) is below ladder.hp.ranged[{t}] ({_lstr(r)})")
+        if not _finite(ladder.get("rangeHp")) or ladder["rangeHp"] <= 0:
+            problem(f"ladder.rangeHp is {_lstr(ladder.get('rangeHp'))}, not a number above 0: the range uses baseHp")
+        band_size = ladder.get("bandSize")
+        bands = ladder.get("bands") if isinstance(ladder.get("bands"), list) else []
+        if not _whole(band_size) or band_size <= 0:
+            problem(f"ladder.bandSize is {_lstr(band_size)}, not a whole number above 0: nothing can be bought")
+        elif band_size * len(bands) != size:
+            problem(f"ladder.bands and bandSize do not cover the {size} tiers")
+        for index, entry in enumerate(bands, 1):
+            if not isinstance(entry, dict) or not isinstance(entry.get("levelId"), str) or entry["levelId"] == "":
+                problem(f"ladder.bands[{index}] names no level: its tiers can never be bought")
+            elif not isinstance(entry.get("material"), str) or entry["material"] == "":
+                problem(f"ladder.bands[{index}] ({entry['levelId']}) names no material: its tiers can never be bought")
+        costs = ladder.get("costs")
+        if not isinstance(costs, list) or (_whole(band_size) and len(costs) != band_size):
+            problem("ladder.costs is not one cost per position in a band")
+        else:
+            for position, cost in enumerate(costs, 1):
+                if not _finite(cost) or cost < 0:
+                    problem(f"ladder.costs[{position}] is {_lstr(cost)}, not a number of at least 0")
+        if not isinstance(ladder.get("starDifficulty"), str) or ladder["starDifficulty"] == "":
+            problem("ladder.starDifficulty names no difficulty: no band top can ever be bought")
+        # Armory.luau `namesList`: a list of non-empty strings (an empty one is one). Luau decodes an
+        # empty JSON object to the same empty table as [], so {} passes too.
+        also = ladder.get("starAlso")
+        if also is not None and also != {} and (not isinstance(also, list)
+                                                or any(not isinstance(d, str) or d == "" for d in also)):
+            problem("ladder.starAlso is not a list of difficulty names")
+    windows = cfg.get("windows")
+    known = set()
+    for family in families:
+        known.add(family)
+        entry = windows.get(family) if isinstance(windows, dict) else None
+        if not isinstance(entry, dict):
+            problem(f'windows has no entry for "{family}": it fights at T1 and cannot be upgraded')
+        elif (not _whole(entry.get("start")) or not _whole(entry.get("top")) or entry["start"] < 1
+              or entry["start"] > entry["top"] or (size > 0 and entry["top"] > size)):
+            problem(f"windows.{family} ({_lstr(entry.get('start'))} to {_lstr(entry.get('top'))}) is not "
+                    f"1 <= start <= top <= {size}")
+    if isinstance(windows, dict):
+        for family in sorted(str(f) for f in windows if f not in known):
+            problem(f"windows.{family} names no weapon family")
+    legacy = cfg.get("legacy")
+    gear_costs = legacy.get("gearCosts") if isinstance(legacy, dict) else None
+    if not isinstance(gear_costs, list):
+        problem("has no legacy.gearCosts: the v8 profile step refunds nothing")
+    else:
+        for index, entry in enumerate(gear_costs, 1):
+            if not isinstance(entry, dict) or not isinstance(entry.get("material"), str) or entry["material"] == "" \
+                    or not _finite(entry.get("amount")) or entry["amount"] < 0:
+                problem(f"legacy.gearCosts[{index}] is not a material and an amount of at least 0")
+    if not _finite(cfg["power"].get("tierWeight")):
+        problem("power.tierWeight is not a number: Gear Power weighs the tiers at 0")
+    return out
 
 
 def ascension_cost(cfg, level):
@@ -424,12 +779,57 @@ def ability_def(cfg, key):
 
 
 # --------------------------------------------------------------------------
+# The C1 Humanoid missions' own power arithmetic. Since L3 the game sizes health and Gear Power
+# from the ladder (max_hp, gear_power above); the C1 run model below still measures the retired
+# Missions/*.json waves by their slot tiers (Armory.json `slots`, kept for the C1 readers until
+# L4), so its numbers stay what C1 balanced. No Luau counterpart: nothing in the game reads these.
+# --------------------------------------------------------------------------
+
+
+def c1_weapon_hp(cfg, slot, tier, asc_level):
+    """The pre-L3 Armory.WeaponHp: the slot tier's hp x the Ascension level's hpMult."""
+    definition = tier_def(cfg, slot, tier)
+    if definition is None:
+        return 0
+    level = ascension_level_def(cfg, asc_level)
+    return definition["hp"] * (level["hpMult"] if level else 1)
+
+
+def c1_max_hp(cfg, gear, ascension):
+    """The pre-L3 Armory.MaxHp: baseHp + c1_weapon_hp(melee) + c1_weapon_hp(ranged)."""
+    return (
+        cfg["baseHp"]
+        + c1_weapon_hp(cfg, "melee", gear["melee"], ascension["melee"])
+        + c1_weapon_hp(cfg, "ranged", gear["ranged"], ascension["ranged"])
+    )
+
+
+def c1_gear_power(cfg, gear, ascension):
+    """The pre-L3 Armory.GearPower, the scale Missions/*.json recommendedPower was written on:
+    round(WeaponDamage melee + WeaponDamage ranged + c1_max_hp x power.hpWeight)."""
+    return luau_round(
+        weapon_damage(cfg, "melee", gear["melee"], ascension["melee"])
+        + weapon_damage(cfg, "ranged", gear["ranged"], ascension["ranged"])
+        + c1_max_hp(cfg, gear, ascension) * cfg["power"]["hpWeight"]
+    )
+
+
+def c1_next_tier(cfg, gear, slot):
+    """The pre-L3 Armory.NextTier: gear[slot] + 1, None past the slot's last tier."""
+    candidate = gear[slot] + 1
+    if candidate > len(cfg["slots"][slot]["tiers"]):
+        return None
+    return candidate
+
+
+# --------------------------------------------------------------------------
 # src/shared/Combat.luau mirror
 # --------------------------------------------------------------------------
 
 
 def new_combat_profile():
-    """The v5 profile template's `combat` field (ProfileSchema.PROFILE_TEMPLATE)."""
+    """The v8 profile template's `combat` field (ProfileSchema.PROFILE_TEMPLATE, L3-7): the v7 maps
+    and the three L3 fields; `gear` is frozen (kept, never read by the tier path)."""
     return {
         "materials": {},
         "valor": 0,
@@ -440,6 +840,13 @@ def new_combat_profile():
         "expeditionSince": 0,
         "expeditionSeconds": 0,
         "stats": {"kills": 0, "wavesCleared": 0, "expeditions": 0, "cashFromCombat": 0},
+        "abilities": {},
+        "secrets": {},
+        "families": {},
+        "shortcuts": {},
+        "tiers": {},
+        "loadout": {"variants": {}},
+        "stars": {},
     }
 
 
@@ -933,24 +1340,6 @@ def ranged_dps(armory, definition):
     return definition["damage"] / cls["cooldown"] * RANGED_UPTIME
 
 
-def loadout_dps(armory, gear, ascension):
-    """Modelled (melee, ranged) DPS of a loadout, ascension multipliers included."""
-    melee = tier_def(armory, "melee", gear["melee"])
-    ranged = tier_def(armory, "ranged", gear["ranged"])
-    melee_level = ascension_level_def(armory, ascension["melee"])
-    ranged_level = ascension_level_def(armory, ascension["ranged"])
-    out_melee = melee_dps(armory, melee) * (melee_level["damageMult"] if melee_level else 1)
-    out_ranged = ranged_dps(armory, ranged) * (ranged_level["damageMult"] if ranged_level else 1)
-    return out_melee, out_ranged
-
-
-def symmetric_loadouts(armory):
-    """The Armory's two ladders are parallel (same band, cost and unlockRate per
-    tier), so a player buys them in step: the sim models tier n / tier n only."""
-    count = min(len(armory["slots"]["melee"]["tiers"]), len(armory["slots"]["ranged"]["tiers"]))
-    return [{"melee": tier, "ranged": tier} for tier in range(0, count + 1)]
-
-
 NO_ASCENSION = {"melee": 0, "ranged": 0}
 
 
@@ -964,17 +1353,17 @@ def gear_for_power(armory, target_power):
     gear = {"melee": 0, "ranged": 0}
     while True:
         for slot in ("melee", "ranged"):
-            candidate = next_tier(armory, gear, slot)
+            candidate = c1_next_tier(armory, gear, slot)
             if candidate is None:
                 continue
             trial = dict(gear)
             trial[slot] = candidate
-            if gear_power(armory, trial, NO_ASCENSION) <= target_power:
+            if c1_gear_power(armory, trial, NO_ASCENSION) <= target_power:
                 gear = trial
                 break
         else:
             break
-    return gear, gear_power(armory, gear, NO_ASCENSION)
+    return gear, c1_gear_power(armory, gear, NO_ASCENSION)
 
 
 def loadout_for_power(armory, target_power):
@@ -996,28 +1385,12 @@ def loadout_for_power(armory, target_power):
                 continue
             trial = dict(ascension)
             trial[slot] += 1
-            if gear_power(armory, gear, trial) <= target_power:
+            if c1_gear_power(armory, gear, trial) <= target_power:
                 ascension = trial
                 break
         else:
             break
-    return gear, ascension, gear_power(armory, gear, ascension)
-
-
-def highest_unlocked_gear(armory, income_per_second):
-    """The best symmetric loadout the income gate alone allows (materials aside):
-    the highest tier whose unlockRate the city's persisted rate has reached."""
-    best = {"melee": 0, "ranged": 0}
-    for gear in symmetric_loadouts(armory):
-        tier = gear["melee"]
-        if tier == 0:
-            continue
-        rate = max(
-            tier_unlock_rate(armory, "melee", tier), tier_unlock_rate(armory, "ranged", tier)
-        )
-        if income_per_second >= rate:
-            best = gear
-    return best
+    return gear, ascension, c1_gear_power(armory, gear, ascension)
 
 
 # --------------------------------------------------------------------------
@@ -1080,17 +1453,6 @@ def greedy_curves(game, eras):
         offset += result.seconds
         legacy += result.legacy_gained
     return curves
-
-
-def first_crossing(curves, rate):
-    """(curve, second in era) of the first moment the greedy player's persisted
-    rate reaches `rate`. Income DROPS at every era advance (a new plot starts
-    empty), so this scans eras in order instead of assuming monotonicity."""
-    for curve in curves:
-        second = curve.crossing(rate)
-        if second is not None:
-            return curve, second
-    return None, None
 
 
 # --------------------------------------------------------------------------
@@ -1226,7 +1588,7 @@ def simulate_run(
         for m in members
     ]
     effects = [member_party_effect(armory, m) for m in members]
-    hp_max = sum(max_hp(armory, m["gear"], m["ascension"]) for m in members) / party
+    hp_max = sum(c1_max_hp(armory, m["gear"], m["ascension"]) for m in members) / party
     hp = float(hp_max)
     pad = player_cfg["hitDistancePad"]
     engages = [model["melee_range"] + pad for model in models]
@@ -1871,7 +2233,7 @@ def simulate_run(
         "ranged_dps": sum(model["ranged_dps"] for model in models) / party,
         "ability_damage": ability_damage_total,
         "max_hp": hp_max,
-        "power": gear_power(armory, members[0]["gear"], members[0]["ascension"]),
+        "power": c1_gear_power(armory, members[0]["gear"], members[0]["ascension"]),
         "hp_left": hp,
         "hp_floor": hp_floor,
         "damage_taken": damage_taken,
@@ -1909,53 +2271,37 @@ def fmt_rate(value):
     return f"{se.fmt_cash(value)}/s"
 
 
-def run_clock(curve, second):
-    return se.fmt_time(curve.offset + second)
-
-
-def print_unlock_table(armory, curves, missions):
-    print("Armory unlock ladder -- when the greedy player's persisted rate opens each tier")
-    print("(melee and ranged ladders are identical per tier; unlockRate is income per second)")
-    print(
-        f"  {'tier':>4} {'band':>4} {'material':<9} {'cost':>5} {'unlockRate':>11} "
-        f"{'crossed in':<14} {'at':>8} {'run clock':>10} {'power':>6} {'dps':>8}"
-    )
-    for gear in symmetric_loadouts(armory):
-        tier = gear["melee"]
-        if tier == 0:
-            continue
-        definition = tier_def(armory, "melee", tier)
-        rate = tier_unlock_rate(armory, "melee", tier)
-        material, cost = tier_cost(armory, "melee", tier)
-        curve, second = first_crossing(curves, rate)
-        where = curve.era["name"] if curve else "never"
-        at = se.fmt_time(second) if curve else "-"
-        clock = run_clock(curve, second) if curve else "-"
-        melee, ranged = loadout_dps(armory, gear, NO_ASCENSION)
-        print(
-            f"  {tier:>4} {definition['band']:>4} {material:<9} {cost:>5} "
-            f"{se.fmt_cash(rate):>11} {where:<14} {at:>8} {clock:>10} "
-            f"{gear_power(armory, gear, NO_ASCENSION):>6} {melee + ranged:>8.1f}"
-        )
-    print()
-    print("  band entry tiers (the pacing beats) and the era they land in:")
-    for entry in armory["bands"]:
-        band = entry["band"]
-        tiers = [t["tier"] for t in armory["slots"]["melee"]["tiers"] if t["band"] == band]
-        if not tiers:
-            continue
-        first = min(tiers)
-        rate = tier_unlock_rate(armory, "melee", first)
-        curve, second = first_crossing(curves, rate)
-        note = "never reached"
-        if curve is not None:
-            note = f"{100 * second / curve.seconds:.0f}% into {curve.era['name']}"
-            if curve.era["name"] != entry["eraName"]:
-                note += f"  <-- expected {entry['eraName']}"
-        print(
-            f"    band {band} ({entry['eraName']}, {entry['material']}): tier {first} "
-            f"at {fmt_rate(rate)} -> {note}"
-        )
+def print_ladder(armory, curves, missions):
+    """L3-1..L3-4: the ladder of 20, each tier's band, price and trophy, and every family's window.
+    The city's income gates nothing since L3 (Ben, 2026-10-20), so the C0 unlock table is gone."""
+    proving = _load(CONFIG_DIR / "ProvingGrounds.json")
+    ladder = armory.get("ladder") or {}
+    print("Armory ladder (L3) -- one ladder of 20 for every weapon family; the tier belongs to the family")
+    print(f"  {'tier':>4} {'x range':>10} {'hp melee':>8} {'hp ranged':>9} {'MaxHp t/t':>9} {'power t/t':>9} "
+          f"{'band':>4} {'level':<11} {'material':<9} {'cost':>5}  trophy")
+    for tier in range(1, ladder_size(armory) + 1):
+        band, position = band_of(armory, tier)
+        entry = (ladder.get("bands") or [])[band - 1]
+        material, cost = tier_cost(armory, tier)
+        both = {"melee": tier, "ranged": tier}
+        trophy = (f"needs the {' or '.join([ladder.get('starDifficulty')] + list(ladder.get('starAlso') or []))} star"
+                  if position == ladder.get("bandSize") else "")
+        print(f"  {tier:>4} {multiplier(armory, tier):>10,.4f} {weapon_hp(armory, 'melee', tier, 0):>8,.0f} "
+              f"{weapon_hp(armory, 'ranged', tier, 0):>9,.0f} {max_hp(armory, both, NO_ASCENSION):>9,.0f} "
+              f"{gear_power(armory, both, NO_ASCENSION):>9,} {band:>4} {entry['levelId']:<11} {material:<9} "
+              f"{cost if tier > 1 else '-':>5}  {trophy}")
+    print(f"  the range's own body: {range_hp(armory):g} (scale 1 there); Gear Power at T1/T1 "
+          f"{gear_power(armory, {'melee': 1, 'ranged': 1}, NO_ASCENSION)} (tierWeight "
+          f"{armory['power'].get('tierWeight')}, hpWeight {armory['power']['hpWeight']})")
+    print("  windows (start-top), in shelf order (by start, melee before ranged, then name):")
+    weapons = proving["weapons"]
+    order = sorted(weapons, key=lambda f: ((window(armory, f) or (99, 99))[0], weapons[f]["slot"] != "melee",
+                                          weapons[f]["name"]))
+    for family in order:
+        span = window(armory, family)
+        bar = "".join("#" if span and span[0] <= t <= span[1] else "." for t in range(1, ladder_size(armory) + 1))
+        print(f"    {weapons[family]['name']:<15} {weapons[family]['slot']:<6} "
+              f"{(f'{span[0]}-{span[1]}' if span else 'none'):>6}  [{bar}]")
     print()
     print("  era income envelope (greedy, legacy carried):")
     for curve in curves:
@@ -2078,6 +2424,13 @@ def sum_enemy_hp(rows, totals):
     ]
 
 
+def reference_second(curve):
+    """Assertion 4's moment in the greedy era: its middle. Until L3 it was when the city's persisted
+    income reached the recommended gear's unlockRate; Ben dropped the income gate (2026-10-20), so a
+    run can come at any time, and the middle is the moment C0's fallback already used."""
+    return curve.seconds // 2
+
+
 def print_cash_ratio(mission, armory, curves, totals):
     """Combat cash must stay a garnish on the tycoon, never a shortcut."""
     curve = next((c for c in curves if c.index == mission["era"]), None)
@@ -2085,21 +2438,14 @@ def print_cash_ratio(mission, armory, curves, totals):
         print("Cash vs era cost -- no greedy curve for this era")
         print()
         return None
-    gear, _ = gear_for_power(armory, mission["recommendedPower"])
-    rate = max(
-        tier_unlock_rate(armory, "melee", gear["melee"]),
-        tier_unlock_rate(armory, "ranged", gear["ranged"]),
-    )
-    second = curve.crossing(rate)
-    if second is None:
-        second = curve.seconds // 2
+    second = reference_second(curve)
     remaining = curve.remaining_slot_cost(second)
     mid_remaining = curve.remaining_slot_cost(curve.seconds // 2)
     ratio = totals["cash"] / remaining if remaining > 0 else float("inf")
     print(f"Cash vs era cost -- {curve.era['name']}")
     print(
         f"  reference moment : {se.fmt_time(second)} "
-        f"(the greedy rate reaches {fmt_rate(rate)}, the recommended loadout's gate)"
+        f"(mid-era: since L3 no weapon tier waits for the city's income, so a run can come at any time)"
     )
     print(
         f"  era slot cost    : {totals['cash']:,.0f} run cash vs "
@@ -2248,7 +2594,7 @@ def print_helpers(armory, combat_cfg, game, shop):
         f"0 expected -> {tempo(0, director['windowSeconds'], 0, director):.2f}"
     )
     print(f"  AscensionCap by rebirthCount 0..4 -> {[ascension_cap(armory, r) for r in range(5)]}")
-    top = symmetric_loadouts(armory)[-1]
+    top = {"melee": 12, "ranged": 12}  # the starters' top (L3-3): where Ascension would be bought
     for level in range(1, len(armory["ascension"]["levels"]) + 1):
         cost = ascension_cost(armory, level)
         materials = " + ".join(f"{amount} {name}" for name, amount in cost["materials"].items())
@@ -2270,10 +2616,28 @@ def print_helpers(armory, combat_cfg, game, shop):
         f"  CombatCashMult at legacy 261 (era 3 entry) -> "
         f"x{combat_cash_mult(state, game, shop):.2f}"
     )
-    state["combat"]["materials"]["Timber"] = 10
-    print(f"  CanBuy melee tier 1 with 10 Timber at 0/s -> {can_buy(armory, state, 'melee', 0)}")
-    state["combat"]["gear"]["melee"] = 1
-    print(f"  CanBuy melee tier 2 at 0/s -> {can_buy(armory, state, 'melee', 0)}")
+    built = {"forestRoad": True}
+    combat = state["combat"]
+    combat["materials"]["Timber"] = 99
+    print(f"  UpgradeVerdict broadsword T1->T2 with 99 Timber -> "
+          f"{upgrade_verdict(armory, combat, 'broadsword', True, True, built)}; with 100 -> ", end="")
+    combat["materials"]["Timber"] = 100
+    print(f"{upgrade_verdict(armory, combat, 'broadsword', True, True, built)}; the gate shut -> "
+          f"{upgrade_verdict(armory, combat, 'broadsword', True, False, built)}; unowned -> "
+          f"{upgrade_verdict(armory, combat, 'warhammer', False, True, built)}; no window -> "
+          f"{upgrade_verdict(armory, combat, 'stick', True, True, built)}")
+    combat["tiers"]["broadsword"] = 3
+    combat["materials"]["Timber"] = 500
+    print(f"  UpgradeVerdict broadsword T3->T4 with 500 Timber, no Hard star -> "
+          f"{upgrade_verdict(armory, combat, 'broadsword', True, True, built)}; with it -> ", end="")
+    combat["stars"]["forestRoad"] = {"hard": True}
+    print(f"{upgrade_verdict(armory, combat, 'broadsword', True, True, built)}; T4->T5 (the Castle, no file) -> ", end="")
+    combat["tiers"]["broadsword"] = 4
+    print(f"{upgrade_verdict(armory, combat, 'broadsword', True, True, built)}; the Splitbow (8-8) -> "
+          f"{upgrade_verdict(armory, combat, 'splitbow', True, True, built)}")
+    print(f"  TierOf a saved 30 on the Longbow (1-12) -> {tier_of(armory, {'tiers': {'longbow': 30}}, 'longbow')}; "
+          f"the Warhammer unsaved -> {tier_of(armory, {}, 'warhammer')}; LegacyRefund at gear 3/3 -> "
+          f"{legacy_refund(armory, {'melee': 3, 'ranged': 3})}")
     print(f"  CanAscend at rebirthCount 0 -> {can_ascend(armory, state, 'melee')}")
     state["era"] = 3
     touch_highest_era(state)
@@ -2727,14 +3091,232 @@ def print_crowd(mission, armory, combat_cfg, curves):
           + f"; targetMinutes {mission['targetMinutes']}")
     for curve in curves:
         if curve.era["name"] == mission["eraName"]:
-            rate = max(tier_unlock_rate(armory, "melee", report["gear"]["melee"]),
-                       tier_unlock_rate(armory, "ranged", report["gear"]["ranged"]))
-            second = curve.crossing(rate)
-            second = curve.seconds // 2 if second is None else second
+            second = reference_second(curve)
             remaining = curve.remaining_slot_cost(second)
             print(f"  vs the tycoon: {pay['cash']:,.0f} = {100 * pay['cash'] / remaining:.2f}% of the "
                   f"{remaining:,.0f} the era still costs at {se.fmt_time(second)}")
     print()
+
+
+def ladder_problems(armory, proving):
+    """Assertion 1 (L3-29): Armory.Problems on the shipped families, then the shipped values against
+    L3-1..L3-4 and L3-8. One line per problem."""
+    families = sorted(proving["weapons"])
+    found = list(problems(armory, families))
+    ladder = armory.get("ladder") or {}
+    damage = ladder.get("damage") or []
+    want = [round(LADDER_FIRST * LADDER_STEP ** (t - 1), 4) for t in range(1, LADDER_SIZE + 1)]
+    if damage != want:
+        found.append(f"ladder.damage is not the {LADDER_SIZE} values {LADDER_FIRST} x {LADDER_STEP}^(t-1) to 4 decimals")
+    hp = ladder.get("hp") or {}
+    for slot in ("melee", "ranged"):
+        old = [t["hp"] for t in armory["slots"][slot]["tiers"]][1:LADDER_HP_FROM_SLOTS + 1]
+        if (hp.get(slot) or [])[:LADDER_HP_FROM_SLOTS] != old:
+            found.append(f"ladder.hp.{slot} T1-T{LADDER_HP_FROM_SLOTS} are not the old slot tiers 2-12 ({old})")
+    for tier, want_hp in LADDER_MAX_HP.items():
+        got = max_hp(armory, {"melee": tier, "ranged": tier}, NO_ASCENSION)
+        if got != want_hp:
+            found.append(f"MaxHp at T{tier}/T{tier} is {got:g}, not {want_hp}")
+    if range_hp(armory) != LADDER_RANGE_HP:
+        found.append(f"RangeHp is {range_hp(armory):g}, not {LADDER_RANGE_HP}")
+    power = gear_power(armory, {"melee": 1, "ranged": 1}, NO_ASCENSION)
+    if power != LADDER_POWER_T1:
+        found.append(f"Gear Power at T1/T1 is {power}, not {LADDER_POWER_T1} (power.tierWeight)")
+    bands = ladder.get("bands") or []
+    if len(bands) != LADDER_BANDS or ladder.get("bandSize") != LADDER_BAND_SIZE:
+        found.append(f"the ladder is not {LADDER_BANDS} bands of {LADDER_BAND_SIZE}")
+    if [b.get("levelId") for b in bands] != list(LADDER_BAND_LEVELS):
+        found.append(f"the bands' levels are not {', '.join(LADDER_BAND_LEVELS)} in order")
+    elif bands[0].get("material") != "Timber":
+        found.append("the first band (Forest Road) is not paid in Timber")
+    prices = [tier_cost(armory, t)[1] for t in range(2, LADDER_BAND_SIZE + 1)]
+    if prices != list(LADDER_FOREST_COSTS):
+        found.append(f"T2..T{LADDER_BAND_SIZE} cost {prices}, not {list(LADDER_FOREST_COSTS)} Timber (Ben)")
+    if ladder.get("starDifficulty") != "hard":
+        found.append(f"starDifficulty is {ladder.get('starDifficulty')!r}, not hard (the Hard star is the trophy)")
+    if ladder.get("starAlso") != list(LADDER_STAR_ALSO):
+        found.append(f"starAlso is {ladder.get('starAlso')!r}, not {list(LADDER_STAR_ALSO)} (R1: a harder star "
+                     "opens a band top too)")
+    windows = {f: window(armory, f) for f in families}
+    wrong = [f"{f} {windows[f]} (needs {LADDER_WINDOWS.get(f)})" for f in families if windows[f] != LADDER_WINDOWS.get(f)]
+    if wrong or sorted(armory.get("windows") or {}) != families:
+        found.append("the windows are not L3-3's for every weapons family: " + ", ".join(wrong[:4]))
+    starters = set((proving.get("loadout") or {}).values())
+    late = [f for f in starters if (windows.get(f) or (0, 0))[0] != 1]
+    if late:
+        found.append(f"a starter's window does not start at T1: {late}")
+    frozen = [{"material": (armory["bands"][t["band"] - 1]["material"]), "amount": t["cost"]}
+              for t in armory["slots"]["melee"]["tiers"]]
+    ranged = [{"material": (armory["bands"][t["band"] - 1]["material"]), "amount": t["cost"]}
+              for t in armory["slots"]["ranged"]["tiers"]]
+    if (armory.get("legacy") or {}).get("gearCosts") != frozen or frozen != ranged:
+        found.append("legacy.gearCosts is not the slot tiers' prices (both slots)")
+    return found
+
+
+def ladder_note(armory, proving):
+    """Assertion 1's line when it holds."""
+    refund = legacy_refund(armory, {"melee": 3, "ranged": 3})
+    return (f"{ladder_size(armory)} tiers x{multiplier(armory, 1):g} .. x{multiplier(armory, ladder_size(armory)):,.0f}; "
+            f"MaxHp T1 {max_hp(armory, {'melee': 1, 'ranged': 1}, NO_ASCENSION):g}, T3 "
+            f"{max_hp(armory, {'melee': 3, 'ranged': 3}, NO_ASCENSION):g}, T5 "
+            f"{max_hp(armory, {'melee': 5, 'ranged': 5}, NO_ASCENSION):g}, T20 "
+            f"{max_hp(armory, {'melee': 20, 'ranged': 20}, NO_ASCENSION):,.0f}; RangeHp {range_hp(armory):g}; power T1/T1 "
+            f"{gear_power(armory, {'melee': 1, 'ranged': 1}, NO_ASCENSION)}; Forest T2/T3/T4 "
+            f"{'/'.join(str(tier_cost(armory, t)[1]) for t in (2, 3, 4))} {tier_cost(armory, 2)[0]}, T4 needs the "
+            f"{' or '.join([armory['ladder']['starDifficulty']] + list(armory['ladder'].get('starAlso') or []))} star; "
+            f"{len(armory['windows'])} windows as L3-3; the v8 refund of a 3/3 "
+            f"profile {refund}; Armory.Problems on {len(proving['weapons'])} families: none")
+
+
+def climb_runs(proving, report, gear, difficulty, cut, memo, fire=None):
+    """sim_range's reacting player (default melee only) through a level with the starters at `gear`
+    {melee tier, ranged tier}, on the shortcut layout when `cut`, carrying `fire` (the fire family)
+    in the ranged slot when given: his bar is then the Broadsword's and the fire family's at its own
+    tier (gearOf's held pair, the L3 W1 fix round's R2); he fights with the sword alone either way.
+    Every seed's run, memoised on its key."""
+    import sim_range as sr
+
+    key = (difficulty, gear["melee"], gear["ranged"], cut, fire)
+    if key not in memo:
+        ctx, level = report["ctx"], report["level"]
+        layout = report["cut"] if cut else report["layout"]
+        scales = level["difficulties"][difficulty]
+        held = (proving["loadout"]["melee"], fire) if fire is not None else None
+        view, hp = sr.level_view(proving, scales, level["crowd"]["regenShare"], ctx["armory"], gear, held=held)
+        policy = sr.THREAT_POLICIES["mission"] if fire is None else dict(sr.THREAT_POLICIES["mission"], holds=(fire,))
+        memo[key] = [sr.LevelRun(view, hp, ctx, level, layout, difficulty, policy, seed).run()
+                     for seed in sr.MISSION_SEEDS]
+    return memo[key]
+
+
+def starter_climb(proving, armory, report):
+    """L3-29: the greedy solo player takes both starters from T1 to T4 on Forest Road (Timber only).
+    Each run is measured by sim_range at the gear he holds then (mean of the seeds: Timber, Valor and
+    minutes of a clear, the clock from the start point to the boss room's clear). Normal until both
+    starters reach Hard's recommendedTier, then Hard. Double Jump is bought with the first Valor that
+    covers it; the next run takes the lookout's chest (its Timber, Valor and the fire family); the
+    run after carries the fire family in the ranged slot into the tunnel (the cache's chest, and the
+    shortcut is found); every later run takes the tunnel. After each run he buys, cheapest first,
+    every starter tier Armory.UpgradeVerdict allows. Returns the runs, each with what it paid and
+    what was bought after it."""
+    import sim_range as sr
+
+    level = report["level"]
+    secrets = level.get("secrets") or {}
+    expeditions = sr.load_config(sr.EXPEDITIONS_PATH)
+    sold = {a["id"]: a for a in (expeditions.get("abilities") or {}).get("list") or []}
+    jump_price = ((sold.get("doubleJump") or {}).get("price") or {}).get("valor", 0)
+    built = {file["id"]: True for file in sr.load_level_files()}
+    melee, ranged = proving["loadout"]["melee"], proving["loadout"]["ranged"]
+    flame = report["flame"]
+    lookout = next((sid for sid, e in secrets.items() if e.get("family") == flame), None)
+    layout_secrets = {s["id"]: s for s in report["layout"].get("secrets") or []}
+    cache = next((sid for sid, s in layout_secrets.items() if s.get("needs") == "fire"), None)
+    hard_tier = level["difficulties"]["hard"]["recommendedTier"]
+    combat = new_combat_profile()
+    timber_key = level["material"]
+    state = {"jump": False, "lookout": False, "cache": False}
+    memo = {}
+    runs = []
+    while (tier_of(armory, combat, melee) < LADDER_BAND_SIZE or tier_of(armory, combat, ranged) < LADDER_BAND_SIZE) \
+            and len(runs) < CLIMB_RUN_LIMIT:
+        held = held_tiers(armory, combat, melee, ranged)
+        difficulty = "hard" if min(held.values()) >= hard_tier else "normal"
+        carry_fire = state["lookout"] and not state["cache"] and cache is not None
+        cut = state["cache"] or carry_fire
+        gear = dict(held)
+        measured = climb_runs(proving, report, gear, difficulty, cut and report["cut"] is not None, memo,
+                              fire=flame if carry_fire else None)
+        cleared = [r for r in measured if r["end"] == "cleared"]
+        timber = sum(r["wallet"]["materials"] for r in measured) / len(measured)
+        valor = sum(r["wallet"]["valor"] for r in measured) / len(measured)
+        minutes = sum(r["at"] for r in measured) / len(measured) / 60
+        chests = []
+        if state["jump"] and not state["lookout"] and lookout is not None:
+            timber += secrets[lookout].get("materials", 0)
+            valor += secrets[lookout].get("valor", 0)
+            combat["families"][flame] = True
+            state["lookout"] = True
+            chests.append(lookout)
+        elif carry_fire:
+            timber += secrets[cache].get("materials", 0)
+            valor += secrets[cache].get("valor", 0)
+            state["cache"] = True
+            chests.append(cache)
+        combat["materials"][timber_key] = combat["materials"].get(timber_key, 0) + timber
+        combat["valor"] += valor
+        if len(cleared) == len(measured):
+            stars = combat["stars"].setdefault(level["id"], {})
+            if not stars.get(difficulty):
+                stars[difficulty] = True
+                first = level["difficulties"][difficulty].get("firstClear") or {}
+                if first.get("family"):
+                    combat["families"][first["family"]] = True
+                combat["valor"] += first.get("valor", 0)
+        if not state["jump"] and combat["valor"] >= jump_price:
+            combat["valor"] -= jump_price
+            state["jump"] = True
+        bought = []
+        while True:
+            options = []
+            for family in (melee, ranged):
+                owned = family in (melee, ranged) or combat["families"].get(family)
+                if upgrade_verdict(armory, combat, family, owned, True, built) is None:
+                    options.append((tier_cost(armory, next_tier(armory, combat, family))[1], family))
+            if not options:
+                break
+            _, family = min(options)
+            upgrade(armory, combat, family, True, True, built)
+            bought.append(f"{proving['weapons'][family]['name']} T{tier_of(armory, combat, family)}")
+        runs.append({"difficulty": difficulty, "gear": gear, "cut": cut, "fire": carry_fire, "timber": timber,
+                     "valor": valor, "minutes": minutes, "cleared": len(cleared), "seeds": len(measured),
+                     "downs": sum(r["downs"] for r in measured), "chests": chests, "bought": bought,
+                     "wallet": combat["materials"].get(timber_key, 0)})
+    return {"runs": runs, "combat": combat, "done": tier_of(armory, combat, melee) >= LADDER_BAND_SIZE
+            and tier_of(armory, combat, ranged) >= LADDER_BAND_SIZE}
+
+
+def climb_verdict(climb, report, armory):
+    """Assertion 2's verdict and line."""
+    import sim_range as sr
+
+    level = report["level"]
+    runs = climb["runs"]
+    minutes = sum(r["minutes"] for r in runs)
+    first = runs[0]["timber"] if runs else 0
+    hard = level["difficulties"]["hard"]
+    brutal = level["difficulties"]["brutal"]
+    boss_valor = report["difficulties"]["normal"]["runs"][0]["wallet"]["valor"]
+    hard_valor = luau_round(boss_valor * hard["rewardMult"])
+    brutal_first = (brutal.get("firstClear") or {}).get("valor")
+    family = (hard.get("firstClear") or {}).get("family")
+    arrives = (window(armory, family) or (None,))[0] if family else None
+    # R2 (the L3 W1 fix round): sim_range rates the fire family's pair at the gear he holds on the run
+    # whose chest pays it (PAIR_FLAME_GEAR); the climb is where that gear comes from.
+    lookout = next((sid for sid, e in (level.get("secrets") or {}).items() if e.get("family") == report["flame"]), None)
+    fire_gear = next((r["gear"] for r in runs if lookout in r["chests"]), None)
+    lo_r, hi_r = CLIMB_RUNS
+    lo_m, hi_m = CLIMB_MINUTES
+    good = (climb["done"] and lo_r <= len(runs) <= hi_r and lo_m <= minutes <= hi_m and first >= CLIMB_FIRST_TIMBER
+            and all(r["cleared"] == r["seeds"] for r in runs) and hard_valor == HARD_VALOR
+            and brutal_first == BRUTAL_FIRST_VALOR and arrives == hard["recommendedTier"]
+            and fire_gear == sr.PAIR_FLAME_GEAR)
+    steps = "; ".join(
+        f"run {i} {r['difficulty']} at T{r['gear']['melee']}/T{r['gear']['ranged']}"
+        + (" with the fire family" if r["fire"] else "") + (" (tunnel)" if r["cut"] else "")
+        + f" {r['minutes']:.2f} min, {r['timber']:.0f} Timber" + (f" + {', '.join(r['chests'])}" if r["chests"] else "")
+        + f" -> {', '.join(r['bought']) or 'nothing bought'} ({r['wallet']:.0f} left)"
+        + ("" if r["cleared"] == r["seeds"] else f", {r['seeds'] - r['cleared']} of {r['seeds']} seeds not cleared")
+        for i, r in enumerate(runs, 1))
+    return good, (f"both starters T1 -> T{LADDER_BAND_SIZE}{'' if climb['done'] else ' NOT reached'} in {len(runs)} runs "
+                  f"(needs {lo_r}-{hi_r}), {minutes:.1f} min of clears (needs {lo_m:g}-{hi_m:g}); the first Normal clear "
+                  f"{first:.0f} Timber (needs >= {CLIMB_FIRST_TIMBER}); a Hard clear {hard_valor} Valor (needs "
+                  f"{HARD_VALOR}), the Brutal first clear {brutal_first} (needs {BRUTAL_FIRST_VALOR}); Hard's first clear "
+                  f"gives {family} at T{arrives} (Hard's recommendedTier {hard['recommendedTier']}); the {report['flame']} "
+                  f"comes at "
+                  + (f"T{fire_gear['melee']}/T{fire_gear['ranged']}" if fire_gear is not None else "no run")
+                  + f" (sim_range PAIR_FLAME_GEAR T{sr.PAIR_FLAME_GEAR['melee']}/T{sr.PAIR_FLAME_GEAR['ranged']}) | {steps}")
 
 
 class Checks:
@@ -2762,63 +3344,34 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
                                     "perWave": per_wave}
     retired = " (crowd mission: see 15-18)"
 
-    # 1. unlockRate non-decreasing per slot; each band's entry tier unlocks inside its era.
-    problems = []
-    for slot in ("melee", "ranged"):
-        previous = -1
-        for definition in armory["slots"][slot]["tiers"]:
-            rate = definition["unlockRate"]
-            if rate < previous:
-                problems.append(f"{slot} tier {definition['tier']} rate drops to {rate}")
-            previous = rate
-    band_notes = []
-    for entry in armory["bands"]:
-        tiers = [t for t in armory["slots"]["melee"]["tiers"] if t["band"] == entry["band"]]
-        if not tiers:
-            continue
-        first = min(tiers, key=lambda t: t["tier"])
-        curve, second = first_crossing(curves, first["unlockRate"])
-        if curve is None:
-            problems.append(
-                f"band {entry['band']} tier {first['tier']} rate "
-                f"{se.fmt_cash(first['unlockRate'])}/s is never reached"
-            )
-            continue
-        if curve.era["name"] != entry["eraName"]:
-            problems.append(
-                f"band {entry['band']} tier {first['tier']} unlocks in "
-                f"{curve.era['name']}, not {entry['eraName']}"
-            )
-        band_notes.append(
-            f"b{entry['band']}t{first['tier']} {curve.era['name']} "
-            f"{se.fmt_time(second)} ({100 * second / curve.seconds:.0f}%)"
-        )
-    checks.verdict(
-        not problems,
-        "1 unlock ladder    ",
-        "; ".join(problems)
-        if problems
-        else "monotonic, every band entry inside its era -- " + ", ".join(band_notes),
-    )
+    # The level reports, measured once by sim_range (assertions 2 and 21 read them).
+    import sim_range as sr
 
-    # 2. At each era's median greedy rate, the unlocked gear meets recommendedPower.
-    details = []
-    ok2 = True
-    for curve in curves:
-        mission = missions.get(curve.index)
-        if mission is None:
-            details.append(f"{curve.era['name']} no mission (skipped)")
-            continue
-        gear = highest_unlocked_gear(armory, curve.median())
-        power = gear_power(armory, gear, NO_ASCENSION)
-        needed = recommended_power(mission, False, combat_cfg)
-        if power < needed:
-            ok2 = False
-        details.append(
-            f"{curve.era['name']} median {fmt_rate(curve.median())} -> tier "
-            f"{gear['melee']}/{gear['ranged']} power {power} vs recommended {needed:g}"
-        )
-    checks.verdict(ok2, "2 power at median  ", "; ".join(details))
+    proving_cfg = sr.load_config(sr.CONFIG_PATH)
+    level_reports = {level_id: sr.forest_report(proving_cfg, careless=False, level_id=level_id, human=False,
+                                                ranged=False, below=False, scenarios=False)
+                     for level_id in LEVEL_PAY_TARGETS}
+
+    # 1. L3-1..L3-4 and L3-29: the ladder as Armory.Problems reads it (nothing for the shipped
+    #    families), and the shipped numbers held to the contract: 20 tiers rising 1.5 x 1.65^(t-1),
+    #    HP T1-T11 = the old slot tiers 2-12 with melee >= ranged and never falling, MaxHp 155 / 230
+    #    / 380 at T1 / T3 / T5, RangeHp 130, Gear Power 64 at T1/T1, five bands of four (the first
+    #    Forest Road's Timber), costs by position (T2 / T3 / T4 = 100 / 250 / 500), the Hard star the
+    #    trophy, L3-3's windows for every family, and `legacy` equal to the slot prices it freezes.
+    #    (Was "1 unlock ladder": the city's income gates no tier since L3, Ben 2026-10-20.)
+    found = ladder_problems(armory, proving_cfg)
+    checks.verdict(not found, "1 ladder           ", "; ".join(found[:5]) if found else ladder_note(armory, proving_cfg))
+
+    # 2. L3-29, solo: one Normal clear pays at least CLIMB_FIRST_TIMBER (T2 for both starters at
+    #    once); the greedy climb takes both starters T1 -> T4 in CLIMB_RUNS runs and CLIMB_MINUTES
+    #    minutes of measured clears (Normal until both reach Hard's recommendedTier, then Hard; the
+    #    lookout once Double Jump is bought, then the cache through the tunnel carrying the fire
+    #    family, the tunnel ever after; the Hard star opens T4); a Hard clear pays HARD_VALOR Valor
+    #    and the Brutal first clear BRUTAL_FIRST_VALOR; Hard's first clear gives a family whose
+    #    window starts at Hard's recommendedTier. (Was "2 power at median": retired with the gate.)
+    climb = starter_climb(proving_cfg, armory, level_reports["forestRoad"])
+    good, text = climb_verdict(climb, level_reports["forestRoad"], armory)
+    checks.verdict(good, "2 forest climb     ", text)
 
     # 3. Simulated run at recommended power clears every wave inside targetMinutes +-50 %.
     details = []
@@ -2863,12 +3416,7 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
             totals = crowd[mission["id"]]["pay"]  # the crowd run's cash, summons included
         elif totals is None:
             _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
-        rate = max(
-            tier_unlock_rate(armory, "melee", gear["melee"]),
-            tier_unlock_rate(armory, "ranged", gear["ranged"]),
-        )
-        second = curve.crossing(rate)
-        second = curve.seconds // 2 if second is None else second
+        second = reference_second(curve)
         remaining = curve.remaining_slot_cost(second)
         ratio = totals["cash"] / remaining if remaining > 0 else float("inf")
         ok4 = ok4 and ratio <= RUN_CASH_CAP_FRACTION
@@ -3351,7 +3899,7 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
 
     # 20. The level gates: every kind a level fields (summons included) is priced; every
     #     difficulty and minDifficulty is one of Expeditions.json's, all three present, with
-    #     rewardMult 1, 2 and 4; stages are travel and camp in turn and end in a camp; every
+    #     rewardMult 1, 2 and 4 (§12.8); stages are travel and camp in turn and end in a camp; every
     #     camp stage names a camp of the layout; runCapSeconds is at least twice targetMinutes;
     #     every map node with a level names a level file and every from / requires.node a node;
     #     levels.gateSeconds is at least 1.
@@ -3398,10 +3946,8 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     #     LEVEL_PAY_TARGETS, and Hard's and Brutal's pay as times Normal's.
     details = []
     ok21 = True
-    proving_cfg = sr.load_config(sr.CONFIG_PATH)
     for level_id, target in LEVEL_PAY_TARGETS.items():
-        report = sr.forest_report(proving_cfg, careless=False, level_id=level_id, human=False, ranged=False, below=False,
-                                  scenarios=False)
+        report = level_reports[level_id]
         if report is None:
             ok21 = False
             details.append(f"{level_id} has no level file")
@@ -3657,7 +4203,7 @@ def main():
     )
     print()
     curves = greedy_curves(game, eras)
-    print_unlock_table(armory, curves, missions)
+    print_ladder(armory, curves, missions)
 
     selected = [m for index, m in sorted(missions.items()) if args.era in (None, index)]
     if not selected:
