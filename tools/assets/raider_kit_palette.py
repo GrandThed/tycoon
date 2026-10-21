@@ -11,8 +11,10 @@ the strips read that same file. What this module holds:
     imported, never redefined: a raider's club and the rack it hangs on are one wood, his fur cloak
     and the tent's bedding one fur. forest_palette has no skin (the skin is painted from config)
     and its rock is the camp's, not a raider's.
-  * `RAIDER`: the two colours only a body needs (hair and war paint, eyes).
-  * `PAINT`: one fallback swatch per painted kit (raider-cloth, raider-skin, raider-glow). The
+  * `RAIDER`: the few colours only a raider needs beside the Forest's gear (hair and war paint,
+    eyes, the lobber's fired-clay firepots).
+  * `PAINT`: one fallback swatch per painted kit (raider-cloth, raider-skin, raider-glow,
+    raider-plate). The
     client clears those MeshParts' TextureID and paints Color and Material by role, so these only
     show if a template is used unpainted: a flat light grey cloth reads "unpainted", never as a
     kind colour it is not.
@@ -22,6 +24,8 @@ Kits and the colours each may use (raider_kit_mesh.RMesh refuses anything else):
     raider-cloth  PAINT.CLOTH       painted: the kind's colour (body) or its darkened leg colour
     raider-skin   PAINT.SKIN        painted: the kind's skin colour, tinted half as far (the crit point)
     raider-glow   PAINT.GLOW        painted: the visor rule (dark, hot orange through an attack, ember enraged)
+    raider-plate  PAINT.PLATE       painted: the plated elite's lashed planks, the plate's colour while the
+                                    plate is on (today's shell rule: glint, ward, burst), gone once it breaks
 
 Units: sRGB bytes, as Color3.fromRGB writes them (the mesh module writes linear factors and
 palette.py turns them back into the same bytes; none of these kits is an sRGB-factor kit).
@@ -51,10 +55,12 @@ GROUNDS = {"forest floor": FOREST_GROUND.FLOOR, "road": FOREST_GROUND.ROAD, "gre
 
 
 class RAIDER:
-    """What only a raider's body needs beside the Forest's gear: hair (and charcoal war paint), eyes."""
+    """What only a raider needs beside the Forest's gear: hair (and charcoal war paint, soot), eyes,
+    the lobber's firepots (fired clay: a warm terracotta well apart from leather and wood)."""
 
-    HAIR = (54, 44, 40)  # hair, beards and charcoal war paint (inner, small only)
+    HAIR = (54, 44, 40)  # hair, beards, charcoal war paint and soot (inner, small only)
     EYE = (30, 25, 24)  # eyes, mouths, the skull mask's sockets (inner, small only)
+    CLAY = (196, 120, 84)  # the lobber's firepots
 
 
 class PAINT:
@@ -63,10 +69,12 @@ class PAINT:
     CLOTH = (214, 214, 210)
     SKIN = (196, 148, 112)  # also the default `skin` the config proposes (RaiderModels.json)
     GLOW = (40, 32, 30)
+    PLATE = (176, 172, 164)  # an unpainted plank reads "unpainted", never as the plate's blue
 
 
 GROUPS = {"forest": FOREST, "forest_hide": FOREST_HIDE, "raider": RAIDER}
-PAINT_KITS = {"raider-cloth": PAINT.CLOTH, "raider-skin": PAINT.SKIN, "raider-glow": PAINT.GLOW}
+PAINT_KITS = {"raider-cloth": PAINT.CLOTH, "raider-skin": PAINT.SKIN, "raider-glow": PAINT.GLOW,
+              "raider-plate": PAINT.PLATE}
 GEAR_KIT = "raider-kit"
 KITS = (GEAR_KIT, *PAINT_KITS)
 

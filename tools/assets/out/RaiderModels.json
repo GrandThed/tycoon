@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 2,
  "folder": "Raiders",
  "rig": {
   "headKeep": 0.4,
@@ -14,9 +14,293 @@
   "stepShare": 0.4,
   "seatLean": 0.12,
   "seatSplay": 0.14,
-  "airTuck": 0.5
+  "airTuck": 0.5,
+  "throwShare": 0.35
  },
  "kinds": {
+  "armoured": {
+   "model": "RaiderArmoured",
+   "height": 6.5,
+   "radius": 1.7,
+   "headRadius": 0.8,
+   "skin": [
+    196,
+    148,
+    112
+   ],
+   "pieces": [
+    {
+     "name": "head",
+     "stage": 0,
+     "pivot": [
+      0.0,
+      5.7,
+      0.0
+     ],
+     "parts": {
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 196,
+     "bounds": {
+      "min": [
+       -0.64,
+       5.0,
+       -0.73
+      ],
+      "max": [
+       0.64,
+       6.68,
+       0.78
+      ]
+     }
+    },
+    {
+     "name": "torso",
+     "stage": 1,
+     "pivot": [
+      0.0,
+      4.95,
+      0.06
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-plate": "plate",
+      "raider-skin": "skin"
+     },
+     "triangles": 518,
+     "bounds": {
+      "min": [
+       -2.166,
+       1.95,
+       -0.942
+      ],
+      "max": [
+       1.296,
+       5.06,
+       0.864
+      ]
+     }
+    },
+    {
+     "name": "arm",
+     "stage": 2,
+     "pivot": [
+      1.08,
+      4.62,
+      0.06
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 132,
+     "bounds": {
+      "min": [
+       0.79,
+       0.624,
+       -1.716
+      ],
+      "max": [
+       1.521,
+       4.698,
+       0.32
+      ]
+     }
+    },
+    {
+     "name": "legL",
+     "stage": 3,
+     "pivot": [
+      -0.46,
+      2.75,
+      0.04
+     ],
+     "parts": {
+      "raider-cloth": "clothLeg",
+      "raider-kit": "gear"
+     },
+     "triangles": 76,
+     "bounds": {
+      "min": [
+       -0.82,
+       0.0,
+       -0.56
+      ],
+      "max": [
+       -0.1,
+       2.92,
+       0.36
+      ]
+     }
+    },
+    {
+     "name": "legR",
+     "stage": 4,
+     "pivot": [
+      0.46,
+      2.75,
+      0.04
+     ],
+     "parts": {
+      "raider-cloth": "clothLeg",
+      "raider-kit": "gear"
+     },
+     "triangles": 76,
+     "bounds": {
+      "min": [
+       0.1,
+       0.0,
+       -0.56
+      ],
+      "max": [
+       0.82,
+       2.92,
+       0.36
+      ]
+     }
+    }
+   ],
+   "points": {
+    "chest": [
+     0.0,
+     3.95,
+     -0.78
+    ],
+    "hand": [
+     1.32,
+     2.95,
+     -0.2
+    ],
+    "handL": [
+     -1.3,
+     2.98,
+     -0.15
+    ],
+    "head": [
+     0.0,
+     5.7,
+     0.0
+    ],
+    "headTop": [
+     0.0,
+     6.5,
+     0.0
+    ],
+    "hipL": [
+     -0.46,
+     2.75,
+     0.04
+    ],
+    "hipR": [
+     0.46,
+     2.75,
+     0.04
+    ],
+    "neck": [
+     0.0,
+     4.95,
+     0.06
+    ],
+    "shoulder": [
+     1.08,
+     4.62,
+     0.06
+    ],
+    "shoulderL": [
+     -1.08,
+     4.62,
+     0.06
+    ],
+    "tip": [
+     1.209,
+     1.195,
+     -1.716
+    ]
+   },
+   "legLength": 2.75,
+   "leadLeg": "legL",
+   "armSwingShare": 0.6,
+   "arm": {
+    "carry": [
+     0.2,
+     0.0,
+     0.0
+    ],
+    "seat": [
+     1.35,
+     0.0,
+     -0.1
+    ],
+    "slump": [
+     0.35,
+     0.0,
+     0.05
+    ],
+    "shapes": {
+     "arc": {
+      "coil": [
+       0.1,
+       -0.9,
+       1.45
+      ],
+      "strike": [
+       0.4,
+       -0.3,
+       1.45
+      ],
+      "follow": [
+       0.3,
+       1.1,
+       1.35
+      ]
+     }
+    }
+   },
+   "headMeshCentre": [
+    0.0,
+    5.7,
+    0.0
+   ],
+   "bounds": {
+    "min": [
+     -2.166,
+     0.0,
+     -1.716
+    ],
+    "max": [
+     1.521,
+     6.68,
+     0.864
+    ],
+    "size": [
+     3.687,
+     6.68,
+     2.581
+    ]
+   },
+   "reach": 2.201,
+   "reachRadii": 1.295,
+   "triangles": 998,
+   "meshParts": 13,
+   "notes": {
+    "headShift": [
+     0.0,
+     -0.06,
+     0.06
+    ],
+    "inHead": 0.814
+   },
+   "posedReach": {
+    "out": 5.41,
+    "outRadii": 3.18,
+    "up": 6.68,
+    "outPose": "arc attack (arm)",
+    "upPose": "walk (head)"
+   }
+  },
   "brute": {
    "model": "RaiderBrute",
    "height": 7.5,
@@ -292,7 +576,15 @@
      0.0,
      0.08,
      0.09
-    ]
+    ],
+    "inHead": 0.933
+   },
+   "posedReach": {
+    "out": 4.77,
+    "outRadii": 2.169,
+    "up": 8.91,
+    "outPose": "reel (arm)",
+    "upPose": "lane windup (arm)"
    }
   },
   "chief": {
@@ -503,10 +795,10 @@
    },
    "legLength": 5.7,
    "leadLeg": "legL",
-   "armSwingShare": 0.45,
+   "armSwingShare": 0.0,
    "arm": {
     "carry": [
-     0.48,
+     0.62,
      0.0,
      0.0
     ],
@@ -516,7 +808,7 @@
      0.05
     ],
     "slump": [
-     0.75,
+     0.9,
      0.0,
      0.05
     ],
@@ -540,12 +832,12 @@
      },
      "lane": {
       "coil": [
-       0.25,
+       1.1,
        0.0,
        0.0
       ],
       "strike": [
-       1.7,
+       1.9,
        0.0,
        0.0
       ],
@@ -639,12 +931,30 @@
     ],
     "note": "CFrame.fromMatrix(grip, right, up) in the arm piece's rest frame, then Model:ScaleTo(scale) about Base (the grip)"
    },
+   "cue": {
+    "piece": "torso",
+    "point": "core",
+    "size": 1.6,
+    "charged": 2.6
+   },
    "notes": {
     "headShift": [
      0.0,
      0.11,
      0.02
-    ]
+    ],
+    "inHead": 0.82
+   },
+   "posedReach": {
+    "out": 17.1,
+    "outRadii": 4.274,
+    "up": 24.13,
+    "outPose": "arc attack (arm)",
+    "upPose": "ring windup (arm)",
+    "withCue": {
+     "out": 17.1,
+     "up": 24.13
+    }
    }
   },
   "fodder": {
@@ -670,10 +980,10 @@
       "raider-kit": "gear",
       "raider-skin": "skin"
      },
-     "triangles": 188,
+     "triangles": 200,
      "bounds": {
       "min": [
-       -0.608,
+       -0.632,
        3.49,
        -0.607
       ],
@@ -697,17 +1007,17 @@
       "raider-kit": "gear",
       "raider-skin": "skin"
      },
-     "triangles": 174,
+     "triangles": 304,
      "bounds": {
       "min": [
-       -1.011,
+       -1.018,
        1.62,
        -0.49
       ],
       "max": [
-       0.643,
+       0.649,
        3.76,
-       0.467
+       0.624
       ]
      }
     },
@@ -723,11 +1033,11 @@
       "raider-kit": "gear",
       "raider-skin": "skin"
      },
-     "triangles": 116,
+     "triangles": 152,
      "bounds": {
       "min": [
-       0.613,
-       1.459,
+       0.6,
+       1.426,
        -1.597
       ],
       "max": [
@@ -749,7 +1059,7 @@
       "raider-cloth": "clothLeg",
       "raider-kit": "gear"
      },
-     "triangles": 58,
+     "triangles": 68,
      "bounds": {
       "min": [
        -0.57,
@@ -775,7 +1085,7 @@
       "raider-cloth": "clothLeg",
       "raider-kit": "gear"
      },
-     "triangles": 58,
+     "triangles": 68,
      "bounds": {
       "min": [
        0.07,
@@ -888,7 +1198,7 @@
    ],
    "bounds": {
     "min": [
-     -1.011,
+     -1.018,
      0.0,
      -1.597
     ],
@@ -898,21 +1208,909 @@
      0.835
     ],
     "size": [
-     2.291,
+     2.298,
      5.158,
      2.432
     ]
    },
    "reach": 1.853,
    "reachRadii": 1.425,
-   "triangles": 594,
+   "triangles": 792,
    "meshParts": 11,
    "notes": {
     "headShift": [
      0.0,
      -0.01,
      0.073
+    ],
+    "inHead": 0.793
+   },
+   "posedReach": {
+    "out": 2.66,
+    "outRadii": 2.044,
+    "up": 5.58,
+    "outPose": "lunge windup (arm)",
+    "upPose": "lunge windup (arm)"
+   }
+  },
+  "lobber": {
+   "model": "RaiderLobber",
+   "height": 5.0,
+   "radius": 1.4,
+   "headRadius": 0.7,
+   "skin": [
+    196,
+    148,
+    112
+   ],
+   "pieces": [
+    {
+     "name": "head",
+     "stage": 0,
+     "pivot": [
+      0.0,
+      4.3,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 202,
+     "bounds": {
+      "min": [
+       -0.68,
+       3.67,
+       -0.616
+      ],
+      "max": [
+       0.68,
+       4.99,
+       0.695
+      ]
+     }
+    },
+    {
+     "name": "torso",
+     "stage": 1,
+     "pivot": [
+      0.0,
+      3.64,
+      0.02
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 378,
+     "bounds": {
+      "min": [
+       -1.127,
+       1.5,
+       -0.569
+      ],
+      "max": [
+       0.694,
+       3.72,
+       1.124
+      ]
+     }
+    },
+    {
+     "name": "arm",
+     "stage": 2,
+     "pivot": [
+      0.86,
+      3.36,
+      0.04
+     ],
+     "parts": {
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 78,
+     "bounds": {
+      "min": [
+       0.678,
+       1.94,
+       -0.279
+      ],
+      "max": [
+       1.23,
+       3.422,
+       0.24
+      ]
+     }
+    },
+    {
+     "name": "legL",
+     "stage": 3,
+     "pivot": [
+      -0.36,
+      2.0,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "clothLeg",
+      "raider-kit": "gear"
+     },
+     "triangles": 68,
+     "bounds": {
+      "min": [
+       -0.64,
+       0.0,
+       -0.46
+      ],
+      "max": [
+       -0.08,
+       2.054,
+       0.242
+      ]
+     }
+    },
+    {
+     "name": "legR",
+     "stage": 4,
+     "pivot": [
+      0.36,
+      2.0,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "clothLeg",
+      "raider-kit": "gear"
+     },
+     "triangles": 68,
+     "bounds": {
+      "min": [
+       0.08,
+       0.0,
+       -0.46
+      ],
+      "max": [
+       0.64,
+       2.054,
+       0.242
+      ]
+     }
+    }
+   ],
+   "points": {
+    "chest": [
+     0.0,
+     2.95,
+     -0.52
+    ],
+    "hand": [
+     1.02,
+     2.12,
+     -0.1
+    ],
+    "head": [
+     0.0,
+     4.3,
+     0.0
+    ],
+    "headTop": [
+     0.0,
+     5.0,
+     0.0
+    ],
+    "hipL": [
+     -0.36,
+     2.0,
+     0.0
+    ],
+    "hipR": [
+     0.36,
+     2.0,
+     0.0
+    ],
+    "neck": [
+     0.0,
+     3.64,
+     0.02
+    ],
+    "pack": [
+     0.0,
+     3.62,
+     0.84
+    ],
+    "shoulder": [
+     0.86,
+     3.36,
+     0.04
+    ],
+    "shoulderL": [
+     -0.86,
+     3.36,
+     0.04
     ]
+   },
+   "legLength": 2.0,
+   "leadLeg": "legL",
+   "armSwingShare": 1.0,
+   "arm": {
+    "carry": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "seat": [
+     0.67,
+     0.0,
+     -0.08
+    ],
+    "slump": [
+     0.2,
+     0.0,
+     0.06
+    ],
+    "shapes": {
+     "lob": {
+      "coil": [
+       -2.8,
+       0.0,
+       0.0
+      ],
+      "strike": [
+       2.35,
+       0.0,
+       0.2
+      ],
+      "follow": [
+       1.15,
+       -0.2,
+       -0.2
+      ]
+     }
+    }
+   },
+   "headMeshCentre": [
+    0.0,
+    4.3,
+    0.0
+   ],
+   "bounds": {
+    "min": [
+     -1.127,
+     0.0,
+     -0.616
+    ],
+    "max": [
+     1.23,
+     4.99,
+     1.124
+    ],
+    "size": [
+     2.357,
+     4.99,
+     1.74
+    ]
+   },
+   "reach": 1.234,
+   "reachRadii": 0.881,
+   "triangles": 794,
+   "meshParts": 12,
+   "cue": {
+    "piece": "torso",
+    "point": "pack"
+   },
+   "notes": {
+    "headShift": [
+     0.0,
+     -0.01,
+     0.074
+    ],
+    "inHead": 0.85
+   },
+   "posedReach": {
+    "out": 2.13,
+    "outRadii": 1.521,
+    "up": 4.99,
+    "outPose": "flinch (torso)",
+    "upPose": "walk (head)",
+    "withCue": {
+     "out": 2.34,
+     "up": 5.32
+    }
+   }
+  },
+  "marksman": {
+   "model": "RaiderMarksman",
+   "height": 5.4,
+   "radius": 1.2,
+   "headRadius": 0.65,
+   "skin": [
+    196,
+    148,
+    112
+   ],
+   "pieces": [
+    {
+     "name": "head",
+     "stage": 0,
+     "pivot": [
+      0.0,
+      4.75,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 216,
+     "bounds": {
+      "min": [
+       -0.593,
+       4.105,
+       -0.571
+      ],
+      "max": [
+       0.593,
+       5.405,
+       0.7
+      ]
+     }
+    },
+    {
+     "name": "torso",
+     "stage": 1,
+     "pivot": [
+      0.0,
+      4.12,
+      0.02
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 202,
+     "bounds": {
+      "min": [
+       -0.585,
+       1.45,
+       -0.491
+      ],
+      "max": [
+       0.62,
+       4.397,
+       0.735
+      ]
+     }
+    },
+    {
+     "name": "arm",
+     "stage": 2,
+     "pivot": [
+      0.0,
+      3.82,
+      0.06
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 230,
+     "bounds": {
+      "min": [
+       -0.873,
+       2.915,
+       -2.22
+      ],
+      "max": [
+       1.192,
+       3.922,
+       0.237
+      ]
+     }
+    },
+    {
+     "name": "legL",
+     "stage": 3,
+     "pivot": [
+      -0.3,
+      2.3,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "clothLeg",
+      "raider-kit": "gear"
+     },
+     "triangles": 68,
+     "bounds": {
+      "min": [
+       -0.54,
+       0.0,
+       -0.42
+      ],
+      "max": [
+       -0.06,
+       2.35,
+       0.208
+      ]
+     }
+    },
+    {
+     "name": "legR",
+     "stage": 4,
+     "pivot": [
+      0.3,
+      2.3,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "clothLeg",
+      "raider-kit": "gear"
+     },
+     "triangles": 68,
+     "bounds": {
+      "min": [
+       0.06,
+       0.0,
+       -0.42
+      ],
+      "max": [
+       0.54,
+       2.35,
+       0.208
+      ]
+     }
+    }
+   ],
+   "points": {
+    "chest": [
+     0.0,
+     3.4,
+     -0.42
+    ],
+    "hand": [
+     0.38,
+     3.43,
+     -0.5
+    ],
+    "handL": [
+     0.26,
+     3.35,
+     -1.04
+    ],
+    "head": [
+     0.0,
+     4.75,
+     0.0
+    ],
+    "headTop": [
+     0.0,
+     5.4,
+     0.0
+    ],
+    "hipL": [
+     -0.3,
+     2.3,
+     0.0
+    ],
+    "hipR": [
+     0.3,
+     2.3,
+     0.0
+    ],
+    "neck": [
+     0.0,
+     4.12,
+     0.02
+    ],
+    "shoulder": [
+     0.0,
+     3.82,
+     0.06
+    ],
+    "shoulderL": [
+     -0.72,
+     3.82,
+     0.06
+    ],
+    "shoulderR": [
+     0.72,
+     3.82,
+     0.06
+    ],
+    "tip": [
+     0.3,
+     3.65,
+     -2.22
+    ]
+   },
+   "legLength": 2.3,
+   "leadLeg": "legL",
+   "armSwingShare": 0.25,
+   "arm": {
+    "carry": [
+     -0.45,
+     0.0,
+     0.0
+    ],
+    "seat": [
+     -0.75,
+     0.0,
+     0.0
+    ],
+    "slump": [
+     -0.62,
+     0.0,
+     0.0
+    ],
+    "shapes": {
+     "line": {
+      "coil": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "strike": [
+       0.22,
+       0.0,
+       0.0
+      ],
+      "follow": [
+       0.05,
+       0.0,
+       0.0
+      ],
+      "steady": true
+     }
+    }
+   },
+   "headMeshCentre": [
+    0.0,
+    4.75,
+    0.0
+   ],
+   "bounds": {
+    "min": [
+     -0.873,
+     0.0,
+     -2.22
+    ],
+    "max": [
+     1.192,
+     5.405,
+     0.735
+    ],
+    "size": [
+     2.065,
+     5.405,
+     2.955
+    ]
+   },
+   "reach": 2.24,
+   "reachRadii": 1.867,
+   "triangles": 784,
+   "meshParts": 13,
+   "cue": {
+    "piece": "arm",
+    "point": "tip"
+   },
+   "notes": {
+    "headShift": [
+     0.0,
+     -0.015,
+     0.074
+    ],
+    "inHead": 0.834
+   },
+   "posedReach": {
+    "out": 2.6,
+    "outRadii": 2.168,
+    "up": 5.41,
+    "outPose": "flinch (torso)",
+    "upPose": "walk (head)",
+    "withCue": {
+     "out": 3.18,
+     "up": 5.41
+    }
+   }
+  },
+  "slinger": {
+   "model": "RaiderSlinger",
+   "height": 5.0,
+   "radius": 1.2,
+   "headRadius": 0.65,
+   "skin": [
+    196,
+    148,
+    112
+   ],
+   "pieces": [
+    {
+     "name": "head",
+     "stage": 0,
+     "pivot": [
+      0.0,
+      4.35,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 212,
+     "bounds": {
+      "min": [
+       -0.565,
+       3.735,
+       -0.571
+      ],
+      "max": [
+       0.565,
+       4.985,
+       1.017
+      ]
+     }
+    },
+    {
+     "name": "torso",
+     "stage": 1,
+     "pivot": [
+      0.0,
+      3.72,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "cloth",
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 286,
+     "bounds": {
+      "min": [
+       -0.968,
+       1.68,
+       -0.509
+      ],
+      "max": [
+       0.607,
+       3.78,
+       0.477
+      ]
+     }
+    },
+    {
+     "name": "arm",
+     "stage": 2,
+     "pivot": [
+      0.74,
+      3.44,
+      0.02
+     ],
+     "parts": {
+      "raider-kit": "gear",
+      "raider-skin": "skin"
+     },
+     "triangles": 144,
+     "bounds": {
+      "min": [
+       0.58,
+       0.98,
+       -0.325
+      ],
+      "max": [
+       1.13,
+       3.488,
+       0.191
+      ]
+     }
+    },
+    {
+     "name": "legL",
+     "stage": 3,
+     "pivot": [
+      -0.3,
+      2.06,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "clothLeg",
+      "raider-kit": "gear"
+     },
+     "triangles": 68,
+     "bounds": {
+      "min": [
+       -0.54,
+       0.0,
+       -0.42
+      ],
+      "max": [
+       -0.06,
+       2.111,
+       0.208
+      ]
+     }
+    },
+    {
+     "name": "legR",
+     "stage": 4,
+     "pivot": [
+      0.3,
+      2.06,
+      0.0
+     ],
+     "parts": {
+      "raider-cloth": "clothLeg",
+      "raider-kit": "gear"
+     },
+     "triangles": 68,
+     "bounds": {
+      "min": [
+       0.06,
+       0.0,
+       -0.42
+      ],
+      "max": [
+       0.54,
+       2.111,
+       0.208
+      ]
+     }
+    }
+   ],
+   "points": {
+    "chest": [
+     0.0,
+     3.05,
+     -0.4
+    ],
+    "hand": [
+     0.9,
+     2.2,
+     -0.1
+    ],
+    "head": [
+     0.0,
+     4.35,
+     0.0
+    ],
+    "headTop": [
+     0.0,
+     5.0,
+     0.0
+    ],
+    "hipL": [
+     -0.3,
+     2.06,
+     0.0
+    ],
+    "hipR": [
+     0.3,
+     2.06,
+     0.0
+    ],
+    "neck": [
+     0.0,
+     3.72,
+     0.0
+    ],
+    "pouch": [
+     0.92,
+     1.18,
+     -0.12
+    ],
+    "shoulder": [
+     0.74,
+     3.44,
+     0.02
+    ],
+    "shoulderL": [
+     -0.74,
+     3.44,
+     0.02
+    ]
+   },
+   "legLength": 2.06,
+   "leadLeg": "legL",
+   "armSwingShare": 1.0,
+   "arm": {
+    "carry": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "seat": [
+     1.05,
+     0.0,
+     -0.08
+    ],
+    "slump": [
+     0.18,
+     0.0,
+     0.05
+    ],
+    "shapes": {
+     "shot": {
+      "coil": [
+       -0.35,
+       0.0,
+       2.55
+      ],
+      "strike": [
+       2.4,
+       -0.1,
+       0.55
+      ],
+      "follow": [
+       0.9,
+       0.0,
+       -0.25
+      ],
+      "whirl": {
+       "turns": 2,
+       "sin": [
+        0.45,
+        0.0,
+        0.0
+       ],
+       "cos": [
+        0.0,
+        0.0,
+        0.25
+       ]
+      }
+     }
+    }
+   },
+   "headMeshCentre": [
+    0.0,
+    4.35,
+    0.0
+   ],
+   "bounds": {
+    "min": [
+     -0.968,
+     0.0,
+     -0.571
+    ],
+    "max": [
+     1.13,
+     4.985,
+     1.017
+    ],
+    "size": [
+     2.098,
+     4.985,
+     1.589
+    ]
+   },
+   "reach": 1.136,
+   "reachRadii": 0.947,
+   "triangles": 778,
+   "meshParts": 12,
+   "cue": {
+    "piece": "arm",
+    "point": "pouch"
+   },
+   "notes": {
+    "headShift": [
+     0.0,
+     -0.015,
+     0.074
+    ],
+    "inHead": 0.897
+   },
+   "posedReach": {
+    "out": 3.21,
+    "outRadii": 2.673,
+    "up": 5.46,
+    "outPose": "shot attack (arm)",
+    "upPose": "shot windup (arm)",
+    "withCue": {
+     "out": 4.51,
+     "up": 6.77
+    }
    }
   }
  }

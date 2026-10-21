@@ -43,20 +43,13 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "testfit"))
 import raider_kit_mesh as rk  # noqa: E402
 import raiderpose  # noqa: E402
-from raider_kit_mesh import add, ball, band, blob, fang_row, horn, limb, shell, spike  # noqa: E402
+from raider_kit_mesh import BUDGETS, add, ball, band, blob, cross3, fang_row, horn, jagged, lerp3, limb, shell, shell_jag, spike  # noqa: E402
 from raider_kit_palette import FOREST as F  # noqa: E402
 from raider_kit_palette import FOREST_HIDE as H  # noqa: E402
 from raider_kit_palette import RAIDER as R  # noqa: E402
 
 LOOK_B_ROOT = os.path.join(rk.REPO_ROOT, "assets", "build", "raider-lookb", "kenney3d")
 PALETTE_CACHE = os.path.join(rk.REPO_ROOT, "assets", "build", "palettes")
-
-BUDGETS = {"fodder": 600, "slinger": 800, "marksman": 800, "lobber": 800, "armoured": 1000, "brute": 1200, "chief": 4000}
-
-
-def lerp3(a, b, t):
-    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
-
 
 # --- the fodder: a lean raider with a flint-studded club --------------------------------------------
 
@@ -66,7 +59,11 @@ def fodder() -> rk.Body:
 
     A wiry raider in a sleeveless tunic (the cloth, red-brown from config) and cloth leg wraps (the
     leg shade), rawhide belt, bandolier and foot wraps, one wolf-fur pauldron, a charcoal war-paint
-    band across the eyes, a shaggy mane and a one-handed club with flint teeth in the right hand."""
+    band across the eyes, a shaggy mane and a one-handed club with flint teeth in the right hand.
+    L4 W2 brought him to the others' detail (the lead's note: about 800 with gear) without moving
+    his silhouette Ben approved: a short fur cape over the back, a fang necklace, a bone knife in a
+    sheath on the left hip, a second feather, a rope-bound grip and two more flint teeth on the club,
+    a forearm wrap, rope at the knees."""
     b = rk.Body("RaiderFodder", "fodder", 5.0, 1.3, 0.7)
     hc = (0.0, 4.3, 0.0)
     b.points.update({
@@ -110,6 +107,8 @@ def fodder() -> rk.Body:
     # One ochre-dyed feather stuck in the mane, leaning back: the raider's mark at a distance.
     head.gear.prism([(0.0, -0.05), (0.62, -0.07), (0.72, 0.0), (0.0, 0.05)], -0.015, 0.015, F.OCHRE,
                     origin=(-0.34, 4.62, 0.36), u=rk.norm((-0.35, 0.75, 0.55)), v=rk.norm((0.0, -0.6, 0.8)))
+    head.gear.prism([(0.0, -0.04), (0.46, -0.05), (0.54, 0.0), (0.0, 0.04)], -0.015, 0.015, F.FEATHER,
+                    origin=(-0.3, 4.58, 0.4), u=rk.norm((-0.6, 0.55, 0.6)), v=rk.norm((0.0, -0.6, 0.8)))
     for side in (-1, 1):
         head.gear.prism([(0.0, 0.035), (0.11, 0.0), (0.0, -0.035)], -0.03, 0.03, F.BONE,
                         origin=(side * 0.2 - 0.05 * side, 4.36, -0.6), u=(side * 1.0, 0.0, 0.0), v=(0.0, 1.0, 0.0))
@@ -131,6 +130,22 @@ def fodder() -> rk.Body:
     limb(torso.gear, [(-0.52, 3.5, -0.3), (0.52, 2.36, -0.42)], [(0.07, 0.03), (0.07, 0.03)], H.HIDE,
          segments=4, smooth=False, normal0=(0.0, 0.0, 1.0))
     ball(torso.gear, (-0.64, 3.44, 0.02), (0.38, 0.24, 0.42), H.FUR, segments=6, rings=3, jitter=0.2, seed=7, smooth=False)
+    # A short fur cape over the back, ragged at the hem.
+    shell(torso.gear, [
+        (2.62, 0.0, 0.1, 0.6, 0.5, 2.0, 2 * math.pi - 2.0),
+        (3.42, 0.0, 0.08, 0.66, 0.46, 1.75, 2 * math.pi - 1.75),
+    ], H.FUR, thickness=0.08, points=6, jag=shell_jag(0.1, 9), cap_colour=H.HIDE_PALE)
+    # A fang necklace on a cord.
+    band(torso.gear, 3.48, 3.54, 0.0, 0.02, 0.27, 0.25, F.ROPE, segments=6)
+    fang_row(torso.gear, (0.0, 3.5, 0.02), 0.28, 0.27, -0.75, 0.75, 4, 0.2, 0.045, F.BONE)
+    # A bone knife in a leather sheath on the left hip.
+    knife = rk.norm((0.15, -1.0, -0.25))
+    limb(torso.gear, [(-0.6, 2.42, -0.22), add((-0.6, 2.42, -0.22), rk.mul(knife, 0.6))], [(0.08, 0.04), (0.05, 0.03)],
+         F.LEATHER, segments=4, smooth=False, normal0=(1.0, 0.0, 0.0))
+    limb(torso.gear, [(-0.6, 2.42, -0.22), add((-0.6, 2.42, -0.22), rk.mul(knife, -0.28))], [0.045, 0.05], F.BONE,
+         segments=4, smooth=False)
+    # A rawhide wrap on the left forearm.
+    band(torso.gear, 2.44, 2.66, -0.875, -0.01, 0.15, 0.15, H.HIDE, segments=5)
 
     # Weapon arm: skin arm and fist, rawhide bracer, the club with flint teeth.
     arm = b["arm"]
@@ -143,7 +158,9 @@ def fodder() -> rk.Body:
     arm.gear.lathe([(-0.14, 0.0), (-0.1, 0.075), (0.9, 0.12), (1.34, 0.18), (1.56, 0.0)],
                    F.WOOD, axis=d, centre=grip, segments=5, smooth=True)
     b.points["tip"] = add(grip, rk.mul(d, 1.56))
-    for k, (along, ang) in enumerate(((1.12, 0.0), (1.3, math.pi * 0.66), (1.22, math.pi * 1.33))):
+    arm.gear.lathe([(0.1, 0.105), (0.42, 0.11)], F.ROPE, axis=d, centre=grip, segments=5, smooth=False)
+    for k, (along, ang) in enumerate(((1.12, 0.0), (1.3, math.pi * 0.66), (1.22, math.pi * 1.33),
+                                      (1.42, math.pi * 0.33), (1.0, math.pi))):
         u, v = rk.basis(d, (1.0, 0.0, 0.0))
         out = add(rk.mul(u, math.cos(ang)), rk.mul(v, math.sin(ang)))
         base = add(grip, rk.mul(d, along))
@@ -157,6 +174,7 @@ def fodder() -> rk.Body:
         leg.gear.prism([(0.18, 0.0), (0.2, 0.36), (-0.08, 0.4), (-0.38, 0.15), (-0.44, 0.0)], -0.16, 0.16, H.HIDE,
                        origin=(x, 0.0, 0.0), u=(0.0, 0.0, 1.0), v=(0.0, 1.0, 0.0))
         band(leg.gear, 0.52, 0.64, x, 0.01, 0.185, 0.185, F.ROPE, segments=5)
+        band(leg.gear, 1.03, 1.13, x * 1.03, -0.05, 0.215, 0.215, F.ROPE, segments=5)
 
     # The weapon arm's keyed poses (pitch, yaw, roll about the shoulder, in the torso's frame;
     # raiderpose.arm_channel blends them). The torso leans about the neck, which swings a hanging arm
@@ -172,26 +190,6 @@ def fodder() -> rk.Body:
     }
     b.budget = BUDGETS["fodder"]
     return b
-
-
-def jagged(amount: float, seed: int, every: int = 2):
-    """A ring jag: every `every`-th point pushed out, the others pulled in a little, seeded (a ragged
-    hem, fur tufts)."""
-    import random
-
-    rng = random.Random(seed)
-    values = [1.0 + (amount * rng.uniform(0.6, 1.0) if i % every == 0 else -amount * 0.35) for i in range(64)]
-    return lambda s: values[s % 64]
-
-
-def shell_jag(amount: float, seed: int, level: int = 0):
-    """A shell jag on one level only (the bottom of a cloak or a mantle: fur tufts)."""
-    tufts = jagged(amount, seed)
-    return lambda li, s: tufts(s) if li == level else 1.0
-
-
-def cross3(a, b_):
-    return (a[1] * b_[2] - a[2] * b_[1], a[2] * b_[0] - a[0] * b_[2], a[0] * b_[1] - a[1] * b_[0])
 
 
 # --- the brute: a hulking raider with a log club ------------------------------------------------------
@@ -364,7 +362,10 @@ def chief(look: str = "A") -> rk.Body:
         "chest": (0.0, 9.0, -1.75),
     })
     b.leg_length = 5.7
-    b.arm_swing_share = 0.45
+    # L4 W2: no walk swing on the hammer arm, and the carry lifted (0.48 -> 0.62): the dragged
+    # hammer swinging with the stride sank its head up to 2.9 studs into the ground on the
+    # backswing; now it rests 0.4 above the ground and dips at most about 0.65 into it mid-stride.
+    b.arm_swing_share = 0.0
     cloak = H.FUR_DARK if look == "A" else H.FUR
 
     head = b["head"]
@@ -549,22 +550,38 @@ def chief(look: str = "A") -> rk.Body:
 
     # Keys carry the lean of their moment (see the fodder): the slam's coil leans back 0.45 and its
     # impact forward 0.3, the charge runs leaning forward 0.5, the call throws the head back 0.5.
+    # L4 W2 (measured on every vertex over every pose, raiderpose.posed_extent): the charge's coil
+    # (0.25 -> 1.1) and strike (1.7 -> 1.9) and the slump (0.75 -> 0.9) were lifted, because leaning
+    # into the charge or slumping after any blow drove the hammer's head 1.7 to 4.6 studs into the
+    # ground; only the slam still buries it, about 1.5 to 1.9, which is the impact.
     b.arm = {
-        "carry": [0.48, 0.0, 0.0],
+        "carry": [0.62, 0.0, 0.0],
         "seat": [1.12, 0.0, 0.05],
-        "slump": [0.75, 0.0, 0.05],
+        "slump": [0.9, 0.0, 0.05],
         "shapes": {
             "ring": {"coil": [2.3, 0.0, 0.12], "strike": [0.79, 0.0, 0.0], "follow": [0.47, 0.0, 0.0]},
-            "lane": {"coil": [0.25, 0.0, 0.0], "strike": [1.7, 0.0, 0.0], "follow": [1.2, 0.0, 0.0]},
+            "lane": {"coil": [1.1, 0.0, 0.0], "strike": [1.9, 0.0, 0.0], "follow": [1.2, 0.0, 0.0]},
             "summon": {"coil": [2.3, 0.0, 0.25], "strike": [3.2, 0.0, 0.3], "follow": [2.6, 0.0, 0.25]},
             "arc": {"coil": [0.1, -0.9, 1.45], "strike": [0.4, -0.3, 1.45], "follow": [0.3, 1.1, 1.35]},
         },
     }
+    # The boss's charging core at model size (the lead's note, Ben's verdict 27.4): today's cue is a
+    # 2.4-stud ball swelling to 4.2 (enraged 3.24 at rest) that hid his chest in every frame. 1.6 at
+    # rest sits inside the amulet ring (2.24 across inside); charged to 2.6 it covers the ring, which
+    # still says "something is coming" from across the clearing. Enraged the rest size grows by
+    # Theme.COMBAT_RANGE_ENRAGE_CORE_SCALE (2.16) and the charged size never shrinks under it.
+    b.cue = {"piece": "torso", "point": "core", "size": 1.6, "charged": 2.6}
     b.budget = BUDGETS["chief"]
     return b
 
 
-MODELS = {"RaiderFodder": fodder, "RaiderBrute": brute, "RaiderChief": chief}
+import raider_kit_elite  # noqa: E402  (step 2: the plated elite)
+import raider_kit_marksman  # noqa: E402  (step 2: the marksman)
+import raider_kit_throwers  # noqa: E402  (step 2: the slinger and the lobber)
+
+MODELS = {"RaiderFodder": fodder, "RaiderBrute": brute, "RaiderChief": chief,
+          "RaiderSlinger": raider_kit_throwers.slinger, "RaiderLobber": raider_kit_throwers.lobber,
+          "RaiderMarksman": raider_kit_marksman.marksman, "RaiderArmoured": raider_kit_elite.armoured}
 
 
 def centre_head(b: rk.Body) -> None:
@@ -580,6 +597,29 @@ def centre_head(b: rk.Body) -> None:
 
 
 # --- driver ---------------------------------------------------------------------------------------
+
+
+def add_posed_reach(body: rk.Body, record: dict, kinds: dict, threat_cfg: dict, consts, rig_numbers: dict) -> None:
+    """`posedReach` in the kind's record: every vertex (and the held Warhammer's) over every sampled
+    pose before a hit (raiderpose.posed_extent), for camp C's sight gate. raiderpose --check measures
+    it again on the exported GLBs and fails when the config is stale."""
+    kind = kinds.get(body.kind)
+    if kind is None:
+        print(f"[raider-kit] WARNING: no crowd kind {body.kind!r}: no posed reach", flush=True)
+        return
+    pieces = {p: raiderpose.unique_points([v for m in body[p].meshes.values() if m.faces for v in m.verts])
+              for p in rk.PIECES}
+    held = []
+    if body.hold:
+        path = os.path.join(raiderpose.WEAPONS_DIR, f"{body.hold['model']}.glb")
+        if os.path.isfile(path):
+            held = raiderpose.unique_points(raiderpose._glb_points(path))
+        else:
+            print(f"[raider-kit] WARNING: no {body.hold['model']}.glb: the posed reach leaves the weapon out", flush=True)
+    ext = raiderpose.posed_extent(record, kind, threat_cfg, consts, rig_numbers, pieces, held)
+    record["posedReach"] = raiderpose.reach_record(ext, body.radius)
+    body.notes["inHead"] = round(ext["intrude"], 3)
+    record["notes"] = body.notes
 
 
 def merge(models: list[str]) -> int:
@@ -616,6 +656,9 @@ def main(argv: list[str]) -> int:
         return 0
 
     rk.export_palette_cards()
+    consts = raiderpose.Constants()
+    kinds, threat_cfg, _ = raiderpose.load_kinds()
+    rig_numbers = dict(raiderpose.RIG_DEFAULTS)
     records = {}
     failures = 0
     built = []
@@ -624,7 +667,7 @@ def main(argv: list[str]) -> int:
             continue
         body = make()
         centre_head(body)
-        rec = rk.export_body(body)
+        rec = rk.export_body(body, extend=lambda r, b=body: add_posed_reach(b, r, kinds, threat_cfg, consts, rig_numbers))
         bp = rk.write_blueprint(body)
         records[body.kind] = rec
         built.append(name)
@@ -632,9 +675,10 @@ def main(argv: list[str]) -> int:
         if over:
             failures += 1
         s = rec["bounds"]["size"]
+        pr = rec.get("posedReach") or {}
         print(f"[raider-kit] {name} ({body.kind}): {rec['triangles']} tris{over}, {rec['meshParts']} MeshParts, "
-              f"{s[0]} x {s[1]} x {s[2]} studs, reach {rec['reach']} ({rec['reachRadii']} radii) -> "
-              f"{os.path.relpath(bp, rk.REPO_ROOT)}", flush=True)
+              f"{s[0]} x {s[1]} x {s[2]} studs, rest reach {rec['reach']} ({rec['reachRadii']} radii), posed reach "
+              f"{pr.get('out')} out / {pr.get('up')} up -> {os.path.relpath(bp, rk.REPO_ROOT)}", flush=True)
         for p in rec["pieces"]:
             print(f"[raider-kit]   S{p['stage']} {p['name']:5s} {p['triangles']:5d} tris  {p['parts']}", flush=True)
     path = rk.write_config(records, dict(raiderpose.RIG_DEFAULTS))

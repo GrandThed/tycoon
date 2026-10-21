@@ -22,6 +22,9 @@ one MeshPart per kit (the folder is the kit's registration, as for every generat
     raider-cloth  the kind's cloth: painted by the client with the kind's colour (body) or its leg shade
     raider-skin   skin: painted with the kind's skin colour, tinted half as far (the crit point)
     raider-glow   the Chief's eye sockets: painted by the visor rule (hot through an attack, ember enraged)
+    raider-plate  the plated elite's lashed planks: painted by the plate rule (today's shell moved onto
+                  them: the plate's colour while the plate is on, a glint on a turned hit, the ward while
+                  a guard lives, a burst on the break, then hidden)
 
 so every surface that carries a tell is its own untextured MeshPart the client paints by Color and
 Material exactly as today (the lead's ruling), and gear keeps its texture.
@@ -45,7 +48,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import raider_kit_palette as rpal  # noqa: E402
 import weapon_kit_mesh as wkm  # noqa: E402
-from weapon_kit_mesh import add, basis, mul, norm, sub  # noqa: E402,F401
+from weapon_kit_mesh import add, basis, dot, length, mul, norm, sub  # noqa: E402,F401
 
 REPO_ROOT = wkm.REPO_ROOT
 KITS_ROOT = os.path.join(REPO_ROOT, "assets", "kenney3d")
@@ -55,8 +58,12 @@ BLUEPRINTS = os.path.join(REPO_ROOT, "tools", "testfit", "blueprints", "_props",
 ERA = "Raiders"
 PIECES = ("head", "torso", "arm", "legL", "legR")  # piece k is stage k
 PIECE_SUFFIX = {"head": "Head", "torso": "Torso", "arm": "Arm", "legL": "LegL", "legR": "LegR"}
-ROLE_OF_KIT = {"raider-kit": "gear", "raider-cloth": "cloth", "raider-skin": "skin", "raider-glow": "glow"}
-CONFIG_VERSION = 1
+ROLE_OF_KIT = {"raider-kit": "gear", "raider-cloth": "cloth", "raider-skin": "skin", "raider-glow": "glow",
+               "raider-plate": "plate"}
+CONFIG_VERSION = 2
+# Triangles for the whole body with its gear (and the plate): the study's budgets, the fodder raised to
+# the others' detail in L4 W2 (the lead's note), the Chief's Warhammer not counted (attached at runtime).
+BUDGETS = {"fodder": 800, "slinger": 800, "marksman": 800, "lobber": 800, "armoured": 1000, "brute": 1200, "chief": 4000}
 
 Vec = tuple[float, float, float]
 Rgb = tuple[int, int, int]
@@ -111,6 +118,10 @@ class Piece:
         return self.kit("raider-glow")
 
     @property
+    def plate(self) -> RMesh:
+        return self.kit("raider-plate")
+
+    @property
     def tris(self) -> int:
         return sum(m.tris for m in self.meshes.values() if m.faces)
 
@@ -132,6 +143,9 @@ class Body:
         self.arm_swing_share = 1.0
         self.arm: dict = {}
         self.hold: dict | None = None
+        # The lit piece the client keeps as a cue (ThreatFx/Cues): which piece it rides and at which
+        # point; the Chief's also says its size (the core at model size). None: the kind has none.
+        self.cue: dict | None = None
         self.cloth_of: dict[str, str] = {"torso": "cloth", "arm": "cloth", "head": "cloth", "legL": "clothLeg", "legR": "clothLeg"}
         self.notes: dict[str, object] = {}
         self.budget = 0
@@ -151,6 +165,30 @@ class Body:
 
 
 # --- the body vocabulary --------------------------------------------------------------------------
+
+
+def lerp3(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+
+
+def cross3(a, b_):
+    return (a[1] * b_[2] - a[2] * b_[1], a[2] * b_[0] - a[0] * b_[2], a[0] * b_[1] - a[1] * b_[0])
+
+
+def jagged(amount: float, seed: int, every: int = 2):
+    """A ring jag: every `every`-th point pushed out, the others pulled in a little, seeded (a ragged
+    hem, fur tufts)."""
+    import random
+
+    rng = random.Random(seed)
+    values = [1.0 + (amount * rng.uniform(0.6, 1.0) if i % every == 0 else -amount * 0.35) for i in range(64)]
+    return lambda s: values[s % 64]
+
+
+def shell_jag(amount: float, seed: int, level: int = 0):
+    """A shell jag on one level only (the bottom of a cloak or a mantle: fur tufts)."""
+    tufts = jagged(amount, seed)
+    return lambda li, s: tufts(s) if li == level else 1.0
 
 
 def ring(cy: float, cx: float, cz: float, rx: float, rz: float, segments: int, phase: float = 0.0,
@@ -355,13 +393,16 @@ def rig_record(body: Body) -> dict:
     }
     if body.hold:
         record["hold"] = body.hold
+    if body.cue:
+        record["cue"] = body.cue
     if body.notes:
         record["notes"] = body.notes
     return record
 
 
-def export_body(body: Body, root: str = KITS_ROOT) -> dict:
-    """One GLB per piece per kit, then the rig record beside the gear GLBs."""
+def export_body(body: Body, root: str = KITS_ROOT, extend=None) -> dict:
+    """One GLB per piece per kit, then the rig record beside the gear GLBs (`extend(record)` may add
+    measured fields to it first: the generator adds the posed reach)."""
     import bpy
 
     for piece, kit, mesh in body.meshes():
@@ -372,6 +413,8 @@ def export_body(body: Body, root: str = KITS_ROOT) -> dict:
         bpy.ops.wm.read_factory_settings(use_empty=True)
         wkm.export(wkm.build_object(mesh, {}), out)
     record = rig_record(body)
+    if extend:
+        extend(record)
     out = kit_dir("raider-kit", root)
     with open(os.path.join(out, f"{body.model}.rig.json"), "w", encoding="utf-8", newline="\n") as fh:
         json.dump(record, fh, indent=2)

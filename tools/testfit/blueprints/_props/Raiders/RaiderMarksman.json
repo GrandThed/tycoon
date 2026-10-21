@@ -1,0 +1,22 @@
+{
+  "id": "RaiderMarksman",
+  "era": "Raiders",
+  "scale": 1.0,
+  "footprint": [6, 6],
+  "note": "raider kit (tools/assets/raider_kit.py), 1 unit = 1 stud, authored in the body frame (feet at the origin, front -Z). Stage k is rigid piece k (head, torso, arm, legL, legR), one piece per kit: raider-kit gear (textured), raider-cloth / raider-skin / raider-glow painted by the client. The rig is in tools/assets/out/RaiderModels.json.",
+  "pieces": [
+    {"kit": "raider-cloth", "model": "RaiderMarksman_Head", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 0},
+    {"kit": "raider-kit", "model": "RaiderMarksman_Head", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 0},
+    {"kit": "raider-skin", "model": "RaiderMarksman_Head", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 0},
+    {"kit": "raider-cloth", "model": "RaiderMarksman_Torso", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 1},
+    {"kit": "raider-kit", "model": "RaiderMarksman_Torso", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 1},
+    {"kit": "raider-skin", "model": "RaiderMarksman_Torso", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 1},
+    {"kit": "raider-cloth", "model": "RaiderMarksman_Arm", "pos": [0, 0, 0], "rotY": 0, "stage": 2, "untilStage": 2},
+    {"kit": "raider-kit", "model": "RaiderMarksman_Arm", "pos": [0, 0, 0], "rotY": 0, "stage": 2, "untilStage": 2},
+    {"kit": "raider-skin", "model": "RaiderMarksman_Arm", "pos": [0, 0, 0], "rotY": 0, "stage": 2, "untilStage": 2},
+    {"kit": "raider-cloth", "model": "RaiderMarksman_LegL", "pos": [0, 0, 0], "rotY": 0, "stage": 3, "untilStage": 3},
+    {"kit": "raider-kit", "model": "RaiderMarksman_LegL", "pos": [0, 0, 0], "rotY": 0, "stage": 3, "untilStage": 3},
+    {"kit": "raider-cloth", "model": "RaiderMarksman_LegR", "pos": [0, 0, 0], "rotY": 0, "stage": 4, "untilStage": 4},
+    {"kit": "raider-kit", "model": "RaiderMarksman_LegR", "pos": [0, 0, 0], "rotY": 0, "stage": 4, "untilStage": 4}
+  ]
+}

@@ -58,6 +58,21 @@ THEME_PATH = os.path.join(REPO_ROOT, "src", "client", "UI", "Theme.luau")
 RENDERER_PATH = os.path.join(REPO_ROOT, "src", "combat", "client", "Controllers", "CrowdRenderer.luau")
 PROVING_PATH = os.path.join(REPO_ROOT, "src", "shared", "Config", "ProvingGrounds.json")
 MODELS_PATH = os.path.join(REPO_ROOT, "tools", "assets", "out", "RaiderModels.json")
+KITS_ROOT = os.path.join(REPO_ROOT, "assets", "kenney3d")
+GLB_DIR = os.path.join("Models", "GLB format")
+WEAPONS_DIR = os.path.join(KITS_ROOT, "weapon-kit", GLB_DIR)
+PIECES = ("head", "torso", "arm", "legL", "legR")
+PIECE_SUFFIX = {"head": "Head", "torso": "Torso", "arm": "Arm", "legL": "LegL", "legR": "LegR"}
+# A vertex of another piece (or the held weapon) this close to the scored head's centre, in head
+# radii, is "in the head": a hit there would crit though it lands on the body. The neck reaching up
+# under the skull stays outside it (raiderview marks the same in every strip frame).
+INTRUDE_SHARE = 0.8
+# --check's in-head gate, over every sampled pose but the flinch (a reaction to a hit that has landed:
+# the side lean swings a shoulder up under the skull for 0.16 s): a little under the strips' mark, so
+# the neck under the jaw (0.79-0.81 hr on the fodder) never trips it and a crossbow stock, a raised
+# arm or a pauldron through the face always does.
+IN_HEAD_GATE = 0.75
+REACTION_POSES = ("flinch",)
 
 Vec = tuple[float, float, float]
 Rgb = tuple[float, float, float]  # 0..1, as Color3 stores it
@@ -77,6 +92,8 @@ THEME_NAMES = (
     "COMBAT_RANGE_BOSS_BREATH", "COMBAT_RANGE_BOSS_BREATH_HZ", "COMBAT_RANGE_ENRAGE_BREATH",
     "COMBAT_RANGE_ENRAGE_BREATH_HZ", "COMBAT_RANGE_ENRAGE_COLOR", "COMBAT_RANGE_ENRAGE_SHARE",
     "COMBAT_RANGE_ENRAGE_GLOW_COLOR", "COMBAT_REST_DROP", "COMBAT_RISE_BLEND_SECONDS", "COMBAT_REST_HIP_SHARE",
+    "COMBAT_RANGE_CUE_CHARGE_SHARE", "COMBAT_RANGE_CUE_AIM_CHARGE_SHARE", "COMBAT_RANGE_CUE_BOSS_CHARGE_SHARE",
+    "COMBAT_RANGE_ENRAGE_CORE_SCALE", "COMBAT_RANGE_PLATE_COLOR", "COMBAT_RANGE_CUE_BREAK_GROW", "COMBAT_RANGE_WARD_COLOR",
 )
 RENDERER_NAMES = (
     "STAGGER_LEAN", "WINDUP_LEAN", "AIRBORNE_LEAN", "AIRBORNE_TUCK", "HEAD_TINT", "HEAD_TINT_SHARE",
@@ -291,6 +308,7 @@ class Attack:
     strike: float
     reach: float  # threatReach: the lunge's jab, an arc's radius, a lane's or line's length...
     arc: float  # threatArc, radians (arcs only)
+    lock: float = 0.0  # a line's lockSeconds: the aim is fixed this long before the hit
 
 
 def attack_of(kind: dict, index: int, threat: dict, consts: Constants, enraged: bool = False) -> Attack:
@@ -314,7 +332,8 @@ def attack_of(kind: dict, index: int, threat: dict, consts: Constants, enraged: 
         reach = max(a.get("radius", 0) or 0, 0)
     else:
         reach = 0.0
-    return Attack(shape, windup, recover, strike, reach, arc)
+    lock = max(a.get("lockSeconds", 0) or 0, 0) if shape == "line" else 0.0
+    return Attack(shape, windup, recover, strike, reach, arc, lock)
 
 
 @dataclass
@@ -330,8 +349,9 @@ class Threat:
     glow: bool = False
     visor_hot: bool = False
     charge: float = 0.0  # a lit cue's charge (Cues.Paint): u * u through a windup, 0 otherwise
-    # For the arm channel: the phase and its clocks.
+    # For the arm channel: the phase and its clocks (age = seconds into the phase).
     phase: str = "none"
+    age: float = 0.0
     build: float = 0.0
     snap: float = 0.0
     u: float = 0.0
@@ -354,7 +374,7 @@ def threat_pose(consts: Constants, kind: dict, attack: Attack, phase: str, age: 
     unwind = angleDelta(yaw, lastYaw) for an arc's recover (how far its body was turned at the
     blow's end); held = interval + lag for an enraged boss's chained recover (0 in the strips)."""
     c = consts
-    out = Threat(phase=phase)
+    out = Threat(phase=phase, age=age)
     twist_most = attack.arc * 0.5 * c.COMBAT_RANGE_TELL_ARC_TWIST_SHARE
     shape = attack.shape
     if phase == "windup":
@@ -513,6 +533,7 @@ RIG_DEFAULTS = {
     "seatLean": 0.12,  # radians a seated body leans forward
     "seatSplay": 0.14,  # radians each seated leg turns outward
     "airTuck": 0.5,  # radians the legs swing forward while airborne
+    "throwShare": 0.35,  # a throw or a shot (shot, lob, line): share of the strike spent going coil -> strike
 }
 
 
@@ -634,15 +655,37 @@ def rig(model: dict, rig_numbers: dict, consts: Constants, pose: Pose, *, seated
 # --- the weapon arm's channel ----------------------------------------------------------------------
 
 SNAP_SHAPES = ("lunge", "ring")
+# A throw or a shot leaves the hand during the strike: the arm goes coil -> strike -> follow.
+THROW_SHAPES = ("shot", "lob", "line")
 
 
-def arm_channel(model: dict, shape: str, threat: Threat, pose: Pose, rig_numbers: dict) -> tuple[float, float, float]:
+def a_lerp(a, b, t: float) -> tuple[float, ...]:
+    """Angles blended the shortest way round: each difference wrapped into [-pi, pi) first."""
+    return tuple(x + ((y - x + math.pi) % (2 * math.pi) - math.pi) * t for x, y in zip(a, b))
+
+
+def arm_channel(model: dict, shape: str, threat: Threat, pose: Pose, rig_numbers: dict,
+                attack: Attack | None = None) -> tuple[float, float, float]:
     """The weapon arm's pitch, yaw, roll for one frame: keyed poses blended on threatPose's clocks.
 
-    Keys (RaiderModels.json `arm`): carry, seat, slump, and per shape coil / strike / follow.
+    Keys (RaiderModels.json `arm`): carry, seat, slump, and per shape coil / strike / follow, plus
+    the shape's optional rules (L4 W2):
+      * `whirl` {turns, sin, cos} (the sling): through the windup the arm adds
+        build x (sin(t) x sin + (cos(t) - 1) x cos), t = 2 pi x turns x u (u = the windup's share
+        run), so it circles `turns` times and is back on its coil exactly at the release;
+      * `steady` true (a two-handed aim, the crossbow): the keys are pitches in the world: the
+        body's lean along its facing (pose.lean, + forward, which tips a forward-held weapon down)
+        is added to the pitch in every phase, so the aim stays where the key says;
+      * a `line` attack with a lock (the marksman) is aimed when its line locks: the arm's build
+        runs to windup - lockSeconds, squared like the body's, instead of the body's own build.
     windup: carry -> coil with the build (and coil -> strike with the snap for a lunge or a slam);
-    attack: an arc swings coil -> follow with the sweep, a lane holds its strike, the rest go
-    strike -> follow; recover: from where the blow left it to the slump, waking to the carry."""
+    attack: an arc swings coil -> follow with the sweep, a lane holds its strike, a throw (shot, lob,
+    line) goes coil -> strike over throwShare of the strike, then strike -> follow, the rest go
+    strike -> follow; recover: from where the blow left it to the slump, waking to the carry. Every
+    blend goes angle by angle the shortest way round (a_lerp), so a key may sit past pi: the lobber's
+    reach back over the shoulder (pitch -2.6) and his release (+2.3) blend over the top, not through
+    the hanging arm. (No key of the step-1 kinds is more than pi from the key it blends with, so
+    their poses are unchanged by it.)"""
     k = {**RIG_DEFAULTS, **(rig_numbers or {})}
     keys = model["arm"]
     carry = keys["carry"]
@@ -650,27 +693,206 @@ def arm_channel(model: dict, shape: str, threat: Threat, pose: Pose, rig_numbers
     coil, strike, follow = s.get("coil", carry), s.get("strike", carry), s.get("follow", s.get("strike", carry))
     phase = threat.phase
     if phase == "windup":
-        a = v_lerp(carry, coil, threat.build)
+        build = threat.build
+        if shape == "line" and attack is not None and attack.lock > 0 and attack.windup > attack.lock:
+            build = min(threat.age / (attack.windup - attack.lock), 1.0) ** 2
+        a = a_lerp(carry, coil, build)
         if shape in SNAP_SHAPES and threat.snap > 0:
-            a = v_lerp(coil, strike, threat.snap)
+            a = a_lerp(coil, strike, threat.snap)
+        whirl = s.get("whirl")
+        if whirl:
+            t = 2 * math.pi * whirl["turns"] * threat.u
+            sn, cs = math.sin(t), math.cos(t) - 1
+            a = tuple(a[i] + build * (sn * whirl["sin"][i] + cs * whirl["cos"][i]) for i in range(3))
     elif phase == "attack":
         if shape == "arc":
-            a = v_lerp(coil, follow, threat.sweep)
+            a = a_lerp(coil, follow, threat.sweep)
         elif shape == "lane":
-            a = v_lerp(coil, strike, min(threat.u / 0.25, 1.0))
+            a = a_lerp(coil, strike, min(threat.u / 0.25, 1.0))
+        elif shape in THROW_SHAPES:
+            share = k["throwShare"]
+            if threat.u < share:
+                a = a_lerp(coil, strike, threat.u / share)
+            else:
+                a = a_lerp(strike, follow, (threat.u - share) / (1 - share))
         else:
-            a = v_lerp(strike, follow, threat.u)
+            a = a_lerp(strike, follow, threat.u)
     elif phase == "recover":
         last = strike if shape == "lane" else follow
-        rest = v_lerp(carry, keys["slump"], threat.slump)
-        a = v_lerp(last, rest, threat.settle)
+        rest = a_lerp(carry, keys["slump"], threat.slump)
+        a = a_lerp(last, rest, threat.settle)
     else:
         a = carry
     seat = smoothstep(min(max(pose.seat, 0.0), 1.0))
     if seat > 0:
-        a = v_lerp(a, keys["seat"], seat)
+        a = a_lerp(a, keys["seat"], seat)
     swing = k["armSwing"] * model.get("armSwingShare", 1.0) * pose.walk_amp * math.sin(pose.walk_phase)
-    return (a[0] + swing, a[1], a[2])
+    steady = pose.lean if s.get("steady") else 0.0
+    return (a[0] + swing + steady, a[1], a[2])
+
+
+# --- the lit piece (ThreatFx/Cues), where a model carries it ------------------------------------
+
+
+def cue_sizes(consts: Constants, kind: dict, model: dict) -> tuple[float, float] | None:
+    """(rest diameter, fully charged diameter) of the kind's lit piece, as Cues.Attach sizes it
+    today, or as the model's `cue` record overrides it (the Chief's core at model size). None: the
+    kind has no lit piece."""
+    cue = model.get("cue")
+    if not cue:
+        return None
+    if "size" in cue and "charged" in cue:
+        return cue["size"], cue["charged"]
+    shape = (kind.get("attacks") or [{}])[0].get("shape")
+    r, h = kind["radius"], kind["height"]
+    if kind.get("boss"):
+        d = max(r * 0.6, 0.8)
+        return d, max(h * consts.COMBAT_RANGE_CUE_BOSS_CHARGE_SHARE, d)
+    if shape == "shot":
+        d = max(r * 0.75, 0.6)
+        return d, h * consts.COMBAT_RANGE_CUE_CHARGE_SHARE
+    if shape == "lob":
+        d = max(r * 0.8, 0.7)
+        return d, h * consts.COMBAT_RANGE_CUE_CHARGE_SHARE
+    if shape == "line":
+        return 0.55, h * consts.COMBAT_RANGE_CUE_AIM_CHARGE_SHARE
+    return None
+
+
+# --- the posed extent: every vertex over every pose -------------------------------------------------
+
+
+def _glb_points(path: str) -> list[Vec]:
+    sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "assets"))
+    import glbtools  # noqa: E402  (stdlib only: runs under py and inside Blender)
+
+    with open(path, "rb") as fh:
+        doc, binary = glbtools.parse_glb(fh.read())
+    out: list[Vec] = []
+    scene = doc["scenes"][doc.get("scene", 0)]
+
+    def visit(index, parent):
+        node = doc["nodes"][index]
+        world = glbtools.mat_mul(parent, glbtools.trs_matrix(node))
+        if "mesh" in node:
+            for prim in doc["meshes"][node["mesh"]]["primitives"]:
+                out.extend(glbtools.apply(world, p)
+                           for p in glbtools.read_positions(doc, binary, prim["attributes"]["POSITION"]))
+        for child in node.get("children", []):
+            visit(child, world)
+
+    for root in scene.get("nodes", []):
+        visit(root, glbtools.trs_matrix({}))
+    return out
+
+
+def unique_points(points, grid: float = 0.005) -> list[Vec]:
+    seen: dict = {}
+    for p in points:
+        seen.setdefault((round(p[0] / grid), round(p[1] / grid), round(p[2] / grid)), tuple(p))
+    return list(seen.values())
+
+
+def model_points(model: dict, root: str = KITS_ROOT) -> tuple[dict[str, list[Vec]], list[Vec]]:
+    """(piece -> its vertices, the held weapon's vertices) from the generator's GLBs: what --check
+    measures the posed extent on."""
+    pieces = {}
+    for entry in model["pieces"]:
+        pts: list[Vec] = []
+        for kit in entry["parts"]:
+            path = os.path.join(root, kit, GLB_DIR, f"{model['model']}_{PIECE_SUFFIX[entry['name']]}.glb")
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f"{os.path.relpath(path, REPO_ROOT)} is missing: run the generator")
+            pts += _glb_points(path)
+        pieces[entry["name"]] = unique_points(pts)
+    held: list[Vec] = []
+    hold = model.get("hold")
+    if hold:
+        path = os.path.join(WEAPONS_DIR, f"{hold['model']}.glb")
+        if os.path.isfile(path):
+            held = unique_points(_glb_points(path))
+    return pieces, held
+
+
+def hold_frame(hold: dict) -> CFrame:
+    right, up = tuple(hold["right"]), tuple(hold["up"])
+    back = v_cross(right, up)
+    rot = ((right[0], up[0], back[0]), (right[1], up[1], back[1]), (right[2], up[2], back[2]))
+    return CFrame(rot, tuple(hold["grip"]))  # type: ignore[arg-type]
+
+
+def posed_extent(model: dict, kind: dict, threat_cfg: dict, consts: Constants, rig_numbers: dict,
+                 pieces: dict[str, list[Vec]], held: list[Vec]) -> dict:
+    """The body's extent over every sampled pose before a hit lands (sweep_poses), from every vertex
+    of every piece and of the held weapon: how far it reaches out from its axis and up from its feet
+    (the sight gate's input, in place of the placeholder torso's half-diagonal), and how close any
+    piece but the head comes to the scored head's centre, in head radii (the flinch left out)."""
+    hold = model.get("hold")
+    hf = hold_frame(hold) if hold else None
+    scale = hold["scale"] if hold else 1.0
+    held_local = [hf.point(v_mul(v, scale)) for v in held] if hf else []
+    hr = model["headRadius"]
+    out = {"out": 0.0, "up": 0.0, "down": math.inf, "outPose": "", "upPose": "", "downPose": "", "intrude": math.inf,
+           "intrudePose": "", "cueOut": 0.0, "cueUp": 0.0}
+    cue = model.get("cue")
+    sizes = cue_sizes(consts, kind, model) if cue else None
+    cue_r = max(sizes) / 2 if sizes else 0.0
+    for name, pose, _, _ in sweep_poses(kind, threat_cfg, consts, model, rig_numbers):
+        r = rig(model, rig_numbers, consts, pose)
+        ax, ay, az = r.anchor
+        if sizes:
+            # The lit piece at its largest wherever its anchor goes (a cue swells only in a windup;
+            # taking its largest everywhere is the safe side for a sight gate).
+            c = r.pieces[cue["piece"]].point(tuple(model["points"][cue["point"]]))
+            out["cueOut"] = max(out["cueOut"], math.hypot(c[0], c[2]) + cue_r)
+            out["cueUp"] = max(out["cueUp"], c[1] + cue_r)
+        for piece in PIECES:
+            cf = r.pieces[piece]
+            (r00, r01, r02), (r10, r11, r12), (r20, r21, r22) = cf.r
+            px, py, pz = cf.p
+            pts = pieces.get(piece, [])
+            if hold and hold.get("piece", "arm") == piece:
+                pts = pts + held_local
+            far, top, low, near = 0.0, -math.inf, math.inf, math.inf
+            for x, y, z in pts:
+                wx = r00 * x + r01 * y + r02 * z + px
+                wy = r10 * x + r11 * y + r12 * z + py
+                wz = r20 * x + r21 * y + r22 * z + pz
+                d = wx * wx + wz * wz
+                if d > far:
+                    far = d
+                if wy > top:
+                    top = wy
+                if wy < low:
+                    low = wy
+                if piece != "head":
+                    e = (wx - ax) ** 2 + (wy - ay) ** 2 + (wz - az) ** 2
+                    if e < near:
+                        near = e
+            far = math.sqrt(far)
+            if far > out["out"]:
+                out["out"], out["outPose"] = far, f"{name} ({piece})"
+            if top > out["up"]:
+                out["up"], out["upPose"] = top, f"{name} ({piece})"
+            if low < out["down"]:
+                out["down"], out["downPose"] = low, f"{name} ({piece})"
+            if piece != "head" and pts and name not in REACTION_POSES and math.sqrt(near) / hr < out["intrude"]:
+                out["intrude"], out["intrudePose"] = math.sqrt(near) / hr, f"{name} ({piece})"
+    return out
+
+
+def reach_record(extent: dict, radius: float) -> dict:
+    """RaiderModels.json `posedReach`: what camp C's sight gate reads (studs from the body's axis and
+    up from its feet; outRadii = out / radius, the unit check_levels' body_reach uses; withCue: the same
+    with the kind's lit piece at its largest)."""
+    record = {"out": round(extent["out"], 2), "outRadii": round(extent["out"] / radius, 3), "up": round(extent["up"], 2),
+              "outPose": extent["outPose"], "upPose": extent["upPose"]}
+    if extent.get("cueUp"):
+        # With the kind's lit piece (a client cue, not in the model) at its largest: the orb whirled
+        # over a slinger's head stands far above the model.
+        record["withCue"] = {"out": round(max(extent["out"], extent["cueOut"]), 2),
+                             "up": round(max(extent["up"], extent["cueUp"]), 2)}
+    return record
 
 
 # --- the strip's frames -----------------------------------------------------------------------------
@@ -684,41 +906,95 @@ class Frame:
     threat: Threat
     shape: str = ""
     enraged: bool = False
+    # The plate's state for a kind with one (the plate role, raider-plate): "on", "glint" (it has just
+    # turned a hit), "break" (the burst, `plate_share` of it played), "gone". "" = the kind's default
+    # (on for a plated kind).
+    plate: str = ""
+    plate_share: float = 0.0
+
+
+def reel_pose(consts: Constants, server_now: float = 0.15) -> tuple[Pose, Threat]:
+    """The reel after a plate breaks (stepAlive's `reeling` branch): thrown back, swaying, slumped,
+    tinted dull like a spent body."""
+    pose = Pose(lean=-consts.COMBAT_RANGE_REEL_LEAN,
+                twist=consts.COMBAT_RANGE_REEL_SWAY * math.sin(server_now * 2 * math.pi * consts.COMBAT_RANGE_REEL_SWAY_HZ),
+                squash=consts.COMBAT_RANGE_REEL_SQUASH)
+    threat = Threat(tint=stepped(consts, consts.COMBAT_RANGE_TELL_SPENT_SHARE), tint_colour=consts.COMBAT_RANGE_TELL_SPENT_COLOR)
+    return pose, threat
 
 
 def frames_for(kind_id: str, kinds: dict, threat_cfg: dict, consts: Constants, model: dict, rig_numbers: dict) -> list[Frame]:
-    """rest, two walk frames, windup, blow, seated, spent (of the kind's first attack); for a kind
-    with an arc that is not its first attack (the Chief's sweep) also that arc's windup and swing;
-    for a boss with a second phase, its enraged look at rest."""
+    """rest, two walk frames, the windup and the blow of the kind's first attack (a shooter's own
+    attack in its steps: the sling's whirl and release, the crossbow raised, aimed at the lock and
+    fired, the firepot's throw), seated, spent; a kind with an arc that is not its first attack (the
+    Chief's sweep) also that arc's windup and swing; a boss with a second phase its enraged look; a
+    plated kind its plate glinting, breaking, the reel after it and the bare body."""
     kind = kinds[kind_id]
     first = attack_of(kind, 1, threat_cfg, consts)
     frames: list[Frame] = []
+    k = {**RIG_DEFAULTS, **(rig_numbers or {})}
 
-    def make(name, label, threat, attack_shape="", enraged=False, **pose_kw):
+    def make(name, label, threat, attack=None, enraged=False, plate="", plate_share=0.0, **pose_kw):
+        atk = attack or first
         pose = Pose(**pose_kw)
         pose.lean, pose.twist, pose.squash, pose.thrust = (pose.lean + threat.lean, pose.twist + threat.twist,
                                                          drawn_squash(pose.squash * threat.squash), pose.thrust + threat.thrust)
-        pose.arm = arm_channel(model, attack_shape or first.shape, threat, pose, rig_numbers)
-        frames.append(Frame(name, label, pose, threat, attack_shape or first.shape, enraged))
+        pose.arm = arm_channel(model, atk.shape, threat, pose, rig_numbers, atk)
+        frames.append(Frame(name, label, pose, threat, atk.shape, enraged, plate, plate_share))
+
+    def at(phase, age, attack=None):
+        return threat_pose(consts, kind, attack or first, phase, age)
 
     idle = Threat()
     make("rest", "rest", idle)
     make("walkA", "walk", idle, walk_phase=math.pi / 2, walk_amp=1.0)
     make("walkB", "walk", idle, walk_phase=3 * math.pi / 2, walk_amp=1.0)
+    shape = first.shape
     coil_age = first.windup * consts.COMBAT_RANGE_TELL_COIL_SHARE
-    make("windup", f"windup ({first.shape})", threat_pose(consts, kind, first, "windup", coil_age))
-    make("blow", f"blow ({first.shape})", threat_pose(consts, kind, first, "attack", 0.0))
+    throw_age = first.strike * k["throwShare"]
+    if shape == "shot":
+        make("whirlEarly", "windup 40%: the whirl starts", at("windup", first.windup * 0.4))
+        make("windup", "windup 80%: whirling", at("windup", coil_age))
+        make("whirlLate", "windup 95%: last turn", at("windup", first.windup * 0.95))
+        make("blow", "the release (shot)", at("attack", throw_age))
+        make("follow", "follow-through", at("attack", first.strike))
+    elif shape == "line":
+        aim_age = first.windup - first.lock if first.lock > 0 else coil_age
+        make("raise", "windup 20%: raising", at("windup", first.windup * 0.2))
+        make("windup", f"aimed: the line locks ({first.lock:.2f} s left)", at("windup", aim_age))
+        make("hold", "held on the lock (windup 95%)", at("windup", first.windup * 0.95))
+        make("blow", "the shot (recoil)", at("attack", throw_age))
+        make("follow", "follow-through", at("attack", first.strike))
+    elif shape == "lob":
+        make("windup", "windup: reaching back (lob)", at("windup", coil_age))
+        make("blow", "the throw (release)", at("attack", throw_age))
+        make("follow", "follow-through", at("attack", first.strike))
+    elif shape == "arc":
+        make("windup", "windup (arc)", at("windup", coil_age))
+        make("blow", "the sweep (arc)", at("attack", first.strike * 0.3))
+    else:
+        make("windup", f"windup ({shape})", at("windup", coil_age))
+        make("blow", f"blow ({shape})", at("attack", 0.0))
     make("seated", "seated", idle, seat=1.0)
     spent_age = max(first.recover - consts.COMBAT_RANGE_TELL_SPENT_WAKE_SECONDS, consts.COMBAT_RANGE_TELL_SPENT_SETTLE_SECONDS)
-    make("spent", "spent", threat_pose(consts, kind, first, "recover", spent_age))
+    make("spent", "spent", at("recover", spent_age))
     for index, raw in enumerate(kind["attacks"], start=1):
         if raw.get("shape") == "arc" and index != 1:
             arc = attack_of(kind, index, threat_cfg, consts)
-            make("sweepWindup", "sweep windup", threat_pose(consts, kind, arc, "windup", arc.windup * consts.COMBAT_RANGE_TELL_COIL_SHARE), "arc")
-            make("sweepSwing", "sweep swing", threat_pose(consts, kind, arc, "attack", arc.strike * 0.3), "arc")
+            make("sweepWindup", "sweep windup", at("windup", arc.windup * consts.COMBAT_RANGE_TELL_COIL_SHARE, arc), arc)
+            make("sweepSwing", "sweep swing", at("attack", arc.strike * 0.3, arc), arc)
             break
     if kind.get("boss") and (kind.get("enrage") or {}).get("at", 0) > 0:
         make("enraged", "enraged (rest)", idle, enraged=True)
+    if (kind.get("plate") or 0) > 0:
+        make("glint", "the plate turns a hit (glint)", idle, plate="glint")
+        reel, dull = reel_pose(consts)
+        make("break", "the plate breaks (burst)", dull, plate="break", plate_share=0.45,
+             lean=reel.lean, twist=reel.twist, squash=reel.squash)
+        make("reel", "the reel after it (the opening)", dull, plate="gone", lean=reel.lean, twist=reel.twist,
+             squash=reel.squash)
+        make("bare", "bare: no plate (rest)", idle, plate="gone")
+        make("bareWindup", "bare: windup (arc)", at("windup", coil_age), plate="gone")
     return frames
 
 
@@ -727,20 +1003,27 @@ def frames_for(kind_id: str, kinds: dict, threat_cfg: dict, consts: Constants, m
 
 def sweep_poses(kind: dict, threat_cfg: dict, consts: Constants, model: dict, rig_numbers: dict):
     """Every pose a living body can take before a hit lands, sampled: idle, walk, seat, stagger,
-    reel, flinch, every phase of every attack, walking through a recover, enraged or not."""
+    reel, flinch, every phase of every attack, walking through a recover, enraged or not. Every pose
+    carries its arm from the arm channel (out of an attack: the carry, the seat, the walk swing)."""
+    first = (kind.get("attacks") or [{}])[0].get("shape", "")
+
+    def idle(pose: Pose) -> Pose:
+        pose.arm = arm_channel(model, first, Threat(), pose, rig_numbers)
+        return pose
+
     for walk in (0.0, 0.5, 1.0):
         for phase in (0.0, 0.7, 1.6, 2.4, 3.9, 4.7):
-            yield "walk", Pose(walk_phase=phase, walk_amp=walk), Threat(), ""
-    for seat in (0.25, 0.5, 1.0):
-        yield "seat", Pose(seat=seat), Threat(), ""
-    yield "stagger", Pose(lean=state_lean(consts, "stagger")), Threat(), ""
-    yield "reel", Pose(lean=-consts.COMBAT_RANGE_REEL_LEAN, twist=consts.COMBAT_RANGE_REEL_SWAY,
-                       squash=consts.COMBAT_RANGE_REEL_SQUASH), Threat(), ""
-    yield "flinch", Pose(lean_side=0.35 * 3, squash=0.5), Threat(), ""
+            yield "walk", idle(Pose(walk_phase=phase, walk_amp=walk)), Threat(), ""
+    for seat in (0.25, 0.5, 0.75, 1.0):
+        yield "seat", idle(Pose(seat=seat)), Threat(), ""
+    yield "stagger", idle(Pose(lean=state_lean(consts, "stagger"))), Threat(), ""
+    yield "reel", idle(Pose(lean=-consts.COMBAT_RANGE_REEL_LEAN, twist=consts.COMBAT_RANGE_REEL_SWAY,
+                            squash=consts.COMBAT_RANGE_REEL_SQUASH)), Threat(), ""
+    yield "flinch", idle(Pose(lean_side=0.35 * 3, squash=0.5)), Threat(), ""
     if kind.get("boss"):
         for t in (0.0, 0.4, 0.7, 1.1, 1.6):
             for enraged in (False, True):
-                yield "breath", Pose(squash=boss_breath(consts, t, enraged)), Threat(), ""
+                yield "breath", idle(Pose(squash=boss_breath(consts, t, enraged))), Threat(), ""
     for enraged in (False, True):
         for index in range(1, len(kind["attacks"]) + 1):
             atk = attack_of(kind, index, threat_cfg, consts, enraged)
@@ -752,11 +1035,14 @@ def sweep_poses(kind: dict, threat_cfg: dict, consts: Constants, model: dict, ri
                                         server_now=age * 7.3)
                         pose = Pose(lean=t.lean, twist=t.twist, squash=drawn_squash(t.squash), thrust=t.thrust,
                                     walk_phase=1.3, walk_amp=stride)
-                        pose.arm = arm_channel(model, atk.shape, t, pose, rig_numbers)
+                        pose.arm = arm_channel(model, atk.shape, t, pose, rig_numbers, atk)
                         yield f"{atk.shape} {phase}", pose, t, atk.shape
 
 
-def check(models: dict, kinds: dict, threat_cfg: dict, consts: Constants) -> int:
+def check(models: dict, kinds: dict, threat_cfg: dict, consts: Constants, *, extent: bool = True) -> int:
+    """The head rule over every sampled pose; with `extent` also, from every vertex of the
+    generator's GLBs: the posed reach against the config's `posedReach` (a stale config fails) and
+    the in-head rule (nothing but the head within INTRUDE_SHARE head radii of the scored head)."""
     rig_numbers = models.get("rig", {})
     failures = 0
     for kind_id, model in sorted(models["kinds"].items()):
@@ -773,10 +1059,6 @@ def check(models: dict, kinds: dict, threat_cfg: dict, consts: Constants) -> int
         worst, worst_name, floats = 0.0, "", 0.0
         mesh_off = tuple(model.get("headMeshCentre", model["points"]["head"]))
         count = 0
-        # How far the posed body reaches (the sight gate's input): the weapon's tip and the hand,
-        # flat from the axis and up from the feet, over the same poses.
-        tip = model["points"].get("tip")
-        reach, top = 0.0, 0.0
         for name, pose, _, _ in sweep_poses(kind, threat_cfg, consts, model, rig_numbers):
             r = rig(model, rig_numbers, consts, pose)
             drawn = r.pieces["head"].point(mesh_off)
@@ -785,23 +1067,40 @@ def check(models: dict, kinds: dict, threat_cfg: dict, consts: Constants) -> int
             if off > worst:
                 worst, worst_name = off, name
             floats = max(floats, max(r.foot_float.values()))
-            for p in (model["points"]["hand"], tip):
-                if p is not None:
-                    q = r.pieces["arm"].point(tuple(p))
-                    reach = max(reach, math.hypot(q[0], q[2]))
-                    top = max(top, q[1])
         verdict = "PASS" if worst <= 0.5 else "FAIL"
         if worst > 0.5:
             failures += 1
-        print(f"[raiderpose] {kind_id}: head rule {verdict} over {count} poses: worst {worst:.3f} head radii ({worst_name}); "
-              f"a foot floats at most {floats:.3f} studs; the weapon reaches {reach:.2f} studs out and {top:.2f} up "
-              f"(rest bounds reach {model['reach']}, {model['reachRadii']} radii)")
+        line = (f"[raiderpose] {kind_id}: head rule {verdict} over {count} poses: worst {worst:.3f} head radii ({worst_name}); "
+                f"a foot floats at most {floats:.3f} studs")
+        if not extent:
+            print(line)
+            continue
+        pieces, held = model_points(model)
+        ext = posed_extent(model, kind, threat_cfg, consts, rig_numbers, pieces, held)
+        rec = reach_record(ext, model["radius"])
+        stored = model.get("posedReach") or {}
+        stale = [key for key in ("out", "up") if abs((stored.get(key) or -1) - rec[key]) > 0.011]
+        if rec.get("withCue") != stored.get("withCue") and (
+                not rec.get("withCue") or not stored.get("withCue")
+                or any(abs(rec["withCue"][k] - stored["withCue"][k]) > 0.011 for k in ("out", "up"))):
+            stale.append("withCue")
+        inside = "PASS" if ext["intrude"] >= IN_HEAD_GATE else "FAIL"
+        if inside == "FAIL":
+            failures += 1
+        if stale:
+            failures += 1
+        print(line + f"; in-head {inside}: nothing else within {ext['intrude']:.2f} hr ({ext['intrudePose']})")
+        print(f"[raiderpose] {kind_id}:   posed reach {rec['out']} studs out ({rec['outRadii']} radii, {rec['outPose']}), "
+              f"{rec['up']} up ({rec['upPose']}), lowest point {ext['down']:.2f} ({ext['downPose']})"
+              + (f"; with its lit piece {rec['withCue']['out']} out, {rec['withCue']['up']} up" if rec.get("withCue") else "")
+              + (f"; STALE config posedReach {stored or 'missing'}: re-run the generator" if stale else "; config posedReach matches"))
     return 1 if failures else 0
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Raider model poses: the client's maths and the rig.")
-    parser.add_argument("--check", action="store_true", help="the head rule over every sampled pose")
+    parser.add_argument("--check", action="store_true", help="the head rule, the in-head rule and the posed reach")
+    parser.add_argument("--no-extent", action="store_true", help="--check the head rule only (no GLBs read)")
     parser.add_argument("--frames", help="print one kind's strip frames")
     parser.add_argument("--models", default=MODELS_PATH, help="RaiderModels.json to read")
     args = parser.parse_args(argv)
@@ -816,9 +1115,9 @@ def main(argv: list[str]) -> int:
             p = f.pose
             print(f"{f.name:12s} lean {p.lean:+.3f} twist {p.twist:+.3f} squash {p.squash:.3f} thrust {p.thrust:+.3f} "
                   f"seat {p.seat:.1f} walk {p.walk_amp:.1f}@{p.walk_phase:.2f} arm {tuple(round(x, 3) for x in p.arm)} "
-                  f"tint {f.threat.tint:.3f} glow {f.threat.glow}")
+                  f"tint {f.threat.tint:.3f} glow {f.threat.glow} charge {f.threat.charge:.2f} plate {f.plate or '-'}")
         return 0
-    return check(models, kinds, threat_cfg, consts)
+    return check(models, kinds, threat_cfg, consts, extent=not args.no_extent)
 
 
 if __name__ == "__main__":

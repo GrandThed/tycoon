@@ -682,27 +682,38 @@ neighbours). Smooth shading (`smooth=True`) stays inside one primitive; caps are
   every GLB and every sidecar came out byte-identical (only the cache's `sourceFiles` count moved,
   3 → 16), which confirms `palette-card.glb` keeps the cache whole.
 
-## raider kit (L4, generated raiders; step 1 2026-10-21)
+## raider kit (L4, generated raiders; step 1 and step 2 2026-10-21)
 
 Real models for the seven Forest looks (MISSIONS_DESIGN section 26): fodder, slinger, marksman, lobber,
 brute, plated elite and the Camp Chief, detailed, on today's crowd bodies, one tribe told apart by gear,
 size and cloth colour, each kind keeping its colour on its cloth. Step 1 built the prototypes fodder,
 brute and the Chief (look A; look B as one front view). Report: `docs/prompts/l4-w1-reports/raiders.md`.
+Step 2 (L4 W2) built the slinger, marksman, lobber and plated elite, brought the fodder to about 800
+triangles, gave the Chief a model-sized core and measured every kind's posed reach for the config.
+Report: `docs/prompts/l4-w2-reports/raiders.md`.
 
 **Files.**
 - `tools/assets/raider_kit_palette.py`: the colours. Wood, bone, rope, leather, flint, ochre come from the
   weapon kit's `FOREST`, hide and fur from the forest track's `forest_palette.HIDE`, both imported, never
-  redefined; `RAIDER` adds hair and eyes; `PAINT` holds one fallback swatch per painted kit.
+  redefined; `RAIDER` adds hair, eyes and the lobber's fired clay; `PAINT` holds one fallback swatch per
+  painted kit.
 - `tools/assets/raider_kit_mesh.py`: `RMesh` (the weapon kit's `Mesh` with a per-kit colour check), the
   body vocabulary (`blob` rings with their own centres and optional jag, `band`, `limb`, `ball`, `shell` a
   thick curved sheet for cloaks, hoods, masks and mantles, `spike`, `horn`, `fang_row`), the rig record, the
   blueprint and config writers.
 - `tools/assets/raider_kit.py`: the generator (Blender). One builder function per model (`fodder`, `brute`,
-  `chief`), `centre_head` puts every skull's centre exactly on the scored head.
+  `chief` here; `raider_kit_throwers.py` the slinger and the lobber, `raider_kit_marksman.py`,
+  `raider_kit_elite.py` the plated elite, all registered in `MODELS`), `centre_head` puts every skull's
+  centre exactly on the scored head, and each kind's `posedReach` is measured here and written to config.
 - `tools/testfit/raiderpose.py` (`py`, stdlib): CrowdRenderer's pose maths ported (constants read from
   Theme.luau and CrowdRenderer.luau, kinds from ProvingGrounds.json), the model rig and the weapon-arm
-  channel. `--check` runs the head rule over every sampled pose of every model.
-- `tools/testfit/raiderview.py` (Blender renders, `py` composes): pose strips, front views, the lineup.
+  channel. `--check` runs the head rule over every sampled pose of every model, and on the exported GLBs
+  the in-head rule (nothing but the head within 0.75 head radii of the scored head, the flinch left out)
+  and the posed reach (every vertex, the Chief's Warhammer included, over every pose) against the config's
+  `posedReach`: a stale config fails.
+- `tools/testfit/raiderview.py` (Blender renders, `py` composes): pose strips, front views, picked frames
+  (`--pick`), the lineup and the overview; it draws each kind's lit cue where the config's `cue` puts it
+  and the plate by the plate rule.
 - `tools/testfit/blueprints/_props/Raiders/<Model>.json` (written by the generator) and the proposed config
   `tools/assets/out/RaiderModels.json` (written by the generator; W2 decides where it lives).
 
@@ -714,6 +725,8 @@ py tools/testfit/raiderpose.py --check                      # the head rule, fee
 blender -b -P tools/testfit/raiderview.py -- --model RaiderFodder          # <Model>_strip.png
 blender -b -P tools/testfit/raiderview.py -- --model RaiderChief --front   # <Model>_front.png
 blender -b -P tools/testfit/raiderview.py -- --lineup RaiderFodder,RaiderBrute,RaiderChief   # _lineup.png
+blender -b -P tools/testfit/raiderview.py -- --lineup RaiderFodder,RaiderSlinger,RaiderMarksman,RaiderLobber,RaiderArmoured,RaiderBrute,RaiderChief --out-name _overview
+blender -b -P tools/testfit/raiderview.py -- --model RaiderArmoured --front --pick rest,glint,break,reel,bare --name plate
 ```
 Outputs in `assets/testfit/out/Raiders/`. A strip takes about a minute (the Chief two).
 
@@ -724,8 +737,9 @@ off arm), `Stage2` the weapon arm (both arms for a two-handed hold: the brute's 
 role into one GLB per kit folder, because merge_stages joins a stage into one MeshPart per kit:
 `raider-kit` gear (palette-textured, never painted), `raider-cloth` (painted with the kind's colour, or the
 leg shade on the legs), `raider-skin` (painted with the kind's skin colour, tinted half as far: today's head
-rule), `raider-glow` (the Chief's eye sockets: today's visor rule, ember once enraged). Fodder and brute are
-11 MeshParts, the Chief 12 (plus the Warhammer's one).
+rule), `raider-glow` (the Chief's eye sockets: today's visor rule, ember once enraged), `raider-plate` (the
+plated elite's planks: today's shell rule moved onto them, hidden once the plate breaks). Fodder and brute
+are 11 MeshParts, slinger, lobber and the Chief 12 (plus the Warhammer's one), marksman and elite 13.
 
 **Pose rules (raiderpose.rig; numbers in the config's `rig`).** The head is placed at the scored head and
 moves only vertically by the body's drop, clamped to `headKeep` 0.4 head radii; it nods (0.35 of the lean)
@@ -744,6 +758,12 @@ attack: an arc swings coil to follow with the sweep, a lane holds its strike, th
 recover: from where the blow left it to the slump, waking to the carry. **A key carries the lean of its
 moment**: the torso leans about the neck, which swings a hanging arm the other way (a blow leaning forward
 0.5 needs 0.5 more pitch). Plus the walk swing, 0.32 rad x the kind's `armSwingShare`.
+Step 2 added: a throw or a shot (`shot`, `lob`, `line`) goes coil -> strike over `throwShare` 0.35 of the
+strike, then strike -> follow; `whirl` {turns, sin, cos} (the sling) circles `turns` times through the
+windup and is back on the coil at the release; `steady` (the crossbow) makes the keys world pitches (the
+body's lean along its facing is added to the pitch); a `line` with a lock is aimed by the lock (its build
+runs to windup - lockSeconds); and every blend goes angle by angle the shortest way round, so the lobber's
+reach back over his shoulder (pitch -2.8) and his release (2.35) blend over the top.
 
 **What the strips taught (step 1).**
 - A rigid wrist decides what a weapon can do. Held at right angles to the forearm (the fodder's club) a
@@ -757,3 +777,18 @@ moment**: the torso leans about the neck, which swings a hanging arm the other w
   and the windup heat reads on all three; fur in the forest track's browns is close to the forest floor,
   so a fur edge needs the pale hide tips.
 - The merge prints nothing for these props: they are inside their footprints and above the ground.
+
+**What the strips taught (step 2).**
+- Measure every vertex over every pose before trusting a key: the Chief's dragged hammer sank 1.7 to 4.6
+  studs into the ground walking, charging and slumping, and the check's idle poses had been carrying an
+  unposed arm (the marksman "walked" aimed). Both are fixed; the slam still buries the hammer's head
+  about 1.5 to 1.9 at the impact, which is the impact.
+- A two-handed piece turns about the shoulder line, so a crossbow cannot be lowered far: below about half
+  a radian the elbows swing behind the back and the hands into the coat. The marksman holds it across his
+  chest at rest and aims from the chest: shouldered at the cheek, his lit tip hid his face (the crit point)
+  for the whole windup.
+- A cue rides a model's point: the slinger's orb in the sling's pouch hangs by his knee at rest and whirls
+  over his head (6.8 studs up at full size), so the sight gate gets `posedReach.withCue` too.
+- One-colour planks read by their shapes: a plank's pointed top, the gaps between planks and two lashings
+  are enough; anything that must stay hidden under them (the harness) has to follow the torso's curve
+  between the tunic and the planks' inner face, or it shows through the gaps.

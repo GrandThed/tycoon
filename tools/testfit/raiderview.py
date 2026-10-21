@@ -16,8 +16,10 @@ second phase its enraged look):
     exactly what would be uploaded), each stage one rigid piece placed by raiderpose.rig, each
     painted MeshPart (raider-cloth / -skin / -glow) in the colour and material raiderpose.paint gives
     for that frame (the kind's colour from ProvingGrounds.json, the windup's heat, the neon blow, the
-    dull spent body, the enraged base), gear in its palette texture; a boss's charging core (a client
-    cue kept as it is) at the model's `core` point;
+    dull spent body, the enraged base), gear in its palette texture; the kind's lit piece (a client
+    cue: the slinger's orb, the marksman's tip, the lobber's round, the Chief's core) where the model's
+    `cue` record puts it, sized and coloured as ThreatFx/Cues does for the frame's charge; the plated
+    elite's planks (raider-plate) by the plate rule (on, glinting, bursting, gone);
   * the scored head (HitShapes: the sphere of headRadius at the feet + height - headRadius, lowered
     by the seat) as a wire circle, the drawn head's centre as a cross and their distance in head
     radii: the head rule says it stays under 0.5 before a hit lands;
@@ -48,7 +50,8 @@ STAGES_DIR = os.path.join(REPO_ROOT, "assets", "build", "stages", "_props", "Rai
 WEAPONS_DIR = os.path.join(REPO_ROOT, "assets", "kenney3d", "weapon-kit", "Models", "GLB format")
 PIECES = ("head", "torso", "arm", "legL", "legR")
 SUFFIX = {"head": "Head", "torso": "Torso", "arm": "Arm", "legL": "LegL", "legR": "LegR"}
-ROLE_OF_KIT = {"raider-kit": "gear", "raider-cloth": "cloth", "raider-skin": "skin", "raider-glow": "glow"}
+ROLE_OF_KIT = {"raider-kit": "gear", "raider-cloth": "cloth", "raider-skin": "skin", "raider-glow": "glow",
+               "raider-plate": "plate"}
 
 FRAME_W = 600  # a strip frame's width (800 for a body over 10 studs); its height follows the poses
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "assets"))
@@ -148,9 +151,22 @@ def compose_lineup(spec: dict) -> int:
     pad = 12
     width = max(r.size[0] for r in big_rows) + 2 * pad
     blocks = []
-    for label, row in zip(spec["bigLabels"], big_rows):
+    from PIL import ImageDraw as _Draw
+
+    body_labels = spec.get("bodyLabels") or [[] for _ in big_rows]
+    for label, row, names in zip(spec["bigLabels"], big_rows, body_labels):
         back = _backdrop(row.size)
         back.paste(row, (0, 0), row)
+        if names:
+            band = Image.new("RGB", (row.size[0], row.size[1] + 46), (16, 18, 20))
+            band.paste(back, (0, 0))
+            d = _Draw.Draw(band)
+            for entry in names:
+                tw = d.textlength(entry["text"], font=font)
+                d.text((entry["x"] - tw / 2, row.size[1] + 4), entry["text"], fill=(236, 236, 236), font=font)
+                sw = d.textlength(entry["sub"], font=small)
+                d.text((entry["x"] - sw / 2, row.size[1] + 25), entry["sub"], fill=(170, 200, 210), font=small)
+            back = band
         blocks.append((label, back))
     for label, row in zip(spec["phoneLabels"], phone_rows):
         back = _backdrop(row.size)
@@ -400,7 +416,14 @@ class Body3D:
             for o, kit, _ in self.loaded[piece]:
                 self.roles[o.name] = parts.get(kit, ROLE_OF_KIT[kit])
         self.paint_mats = {role: (viewer.lit_material(f"{model_name}_{role}"), viewer.neon_material(f"{model_name}_{role}_neon"))
-                           for role in ("cloth", "clothLeg", "skin", "glow")}
+                           for role in ("cloth", "clothLeg", "skin", "glow", "plate")}
+        # Each plate MeshPart's own centre (Roblox scales a MeshPart about it: the burst grows there).
+        self.centres = {}
+        for piece in PIECES:
+            for o, _, _ in self.loaded[piece]:
+                if self.roles[o.name] == "plate":
+                    vs = [vert.co for vert in o.data.vertices]
+                    self.centres[o.name] = tuple((min(v[i] for v in vs) + max(v[i] for v in vs)) / 2 for i in range(3))
         self.hold = model.get("hold")
         self.held = []
         if self.hold:
@@ -410,11 +433,12 @@ class Body3D:
             else:
                 print(f"[raiderview] WARNING: no {self.hold['model']}.glb in the weapon kit; the hold is left empty", flush=True)
         self.core = None
-        if kind.get("boss") and "core" in model["points"]:
+        self.cue = model.get("cue")
+        sizes = rp.cue_sizes(consts, kind, model)
+        if self.cue and sizes:
             import bmesh
 
-            self.core_size = max(model["radius"] * 0.6, 0.8)
-            self.core_swell = max(model["height"] * 0.3 / self.core_size, 1.0)
+            self.core_size, self.core_charged = sizes
             mesh = bpy.data.meshes.new(f"{model_name}_Core")
             bm = bmesh.new()
             bmesh.ops.create_uvsphere(bm, u_segments=16, v_segments=10, radius=0.5)
@@ -439,6 +463,8 @@ class Body3D:
         return name if name in ROLE_OF_KIT else "raider-kit"
 
     def _set_paint(self, role, rgb, material):
+        if material == "Hidden":
+            return None
         lit, neon = self.paint_mats[role]
         col = (lin(rgb[0]), lin(rgb[1]), lin(rgb[2]), 1.0)
         lit.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = col
@@ -470,22 +496,34 @@ class Body3D:
             for o, base in self.held:
                 o.matrix_world = mb @ base
         paint = rp.paint(self.consts, self.kind, self.skin, frame.threat, enraged=frame.enraged)
+        paint["plate"] = self._plate_paint(frame)
         for piece in PIECES:
-            for o, _, _ in self.loaded[piece]:
+            for o, _, base in self.loaded[piece]:
                 role = self.roles[o.name]
                 if role != "gear":
                     rgb, material = paint[role]
-                    o.data.materials.clear()
-                    o.data.materials.append(self._set_paint(role, rgb, material))
+                    o.hide_render = material == "Hidden"
+                    if material != "Hidden":
+                        o.data.materials.clear()
+                        o.data.materials.append(self._set_paint(role, rgb, material))
+                if role == "plate" and frame.plate == "break":
+                    grow = 1 + self.consts.COMBAT_RANGE_CUE_BREAK_GROW * frame.plate_share
+                    c = Matrix.Translation(self.centres[o.name])
+                    o.matrix_world = o.matrix_world @ c @ Matrix.Scale(grow, 4) @ c.inverted()
         if self.core is not None:
-            base = tuple(c / 255.0 for c in self.kind["color"])
-            lit = rp.c3_lerp(base, (1.0, 1.0, 1.0), 0.45)
-            if frame.enraged:
-                lit = self.consts.COMBAT_RANGE_ENRAGE_GLOW_COLOR
+            c = self.consts
+            base = tuple(x / 255.0 for x in self.kind["color"])
+            if self.kind.get("boss"):
+                base = rp.c3_lerp(base, c.COMBAT_RANGE_ENRAGE_COLOR, c.COMBAT_RANGE_ENRAGE_SHARE) if frame.enraged else base
+            lit = c.COMBAT_RANGE_ENRAGE_GLOW_COLOR if frame.enraged else rp.c3_lerp(base, (1.0, 1.0, 1.0), 0.45)
             charge = frame.threat.charge
-            colour = rp.c3_lerp(lit, self.consts.COMBAT_RANGE_TELL_COLOR, min(round(charge * 8) / 8 * 2, 1.0))
-            size = self.core_size * (1 + (self.core_swell - 1) * charge) * (1.35 if frame.enraged else 1.0)
-            at = rp.v_add(feet, r.pieces["torso"].point(tuple(self.model["points"]["core"])))
+            steps = c.COMBAT_RANGE_TELL_TINT_STEPS
+            colour = rp.c3_lerp(lit, c.COMBAT_RANGE_TELL_COLOR, min(rp.luau_round(charge * steps) / steps * 2, 1.0))
+            # Cues.Attach: a boss's core grows by the enrage scale at rest; its charged size never shrinks under it.
+            rest = self.core_size * (c.COMBAT_RANGE_ENRAGE_CORE_SCALE if frame.enraged else 1.0)
+            full = max(self.core_charged, rest)
+            size = rest + (full - rest) * charge
+            at = rp.v_add(feet, r.pieces[self.cue["piece"]].point(tuple(self.model["points"][self.cue["point"]])))
             self.core.matrix_world = Matrix.Translation(v.g2b(at)) @ Matrix.Scale(size, 4)
             em = next(n for n in self.core.data.materials[0].node_tree.nodes if n.bl_idname == "ShaderNodeEmission")
             em.inputs["Color"].default_value = (lin(colour[0]), lin(colour[1]), lin(colour[2]), 1.0)
@@ -493,12 +531,23 @@ class Body3D:
         v.bpy.context.view_layer.update()
         return r
 
+    def _plate_paint(self, frame):
+        """The plate role (today's shell rule on the planks): the plate's colour while on, white and lit
+        while it glints or bursts, hidden once gone (raider-plate is painted SmoothPlastic, not Metal)."""
+        c = self.consts
+        state = frame.plate or "on"
+        if state == "gone":
+            return (c.COMBAT_RANGE_PLATE_COLOR, "Hidden")
+        if state in ("glint", "break"):
+            return ((1.0, 1.0, 1.0), "Neon")
+        return (c.COMBAT_RANGE_PLATE_COLOR, "SmoothPlastic")
+
     def objects(self):
         out = [o for piece in PIECES for o, _, _ in self.loaded[piece]] + [o for o, _ in self.held]
         return out + ([self.core] if self.core is not None else [])
 
     def points(self):
-        return [o.matrix_world @ vert.co for o in self.objects() for vert in o.data.vertices]
+        return [o.matrix_world @ vert.co for o in self.objects() if not o.hide_render for vert in o.data.vertices]
 
     def intrusions(self, anchor, feet=(0.0, 0.0, 0.0)):
         """Vertices of every piece but the head (and the held weapon) deep in the scored head sphere."""
@@ -543,7 +592,10 @@ def strip_or_front(args) -> int:
     vd = FRONT_DIR if args.front else VIEW_DIR
     sil = v.silhouette(sil_at, math.atan2(-vd[0], -vd[2]) + math.pi)
 
-    if args.front:
+    if args.pick:
+        every = {f.name: f for f in rp.frames_for(kind_id, kinds, threat_cfg, consts, model, rig_numbers)}
+        frames = [every[n.strip()] for n in args.pick.split(",") if n.strip()]
+    elif args.front:
         frames = [rp.Frame("front", "front, rest", rp.Pose(arm=tuple(model["arm"]["carry"])), rp.Threat())]
     else:
         frames = rp.frames_for(kind_id, kinds, threat_cfg, consts, model, rig_numbers)
@@ -600,80 +652,101 @@ def strip_or_front(args) -> int:
     ]
     if kind_id in kind_notes:
         lines.append(f"{kind_id}: {kind_notes[kind_id]}")
-    which = "front" if args.front else "strip"
-    spec = {"title": args.model + (" - front" if args.front else " - pose strip"), "lines": lines, "size": list(v.size),
+    which = args.name or ("front" if args.front else "strip")
+    title = args.model + (f" - {args.name}" if args.name else (" - front" if args.front else " - pose strip"))
+    spec = {"title": title, "lines": lines, "size": list(v.size),
             "frames": spec_frames, "out": os.path.join(OUT_DIR, f"{args.model}_{which}.png")}
     return _run_compose(spec, os.path.join(raw, f"{args.model}_{which}_spec.json"))
 
 
 def lineup(args) -> int:
-    """Several models side by side at one scale: at rest and at the end of their first windup's coil,
-    then the same at a phone's size 50 studs away."""
+    """Several models side by side at one scale beside a 5-stud player: at rest and in their windup
+    (each kind's own `windup` frame: the slinger whirling, the marksman aimed at the lock, the
+    lobber reaching back, the elite and the Chief coiled), then the same at a phone's size 50
+    studs away. Each row is framed on its own poses at one shared scale, so no row is mostly sky."""
     import raiderpose as rp
     from mathutils import Vector
 
     consts = rp.Constants()
     kinds, threat_cfg, _ = rp.load_kinds()
     v = Viewer()
-    right, _ = v.aim(LINEUP_DIR)
+    right, up = v.aim(LINEUP_DIR)
     right_g = v.b2g(right)
     names = [n.strip() for n in args.lineup.split(",") if n.strip()]
-    bodies = []
-    cursor = 0.0
     sil_yaw = math.atan2(-LINEUP_DIR[0], -LINEUP_DIR[2]) + math.pi
-    sil = v.silhouette(rp.v_mul(right_g, cursor), sil_yaw)
-    cursor += 2.0
+    sil = v.silhouette((0.0, 0.0, 0.0), sil_yaw)
+    sil_pts = [s.matrix_world @ Vector(c) for s in sil for c in s.bound_box]
+    gap = 1.4
+    cursor = max(p.dot(right) for p in sil_pts) + gap
+    bodies = []
     for name in names:
         model, kind_id, rig_numbers = load_entry(rp, args.models, name)
         body = Body3D(v, name, model, kinds[kind_id], rig_numbers, consts)
-        half = model["reach"] + (3.0 if model.get("hold") else 0.6)
-        cursor += half + 1.2
-        frames = rp.frames_for(kind_id, kinds, threat_cfg, consts, model, rig_numbers)
-        rest = next(f for f in frames if f.name == "rest")
-        windup = next(f for f in frames if f.name == "windup")
-        bodies.append((body, rp.v_mul(right_g, cursor), rest, windup))
-        cursor += half
+        frames = {f.name: f for f in rp.frames_for(kind_id, kinds, threat_cfg, consts, model, rig_numbers)}
+        # The marksman's `windup` frame is the moment his line locks, before his body has heated;
+        # the overview shows him held on the lock, at the heat the others show at their coil's end.
+        rest, windup = frames["rest"], frames.get("hold", frames["windup"])
+        # Its own extent across the screen over both poses, standing at the origin.
+        lo, hi = math.inf, -math.inf
+        for fr in (rest, windup):
+            body.apply(fr)
+            xs = [p.dot(right) for p in body.points()]
+            lo, hi = min(lo, min(xs)), max(hi, max(xs))
+        cursor += -lo
+        bodies.append((body, rp.v_mul(right_g, cursor), rest, windup, model, kind_id))
+        cursor += hi + gap
     raw = os.path.join(OUT_DIR, "_raw")
     os.makedirs(raw, exist_ok=True)
 
     def pose(which):
-        for body, feet, rest, windup in bodies:
+        for body, feet, rest, windup, _, _ in bodies:
             body.apply(rest if which == "rest" else windup, feet)
 
-    pts = []
-    for which in ("rest", "windup"):
+    def row_points(which):
         pose(which)
-        for body, _, _, _ in bodies:
+        pts = list(sil_pts)
+        for body, *_ in bodies:
             pts += body.points()
-    pts += [s.matrix_world @ Vector(c) for s in sil for c in s.bound_box]
-    pts.append(Vector((0.0, 0.0, -0.4)))
-    out = {"big": [], "phone": []}
-    v.fit(pts, 2400, None, margin=1.04)
-    big_px = v.px_per_stud
-    for which in ("rest", "windup"):
-        pose(which)
-        path = os.path.join(raw, f"_lineup_{which}.png")
-        v.render(path)
-        out["big"].append(path)
-    v.fit(pts, 0, 0, margin=1.04, px_per_stud=PHONE_PX_PER_STUD)
-    for which in ("rest", "windup"):
-        pose(which)
-        path = os.path.join(raw, f"_lineup_{which}_phone.png")
-        v.render(path)
-        out["phone"].append(path)
+        pts.append(Vector((0.0, 0.0, -0.4)))
+        return pts
+
+    rows = {w: row_points(w) for w in ("rest", "windup")}
+    xs = [p.dot(right) for w in rows for p in rows[w]]
+    ys = [p.dot(up) for w in rows for p in rows[w]]
+    big_px = min(2600 / ((max(xs) - min(xs)) * 1.04), 1500 / ((max(ys) - min(ys)) * 1.04))
+    out = {"big": [], "phone": [], "bigLabels": [], "phoneLabels": []}
+    labels = []
+    for scale, key in ((big_px, "big"), (PHONE_PX_PER_STUD, "phone")):
+        for which in ("rest", "windup"):
+            pts = rows[which]
+            v.fit(pts, 0, 0, margin=1.04, px_per_stud=scale)
+            pose(which)
+            path = os.path.join(raw, f"{args.out_name}_{which}{'' if key == 'big' else '_phone'}.png")
+            v.render(path)
+            out[key].append(path)
+            if key == "big":
+                labels.append([{"x": v.project(feet)[0], "text": f"{model['model'][6:]} ({kind_id})",
+                                "sub": f"{model['height']} tall, {model['triangles']} tris"}
+                               for _, feet, _, _, model, kind_id in bodies]
+                              + [{"x": v.project((0.0, 0.0, 0.0))[0], "text": "player", "sub": "5 tall"}])
+    kinds_txt = ", ".join(f"{m['model'][6:]} {m['height']}" for *_, m, _ in bodies)
     spec = {
         "kind": "lineup",
-        "title": "Raider prototypes - lineup (fodder 5, brute 7.5, the Camp Chief 14; the R15 silhouette is a 5-stud player)",
-        "lines": [f"{n}: posed and painted by raiderpose.py; the cloth is each kind's colour from ProvingGrounds.json" for n in [", ".join(names)]]
-        + [f"top rows {big_px:.0f} px a stud; bottom rows: 50 studs away on a phone (70 degree view, 390 points tall): "
-           f"{PHONE_PX_PER_STUD:.1f} px a stud at its 3x density, and at point size (right)"],
-        "bigLabels": ["at rest", "at the end of each one's first windup coil (the heat tint)"],
-        "phoneLabels": ["at rest, 50 studs on a phone", "first windup, 50 studs on a phone"],
+        "title": f"Raiders - all {len(bodies)} looks ({kinds_txt}; the grey R15 is a 5-stud player)",
+        "lines": ["posed and painted by raiderpose.py (CrowdRenderer's maths + the model rig); the cloth is each kind's colour "
+                  "from ProvingGrounds.json; the lit pieces (the slinger's orb, the marksman's tip, the lobber's round, the "
+                  "Chief's core) are the client's cues, drawn where the config puts them",
+                  f"top rows {big_px:.0f} px a stud; bottom rows: 50 studs away on a phone (70 degree view, 390 points tall): "
+                  f"{PHONE_PX_PER_STUD:.1f} px a stud at its 3x density, and at point size (right)"],
+        "bigLabels": ["at rest", "in the windup (each kind's own: the sling whirling, the crossbow held on the lock, the firepot "
+                      "reached for, the axe, the club and the hammer coiled)"],
+        "phoneLabels": ["at rest, 50 studs on a phone", "windup, 50 studs on a phone"],
+        "bodyLabels": labels,
         "big": out["big"],
         "phone": out["phone"],
-        "out": os.path.join(OUT_DIR, "_lineup.png"),
+        "out": os.path.join(OUT_DIR, f"{args.out_name}.png"),
     }
-    return _run_compose(spec, os.path.join(raw, "_lineup_spec.json"))
+    return _run_compose(spec, os.path.join(raw, f"{args.out_name}_spec.json"))
 
 
 def blender_main(argv: list[str]) -> int:
@@ -683,6 +756,9 @@ def blender_main(argv: list[str]) -> int:
     parser.add_argument("--model", help="one model: its pose strip (or --front)")
     parser.add_argument("--front", action="store_true", help="one front view at rest instead of the strip")
     parser.add_argument("--lineup", help="comma-separated models side by side, plus the 50-stud phone check")
+    parser.add_argument("--out-name", default="_lineup", help="the lineup's file name (no extension)")
+    parser.add_argument("--pick", help="with --model: only these strip frames, comma-separated, in this order")
+    parser.add_argument("--name", help="with --pick: the picture's suffix (<Model>_<name>.png)")
     parser.add_argument("--pieces", help="pose per-piece GLBs from this kenney3d-style root instead of merged stages")
     parser.add_argument("--models", default=rp.MODELS_PATH)
     parser.add_argument("--rig", help="read the model's rig record from this .rig.json instead of the config")
