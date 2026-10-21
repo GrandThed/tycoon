@@ -53,3 +53,9 @@ W1b (old mission code out, the dash proven by the server's ring, RunState cells 
 `tycoon-p5b`, branch `l4-w1b`; W2 tracks running: the other four raiders, the asset route (forest meshes land in
 `templates/_levels/ForestRoad` → `ReplicatedStorage.Assets.Levels`), the W2 contract draft. One session-limit cut on
 2026-10-21 (reset 14:10); four agents resumed by SendMessage with nothing lost.
+
+**Rocks redone (2026-10-21, after the gate):** Ben came back with two reference images (bevelled standing stones; cliffs
+of clustered stacked bevelled blocks) and "the stones leave so much to offer". Saved in
+`assets/research/2026-10-21-l4/ref_rocks_*.png`; a fresh rock builder redoes every rock from `docs/prompts/l4-w2-rocks.md`
+before any upload. Lesson: the noisy triangulated cliff skins passed his first look at the whole-level renders but not a
+second one; for any generated natural surface, show a close-up kit sheet of the pieces beside the level views.
