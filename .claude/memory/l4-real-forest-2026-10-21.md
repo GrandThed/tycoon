@@ -23,3 +23,20 @@ end screen with coins flying in, both places publish together from `main`, R15-o
 
 **How to apply:** check the branch's `docs/prompts/l4-*` files for what is done before delegating. See
 [[l3-armory-2026-10-20]], [[missions-replan-2026-10-13]], [[agent-context-cost-2026-10-13]].
+
+**Ben's eight decisions (2026-10-21, click questions with sketches; the lead's recommendation on all eight; record:
+MISSIONS_DESIGN §26 on the branch):** lookout to the trailhead (study variant V3, empties the sniper list by data);
+natural camp edges on today's outlines (no crowd change; organic outlines not in L4); real models for all seven looks
+(fodder, slinger, marksman, lobber, brute, plated elite, the Camp Chief); the Chief's own move a war-club sweep; the
+city map departs straight into the level (lobby countdown, fallback = lobby with it picked); the Raider Arena hidden
+for the publish; the end screen = tally rows then coins flying in and Timber piling; **run cash grows with the city's
+era** (fixed per kill × an era multiplier, a clear worth a few minutes of that era's income; this bends C0's "fixed cash
+per enemy", which he chose knowing a clear was ~15 s of Village income). Still his later: the forest mood (two-mood
+renders), the Chief's look (A skull mask + Warhammer vs B antlers), how to publish (staging first recommended).
+Lead rulings: baked ground and cliff skins; dressing never changes collision; invisible tree-line walls; tell surfaces
+on raiders are untextured pieces painted by `Color` (a textured MeshPart may ignore Color; no Studio check needed).
+
+**W1 "the forest on paper" running (2026-10-21):** three Opus agents from briefs `docs/prompts/l4-w1-{lookout,forest,
+raiders}.md`, reports into `docs/prompts/l4-w1-reports/`. No uploads in W1. Then Ben's look at the pictures, W1b
+(old mission code removed, after the designer's track), W2 in the game with one harvest paste, W3 city map / end screen
+/ rewards, W4 publish readiness.
