@@ -15675,3 +15675,8 @@ Decisions: `docs/MISSIONS_DESIGN.md` §24 (and its W2 paragraph). Contract of re
 Decisions: `docs/MISSIONS_DESIGN.md` §26 (the Raider Arena hidden for the publish). Contract of record:
 `docs/prompts/l4-w1b-contract.md` (rulings L4B-1 to L4B-9, the deletions table, `OnDash` against the ring, RunState cells
 once), built on branch `l4-w1b` in the worktree `tycoon-p5b`.
+
+# L4 W2 contracts — the forest and the raiders in the game
+
+Decisions: `docs/MISSIONS_DESIGN.md` §26, §27. Contract of record: `docs/prompts/l4-w2-contract.md` (rulings L4W2-1 to
+L4W2-15, the lead's amendments in §0), built on branch `l4-w2` after `l4-w1b` merges.
