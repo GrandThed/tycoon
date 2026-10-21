@@ -14,7 +14,8 @@ py tools/assets/forest_kit.py                   # the kit: 39 GLBs + pieces.json
 "/c/Program Files/Blender Foundation/Blender 5.2/5.2/python/bin/python.exe" tools/levels/forest_textures.py
                                                 # 4 ground textures into assets/build/levels/ForestRoad/textures/
 py tools/levels/forest.py build                 # meshes + palette into assets/build/levels/ForestRoad/,
-                                                # data into tools/levels/out/ForestRoad.dress.json, then the gate
+                                                # data into src/shared/Config/LevelDress/ForestRoad.json, the upload
+                                                # record assets/build/levels/ForestRoad.json, then the gate
 py tools/levels/forest.py check                 # the QA gate (writes nothing): PASS or one line per failure
 py tools/levels/forest.py stats                 # triangles by group and by piece
 py tools/testfit/levelrender.py                 # every view (both moods where asked) into assets/testfit/out/Levels/ForestRoad/
@@ -36,7 +37,7 @@ A build is about 12 s; a render 20-60 s a view; the full set about 8 minutes.
 | `forestcheck.py` | the gate's rules (see its docstring); `forest.py check` runs it |
 | `levelmesh.py` | baked-mesh writer (the Valley's GLB shape), level palette, rectangle maths, noise |
 | `forest_textures.py` | road, road rim, camp earth, forest floor: 1024 px, opaque, two-way seamless (Blender's numpy) |
-| `out/ForestRoad.dress.json` | the generated data file (never hand-edit; `check` compares it with a fresh build) |
+| `src/shared/Config/LevelDress/ForestRoad.json` | the generated data file the game reads (never hand-edit; `check` compares it with a fresh build) |
 | `../assets/forest_palette.py` | every forest colour (reuses the weapon kit's `FOREST` and `FIRE`) |
 | `../assets/forest_kit.py` | the generated pieces, pure Python; the generator bakes the same triangles it exports |
 | `../testfit/levelrender.py` | the renders, a mirror of what the data file places |

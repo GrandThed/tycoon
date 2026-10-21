@@ -2,7 +2,7 @@
  "version": 1,
  "level": "forestRoad",
  "layout": "ForestRoad",
- "planHash": "45565907cbd38bab",
+ "planHash": "5a954ad6ec3b9853",
  "frame": "level",
  "units": "studs; yaw in degrees about +Y (CFrame.Angles); a prop's origin is its bottom centre, front -Z",
  "triangles": 149761,
@@ -1984,21 +1984,21 @@
    "A": [
     "floor",
     "fence",
-    "cover",
-    "fireMarkers",
-    "tentMarker"
+    "obstacle",
+    "fire",
+    "tent"
    ],
    "B": [
     "floor",
     "fence",
-    "cover",
-    "fireMarkers",
-    "tentMarker"
+    "obstacle",
+    "fire",
+    "tent"
    ],
    "C": [
     "floor",
     "fence",
-    "cover"
+    "obstacle"
    ]
   },
   "keep": [

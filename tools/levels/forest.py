@@ -1,9 +1,11 @@
 """The Forest Road's dresser (L4): one deterministic generator that turns the level's layout into the
 real forest, on paper. It writes the baked meshes, the props the client places, the new invisible
-character-only walls, and one data file that W2's game code reads.
+character-only walls, and one data file the game reads (src/shared/Config/LevelDress/<layout>.json,
+the L4 W2 contract's L4W2-1: Rojo makes it a ModuleScript beside Valley.json).
 
     py tools/levels/forest.py build      # GLBs + palette into assets/build/levels/ForestRoad/,
-                                         # the data file tools/levels/out/ForestRoad.dress.json
+                                         # the data file src/shared/Config/LevelDress/ForestRoad.json,
+                                         # the upload record assets/build/levels/ForestRoad.json
     py tools/levels/forest.py check      # QA gate (see `check`); writes nothing
     py tools/levels/forest.py stats      # counts only
 
@@ -43,6 +45,7 @@ import json
 import math
 import os
 import random
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,7 +63,7 @@ LEVEL_CONFIG = os.path.join(REPO_ROOT, "src", "shared", "Config", "Levels", "1_F
 LAYOUT_DIR = os.path.join(REPO_ROOT, "src", "shared", "Layouts", "Levels")
 COMBAT_JSON = os.path.join(REPO_ROOT, "src", "shared", "Config", "Combat.json")
 OUT_ROOT = os.path.join(REPO_ROOT, "assets", "build", "levels")
-DATA_DIR = os.path.join(HERE, "out")
+DRESS_DIR = os.path.join(REPO_ROOT, "src", "shared", "Config", "LevelDress")
 
 # check_levels' constants this generator must agree with (tools/check_levels.py; restated, since
 # importing it pulls in the simulator). UNCLIMB: a wall top is out of reach when it stands this far
@@ -1968,30 +1971,98 @@ def hide_list(level: Level) -> dict:
     """The layout Parts W2 makes invisible (Transparency 1, collision kept) because a skin, a rock
     face or a prop now shows them; everything else keeps today's look."""
     blocks = sorted(b["name"] for b in level.layout["blocks"] if b["look"] in ("path", "ground", "wall") and b.get("collide", True) is not False)
+    # A camp's roles are LevelGeometry's piece roles (its floor, fence strips, cover boxes, fire
+    # markers and tent marker), so the server finds the Parts by role (L4W2-5).
     camps = {}
     for cid, camp in level.camps.items():
         camps[cid] = ["floor", "fence"]
         if camp.get("obstacles"):
-            camps[cid].append("cover")
+            camps[cid].append("obstacle")
         if any(s["posture"] == "fire" for s in camp.get("spots") or []):
-            camps[cid].append("fireMarkers")
+            camps[cid].append("fire")
         if camp.get("tent"):
-            camps[cid].append("tentMarker")
+            camps[cid].append("tent")
     return {"blocks": blocks, "camps": camps,
             "keep": ["water", "ice", "bramble", "secret chests", "signs", "checkpoints", "gates (camp C, while shut)"]}
 
 
+def stage_geometry(level: Level) -> list:
+    """What of the level's stages the dressing reads: each stage's kind and zone, and where its
+    bosses stand (the Chief's hall is placed behind the boss point). A boss's kind, his Valor and
+    every wave number are play, not geometry, so they never move the plan hash (L4W2-4)."""
+    out = []
+    for st in level.config.get("stages") or []:
+        bosses = [(wave.get("boss") or {}).get("at") for wave in st.get("waves") or [] if wave.get("boss")]
+        out.append({"kind": st.get("kind"), "zone": st.get("zone"), "bossAt": bosses})
+    return out
+
+
 def plan_hash(level: Level) -> str:
-    """What the bake depends on: the layout as written, the fence thickness, this generator's
-    version and art numbers, and the kit's geometry. Any change is a re-bake and a paste."""
+    """What the bake depends on: the layout as written, the fence thickness, the stages' geometry
+    (stage_geometry), this generator's version and art numbers, and the kit's geometry. Any change
+    is a re-bake and a paste."""
     h = hashlib.sha256()
     h.update(json.dumps(level.layout, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-    h.update(json.dumps({"fence": level.fence_default, "stages": level.config.get("stages")}, sort_keys=True).encode("utf-8"))
+    h.update(json.dumps({"fence": level.fence_default, "stages": stage_geometry(level)}, sort_keys=True).encode("utf-8"))
     h.update(json.dumps({"v": GENERATOR_VERSION, "art": ART, "props": PROP_PIECES, "tex": TEXTURES}, sort_keys=True).encode("utf-8"))
     for name in sorted(kit.PIECES):
         h.update(name.encode("utf-8"))
         h.update(kit.glb_bytes(kit.build(name)))
     return h.hexdigest()[:16]
+
+
+def upload_record(build: Build, out_root: str, glbs: dict) -> dict:
+    """The upload manifest, `<out_root>/<layout>.json` beside the bake folder (the Valley's bake
+    record shape): what tools/assets/upload_level.py sends and what harvest.py checks Studio's
+    sizes against. Every file is named relative to out_root with its sha256, so a file left over
+    from another build is caught before an upload is spent on it. A mesh's size and centre are its
+    GLB's own float32 bounding box (a flat sheet's 0.01 hair included), which the data file's
+    rounded min/max are not. A texture forest_textures.py has not written yet is listed unhashed:
+    the uploader refuses it by name."""
+    layout = build.level.layout_name
+    folder = os.path.join(out_root, layout)
+    images = {}
+    palette_path = os.path.join(folder, "palette.png")
+    with open(palette_path, "rb") as fh:
+        palette_bytes = fh.read()
+    pal = lm.Palette()
+    images["palette"] = {"file": f"{layout}/palette.png", "sha256": hashlib.sha256(palette_bytes).hexdigest(), "size": [pal.width, pal.height]}
+    for name in sorted(TEXTURES):
+        path = os.path.join(folder, "textures", f"{name}.png")
+        entry = {"file": f"{layout}/textures/{name}.png", "sha256": "", "tileStuds": TEXTURES[name]["tile"]}
+        if os.path.isfile(path):
+            with open(path, "rb") as fh:
+                data = fh.read()
+            width, height = struct.unpack(">II", data[16:24]) if data[12:16] == b"IHDR" else (0, 0)
+            entry.update({"sha256": hashlib.sha256(data).hexdigest(), "size": [width, height]})
+        else:
+            log(f"note: {entry['file']} is missing (run tools/levels/forest_textures.py); the upload record lists it unhashed")
+        images[name] = entry
+    meshes = {}
+    for m in build.meshes:
+        data, lo, hi = glbs[m.name]
+        entry = {
+            "file": f"{layout}/{m.name}.glb",
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "triangles": m.count(),
+            "vertices": 3 * m.count(),
+            "centre": [round((lo[i] + hi[i]) / 2, 6) for i in range(3)],
+            "size": [round(hi[i] - lo[i], 6) for i in range(3)],
+            "look": m.look,
+            "group": m.group,
+        }
+        if m.look == "texture":
+            entry["texture"] = m.texture
+        meshes[m.name] = entry
+    return {
+        "version": 1,
+        "set": layout,
+        "level": build.level.config["id"],
+        "planHash": build.plan_hash(),
+        "frame": "level",
+        "images": images,
+        "meshes": meshes,
+    }
 
 
 def write(build: Build, out_root: str, data_path: str) -> None:
@@ -2002,10 +2073,17 @@ def write(build: Build, out_root: str, data_path: str) -> None:
             os.remove(os.path.join(folder, f))
     pal = lm.Palette()
     pal.write(os.path.join(folder, "palette.png"))
+    glbs = {}
     for m in build.meshes:
-        data, _lo, _hi = m.glb(pal, GENERATOR)
+        data, lo, hi = m.glb(pal, GENERATOR)
+        glbs[m.name] = (data, lo, hi)
         with open(os.path.join(folder, m.name + ".glb"), "wb") as fh:
             fh.write(data)
+    upload_path = os.path.join(out_root, f"{build.level.layout_name}.json")
+    with open(upload_path, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(upload_record(build, out_root, glbs), fh, indent=1)
+        fh.write("\n")
+    log(f"wrote the upload record {upload_path}")
     record = build.data()
     record["paletteSwatches"] = pal.record()
     os.makedirs(os.path.dirname(data_path), exist_ok=True)
@@ -2049,9 +2127,10 @@ def main(argv) -> int:
     parser = argparse.ArgumentParser(description="Dress the Forest Road.")
     parser.add_argument("mode", choices=("build", "check", "stats"))
     parser.add_argument("--out-root", default=OUT_ROOT)
-    parser.add_argument("--data", default=os.path.join(DATA_DIR, "ForestRoad.dress.json"))
+    parser.add_argument("--data", help="the dress data file (default src/shared/Config/LevelDress/<layout>.json)")
     args = parser.parse_args(argv)
     level = Level()
+    args.data = args.data or os.path.join(DRESS_DIR, f"{level.layout_name}.json")
     build = Build(level)
     if args.mode == "stats":
         stats(build)

@@ -1,0 +1,10 @@
+{
+  "id": "ChiefTent",
+  "era": "Forest",
+  "scale": 1.0,
+  "footprint": [28, 30],
+  "note": "forest-kit is authored 1 unit = 1 stud (tools/assets/forest_kit.py), origin at the bottom centre, front -Z: one piece at the origin, unturned, placed by tools/levels/out/ForestRoad.dress.json `props`; the Chief's hide hall at camp C: the dress data places it at scale 1.25 (Model:ScaleTo), walk-through",
+  "pieces": [
+    {"kit": "forest-kit", "model": "ChiefTent", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

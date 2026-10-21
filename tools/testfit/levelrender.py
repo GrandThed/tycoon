@@ -459,7 +459,7 @@ def counts(args):
 
 def main_py():
     parser = argparse.ArgumentParser(description="Render a dressed level.")
-    parser.add_argument("--data", default=os.path.join(REPO_ROOT, "tools", "levels", "out", "ForestRoad.dress.json"))
+    parser.add_argument("--data", default=os.path.join(REPO_ROOT, "src", "shared", "Config", "LevelDress", "ForestRoad.json"))
     parser.add_argument("--views", default="")
     parser.add_argument("--moods", default="")
     parser.add_argument("--sheet", action="store_true")
