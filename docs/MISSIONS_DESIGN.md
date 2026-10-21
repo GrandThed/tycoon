@@ -658,3 +658,10 @@ ability may replace it. Brief: `docs/prompts/l4-w2-mountain.md`.
 looks, the fodder's cape and knife, the Chief's smaller core): they upload with the forest, after Ben's look at the new
 rocks and the mountain, in the one harvest paste. The Chief keeps the Colossus's hit shapes (14 / 4 / 1.6), so tuning him
 in W2 never invalidates his model. **[Ben]**
+
+**The rocks, second look (2026-10-21):** on `_rocks_sheet.png` and `_L4_rocks_before_after.png` the stones and outcrops
+matched his references, but the tall walls a player walks beside read as walls of stone blocks (the skin may not stand
+out into walking space, so they have about 1.3 studs of relief). Asked, Ben chose **less regular walls**: the same depth,
+bigger uneven blocks, broken horizontal layers, fewer straight joints, boulder piles in corners and beside gates where
+nobody walks; no layout change (over "move the walls back for deep masses" and "good as they are"). Done in the same
+forest pass that dresses the mountain. **[Ben]**
