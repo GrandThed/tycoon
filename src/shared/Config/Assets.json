@@ -14130,10 +14130,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.628, 1.206, 3.16],
-                "offset": [0.0, 0.302, -0.58]
+                "meshId": 139314409770217,
+                "imageId": 98504303925976,
+                "size": [0.628, 1.2062, 3.16],
+                "offset": [0.0, 0.3019, 0.58]
               }
             ]
           }
@@ -14146,10 +14146,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.298, 1.32, 3.83],
-                "offset": [0.006, 0.0, -1.265]
+                "meshId": 109440763846300,
+                "imageId": 98504303925976,
+                "size": [0.2981, 1.32, 3.83],
+                "offset": [-0.0063, 0.0, 1.265]
               }
             ]
           }
@@ -14162,10 +14162,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 88927753480806,
+                "imageId": 98504303925976,
                 "size": [0.47, 1.407, 3.07],
-                "offset": [0.0, 0.402, -0.505]
+                "offset": [0.0, 0.4023, 0.505]
               }
             ]
           }
@@ -14178,10 +14178,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.509, 1.804, 3.345],
-                "offset": [0.0, 0.065, -0.458]
+                "meshId": 73717167196963,
+                "imageId": 98504303925976,
+                "size": [0.5085, 1.804, 3.345],
+                "offset": [0.0, 0.0645, 0.4575]
               }
             ]
           }
@@ -14194,10 +14194,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.774, 1.797, 4.372],
-                "offset": [-0.01, 0.299, -1.406]
+                "meshId": 87871637375503,
+                "imageId": 98504303925976,
+                "size": [0.7744, 1.7972, 4.3715],
+                "offset": [0.0103, 0.2986, 1.4058]
               }
             ]
           }
@@ -14210,10 +14210,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.332, 1.46, 4.459],
-                "offset": [0.0, -0.25, -1.569]
+                "meshId": 81022156796042,
+                "imageId": 98504303925976,
+                "size": [0.332, 1.46, 4.4587],
+                "offset": [0.0, -0.25, 1.5694]
               }
             ]
           }
@@ -14226,10 +14226,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.554, 1.316, 3.685],
-                "offset": [0.0, 0.357, -0.443]
+                "meshId": 113616965511052,
+                "imageId": 98504303925976,
+                "size": [0.554, 1.3162, 3.685],
+                "offset": [0.0, 0.3569, 0.4425]
               }
             ]
           }
@@ -14242,10 +14242,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.304, 3.91, 0.83],
-                "offset": [0.019, 0.0, 0.141]
+                "meshId": 90943288062448,
+                "imageId": 98504303925976,
+                "size": [0.3041, 3.9099, 0.83],
+                "offset": [-0.0188, 0.0, -0.1408]
               }
             ]
           }
@@ -14258,10 +14258,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.24, 1.106, 3.405],
-                "offset": [0.0, -0.043, -0.742]
+                "meshId": 71696025707189,
+                "imageId": 98504303925976,
+                "size": [0.24, 1.1061, 3.405],
+                "offset": [0.0, -0.043, 0.7425]
               }
             ]
           }
@@ -14274,10 +14274,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 135799643827257,
+                "imageId": 98504303925976,
                 "size": [0.556, 1.062, 3.132],
-                "offset": [0.0, -0.083, -0.506]
+                "offset": [0.0, -0.083, 0.506]
               }
             ]
           }
@@ -14290,10 +14290,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 77292617042001,
+                "imageId": 98504303925976,
                 "size": [0.3, 1.263, 2.56],
-                "offset": [0.002, 0.258, -0.16]
+                "offset": [-0.002, 0.2583, 0.16]
               }
             ]
           }
@@ -14306,10 +14306,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.377, 1.165, 6.6],
-                "offset": [0.002, -0.083, -1.2]
+                "meshId": 96140532273107,
+                "imageId": 98504303925976,
+                "size": [0.3771, 1.1654, 6.6],
+                "offset": [-0.0016, -0.0827, 1.2]
               }
             ]
           }
@@ -14322,10 +14322,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.38, 1.193, 3.987],
-                "offset": [0.0, 0.0, -1.254]
+                "meshId": 120864848895300,
+                "imageId": 98504303925976,
+                "size": [0.38, 1.1934, 3.9873],
+                "offset": [0.0, 0.0, 1.2537]
               }
             ]
           }
@@ -14338,10 +14338,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.326, 3.904, 0.909],
-                "offset": [0.027, 0.0, -0.071]
+                "meshId": 77661621747004,
+                "imageId": 98504303925976,
+                "size": [0.3263, 3.9037, 0.9086],
+                "offset": [-0.0268, 0.0, 0.0707]
               }
             ]
           }
@@ -14354,10 +14354,10 @@
             "parts": [
               {
                 "kit": "weapon-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [0.831, 1.62, 4.361],
-                "offset": [0.0, 0.15, -1.524]
+                "meshId": 109756310070098,
+                "imageId": 98504303925976,
+                "size": [0.831, 1.62, 4.3607],
+                "offset": [0.0, 0.15, 1.5236]
               }
             ]
           }
@@ -16847,77 +16847,77 @@
     "Weapons": {
       "Beam": {
         "assetId": 77434531470060,
-        "imageId": 0,
+        "imageId": 78405654332105,
         "sha256": "bd59e95950f90ca6e40f962237651d8bf36ebdc2d6584d02df381a0b0e011c53"
       },
       "Broadsword": {
         "assetId": 98630146179400,
-        "imageId": 0,
+        "imageId": 72944044772469,
         "sha256": "86f10b582ec5fb175b9418243181925b12feb5a1e92e5e2e5f71a97f17e8b175"
       },
       "Chaingun": {
         "assetId": 127802520613907,
-        "imageId": 0,
+        "imageId": 118382529917177,
         "sha256": "7e987a255ec5e5ff43a55ee8b1c1dec22af55458256551fedc475a3acb462dae"
       },
       "Flamethrower": {
         "assetId": 81280295006153,
-        "imageId": 0,
+        "imageId": 130861835436448,
         "sha256": "196d4f9ab7bf769c57775796171ec3a41781e70c00be8fe25c28bea4a0a4c2d3"
       },
       "FrostHammer": {
         "assetId": 105557430958523,
-        "imageId": 0,
+        "imageId": 84454738114205,
         "sha256": "0598240ab1f565304f9e84f67d1d7e180b84cdc650e91da93fb010753c0f5671"
       },
       "Greataxe": {
         "assetId": 111727837327238,
-        "imageId": 0,
+        "imageId": 124564908686174,
         "sha256": "55180f0e90189349bc4b9cf228a8b302771ccc63d63d64217bfce8bd79f38ea2"
       },
       "Launcher": {
         "assetId": 133423818465483,
-        "imageId": 0,
+        "imageId": 99511290734724,
         "sha256": "005230fdd0ac8d2a1a63c91e9b10a6a289fffa23df7dd7d4eb48d558226f4b9c"
       },
       "Longbow": {
         "assetId": 95426563417130,
-        "imageId": 0,
+        "imageId": 82391721144347,
         "sha256": "d335c3b657627f64715781bf55538de90bf0acba51c29475449262e4b1609ff8"
       },
       "Rifle": {
         "assetId": 86363372505883,
-        "imageId": 0,
+        "imageId": 121667236403968,
         "sha256": "bea1f274a58bb443b7c01145cb0dae796f76e89aa9d153f1db1316bee638d90b"
       },
       "Shotgun": {
         "assetId": 105349338514512,
-        "imageId": 0,
+        "imageId": 133557240833023,
         "sha256": "9b09cdd4e4de61fea64dd506064cc60916a9dc2c10cb38a1364f499dc4fc685a"
       },
       "Smg": {
         "assetId": 113664268953409,
-        "imageId": 0,
+        "imageId": 135630985180368,
         "sha256": "306a979aaeaac0411ceef61be07e7897e7392379e0ba7172e13158f8e2230946"
       },
       "Spear": {
         "assetId": 118768863424175,
-        "imageId": 0,
+        "imageId": 138783089295514,
         "sha256": "6a636aa588beb5bf59ecc9e005b7dbe2d1fa057e49f3be55b34ab5d5fcea70a2"
       },
       "Spinblade": {
         "assetId": 115474058729704,
-        "imageId": 0,
+        "imageId": 119252446815378,
         "sha256": "9ca13fd61539bd84f54cbfc36161e39b4173e039a3ef5daddee1451709440027"
       },
       "Splitbow": {
         "assetId": 116927476118869,
-        "imageId": 0,
+        "imageId": 122476620374074,
         "sha256": "3426798443a6e13aee3cc8263cef7679d7f63c1978fe76b3a0989b0980345e4a"
       },
       "Warhammer": {
         "assetId": 131554944715656,
-        "imageId": 0,
+        "imageId": 127356628127071,
         "sha256": "66baad5412cf1252f87d10ef0663c4b689f0c88b539355fd9602c74c26bc9a59"
       }
     }
