@@ -639,3 +639,17 @@ be great if we could make something more like the images attached"*, with two re
 (`assets/research/2026-10-21-l4/ref_rocks_standing.png`: bevelled standing stones and chunky low stones;
 `ref_rocks_cliffs.png`: cliffs of clustered, stacked bevelled blocks). Every rock of the forest is redone in that
 language before the upload (brief `docs/prompts/l4-w2-rocks.md`); the rest of the forest stays as approved. **[Ben]**
+
+## 28. The mountain climb and the Castle Key (2026-10-21)
+
+Ben: *"can we create a new parkour in the forest that uses the double jump in multiple times arround a mountain that gives
+you a key to unlock a secret room in the castle?"* Asked with sketches (three click questions, the lead's recommendation
+each time): **behind the trailhead** (north-west of the start past the creek, the secrets corner with the lookout and the
+shrine, far from every camp), **one lap of about 8 double jumps** (1-2 minutes, wide ledges, a miss drops you to the
+ledge below), **built now with the forest** (baked in the same upload: still one harvest paste). **[Ben]**
+
+Lead's rulings: the summit chest is a fourth Forest secret, `mountain`, needing Double Jump; it pays a little and gives
+**the Castle Key**, which is the opened secret itself (saved per player in `combat.secrets`; no profile change); the
+Castle's plan gets a locked room that only this key opens (what it holds is decided with the Castle); no enemies on the
+climb; no ledge or summit may be a sniper spot; a fall never leaves the level; every hop needs Double Jump and no lifting
+ability may replace it. Brief: `docs/prompts/l4-w2-mountain.md`.
