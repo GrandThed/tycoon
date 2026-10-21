@@ -1,6 +1,6 @@
 ---
 name: l3-armory-review
-description: L3 "the Armory" reviews (tiers per weapon family, profile v8 with a one-time refund, saved loadout, stars saved, the Armory screen) - W1 slice 1 saving 2026-10-20 0C/0M/6m (harness proves a COPY of the migration runner; validator rules shadowed by a second rule; Hard-only trophy; old servers after publish); W1 slice 2 combat server 0C/1M/2m/1s (per-family TierOf vs per-slot sim mirror, unharnessed service lines, a star lever eats a first-clear reward); W1 slice 3 hub + hosts 0C/0M/2m/5s (hub service lines under no gate; a full-screen card covers earlier same-ZIndex siblings like the party invite); W1 slice 4 screen 0C/0M/3m/7s (hub modal vs Roblox TouchGui at equal DisplayOrder; pad selection restored only on repaint; style-button pending gate unharnessed); W1 fix diff 0C/0M/2m/5s (text checks pin a call, not where its arguments come from or whether it is reached; a sibling lever in the other place keeps the bug the ruling fixed)
+description: L3 "the Armory" reviews (tiers per weapon family, profile v8 with a one-time refund, saved loadout, stars saved, the Armory screen) - W1 slice 1 saving 2026-10-20 0C/0M/6m (harness proves a COPY of the migration runner; validator rules shadowed by a second rule; Hard-only trophy; old servers after publish); W1 slice 2 combat server 0C/1M/2m/1s (per-family TierOf vs per-slot sim mirror, unharnessed service lines, a star lever eats a first-clear reward); W1 slice 3 hub + hosts 0C/0M/2m/5s (hub service lines under no gate; a full-screen card covers earlier same-ZIndex siblings like the party invite); W1 slice 4 screen 0C/0M/3m/7s (hub modal vs Roblox TouchGui at equal DisplayOrder; pad selection restored only on repaint; style-button pending gate unharnessed); W1 fix diff 0C/0M/2m/5s (text checks pin a call, not where its arguments come from or whether it is reached; a sibling lever in the other place keeps the bug the ruling fixed); W2 slice 1 pipeline 2026-10-21 0C/0M/3m/4s (manifest stale after an upload commit; turn proof blind to a rotated MeshPart; clients trust the template PrimaryPart Ref; harvest inner pivot = glTF origin on all axes; py shebang picks 3.12; W2 slice 2 server 2026-10-21 0C/0M/5m/4s (T8 per-function misses slotFamily/variantFor; reach of the character hook unpinned; word-level structure checks; lobby act gate freezes WeaponHeld; melee draws flip the look at 40/s); W2 slice 3 client 2026-10-21 0C/0M/3m/7s (cast fx broadcast before the WeaponHeld write: one-shot builders draw from the other slot's weapon; black silhouette on a navy card maxes at 1.26:1; teardown and driving signals unpinned; R15 attachment frames read from local morpherEditorR15.rbxmx); W2 fix diff 2026-10-21 0C/0M/3m/3s (a task.defer coalesce runs the hold listener after another player's SwingOther and cancels the first swing after a switch; a stick added to a modal also drives the world camera; pins miss Muzzle's flush order and the rig constructor flags))
 metadata:
   type: project
 ---
@@ -221,5 +221,196 @@ docs-keeper's at the end of the wave.
 - `scratchpad/l3fix/probe.py <probes.json>`: a list of `[label, file, old, new]`; applies each to a git-archive tree,
   runs the harness, restores, and prints CAUGHT/SURVIVES. Print with `errors="replace"` (the ★ in check text breaks
   cp1252 stdout).
+
+## W2 slice 1, pipeline and data (2026-10-21, c79bec5 on `l3-w2`): 0 Critical, 0 Major, 3 Minor, 4 Suggestions
+
+Brief: `docs/prompts/l3-w2-review.md` (three slices). Findings: `docs/prompts/l3-w2-review/1-pipeline.md`. The weapons
+take the props route (`props.Weapons`, `templates/_props/Weapons`), and the icons are a v5 top-level `icons` block.
+
+**Patterns:**
+- **A pipeline-state doc that a gate diffs goes stale when an upload commit skips it.** The `ASSET_MANIFEST` Weapons
+  table has uploaded and harvested columns. The lead committed `Assets.json` after the uploads without
+  `gen_asset_manifest.py`, so `--check` is red on the branch until the post-harvest step.
+  - Run `gen_asset_manifest.py --check` at every review, not only after a harvest.
+- **A "turn proof" can only prove translation.** `weapon_frames.weapon_proof` reduces to
+  `offset == (-cx, cy, -cz)` plus a size check per axis. A MeshPart that Studio reports `rotated` is only warned
+  about in `merge_model` (`harvest.py:354`), and the flag is never stored, so the proof passes on it (probed).
+- **The clients trust the template `PrimaryPart` Ref.** HeldWeapons and ArmoryStage do, while PlotService and
+  PropFactory find `Base` by name (the M7 lesson). Grep every new template consumer for `.PrimaryPart`.
+
+**Verified, safe to reuse:**
+- The harvest's inner-model pivot is the glTF origin on all three axes. Evidence:
+  - Valley `Clouds_1` offset y is 350.9 against size/2 of 94.8.
+  - Village `BushA` has min y −0.2, and its harvested y 0.5208 equals the centre y.
+  - Boomtown `LampPost` z −0.788 harvests as +0.7875.
+- `assets_config.render_assets` round-trips the real `Assets.json` byte for byte. All six writers go through
+  `cfg.save_assets`, and every version bump is a `max()`.
+- `py` picks its interpreter from the shebang. A script that starts with `#!/usr/bin/env python` runs 3.12 64-bit,
+  which has no Pillow; without one it runs 3.14 32-bit. Most `tools/*.py` have that shebang. This is also the
+  32/64-bit drift noted in [[l1c-chief-clearing-review]].
+
+**Recipes (all on scratch, never the real `Assets.json`):**
+- **Post-paste chain with the real ids.** Rewrite the asset ids in `tools/assets/fixtures/harvest_weapons_sample.txt`
+  to the real ones from `Assets.json`. Then run, all against scratch copies:
+  1. `harvest.py --props --file <copy> --assets-json <scratch>`;
+  2. `weapon_frames.py --check --require-harvest --assets-json <scratch>`;
+  3. `gen_templates.py --props` and then `--check`, both with `--assets-json` and `--out <copy of templates>`.
+
+  This reproduces MANUAL_STEPS steps 8 to 10 exactly.
+- **Run `harvest.luau` under `luau.exe`.** Prepend about 70 lines of stubs: `game:GetService` for InsertService and
+  HttpService, Vector3 with `__sub` and Magnitude, and instance tables with `IsA` and `GetDescendants`. Then add the
+  script from `local ASSETS = {` on. A stubbed run proves that each record kind prints a line `harvest.py` parses.
+  Large Bash heredocs with backticks failed here, so use the Write tool and then `sed -i 's/\r$//'`.
+
+## W2 slice 2, server and shared (2026-10-21, c79bec5 on `l3-w2`): 0 Critical, 0 Major, 5 Minor, 4 Suggestions
+
+Findings: `docs/prompts/l3-w2-review/2-server.md`. The code under review: WeaponLook (pure), plus the
+`WeaponMelee`/`WeaponRanged`/`WeaponHeld` character attributes. They are written only by WeaponService's
+`showWeapons`, from PrepareCharacter, SetFamily and `noteHeld`, and `noteHeld` runs on an accepted attack, draw or
+cast. The server code was right. Every finding was about a gate or the docs.
+
+**Patterns:**
+- **A "no hit reads X" rule checked per named function leaves out the functions that pick the family, the variant
+  and the slot.**
+  - T8 covered 7 functions. Two mutants put a `.held` read into `slotFamily` and into `variantFor`, and both
+    survive.
+  - Ask for a file-wide count of the field's reads, plus a count of 0 in the other files.
+- **"Reached" pinned as call text only.** These four all survive:
+  - the hook line wrapped in an `if` (the count is file-wide, with no indentation);
+  - ArenaService's `hook(player, character)` deleted. This breaks every mission respawn, the vitals included;
+  - RangeService's respawn handler emptied;
+  - AddPlayer's mode test flipped.
+
+  Exact text that includes its tabs does catch a wrapping `if`.
+- **Word-level structure checks:**
+  - "the call is inside the branch" still passes with an inner `if false`;
+  - "behind `not Theme.lowEndDevice`" still passes with `if true or not …`;
+  - "seal sets five properties" still passes when a later line turns one back on.
+
+  Pin whole lines with their indentation, and add a file-wide 0 count for re-enables.
+- **An act gate makes "others see it at the next attack" mean "never" in the lobby.** In the dungeon lobby
+  (`ArenaService.InRun()` false), every attack, draw and cast is refused. So a teammate's `WeaponHeld`, and the
+  raised ranged arm with it, stay frozen at their last in-run slot. Check where each "shows at the next action" rule
+  can actually act.
+- **A remote that once carried nothing now drives a replicated look.** `RequestRangeDraw` accepts a melee family
+  (only the Longbow has a charge variant). Alternating two draws flips `WeaponHeld` 40 times a second, inside the
+  `rangeAttack` bucket. When a cheap intent starts writing a replicated attribute, check the intent's own rate and
+  what it accepts.
+
+**Verified, safe to reuse:**
+- No server code reads character attributes (only `EnemyId`), and nothing on the server listens to attribute
+  changes.
+- Neither `held` (server) nor `rangeState.activeSlot` (client, written only by `setActiveSlot`) resets on a respawn.
+- Every family change in the combat place goes through `WeaponService.SetFamily`:
+  - the lobby equip;
+  - `removeFamily` and `resetArmory`, via `holdStarter`;
+  - the range's `weapon` command.
+
+  `grantFamily` changes ownership only.
+- Mutate's `FILES` covers every file that `L3W2_*` and `SOURCES` read. Check it by exec-ing `mutate.py` up to
+  `MUTATIONS.update(L3W2_MUTATIONS)` with a fake argv.
+
+**Recipes:**
+- Use `scratchpad/l3w2s2/probe.py <probes.json>`. Each probe is `[label, [[file, old, new], ...]]`, so a probe can
+  make several edits.
+  - It applies each probe to a `git archive HEAD` copy and runs that copy's own `run_harness.py`, so `bundle.luau`
+    lands in scratch, not in the worktree.
+  - Each probe takes about 12 s.
+  - Build the JSON with a small Python script, not by hand-escaping.
+- To run `check_compile` on the copy, copy `luau-compile.exe` into `tree/tools/bin` first.
+- luau-lsp: run `rojo sourcemap <project> -o <scratch>` from the worktree. Then run `luau-lsp analyze
+  --sourcemap=<scratch> --definitions=tools/types/globalTypes.d.luau <files>`, without `--settings`: the worktree has
+  no `.vscode`.
+
+## W2 slice 3, the client (2026-10-21, c79bec5 on `l3-w2`): 0 Critical, 0 Major, 3 Minor, 7 Suggestions
+
+Findings: `docs/prompts/l3-w2-review/3-client.md`. The code under review:
+- HeldWeapons: welds from RightGripAttachment and BodyBackAttachment, `Muzzle`, `OnHold`;
+- the rest poses in WeaponController (a raised ranged arm);
+- the four muzzle copies folded into one;
+- the ArmoryStage ViewportFrame and the shelf icons.
+
+**Patterns:**
+- **A remote event broadcast before the attribute that describes it.**
+  - In `AbilityService.OnCast`, `broadcastFx(cast)` and `mechanic.launch` (instant strikes and shots) both run before
+    `NoteHeld` writes `WeaponHeld`.
+  - Under deferred signals the attribute's value is already set, but the AttributeChanged handler that updates the
+    client's cache (`rig.inHand`) is queued after the remote handlers.
+  - So builders that read once (Volley, StormCoil, BladeStorm, the blend in `onShot`) draw from the other slot's
+    weapon.
+  - For every new display attribute, list each broadcast that a client builds from it, and check it comes after the
+    write.
+- **A near-black silhouette on a dark card cannot reach the sample's contrast.**
+  - On (22, 29, 50) it gives 1.14. Even pure black gives only 1.26. The approved sample sat on (30, 41, 70) at 1.32.
+  - Compute the WCAG luminance against the shipped backdrop, not the sample's.
+- **Text checks pin creation, not teardown or the signals that drive it.** Each of these survives alone:
+  - `stop()` dropped from `SetActive(false)`;
+  - `clear()` dropped from `selectFamily`;
+  - the loadout-leave `Destroy` dropped;
+  - `names.held` dropped from the watched names.
+- **One server write of N attributes runs a client handler N times.** It needs coalescing (`task.defer` plus a
+  flag), as the old RefreshCosmetics did. This matters more when slice 2's 40/s `WeaponHeld` flip is possible.
+
+**Verified, safe to reuse:**
+- **R15 attachment frames** come from `%LOCALAPPDATA%\Roblox\Versions\<v>\content\avatar\morpherEditorR15.rbxmx`. It
+  is XML, so a regex reads it.
+  - `RightGripAttachment` is at (0, −0.147, 0) with rows (1,0,0), (0,0,1), (0,−1,0). Its look runs down the arm, and
+    its up is the hand's forward.
+  - `BodyBackAttachment` is the identity at (0, −0.196, 0.5), with +Z out of the back.
+  - The shoulder rig attachments are the identity. So `C0 * Rx(+θ)` raises an R15 arm forward.
+  - R6's `Right Shoulder` C0 carries a 90° Y turn, so its X is the forward axis. The same pose there raises the arm
+    sideways.
+- **The combat place has `StreamingEnabled` false**, so remote characters arrive whole.
+- **Downs keep `DOWN_HEALTH`** (VitalsService), so `Humanoid.Died` never fires for a down.
+- **`WeaponService.finish` broadcasts every strike**, whiffs included.
+- **`AbilityFx/init.onCast` builds on receipt.**
+- **Only WeaponController writes a shoulder C0.**
+
+**Recipes:**
+- Mutants: `scratchpad/l3w2c/probe.py <tree> <luau> <probes.json>`, where each probe is `[label, file, old, new]`,
+  run on a `git archive HEAD src tools combat.project.json default.project.json` copy. Each one takes about 11 s.
+- Under this Git Bash, `grep -c $'\r'` counts every line. Count CR bytes with `py` instead. The Write tool wrote LF
+  here.
+- A long `cat <<'EOF'` heredoc failed with "unexpected EOF while looking for matching `''". Use Write for findings
+  files.
+
+## W2 fix diff (2026-10-21, `git diff 5c0958b 31b1947`): 0 Critical, 0 Major, 3 Minor, 3 Suggestions
+
+Findings: `docs/prompts/l3-w2-fix-diff-review.md`. All 17 rulings (P1-P6, S1-S6, C1-C5) are done.
+
+**Patterns:**
+- **Coalescing an attribute handler (`task.defer` plus a pending flag) reorders it behind remote handlers queued
+  in the same batch.**
+  - The ui-engineer added a flush in `Muzzle` for the effects, but `FeedbackController.onStrike` calls
+    `WeaponController.SwingOther` without `Muzzle`.
+  - So the deferred show and its hold listener's `setRest` run after the swing has started. `setRest` raises
+    `rig.token` and cancels the windup.
+  - Result: another player's first swing after a ranged-to-melee switch never animates.
+  - When a handler is deferred, list every remote handler that reads the state the handler sets, not only the ones
+    the fix had in mind.
+- **A feature that adds an input to a modal must check who else reads that input.**
+  - C3 made the right stick turn the Armory stage.
+  - The combat `CameraController` reads `Thumbstick2` from UIS with no `processed` or modal gate, and nothing in the
+    hub sinks it for the PlayerModule camera.
+  - So the world camera, and the character, swing behind the 0.35 scrim.
+- **The same recurring pattern: pins hold call text, not order or constructor inputs.**
+  - These survive: `Muzzle` reading `rig.inHand` above its pinned flush, and `bound = false` or `pending = true` in
+    `bind`'s rig.
+  - The stick's four lines and the ghost tone's value are also unpinned.
+
+**Verified, safe to reuse:**
+- The 15 icon `sha256` values are pixel hashes.
+- Kenney kit folders carry `License.txt` and generated ones do not: `tower-kit` is generated (`tower_kit.py`).
+- Every family's variant `kind` matches its slot, so only bows reach `startDraw`.
+- `castAbility` calls `setActiveSlot` on the press.
+- The combat `CameraController` handles `Thumbstick2` `InputEnded` (`:874`) as rest.
+- While this review ran, a QA run in `tycoon-p5` modified `build/*.rbxl` and the sourcemaps. That was not the
+  reviewer.
+
+**Recipes:**
+- `scratchpad/l3w2fd/probe.py probes.json` on `scratchpad/l3w2fd/tree`, a `git archive <sha>` copy. A probe is
+  `[label, [[file, old, new], ...]]`, takes about 14 s, and `mkprobes.py` builds the JSON.
+- `ghost.py <icons256 dir>` (`py`, Pillow) recomputes the shelf icon contrast.
+- `icon_hash.py <repo>` checks the recorded icon hashes against `pixel_sha256`.
 
 See [[l2-secrets-review]] and [[review-workflow]].
