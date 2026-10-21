@@ -44,6 +44,8 @@ local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local SwingGate = require(sharedFolder:WaitForChild("SwingGate"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+-- L3 W2: the attributes that show a player's weapons to every client (pure; requires only Types).
+local WeaponLook = require(sharedFolder:WaitForChild("WeaponLook"))
 local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
@@ -209,6 +211,10 @@ type Shooter = {
 	abilityKills: number,
 	-- Ruling 7: a ring of the server root's positions on os.clock(), one per Heartbeat.
 	history: PositionRing.History,
+	-- L3-50: the slot in use as others see it, from this player's last accepted attack or draw,
+	-- or cast (noted just before its effect is sent: NoteHeld); a pure switch tells the server
+	-- nothing. Shown through the character attributes (showWeapons) only: no hit ever reads it.
+	held: SlotName,
 }
 -- One enemy the shape touched. `order` sorts nearest-first (distance, or entry along a ray).
 type Candidate = { id: number, order: number, body: Vector3, crit: boolean }
@@ -2140,6 +2146,29 @@ end
 
 -- Players ------------------------------------------------------------------------------------
 
+-- L3-49: the one writer of the three character attributes every client hangs this player's
+-- weapons from (WeaponLook.Values: the held melee and ranged families, the slot in use). On
+-- `character` when given (a fresh one, before it is the player's Character), else on the live one.
+-- Attributes replicate, so no remote carries them; none of them is ever read where a hit is judged.
+local function showWeapons(shooter: Shooter, character: Model?): ()
+	local target = character or shooter.player.Character
+	if target == nil then
+		return
+	end
+	for name, value in WeaponLook.Values(shooter.loadout, shooter.held) do
+		target:SetAttribute(name, value)
+	end
+end
+
+-- L3-50: the slot in use, from an accepted attack, draw or cast. Shown only when it changed.
+local function noteHeld(shooter: Shooter, slot: SlotName): ()
+	if shooter.held == slot then
+		return
+	end
+	shooter.held = slot
+	showWeapons(shooter, nil)
+end
+
 -- A loaded player takes up their weapons, then TuneState and a first readout. Idempotent. In the
 -- range: the ProvingGrounds.json loadout (Wave 1). In a mission (L3-10): the saved loadout, read
 -- by Unlocks.LoadoutOf with each slot's starter as the fallback (a saved family no longer owned,
@@ -2207,6 +2236,8 @@ function WeaponService.AddPlayer(player: Player): ()
 		abilityHits = 0,
 		abilityKills = 0,
 		history = PositionRing.New(CONST.HISTORY_CAPACITY),
+		-- The client's starting stance.
+		held = "melee",
 	}
 	state.shooters[player] = shooter
 	VitalsService.AddPlayer(player)
@@ -2240,8 +2271,8 @@ function WeaponService.RemovePlayer(player: Player): ()
 	state.projectiles = survivors
 end
 
--- A fresh character, already where it should stand: its air state starts over and its body
--- (health, regen) is VitalsService's.
+-- A fresh character, already where it should stand: its air state starts over, it shows the
+-- held weapons (L3-49, in every mode) and its body (health, regen) is VitalsService's.
 function WeaponService.PrepareCharacter(player: Player, character: Model): ()
 	if not state.active then
 		return
@@ -2249,6 +2280,7 @@ function WeaponService.PrepareCharacter(player: Player, character: Model): ()
 	local shooter = state.shooters[player]
 	if shooter ~= nil then
 		resetAir(shooter)
+		showWeapons(shooter, character)
 	end
 	VitalsService.PrepareCharacter(player, character)
 end
@@ -2469,6 +2501,7 @@ function WeaponService.OnAttack(
 		end
 	end
 	shooter.lastSeq[slot] = seq
+	noteHeld(shooter, slot)
 	shooter.lastAttackAt[slot] = now
 	shooter.credit[slot] = credit - 1
 	shooter.creditAt[slot] = now
@@ -2519,9 +2552,12 @@ function WeaponService.OnDraw(player: Player, weapon: string): ()
 	end
 	local slot: SlotName = if def.slot == "melee" then "melee" else "ranged"
 	-- A downed player starts no draw (P4 ruling 24c), like their other intents; nor does one
-	-- the mission's act gate holds back (P5 ruling 21).
+	-- the mission's act gate holds back (P5 ruling 21). Only a ranged family draws (the bows'
+	-- charge): a melee draw charges nothing and would flip WeaponHeld (L3-50) as fast as the
+	-- remote's bucket allows, which every client would redraw (the W2 review's 2-m5).
 	if
-		slotFamily(shooter, slot) ~= weapon
+		def.slot ~= "ranged"
+		or slotFamily(shooter, slot) ~= weapon
 		or VitalsService.IsDown(player)
 		or not mayAct(player)
 	then
@@ -2530,6 +2566,7 @@ function WeaponService.OnDraw(player: Player, weapon: string): ()
 	local now = os.clock()
 	shooter.drawStartedAt = if slotLocked(shooter, slot, now) then shooter.lockUntil else now
 	shooter.drawWeapon = weapon
+	noteHeld(shooter, slot)
 end
 
 -- Opens the i-frame window; the dash itself moves the client-owned character.
@@ -2643,7 +2680,8 @@ end
 -- Puts `family` into its own slot (the range's `weapon` command). False for an unknown family
 -- or player. Picking the family already held keeps its combo, so the client's predicted step
 -- only restarts on a real change; a change drops the slot's buff (it belongs to the family
--- whose ability granted it) and tells the loadout listeners.
+-- whose ability granted it) and tells the loadout listeners. Every call shows the pair again
+-- (L3-49), the lobby's equip and the levers included.
 function WeaponService.SetFamily(player: Player, family: string): boolean
 	local shooter = state.shooters[player]
 	if not state.active or shooter == nil then
@@ -2661,6 +2699,7 @@ function WeaponService.SetFamily(player: Player, family: string): boolean
 		shooter.loadout.ranged = family
 	end
 	shooter.drawStartedAt = 0
+	showWeapons(shooter, nil)
 	tuneStateFor(shooter)
 	if previous ~= family then
 		shooter.combo[family] = 0
@@ -2776,6 +2815,18 @@ end
 function WeaponService.FloorBelow(position: Vector3): Vector3
 	local floorY = floorUnder(position, worldParams())
 	return if floorY ~= nil then Vector3.new(position.X, floorY, position.Z) else position
+end
+
+-- L3-50: AbilityService's cast (it alone knows the cast's slot), once every refusal but the
+-- projectile budget has passed and before its effect is sent (the fix round's S6), so the other
+-- clients build that effect from the right weapon. Ignored for a player without weapons and for
+-- any other slot word.
+function WeaponService.NoteHeld(player: Player, slot: string): ()
+	local shooter = state.shooters[player]
+	if not state.active or shooter == nil or (slot ~= "melee" and slot ~= "ranged") then
+		return
+	end
+	noteHeld(shooter, if slot == "melee" then "melee" else "ranged")
 end
 
 -- The seed an ability's shots, strikes and scatters carry: a fresh server draw per cast in the

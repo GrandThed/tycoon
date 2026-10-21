@@ -434,13 +434,22 @@ local Theme = {
 	COMBAT_BEAM_SECONDS = 0.16,
 	COMBAT_BEAM_WIDTH = 0.35,
 	COMBAT_FINISHER_STRIKE_MULT = 1.25, -- the finisher's pose travels further than a slash
-	COMBAT_WEAPON_WAIT_SECONDS = 3, -- WaitForChild budget for the hand and the prop folder
-	-- Grip placement of a weapon prop in the right hand. No weapon prop has been authored
-	-- yet (empty hands are the shipped C1 default), so these are the neutral "held blade"
-	-- values a first prop will be modelled against, not measurements.
-	COMBAT_GRIP_FORWARD = 0.6,
-	COMBAT_GRIP_UP = -0.4,
-	COMBAT_GRIP_PITCH_DEGREES = -90,
+	COMBAT_WEAPON_WAIT_SECONDS = 3, -- WaitForChild budget for the arm that holds the shoulder joint
+	-- L3 W2 (docs/prompts/l3-w2-contract.md, L3-51, L3-58, §11.6): how HeldWeapons hangs a weapon
+	-- model (its pivot is the grip, its tip along -Z, its top +Y) from RightGripAttachment in use
+	-- and BodyBackAttachment otherwise. Starting values; R15 attachment frames are unchecked outside
+	-- Studio, so one round from a screenshot is expected (L3-63).
+	-- A melee tip turned forward off a hanging arm (straight down it went into the floor).
+	COMBAT_HOLD_GRIP_MELEE = CFrame.Angles(math.rad(90), 0, 0),
+	-- A ranged weapon along the grip's look: forward once the arm is raised (below).
+	COMBAT_HOLD_GRIP_RANGED = CFrame.identity,
+	-- The right arm's rest while a ranged family is in hand: the draw angle, so it aims ahead.
+	COMBAT_HOLD_RANGED_RAISE_DEGREES = 80,
+	-- 0.3 off the back, 35 degrees across it, a quarter turn so a bow's limbs lie flat, tip up.
+	COMBAT_HOLD_BACK = CFrame.new(0, 0, 0.3)
+		* CFrame.Angles(0, 0, math.rad(35))
+		* CFrame.Angles(0, math.rad(90), 0)
+		* CFrame.Angles(math.rad(90), 0, 0),
 
 	-- C1 input. The dash a burst ability performs locally; the server already resolved the
 	-- damage along the same segment, so this is presentation that never changes a hit.
@@ -1416,6 +1425,27 @@ local Theme = {
 	-- A new selection pops the stage's text in from this scale (not on low-end devices).
 	ARMORY_SCREEN_STAGE_POP_SCALE = 0.94,
 	ARMORY_SCREEN_STAGE_POP_SECONDS = 0.14,
+	-- L3 W2 (L3-56, L3-58): the stage's ViewportFrame. One directional light and an ambient, the
+	-- two terms tools/testfit/weaponview.py renders with (ambient 0.5, light 0.62), starting values
+	-- for one Studio round. An unowned weapon is this near-black over the lighter gradient (the
+	-- stage only; the shelf has its own ghost tone). The model is posed once, its tip raised TILT
+	-- degrees about X as on the icons; the camera orbits it at PITCH above, from START_YAW (the
+	-- strips' three-quarter view, from the weapon's right side toward its tip), framing the
+	-- bounds' sphere so a turn never changes the framing: distance = radius / sin(FOV / 2) x FIT
+	-- (FOV is vertical; a stage taller than wide uses its narrower across angle instead). It turns
+	-- TURN degrees a second while the screen is open on Weapons with a model shown (not on
+	-- low-end devices). A drag turns it by DRAG_DEGREES_PER_PIXEL on every device.
+	ARMORY_STAGE_AMBIENT = Color3.fromRGB(128, 128, 128),
+	ARMORY_STAGE_LIGHT_COLOR = Color3.fromRGB(158, 158, 158),
+	ARMORY_STAGE_LIGHT_DIRECTION = Vector3.new(-1, -1, -1),
+	ARMORY_STAGE_SILHOUETTE = Color3.fromRGB(14, 16, 22),
+	ARMORY_STAGE_FOV = 30,
+	ARMORY_STAGE_FIT = 1.15,
+	ARMORY_STAGE_PITCH_DEGREES = 12,
+	ARMORY_STAGE_TILT_DEGREES = 30,
+	ARMORY_STAGE_START_YAW_DEGREES = 35,
+	ARMORY_STAGE_TURN_DEGREES_PER_SECOND = 20,
+	ARMORY_STAGE_DRAG_DEGREES_PER_PIXEL = 0.5,
 	-- An element's chip (stage) and dot (card); the words are SECRET_NEED_WORDS'.
 	ARMORY_SCREEN_CHIP_HEIGHT = 16,
 	ARMORY_SCREEN_CHIP_TEXT = 10,
@@ -1471,6 +1501,21 @@ local Theme = {
 	ARMORY_SCREEN_CARD_DOT_GAP = 3, -- between the tier line's end and the dot
 	ARMORY_SCREEN_CARD_HELD_BAR = 3,
 	ARMORY_SCREEN_CARD_DARK = Color3.fromRGB(22, 29, 50),
+	-- An unowned card's icon (3-m2): no silhouette darker than the card can read on it (black
+	-- reaches 1.26). ImageColor3 multiplies the icon's own colours, so this is the brightest an
+	-- icon pixel can be, not a flat fill: the weapon shows dimmed and cooled. At this tone every
+	-- icon's median pixel is at least 1.59 against CARD_DARK (the tone itself 6.0).
+	ARMORY_SCREEN_ICON_GHOST = Color3.fromRGB(140, 155, 190),
+	-- L3 W2 (L3-57): a card whose family has a harvested icon. The name is one line across the
+	-- card's top (ICON_TOP down, CARD_NAME_TEXT + 2 tall, ICON_PAD in from each side: 86 wide in a
+	-- 92 card, 62 in a 68 portrait card, so "Frost Hammer" and "Flamethrower" fit on one line at
+	-- 8 or more); the icon, ICON square, under it at the left (y 15 to 55 of 56); the tier line in
+	-- the card's lower right from the icon's middle, beside or over the icon's empty lower-right
+	-- corner (every icon's long axis runs lower left to upper right); the element's dot on the
+	-- icon's empty upper-left corner. Without an icon a card is W1's text card.
+	ARMORY_SCREEN_CARD_ICON = 40,
+	ARMORY_SCREEN_CARD_ICON_PAD = 3,
+	ARMORY_SCREEN_CARD_ICON_TOP = 2,
 	ARMORY_SCREEN_PORTRAIT_COLUMNS = 5,
 	ARMORY_SCREEN_PORTRAIT_ROWS = 3,
 	-- The Abilities tab: the lobby panel's rows (L2 W2), centred and capped.

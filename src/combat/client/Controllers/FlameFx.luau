@@ -4,8 +4,10 @@
 -- ordinary `tick` strike (numbers, marker, reactions). This module draws the fire itself.
 --
 --  * A stream is a continuous family whose shape is not a ray (`IsStream`): the Beam's held ray
---    keeps FeedbackController's beam. One stream per shooter, from the hand to where the server
---    cut the capsule at the first wall (the strike's `size`), as wide as the capsule.
+--    keeps FeedbackController's beam. One stream per shooter, from the nozzle (HeldWeapons.Muzzle:
+--    the tip of the model in the hand, L3-52; with no model, a stud ahead of the hand along the
+--    aim) to where the server cut the capsule at the first wall (the strike's `size`), as wide as
+--    the capsule.
 --  * Someone else's stream follows their strikes and goes out COMBAT_FLAME_LINGER_INTERVALS
 --    ticks after the last one. The local player's starts on the frame the shot is sent
 --    (InputController's stream handler, the P3.1 lesson: no waiting for the server), lives on
@@ -31,6 +33,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Create = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Create"))
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
+local HeldWeapons = require(script.Parent:WaitForChild("HeldWeapons"))
 
 -- What FeedbackController hands over of a strike (its parsed Strike has more).
 export type StreamStrike = {
@@ -67,7 +70,7 @@ type Stream = {
 -- The engine's own fire texture (bundled, no upload).
 local FIRE_TEXTURE = "rbxasset://textures/particles/fire_main.dds"
 local EPSILON = 1e-4
--- The fire leaves this far along the aim from the right hand.
+-- With no model in the hand, the fire leaves this far along the aim from it.
 local MUZZLE_FORWARD = 1
 -- A write to the emitter only when a value moved more than this share.
 local REWRITE_SHARE = 0.05
@@ -96,19 +99,13 @@ local function unitOf(vector: Vector3): Vector3?
 	return vector / length
 end
 
+-- The nozzle is the model's tip; only the hand fallback is pushed along the aim.
 local function muzzleOf(userId: number, aim: Vector3): Vector3?
-	local player = Players:GetPlayerByUserId(userId)
-	local character = if player ~= nil then player.Character else nil
-	if character == nil then
-		return nil
+	local point, fromModel = HeldWeapons.Muzzle(userId)
+	if point == nil or fromModel then
+		return point
 	end
-	local hand = character:FindFirstChild("RightHand")
-		or character:FindFirstChild("Right Arm")
-		or character:FindFirstChild("HumanoidRootPart")
-	if hand ~= nil and hand:IsA("BasePart") then
-		return hand.Position + aim * MUZZLE_FORWARD
-	end
-	return nil
+	return point + aim * MUZZLE_FORWARD
 end
 
 local function lingerOf(variant: Types.RangeWeaponVariant?): number

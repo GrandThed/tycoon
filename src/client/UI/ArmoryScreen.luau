@@ -675,6 +675,8 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 			holders[tab].Visible = on
 		end
 		abilities.frame.Visible = shown == "abilities"
+		-- L3-56: the stage turns only while it can be seen, open on the Weapons tab.
+		stage.SetActive(view.open and shown == "weapons")
 	end
 
 	showTab = function(tab: Tab): ()
@@ -834,6 +836,7 @@ function ArmoryScreen.new(parent: Instance, deps: Deps): Handle
 			end
 		else
 			bindOpenKeys(false)
+			stage.SetActive(false)
 			local selected = GuiService.SelectedObject
 			if selected ~= nil and selected:IsDescendantOf(root) then
 				GuiService.SelectedObject = nil

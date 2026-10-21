@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "testfit"))
 import assets_config as cfg  # noqa: E402
 import glbtools  # noqa: E402
 from blueprint import BLUEPRINTS_ROOT, PROPS_ROOT, BlueprintError, list_blueprints, load_blueprint  # noqa: E402
+from palette import KITS_ROOT  # noqa: E402
 from upload_audio import CREATE_URL, OPERATION_URL, UploadError, api_request, build_multipart, load_env, require_credentials  # noqa: E402
 
 VIP_DIR = os.path.join(cfg.REPO_ROOT, "assets", "build", "vip")
@@ -226,6 +227,28 @@ def select_blueprints(args, default_root: str) -> list[str]:
     return paths
 
 
+def kenney_kit(kit: str) -> bool:
+    """A kit is Kenney's when its folder holds Kenney's CC0 licence; the generated kits (weapon-kit,
+    colony-kit, ...) share the folder convention but carry no licence file."""
+    try:
+        with open(os.path.join(KITS_ROOT, kit, "License.txt"), "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return False
+    return "Kenney" in text and "CC0" in text
+
+
+def prop_description(prop: str, era: str, index: int, side_stage: dict | None, blueprint_kits: list[str]) -> str:
+    """Names the kits the merge put in the stage, and claims "Kenney kit pieces, CC0" only when
+    every one of them is a Kenney kit; a generated kit is named as generated (the L3 W2 fix round,
+    P6). Only what new uploads say changes."""
+    kits = sorted((side_stage or {}).get("kits") or {}) or sorted(blueprint_kits)
+    kenney = {kit: kenney_kit(kit) for kit in kits}
+    names = ", ".join(kit if kenney[kit] else f"{kit} (generated)" for kit in kits)
+    credit = " Kenney kit pieces, CC0." if kits and all(kenney.values()) else ""
+    return f"Era City Tycoon prop '{prop}' ({era}) stage {index}; kits: {names}.{credit}"
+
+
 def upload_props(args) -> int:
     assets = cfg.load_assets()
     jobs: list[Job] = []
@@ -263,7 +286,7 @@ def upload_props(args) -> int:
                     label,
                     glb,
                     model_display_name(f"Prop_{args.era}_{prop}_S{index}"),
-                    f"Era City Tycoon city prop '{prop}' ({args.era}) stage {index}. Kenney kit pieces, CC0.",
+                    prop_description(prop, args.era, index, side_stage, bp.kits),
                     commit,
                 )
             )

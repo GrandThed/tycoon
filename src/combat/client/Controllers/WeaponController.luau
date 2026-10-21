@@ -2,22 +2,28 @@
 -- The local player's weapon, on the local character only (C1 contract, docs/INTERFACES.md
 -- "Combat client", extended by C2.5 "Combat client"). Four jobs:
 --
--- 1. Hold the prop. `ReplicatedStorage/Assets/Props/<band eraName>/<model>` is cloned into
---    the right hand when it exists. No weapon prop has been authored yet, so the shipped
---    default is empty hands — a missing folder, era or model is silent, never an error.
+-- 1. Hold the weapon. Every player's weapons, this one's included, are HeldWeapons' (L3 W2,
+--    docs/prompts/l3-w2-contract.md, L3-51 and L3-54): this module starts it and hands it the
+--    local stance on the frame of a switch, which the server is never told of.
 -- 2. Animate the swing. C2.5 `animations.playerSlash` (steps 1-2) and `playerLunge` (the
 --    finisher) play on the Animator when they load; the ids are unverified, so each one is
 --    preloaded in a pcall and a failed or 0 id falls back to the procedural Motor6D C0 pose
 --    silently (one warn per id). C0 is used, not Transform, so the default Animate script
---    keeps running underneath instead of fighting us.
+--    keeps running underneath instead of fighting us. Every pose ends at its rig's rest: the
+--    arm hangs, except while a ranged model is in the hand (HeldWeapons.OnHold, on every
+--    character): then it is held raised forward at COMBAT_HOLD_RANGED_RAISE_DEGREES, so a gun
+--    or a bow points ahead instead of at the ground (contract section 11, ruling 6). A shot's
+--    kick and a draw start from that raised arm; a melee swing is unchanged.
 -- 3. Trail the strike. A Trail between two hand attachments is lit for the strike leg
 --    (`feel.trailSeconds` long), so a swing reads as an arc even with empty hands.
 -- 4. Show the shot. Every shot flies: an arrow for charge weapons and a bright bolt for guns
---    (with a muzzle flash) travel from the hand to the point the client's own copy of the
---    server's ray reaches, at `feel.arrowSpeed`; beams stay instant. CombatFxController asks
---    ArrivalDelay() so a hit's number and sparks land when the arrow does, not before.
+--    (with a muzzle flash) travel from the muzzle (HeldWeapons.Muzzle) to the point the
+--    client's own copy of the server's ray reaches, at `feel.arrowSpeed`; beams stay instant.
+--    CombatFxController asks ArrivalDelay() so a hit's number and sparks land when the arrow
+--    does, not before.
 --
--- Other players' swings (C2 `CombatFx swing`) play the same animation or pose, and the same
+-- Other players' swings (SwingOther: FeedbackController on each of their weapon strikes, L3-53;
+-- the C1 `CombatFx swing` until those modules go) play the same animation or pose, and the same
 -- trail, on THEIR character, locally. Nothing written here replicates, and the owner's
 -- client animates its own copy, so the two never fight. Their weapon class is not sent, so a
 -- remote swing uses one fixed presentation window.
@@ -32,15 +38,14 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
-local Armory = require(sharedFolder:WaitForChild("Armory"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
 local Theme = require(uiFolder:WaitForChild("Theme"))
 local Motion = require(uiFolder:WaitForChild("Motion"))
+local HeldWeapons = require(script.Parent:WaitForChild("HeldWeapons"))
 
 local MELEE_SLOT = "melee"
-local WEAPON_NAME = "CombatWeapon"
 local TRACER_NAME = "CombatTracer"
 local PROJECTILE_NAME = "CombatProjectile"
 local MUZZLE_NAME = "CombatMuzzleFlash"
@@ -56,20 +61,18 @@ local SHOULDER_NAMES = { "RightShoulder", "Right Shoulder" }
 local DEFAULT_TRAIL_SECONDS = 0.15
 local DEFAULT_ARROW_SPEED = 180
 
-export type SlotTiers = { melee: number, ranged: number }
-
 local WeaponController = {}
 
-local armoryConfig: Types.ArmoryConfig? = nil
 local combatConfig: Types.CombatConfig? = nil
-local gear: SlotTiers = { melee = 0, ranged = 0 }
 local stance = MELEE_SLOT
 
 -- One posable shoulder. `token` invalidates the delayed legs of a superseded pose; `track`
--- is the animation playing instead of the procedural pose, when one loaded.
+-- is the animation playing instead of the procedural pose, when one loaded. `rest` is the
+-- angle every pose returns to (degrees from `base`, the hanging arm).
 type PoseRig = {
 	motor: Motor6D?,
 	base: CFrame,
+	rest: number,
 	tween: Tween?,
 	token: number,
 	track: AnimationTrack?,
@@ -82,6 +85,7 @@ local function newPose(motor: Motor6D?): PoseRig
 	return {
 		motor = motor,
 		base = if motor ~= nil then motor.C0 else CFrame.identity,
+		rest = 0,
 		tween = nil,
 		token = 0,
 		track = nil,
@@ -95,7 +99,9 @@ local character: Model? = nil
 local localPose: PoseRig = newPose(nil)
 -- Other players' rigs, weak-keyed so a respawned or departed character simply drops out.
 local remotePoses: { [Model]: PoseRig } = setmetatable({}, { __mode = "k" }) :: any
-local weapon: Instance? = nil
+-- Characters with a ranged model in the hand (HeldWeapons.OnHold), weak-keyed. Kept apart from
+-- the pose records, because the news can come before a character's shoulder is found.
+local raisedRigs: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local connections: { RBXScriptConnection } = {}
 
 -- Animation id -> "pending" | "ok" | "failed". Only "ok" ids are ever played.
@@ -131,37 +137,6 @@ local function arrowSpeed(): number
 	return if f ~= nil and f.arrowSpeed > 0 then f.arrowSpeed else DEFAULT_ARROW_SPEED
 end
 
-local function slotTier(slot: string): number
-	return if slot == MELEE_SLOT then gear.melee else gear.ranged
-end
-
-local function tierDefFor(slot: string): (Types.WeaponTierDef | Types.WeaponStarterDef)?
-	local cfg = armoryConfig
-	if cfg == nil then
-		return nil
-	end
-	return Armory.TierDef(cfg, slot, slotTier(slot))
-end
-
--- The prop folder is per era, and a tier names its band, so the era comes from the band
--- table. A starter weapon has no band and no model: nothing to hold.
-local function propFolderFor(tierDef: Types.WeaponTierDef | Types.WeaponStarterDef): Instance?
-	local cfg = armoryConfig
-	local band = (tierDef :: any).band
-	if cfg == nil or typeof(band) ~= "number" then
-		return nil
-	end
-	for _, bandDef in cfg.bands do
-		if bandDef.band ~= band then
-			continue
-		end
-		local assets = ReplicatedStorage:FindFirstChild("Assets")
-		local props = if assets ~= nil then assets:FindFirstChild("Props") else nil
-		return if props ~= nil then props:FindFirstChild(bandDef.eraName) else nil
-	end
-	return nil
-end
-
 local function findFirst(parent: Instance, names: { string }): Instance?
 	for _, name in names do
 		local found = parent:FindFirstChild(name)
@@ -175,78 +150,6 @@ end
 local function handOf(rig: Model): BasePart?
 	local hand = findFirst(rig, HAND_NAMES)
 	return if hand ~= nil and hand:IsA("BasePart") then hand else nil
-end
-
-local function clearWeapon(): ()
-	local current = weapon
-	weapon = nil
-	if current ~= nil then
-		current:Destroy()
-	end
-end
-
-local function gripCFrame(hand: BasePart): CFrame
-	return hand.CFrame
-		* CFrame.new(0, Theme.COMBAT_GRIP_UP, -Theme.COMBAT_GRIP_FORWARD)
-		* CFrame.Angles(math.rad(Theme.COMBAT_GRIP_PITCH_DEGREES), 0, 0)
-end
-
--- Welded, massless and non-collidable: a prop must never push the rig around or catch on
--- the arena walls. Parts are welded to each other first, then the whole thing to the hand.
-local function attachTo(hand: BasePart, clone: Instance): ()
-	local parts: { BasePart } = {}
-	if clone:IsA("BasePart") then
-		table.insert(parts, clone)
-	end
-	for _, descendant in clone:GetDescendants() do
-		if descendant:IsA("BasePart") then
-			table.insert(parts, descendant)
-		end
-	end
-	local anchor: BasePart? = parts[1]
-	if anchor == nil then
-		clone:Destroy()
-		return
-	end
-	local target = gripCFrame(hand)
-	if clone:IsA("Model") then
-		clone:PivotTo(target)
-	else
-		anchor.CFrame = target
-	end
-	for _, part in parts do
-		part.Anchored = false
-		part.CanCollide = false
-		part.CanQuery = false
-		part.CanTouch = false
-		part.Massless = true
-		if part ~= anchor then
-			Create("WeldConstraint", { Part0 = anchor, Part1 = part, Parent = anchor })
-		end
-	end
-	Create("WeldConstraint", { Name = "Grip", Part0 = hand, Part1 = anchor, Parent = anchor })
-	clone.Name = WEAPON_NAME
-	clone.Parent = hand
-	weapon = clone
-end
-
-local function refreshWeapon(): ()
-	clearWeapon()
-	local rig = character
-	if rig == nil then
-		return
-	end
-	local tierDef = tierDefFor(stance)
-	if tierDef == nil or tierDef.model == "" then
-		return -- starter weapons and unconfigured tiers are held bare-handed by design
-	end
-	local folder = propFolderFor(tierDef)
-	local template = if folder ~= nil then folder:FindFirstChild(tierDef.model) else nil
-	local hand = handOf(rig)
-	if template == nil or hand == nil then
-		return
-	end
-	attachTo(hand, template:Clone())
 end
 
 -- Animations -------------------------------------------------------------------------
@@ -413,6 +316,16 @@ end
 
 -- Procedural pose ------------------------------------------------------------------------
 
+local function restOf(rigModel: Model?): number
+	return if rigModel ~= nil and raisedRigs[rigModel] == true
+		then Theme.COMBAT_HOLD_RANGED_RAISE_DEGREES
+		else 0
+end
+
+local function restFrame(rig: PoseRig): CFrame
+	return rig.base * CFrame.Angles(math.rad(rig.rest), 0, 0)
+end
+
 local function cancelRig(rig: PoseRig): ()
 	rig.token += 1
 	local tween = rig.tween
@@ -422,7 +335,7 @@ local function cancelRig(rig: PoseRig): ()
 	end
 	local motor = rig.motor
 	if motor ~= nil then
-		motor.C0 = rig.base
+		motor.C0 = restFrame(rig)
 	end
 end
 
@@ -454,6 +367,25 @@ end
 
 local function poseTo(degrees: number, seconds: number, style: Enum.EasingStyle): Tween?
 	return rigPoseTo(localPose, degrees, seconds, style)
+end
+
+-- A new rest, eased to. It changes with the slot in hand, and a switch ends any pose anyway, so
+-- a pose still running is superseded.
+local function setRest(rig: PoseRig, degrees: number): ()
+	if rig.rest == degrees then
+		return
+	end
+	rig.rest = degrees
+	if rig.motor == nil then
+		return
+	end
+	rig.token += 1
+	local tween = rig.tween
+	rig.tween = nil
+	if tween ~= nil then
+		tween:Cancel()
+	end
+	rigPoseTo(rig, degrees, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)
 end
 
 -- Wind up against the swing, then strike through it, then settle, all inside
@@ -508,7 +440,7 @@ local function swingRig(
 			if token ~= rig.token then
 				return
 			end
-			rigPoseTo(rig, 0, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)
+			rigPoseTo(rig, rig.rest, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)
 		end)
 	end)
 end
@@ -524,11 +456,41 @@ local function findShoulder(rig: Model): Motor6D?
 	return if motor ~= nil and motor:IsA("Motor6D") then motor else nil
 end
 
+-- Another player's posable shoulder. The base C0 is captured the first time a rig is seen (at
+-- rest, since nothing posed it yet) and reused, so overlapping poses never drift the arm; a
+-- record made while a ranged model is already in that hand starts raised.
+local function remotePoseFor(rigModel: Model): PoseRig
+	local pose = remotePoses[rigModel]
+	local motor = if pose ~= nil then pose.motor else nil
+	if pose ~= nil and motor ~= nil and motor.Parent ~= nil then
+		return pose
+	end
+	local fresh = newPose(findShoulder(rigModel))
+	remotePoses[rigModel] = fresh
+	fresh.rest = restOf(rigModel)
+	local freshMotor = fresh.motor
+	if freshMotor ~= nil and fresh.rest ~= 0 then
+		freshMotor.C0 = restFrame(fresh)
+	end
+	return fresh
+end
+
+-- HeldWeapons.OnHold: a character's hand started or stopped holding a ranged model.
+local function onHold(rigModel: Model, isLocal: boolean, raised: boolean): ()
+	raisedRigs[rigModel] = raised
+	if not isLocal then
+		setRest(remotePoseFor(rigModel), restOf(rigModel))
+	elseif rigModel == character then
+		setRest(localPose, restOf(rigModel))
+	end
+end
+
 local function bindCharacter(rig: Model): ()
 	cancelPose()
 	character = rig
 	localPose.motor = nil
 	localPose.base = CFrame.identity
+	localPose.rest = 0
 	localPose.track = nil
 	localPose.trail = nil
 	task.spawn(function()
@@ -548,8 +510,9 @@ local function bindCharacter(rig: Model): ()
 		end
 		localPose.motor = motor
 		localPose.base = motor.C0
+		localPose.rest = restOf(rig)
+		motor.C0 = restFrame(localPose)
 		ensureTrail(rig, localPose)
-		refreshWeapon()
 	end)
 end
 
@@ -627,9 +590,7 @@ local function shotEnd(origin: Vector3, direction: Vector3, range: number): (Vec
 end
 
 local function muzzlePoint(fallback: Vector3): Vector3
-	local rig = character
-	local hand = if rig ~= nil then handOf(rig) else nil
-	return if hand ~= nil then hand.Position else fallback
+	return HeldWeapons.Muzzle(Players.LocalPlayer.UserId) or fallback
 end
 
 local function muzzleFlash(position: Vector3, color: Color3): ()
@@ -766,7 +727,6 @@ end
 -- Public -------------------------------------------------------------------------------
 
 function WeaponController.Init(): ()
-	armoryConfig = Catalog.GetArmoryConfig()
 	combatConfig = Catalog.GetCombatConfig()
 end
 
@@ -774,6 +734,8 @@ function WeaponController.Start(): ()
 	-- Both ids start fetching at boot so the first swing of the run can already use them.
 	preload(animationId(1))
 	preload(animationId(FINISHER_STEP))
+	HeldWeapons.OnHold(onHold)
+	HeldWeapons.Start()
 	local player = Players.LocalPlayer
 	table.insert(connections, player.CharacterAdded:Connect(bindCharacter))
 	local rig = player.Character
@@ -782,21 +744,13 @@ function WeaponController.Start(): ()
 	end
 end
 
-function WeaponController.SetGear(nextGear: SlotTiers, _ascension: SlotTiers): ()
-	if nextGear.melee == gear.melee and nextGear.ranged == gear.ranged then
-		return
-	end
-	gear = nextGear
-	refreshWeapon()
-end
-
 function WeaponController.SetStance(nextStance: string): ()
 	if nextStance == stance then
 		return
 	end
 	stance = nextStance
 	cancelPose()
-	refreshWeapon()
+	HeldWeapons.SetLocalStance(nextStance)
 end
 
 -- The local swing, timed by the equipped class's window for this step.
@@ -806,8 +760,7 @@ function WeaponController.Swing(step: number, windowSeconds: number): ()
 	swingRig(localPose, rig, humanoid, step, windowSeconds)
 end
 
--- Another player's validated swing. The base C0 is captured the first time a rig is seen
--- (at rest, since nothing posed it yet) and reused, so overlapping swings never drift the arm.
+-- Another player's validated swing, on their rig's shoulder record (remotePoseFor).
 function WeaponController.SwingOther(userId: number, step: number): ()
 	local player = Players:GetPlayerByUserId(userId)
 	if player == nil or player == Players.LocalPlayer then
@@ -817,14 +770,8 @@ function WeaponController.SwingOther(userId: number, step: number): ()
 	if rig == nil then
 		return
 	end
-	local pose = remotePoses[rig]
-	local motor = if pose ~= nil then pose.motor else nil
-	if pose == nil or motor == nil or motor.Parent == nil then
-		pose = newPose(findShoulder(rig))
-		remotePoses[rig] = pose
-	end
 	swingRig(
-		pose :: PoseRig,
+		remotePoseFor(rig),
 		rig,
 		rig:FindFirstChildOfClass("Humanoid"),
 		step,
@@ -832,6 +779,8 @@ function WeaponController.SwingOther(userId: number, step: number): ()
 	)
 end
 
+-- The draw angle is from the hanging arm, like the raise: a bow held raised is already at it,
+-- and the draw starts from there (adding it to the raise would point the arm at the sky).
 function WeaponController.Draw(chargeSeconds: number): ()
 	if localPose.motor == nil then
 		return
@@ -845,7 +794,7 @@ function WeaponController.Release(): ()
 		return
 	end
 	cancelPose()
-	poseTo(0, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)
+	poseTo(localPose.rest, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)
 end
 
 -- Every shot is visible on every device: seeing your own shot is information, not
@@ -859,7 +808,7 @@ function WeaponController.Shoot(
 	if localPose.motor ~= nil then
 		cancelPose()
 		poseTo(
-			Theme.COMBAT_SHOOT_KICK_DEGREES,
+			localPose.rest + Theme.COMBAT_SHOOT_KICK_DEGREES,
 			Theme.COMBAT_SHOOT_KICK_SECONDS,
 			Enum.EasingStyle.Quad
 		)
@@ -936,12 +885,16 @@ function WeaponController.Destroy(): ()
 		shot.part:Destroy()
 	end
 	table.clear(projectiles)
+	-- Every arm goes back to hanging: nothing will raise it again.
+	HeldWeapons.Destroy()
+	table.clear(raisedRigs)
+	localPose.rest = 0
 	cancelPose()
 	for _, pose in remotePoses do
+		pose.rest = 0
 		cancelRig(pose)
 	end
 	table.clear(remotePoses)
-	clearWeapon()
 end
 
 return WeaponController

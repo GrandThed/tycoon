@@ -645,3 +645,39 @@ neighbours). Smooth shading (`smooth=True`) stays inside one primitive; caps are
 - The merge prints "geometry N studs below ground" for every weapon: expected, the grip is the origin.
 - The weapon view's light is one key plus ambient (0.5 + 0.62 cos), like a ViewportFrame; Roblox's
   own constants are unknown until Studio, so expect one tuning round there, not here.
+
+**In the game (L3 W2, docs/prompts/l3-w2-contract.md L3-40 to L3-47).**
+- **The config.** `py tools/assets/weapon_frames.py` copies every point of the 15 frame files into
+  `src/shared/Config/WeaponModels.json` (`folder` "Weapons"; per family its `model`, its `points` and
+  its `bounds`), which the client reads for the grip, the holster, the muzzle and the stage's framing.
+  `model` is written out, never derived in Luau without it. It refuses to write when a family has no
+  frame file, a name breaks the rule, `grip` is off the origin, `tip` or `holster` is missing, a point
+  lies outside the bounds by more than 0.01, a blueprint is not one piece at the origin, unturned, at
+  scale 1, or a merge sidecar's bounds (±0.002) or triangles differ from the frame file's. `--check`
+  rebuilds it in memory and diffs; without the frame files (the `assets` folder is gitignored) it
+  checks the committed file's shape only. Rerun it after any generator run that moves a point.
+- **The template's frame is the generator's**, pivot (`Base`) on the grip, because each blueprint is
+  one piece at the origin: the importer's 180° turn and `gen_templates.template_placement` undo each
+  other. `weapon_frames.py --check` proves it through `template_placement` itself: always on
+  `tools/assets/fixtures/turn_proof.json` (Boomtown LampPost and Village BushA, real Studio data;
+  an import with no turn, and a placement that does not undo it, must both fail), and on every
+  harvested weapon (each point, and harvested size = config size, within 0.01). After the paste,
+  `--require-harvest` fails unless all 15 are harvested and proven.
+- **The models** take the props route, folder `Weapons`: `merge_stages.py --props --era Weapons`,
+  `upload_models.py --props --era Weapons`, the harvest, `gen_templates.py --props` →
+  `templates/_props/Weapons/<Model>.rbxmx` = `ReplicatedStorage/Assets/Props/Weapons/<Model>`. Their
+  upload description names the kit as generated ("…; kits: weapon-kit (generated)."); a prop built only
+  from Kenney kits keeps "Kenney kit pieces, CC0." (`upload_models.kenney_kit` reads each kit's License.txt).
+- **The icons** are 256 × 256 (the lead's ruling: about 4 MB on a phone for 15, a quarter of the
+  512 set). `py tools/assets/upload_icons.py --set Weapons --make` shrinks the 512 renders (Pillow,
+  LANCZOS through premultiplied alpha) into `assets/testfit/out/Weapons/icons256/`; the same tool
+  without `--make` uploads them as Decals into `Assets.json` v5 `icons.Weapons.<Model>` (`assetId`,
+  `imageId`, `sha256`; hash-checked on the decoded pixels, so a changed image goes up again and a
+  re-encode of the same image does not). Its `--dry-run` writes
+  nothing. Every file passes `icon_problems` first (256 × 256, 8-bit RGBA, not interlaced, four
+  transparent corners, one opaque pixel; decoded in plain Python). The harvest records each icon's
+  Image id as kind `icon`, in either mode. Run `upload_icons.py` with `py` and no `#!`: a `#!` line
+  makes the py launcher start the 3.12 on PATH, which has no Pillow.
+- **Fresh palette, 2026-10-20:** the cache was deleted and all 15 re-merged; the palette's colours,
+  every GLB and every sidecar came out byte-identical (only the cache's `sourceFiles` count moved,
+  3 → 16), which confirms `palette-card.glb` keeps the cache whole.

@@ -2143,14 +2143,16 @@ city (hub) and the Expeditions place.
   Expeditions place still fights at their old gear.
 - At L4 both publish together, in the order below. Not a step now.
 
-**Status 2026-10-20:** built, reviewed (four slices, then a fix-diff review; all fixed), QA green
-on `l3-armory`. **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+**Status 2026-10-21:** built, reviewed (four slices, then a fix-diff review; all fixed), QA green,
+**merged to `main` 2026-10-20** (`448987e`; place files `0fb03be`).
+- **Your look waits for L3 W2:** one session for both waves, after your one harvest paste.
+- Do it from **"L3 W2 — the look"** below. It covers steps 1–6 here.
 
 <!-- FILE TO OPEN: start. Lead: if L3 Wave 1 is not merged to `main`, change only this block. -->
 **Files to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`, then
 `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (both in the main checkout)
-- **Wait for the lead's word first.** Before the merge, "Build all" gives L2 (the old Armory
-  panel).
+- **Wait for the lead's word that L3 W2 is merged** ("L3 W2 — the look", step 1). Until then
+  "Build all" gives Wave 1 alone, with empty hands.
 - **Build them:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - **A file that was open in Studio before "Build all" is the old one.**
 - **You have the new build if** the key hint ends **"T +500 Timber · U ★ Hard · L reset
@@ -2159,10 +2161,11 @@ on `l3-armory`. **Not merged yet.** Wait for the lead's word (step 0) before ste
 
 **Steps:**
 
-- [ ] 0. (Lead) Merge, rebuild, tell Ben.
-      - [ ] Fix 2 (F1–F6) landed; QA line filled (PLAN "L3", Wave 1, QA).
-      - [ ] `l3-armory` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L3 Wave 1 is merged, Build all."
+- [x] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] Fix 2 (F1–F7) landed (`315d725`); QA line filled (PLAN "L3", Wave 1, QA).
+      - [x] `l3-armory` merged to `main` (`448987e`); the six place files rebuilt (`0fb03be`).
+      - [x] Ben told. He answered "lets do wave 2, i will test later": steps 1–6 now run inside
+            "L3 W2 — the look".
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save).
 - [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
@@ -2182,6 +2185,13 @@ on `l3-armory`. **Not merged yet.** Wait for the lead's word (step 0) before ste
 ### The L4 publish order (later, not now)
 
 Done once, at L4, in one sitting. Same dialogs as "C2 → 4. Republish BOTH places".
+- [ ] L4-0. **Before publishing: both places are R15 only** (L3 W2 review 3-s5). The combat code
+      assumes R15 (since P1); weapons hang from R15 attachments.
+      - Creator Hub → **Creations** → *Era Tycoon: Village to Space (BETA)* → **Places** → the
+        start place → **Avatar** settings → avatar type **R15** (not R6, not "Player choice").
+      - The same for **`Expeditions`**.
+      - If Creator Hub shows one Avatar page for the whole experience, set it there once.
+      - Anything other than R15: set R15, save, and tell Claude.
 - [ ] L4-1. **City (hub):** open `C:\Users\benja\Desktop\tycoon\build\test.rbxl` → **File → Publish
       to Roblox** → *Era Tycoon: Village to Space (BETA)* → the **start place** → **Overwrite**.
 - [ ] L4-2. **Expeditions:** open `C:\Users\benja\Desktop\tycoon\build\combat.rbxl` → **File →
@@ -2192,6 +2202,235 @@ Done once, at L4, in one sitting. Same dialogs as "C2 → 4. Republish BOTH plac
 - [ ] L4-4. **Shut down all servers:** on the experience card **⋯ → Restart servers** (older UI:
       "Shut Down All Servers"). Old servers would keep running the old save rules.
 - Never publish only one of the two.
+
+## L3 W2 — the asset run
+
+**Ben: your one step here is step 7, the harvest paste.** About 2 minutes, any time before your
+look.
+1. Ask Claude "ready to paste". Wait until Claude says the harvest script is on your clipboard.
+2. Studio → File (*Archivo*) → Open (*Abrir*) → the **local** file
+   `C:\Users\benja\Desktop\tycoon\build\test.rbxl`. Edit mode: **do not press Play**. Not the
+   published game.
+3. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
+   **Enter**.
+4. Wait for **`[HARVEST-DONE] 30 loaded, 0 failed`** in Output (*Salida*).
+5. Output → right-click → **Select All** → **Ctrl+C**.
+6. Tell Claude **"done"**. **Copy nothing else** until Claude answers, and do not paste the
+   Output into the chat.
+- Another number, or "failed" is not 0: tell Claude the line as it reads.
+- Everything else in this section is the lead's.
+
+**One run, one paste** (docs/prompts/l3-w2-contract.md L3-40): 15 weapon models and 15 shelf icons,
+**30 uploads**, then **one harvest paste of 30 records**, then templates. The code wave does not wait
+for it: with no templates and no icons the hands stay empty and the Armory looks like W1. Ben's paste
+can come any time before his look; his look covers W1 and W2 together.
+
+**Where:** the worktree `C:\Users\benja\Desktop\tycoon-p5`, branch `l3-w2` (the new tools exist only
+there until it merges). Its `assets\` is the main checkout's (a junction) and `.env` is there. Python
+is `py`; the Blender line needs Git Bash; rojo needs `export PATH="$HOME/.rokit/bin:$PATH"`.
+
+**Rules for the lead:**
+- **Announce first.** Tell any other open Claude session before the uploads and before the harvest,
+  and wait for its answer.
+- **Never run an asset tool in `tycoon-c2` or `tycoon-m11`** before they merge `main`: their older
+  `assets_config.py` would erase the new `icons` block on its next save (L3-66).
+- `upload_models.py --props --dry-run` **writes `Assets.json`** (it pre-lists the 15 entries, ids 0).
+  `upload_icons.py --dry-run` writes nothing.
+- **Commit `src/shared/Config/Assets.json` right after the uploads, and again right after the
+  harvest, each time with `docs/ASSET_MANIFEST.md` regenerated beside it**
+  (`py tools/gen_asset_manifest.py`): the manifest counts uploads and harvests, so
+  `gen_asset_manifest.py --check` is red whenever the two are committed apart.
+- A non-zero `modelAssetId` is never uploaded again, even when the GLB changed (L3-67): clear it
+  through `assets_config.save_assets` first. Icons are hash-checked on their decoded pixels: a
+  changed image goes up again, the same pixels re-encoded (another `--make`) do not.
+- If a tool or Blender hangs, stop only your own process, by its id. Never by name.
+
+**The command lines were checked against the tools on 2026-10-20** (the scratch routing proof,
+L3-44, in `docs/prompts/l3-w2-reports/pipeline.md`): every flag exists; the 15 blueprints are in
+`tools/testfit/blueprints/_props/Weapons/`; the longest model name is 42 characters
+(`EraCityTycoon_Prop_Weapons_Flamethrower_S0`), the longest icon name 39
+(`EraCityTycoon_Icon_Weapons_Flamethrower`); nothing is waiting for a harvest besides these 30.
+None of the 15 was in `Assets.json` before the uploads. Since 084a14f and d1c2f59, all 15 models
+and all 15 icons are there, uploaded and not yet harvested.
+
+- [x] 1. **Fresh palette and the re-merge** (pipeline engineer, done 2026-10-20 23:56; L3-41). Git
+      Bash:
+      ```
+      rm -f assets/build/palettes/weapon-kit.*
+      "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era Weapons
+      py tools/assets/weapon_frames.py --check
+      ```
+      - It ended `done: 15 blueprint(s), 0 with problems`. "geometry N studs below ground" on
+        every weapon is expected: the grip is the origin.
+      - The palette's colours, all 15 GLBs and all 15 sidecars came out byte-identical to the
+        older merge. `weapon_frames.py --check` passes (sidecar bounds and triangles = the frame
+        files').
+      - Redo it only if a weapon generator runs after this date.
+- [x] 2. **The 256 px icons** (pipeline engineer, done 2026-10-21 00:00; the lead's ruling 3):
+      ```
+      py tools/assets/upload_icons.py --set Weapons --make
+      ```
+      - It ended `made 15 icon(s) at 256 x 256 in assets/testfit/out/Weapons/icons256` (21–46 KB
+        each).
+      - Redo it only if a 512 render changes. The upload refuses an icon older than its render.
+- [x] 3. **Lead: announce**, and check `git status` is clean in `tycoon-p5` on `l3-w2` (done
+      2026-10-21, before 084a14f).
+- [x] 4. **Lead: upload the 15 models** (done 2026-10-21 00:13, 084a14f).
+      ```
+      py tools/assets/upload_models.py --props --era Weapons --dry-run
+      py tools/assets/upload_models.py --props --era Weapons
+      ```
+      - Dry run: 15 `would upload props/Weapons/<Model> S0` lines, then `dry run: 15 upload(s)
+        prepared, nothing sent`.
+      - Real run: `uploaded 15/15`. On "Unknown Error", run the same line again: finished stages
+        are skipped.
+- [x] 5. **Lead: upload the 15 icons** (done 2026-10-21 00:14, d1c2f59).
+      ```
+      py tools/assets/upload_icons.py --set Weapons --dry-run
+      py tools/assets/upload_icons.py --set Weapons
+      py tools/gen_asset_manifest.py
+      ```
+      - Dry run: 15 `would upload decal icon Weapons/<Model>` lines, then `dry run: 15 valid
+        icon(s), 15 upload(s) pending, nothing sent, nothing written`.
+      - Real run: `Weapons: uploaded 15/15`. On "Unknown Error", run the same line again.
+      - `Assets.json` becomes v5 (a new top-level `icons` block).
+      - **Commit `Assets.json` and `docs/ASSET_MANIFEST.md` together now.** In this run the
+        manifest was left out of d1c2f59 and was regenerated in the L3 W2 fix round. The same
+        round moved the 15 recorded icon `sha256` values from the PNG's bytes to its decoded
+        pixels: the same files, recomputed, nothing uploaded.
+- [x] 6. **Lead: the harvest script**, then put it on the clipboard for Ben (done 2026-10-21 00:14,
+      4154715, 30 records):
+      ```
+      py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip
+      ```
+      - The first time: `wrote tools\assets\harvest.luau with 30 asset(s) to harvest`.
+      - **Copy it again when Ben says "ready to paste"**: his clipboard has changed since 00:14.
+        `harvest.luau` is committed, so `cat tools/assets/harvest.luau | clip` alone is enough;
+        then tell him it is on his clipboard.
+      - A repeat (step 12) emits only the records still missing, so fewer than 30 is right then:
+        one per name in the last merge's `still missing harvest data:` line. Any other count:
+        stop and tell the lead.
+- [ ] 7. **Ben: the one harvest paste.** Open the **local** file
+      `C:\Users\benja\Desktop\tycoon\build\test.rbxl` in Studio, with File (*Archivo*) → Open
+      (*Abrir*). **Not the published game. Do not press Play.**
+      1. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
+         Enter → wait for `[HARVEST-DONE] 30 loaded, 0 failed` in Output (*Salida*).
+      2. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
+      3. Tell Claude **"done"**, and nothing else. **Do not paste the Output into the chat, and do
+         not copy anything else** before Claude answers: your clipboard holds the result.
+      - If the number is not the one Claude gave you (30 the first time) or "failed" is not 0:
+        tell Claude the line as it reads.
+- [ ] 8. **Lead: save the clipboard to a file first, count, then merge from the file.**
+      ```
+      powershell -NoProfile -Command "[IO.File]::WriteAllText('<a scratch file>', (Get-Clipboard -Raw), (New-Object Text.UTF8Encoding $false))"
+      grep -c '\[HARVEST\] {' <that scratch file>
+      py tools/assets/harvest.py --props --file <that scratch file>
+      py tools/gen_asset_manifest.py
+      ```
+      - The count must be the number step 6 emitted: 30 the first time. `[HARVEST-FAIL]` appears
+        once in a good Output, in the echoed script.
+      - The merge prints `merged 15 prop stage(s)` and `merged 15 icon(s)`, then `every uploaded
+        asset is harvested; next: py tools/assets/gen_templates.py --props`, and exits 0.
+      - **No `rotated` warning.** A `ROTATED:` line means a weapon's MeshPart came in rotated.
+        The merge refuses that weapon, merges the rest and exits 1. The turn proof cannot see a
+        rotated part, so stop as for a failed proof (step 9).
+      - An icon still in moderation prints `no Decal Texture ... (still in moderation?); skipped`:
+        its card stays text. Repeat steps 6 to 8 later for it; never the uploaders.
+      - **Commit `Assets.json` and `docs/ASSET_MANIFEST.md` together now.**
+- [ ] 9. **Lead: the turn proof on the real harvest, before any template** (L3-47):
+      ```
+      py tools/assets/weapon_frames.py --check --require-harvest
+      ```
+      - Expect `15 of 15 harvested and proven (per weapon one offset check and one size check;
+        that offset carries their 63 point(s))` and `CHECK: PASS`. That is one offset check and
+        one size check per weapon. Where each point sits on the mesh is the generator's word.
+      - **If it fails** (or step 8 printed `ROTATED:`), stop the run here:
+        - write no templates and commit none. `Assets.json` is already committed with the
+          harvested stages, so `gen_templates.py --check` stays red until the lead resolves it;
+        - send the lead the printed lines, which name the weapon and the point or the part;
+        - never re-upload.
+- [ ] 10. **Lead: templates and manifest.**
+      ```
+      py tools/assets/gen_templates.py --props
+      py tools/assets/gen_templates.py --check
+      py tools/gen_asset_manifest.py
+      py tools/gen_asset_manifest.py --check
+      ```
+      - `286 prop template(s): 15 written, 271 unchanged, 0 removed`, then `CHECK: PASS -- 569
+        template(s) up to date` (554 before).
+      - 15 new `templates/_props/Weapons/<Model>.rbxmx`: a Model with `Base` and `Stage0` holding
+        one MeshPart `weapon-kit`, CanCollide and CanQuery false.
+      - The manifest's Weapons summary reads 15/15 for blueprints, uploaded, harvested, templated,
+        icons uploaded and icons harvested.
+- [ ] 11. **Lead: sourcemaps and the six place files** (Git Bash, in `tycoon-p5`):
+      ```
+      export PATH="$HOME/.rokit/bin:$PATH"
+      rojo sourcemap default.project.json -o sourcemap.json
+      rojo sourcemap combat.project.json -o sourcemap.combat.json
+      rojo build -o build/test.rbxl
+      rojo build combat.project.json -o build/combat.rbxl
+      py tools/proving_project.py && rojo build .proving.project.json -o build/proving.rbxl
+      rojo build boomtown.project.json -o build/boomtown.rbxl
+      rojo build metropolis.project.json -o build/metropolis.rbxl
+      rojo build orbital.project.json -o build/orbital.rbxl
+      ```
+      Commit the templates, the manifest, `harvest.luau`, the sourcemaps and the place files.
+- 12. **If a record goes missing later:** repeat steps 6 to 10 only. Do **not** re-run the
+      uploaders.
+
+## L3 W2 — the look (Waves 1 and 2 together)
+
+**Studio only.**
+- No Creator Hub work, no new Studio setting. Your one Studio chore is the paste above (step 7).
+- Still silent (no audio step).
+- About 30 minutes for both checklists, keys only.
+
+**Do NOT publish either place from `main` until L4.** The freeze from "L3 W1" holds.
+
+**Status 2026-10-21:** waiting on fix 2, QA, your paste ("L3 W2 — the asset run", step 7) and
+the merge.
+
+<!-- FILE TO OPEN: start. Lead: if L3 Wave 2 is not merged to `main`, change only this block. -->
+**Files to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`, then
+`C:\Users\benja\Desktop\tycoon\build\test.rbxl` (both in the main checkout)
+- **Wait for the lead's word first** (step 1).
+- **Build them:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A file that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** a **sword hangs in your right hand** in the lobby.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 1. (Lead) After the paste: merge, rebuild, tell Ben.
+      - [ ] Fix 2 (G1–G3) landed; QA line filled (PLAN "L3", Wave 2, Gates).
+      - [ ] "L3 W2 — the asset run" steps 8–11 done: 30 records merged, the turn proof holds on
+            15, templates committed.
+      - [ ] `l3-w2` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L3 Wave 2 is merged, Build all."
+- [ ] 2. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 3. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save). That
+      includes the `test.rbxl` from your paste.
+- [ ] 4. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
+      lobby, a sword in your hand.
+- [ ] 5. Run `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen", steps 1–8.
+- [ ] 6. Run `docs/PLAYTEST.md` "L3 Wave 2 — weapons in hand and on the stage", steps 1–8, in
+      the same file.
+- [ ] 7. Optional: the "L3 Wave 2" two-player step (Test → Clients and Servers, *Clientes y
+      servidores*, 2 players), inside a level.
+- [ ] 8. Close `proving.rbxl` without saving. Open
+      `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (the city): "L3 Wave 1" step 9, then
+      "L3 Wave 2" step 9.
+- [ ] 9. Close Studio without saving. Tell Claude when you are done. Seven click questions
+      follow (four for Wave 1, three for Wave 2). Send your screenshots of the weapons in hand
+      and on the back.
+
+**Notes:**
+- **Every Play starts a fresh save:** Broadsword and Longbow at T1, no Timber, no stars. Levers:
+  **T**, **U**, **L**, **G** (Wave 1); **F**, **I**, **J**, **H**, **V** as in L2.
+- The stage light, the grip in the hand and the pose on the back are first guesses. A fix is a
+  Theme number and one more "Build all": no upload, no paste.
+- Weapons in hand show only in `proving.rbxl` (the dungeon). The city shows them only on the
+  Armory screen.
 
 ## M10 — Icon, store icons, thumbnails
 

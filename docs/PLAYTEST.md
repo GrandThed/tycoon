@@ -5603,12 +5603,13 @@ Also, if you have a view: any flicker (where), anything wrong, by step number, P
 
 <!-- FILE TO OPEN: start. Lead: if L3 Wave 1 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
-- **Only after the lead says L3 Wave 1 is merged.** Then VS Code, **Ctrl+Shift+B** →
-  **"Build all"**.
+- **Wave 1 is merged (2026-10-20). Play it in one session with Wave 2**, after your harvest
+  paste and the lead's word that Wave 2 is merged (see "L3 Wave 2" below). Then VS Code,
+  **Ctrl+Shift+B** → **"Build all"**.
 - Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
   was open before "Build all" is the old one.**
 - **You have the new build if** the key hint ends **"T +500 Timber · U ★ Hard · L reset
-  Armory"**.
+  Armory"** and a **sword hangs in your right hand** in the lobby.
 - Step 9 uses `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (the city), built by the same
   "Build all".
 <!-- FILE TO OPEN: end -->
@@ -5617,11 +5618,14 @@ Also, if you have a view: any flicker (where), anything wrong, by step number, P
 it all.
 - One ladder of 20 tiers. Each weapon has its own window on it (Broadsword and Longbow 1–12).
 - T2 / T3 / T4 cost 100 / 250 / 500 Timber. T4 also needs the Forest's **Hard star**.
-- Grey screen, no 3D weapons yet: the big area shows the weapon's name. Models come in Wave 2.
+- Wave 1 alone showed a grey screen: the big area showed the weapon's name. **With Wave 2 the
+  big area shows the weapon in 3D, turning**; its name and tier sit in the details column.
+  Everything else in these nine steps reads the same.
 - **About 15 minutes. Play and keys only, no panel.** No sound.
 
-**Status 2026-10-20:** built, reviewed (four slices: 0 Critical, 1 Major, 13 Minor; fix-diff:
-0 / 0 / 2; all fixed), QA green. **Wait for the lead's merge word.**
+**Status 2026-10-21:** built, reviewed (four slices: 0 Critical, 1 Major, 13 Minor; fix-diff:
+0 / 0 / 2; all fixed), QA green, **merged to `main` 2026-10-20**. Your look waits for Wave 2:
+one session for both.
 
 Setup: `docs/MANUAL_STEPS.md` "L3 W1".
 
@@ -5645,7 +5649,8 @@ the next run starts: an upgrade bought in the lobby is already in the bar when y
 
 - [ ] 1. **The screen.** **Play.** The health bar reads **155 / 155**. Press **K**.
       - It opens on **Weapons** with the **Broadsword** selected: big **"Broadsword"**,
-        **MELEE**, **T1**.
+        **MELEE**, **T1**. (With Wave 2: the turning sword, a small **MELEE** on top, the name
+        and **T1** in the details.)
       - The track: **20 pips** in five colour bands of four. Pips **1–12** are open, **1** is lit.
       - The shelf along the bottom, in this order: Broadsword, Longbow, Flamethrower, Warhammer,
         Frost Hammer, Greataxe, Splitbow, Spear, Shotgun, Piercing Rifle, Launcher, SMG, Beam,
@@ -5655,6 +5660,7 @@ the next run starts: an upgrade bought in the lobby is already in the bar when y
       - Bug: an empty shelf; cards out of order; a track of 12 pips; no wallet.
 - [ ] 2. **Dark cards.** Click the **Warhammer** card.
       - It is **dark**. The track lights its window, **3–16**; pips 1–2 and 17–20 stay dim.
+        (With Wave 2: a near-black hammer turns on a light band; its card shows a dimmed icon.)
       - Text: **"Not found yet · First Hard clear of Forest Road"**. **No buttons.**
       - **Flamethrower**: "Hidden on Forest Road". **Spinblade**: one pip, at 20.
       - **Esc** closes it. **K**, then its **X**: closes. **K**, then click outside the frame:
@@ -5723,7 +5729,8 @@ the next run starts: an upgrade bought in the lobby is already in the bar when y
 
 ### Not a bug (don't report these)
 
-- **No 3D weapons yet.** The big area shows the name and tier. Wave 2 brings the models.
+- **No 3D weapons in a build from before the Wave 2 paste.** The big area shows the name and
+  tier, and the hands are empty.
 - Every Play starts a fresh save: T1 / T1, no Timber, no stars.
 - **The city no longer shows a total Max HP.** The next-tier line shows the HP step instead.
 - **I** puts the Frost Hammer in at **T5** (it is a Castle weapon): Forest Road in about 2.3 min,
@@ -5743,6 +5750,168 @@ Asked afterwards, as click questions:
 - **Three Forest runs per weapon (T1 → T4):** too few / about right / too many.
 - **Is the screen readable?** Yes / hard on the phone / hard on PC.
 - **Anything about the layout?** Fine / something to move (say what).
+
+Also, if you have a view: anything wrong, by step number, PC or phone.
+
+## L3 Wave 2 — weapons in hand and on the stage
+
+<!-- FILE TO OPEN: start. Lead: if L3 Wave 2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Only after two things:**
+  1. your harvest paste (`docs/MANUAL_STEPS.md` "L3 W2 — the asset run", step 7);
+  2. the lead's word that L3 Wave 2 is merged.
+- Then VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- Close any `proving.rbxl` or `test.rbxl` open in Studio (don't save), then open the file again.
+  **A copy that was open before "Build all" is the old one.**
+- **You have the new build if** a **sword hangs in your right hand** in the lobby.
+- Step 9 uses `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (the city), built by the same
+  "Build all".
+<!-- FILE TO OPEN: end -->
+
+**Goal:** the 15 weapon models are in the game.
+- The weapon in use is in your right hand; the other hangs on your back. Other players see both.
+- The Armory's big area shows the selected weapon in 3D, turning. Each shelf card shows its
+  weapon's icon.
+- **About 15 minutes. Play and keys only, no panel.** No sound.
+
+**One session for both waves** (your words: "lets do wave 2, i will test later"):
+1. "L3 Wave 1" steps 1–8 (above), in `proving.rbxl`.
+2. This section, steps 1–8, same file.
+3. "L3 Wave 1" step 9 and step 9 here, in `test.rbxl` (the city).
+4. Optional: the two-player step.
+
+**Status 2026-10-21:** built, reviewed (three slices: 0 Critical, 0 Major, 11 Minor; fix-diff:
+0 / 0 / 3; all fixed or ruled). The 15 models and 15 icons are uploaded. **Waiting on fix 2,
+QA, your harvest paste and the lead's merge word.**
+
+Setup: `docs/MANUAL_STEPS.md` "L3 W2 — the asset run" (your paste is step 7), then "L3 W2 — the
+look".
+
+**Keys (none new):**
+- **K** = Armory (in the lobby). **Esc** or its **X** closes it.
+- **1** / **2** = melee / ranged. **Left click** = attack; hold it to draw a bow or to keep the
+  Flamethrower firing.
+- **E** = ranged ability. **Enter** = Depart. **Backspace** twice = Abandon.
+- Studio only: **F** = Flamethrower (yours; equip it in the Armory); **U** = ★ Hard and the
+  Warhammer; **I** = Frost Hammer.
+
+**Studio resets your save every session.** Each Play starts with the Broadsword and the Longbow.
+
+### The look (keys only)
+
+- [ ] 1. **In hand.** **Play.** In the lobby, turn the camera to see yourself from the side and
+      the back.
+      - A **sword in your right hand**, pointing **forward**, clear of the floor. The arm hangs.
+      - The **bow on your back**, across the shoulders. No limb through your chest.
+      - Take a screenshot of each (the grip and back poses are first guesses).
+      - Bug: empty hands; the sword in the floor or through your leg; the bow through your chest;
+        a weapon floating off your body.
+- [ ] 2. **Switch.** Press **2**.
+      - Your **arm rises forward** and the **bow points ahead**, limbs upright. The sword goes to
+        your back.
+      - Press **1**: the arm eases down. The bow goes back across your shoulders; the sword is in
+        your hand again.
+      - Bug: the arm never rises; both weapons in your hand; a weapon missing; the raised bow
+        hides the crosshair.
+- [ ] 3. **The stage.** Press **K**. The Broadsword is selected.
+      - The big area shows the **Broadsword in 3D**, tip raised, **turning slowly**.
+      - **Drag** it with the mouse: it turns with the drag. Let go: it keeps turning slowly from
+        there.
+      - Click the **Longbow** card: the bow replaces the sword.
+      - Click **Abilities**: the turning stops. **Weapons**: it turns again. **Esc**: closed.
+      - Bug: an empty big area; the weapon leaves the frame while turning; it still follows the
+        mouse after you let go.
+- [ ] 4. **The shelf.** **K** again.
+      - **15 icons**, one per card. Your two weapons in full colour.
+      - The other 13 are **ghosts**: the same weapon, dimmed blue-grey, on the dark card.
+      - Click a ghost (the **Spear**): a **near-black** spear turns on a light band.
+      - Names stay on one line.
+      - Bug: a card with only text (unless Claude said an icon is still in moderation); a ghost
+        you cannot make out; a coloured weapon on an unowned card.
+- [ ] 5. **Shots from the tip.** Close the Armory. **Enter** on Normal. In camp A:
+      - Press **2**. Hold **left click** to draw, release: the arrow leaves the **bow**, ahead of
+        your hand, not from your chest or your feet.
+      - Hits land as before: the same numbers, the same aim.
+      - Press **1**, swing at a raider: the swing starts from the hanging arm and ends hanging.
+      - Walk into a fence or a tent with the sword out: nothing catches. The camera never stops on
+        your weapon.
+      - **Backspace** twice. Back in the lobby you still hold the sword, with the bow on your
+        back. No weapon is left lying on the road.
+      - Bug: the arrow starts at your hand or chest; a weapon stuck in the world; the camera
+        bumps into your weapon.
+- [ ] 6. **The Flamethrower.** In the lobby press **F** (toast "Flamethrower is yours"). **K** →
+      **Flamethrower** → **Equip**. Close.
+      - The **bow on your back is now the Flamethrower**.
+      - Press **2**: it moves to your raised hand.
+      - **Enter** on Normal. Hold **left click**: the **flame leaves the nozzle**.
+      - Press **E** (Dragon's Breath): the fire burst starts at the nozzle too.
+      - **Backspace** twice.
+      - Bug: the bow still on your back; the flame starts at your hand or chest.
+- [ ] 7. **The hammers.** Press **U** (the Warhammer) and **I** (the Frost Hammer).
+      - **K** → **Warhammer** → **Equip**. Close. It is in your hand, head forward, clear of the
+        floor.
+      - Same for the **Frost Hammer**.
+      - Bug: a hammer head in the floor or in your body.
+- [ ] 8. **Phone.** Stop. Test (*Prueba*) → Device (*Dispositivo*) → a **640×360** phone,
+      landscape (add a custom 640×360 device if the list has none). **Play.**
+      - Sword in hand, bow on back, as on PC.
+      - Tap the HUD's **Armory** button. The weapon **turns by itself** (phones too). A **touch
+        drag** turns it.
+      - The icons are readable at this size. You can tell what each ghost is.
+      - Rotate to portrait (**375×667**): the stage still shows the weapon; the **5 × 3** shelf
+        has icons; "Flamethrower" is not split mid-word.
+      - Close with **X**.
+      - Bug: the stage still or empty on the phone; a drag does nothing; icons cut off.
+- [ ] 9. **The city.** Stop; turn the Device emulator off. Close `proving.rbxl` (don't save).
+      Open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`, **Play**. (Run "L3 Wave 1" step 9
+      here too.)
+      - Press **K**: the **same screen** with the turning Broadsword and the 15 icons. A drag
+        turns it. **Esc**.
+      - Close Studio without saving.
+      - Bug: the city shows the text screen; no icons.
+
+**Optional, not one of the nine:**
+- **Two players, inside a level.** Test (*Prueba*) → Clients and Servers (*Clientes y
+  servidores*): **Local Server** (*Servidor local*), **2 players** (*2 jugadores*) → **Start**
+  (*Iniciar*), in `proving.rbxl`.
+  - In the lobby, in Player2's window: Player1 holds the **sword** and wears the **bow** on his
+    back.
+  - Player1 presses **Enter** on Normal. Both arrive at the trailhead.
+  - Player1 presses **2** and shoots an arrow. From that shot, Player2 sees the bow in Player1's
+    raised hand.
+  - Player1 presses **1** and clicks at once. Player2 sees Player1's arm come down **and the
+    whole swing**: windup, strike, trail.
+  - Player1 holds a bow draw and spams it. Player2's view of his arm stays steady, no jitter.
+  - Bug: Player2 sees empty hands; the arm only drops, with no swing; a weapon left floating
+    where Player1 was.
+- **Low graphics** (level 1–3): the stage does not turn by itself; a drag still turns it.
+- **Gamepad.** **Y** opens the Armory; the d-pad browses the cards.
+
+### Not a bug (don't report these)
+
+- **Empty hands and the Wave 1 screen** in a build from before the paste or the merge. The lead
+  tells you when both are done.
+- **A teammate's 1 / 2 switch** shows on your screen at his next attack, draw or ability, not
+  at the key press. In the lobby it shows only once a level starts (the lobby has no attacks).
+- **Drawing a bow shows no more arm movement**: the arm is already raised.
+- **The stage light, the grip in your hand and the pose on your back are first guesses.** If
+  any looks off, send a screenshot; the fix is a number.
+- Each weapon has one look at every tier. Looks that grow with the tier come later.
+- Hammers, the axe and the spear are held in the right hand alone.
+- A cape or backpack can overlap the weapon on your back.
+- The swing trail follows your hand, not the blade.
+- The debug bots hold nothing.
+- The gamepad's right stick does not turn the stage. It turns by itself and by drag.
+- Nobody holds weapons in the city.
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- **Does the turning weapon read on the stage?** Yes / too dark / too small / something else.
+- **Do the weapons in hand and on the back look right?** Yes / the hand is off / the back is off
+  (send a screenshot).
+- **Do the icons and the ghosts read on a phone?** Yes / the ghosts are hard to see / the icons
+  are too small.
 
 Also, if you have a view: anything wrong, by step number, PC or phone.
 

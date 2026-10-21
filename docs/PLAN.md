@@ -4252,7 +4252,7 @@ the loadout and the stars are saved; a new Armory screen opens in both places; t
   20") and the approved models at the end of §24.
 - Studies: `docs/prompts/l3-study-report-systems.md`, `l3-study-report-screen.md` (brief `l3-study.md`).
 - Values: `docs/BALANCE.md` "L3 W1" and "L3 W1 fix round".
-- Branch `l3-armory`, worktree `C:\Users\benja\Desktop\tycoon-p5`.
+- Worktree `C:\Users\benja\Desktop\tycoon-p5`: branch `l3-armory` (W1, merged), then `l3-w2` (W2).
 
 **Ben's rulings (2026-10-20, MISSIONS_DESIGN §24):**
 1. **The windows, as drawn:** Broadsword and Longbow 1–12, Flamethrower 2–8, Warhammer 3–16, Frost Hammer 5–12,
@@ -4273,9 +4273,9 @@ the loadout and the stars are saved; a new Armory screen opens in both places; t
 
 | Step | Scope | State |
 |---|---|---|
-| W1 | Tiers per weapon, profile v8, the saved loadout and stars, the Armory screen in grey in both places | **Built, reviewed 0 / 1 / 13, fix-diff 0 / 0 / 2, QA green (2026-10-20); fix 2 landing; waits for the merge** |
-| Kit | The 15 weapon models (generated Blender geometry; the shelf icons render from the same files) | **Approved by Ben 2026-10-20** ("Yes, build the other 13", then all 15 on the overview). Nothing uploaded |
-| W2 | The models in the game: the icon upload route, one harvest paste, the ViewportFrame stage, weapons in hand that others see | Not started; only on Ben's word |
+| W1 | Tiers per weapon, profile v8, the saved loadout and stars, the Armory screen in grey in both places | **Merged to `main` 2026-10-20** (`448987e`; place files `0fb03be`). Ben's look waits for W2: one session for both |
+| Kit | The 15 weapon models (generated Blender geometry; the shelf icons render from the same files) | **Approved by Ben 2026-10-20** ("Yes, build the other 13", then all 15 on the overview). Uploaded at W2's start (`084a14f`, `d1c2f59`) |
+| W2 | The models in the game: the icon upload route, one harvest paste, the ViewportFrame stage, weapons in hand that others see | **Built, reviewed 0 / 0 / 11, fix-diff 0 / 0 / 3 (2026-10-21); fix 2 landing.** 30 uploads done; Ben's harvest paste pending |
 
 ### Wave 1 — tiers per weapon and the Armory screen in grey (2026-10-20)
 
@@ -4354,8 +4354,8 @@ the loadout and the stars are saved; a new Armory screen opens in both places; t
 - Study brief and windows `b0a0769`; studies `808820b`; Ben's decisions `06d5e08`.
 - Contract brief `773f37d`; contract `d9e7ad1`, `4362568`. Build `ff7a910`; Hard ×2 in sim_combat `64a6b12`.
 - Review brief `a2628da`; findings and fix-round rulings `f6c426d`. Fix round `32d7893`.
-- QA brief `af04038`. Fix-diff review and fix 2 rulings `ba34a67`; fix 2 F7 `51a6529`, F1–F6 landing.
-- Plus this docs commit.
+- QA brief `af04038`. Fix-diff review and fix 2 rulings `ba34a67`; fix 2 `51a6529` (F7), `315d725` (F1–F7).
+- Docs `9d1c0f2`. **Merged to `main` `448987e` (2026-10-20); place files rebuilt `0fb03be`.**
 
 **First review: four Opus slices, 0 Critical, 1 Major, 13 Minor, 13 Suggestions** (saving 0 / 0 / 6, combat
 server 0 / 1 / 2, hub and hosts 0 / 0 / 2, screen 0 / 0 / 3). All fixed or ruled (R1–R12):
@@ -4393,8 +4393,8 @@ server 0 / 1 / 2, hub and hosts 0 / 0 / 2, screen 0 / 0 / 3). All fixed or ruled
   --only Armory` 10 / 10; `check_levels` PASS; `sim_combat --check` 23 / 23; `sim_range --check --levels-only
   --level forest` (64-bit) 157 PASS, 0 FAIL; `check_compile` (178 files), stylua, selene, luau-lsp: clean.
 - `gen_asset_manifest.py`: unchanged (no asset change).
-- Full `mutate.py` and `check_levels_mutants.py` (worktree `tycoon-p5b`) and fix 2's filtered entries: the lead
-  fills this line.
+- At the merge (after fix 2): full `mutate.py` **1,368 / 0 not caught**; `check_levels_mutants` 265 PASS;
+  `mirror_mutants` 129 / 129; harness 3,719 checks; sims green.
 
 **Carried (owners):**
 - **lead (L4), R12:** the L4 publish adds **"Shut down all servers"** after both places are published
@@ -4436,29 +4436,165 @@ server 0 / 1 / 2, hub and hosts 0 / 0 / 2, screen 0 / 0 / 3). All fixed or ruled
   `EraCityTycoon_Prop_Weapons_<Model>_S<n>` (at most 42 characters). 1,500–3,500 triangles each.
 - Ben approved the Broadsword and Longbow prototypes (kit step 1, `ea1cf19`), then all 15 on
   `assets/testfit/out/Weapons/_overview.png` (step 2, `3ccb548`).
-- **Nothing is uploaded.** The models and their 15 shelf icons upload at the start of W2.
+- **Uploaded at the start of W2** with their 15 shelf icons (`084a14f`, `d1c2f59`); one harvest paste pending.
 
-### Wave 2 — the models in the game (planned)
+### Wave 2 — the models in the game (2026-10-21)
 
-- **Upload:** the 15 models (the props route, era `Weapons`, as `merge_stages.py --props --era Weapons` already
-  merges them) and 15 shelf icons (512 px Blender renders with alpha) as Decals through the `upload_paths.upload_decal` route, which needs an icon kind and its own alpha
-  check (the path check rejects alpha). **One harvest paste**, then templates.
-- **The stage:** a ViewportFrame behind `ArmoryStage`'s API (turn, drag, light, dark silhouettes when unowned); the
-  turn gated on `lowEndDevice`, never `reducedMotion`.
-- **Weapons in hand that others see:** the one in use in the right hand, the other on the back (`holster` on
-  `BodyBackAttachment`), from server attributes in `WeaponService`; per-family templates in `WeaponController`.
-- **Owners (to confirm in W2's contract):** ui-engineer (client), luau-engineer (one server file and Types), lead (the
-  pipeline and the paste).
-- **Risks:** ViewportFrame is new here (how the palette models read in it is unknown until Ben looks); the turning
-  stage's frame time on a phone is unmeasured.
-- Ben's look: the stage, a weapon in hand, a teammate's weapon.
+**Documents:**
+- Ben's go (MISSIONS_DESIGN §24): *"lets do wave 2, i will test later"*. His look covers W1 and W2 together, after one
+  harvest paste.
+- Brief `docs/prompts/l3-w2-brief.md`. Contract `docs/prompts/l3-w2-contract.md`: rulings L3-40 to L3-61, risks L3-62
+  to L3-73; the lead's rulings §11, 1–8, override the text above them. INTERFACES "# L3 W2 contracts" points to it.
+- Fix rounds: `docs/prompts/l3-w2-fix-round.md` (P1–P6, S1–S6, C1–C5), `l3-w2-fix2.md` (G1–G3).
+- Reports: `docs/prompts/l3-w2-reports/` (`luau`, `pipeline`, `ui-a`, `ui-b`), `docs/prompts/l3-w2-fix-reports/`.
+  Findings: `docs/prompts/l3-w2-review/` (`1-pipeline.md`, `2-server.md`, `3-client.md`),
+  `docs/prompts/l3-w2-fix-diff-review.md`.
+- QA brief: `docs/prompts/l3-w2-qa.md`.
+
+**What shipped:**
+- **The asset route** (one run, one paste; MANUAL_STEPS "L3 W2 — the asset run"):
+  - 15 models on the props route, folder `Weapons`: `Assets.json props.Weapons.<Model>`, templates
+    `templates/_props/Weapons/<Model>.rbxmx` = `ReplicatedStorage/Assets/Props/Weapons` in both places. The fresh
+    palette and re-merge came out byte-identical to the approved merge.
+  - 15 shelf icons at **256 × 256** (ruling 3, made from the 512 renders by `upload_icons.py --make`), uploaded as
+    Decals by the new `tools/assets/upload_icons.py`: its own alpha check, a `--dry-run` that writes nothing, hashed
+    on the decoded pixels (P4).
+  - `Assets.json` **v5**: a top-level `icons.<Set>.<Model>` block (`assetId`, `imageId`, `sha256`).
+  - `harvest.py`: a new kind `icon`; a rotated weapon MeshPart is refused (P2).
+  - `upload_models.py`: names generated kits as generated (P6). `gen_asset_manifest.py`: a Weapons section.
+- **Frame points come from config, never from a mesh.**
+  - `src/shared/Config/WeaponModels.json`: 15 families, 63 points (`grip`, `tip`, `holster` and the builders'
+    extras) and `bounds`, generated by `tools/assets/weapon_frames.py`.
+  - The template's frame is the generator's (L3-47): the grip is the pivot.
+  - `weapon_frames.py --check` runs the turn proof on real Studio data now (`fixtures/turn_proof.json`: LampPost,
+    BushA) and on all 15 after the harvest (`--require-harvest`).
+- **Shared:** pure `src/shared/WeaponLook.luau` (`ATTRIBUTES`, `ModelName`, `Def`, `Point`, `IconId`, `Values`,
+  `Read`, `Problems`); the Types; `Catalog.GetWeaponModelsConfig`.
+- **Server: others see your weapons.**
+  - WeaponService writes three character attributes: `WeaponMelee`, `WeaponRanged`, `WeaponHeld`.
+  - Written on every fresh character, on every family change (levers included), and for the slot in use on every
+    accepted attack, draw or cast.
+  - AbilityService's one line, `WeaponService.NoteHeld`, sits before `broadcastFx` (S6).
+  - A draw of a non-ranged family is refused (S4).
+  - No new remote. Nothing a hit is judged on reads them (text check T8).
+- **Client: weapons in hand** (new `src/combat/client/Controllers/HeldWeapons.luau`):
+  - one clone per character and family, sealed (no collide, query or touch; massless);
+  - welded once: in use to `RightGripAttachment`, the other to `BodyBackAttachment`; a switch re-points two welds;
+    nothing per frame;
+  - attribute changes coalesce into one show per frame (C4); `Base` found by name (C1); `Flush(userId)` runs first
+    in a teammate's swing (G1).
+  - **Rest poses (ruling 6):** a melee weapon points forward from the hanging arm (`COMBAT_HOLD_GRIP_MELEE`); a
+    ranged weapon raises the arm forward 80° (`COMBAT_HOLD_RANGED_RAISE_DEGREES`), locally and on others from
+    `WeaponHeld`; the back weapon lies across the shoulders (`COMBAT_HOLD_BACK`).
+  - **One muzzle:** `HeldWeapons.Muzzle(userId)` (the model's `tip`, else the hand) replaces four copies
+    (WeaponController, FeedbackController, FlameFx, AbilityFx/Shared; MagDump takes it).
+  - **The shot ray and the melee origin did not move** (InputController untouched).
+  - Other players' arms swing with their strikes (`WeaponController.SwingOther` from `FeedbackController.onStrike`).
+  - The slot-tier model lookup is gone (WeaponController, CombatUIController).
+- **The stage and the shelf, in both places:**
+  - `ArmoryStage`: the selected weapon in a ViewportFrame, tip raised; the camera orbits, the model never turns.
+  - It turns slowly by itself (not on low-end devices; never gated on `reducedMotion`). A drag turns it on every
+    device. It runs only while the screen is open on Weapons with a model shown (`SetActive`, C3).
+  - Unowned on the stage: a near-black silhouette on the light band.
+  - `ArmoryShelf`: each family's icon. Unowned: the ghost tone `ARMORY_SCREEN_ICON_GHOST` (140, 155, 190), a dimmed
+    weapon (C2).
+  - Missing anything (config, template, icon, attachment): W1's text stage and cards, empty hands (L3-59).
+- **Theme** (starting values, one Studio round expected): `ARMORY_STAGE_*` (light, fit, pitch, tilt, start yaw, turn
+  and drag rates, silhouette), `ARMORY_SCREEN_CARD_ICON` 40, `ARMORY_SCREEN_ICON_GHOST`, `COMBAT_HOLD_GRIP_MELEE`,
+  `COMBAT_HOLD_GRIP_RANGED`, `COMBAT_HOLD_BACK`, `COMBAT_HOLD_RANGED_RAISE_DEGREES` 80.
+
+**Lead's rulings (contract §11):** the four (code) points as drafted; one look (`Stage0`) for everyone; icons 256 px;
+a three-slice review; rest poses; T9's exit count; the fix round's changes. Fix 2 withdrew the right-stick turn (G3):
+it also turned the world camera behind the screen.
+
+**Commits:**
+- Contract brief `f26e496`; Ben's go `d7960b9`; contract `eb1c25c`; rulings 6–7 `33ec9dc`.
+- Uploads: models `084a14f`; icons `d1c2f59`; `harvest.luau` `4154715` (30 records).
+- Build `8d9119e`.
+- Review brief `c79bec5`; findings and fix-round rulings `5c0958b`; fix round: pipeline `ff4b206`, server and client
+  `31b1947`.
+- QA brief `0d5dc6f`; fix-diff review and fix 2 rulings `4411440`; fix 2 landing.
+- Plus this docs commit.
+
+**First review: three Opus slices, 0 Critical, 0 Major, 11 Minor, 15 Suggestions** (pipeline and data 0 / 0 / 3 + 4,
+server and shared 0 / 0 / 5 + 4, client 0 / 0 / 3 + 7). All fixed or ruled:
+- P1 manifest regenerated; P2 a rotated weapon refused; P3 MANUAL_STEPS caught up; P4 icon hashes on pixels; P5 the
+  proof line; P6 the description.
+- S1–S3 pins (every `.held` read counted, `PrepareCharacter`'s callers, whole lines); S4 a non-ranged draw refused; S5
+  spelling-robust counts; S6 `NoteHeld` before `broadcastFx`, so others see the right weapon on a cast's first frame.
+- C1 `Base` by name; C2 the ghost tone; C3 the turn only with a model, a drag ends on release, focus loss or close;
+  C4 one show per frame; C5 a comment.
+- Settled with no code: 3-s1 (the bow draw), 3-s5 (R15), 2-m4 (a switch in the lobby). Not taken: 2-s3.
+
+**Fix-diff review: 0 Critical, 0 Major, 3 Minor, 3 Suggestions** (fix 2, G1–G3):
+- **m1:** since C4, a teammate's first swing after a switch from ranged to melee did not animate → G1
+  (`HeldWeapons.Flush` first in the swing branch).
+- m2: order and constructor pins → G2.
+- m3: C3's right stick also turned the world camera behind the screen → G3 (the stick part withdrawn).
+- Not taken: s1's ghost-tone pin (judged at Ben's look). s3 → PLAYTEST's two-client swing step.
+
+**The asset run** (MANUAL_STEPS "L3 W2 — the asset run"):
+- [x] Fresh palette, re-merge, 256 px icons, the scratch routing proof (pipeline engineer)
+- [x] 15 models uploaded (`084a14f`)
+- [x] 15 icons uploaded (`d1c2f59`)
+- [x] `harvest.luau` emitted, 30 records (`4154715`)
+- [ ] Ben's harvest paste (step 7)
+- [ ] Lead: merge from the saved file, the turn proof on 15, templates, manifest, place files (steps 8–11)
+- Until the paste: hands stay empty and the Armory looks like W1's.
+
+**Gates:**
+- Build: harness 3,950 checks; `mutate.py … l3w2` 138 / 0 not caught; `check_compile` 180 files; stylua, selene,
+  luau-lsp clean on both sourcemaps; `weapon_frames.py --check`, `gen_templates.py --check` (554),
+  `gen_asset_manifest.py --check` PASS; the scratch routing chain (L3-44) end to end.
+- Fix round: harness 4,024 checks; `mutate.py … l3w2` 218 / 0 not caught; the manifest regenerated (it was stale, P1).
+- Untouched: InputController, `Armory.json`, `Combat.json`, `ProvingGrounds.json`, `Levels`, `Layouts` equal `main`,
+  so `sim_range`, `sim_combat` and `check_levels` need no re-run.
+- QA quick gates (`l3-w2-qa.md`, on 0d5dc6f): 21 of 21 PASS (stylua, selene with the one known LegacyPanel warning,
+  luau-lsp both trees, check_compile 180 files, six place files, harness 4,024, check_stage_mirror 14,402 comparisons,
+  mirror_mutants 129 / 129, weapon_frames, gen_templates 554, gen_asset_manifest, the untouched check, 0 CRLF). Fix 2's
+  gates and the `files:` mutate run over every file W2 changed: in the merge commit's message.
+- After the paste: the merge takes 30 records, the turn proof holds on 15, `gen_templates.py --check` 569.
+
+**Carried (owners):**
+- **lead → Ben, then luau-engineer + ui-engineer: looks that grow with the tier** need two look attributes
+  (`WeaponMeleeLook`, `WeaponRangedLook`, L3-55): other players' tiers are not on the character. W2 shows `Stage0`
+  for everyone.
+- **ui-engineer + luau-engineer, only if Ben minds: a teammate's pure slot switch** (1 / 2, pad Y, the touch slot
+  button) shows on other screens only at their next attack, draw or cast (L3-65); in the lobby only once a level
+  starts (the lobby refuses attacks, 2-m4). A fix is a stance remote.
+- **ui-engineer, only if Ben minds: the bow's draw** shows no arm movement from the raised arm (3-s1; the draw keeps
+  its absolute 80°).
+- **lead (before the L4 publish): the R15-only avatar setting** checked in Creator Hub for both places (3-s5; the
+  combat code assumes R15). MANUAL_STEPS "L3 W1", L4-0.
+- **ui-engineer, if Ben finds it off: the swing trail** stays on the hand's line, not the blade's `bladeBase` → `tip`
+  (L3-73).
+- **Accepted: back accessories** (capes, backpacks) share `BodyBackAttachment` with the weapon on the back (L3-72).
+- **lead + pipeline engineer: a re-generated weapon** is silently skipped by `upload_models.py` (no hash): clear its
+  `modelAssetId` through `assets_config.save_assets` before re-uploading (L3-67). Icons are hash-checked.
+- **ui-engineer, only if Ben asks: the gamepad's right stick no longer turns the stage** (G3). It needs
+  CameraController and the hub's PlayerModule to stop reading the stick while the Armory is open.
+- **ui-engineer (one Theme round from Ben's screenshots):** the stage light, fit and tilt (L3-62), the grip and back
+  poses (L3-63), the ghost tone (C2; a flat silhouette would need a plate behind the icon). Theme only, no re-upload.
+- **lead: never run an asset tool in `tycoon-c2` or `tycoon-m11`** before they merge `main`: their older
+  `assets_config.py` erases the `icons` block (L3-66).
+- **lead: an icon still in moderation** harvests image 0 and its card stays text; repeat MANUAL_STEPS steps 6–8 for it
+  (L3-69).
+- **ui-engineer (L4 cleanup):** the C1 `onSwing` path in CombatFxController stays until the C1 modules are deleted
+  (L3-53).
+- **luau-engineer (L4):** `Armory.json slots.*.tiers[].model` and `Types.WeaponTierDef.model` go with `slots` (L3-54).
+- **pipeline engineer:** `tools/testfit/README.md` lines 669 and 674 lag P6 and P4 (the description wording, the
+  pixel hash).
+- **Unmeasured until Studio:** frame time with two players in a mission (up to 8 held models, 1,700–3,500 triangles
+  each) and the turning stage on a phone.
+- Every W1 carried item above stands. **Publish freeze (lead):** neither place publishes from `main` until L4.
 
 **Next:**
-1. Fix 2 (F1–F6) lands and passes its filtered gates; the lead fills the QA line, merges `l3-armory` to `main` and
-   rebuilds the six place files.
-2. **Ben's look:** `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen"; setup
-   `docs/MANUAL_STEPS.md` "L3 W1".
-3. Then W2 (the models in the game), only on Ben's word.
+1. Fix 2 (G1–G3) lands and passes its gates; QA quick gates (`docs/prompts/l3-w2-qa.md`); the lead fills the QA line.
+2. **Ben's harvest paste:** `docs/MANUAL_STEPS.md` "L3 W2 — the asset run", step 7. The lead runs steps 8–11.
+3. The lead merges `l3-w2` to `main` and rebuilds the six place files.
+4. **Ben's look, W1 and W2 in one session:** `docs/PLAYTEST.md` "L3 Wave 1", then "L3 Wave 2 — weapons in hand and on
+   the stage"; setup `docs/MANUAL_STEPS.md` "L3 W2 — the look".
+5. L3 is complete when he signs both off. L4 only on his word.
 
 - [x] Ben's decisions (`06d5e08`)
 - [x] Weapon kit: 15 models approved by Ben (`3ccb548`)
@@ -4466,11 +4602,22 @@ server 0 / 1 / 2, hub and hosts 0 / 0 / 2, screen 0 / 0 / 3). All fixed or ruled
 - [x] Reviewed: four slices, 0 / 1 / 13 + 13 (`f6c426d`)
 - [x] Fix round R1–R12 (`32d7893`)
 - [x] Fix-diff review 0 / 0 / 2 + 5 (`ba34a67`)
-- [ ] Fix 2, F1–F7 (luau-engineer; F7 `51a6529`)
-- [ ] QA: full mutate and the lead's line
+- [x] Fix 2, F1–F7 (`51a6529`, `315d725`)
+- [x] QA: full mutate 1,368 / 0 and the lead's line
+- [x] Merged to `main` (`448987e`), six place files rebuilt (`0fb03be`)
+- [ ] L3 Wave 1 playtest (Ben; in one session with W2)
+- [x] W2 contract (`eb1c25c`; rulings 6–7 `33ec9dc`)
+- [x] W2 uploads: 15 models (`084a14f`), 15 icons (`d1c2f59`), `harvest.luau` (`4154715`)
+- [x] W2 built (`8d9119e`)
+- [x] Reviewed: three slices, 0 / 0 / 11 + 15 (`5c0958b`)
+- [x] Fix round P1–P6, S1–S6, C1–C5 (`ff4b206`, `31b1947`)
+- [x] Fix-diff review 0 / 0 / 3 + 3 (`4411440`)
+- [ ] Fix 2, G1–G3 (ui-engineer)
+- [ ] QA quick gates and the lead's line
+- [ ] Ben's harvest paste (MANUAL_STEPS "L3 W2", step 7)
+- [ ] Lead: merge from the file, turn proof, templates, manifest, place files (steps 8–11)
 - [ ] Merged to `main`, six place files rebuilt (lead)
-- [ ] L3 Wave 1 playtest (Ben)
-- [ ] W2: the models in the game
+- [ ] L3 Wave 2 playtest (Ben; in one session with W1)
 
 ## M12 — Growing city
 

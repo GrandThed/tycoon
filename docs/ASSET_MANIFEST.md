@@ -477,6 +477,32 @@ Summary: 62/62 blueprints, 58/62 uploaded, 58/62 harvested, 58/62 templated
 | 61 | `TubeStraight` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 62 | `TubeTee` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
+## Weapons
+
+Config: `src/shared/Config/WeaponModels.json` (`py tools/assets/weapon_frames.py`) -- blueprints: `tools/testfit/blueprints/_props/Weapons/` -- templates: `templates/_props/Weapons/` -- in game: `ReplicatedStorage/Assets/Props/Weapons/` -- icons: `Assets.json` `icons.Weapons` (`py tools/assets/upload_icons.py`).
+
+Each family is one model with one stage, on the props route. **Points** -- the frame points the config gives the client (grip, tip and holster always). **Icon uploaded** / **Icon harvested** -- the shelf icon's Decal `assetId` and its Image `imageId` in `Assets.json`. A missing template or icon leaves the hand empty and the card as text, never an error.
+
+Summary: 15 families: 15/15 blueprints, 15/15 uploaded, 0/15 harvested, 0/15 templated, 15/15 icons uploaded, 0/15 icons harvested
+
+| # | Family | Model | Blueprint | GLB | Uploaded | Harvested | Template | Points | Icon uploaded | Icon harvested |
+|---|--------|-------|-----------|-----|----------|-----------|----------|--------|---------------|----------------|
+| 1 | `beam` | `Beam` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, support, tip | yes | — |
+| 2 | `broadsword` | `Broadsword` | yes | 1/1 | 1/1 | 0/1 | — | bladeBase, grip, holster, tip | yes | — |
+| 3 | `chaingun` | `Chaingun` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, support, tip | yes | — |
+| 4 | `flamethrower` | `Flamethrower` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, pilot, tip | yes | — |
+| 5 | `frostHammer` | `FrostHammer` | yes | 1/1 | 1/1 | 0/1 | — | grip, head, holster, tip | yes | — |
+| 6 | `greataxe` | `Greataxe` | yes | 1/1 | 1/1 | 0/1 | — | edge, grip, holster, tip | yes | — |
+| 7 | `launcher` | `Launcher` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, support, tip | yes | — |
+| 8 | `longbow` | `Longbow` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, nock, tip | yes | — |
+| 9 | `rifle` | `Rifle` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, sight, support, tip | yes | — |
+| 10 | `shotgun` | `Shotgun` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, support, tip | yes | — |
+| 11 | `smg` | `Smg` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, support, tip | yes | — |
+| 12 | `spear` | `Spear` | yes | 1/1 | 1/1 | 0/1 | — | bladeBase, grip, holster, tip | yes | — |
+| 13 | `spinblade` | `Spinblade` | yes | 1/1 | 1/1 | 0/1 | — | bladeBase, grip, holster, tip | yes | — |
+| 14 | `splitbow` | `Splitbow` | yes | 1/1 | 1/1 | 0/1 | — | grip, holster, nock, splitDown, splitUp, tip | yes | — |
+| 15 | `warhammer` | `Warhammer` | yes | 1/1 | 1/1 | 0/1 | — | grip, head, holster, tip | yes | — |
+
 ## Baked paths
 
 Pipeline: `tools/paths/texture.py` (two PNGs -> Decals) and `tools/paths/bake.py` (two GLBs per piece -> Models) -> `tools/assets/upload_paths.py` -> Studio harvest -> `tools/assets/gen_templates.py --paths` -> `templates/_paths/<Era>/<pieceId>.rbxmx` -> `ReplicatedStorage/Assets/Paths/<Era>/`.

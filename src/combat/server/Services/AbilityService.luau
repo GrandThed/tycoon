@@ -994,6 +994,10 @@ function AbilityService.OnCast(
 		startsAt = workspace:GetServerTimeNow(),
 		seq = seed,
 	}
+	-- L3-50: the slot in use is shown before the cast's effect leaves, so every other client
+	-- builds it from the tip of the right weapon (W2 review 3-m1). Only the projectile budget can
+	-- still refuse it below, and the caster's own client switched its stance on the press anyway.
+	WeaponService.NoteHeld(player, slotName)
 	broadcastFx(fx)
 	local timeline: Timeline = {
 		slot = slotName,

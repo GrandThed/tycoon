@@ -25,6 +25,7 @@ local positive = Shared.positive
 local rate = Shared.rate
 local casterOf = Shared.casterOf
 local handOf = Shared.handOf
+local muzzleOf = Shared.muzzleOf
 local aimOf = Shared.aimOf
 local takePart = Pool.takePart
 local takeEmitter = Pool.takeEmitter
@@ -75,7 +76,7 @@ local function buildMagDump(cast: Cast, def: Def, kit: Kit): (Step?, StrikeHook?
 	local rng = Random.new(cast.seq)
 	local look = unitOf(cast.direction) or Vector3.zAxis
 	local handPoint = cast.origin
-	local muzzle = cast.origin + look * MUZZLE_FORWARD
+	local muzzle = muzzleOf(cast.userId, look, cast.origin + look * MUZZLE_FORWARD)
 
 	local function step(t: number, _dt: number): boolean
 		if t >= finish then
@@ -87,7 +88,7 @@ local function buildMagDump(cast: Cast, def: Def, kit: Kit): (Step?, StrikeHook?
 		if root ~= nil then
 			look = aimOf(cast.userId, root)
 			handPoint = handOf(character, root)
-			muzzle = handPoint + look * MUZZLE_FORWARD
+			muzzle = muzzleOf(cast.userId, look, muzzle)
 		end
 		local share = clamp01(t / firing)
 		local v = envelope(t, 0, finish, MAG_FADE_IN, MAG_TAIL_SECONDS)

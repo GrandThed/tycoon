@@ -7,8 +7,8 @@
 -- source for the HP bar.
 --
 -- This module is the one place that reads the profile: it forwards the equipped gear to
--- InputController and WeaponController, the ability cooldowns to the HUD, and the mission
--- material to CombatFxController. Everything else is pushed, never pulled.
+-- InputController, the ability cooldowns to the HUD, and the mission material to
+-- CombatFxController. Everything else is pushed, never pulled.
 --
 -- Degrades like the hub: a profile that will not load shows the same safe-mode card instead
 -- of a kick, a RunState that never arrives leaves the HUD in its lobby state, and the
@@ -176,7 +176,6 @@ local MapScreen = require(uiFolder:WaitForChild("MapScreen"))
 local ArmoryScreen = require(uiFolder:WaitForChild("ArmoryScreen"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
-local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 local CombatFxController = require(script.Parent:WaitForChild("CombatFxController"))
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local FeedbackController = require(script.Parent:WaitForChild("FeedbackController"))
@@ -1108,7 +1107,6 @@ local function boot(): ()
 		local ascension = combat.ascension
 		if typeof(gear) == "table" and typeof(ascension) == "table" then
 			InputController.SetGear(gear)
-			WeaponController.SetGear(gear, ascension)
 			-- The strip's tier buttons name a family (L3-28), which this HUD has none of: they
 			-- stay inert here, as everything that fights does.
 			hud.SetAbilities({

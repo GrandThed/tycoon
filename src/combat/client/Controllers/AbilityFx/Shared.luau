@@ -13,6 +13,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 
 local uiFolder = script.Parent.Parent.Parent:WaitForChild("UI")
 local Theme = require(uiFolder:WaitForChild("Theme"))
+local HeldWeapons = require(script.Parent.Parent:WaitForChild("HeldWeapons"))
 
 export type Def = Types.RangeAbilityDef
 
@@ -105,7 +106,7 @@ local FLOOR_PROBE_UP = 3
 local FLOOR_PROBE_DOWN = 250
 -- Root centre above the floor for an R6 rig (legs 2 + half the root); R15 reads HipHeight.
 local R6_ROOT_HEIGHT = 3
--- The weapon sits this far along the aim from the right hand.
+-- With no model in the hand, the weapon sits this far along the aim from it.
 local MUZZLE_FORWARD = 1
 -- Ground marks float this far above the floor so they never z-fight it.
 local LIFT = 0.06
@@ -351,13 +352,14 @@ local function handOf(character: Model?, root: BasePart): Vector3
 	return root.Position
 end
 
--- Where a caster's weapon is: the right hand pushed along the aim, else the fallback.
+-- Where a caster's weapon is (L3-52): the tip of the model in the hand; with none, the hand
+-- pushed along the aim; with no character, the fallback.
 local function muzzleOf(userId: number, aim: Vector3, fallback: Vector3): Vector3
-	local root, _, character = casterOf(userId)
-	if root == nil then
+	local point, fromModel = HeldWeapons.Muzzle(userId)
+	if point == nil then
 		return fallback
 	end
-	return handOf(character, root) + aim * MUZZLE_FORWARD
+	return if fromModel then point else point + aim * MUZZLE_FORWARD
 end
 
 -- The local player aims with the camera; anyone else faces where they aim.

@@ -1,0 +1,19 @@
+{
+  "note": "Real Studio data for the turn proof (tools/assets/weapon_frames.py; docs/prompts/l3-w2-contract.md L3-47): each record copies a prop's merge sidecar (assets/build/stages/_props/<Era>/<Model>.json, stage 0, its one kit's centre and size) and what the harvest recorded for it (src/shared/Config/Assets.json props.<Era>.<Model>, stage 0). LampPost is the contract's record; BushA (Village) sits off both axes in x and z, so the guard can see a missing turn in either.",
+  "records": [
+    {
+      "era": "Boomtown",
+      "model": "LampPost",
+      "kit": "city-kit-roads",
+      "sidecar": { "centre": [0.0, 3.037, -0.788], "size": [0.45, 6.075, 2.025] },
+      "harvested": { "offset": [0.0, 3.0375, 0.7875], "size": [0.45, 6.075, 2.025] }
+    },
+    {
+      "era": "Village",
+      "model": "BushA",
+      "kit": "nature-kit",
+      "sidecar": { "centre": [-0.087, 0.521, 0.067], "size": [2.717, 1.442, 2.677] },
+      "harvested": { "offset": [0.0865, 0.5208, -0.0665], "size": [2.7171, 1.4416, 2.6771] }
+    }
+  ]
+}

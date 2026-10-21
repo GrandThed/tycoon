@@ -1,6 +1,7 @@
 """Read, shape and write src/shared/Config/Assets.json (schema v1, INTERFACES.md "M7 contracts";
 v2 adds the city-dressing `props` block, "M9 contracts"; v3 adds the baked-path `paths` block,
-"Wave 1d — baked paths"; v4 adds the landscape `world` block, "M13 Wave 2 — the Valley meshes").
+"Wave 1d — baked paths"; v4 adds the landscape `world` block, "M13 Wave 2 — the Valley meshes"; v5
+adds the shelf `icons` block, docs/prompts/l3-w2-contract.md L3-42).
 
 Shared by upload_models.py (writes modelAssetId / vipSwatchAssetId), harvest.py (writes meshId,
 imageId, size, offset, vipImageId) and gen_templates.py (reads everything). Every writer goes
@@ -54,6 +55,10 @@ WORLD_KEY = "world"
 WORLD_LOOK_PALETTE = "palette"
 WORLD_LOOK_FLAT = "flat"
 WORLD_LOOKS = (WORLD_LOOK_PALETTE, WORLD_LOOK_FLAT)
+# A file only becomes v5 once it carries icons, so every earlier run keeps its bytes. Icons are a
+# top-level block, not a key of a prop entry: ensure_prop rebuilds a prop entry from its stages alone.
+ICONS_SCHEMA_VERSION = 5
+ICONS_KEY = "icons"
 SINGLE_STAGE_TYPES = ("unlock", "decor", "monument")
 
 _NUMBER_LIST = re.compile(r"\[\s*((?:-?\d+(?:\.\d+)?(?:e-?\d+)?\s*,\s*)*-?\d+(?:\.\d+)?(?:e-?\d+)?)\s*\]")
@@ -287,6 +292,33 @@ def world_mesh_harvested(mesh: dict) -> bool:
     return int((mesh or {}).get("meshId", 0)) != 0
 
 
+def empty_icon() -> dict:
+    return {"assetId": 0, "imageId": 0, "sha256": ""}
+
+
+def ensure_icon(assets: dict, set_name: str, model: str) -> dict:
+    """Pre-list one shelf icon (L3-42) without touching ids; marks the file v5. An icon is a Decal:
+    `assetId` from the upload, `imageId` from the harvest, `sha256` of the uploaded PNG so a changed
+    file goes up again."""
+    assets["version"] = max(int(assets.get("version", SCHEMA_VERSION)), ICONS_SCHEMA_VERSION)
+    icon = assets.setdefault(ICONS_KEY, {}).setdefault(set_name, {}).setdefault(model, {})
+    for key, default in empty_icon().items():
+        icon.setdefault(key, default)
+    return icon
+
+
+def pending_icons(assets: dict, include_all: bool = False) -> list[tuple[str, str, int]]:
+    """(set, model, assetId) for every uploaded icon whose Image asset is still unknown."""
+    out = []
+    for set_name in sorted(assets.get(ICONS_KEY, {})):
+        models = assets[ICONS_KEY][set_name] or {}
+        for model in sorted(models):
+            asset_id = int((models[model] or {}).get("assetId", 0))
+            if asset_id != 0 and (include_all or int(models[model].get("imageId", 0)) == 0):
+                out.append((set_name, model, asset_id))
+    return out
+
+
 def stage_harvested(stage: dict) -> bool:
     parts = stage.get("parts") or []
     return bool(parts) and all(int(p.get("meshId", 0)) != 0 for p in parts)
@@ -334,6 +366,11 @@ def render_assets(assets: dict) -> str:
         ordered[PATHS_KEY] = {era: render_path_era(assets[PATHS_KEY][era]) for era in sorted(assets[PATHS_KEY])}
     if WORLD_KEY in assets:
         ordered[WORLD_KEY] = {name: render_world_set(assets[WORLD_KEY][name]) for name in sorted(assets[WORLD_KEY])}
+    if ICONS_KEY in assets:
+        ordered[ICONS_KEY] = {
+            set_name: {model: render_icon(assets[ICONS_KEY][set_name][model]) for model in sorted(assets[ICONS_KEY][set_name])}
+            for set_name in sorted(assets[ICONS_KEY])
+        }
     text = json.dumps(ordered, indent=2, ensure_ascii=False)
     text = _NUMBER_LIST.sub(lambda m: "[" + ", ".join(v.strip() for v in m.group(1).split(",")) + "]", text)
     return text + "\n"
@@ -410,6 +447,12 @@ def render_world_set(entry: dict) -> dict:
             row["transparency"] = mesh.get("transparency", 0)
         out["meshes"][name] = row
     return out
+
+
+def render_icon(icon: dict) -> dict:
+    """Fixed key order for one shelf icon (L3-42): assetId, imageId, sha256."""
+    icon = icon or {}
+    return {"assetId": int(icon.get("assetId", 0)), "imageId": int(icon.get("imageId", 0)), "sha256": str(icon.get("sha256", ""))}
 
 
 def save_assets(assets: dict) -> None:
