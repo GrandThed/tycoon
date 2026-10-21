@@ -665,3 +665,18 @@ then Ben: growth looks are not content only for other players (L3-55, L3-70).
    About 4 MB on a phone for the shelf, a quarter of the 512 set; the cards draw at 40 design px.
 4. **Review:** three slices (pipeline and data; server and shared; client hands, muzzle and stage), on Opus.
 5. Every other ruling (L3-40 to L3-61) stands as drafted.
+6. **Rest poses (after ui-engineer B's report, 2026-10-21).** `COMBAT_HOLD_GRIP = CFrame.identity` points every weapon
+   down a hanging arm (blades 1.2–2.5 studs into the floor, guns at the ground, tracers from the knee); no one grip fits
+   both rest and draw. So:
+   - `COMBAT_HOLD_GRIP` is replaced by **`COMBAT_HOLD_GRIP_MELEE` = `CFrame.Angles(math.rad(90), 0, 0)`** (the tip
+     forward from a hanging arm; the swing poses are unchanged and carry it) and **`COMBAT_HOLD_GRIP_RANGED` =
+     `CFrame.identity`**;
+   - **while a ranged family is in hand the right arm is held raised forward** at
+     **`COMBAT_HOLD_RANGED_RAISE_DEGREES` = 80** (the draw angle), on the local character and on every other character
+     from `WeaponHeld`; the draw and shot kicks are measured from that raised arm; a melee family in hand leaves the arm
+     hanging as today. WeaponController owns the pose (ui B); Theme owns the numbers (ui A).
+   - **`COMBAT_HOLD_BACK`** takes ui B's fix: `* CFrame.Angles(0, math.rad(90), 0)` between the 35° turn and the 90° X
+     turn, so a bow's limbs lie across the back (ui B's report has the diff).
+   - Starting values; one screenshot round expected (L3-63).
+7. **T9's exit count** pins the exits **before** the `SwingOther` call (1: the empty-flight return), not the whole
+   `onStrike` (4 since before W2).
