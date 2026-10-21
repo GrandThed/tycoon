@@ -40,3 +40,16 @@ on raiders are untextured pieces painted by `Color` (a textured MeshPart may ign
 raiders}.md`, reports into `docs/prompts/l4-w1-reports/`. No uploads in W1. Then Ben's look at the pictures, W1b
 (old mission code removed, after the designer's track), W2 in the game with one harvest paste, W3 city map / end screen
 / rewards, W4 publish readiness.
+
+**Picture gate passed the same day (MISSIONS_DESIGN §27):** Ben approved the dressed forest as rendered
+(`assets/testfit/out/Levels/ForestRoad/_L4_forest_overview.png`, `_L4_moods.png`), **mood B** (haze, dungeon place only),
+the Chief **look A** (skull mask + Warhammer), the raider style, and **R8 "judged fairly"** (whole run snipe-then-fight vs
+fight-all with the same gear over 30 seeds; the Road3 Hard sword-T1/bow-T4 burst was red before L4 on 12 of 30 seeds).
+Pictures were shown as local PNG sheets linked in the chat (made with a scratch Pillow script), then click questions.
+W1 is committed on `l4-real-forest`: the lookout at the trailhead (`SNIPER_KNOWN_LIMIT_L4` removed), the forest generator
+`tools/levels/forest.py` + `forestcheck.py` (149,761 triangles, 62 invisible walls, 38 baked meshes, 4 textures, 4 props),
+the raider kit prototypes. The layout is `src/shared/Layouts/Levels/ForestRoad.json`, not `Config/Levels/1_ForestRoad.json`.
+W1b (old mission code out, the dash proven by the server's ring, RunState cells once) runs in a second worktree
+`tycoon-p5b`, branch `l4-w1b`; W2 tracks running: the other four raiders, the asset route (forest meshes land in
+`templates/_levels/ForestRoad` → `ReplicatedStorage.Assets.Levels`), the W2 contract draft. One session-limit cut on
+2026-10-21 (reset 14:10); four agents resumed by SendMessage with nothing lost.
