@@ -653,3 +653,8 @@ Lead's rulings: the summit chest is a fourth Forest secret, `mountain`, needing 
 Castle's plan gets a locked room that only this key opens (what it holds is decided with the Castle); no enemies on the
 climb; no ledge or summit may be a sniper spot; a fall never leaves the level; every hop needs Double Jump and no lifting
 ability may replace it. Brief: `docs/prompts/l4-w2-mountain.md`.
+
+**All seven raiders approved for the upload (2026-10-21)** on `assets/testfit/out/Raiders/_overview.png` (the four new
+looks, the fodder's cape and knife, the Chief's smaller core): they upload with the forest, after Ben's look at the new
+rocks and the mountain, in the one harvest paste. The Chief keeps the Colossus's hit shapes (14 / 4 / 1.6), so tuning him
+in W2 never invalidates his model. **[Ben]**
