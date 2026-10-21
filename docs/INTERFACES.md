@@ -15664,3 +15664,8 @@ slam because the root box (2 tall) would have to move ~3.9 studs in one physics 
 Decisions: `docs/MISSIONS_DESIGN.md` §24 (and §10's 2026-10-20 restatement: every weapon has its own window on the
 ladder of 20). Studies: `docs/prompts/l3-study-report-systems.md`, `l3-study-report-screen.md`. Contract of record:
 `docs/prompts/l3-w1-contract.md` (rulings L3-1 to L3-39, §12 the lead's rulings), on branch `l3-armory`.
+
+# L3 W2 contracts — the models in the game
+
+Decisions: `docs/MISSIONS_DESIGN.md` §24 (and its W2 paragraph). Contract of record: `docs/prompts/l3-w2-contract.md`
+(rulings L3-40 to L3-61, risks L3-62 to L3-73, §11 the lead's rulings), on branch `l3-w2`.
