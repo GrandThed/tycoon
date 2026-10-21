@@ -18,7 +18,7 @@
 --    family; a switch only re-points the two welds. Nothing here runs per frame, and a burst of
 --    changes on one character (a server write sets three attributes; a rapid draw can flip
 --    WeaponHeld many times a second) is shown once, deferred to the end of that frame's batch,
---    or at once when Muzzle is asked for that character first.
+--    or at once when Flush or Muzzle is asked for that character first.
 --  * Rest poses (contract section 11, ruling 6): no one grip fits a hanging arm and a drawn bow,
 --    so a melee weapon is held tip forward from the hanging hand (COMBAT_HOLD_GRIP_MELEE) and a
 --    ranged one along the arm (COMBAT_HOLD_GRIP_RANGED), which WeaponController raises forward
@@ -279,9 +279,8 @@ local function show(rig: Rig): ()
 	end
 end
 
--- Shows a deferred change now. Muzzle calls it too: a teammate's cast or shot that arrives in the
--- same batch as his slot change runs before the deferred show, and must leave from the weapon now
--- in his hand, not the one before (3-m1).
+-- Shows a deferred change now (HeldWeapons.Flush and Muzzle call it for a remote that arrives in
+-- the same batch as the change and must see it).
 local function flush(rig: Rig): ()
 	if not rig.pending then
 		return
@@ -493,19 +492,31 @@ function HeldWeapons.SetLocalStance(slot: string): ()
 	end
 end
 
+-- Runs that player's deferred show now, if one is pending (else nothing). A server write is
+-- queued on this client ahead of the remote that follows it, but the show it defers goes to the
+-- back of the queue, so a remote that must see the change calls this first: Muzzle, so a
+-- teammate's cast or shot leaves from the weapon now in his hand (3-m1); FeedbackController,
+-- before another player's swing, so the arm is lowered from a bow's raise before the swing starts
+-- rather than cancelling it halfway (fix round 2, m1).
+function HeldWeapons.Flush(userId: number): ()
+	local player = Players:GetPlayerByUserId(userId)
+	local rig = if player ~= nil then rigs[player] else nil
+	if player ~= nil and rig ~= nil and rig.character == player.Character then
+		flush(rig)
+	end
+end
+
 -- Where that player's shot, flame or ability effect leaves from (L3-52): the tip of the model in
 -- the hand and true; with none, W1's chain (the right hand, then the root) and false; with no
 -- character, nil and false.
 function HeldWeapons.Muzzle(userId: number): (Vector3?, boolean)
+	HeldWeapons.Flush(userId)
 	local player = Players:GetPlayerByUserId(userId)
 	local character = if player ~= nil then player.Character else nil
 	if player == nil or character == nil then
 		return nil, false
 	end
 	local rig = rigs[player]
-	if rig ~= nil and rig.character == character then
-		flush(rig)
-	end
 	local held = if rig ~= nil and rig.character == character then rig.inHand else nil
 	local tip = if held ~= nil then held.tip else nil
 	if held ~= nil and tip ~= nil and held.model.Parent == character then

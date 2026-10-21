@@ -2867,6 +2867,9 @@ local function onStrike(strike: Strike): ()
 		-- than a short grace from here.
 		FrostFx.OnAnswered(seq)
 	elseif swing and not mine then
+		-- Their slot change in this batch shows first, so the arm leaves a bow's raise before
+		-- the swing starts rather than cancelling it (L3 W2 fix round 2, m1).
+		HeldWeapons.Flush(strike.userId)
 		-- L2-56: someone else's ice swing puffs frost (the local one did on its press).
 		FrostFx.OnStrike(strike)
 		-- L3-53: and their arm swings, with the step the server used.

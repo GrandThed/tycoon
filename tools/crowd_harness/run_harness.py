@@ -56,6 +56,9 @@ Its fix round (docs/prompts/l3-w2-fix-round.md) counts every pinned text as whol
 their indentation (whole_lines), the exits after each noted line, every `held` read in the
 server, the attribute names spelled anywhere under src, the three ways a character reaches
 PrepareCharacter, and the client lines that tear down, re-show and drive the models and the stage.
+Its second fix round (docs/prompts/l3-w2-fix2.md G1 to G3) pins the flush another player's swing
+runs first (its first code line in T9's branch, before SwingOther), the order in Muzzle and a new
+rig's first state, and that the stage hears no gamepad stick.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -791,7 +794,6 @@ L3W2_BODIES = {
     "stageSelect": (ARMORY_STAGE, re.compile(r"(?ms)^\tlocal function selectFamily\(.*?^\tend$")),
     "stageSync": (ARMORY_STAGE, re.compile(r"(?ms)^\tlocal function syncTurn\(.*?^\tend$")),
     "stageStop": (ARMORY_STAGE, re.compile(r"(?ms)^\tlocal function stop\(.*?^\tend$")),
-    "stageStick": (ARMORY_STAGE, re.compile(r"(?ms)^\tlocal function onStick\(.*?^\tend$")),
     "stageDrag": (ARMORY_STAGE, re.compile(r"(?ms)^\tviewport\.InputBegan:Connect\(function\(.*?^\tend\)$")),
     "stageTemplate": (ARMORY_STAGE, body_of("templateOf")),
     # The fix round's S3 (3-m3) and C1 to C4, HeldWeapons: how a character's weapons are watched,
@@ -802,6 +804,8 @@ L3W2_BODIES = {
     "heldWatchPart": (HELD_WEAPONS, body_of("watchPart")),
     "heldQueue": (HELD_WEAPONS, body_of("queueShow")),
     "heldFlush": (HELD_WEAPONS, body_of("flush")),
+    # Fix round 2 (G1): the public flush, which Muzzle and another player's swing run first.
+    "heldFlushPublic": (HELD_WEAPONS, body_of("HeldWeapons.Flush")),
     "heldStart": (HELD_WEAPONS, body_of("HeldWeapons.Start")),
     "heldSetStance": (HELD_WEAPONS, body_of("HeldWeapons.SetLocalStance")),
     # The lead's ruling 6 (§11): the rest poses, in HeldWeapons (the hold a slot hangs by, whether
@@ -970,10 +974,10 @@ L3W2_LINES = {
                    "\tend\n\treturn fresh\nend"),
     # S3 (3-m3), the stage: a close stops it, the screen's open state syncs it, a selection clears
     # the old clone first; C3: syncTurn stops everything unless the screen is open on Weapons with
-    # a model shown, then holds the stick's and the window's listeners and the one per-frame turn
-    # (T14: behind exactly this gate); stop drops them all; every drag ends on its own release, a
-    # lost one or the window's focus; the stick is the right one, once per event on a low-end
-    # device; C1: Base by name, made PrimaryPart before the pose; an unowned model is a silhouette.
+    # a model shown, then holds the window's focus listener and the one per-frame turn (T14:
+    # behind exactly this gate); stop drops both; every drag ends on its own release, a lost one or
+    # the window's focus (fix round 2, G3: no stick turns it); C1: Base by name, made PrimaryPart
+    # before the pose; an unowned model is a silhouette.
     "stageStops": (ARMORY_STAGE, "stageSetActive", "\t\t\tif not active then\n\t\t\t\tstop()\n\t\t\t\treturn\n\t\t\tend\n"),
     "activeSyncs": (ARMORY_STAGE, "stageSetActive", "\t\t\t\twarm()\n\t\t\tend\n\t\t\tsyncTurn()\n\t\tend,"),
     "selectClears": (ARMORY_STAGE, "stageSelect", "\tlocal function selectFamily(family: string): ()\n\t\tclear()\n"),
@@ -989,20 +993,16 @@ L3W2_LINES = {
                   "\t\tif not look.active or look.model == nil then\n\t\t\tstop()\n\t\t\treturn\n\t\tend\n"),
     "gatedFrames": (ARMORY_STAGE, "stageSync", "\t\tif look.turn == nil and not Theme.lowEndDevice then\n"
                     "\t\t\tlook.turn = RunService.RenderStepped:Connect(function(deltaTime: number)\n"),
-    "syncStep": (ARMORY_STAGE, "stageSync", "\t\t\t\tturnBy(rate * deltaTime)\n"),
-    "syncStick": (ARMORY_STAGE, "stageSync", "\t\tif #look.inputs == 0 then\n"
-                  "\t\t\ttable.insert(look.inputs, UserInputService.InputChanged:Connect(onStick))\n"),
-    "syncFocus": (ARMORY_STAGE, "stageSync", "\t\t\t\tUserInputService.WindowFocusReleased:Connect(function()\n"
-                  "\t\t\t\t\tlook.stickX = 0\n\t\t\t\t\tendDrag()\n\t\t\t\tend)\n"),
-    "stopDrops": (ARMORY_STAGE, "stageStop", "\t\tfor _, connection in look.inputs do\n\t\t\tconnection:Disconnect()\n"
-                  "\t\tend\n\t\ttable.clear(look.inputs)\n\t\tlook.stickX = 0\n\t\tendDrag()\n\tend"),
+    "syncStep": (ARMORY_STAGE, "stageSync", "\t\t\t\tturnBy(Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND * deltaTime)\n"),
+    "syncFocusOnce": (ARMORY_STAGE, "stageSync", "\t\tif look.focus == nil then\n"),
+    "syncFocus": (ARMORY_STAGE, "stageSync",
+                  "\t\t\tlook.focus = UserInputService.WindowFocusReleased:Connect(endDrag)\n"),
+    "stopDrops": (ARMORY_STAGE, "stageStop", "\t\tlocal focus = look.focus\n\t\tif focus ~= nil then\n"
+                  "\t\t\tlook.focus = nil\n\t\t\tfocus:Disconnect()\n\t\tend\n\t\tendDrag()\n\tend"),
     "showNilSyncs": (ARMORY_STAGE, "stageShow", "\t\t\t\tclear()\n\t\t\t\tlook.family = nil\n\t\t\t\tsyncTurn()\n"),
     "selectSyncs": (ARMORY_STAGE, "stageShow", "\t\t\t\tselectFamily(view.family)\n\t\t\t\tsyncTurn()\n"),
     "stageSilhouette": (ARMORY_STAGE, "stageShow",
                         "\t\t\tviewport.ImageColor3 = if owned then WHITE else Theme.ARMORY_STAGE_SILHOUETTE\n"),
-    "stickOnly": (ARMORY_STAGE, "stageStick", "\t\tif input.KeyCode ~= Enum.KeyCode.Thumbstick2 then\n"),
-    "stickLowEnd": (ARMORY_STAGE, "stageStick",
-                    "\t\tif Theme.lowEndDevice and look.stickX ~= 0 and stickX ~= 0 and look.drag == nil then\n"),
     "dragLost": (ARMORY_STAGE, "stageDrag", "\t\t\t\tif not touch and not UserInputService:IsMouseButtonPressed(kind) then\n"
                  "\t\t\t\t\tendDrag()\n\t\t\t\t\treturn\n\t\t\t\tend\n"),
     "dragEnds": (ARMORY_STAGE, "stageDrag", "\t\t\t\tif ended == input or (not touch and ended.UserInputType == kind) then\n"
@@ -1014,8 +1014,11 @@ L3W2_LINES = {
     # watched (C4: each change queued); a mount part or attachment arriving re-shows; bind ends on
     # a show, as does the local switch (on its own frame); every player is watched, now and as
     # they join. C4: one deferred show per batch, none for a rig that has gone, and Muzzle shows a
-    # pending change first (else a teammate's effect leaves from the weapon before, 3-m1). C1:
-    # Base by name, PrimaryPart before any weld.
+    # pending change first (else a teammate's effect leaves from the weapon before, 3-m1): since
+    # fix round 2 (G1, G2) through the public Flush, of the player's current character only, as
+    # Muzzle's first line (L3W2_ORDER: before it reads the hand); a new rig starts with nothing
+    # pending and bound, else every queued show is dropped or never deferred. C1: Base by name,
+    # PrimaryPart before any weld.
     "heldCleanup": (HELD_WEAPONS, "heldShow", "\tlocal cache = models[character]\n\tif cache ~= nil then\n"
                     "\t\tfor family, entry in cache do\n\t\t\tif family ~= melee and family ~= ranged then\n"
                     "\t\t\t\tcache[family] = nil\n\t\t\t\tentry.model:Destroy()\n\t\t\tend\n\t\tend\n\tend\n"),
@@ -1038,8 +1041,14 @@ L3W2_LINES = {
     "flushShows": (HELD_WEAPONS, "heldFlush", "\tif not rig.pending then\n\t\treturn\n\tend\n\trig.pending = false\n"
                    "\tif rig.bound then\n\t\tshow(rig)\n\tend\nend"),
     "unbindUnbinds": (HELD_WEAPONS, "heldUnbind", "\trigs[player] = nil\n\trig.bound = false\n"),
-    "muzzleFlushes": (HELD_WEAPONS, "heldMuzzle", "\tif rig ~= nil and rig.character == character then\n"
-                      "\t\tflush(rig)\n\tend\n"),
+    "muzzleFlushes": (HELD_WEAPONS, "heldMuzzle", "function HeldWeapons.Muzzle(userId: number): (Vector3?, boolean)\n"
+                      "\tHeldWeapons.Flush(userId)\n"),
+    "flushPublic": (HELD_WEAPONS, "heldFlushPublic", "\tlocal player = Players:GetPlayerByUserId(userId)\n"
+                    "\tlocal rig = if player ~= nil then rigs[player] else nil\n"
+                    "\tif player ~= nil and rig ~= nil and rig.character == player.Character then\n"
+                    "\t\tflush(rig)\n\tend\nend"),
+    "rigPending": (HELD_WEAPONS, "heldBind", "\t\tpending = false,\n"),
+    "rigBound": (HELD_WEAPONS, "heldBind", "\t\tbound = true,\n"),
     "heldBaseName": (HELD_WEAPONS, None, "local TEMPLATE_BASE_NAME = \"Base\"\n"),
     "heldTemplateBase": (HELD_WEAPONS, "heldTemplate", "\tlocal base = template:FindFirstChild(TEMPLATE_BASE_NAME)\n"
                          "\tif base == nil or not base:IsA(\"BasePart\") then\n\t\treturn nil\n\tend\n\treturn template\n"),
@@ -1135,6 +1144,9 @@ L3W2_PATTERNS = {
     # ways out are the stop and the per-frame turn's wait for a drag; SetActive's are the same
     # state and the close.
     "syncCalls": (ARMORY_STAGE, None, re.compile(r"\bsyncTurn\(")),
+    # Fix round 2 (G3, m3): no gamepad stick turns the stage; the world camera behind the screen
+    # reads the right stick unsunk, so it would turn the lobby and the character as well.
+    "stageSticks": (ARMORY_STAGE, None, re.compile(r"\bThumbstick[12]\b")),
     "syncExits": (ARMORY_STAGE, "stageSync", L3W2_EXITS),
     "setActiveExits": (ARMORY_STAGE, "stageSetActive", L3W2_EXITS),
     # C1: neither clone's Base is read from a PrimaryPart ref (it can arrive nil in a session).
@@ -1148,6 +1160,7 @@ L3W2_PATTERNS = {
     "heldDirectShows": (HELD_WEAPONS, None, re.compile(r"\bshow\(rig\)")),
     "heldQueues": (HELD_WEAPONS, None, re.compile(r"\bqueueShow\(rig\)")),
     "bindExits": (HELD_WEAPONS, "heldBind", L3W2_EXITS),
+    "flushPublicExits": (HELD_WEAPONS, "heldFlushPublic", L3W2_EXITS),
     "stanceExits": (HELD_WEAPONS, "heldSetStance", L3W2_EXITS),
     "startExits": (HELD_WEAPONS, "heldStart", L3W2_EXITS),
     "stagePoses": (ARMORY_STAGE, None, re.compile(r":PivotTo\(")),
@@ -1182,6 +1195,8 @@ L3W2_ORDER = {
     # C1: Base is the PrimaryPart before any weld in HeldWeapons and before the stage's pose.
     "baseBeforeWelds": ("modelFor", "model.PrimaryPart = base", "WeldConstraint"),
     "baseBeforePose": ("stageSelect", "model.PrimaryPart = base", ":PivotTo("),
+    # Fix round 2 (G2, m2): Muzzle runs the pending show before it reads the hand.
+    "muzzleFlushFirst": ("heldMuzzle", "HeldWeapons.Flush(userId)", "rig.inHand"),
 }
 
 
@@ -1203,6 +1218,9 @@ def branch(source: str, header: re.Pattern) -> str:
 OTHER_BRANCH = re.compile(r"(?m)^\telseif swing and not mine then$")
 OTHER_CALL = "WeaponController.SwingOther(strike.userId, strike.step or 1)"
 OTHER_LINE = "\t\t" + OTHER_CALL
+# Fix round 2 (G1, m1): the branch's first code line shows that player's pending slot change, so
+# the hold listener lowers a raised arm before the swing starts instead of cancelling it.
+OTHER_FLUSH = "\t\tHeldWeapons.Flush(strike.userId)"
 BLOCK_OPENER = re.compile(r"(?m)^[ \t]*(?:if|while|for|repeat|do)\b")
 # S5 (2-s1): an attribute name spelled as a literal, in any quote or a long bracket. WeaponLook
 # alone may hold one; every other file under src reads WeaponLook.ATTRIBUTES.
@@ -1289,6 +1307,11 @@ def l3w2_reading(text, repo=None) -> dict:
     line = whole_line_at(other, OTHER_LINE)
     head = other.find("\n") + 1
     counts["otherBlocks"] = len(BLOCK_OPENER.findall(luau_code(other[head:line]))) if line >= 0 else -1
+    counts["otherFlush"] = whole_lines(other, OTHER_FLUSH)
+    flushed = whole_line_at(other, OTHER_FLUSH)
+    counts["otherFlushBefore"] = 1 if 0 <= flushed < line else 0
+    code = [row for row in luau_code(other[head:]).split("\n") if row.strip()]
+    counts["otherFlushFirst"] = 1 if code and code[0] == OTHER_FLUSH else 0
     # The lead's ruling 7 (§11): onStrike's ways out before the SwingOther call (-1 when the call
     # is not there), not the whole function's (it has had more since before W2).
     called = strike.find(OTHER_CALL)

@@ -10,11 +10,13 @@
 -- missing. The camera orbits the model's bounds (from the config, never measured), framing their
 -- sphere so no turn changes the framing. While the screen is open on the Weapons tab (SetActive)
 -- with a model shown, and only then, it turns slowly, except on low-end devices
--- (Theme.lowEndDevice, never reducedMotion, which is true on every phone); a drag and a gamepad's
--- right stick turn it on every device. A drag ends on its own release, on the window losing
--- focus, and whenever the stage stops (close, the Abilities tab, no model). An unowned weapon is
--- a near-black silhouette over the same lighter band. The name and the big tier (the detail
--- column shows both) give way to a small top line: the slot word and the element chip.
+-- (Theme.lowEndDevice, never reducedMotion, which is true on every phone); a drag turns it on
+-- every device. The gamepad's right stick does not: the world camera behind the screen reads it
+-- unsunk, so it would turn the lobby and the character too. A drag ends on its own release, on
+-- the window losing focus, and whenever the stage stops (close, the Abilities tab, no model). An
+-- unowned weapon is a near-black silhouette over the same lighter band. The name and the big
+-- tier (the detail column shows both) give way to a small top line: the slot word and the
+-- element chip.
 --
 -- Without a model (no config, no entry, no template: before the harvest paste, L3-59) it is W1's
 -- placeholder exactly: the family's name large, its slot, its element chip (FIRE / ICE), a big
@@ -236,12 +238,9 @@ function ArmoryStage.new(parent: Instance): Stage
 		active = false,
 		warmed = false,
 		-- Live only while the screen is open on Weapons with a model shown (syncTurn): the slow
-		-- turn (never on a low-end device), and the right stick's and the window's listeners.
+		-- turn (never on a low-end device), and the window's focus listener.
 		turn = nil :: RBXScriptConnection?,
-		inputs = {} :: { RBXScriptConnection },
-		-- The right stick's X past the dead zone (0 at rest) and when it last moved (os.clock).
-		stickX = 0,
-		stickAt = 0,
+		focus = nil :: RBXScriptConnection?,
 		drag = nil :: Drag?,
 	}
 
@@ -354,34 +353,15 @@ function ArmoryStage.new(parent: Instance): Stage
 			look.turn = nil
 			turn:Disconnect()
 		end
-		for _, connection in look.inputs do
-			connection:Disconnect()
+		local focus = look.focus
+		if focus ~= nil then
+			look.focus = nil
+			focus:Disconnect()
 		end
-		table.clear(look.inputs)
-		look.stickX = 0
 		endDrag()
 	end
 
-	-- The right stick (3-s4): its X past the dead zone sets the turn's rate, which the slow turn
-	-- applies per frame. A low-end device has no per-frame turn, so there each stick event turns
-	-- the view once, by the time since the stick last moved (capped); the first event off rest
-	-- only arms it. A drag in progress wins.
-	local function onStick(input: InputObject): ()
-		if input.KeyCode ~= Enum.KeyCode.Thumbstick2 then
-			return
-		end
-		local x = input.Position.X
-		local stickX = if math.abs(x) < Theme.ARMORY_STAGE_STICK_DEADZONE then 0 else x
-		local now = os.clock()
-		if Theme.lowEndDevice and look.stickX ~= 0 and stickX ~= 0 and look.drag == nil then
-			local seconds = math.min(now - look.stickAt, Theme.ARMORY_STAGE_STICK_STEP_SECONDS)
-			turnBy(stickX * Theme.ARMORY_STAGE_STICK_DEGREES_PER_SECOND * seconds)
-		end
-		look.stickX = stickX
-		look.stickAt = now
-	end
-
-	-- Called whenever the screen's state or the shown model changes: the stage's listeners and
+	-- Called whenever the screen's state or the shown model changes: the stage's listener and
 	-- its per-frame turn exist only while the screen is open on Weapons with a model shown
 	-- (3-s2); otherwise everything stops, any drag included.
 	local function syncTurn(): ()
@@ -389,27 +369,16 @@ function ArmoryStage.new(parent: Instance): Stage
 			stop()
 			return
 		end
-		if #look.inputs == 0 then
-			table.insert(look.inputs, UserInputService.InputChanged:Connect(onStick))
-			-- A release the window never saw (focus lost mid-drag) must not leave a drag or a
-			-- stick turn running.
-			table.insert(
-				look.inputs,
-				UserInputService.WindowFocusReleased:Connect(function()
-					look.stickX = 0
-					endDrag()
-				end)
-			)
+		if look.focus == nil then
+			-- A release the window never saw (focus lost mid-drag) must not leave a drag running.
+			look.focus = UserInputService.WindowFocusReleased:Connect(endDrag)
 		end
 		if look.turn == nil and not Theme.lowEndDevice then
 			look.turn = RunService.RenderStepped:Connect(function(deltaTime: number)
 				if look.drag ~= nil then
 					return
 				end
-				local rate = if look.stickX ~= 0
-					then look.stickX * Theme.ARMORY_STAGE_STICK_DEGREES_PER_SECOND
-					else Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND
-				turnBy(rate * deltaTime)
+				turnBy(Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND * deltaTime)
 			end)
 		end
 	end

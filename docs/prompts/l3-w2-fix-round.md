@@ -51,7 +51,7 @@ run against the real `Assets.json`** (scratch copies only).
 - **C3 (3-s2, 3-s3, 3-s4)** The stage's turn connection exists only while a model is shown; a drag ends on any
   `InputEnded` of its input, on window focus loss and on close (no stuck drag); on every device the gamepad's right stick
   turns the stage while the Weapons tab is open (on a low-end device it re-places the camera per stick event, no
-  per-frame work).
+  per-frame work). **The right-stick part was withdrawn in fix round 2 (G3, `l3-w2-fix2.md`).**
 - **C4 (3-s7)** HeldWeapons coalesces a character's attribute changes into one `show` per frame (`task.defer`, one pending
   flag per character), which also bounds a flood of `WeaponHeld` flips.
 - **C5 (3-s6)** `COMBAT_WEAPON_WAIT_SECONDS`' comment no longer mentions the prop folder.

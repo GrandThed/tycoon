@@ -1434,10 +1434,7 @@ local Theme = {
 	-- bounds' sphere so a turn never changes the framing: distance = radius / sin(FOV / 2) x FIT
 	-- (FOV is vertical; a stage taller than wide uses its narrower across angle instead). It turns
 	-- TURN degrees a second while the screen is open on Weapons with a model shown (not on
-	-- low-end devices). A drag turns it by DRAG_DEGREES_PER_PIXEL on every device, and so does a
-	-- gamepad's right stick past STICK_DEADZONE, at up to STICK_DEGREES_PER_SECOND: per frame, or
-	-- on a low-end device once per stick event, by the time since the last one (at most
-	-- STICK_STEP_SECONDS of it).
+	-- low-end devices). A drag turns it by DRAG_DEGREES_PER_PIXEL on every device.
 	ARMORY_STAGE_AMBIENT = Color3.fromRGB(128, 128, 128),
 	ARMORY_STAGE_LIGHT_COLOR = Color3.fromRGB(158, 158, 158),
 	ARMORY_STAGE_LIGHT_DIRECTION = Vector3.new(-1, -1, -1),
@@ -1449,9 +1446,6 @@ local Theme = {
 	ARMORY_STAGE_START_YAW_DEGREES = 35,
 	ARMORY_STAGE_TURN_DEGREES_PER_SECOND = 20,
 	ARMORY_STAGE_DRAG_DEGREES_PER_PIXEL = 0.5,
-	ARMORY_STAGE_STICK_DEADZONE = 0.2,
-	ARMORY_STAGE_STICK_DEGREES_PER_SECOND = 120,
-	ARMORY_STAGE_STICK_STEP_SECONDS = 0.1,
 	-- An element's chip (stage) and dot (card); the words are SECRET_NEED_WORDS'.
 	ARMORY_SCREEN_CHIP_HEIGHT = 16,
 	ARMORY_SCREEN_CHIP_TEXT = 10,

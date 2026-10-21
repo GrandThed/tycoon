@@ -7476,8 +7476,9 @@ L3W2_MUTATIONS = {
     ),
     "l3w2 T14: the model is posed every frame": (
         ARMORY_STAGE,
-        "\t\t\t\tturnBy(rate * deltaTime)\n",
-        "\t\t\t\t(look.model :: any):PivotTo(CFrame.identity)\n\t\t\t\tturnBy(rate * deltaTime)\n",
+        "\t\t\t\tturnBy(Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND * deltaTime)\n",
+        "\t\t\t\t(look.model :: any):PivotTo(CFrame.identity)\n"
+        "\t\t\t\tturnBy(Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND * deltaTime)\n",
     ),
     "l3w2 T14: the select path poses nothing": (ARMORY_STAGE, "\t\tmodel:PivotTo(pose)\n", ""),
     "l3w2 T14: the stage stands flat": (
@@ -7783,25 +7784,25 @@ L3W2_FIX_MUTATIONS = {
     ),
     "l3w2 fix C3: the slow turn never turns": (
         ARMORY_STAGE,
-        "\t\t\t\tturnBy(rate * deltaTime)\n",
-        "\t\t\t\tlocal _ = rate * deltaTime\n",
+        "\t\t\t\tturnBy(Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND * deltaTime)\n",
+        "\t\t\t\tlocal _ = Theme.ARMORY_STAGE_TURN_DEGREES_PER_SECOND * deltaTime\n",
     ),
-    "l3w2 fix C3: the right stick is never heard": (
-        ARMORY_STAGE,
-        "\t\t\ttable.insert(look.inputs, UserInputService.InputChanged:Connect(onStick))\n",
-        "",
-    ),
+    # Re-aimed by fix round 2 (G3: the stick is gone, the focus listener is the stage's one).
     "l3w2 fix C3: a lost focus keeps the drag": (
         ARMORY_STAGE,
-        "\t\t\t\t\tlook.stickX = 0\n\t\t\t\t\tendDrag()\n",
-        "\t\t\t\t\tlook.stickX = 0\n",
+        "\t\t\tlook.focus = UserInputService.WindowFocusReleased:Connect(endDrag)\n",
+        "\t\t\tlook.focus = UserInputService.WindowFocusReleased:Connect(function() end)\n",
     ),
-    "l3w2 fix C3: a low-end device gets no stick": (
+    "l3w2 fix C3: a low-end device keeps no focus listener": (
         ARMORY_STAGE,
-        "\t\tif #look.inputs == 0 then\n",
-        "\t\tif Theme.lowEndDevice then\n\t\t\treturn\n\t\tend\n\t\tif #look.inputs == 0 then\n",
+        "\t\tif look.focus == nil then\n",
+        "\t\tif Theme.lowEndDevice then\n\t\t\treturn\n\t\tend\n\t\tif look.focus == nil then\n",
     ),
-    "l3w2 fix C3: stop leaves the listeners counted": (ARMORY_STAGE, "\t\ttable.clear(look.inputs)\n", ""),
+    "l3w2 fix C3: stop leaves the focus listener set": (
+        ARMORY_STAGE,
+        "\t\t\tlook.focus = nil\n\t\t\tfocus:Disconnect()\n",
+        "\t\t\tfocus:Disconnect()\n",
+    ),
     "l3w2 fix C3: Show(nil) leaves the stage live": (
         ARMORY_STAGE,
         "\t\t\t\tlook.family = nil\n\t\t\t\tsyncTurn()\n",
@@ -7811,16 +7812,6 @@ L3W2_FIX_MUTATIONS = {
         ARMORY_STAGE,
         "\t\t\t\tselectFamily(view.family)\n\t\t\t\tsyncTurn()\n",
         "\t\t\t\tselectFamily(view.family)\n",
-    ),
-    "l3w2 fix C3: any stick turns the stage": (
-        ARMORY_STAGE,
-        "\t\tif input.KeyCode ~= Enum.KeyCode.Thumbstick2 then\n",
-        "\t\tif input.KeyCode == Enum.KeyCode.Unknown then\n",
-    ),
-    "l3w2 fix C3: the stick turns per event off low-end too": (
-        ARMORY_STAGE,
-        "if Theme.lowEndDevice and look.stickX ~= 0",
-        "if look.stickX ~= 0",
     ),
     "l3w2 fix C3: a lost mouse release keeps the drag": (
         ARMORY_STAGE,
@@ -7917,7 +7908,8 @@ L3W2_FIX_MUTATIONS = {
         "\tshow(rig)\n",
     ),
     "l3w2 fix C4: unbind leaves the rig bound": (HELD_WEAPONS, "\trig.bound = false\n", ""),
-    "l3w2 fix C4: Muzzle reads before the pending show": (HELD_WEAPONS, "\t\tflush(rig)\n", ""),
+    # Re-aimed by fix round 2 (G1: Muzzle flushes through the public Flush).
+    "l3w2 fix C4: Muzzle reads before the pending show": (HELD_WEAPONS, "\tHeldWeapons.Flush(userId)\n", ""),
     "l3w2 fix C4: a burst shows at once, change by change": (
         HELD_WEAPONS,
         "\t\t\t\twatchPart(rig, child)\n\t\t\t\tqueueShow(rig)\n",
@@ -8002,6 +7994,56 @@ L3W2_FIX_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L3W2_FIX_MUTATIONS)
+
+# The L3 W2 fix round 2 (docs/prompts/l3-w2-fix2.md G1 to G3). Run them alone with
+# `mutate.py <root> <luau> "l3w2 fix2"`.
+L3W2_FIX2_MUTATIONS = {
+    # G1 (m1): another player's swing shows his pending slot change first.
+    "l3w2 fix2 G1: another player's swing flushes nothing": (FEEDBACK, "\t\tHeldWeapons.Flush(strike.userId)\n", ""),
+    "l3w2 fix2 G1: the flush after the arm swings": moved_down(
+        FEEDBACK,
+        "\t\tHeldWeapons.Flush(strike.userId)\n",
+        "\t\tWeaponController.SwingOther(strike.userId, strike.step or 1)\n",
+    ),
+    "l3w2 fix2 G1: the swing flushes my own rig": (
+        FEEDBACK,
+        "HeldWeapons.Flush(strike.userId)",
+        "HeldWeapons.Flush(localUserId())",
+    ),
+    "l3w2 fix2 G1: the flush inside a block": (
+        FEEDBACK,
+        "\t\tHeldWeapons.Flush(strike.userId)\n",
+        "\t\tif strike.tick then\n\t\t\tHeldWeapons.Flush(strike.userId)\n\t\tend\n",
+    ),
+    "l3w2 fix2 G1: Flush shows nothing": (HELD_WEAPONS, "\t\tflush(rig)\n", ""),
+    "l3w2 fix2 G1: Flush shows a character the player has left": (
+        HELD_WEAPONS,
+        "\tif player ~= nil and rig ~= nil and rig.character == player.Character then\n",
+        "\tif player ~= nil and rig ~= nil then\n",
+    ),
+    "l3w2 fix2 G1: Flush leaves early": (
+        HELD_WEAPONS,
+        "\tlocal rig = if player ~= nil then rigs[player] else nil\n",
+        "\tlocal rig = if player ~= nil then rigs[player] else nil\n\tif userId < 0 then\n\t\treturn\n\tend\n",
+    ),
+    # G2 (m2): the review's three.
+    "l3w2 fix2 G2: Muzzle reads the hand before the flush": moved_down(
+        HELD_WEAPONS,
+        "\tHeldWeapons.Flush(userId)\n",
+        "\tlocal held = if rig ~= nil and rig.character == character then rig.inHand else nil\n",
+    ),
+    "l3w2 fix2 G2: a new rig starts unbound": (HELD_WEAPONS, "\t\tbound = true,\n", "\t\tbound = false,\n"),
+    "l3w2 fix2 G2: a new rig starts pending": (HELD_WEAPONS, "\t\tpending = false,\n", "\t\tpending = true,\n"),
+    # G3 (m3): the right stick turns the stage again (and the world behind the screen with it).
+    "l3w2 fix2 G3: the right stick turns the stage": (
+        ARMORY_STAGE,
+        "\t\tif look.focus == nil then\n",
+        "\t\tUserInputService.InputChanged:Connect(function(input: InputObject)\n"
+        "\t\t\tif input.KeyCode == Enum.KeyCode.Thumbstick2 then\n"
+        "\t\t\t\tturnBy(input.Position.X)\n\t\t\tend\n\t\tend)\n\t\tif look.focus == nil then\n",
+    ),
+}
+MUTATIONS.update(L3W2_FIX2_MUTATIONS)
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
