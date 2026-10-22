@@ -48,7 +48,8 @@
 -- L4 W1b (docs/prompts/l4-w1b-contract.md): the Raider Arena's adapters, the mission records and
 -- the debug bots are gone, so every member is a player. Every floor set the run assigns (a start,
 -- the lobby's empty one) gets a new floorsSeq, and ArenaService sends its cells to each member
--- once (L4B-8).
+-- once (L4B-8). Fix round 3's H1 (docs/prompts/l4-w1b-fix3.md): while a fighter's decision waits
+-- for a dash claim the field is never clear (fieldHeld), so a clear never erases a held blow.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -76,6 +77,7 @@ local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
 local SecretFlow = require(script.Parent:WaitForChild("SecretFlow"))
 local UnlockService = require(script.Parent:WaitForChild("UnlockService"))
+local DashProof = require(script.Parent:WaitForChild("DashProof"))
 
 -- Degrade value: without Combat.json the place never leaves the lobby, but the broadcast loop
 -- still needs a legal period.
@@ -173,6 +175,11 @@ type Run = {
 	-- userId then shortcut id (a find is recorded once per run per player).
 	shortcuts: { SecretFlow.Shortcut },
 	shortcutSeen: { [number]: { [string]: boolean } },
+	-- H1 (docs/prompts/l4-w1b-fix3.md, fieldHeld): the last tick found a fighter's decision waiting
+	-- for a dash claim; and os.clock() of the first tick in a row whose clear field that held (0 =
+	-- none), from which the clear's deferral is counted.
+	blowWaits: boolean,
+	heldSince: number,
 }
 
 local function freshRun(): Run
@@ -219,6 +226,8 @@ local function freshRun(): Run
 		secretSeen = {},
 		shortcuts = {},
 		shortcutSeen = {},
+		blowWaits = false,
+		heldSince = 0,
 	}
 end
 
@@ -1408,7 +1417,8 @@ local function execute(actions: { StageFlow.Action }): ()
 			queueWave(action.stage, action.wave or 1, action.merged == true)
 		elseif kind == "clear" then
 			-- What the dead still had in the air (a lob, a slinger's shot) goes with them:
-			-- nothing lands on an empty field.
+			-- nothing lands on an empty field. A blow already due and waiting for a dash claim
+			-- has landed or been dodged first (H1, fieldHeld).
 			VitalsService.ClearThreats()
 			ArenaService.MarkWaveCleared(action.wave or 0, action.count or 0)
 			countWaves(action.count or 0)
@@ -1491,9 +1501,50 @@ local function syncPhase(): ()
 	run.phase = StageFlow.Phase(flow, run.bossId ~= 0 or run.bossPending ~= nil)
 end
 
--- One question to StageFlow, asked by the tick every frame and by OnDown at once: what happens
--- now? Its input is built here, once.
-local function advance(combatConfig: Types.CombatConfig): ()
+-- H1 (docs/prompts/l4-w1b-fix3.md): a blow that has fallen due on a fighter and waits for their
+-- dash claim (VitalsService.HasWaiting) is still in play, so the field is not clear while it
+-- waits. No wave is beaten under it (a clear empties every queue, the blow with it), and a down it
+-- causes when it lands is judged as at its moment, when its striker lived: a lost run stays lost.
+-- Once the claim is proven the blow is dodged, nothing waits, and the next tick's clear goes
+-- through. The tick asks every frame (`delta`, its frame), and never holds a clear field longer
+-- than a claim's lapse and that frame from the first tick that held it: each list empties by its
+-- claim's lapse, and this keeps one that never did from holding the run. A down's advance
+-- (`delta` nil) runs inside VitalsService.Step, after the release that downed them emptied their
+-- list, so the last tick's finding stands for it. Never yields.
+local function fieldHeld(
+	plan: StageFlow.Plan,
+	flow: StageFlow.State,
+	input: StageFlow.Input,
+	now: number,
+	delta: number?
+): boolean
+	local waits = false
+	for _, member in ArenaService.GetMembers() do
+		if ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then
+			waits = true
+			break
+		end
+	end
+	if delta == nil then
+		return (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)
+	end
+	run.blowWaits = waits
+	if not waits or not StageFlow.FieldClear(plan, flow, input) then
+		run.heldSince = 0
+		return false
+	end
+	if run.heldSince == 0 then
+		run.heldSince = now
+	end
+	local tuning = Tuning.Get()
+	local rule = DashProof.Rule(tuning.movement, tuning.shooting)
+	local lapse = if rule ~= nil then rule.lapse else 0
+	return now - run.heldSince <= lapse + delta
+end
+
+-- One question to StageFlow, asked by the tick every frame (`delta`, its frame) and by OnDown at
+-- once (`delta` nil): what happens now? Its input is built here, once.
+local function advance(combatConfig: Types.CombatConfig, delta: number?): ()
 	local plan = run.plan
 	local flow = run.flow
 	if plan == nil or flow == nil or not isLive(run.phase) then
@@ -1539,6 +1590,10 @@ local function advance(combatConfig: Types.CombatConfig): ()
 		fallen = fallen,
 		runCap = run.runEndsAt > 0 and now >= run.runEndsAt,
 	}
+	if fieldHeld(plan, flow, input, now, delta) then
+		-- StageFlow.FieldClear reads this first: the field does not read clear.
+		input.spawningDone = false
+	end
 	local actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)
 	execute(actions)
 	-- Open camps have no boundary: a member down on a road whose field is clear stands up now.
@@ -2087,7 +2142,7 @@ local function onReacted(event: LevelService.Reacted): ()
 	})
 end
 
-local function tick(): ()
+local function tick(delta: number): ()
 	local combatConfig = config()
 	if combatConfig == nil then
 		return
@@ -2147,7 +2202,7 @@ local function tick(): ()
 		moveFighters(zone.entry, zone, true)
 	end
 	tickTents()
-	advance(combatConfig)
+	advance(combatConfig, delta)
 	tickSecrets(combatConfig.levels)
 	sendWallets(os.clock(), false)
 end
@@ -2199,7 +2254,8 @@ function WaveService.MayLeave(player: Player): boolean
 end
 
 -- P5 ruling 18, the one rule for a down: VitalsService reports it, and this asks StageFlow at
--- once what the tick asks it every frame (the fallen end the run unless the field is clear).
+-- once what the tick asks it every frame (the fallen end the run unless the field is clear; H1:
+-- not clear while the last tick found a blow waiting, fieldHeld).
 function WaveService.OnDown(_player: Player): ()
 	local combatConfig = config()
 	if combatConfig ~= nil then
@@ -2396,7 +2452,7 @@ function WaveService.Boot(): ()
 		return
 	end
 	boot.loop = RunService.Heartbeat:Connect(function(delta: number)
-		tick()
+		tick(delta)
 		boot.broadcastAccumulator += delta
 		local period = 1 / stateHz()
 		if boot.broadcastAccumulator >= period then

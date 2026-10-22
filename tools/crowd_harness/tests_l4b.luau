@@ -6,7 +6,11 @@
 -- Pending on their own; RunFloors' promise that every floor it returns is new; (g) the real
 -- VitalsService, started here a second time with a claim hook, run frame by frame in
 -- WeaponService's order (ring sample, Step, VitalsService.Step) over pings, replication, phases and
--- press times; (h) the shipped ProvingGrounds.json. Appended by run_harness.py after tests.luau, so
+-- press times, and fix round 2's G1 (docs/prompts/l4-w1b-fix2.md: a held hit keeps the knock rules,
+-- and a player's later decisions wait behind it, so a claim that never proves costs what no claim
+-- costs), and fix round 3's H2 and H1 (docs/prompts/l4-w1b-fix3.md: a throw while deciding drops that
+-- decision alone, and HasWaiting holds a boss room's clear until a held blow is decided); (h) the
+-- shipped ProvingGrounds.json. Appended by run_harness.py after tests.luau, so
 -- its locals are in scope (check, near, load, vec, config, FIXTURES, fakeNow, fired,
 -- player, beats, walls, blocks, threatHooks, hooks, Crowd, SOURCES, gameStub, token, requireStub, V,
 -- osStub).
@@ -415,12 +419,22 @@ function L4B.pendingDash(who: any): (number, number, number)
 	return L4B.Proof.Pending(L4B.claim.dashClaimAt, L4B.shippedRule, L4B.shippedMove.dashIframes)
 end
 
+-- The i-frame hook as WeaponService.IframeWindow answers it, on the same claimant.
+function L4B.claimWindow(who: any): (number, number, number, number)
+	if who ~= L4B.player then
+		return 0, 0, 0, 0
+	end
+	local w = L4B.claim
+	return w.iframesFrom, w.iframesUntil, w.iframesWasFrom, w.iframesWasUntil
+end
+
 function L4B.startVitals(): ()
 	L4B.body()
 	L4B.ping = 0
 	L4B.claim = L4B.claimant(nil)
 	L4B.history = L4B.Ring.New(120)
 	L4B.dashClaim = L4B.pendingDash
+	L4B.window = L4B.claimWindow
 	local connected = #beats
 	L4B.vitals = SOURCES.VitalsService(gameStub, token("script"), requireStub, V, osStub, {
 		spawn = function(fn, ...)
@@ -433,16 +447,12 @@ function L4B.startVitals(): ()
 	}, { RaycastFilterType = { Exclude = 1 } })
 	L4B.vitals.Start({
 		iframeWindow = function(who)
-			if who ~= L4B.player then
-				return 0, 0, 0, 0
-			end
-			local w = L4B.claim
-			return w.iframesFrom, w.iframesUntil, w.iframesWasFrom, w.iframesWasUntil
+			return L4B.window(who)
 		end,
-		-- WeaponService.GrantIframes: a window from now.
-		grantIframes = function(who, seconds)
+		-- WeaponService.GrantIframes: a window from now, or from `from` when that is earlier (G1).
+		grantIframes = function(who, seconds, from)
 			if who == L4B.player and seconds > 0 then
-				L4B.Proof.Open(L4B.claim, fakeNow, seconds)
+				L4B.Proof.Open(L4B.claim, math.min(from or fakeNow, fakeNow), seconds)
 			end
 		end,
 		dashClaim = function(who)
@@ -464,6 +474,7 @@ function L4B.fresh(ping: number): ()
 	L4B.claim = L4B.claimant(nil)
 	L4B.history = L4B.Ring.New(120)
 	L4B.dashClaim = L4B.pendingDash
+	L4B.window = L4B.claimWindow
 	L4B.root.Position = vec(0, 3, 0)
 	L4B.vitals.PrepareCharacter(L4B.player, L4B.character)
 	L4B.vitals.Step(1 / 60)
@@ -712,11 +723,17 @@ function L4B.casesTests(): ()
 
 	L4B.fresh(0.05)
 	start = L4B.humanoid.Health
-	-- A forged claim, a hit held for it, then a knocking hit its window would not have covered (an
-	-- impact 0.27 after the claim) lands while the first waits: the knock does not void the first.
+	-- G1: a forged claim, a hit held for it, then a knocking hit its window would not have covered
+	-- (an impact 0.27 after the claim) falls due while the first waits. It waits behind it, and both
+	-- are released on the frame the claim lapses in the order they fell due, the held hit first:
+	-- the knock came after it, so both land, as with no claim.
 	claimAt = L4B.claimNow()
 	out = L4B.play(nil, { { at = 0.05 }, { at = 0.27, knockback = 10 } }, 0.8, claimAt)
-	check(#out == 2 and out[1].fx.dodged ~= true and out[2].fx.dodged ~= true and L4B.humanoid.Health == start - 16, `a knock while a hit is held does not void it (its moment came first): both land (health {start} -> {L4B.humanoid.Health})`)
+	local inTurn = #out == 2 and out[1].fx.push == nil and out[2].fx.push ~= nil
+	for _, entry in out do
+		inTurn = inTurn and entry.fx.dodged ~= true and entry.at > lapse - 1e-9 and entry.at <= lapse + 1 / 60 + 1e-9
+	end
+	check(inTurn and L4B.humanoid.Health == start - 16, `G1: a knock due while a hit is held waits behind it: both land as the claim lapses, the held hit first (health {start} -> {L4B.humanoid.Health})`)
 
 	L4B.fresh(0.05)
 	start = L4B.humanoid.Health
@@ -880,11 +897,418 @@ function L4B.travelTests(): ()
 	L4B.ends = nil
 end
 
+-- G1 (docs/prompts/l4-w1b-fix2.md): a claim that never proves costs exactly what no claim costs.
+-- A queue of strikes (times after the claim, ping 0.05: the commit lag 0.1) played from a fresh
+-- run, with no claim or with a claim made at 0 that never proves (a still root). Returns the health
+-- lost, every hurt with its frame, and the run's start. `setup` runs after the fresh run, `onFrame`
+-- (a fresh one per run) each frame before it is stepped; `ping` (default 0.05) sets the lag.
+function L4B.queue(claim: boolean, impacts: { any }, setup: (() -> ())?, onFrame: ((since: number) -> ())?, seconds: number?, ping: number?): (number, { any }, number)
+	L4B.fresh(ping or 0.05)
+	if setup ~= nil then
+		setup()
+	end
+	local start = L4B.humanoid.Health
+	local from = fakeNow
+	if claim then
+		L4B.claimNow()
+	end
+	local out = L4B.play(nil, impacts, seconds or 0.9, from, onFrame)
+	return start - L4B.humanoid.Health, out, from
+end
+
+-- "landed dodged ...": what each hurt said, in the order they left.
+function L4B.pattern(out: { any }): string
+	local parts = {}
+	for _, entry in out do
+		table.insert(parts, if entry.fx.dodged then "dodged" else "landed")
+	end
+	return table.concat(parts, " ")
+end
+
+-- The same queue with no claim and with one that never proves: the same loss (`lost`), the same
+-- landings and dodges in the same order, and with the claim the first `waited` effects (default
+-- all) on the frame it lapses: each waited, held for the claim or behind a decision that was.
+function L4B.sameAsNoClaim(label: string, impacts: { any }, lost: number, waited: number?): ()
+	local lapse = L4B.shippedRule.lapse
+	local lostFree, free = L4B.queue(false, impacts)
+	local lostHeld, held = L4B.queue(true, impacts)
+	local atLapse = #held == #free
+	for index, entry in held do
+		if index <= (waited or #held) then
+			atLapse = atLapse and entry.at > lapse - 1e-9 and entry.at <= lapse + 1 / 60 + 1e-9
+		end
+	end
+	check(lostFree == lost and lostHeld == lostFree and L4B.pattern(held) == L4B.pattern(free) and atLapse, `G1: {label}: no claim lost {lostFree} ({L4B.pattern(free)}), a claim that never proves lost {lostHeld} ({L4B.pattern(held)}), the waiting ones as it lapsed {atLapse}`)
+end
+
+-- A knocking hit at 0 and a ring that leaves 12 studs off at 0: it reaches the root at 0.275, after
+-- the claim's window ([0, 0.25)), and the crowd step of 0.4 finds it (ThreatField, steps every fourth
+-- frame), while the knock (decided at 0.1) is still held for the claim.
+-- `distance` (default 12): how far off the ring leaves.
+function L4B.ringQueue(claim: boolean, distance: number?): (number, { any })
+	L4B.fresh(0.05)
+	local start = L4B.humanoid.Health
+	local from = fakeNow
+	if claim then
+		L4B.claimNow()
+	end
+	L4B.threat.impact(L4B.strike(from, 10))
+	local ring = L4B.strike(from)
+	ring.def = { shape = "ring", speed = 40, radius = 30, width = 2, damage = 8, height = 5 }
+	ring.origin = vec(0, 3, distance or 12)
+	ring.aim = vec(0, 3, 0)
+	ring.facing = vec(0, 0, -1)
+	L4B.threat.impact(ring)
+	local out = {}
+	for k = 1, 54 do
+		fakeNow = from + k / L4B.HZ
+		if k % 4 == 0 then
+			L4B.threat.step(fakeNow)
+		end
+		for _, fx in L4B.frame(vec(0, 3, 0)) do
+			table.insert(out, { fx = fx, at = fakeNow - from })
+		end
+	end
+	return start - L4B.humanoid.Health, out
+end
+
+-- Runs `cases` with config.player's `key` at `value`, and puts it back whatever happens.
+function L4B.withPlayer(key: string, value: number, cases: () -> ()): ()
+	local was = config.player[key]
+	config.player[key] = value
+	local ok, problem = pcall(cases)
+	config.player[key] = was
+	if not ok then
+		error(problem, 0)
+	end
+end
+
+function L4B.knockTests(): ()
+	print(" (g) knocks among held hits (G1): a claim that never proves costs what no claim costs")
+	local lapse = L4B.shippedRule.lapse
+	-- The review's three queues (docs/prompts/l4-w1b-review/4-fix-diff.md M1), 8 a hit, knockIframes 0.4.
+	L4B.sameAsNoClaim("a knocking hit at 0, a plain one at 0.05", { { at = 0, knockback = 10 }, { at = 0.05 } }, 8)
+	L4B.sameAsNoClaim("two knocking hits in one step, at 0", { { at = 0, knockback = 10 }, { at = 0, knockback = 10 } }, 8)
+	L4B.sameAsNoClaim("a held knocking hit at 0.05, then one at 0.27 its claim would not cover", { { at = 0.05, knockback = 10 }, { at = 0.27 } }, 8)
+	-- The released knock's windows run from its moment (0.1), not from the release: a hit at 0.5,
+	-- after them (and after the lapse), lands, as with no claim.
+	L4B.sameAsNoClaim("a knocking hit at 0, a plain one at 0.5 after its window", { { at = 0, knockback = 10 }, { at = 0.5 } }, 16, 1)
+
+	-- What travels waits behind a held decision too: the ring's contact, which the claim would not
+	-- cover, is judged as of its own step (0.4) once the knock before it is released, so the knock's
+	-- window voids it, as with no claim.
+	local lostFree, free = L4B.ringQueue(false)
+	local lostHeld, held = L4B.ringQueue(true)
+	local behind = held[2] ~= nil and held[2].at > lapse - 1e-9 and held[2].at <= lapse + 1 / 60 + 1e-9
+	check(lostFree == 8 and lostHeld == 8 and L4B.pattern(free) == "landed dodged" and L4B.pattern(held) == "landed dodged" and behind, `G1: a ring's contact found while a knock is held waits behind it and is voided by it: no claim lost {lostFree} ({L4B.pattern(free)}), held lost {lostHeld} ({L4B.pattern(held)})`)
+
+	-- A knock voids what was waiting at its moment only: a hit whose impact came before the knock but
+	-- that a late step raised after it (at 0.2, its impact -0.1) was not among them. With knockIframes
+	-- 0.05 neither knock window covers it either: with no claim it lands, and held behind the knock it
+	-- lands too.
+	L4B.withPlayer("knockIframes", 0.05, function()
+		local function lateHit(): (since: number) -> ()
+			local raised = false
+			return function(since: number)
+				if not raised and since > 0.2 - 1e-9 then
+					raised = true
+					L4B.threat.impact(L4B.strike(fakeNow - since - 0.1))
+				end
+			end
+		end
+		local lostA, outA = L4B.queue(false, { { at = 0, knockback = 10 } }, nil, lateHit())
+		local lostB, outB = L4B.queue(true, { { at = 0, knockback = 10 } }, nil, lateHit())
+		check(lostA == 16 and lostB == 16 and L4B.pattern(outA) == "landed landed" and L4B.pattern(outB) == "landed landed", `G1: a knock does not void a hit that joined the queue after its moment: no claim lost {lostA} ({L4B.pattern(outA)}), held lost {lostB} ({L4B.pattern(outB)})`)
+	end)
+	-- The same late hit with knockIframes 0.3: its moment (0.2) is inside the knock's window from the
+	-- knock's moment (to 0.4), so ruling 18 voids it, held or not, though that window has closed by
+	-- the release (0.47).
+	L4B.withPlayer("knockIframes", 0.3, function()
+		local function lateHit(): (since: number) -> ()
+			local raised = false
+			return function(since: number)
+				if not raised and since > 0.2 - 1e-9 then
+					raised = true
+					L4B.threat.impact(L4B.strike(fakeNow - since - 0.1))
+				end
+			end
+		end
+		local lostLateFree, lateFree = L4B.queue(false, { { at = 0, knockback = 10 } }, nil, lateHit())
+		local lostLateHeld, lateHeld = L4B.queue(true, { { at = 0, knockback = 10 } }, nil, lateHit())
+		check(lostLateFree == 8 and lostLateHeld == 8 and L4B.pattern(lateFree) == "landed dodged" and L4B.pattern(lateHeld) == "landed dodged", `G1: a waiting hit decided inside a released knock's window (from its moment) is voided: no claim lost {lostLateFree} ({L4B.pattern(lateFree)}), held lost {lostLateHeld} ({L4B.pattern(lateHeld)})`)
+	end)
+
+	-- With knockIframes 0 a knock opens no window and `knockUntil` voids nothing after its own moment:
+	-- only ruling 18's "struck and waiting" voids what was decided with it. So here each half of it
+	-- shows: what waits behind the knock is voided by it (two knocking hits in one step); what joined
+	-- the queue after the knock's moment is not, whether it is an impact a late step raised that is
+	-- not yet due at the release (ping 0.25: lag 0.3; the knock decided on the frame of 0.42, the late
+	-- hit struck at 0.3, raised at 0.43, decided at 0.6) or a ring's contact (it reaches the root at 0.05, before the
+	-- knock's moment, and the step of 0.2 finds it, after it).
+	L4B.withPlayer("knockIframes", 0, function()
+		L4B.sameAsNoClaim("knockIframes 0, two knocking hits in one step", { { at = 0, knockback = 10 }, { at = 0, knockback = 10 } }, 8)
+		local function lateDue(): (since: number) -> ()
+			local raised = false
+			return function(since: number)
+				if not raised and since > 0.43 then
+					raised = true
+					L4B.threat.impact(L4B.strike(fakeNow - since + 0.3))
+				end
+			end
+		end
+		local lostP, outP = L4B.queue(false, { { at = 0.1, knockback = 10 } }, nil, lateDue(), 0.9, 0.25)
+		local lostQ, outQ = L4B.queue(true, { { at = 0.1, knockback = 10 } }, nil, lateDue(), 0.9, 0.25)
+		check(lostP == 16 and lostQ == 16 and L4B.pattern(outP) == "landed landed" and L4B.pattern(outQ) == "landed landed", `G1: knockIframes 0, a late hit not yet due at the release is not voided by the knock: no claim lost {lostP} ({L4B.pattern(outP)}), held lost {lostQ} ({L4B.pattern(outQ)})`)
+		local lostR, outR = L4B.ringQueue(false, 3)
+		local lostS, outS = L4B.ringQueue(true, 3)
+		check(lostR == 16 and lostS == 16 and L4B.pattern(outR) == "landed landed" and L4B.pattern(outS) == "landed landed", `G1: knockIframes 0, a ring's contact found after a held knock's moment is judged at its own step: no claim lost {lostR} ({L4B.pattern(outR)}), held lost {lostS} ({L4B.pattern(outS)})`)
+	end)
+
+	-- A down from a held hit starts at its moment: stood up at 0.5 (StandUp), a hit that struck at
+	-- 0.45, inside the down, is the down's and is dropped, as with no claim.
+	local function lowAgain(): ()
+		L4B.humanoid.Health = 8
+	end
+	local function standUp(): (since: number) -> ()
+		return function(since: number)
+			if math.abs(since - 0.5) < 0.5 / 60 then
+				L4B.vitals.StandUp(L4B.player)
+			end
+		end
+	end
+	local _, upFree = L4B.queue(false, { { at = 0 }, { at = 0.45 } }, lowAgain, standUp())
+	local _, upHeld = L4B.queue(true, { { at = 0 }, { at = 0.45 } }, lowAgain, standUp())
+	check(L4B.pattern(upFree) == "landed" and L4B.pattern(upHeld) == "landed", `G1: a held hit's down runs from its moment: a hit inside it, decided after a stand-up, is dropped (no claim: {L4B.pattern(upFree)}; held: {L4B.pattern(upHeld)})`)
+
+	-- ClearThreats takes the waiting too: a hit held for a claim, then the threats cleared (a camp's
+	-- clear, a run's end), lands on nobody.
+	local _, cleared = L4B.queue(true, { { at = 0 } }, nil, function(since: number)
+		if math.abs(since - 0.2) < 0.5 / 60 then
+			L4B.vitals.ClearThreats()
+		end
+	end)
+	check(#cleared == 0, `G1: ClearThreats drops a decision that waits ({#cleared} effects)`)
+
+	-- A released hit is taken at its moment: one that puts the player down tells the same get-up
+	-- and stands them up at the same time as with no claim, though its effect leaves at the lapse.
+	local function low(): ()
+		L4B.humanoid.Health = 8
+	end
+	local function watchUp(log: { [string]: boolean }): (since: number) -> ()
+		return function(since: number)
+			if math.abs(since - 2.05) < 0.5 / 60 then
+				log.downAt205 = L4B.vitals.IsDown(L4B.player)
+			elseif math.abs(since - 2.15) < 0.5 / 60 then
+				log.downAt215 = L4B.vitals.IsDown(L4B.player)
+			end
+		end
+	end
+	local logFree, logHeld = {}, {}
+	local _, downFree, fromFree = L4B.queue(false, { { at = 0 } }, low, watchUp(logFree), 2.3)
+	local _, downHeld, fromHeld = L4B.queue(true, { { at = 0 } }, low, watchUp(logHeld), 2.3)
+	local a, b = downFree[1], downHeld[1]
+	local sameUp = a ~= nil and b ~= nil and a.fx.down == true and b.fx.down == true and a.fx.upAt ~= nil and b.fx.upAt ~= nil and math.abs((a.fx.upAt - fromFree) - (b.fx.upAt - fromHeld)) < 1e-6
+	check(sameUp and b.at > lapse - 1e-9 and logFree.downAt205 == true and logHeld.downAt205 == true and logFree.downAt215 == false and logHeld.downAt215 == false, `G1: a held hit that puts them down is a down from its moment: the same upAt and the same get-up (2.1 s) as with no claim (down at 2.05: {tostring(logFree.downAt205)} / {tostring(logHeld.downAt205)}, at 2.15: {tostring(logFree.downAt215)} / {tostring(logHeld.downAt215)})`)
+
+	-- And regen waits regenDelay from its moment (0.1): 0.35 s after that, both runs have healed about
+	-- as much (to a regen step), where a delay counted from the release (0.47) would not have begun.
+	-- At the shipped regenPerSecond (the fixture's own is 0 by now, set by earlier groups).
+	local sampleAt = 0.1 + config.player.regenDelay + 0.35
+	L4B.withPlayer("regenPerSecond", FIXTURES.proving.player.regenPerSecond, function()
+		local function sample(log: { number }): (since: number) -> ()
+			return function(since: number)
+				if math.abs(since - sampleAt) < 0.5 / 60 then
+					table.insert(log, L4B.humanoid.Health)
+				end
+			end
+		end
+		local healthFree, healthHeld = {}, {}
+		L4B.queue(false, { { at = 0 } }, nil, sample(healthFree), sampleAt + 0.1)
+		L4B.queue(true, { { at = 0 } }, nil, sample(healthHeld), sampleAt + 0.1)
+		-- A fresh run starts at full health; the hit took 8, so more than 2 back is regen begun.
+		local hit = L4B.humanoid.MaxHealth - 8
+		local hFree, hHeld = healthFree[1], healthHeld[1]
+		check(hFree ~= nil and hHeld ~= nil and hFree > hit + 2 and hHeld > hit + 2 and math.abs(hFree - hHeld) <= 1.5, `G1: regen waits from a held hit's moment: health {string.format("%.2f", sampleAt)} s in {hFree} with no claim, {hHeld} held (both from {hit})`)
+	end)
+
+	-- An honest dash proven late against the third queue: the held knock is dodged on the proof's
+	-- frame, and the later hit, with nothing left waiting before it, lands at its own moment (0.38),
+	-- as before L4.
+	L4B.fresh(0.05)
+	local start = L4B.humanoid.Health
+	local claimAt = L4B.claimNow()
+	local out = L4B.play(L4B.dashFrom(0.15), { { at = 0.05, knockback = 10 }, { at = 0.27 } }, 0.9, claimAt)
+	check(#out == 2 and out[1].fx.dodged == true and out[1].at < 0.25 and out[2].fx.dodged ~= true and out[2].at > 0.37 - 1e-9 and out[2].at < 0.37 + 1 / 60 + 1e-9 and L4B.humanoid.Health == start - 8, `G1: a dash proven late: the held knock dodged at {if out[1] then string.format("%.3f", out[1].at) else "-"} s, the later hit landed at its own moment {if out[2] then string.format("%.3f", out[2].at) else "-"} s (health {start} -> {L4B.humanoid.Health})`)
+end
+
+-- H2 (docs/prompts/l4-w1b-fix3.md, the review's s1): Heartbeats from `from` for `seconds`, each running
+-- VitalsService.Step under a protected call as WeaponService's xpcall does, with no ring sample (a
+-- claim never proves; it lapses by its own clock). `raise` = strikes by time since `from`, raised at
+-- the first frame at or after it; `onFrame` runs first in each frame. Returns how many frames threw
+-- and every hurt with its frame.
+function L4B.guarded(from: number, seconds: number, raise: { number }, onFrame: (() -> ())?): (number, { any })
+	local due = table.clone(raise)
+	local thrown = 0
+	local out = {}
+	for k = 1, math.floor(seconds * L4B.HZ + 0.5) do
+		fakeNow = from + k / L4B.HZ
+		if onFrame ~= nil then
+			onFrame()
+		end
+		while due[1] ~= nil and due[1] <= k / L4B.HZ + 1e-9 do
+			L4B.threat.impact(L4B.strike(from + table.remove(due, 1)))
+		end
+		if not pcall(L4B.vitals.Step, 1 / L4B.HZ) then
+			thrown += 1
+		end
+		for _, fx in L4B.hurts() do
+			table.insert(out, { fx = fx, at = k / L4B.HZ })
+		end
+	end
+	return thrown, out
+end
+
+function L4B.throwTests(): ()
+	print(" (g) a throw while deciding (H2): that decision alone is dropped, none before it is decided again")
+	local lapse = L4B.shippedRule.lapse
+	local calls = 0
+	-- The claim hook, asked once per decision that is not voided, throwing at its second call in a
+	-- frame once `after` seconds have passed since `from`.
+	local function throwing(from: number, after: number): (who: any) -> (number, number, number)
+		return function(who: any): (number, number, number)
+			calls += 1
+			if fakeNow - from > after and calls == 2 then
+				error("H2 test throw", 0)
+			end
+			return L4B.pendingDash(who)
+		end
+	end
+	local function frameStart(): ()
+		calls = 0
+	end
+
+	-- The review's probe (docs/prompts/l4-w1b-review/5-fix2-diff.md s1): three hits held for a claim
+	-- that never proves. In the release, past the lapse, the first lands and the second's decision
+	-- throws: that one is dropped, the frame's batch leaves with the next frame's, the third lands
+	-- then, and the first is never decided again.
+	L4B.fresh(0.05)
+	local start = L4B.humanoid.Health
+	local from = L4B.claimNow()
+	L4B.dashClaim = throwing(from, lapse)
+	local thrown, out = L4B.guarded(from, 1, { 0, 0.1, 0.2 }, frameStart)
+	L4B.dashClaim = L4B.pendingDash
+	local oneBatch = #out == 2 and out[1].at == out[2].at and out[1].at > lapse + 1 / 60 - 1e-9 and out[1].at <= lapse + 2 / 60 + 1e-9
+	check(thrown == 1 and L4B.pattern(out) == "landed landed" and oneBatch and L4B.humanoid.Health == start - 16 and not L4B.vitals.HasWaiting(L4B.player), `H2: a throw in the release drops that decision once: {thrown} frame threw, {L4B.pattern(out)} (one batch, the frame after the throw: {tostring(oneBatch)}), health {start} -> {L4B.humanoid.Health}, none left waiting: {tostring(not L4B.vitals.HasWaiting(L4B.player))}`)
+
+	-- The queue, with no claim: four strikes raised in one step, A, B and D struck at 0 and C (third)
+	-- at 0.5. In the frame A, B and D fall due, B's decision throws: A is not decided again, D behind it
+	-- is decided in the next frame, and C, kept, once at its own moment (0.6).
+	L4B.fresh(0.05)
+	start = L4B.humanoid.Health
+	from = fakeNow
+	L4B.dashClaim = throwing(from, 0)
+	for _, at in { 0, 0, 0.5, 0 } do
+		L4B.threat.impact(L4B.strike(from + at))
+	end
+	thrown, out = L4B.guarded(from, 1, {}, frameStart)
+	L4B.dashClaim = L4B.pendingDash
+	local last = out[#out]
+	local keptOnTime = #out == 3 and last.at > 0.6 - 1e-9 and last.at < 0.6 + 1 / 60 + 1e-9
+	check(thrown == 1 and L4B.pattern(out) == "landed landed landed" and keptOnTime and L4B.humanoid.Health == start - 24, `H2: a throw in the queue drops that entry once, the queue whole behind it: {thrown} frame threw, {L4B.pattern(out)}, the kept one at {if last then string.format("%.3f", last.at) else "-"} s, health {start} -> {L4B.humanoid.Health}`)
+
+	-- An entry whose moment has come leaves the queue before anything about it is asked: two strikes
+	-- at 0, the i-frame hook throwing once a decision has been taken in the frame (the second strike's
+	-- question, after the first's decision). One lands, the other is dropped and never asked again.
+	L4B.fresh(0.05)
+	start = L4B.humanoid.Health
+	from = fakeNow
+	local decided = 0
+	L4B.dashClaim = function(who: any): (number, number, number)
+		decided += 1
+		return L4B.pendingDash(who)
+	end
+	L4B.window = function(who: any): (number, number, number, number)
+		if decided > 0 then
+			error("H2 test throw", 0)
+		end
+		return L4B.claimWindow(who)
+	end
+	thrown, out = L4B.guarded(from, 0.5, { 0, 0 }, function()
+		decided = 0
+	end)
+	L4B.dashClaim = L4B.pendingDash
+	L4B.window = L4B.claimWindow
+	check(thrown == 1 and L4B.pattern(out) == "landed" and L4B.humanoid.Health == start - 8, `H2: an entry leaves the queue before its i-frames are asked: {thrown} frame threw, {L4B.pattern(out)}, health {start} -> {L4B.humanoid.Health}`)
+end
+
+-- H1 (docs/prompts/l4-w1b-fix3.md, the review's m3): the boss room's clear, held as WaveService holds
+-- it. A slam at 0 that puts the player down (health 8); the boss dies at `killAt`, and from then the
+-- clear (ClearThreats) goes through on the first frame that finds VitalsService.HasWaiting() false,
+-- asked before the frame's Step. `claim`: "none", "forged" (a still root: it lapses) or "honest" (the
+-- dash seen from 0.15, proven about 0.18). Returns the hurts, when the clear went (since the start),
+-- whether the player was down then, whether HasWaiting was true at the kill for them and false for
+-- tests.luau's player (who has no record here), and whether it was ever true.
+function L4B.bossClear(claim: string, killAt: number): ({ any }, number?, boolean, boolean, boolean)
+	L4B.fresh(0.05)
+	L4B.humanoid.Health = 8
+	local from = fakeNow
+	if claim ~= "none" then
+		L4B.claimNow()
+	end
+	local killed = false
+	local clearedAt: number? = nil
+	local downAtClear, waitingAtKill, everWaiting = false, false, false
+	local path = if claim == "honest" then L4B.dashFrom(0.15) else nil
+	local out = L4B.play(path, { { at = 0 } }, 0.9, from, function(since: number)
+		local waiting = L4B.vitals.HasWaiting()
+		everWaiting = everWaiting or waiting
+		if not killed and since > killAt - 1e-9 then
+			killed = true
+			waitingAtKill = L4B.vitals.HasWaiting(L4B.player) and not L4B.vitals.HasWaiting(player)
+		end
+		if killed and clearedAt == nil and not waiting then
+			clearedAt = since
+			downAtClear = L4B.vitals.IsDown(L4B.player)
+			L4B.vitals.ClearThreats()
+		end
+	end)
+	return out, clearedAt, downAtClear, waitingAtKill, everWaiting
+end
+
+function L4B.clearTests(): ()
+	print(" (g) the boss room's clear waits for a held blow (H1, VitalsService.HasWaiting)")
+	local lapse = L4B.shippedRule.lapse
+	-- No claim: the slam lands at its moment (0.1), nothing ever waits, and the clear at the kill (0.3)
+	-- finds them down.
+	local out, clearedAt, downAtClear, _, everWaiting = L4B.bossClear("none", 0.3)
+	local slam = out[1]
+	check(#out == 1 and slam.fx.down == true and near(slam.at, 0.1, 1e-6) and clearedAt ~= nil and near(clearedAt, 0.3, 1e-6) and downAtClear and not everWaiting, `H1: no claim: the slam downs them at {if slam then string.format("%.3f", slam.at) else "-"} s, nothing waits, the clear goes at the kill ({if clearedAt then string.format("%.3f", clearedAt) else "never"} s), down then: {tostring(downAtClear)}`)
+
+	-- The review's race: a claim that never proves holds the slam, and the boss dies at 0.3. The clear
+	-- waits until the slam is released at the lapse: it lands first and downs them, as with no claim.
+	local waitingAtKill
+	out, clearedAt, downAtClear, waitingAtKill = L4B.bossClear("forged", 0.3)
+	slam = out[1]
+	local landedFirst = slam ~= nil and slam.fx.down == true and slam.at > lapse - 1e-9 and clearedAt ~= nil and clearedAt > slam.at and clearedAt <= slam.at + 1 / 60 + 1e-9
+	check(#out == 1 and landedFirst and downAtClear and waitingAtKill, `H1: a slam held behind a claim that never proves, the boss dead at 0.3: it waits (HasWaiting at the kill: {tostring(waitingAtKill)}), the slam downs them at {if slam then string.format("%.3f", slam.at) else "-"} s, the clear goes after it at {if clearedAt then string.format("%.3f", clearedAt) else "never"} s, down then: {tostring(downAtClear)}`)
+
+	-- An honest dash proven after the kill (0.12): the held slam is dodged at the proof, and the clear
+	-- goes through right after it, not at the lapse.
+	out, clearedAt, downAtClear, waitingAtKill = L4B.bossClear("honest", 0.12)
+	slam = out[1]
+	local atProof = slam ~= nil and slam.fx.dodged == true and slam.at < 0.25 and clearedAt ~= nil and clearedAt > slam.at and clearedAt <= slam.at + 1 / 60 + 1e-9
+	check(#out == 1 and atProof and not downAtClear and waitingAtKill and L4B.humanoid.Health == 8, `H1: an honest claim proven after the kill: the slam dodged at {if slam then string.format("%.3f", slam.at) else "-"} s, the clear right after it ({if clearedAt then string.format("%.3f", clearedAt) else "never"} s), down then: {tostring(downAtClear)}`)
+end
+
+
 function L4B.vitalsTests(): ()
 	L4B.startVitals()
 	L4B.group("dash proof: (g) study", L4B.studyTests)
 	L4B.group("dash proof: (g) cases", L4B.casesTests)
 	L4B.group("dash proof: (g) travelling", L4B.travelTests)
+	L4B.group("dash proof: (g) knocks among held hits (G1)", L4B.knockTests)
+	L4B.group("dash proof: (g) a throw while deciding (H2)", L4B.throwTests)
+	L4B.group("dash proof: (g) the boss room's clear waits (H1)", L4B.clearTests)
 	config.player.regenPerSecond = L4B.regen
 	L4B.vitals.ClearThreats()
 	-- tests.luau's VitalsService takes the crowd's hooks back.
