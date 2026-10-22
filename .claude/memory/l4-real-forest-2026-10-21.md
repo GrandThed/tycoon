@@ -103,3 +103,7 @@ now its own gate `sim_range.py --r8 --check` (~54 min). Four-slice review runnin
 simulated runs, ~54 min on 8 workers; they compete for CPU). Offered sharding `mutate.py` and running the full passes only
 at QA; **he chose "leave it as it is"** (this also answers the L1b sharding offer). Do not re-offer unless he asks; say
 plainly what is running when a wait is long.
+**Same evening, Ben: "no way the tool is taking that long".** The full `mutate.py` on afdce67 had done 572 of 1,914 in 4 h
+(~25 s each, single core; ~9 h left, on code the fix round had changed). Shown the numbers, **he chose "stop it; split the
+end run across cores"**: the run was stopped (572 caught), and the final full run on W2's last commit is to be sharded.
+This supersedes his earlier "leave it as it is". Lesson: give a computed ETA from the run's own progress, never a guess.
