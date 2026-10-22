@@ -13,3 +13,9 @@
   Colossus's numbers: re-render once the `chief` kind exists; camp C's sight gate needs the posed hammer reach (17 out,
   24 up), not the torso width; add a mirror check for the hand-ported poses; a seated body's hit shapes must drop
   (server) for the head rule to hold seated.
+- **Harness (Castle or any new level):** `realMapTests`' `table.concat(open, " ") == "forestRoad"` pins today's map and goes
+  red once the Castle gets a level file; replace it with the rule "a node with a level file and no `requires` is open, one
+  with `requires` is locked by it" (W1b fix-round designer's note).
+- **W1b dash hold:** the simulator dates an unproven dash's hits at their decision, not at the lapse, and does not model
+  the queue order when a held hit lands in the same frame as another decision; neither moves a gated number while no
+  simulated dash goes unproven.
