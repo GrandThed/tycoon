@@ -43,11 +43,7 @@
 		},
 		"ServerStorage": {
 			"$className": "ServerStorage",
-			"$ignoreUnknownInstances": true,
-			"Enemies": {
-				"$className": "Folder",
-				"$path": { "optional": "templates/_enemies" }
-			}
+			"$ignoreUnknownInstances": true
 		},
 		"Workspace": {
 			"$className": "Workspace",
