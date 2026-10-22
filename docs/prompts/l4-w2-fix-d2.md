@@ -38,3 +38,17 @@ owners" section and apply it; this list is the lead's index, the reports hold th
 `mirror_mutants.py` pass; `forest.py check` passes; `mutate.py` filtered to every file changed in the fix round reads 0 not
 caught and the stale check over all entries reads 0 stale; every review probe named in the fix round is caught (by a test,
 a pin or a mutant: name which). Report: `docs/prompts/l4-w2-fix-reports/d2.md`.
+
+## Added after D1's report
+
+7. **D1's relays** (exact texts in `d1.md`): the `seatStep` op in `stage_mirror.luau` (until it lands `check_stage_mirror.py`
+   fails that one row); two `mirror_mutants.py` entries (SeatStep at twice the pace; with no pace it never moves); the K6
+   SIM_CASE in `check_levels_mutants.py`, and `--r8-gate-only` appended to the two clock cases. The Chief's sweep is now
+   range 12.7 / reach 10.5 in `ProvingGrounds.json`: re-run `raiderpose.py --check` and `check_levels.py`.
+8. **The plan hash depends on the Python that runs `forest.py`** (D1: `forest.py check` passes under plain `py`, i.e. 3.14
+   32-bit, and reports the hash stale under `py -3.12`). The shipped hash `23851a6f417491c1` was made by one of them and
+   both `Config/LevelDress/ForestRoad.json` and `Assets.json levels.ForestRoad.planHash` hold it, so the game is consistent;
+   but a rebuild under the other Python would read as a new plan. Find the cause (float formatting, rounding, dict order)
+   and make the hash identical under both Pythons. If that keeps today's value, nothing else moves. If it cannot, write the
+   new value into the dress file with `forest.py` and into `Assets.json` only through `assets_config.save_assets` (never by
+   hand: a hand save reformats the file), prove nothing re-uploads (`upload_level.py --dry-run` reads 0 pending), and say so.
