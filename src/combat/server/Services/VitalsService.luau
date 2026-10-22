@@ -46,6 +46,13 @@
 -- voids it waits, until the claim is proven (voided, as before L4) or lapses (it lands), never
 -- past the lapse. One order every frame: WeaponService's Heartbeat samples the rings and proves
 -- the claims, then runs Step here, so a claim proven this frame counts in this frame's decisions.
+--
+-- G1 (docs/prompts/l4-w1b-fix2.md): a dash that never proves never costs more than not dashing.
+-- A held decision keeps the moment it was first due (`hold.at`), and while it waits every later
+-- decision of that player waits behind it (`waiting`), so nothing of theirs lands out of turn.
+-- On release they are decided in the order they fell due, each as of its own moment: the knock
+-- windows (rulings 6 and 18), the down's clock and the regen delay are the ones an unheld
+-- decision taken then would have met and left. Only the effect leaves late.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -81,7 +88,8 @@ export type Hooks = {
 	-- The player's latest i-frame window and the one before it: (from, until, previous from,
 	-- previous until), still readable after they have lapsed.
 	iframeWindow: (player: Player) -> (number, number, number, number),
-	grantIframes: (player: Player, seconds: number) -> (),
+	-- A window of `seconds` from `from` (default now; G1: a released knock's own moment).
+	grantIframes: (player: Player, seconds: number, from: number?) -> (),
 	-- F1: the player's pending dash claim: the window it opens if the ring proves it, (from,
 	-- until), and the last moment it can still be proven; 0, 0, 0 = none (DashProof.Pending).
 	dashClaim: (player: Player) -> (number, number, number),
@@ -104,9 +112,15 @@ type Vitals = {
 	knockUntil: number,
 	-- Roblox may add its regen script after CharacterAdded: this watches the character for it.
 	watch: RBXScriptConnection?,
+	-- G1: the decisions due and not yet released, in the order they fell due. The first waits for
+	-- a dash claim; the rest wait behind it.
+	waiting: { Pending },
 }
--- F1: what the commit rule found at a held decision's moment, kept until the dash claim resolves.
+-- F1: what the commit rule found at a held decision's moment, kept until it is released.
 type Hold = {
+	-- G1: os.clock() of the frame it was first due (for what travels, of the step that found it):
+	-- its moment, as of which it is judged when released.
+	at: number,
 	-- The shape held the root (plan and height), and where that root was.
 	inShape: boolean,
 	position: Vector3,
@@ -122,8 +136,11 @@ type Pending = {
 	-- Voided already: an i-frame has covered some moment between the impact and the decision,
 	-- or a knockback landed while this hit was waiting.
 	covered: boolean,
-	-- F1: its moment has come and gone while a dash claim that would cover it was pending.
+	-- F1 and G1: its moment has come and it waits, for a dash claim that would cover it or behind
+	-- an earlier decision of its player's that does.
 	hold: Hold?,
+	-- G1: os.clock() when it joined the queue. A knock voids what was waiting at its moment only.
+	queuedAt: number,
 }
 
 -- What a downed player's Humanoid holds. At 0 it would die, and the range has no respawn.
@@ -174,10 +191,10 @@ local function lagOf(player: Player, shooting: Types.RangeShootingConfig): numbe
 	return Tuning.CommitLag(shooting, player:GetNetworkPing())
 end
 
-local function grantIframes(player: Player, seconds: number): ()
+local function grantIframes(player: Player, seconds: number, from: number?): ()
 	local range = hooks
 	if range ~= nil then
-		range.grantIframes(player, seconds)
+		range.grantIframes(player, seconds, from)
 	end
 end
 
@@ -272,12 +289,20 @@ local function pushOf(strike: CrowdBrain.Strike, point: Vector3): Vector3
 	return strike.facing
 end
 
+-- Ruling 18's "struck and waiting": had `other` struck by the moment `at`, and was it in the queue
+-- then (G1)? A contact that travels, or an impact a later step raised, joins the queue after its own
+-- impact: a knock decided in between did not void it, so a released one does not either.
+local function struckBy(other: Pending, at: number): boolean
+	return other.strike.at <= at and other.queuedAt <= at
+end
+
 -- One standing player's outcome of one attack, against the root as the server had it at the
 -- decision (`position`). `held` = the attack's shape holds them; `voided` = an i-frame met its
 -- judging span, or it was decided inside a knockback's window (ruling 18, judged by the caller
 -- at the decision's own moment). At most one `hurt` is raised: for a hit, landed or voided, and
 -- for a miss the player it was aimed at dodged. Any other miss is silent. Returns what was sent,
--- if anything.
+-- if anything. `at` is the decision's moment and `now` the frame its effect leaves in: the same
+-- unless the decision waited (G1), when everything it starts runs from `at`.
 local function rule(
 	config: Types.ProvingGroundsConfig,
 	vitals: Vitals,
@@ -286,6 +311,7 @@ local function rule(
 	voided: boolean,
 	position: Vector3,
 	humanoid: Humanoid,
+	at: number,
 	now: number
 ): ThreatField.Verdict?
 	local player = vitals.player
@@ -330,13 +356,14 @@ local function rule(
 		fx.launch = launch
 	end
 	vitals.damageTaken += amount
-	vitals.lastHurtAt = now
+	-- G1: a hit that waited was taken at its moment, so regen waits from there.
+	vitals.lastHurtAt = math.max(vitals.lastHurtAt, at)
 	if humanoid.Health - amount <= 0 then
 		-- Ruling 4: the hit that would empty the bar puts the player down instead.
 		humanoid.Health = math.min(DOWN_HEALTH, humanoid.MaxHealth)
 		vitals.downs += 1
 		vitals.down = true
-		vitals.downFrom = now
+		vitals.downFrom = at
 		fx.down = true
 		if rules ~= nil then
 			-- P5 ruling 18: no get-up timer. The run decides, after this frame's batch.
@@ -344,25 +371,31 @@ local function rule(
 			table.insert(downed, player)
 		else
 			local downSeconds = math.max(config.player.downSeconds, 0)
-			vitals.downUntil = now + downSeconds
-			fx.upAt = Workspace:GetServerTimeNow() + downSeconds
+			vitals.downUntil = at + downSeconds
+			-- On server time, from the moment: the effect leaves `now - at` after it.
+			fx.upAt = Workspace:GetServerTimeNow() + downSeconds - (now - at)
 		end
 		return "landed"
 	end
 	humanoid.Health -= amount
 	if knockback > 0 or launch > 0 then
 		-- Ruling 6: thrown by one hit, the player cannot be caught by the next while in the air.
+		-- G1: the window runs from the decision's moment, as it would have had it not waited.
 		local knockIframes = math.max(config.player.knockIframes, 0)
-		grantIframes(player, knockIframes)
+		grantIframes(player, knockIframes, at)
 		-- Ruling 18: nor by the ones decided with it. Enemies that wound up in the same step
 		-- would otherwise land as one hit, and stay in step for good. Every other hit of theirs
-		-- that has struck and is waiting for its decision is voided here (a lob still in the
-		-- air has not struck); `knockUntil` voids the ones not yet raised. F1: not one held for
-		-- a dash claim, whose moment came before this hit's (else a forged claim and a later
-		-- knock would void it).
-		vitals.knockUntil = now + knockIframes
+		-- that had struck and was waiting for its decision at this one's moment is voided here (a
+		-- lob still in the air has not struck), those waiting behind it (G1) among them;
+		-- `knockUntil` voids the ones decided inside its window from then on.
+		vitals.knockUntil = at + knockIframes
 		for _, other in pending do
-			if other.vitals == vitals and other.strike.at <= now and other.hold == nil then
+			if other.vitals == vitals and struckBy(other, at) then
+				other.covered = true
+			end
+		end
+		for _, other in vitals.waiting do
+			if struckBy(other, at) then
 				other.covered = true
 			end
 		end
@@ -382,8 +415,10 @@ local function wasDown(vitals: Vitals, impact: number): boolean
 end
 
 -- The decision of the commit rule for an instant shape, taken at the pending entry's moment.
--- True when it must wait for a dash claim (F1): the shape's verdict on the root is taken at the
--- first try and kept (`hold`), and each later try only asks again whether an i-frame voids it.
+-- True when it must wait: a pending dash claim would cover it (F1), or its player has an earlier
+-- decision still waiting (G1: it queues behind, so nothing of theirs lands out of turn). The
+-- shape's verdict on the root is taken at the first try and kept (`hold`) with that moment, and
+-- each later try is judged as of that moment, with the knock state its predecessors left.
 local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: number): boolean
 	local vitals = entry.vitals
 	local player = vitals.player
@@ -411,12 +446,13 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 	local hold = entry.hold
 	local position = root.Position
 	local held = false
+	local at = now
 	if hold ~= nil then
 		-- The body it was judged on is gone (a respawn while it waited).
 		if hold.humanoid ~= humanoid then
 			return false
 		end
-		held, position = hold.inShape, hold.position
+		held, position, at = hold.inShape, hold.position, hold.at
 	else
 		-- Ruling 11: a jump clears a ground shape; the feet come from the same sample as the plan
 		-- test. A line is a wall, not a ground shape: being in the air does not avoid it.
@@ -435,16 +471,22 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 		end
 	end
 	-- Ruling 18: a knockback's window voids what is decided inside it, judged at the decision's
-	-- own moment: a held hit was decided outside one (else it would not wait), and a knock that
-	-- lands while it waits does not void it.
-	local voided = entry.covered or (hold == nil and now < vitals.knockUntil)
-	if not voided and awaitsDash(player, strike.at, entry.decideAt, now) then
+	-- own moment (G1): nothing of the player lands while one of theirs waits, so the knocks that
+	-- count are those decided before it, the released ones among them. Kept once found.
+	if at < vitals.knockUntil then
+		entry.covered = true
+	end
+	local voided = entry.covered
+	if
+		(hold == nil and #vitals.waiting > 0)
+		or (not voided and awaitsDash(player, strike.at, entry.decideAt, now))
+	then
 		if hold == nil then
-			entry.hold = { inShape = held, position = position, humanoid = humanoid }
+			entry.hold = { at = now, inShape = held, position = position, humanoid = humanoid }
 		end
 		return true
 	end
-	local verdict = rule(config, vitals, strike, held, voided, position, humanoid, now)
+	local verdict = rule(config, vitals, strike, held, voided, position, humanoid, at, now)
 	if volley ~= nil and verdict ~= nil then
 		volley[player.UserId] = true
 	end
@@ -474,12 +516,18 @@ local function judgeTravelling(
 	-- Ruling 18 as in decide.
 	local voided = shielded(player, impactAt, limit) or now < vitals.knockUntil
 	-- F1: a contact the pending claim would cover is decided in the queue once the claim
-	-- resolves, as the strike met them (its `at` is this impact) with what was found now.
+	-- resolves, as the strike met them (its `at` is this impact) with what was found now. G1: so
+	-- is one that finds an earlier decision of theirs waiting, behind it, as of this moment.
 	-- ThreatField hears "dodged": the attack is done with them and a shot flies on, as past a
-	-- dodge; if the claim lapses the hit lands from the queue and the shot is not stopped on them
-	-- (a forged or walled dash only). An aimed miss is answered now: had it waited, the attack
-	-- would be done with them, and a claim that lapses would have let them walk through it after.
-	if held and not voided and awaitsDash(player, impactAt, limit, now) then
+	-- dodge; if it lands from the queue the shot is not stopped on them (a forged or walled dash
+	-- only). A voided contact and an aimed miss land nothing and are answered now: had an aimed
+	-- miss waited, the attack would be done with them, and a claim that lapses would have let
+	-- them walk through it after.
+	if
+		held
+		and not voided
+		and (#vitals.waiting > 0 or awaitsDash(player, impactAt, limit, now))
+	then
 		local struck = table.clone(strike)
 		struck.at = impactAt
 		local entry: Pending = {
@@ -487,17 +535,56 @@ local function judgeTravelling(
 			vitals = vitals,
 			decideAt = limit,
 			covered = false,
-			hold = { inShape = held :: boolean, position = root.Position, humanoid = humanoid },
+			hold = {
+				at = now,
+				inShape = held :: boolean,
+				position = root.Position,
+				humanoid = humanoid,
+			},
+			queuedAt = now,
 		}
-		table.insert(pending, entry)
+		table.insert(vitals.waiting, entry)
 		return "dodged"
 	end
-	return rule(config, vitals, strike, held, voided, root.Position, humanoid, now)
+	return rule(config, vitals, strike, held, voided, root.Position, humanoid, now, now)
 end
 
--- Walks the queue: notes any i-frame that has covered an entry so far, decides the entries
--- whose moment has come and keeps the rest (and those held for a dash claim, F1), in order.
+-- G1: one player's waiting decisions, first to last, each decided as of its own moment until one
+-- still waits for a dash claim: it and those behind it stay. A released knock's window, voids and
+-- down are in place before the next is judged, as they would have been at its moment.
+local function release(config: Types.ProvingGroundsConfig, vitals: Vitals, now: number): ()
+	local list = vitals.waiting
+	local count = #list
+	local released = 0
+	for _, entry in list do
+		if not entry.covered then
+			-- Its whole span is past; asked again now, the windows a proof or a released knock
+			-- opened from earlier moments count.
+			entry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)
+		end
+		if decide(config, entry, now) then
+			break
+		end
+		released += 1
+	end
+	if released == 0 then
+		return
+	end
+	table.move(list, released + 1, count, 1)
+	for index = count - released + 1, count do
+		list[index] = nil
+	end
+end
+
+-- Walks the queue: first each player's waiting decisions (release), then the queue in order:
+-- notes any i-frame that has covered an entry so far, decides the entries whose moment has come
+-- and keeps the rest; one that must wait (F1, G1) joins its player's waiting.
 local function settle(config: Types.ProvingGroundsConfig, now: number): ()
+	for _, vitals in vitalsByPlayer do
+		if #vitals.waiting > 0 then
+			release(config, vitals, now)
+		end
+	end
 	local count = #pending
 	if count == 0 then
 		return
@@ -512,9 +599,11 @@ local function settle(config: Types.ProvingGroundsConfig, now: number): ()
 			entry.covered =
 				shielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))
 		end
-		if now < entry.decideAt or decide(config, entry, now) then
+		if now < entry.decideAt then
 			kept += 1
 			pending[kept] = entry
+		elseif decide(config, entry, now) then
+			table.insert(entry.vitals.waiting, entry)
 		end
 	end
 	for index = kept + 1, count do
@@ -621,12 +710,14 @@ end
 local function await(strike: CrowdBrain.Strike): ()
 	local shooting = Tuning.Get().shooting
 	local impact = strike.at
+	local queuedAt = os.clock()
 	for player, vitals in vitalsByPlayer do
 		table.insert(pending, {
 			strike = strike,
 			vitals = vitals,
 			decideAt = impact + lagOf(player, shooting),
 			covered = false,
+			queuedAt = queuedAt,
 		})
 	end
 end
@@ -724,13 +815,14 @@ end
 
 -- The bodies in `ids` are gone for good: a boss has died, and what it summoned went with it.
 -- Nothing of theirs lands any more: decisions still waiting (a barrage in the air among them),
--- shots, charges and rings. F1: a hit held for a dash claim stays, its moment came before.
+-- shots, charges and rings. F1 and G1: a decision in a player's `waiting` stays, its moment came
+-- before.
 local function onGone(ids: { [number]: boolean }): ()
 	local count = #pending
 	local kept = 0
 	for index = 1, count do
 		local entry = pending[index]
-		if entry.hold ~= nil or not ids[entry.strike.bodyId] then
+		if not ids[entry.strike.bodyId] then
 			kept += 1
 			pending[kept] = entry
 		end
@@ -815,10 +907,12 @@ function VitalsService.AddPlayer(player: Player): ()
 		downUntil = 0,
 		knockUntil = 0,
 		watch = nil,
+		waiting = {},
 	}
 end
 
--- Decisions still queued for the player are dropped as they fall due.
+-- Decisions still queued for the player are dropped as they fall due; those waiting (G1) go with
+-- the record.
 function VitalsService.RemovePlayer(player: Player): ()
 	local vitals = vitalsByPlayer[player]
 	if vitals == nil then
@@ -1003,9 +1097,13 @@ function VitalsService.Readout(player: Player): (number, number, boolean)
 end
 
 -- The attacks of enemies that no longer exist land on nobody: queued decisions (lobs in the air
--- among them), shots and charges all go. A run's end and a forced wave call this (P5).
+-- among them, and those waiting, G1), shots and charges all go. A run's end and a forced wave
+-- call this (P5).
 function VitalsService.ClearThreats(): ()
 	table.clear(pending)
+	for _, vitals in vitalsByPlayer do
+		table.clear(vitals.waiting)
+	end
 	ThreatField.Clear(raise)
 end
 

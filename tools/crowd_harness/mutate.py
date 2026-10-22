@@ -105,10 +105,14 @@ MUTATIONS = {
     ),
     "18: no knock window at the decision": (
         VITALS,
-        "local voided = entry.covered or (hold == nil and now < vitals.knockUntil)",
-        "local voided = entry.covered",
+        "\tif at < vitals.knockUntil then\n\t\tentry.covered = true\n\tend\n",
+        "",
     ),
-    "18: hits waiting at the knock not voided": (VITALS, "other.covered = true", "other.covered = other.covered"),
+    "18: hits waiting at the knock not voided": (
+        VITALS,
+        "\t\t\tif other.vitals == vitals and struckBy(other, at) then\n\t\t\t\tother.covered = true\n",
+        "\t\t\tif other.vitals == vitals and struckBy(other, at) then\n\t\t\t\tother.covered = other.covered\n",
+    ),
     "21: reach measured in 3D": (
         BRAIN,
         "local distance = flat.Magnitude\n\tif distance > FACING_EPSILON then\n\t\tmind.facing = flat.Unit\n\tend\n\tlocal ready",
@@ -221,8 +225,8 @@ MUTATIONS = {
     "lob: judged at its throw": (VITALS, "\tstrike.at += seconds\n", ""),
     "lob: a knock voids one still in the air": (
         VITALS,
-        "if other.vitals == vitals and other.strike.at <= now and other.hold == nil then",
-        "if other.vitals == vitals and other.hold == nil then",
+        "return other.strike.at <= at and other.queuedAt <= at",
+        "return other.queuedAt <= at",
     ),
     "lob: pushed along its throw": (VITALS, 'elseif shape == "lob" then strike.aim', "elseif false then strike.aim"),
     "lob: with nothing under its target it lands at the root": (
@@ -603,7 +607,7 @@ MUTATIONS = {
     "boss: its queued impact is still handed over": (CROWD, "\tCrowdBrain.Recall(ids)\n", ""),
     "boss: decisions still waiting are kept": (
         VITALS,
-        "if entry.hold ~= nil or not ids[entry.strike.bodyId] then",
+        "if not ids[entry.strike.bodyId] then",
         "if true then",
     ),
     "boss: what travels is kept": (VITALS, "\tThreatField.Drop(ids, raise)\n", ""),
@@ -8205,39 +8209,39 @@ L4B_FIX_MUTATIONS = {
     ),
     "l4b f1: decide never holds": (
         VITALS,
-        "\tif not voided and awaitsDash(player, strike.at, entry.decideAt, now) then",
-        "\tif false then",
+        "\t\tor (not voided and awaitsDash(player, strike.at, entry.decideAt, now))\n",
+        "\t\tor false\n",
     ),
     "l4b f1: a held hit lands on a new body": (VITALS, "\t\tif hold.humanoid ~= humanoid then", "\t\tif false then"),
     "l4b f1: a held hit judged by a later knock": (
         VITALS,
-        "local voided = entry.covered or (hold == nil and now < vitals.knockUntil)",
-        "local voided = entry.covered or now < vitals.knockUntil",
+        "\tif at < vitals.knockUntil then\n",
+        "\tif now < vitals.knockUntil then\n",
     ),
     "l4b f1: a knock voids a held hit": (
         VITALS,
-        "other.strike.at <= now and other.hold == nil then",
-        "other.strike.at <= now then",
+        "\t\t(hold == nil and #vitals.waiting > 0)\n\t\tor (not voided",
+        "\t\tfalse\n\t\tor (not voided",
     ),
     "l4b f1: a striker's death drops a held hit": (
         VITALS,
-        "if entry.hold ~= nil or not ids[entry.strike.bodyId] then",
-        "if not ids[entry.strike.bodyId] then",
+        "\tThreatField.Drop(ids, raise)\n",
+        "\tfor _, vitals in vitalsByPlayer do\n\t\ttable.clear(vitals.waiting)\n\tend\n\tThreatField.Drop(ids, raise)\n",
     ),
     "l4b f1: an aimed miss is held": (
         VITALS,
-        "\tif held and not voided and awaitsDash(player, impactAt, limit, now) then",
-        "\tif not voided and awaitsDash(player, impactAt, limit, now) then",
+        "\t\theld\n\t\tand not voided\n\t\tand (#vitals.waiting > 0 or awaitsDash(",
+        "\t\tnot voided\n\t\tand (#vitals.waiting > 0 or awaitsDash(",
     ),
     "l4b f1: what travels is never held": (
         VITALS,
-        "\tif held and not voided and awaitsDash(player, impactAt, limit, now) then",
-        "\tif false then",
+        "\t\tand (#vitals.waiting > 0 or awaitsDash(player, impactAt, limit, now))\n",
+        "\t\tand false\n",
     ),
     "l4b f1: a held shot is stopped on them": (
         VITALS,
-        "\t\ttable.insert(pending, entry)\n\t\treturn \"dodged\"\n",
-        "\t\ttable.insert(pending, entry)\n\t\treturn \"landed\"\n",
+        "\t\ttable.insert(vitals.waiting, entry)\n\t\treturn \"dodged\"\n",
+        "\t\ttable.insert(vitals.waiting, entry)\n\t\treturn \"landed\"\n",
     ),
     "l4b f1: a held travelling hit judged when it left": (VITALS, "\t\tstruck.at = impactAt\n", ""),
     "l4b f1: no knock window for what travels": (
@@ -8247,18 +8251,18 @@ L4B_FIX_MUTATIONS = {
     ),
     "l4b f1: settle drops a held entry": (
         VITALS,
-        "if now < entry.decideAt or decide(config, entry, now) then",
-        "if now < entry.decideAt then",
+        "\t\telseif decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n",
+        "\t\telse\n\t\t\tdecide(config, entry, now)\n",
     ),
     "l4b f1: a held entry judged again at the release": (
         VITALS,
-        "\t\theld, position = hold.inShape, hold.position\n",
-        "\t\theld, position = inPlan(strike, position), position\n",
+        "\t\theld, position, at = hold.inShape, hold.position, hold.at\n",
+        "\t\theld, position, at = inPlan(strike, position), position, hold.at\n",
     ),
     "l4b f1: a held hit pushed from the live root": (
         VITALS,
-        "\t\theld, position = hold.inShape, hold.position\n",
-        "\t\theld = hold.inShape\n",
+        "\t\theld, position, at = hold.inShape, hold.position, hold.at\n",
+        "\t\theld, at = hold.inShape, hold.at\n",
     ),
     "l4b f1: VitalsService connects its own Heartbeat": (
         VITALS,
@@ -8310,10 +8314,14 @@ L4B_FIX_MUTATIONS = {
     ),
     "l4b f1: VitalsService decides before the proofs": (
         WEAPON,
-        "\ttrackAir(now, deltaTime)\n\tVitalsService.Step(deltaTime)\n",
-        "\tVitalsService.Step(deltaTime)\n\ttrackAir(now, deltaTime)\n",
+        "\txpcall(trackAir, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n",
+        "\txpcall(VitalsService.Step, stepFailed, deltaTime)\n\txpcall(trackAir, stepFailed, now, deltaTime)\n",
     ),
-    "l4b f1: VitalsService never stepped": (WEAPON, "\tVitalsService.Step(deltaTime)\n", ""),
+    "l4b f1: VitalsService never stepped": (
+        WEAPON,
+        "\txpcall(VitalsService.Step, stepFailed, deltaTime)\n",
+        "",
+    ),
     "l4b f1: no claim hook": (
         WEAPON,
         "\t\tdashClaim = pendingDash,\n",
@@ -8326,8 +8334,8 @@ L4B_FIX_MUTATIONS = {
     ),
     "l4b f1: a grant from the past": (
         WEAPON,
-        "\tDashProof.Open(shooter, now, seconds)\n\tshowIframes(shooter, now)\n",
-        "\tDashProof.Open(shooter, now - 0.3, seconds)\n\tshowIframes(shooter, now)\n",
+        "\tDashProof.Open(shooter, math.min(from or now, now), seconds)\n",
+        "\tDashProof.Open(shooter, math.min(from or now, now) - 0.3, seconds)\n",
     ),
     "l4b f1: a second Heartbeat": (
         WEAPON,
@@ -8454,6 +8462,67 @@ L4B_FIX_MUTATIONS = {
 }
 assert not set(L4B_FIX_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX_MUTATIONS) & set(MUTATIONS))
 MUTATIONS.update(L4B_FIX_MUTATIONS)
+
+# The L4 W1b fix round 2 (docs/prompts/l4-w1b-fix2.md): G1 (a held hit keeps the knock rules: the
+# moment, the queue behind it, the release), G2 (each part of WeaponService's step contained), G3
+# (the review's two probes of the wire that gates every enemy hit), luau-engineer A's entries
+# (luau-a-2.md); s1 (payMentors' inputs) and s2 (no rule built without a claim), the designer's.
+# G1's are caught by tests_l4b (g); the WeaponService and WaveService ones by source.l4b's pins.
+L4B_FIX2_MUTATIONS = {
+    'l4b g1: a released knock voids nothing waiting behind it': (VITALS, '\t\tfor _, other in vitals.waiting do\n\t\t\tif struckBy(other, at) then', '\t\tfor _, other in vitals.waiting do\n\t\t\tif false then'),
+    "l4b g1: a released knock's i-frames from the release": (VITALS, 'grantIframes(player, knockIframes, at)', 'grantIframes(player, knockIframes)'),
+    "l4b g1: a released knock's window from the release": (VITALS, 'vitals.knockUntil = at + knockIframes', 'vitals.knockUntil = now + knockIframes'),
+    'l4b g1: a knock voids what joined the queue after it': (VITALS, 'return other.strike.at <= at and other.queuedAt <= at', 'return other.strike.at <= at'),
+    'l4b g1: a waiting decision judged at the release': (VITALS, 'held, position, at = hold.inShape, hold.position, hold.at', 'held, position = hold.inShape, hold.position'),
+    'l4b g1: the release asks no window again': (VITALS, '\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n', ''),
+    'l4b g1: the release drops one that still waits': (VITALS, '\t\tif decide(config, entry, now) then\n\t\t\tbreak\n\t\tend\n\t\treleased += 1', '\t\tdecide(config, entry, now)\n\t\treleased += 1'),
+    'l4b g1: ClearThreats keeps the waiting': (VITALS, '\t\ttable.clear(vitals.waiting)\n', ''),
+    'l4b g1: what travels never waits behind': (VITALS, 'and (#vitals.waiting > 0 or awaitsDash(player, impactAt, limit, now))', 'and awaitsDash(player, impactAt, limit, now)'),
+    'l4b g1: the knock window only at the first try': (VITALS, '\tif at < vitals.knockUntil then\n\t\tentry.covered = true', '\tif hold == nil and at < vitals.knockUntil then\n\t\tentry.covered = true'),
+    'l4b g1: rule at the release': (VITALS, 'local verdict = rule(config, vitals, strike, held, voided, position, humanoid, at, now)', 'local verdict = rule(config, vitals, strike, held, voided, position, humanoid, now, now)'),
+    'l4b g1: regen from the release': (VITALS, 'vitals.lastHurtAt = math.max(vitals.lastHurtAt, at)', 'vitals.lastHurtAt = now'),
+    'l4b g1: the down runs from the release': (VITALS, 'vitals.downUntil = at + downSeconds', 'vitals.downUntil = now + downSeconds'),
+    'l4b g1: upAt from the release': (VITALS, 'fx.upAt = Workspace:GetServerTimeNow() + downSeconds - (now - at)', 'fx.upAt = Workspace:GetServerTimeNow() + downSeconds'),
+    "l4b g1: the hold's moment wrong": (VITALS, 'entry.hold = { at = now, inShape = held', 'entry.hold = { at = now - 0.2, inShape = held'),
+    'l4b g1: the waiting never released': (VITALS, '\t\tif #vitals.waiting > 0 then\n\t\t\trelease(config, vitals, now)', '\t\tif false then\n\t\t\trelease(config, vitals, now)'),
+    "l4b g1: a travelling wait's moment its impact": (VITALS, '\t\t\t\tat = now,\n', '\t\t\t\tat = impactAt,\n'),
+    'l4b g1: a knock voids queued hits raised after it': (VITALS, '\t\t\tif other.vitals == vitals and struckBy(other, at) then', '\t\t\tif other.vitals == vitals and other.strike.at <= at then'),
+    'l4b g1: the down starts at the release': (VITALS, '\t\tvitals.downFrom = at\n', '\t\tvitals.downFrom = now\n'),
+    'l4b g3: step never connected': (WEAPON, '\tRunService.Heartbeat:Connect(step)\n', '\tRunService.Heartbeat:Connect(function() end)\n'),
+    'l4b g3: step returns before the proofs': (WEAPON, '\tlocal now = os.clock()\n\txpcall(trackAir, stepFailed, now, deltaTime)\n', '\tlocal now = os.clock()\n\tif #state.projectiles == 0 then\n\t\treturn\n\tend\n\txpcall(trackAir, stepFailed, now, deltaTime)\n'),
+    'l4b g2: the proofs unprotected': (WEAPON, '\txpcall(trackAir, stepFailed, now, deltaTime)\n', '\ttrackAir(now, deltaTime)\n'),
+    'l4b g2: VitalsService unprotected': (WEAPON, '\txpcall(VitalsService.Step, stepFailed, deltaTime)\n', '\tVitalsService.Step(deltaTime)\n'),
+    'l4b g2: the rest unprotected': (WEAPON, '\txpcall(stepRest, stepFailed, now, deltaTime)\n', '\tstepRest(now, deltaTime)\n'),
+    'l4b g2: the rest never runs': (WEAPON, '\txpcall(stepRest, stepFailed, now, deltaTime)\n', ''),
+    'l4b g2: the rest before VitalsService': (WEAPON, '\txpcall(VitalsService.Step, stepFailed, deltaTime)\n\txpcall(stepRest, stepFailed, now, deltaTime)\n', '\txpcall(stepRest, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n'),
+    "l4b s1: the total is the top damage": (
+        WAVE_SERVICE,
+        "\t\ttotal += damage\n",
+        "\t\ttotal = math.max(total, damage)\n",
+    ),
+    "l4b s1: the total starts at one": (
+        WAVE_SERVICE,
+        "\tlocal total = 0\n\tfor _, damage in tally do\n",
+        "\tlocal total = 1\n\tfor _, damage in tally do\n",
+    ),
+    "l4b s1: a bonus of nothing is paid": (
+        WAVE_SERVICE,
+        "\t\tif bonus <= 0 then\n\t\t\tcontinue\n\t\tend\n",
+        "",
+    ),
+    "l4b s1: the guard on nothing turns nobody back": (
+        WAVE_SERVICE,
+        "\t\tif bonus <= 0 then\n\t\t\tcontinue\n",
+        "\t\tif bonus <= 0 then\n",
+    ),
+    "l4b s2: a rule built with no claim": (
+        WEAPON,
+        "\tif shooter == nil or shooter.dashClaimAt == nil then\n\t\treturn 0, 0, 0\n",
+        "\tif shooter == nil then\n\t\treturn 0, 0, 0\n",
+    ),
+}
+assert not set(L4B_FIX2_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX2_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4B_FIX2_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

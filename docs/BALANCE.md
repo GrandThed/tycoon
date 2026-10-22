@@ -6713,3 +6713,96 @@ insertion order and the mirror releases the held one first; this can only matter
 - **Slice 3 S2.** The two real-file checks that pinned today's map became rules: every level file is played by a map
   node and was resolved, validated and planned (1 today); every side node hangs off a level node and has a map theme
   (0 today).
+
+## L4 W1b fix round 2: a held hit keeps the knock rules (2026-10-22)
+
+Rulings `docs/prompts/l4-w1b-fix2.md` (the designer's: G1's simulator mirror and its gate line, G3's pins and the
+review's two probes as mutants, s1's two payMentors pins), finding `docs/prompts/l4-w1b-review/4-fix-diff.md` M1,
+luau-engineer A's G1 as built in `docs/prompts/l4-w1b-fix-reports/luau-a-2.md`, report
+`docs/prompts/l4-w1b-fix-reports/designer-2.md`. **No config key changed and no number a run plays moved.** Measured on
+Python 3.12.10 64-bit (the gate's); "before" is the simulator and data of f16515a (this worktree's are byte-identical to
+it before the round), run on the same machine.
+
+### Fix round 2: the hold in the simulator (G1)
+
+The review found that a dash the ring never proves (one pressed against a fence) cost more than no dash: every hit its
+claim held was released at the lapse with the knock rules skipped, so a knocking hit and the hit behind it both landed
+(16 lost where no dash loses 8). The game now judges a held decision as of its own moment, and the mirror
+(`hold`, `release`, `rule`, `hurt`, `struck_by`) follows it:
+- a decision that waits keeps its moment `at` (the frame it fell due; for a shot, charge or ring contact, the crowd step
+  that found it) and its queue time (`queued`: the step that raised it, the throw for a lob, the step that judged a
+  contact);
+- while one of his decisions waits, every later one waits behind it (`holds` is VitalsService's `waiting`), voided or
+  not; a contact that travels too, unless an i-frame or a knock already voids it (it lands nothing and is answered now);
+- each frame, after the claim is settled and before the queue, the waiting ones are released first to last until one
+  the still pending claim covers: each is asked its whole span of the windows again (a proven dash's, and a knock
+  released before it), voided by a knock decided before its moment (`at` < knock_until), and dropped if he is or was
+  down or a barrage he answered;
+- a released hit's regen delay, its down (`down_span`, the get-up clock) and its knock's window, `knock_until` and voids
+  run from `at`; it voids what had struck and was queued by then (`struck_by`), in the queue and among the waiting.
+  Its push and launch leave at the release, and the log dates its damage there (when the bar moves).
+
+**Result.** `sim_range.py --check` prints every line f16515a printed, byte for byte (the whole output compared), but two:
+the `DASH PROOF` header's wording ("F1 and G1: decisions held (for a pending claim, or behind one), voided / judged
+unvoided at their release") and the new gate line. The DASH PROOF counts are the fix round's table above, unchanged
+(33 held, all voided at their proof; 0 dashes unproven). Nothing could move in a gated run: every simulated dash is
+proven 2 Heartbeats after its press, and a decision due in those 2 Heartbeats has its impact well inside the claim's
+window (dashIframes 0.25 s), so it waits for the claim itself, never only behind another, and the proof voids every
+held entry with no knock released.
+
+**The new gate line** (`dash_fence_probe`): the review's three queues, each lunge holding the root and decided at its
+impact, against a dash pressed into the fence and against no dash. Seconds after the press:
+
+| Queue | No dash | Fence dash, f16515a's mirror | Fence dash, G1 (the gate) |
+|---|---|---|---|
+| a knocking lunge at 0, a plain one at 0.05 | knock lands 0.000, plain dodged | both land, 0.467 | knock lands 0.467, plain dodged |
+| two knocking lunges at 0, one step | knock lands 0.000, the other dodged | both land, 0.467 | knock lands 0.467, the other dodged |
+| a knocking lunge at 0.05 (held), a plain one at 0.27 (past the claim's window, inside the knock's) | knock lands 0.050, plain dodged | plain lands 0.283, knock 0.467 | knock lands 0.467, plain dodged |
+
+The middle column is the old mirror running the same queues: it reproduces M1's three rows exactly. The gate passes
+when every queue loses what no dash loses (the same lunges land, the same count dodged) and the first is one landed,
+one dodged. The 0.467 is the first Heartbeat past the 0.45 s lapse; the plain lunge's 0.27 is computed from
+`dashIframes` + 0.02, so the third queue keeps its meaning if the dash's window is retuned.
+
+**The R8 row.** Unchanged at **x1.60** (seed 11 39,504 / 55.1 against 24,703 / 37.2; 23: 18,374 / 27.6 against
+23,330 / 34.8; 37: 2,756 / 0.0 against 21,332 / 31.9), the only failing line.
+
+**What the mirror does not model.** The planner (`plan_hits`) still dates an unproven dash's hits at their decision
+(no gated run dashes unproven). The fix round's second gap is closed: the game now also releases a player's waiting
+decisions before it walks the queue. A's known limits: an aimed miss against a held knock (limit 1) has no counterpart,
+since the mirror models no aimed-miss dodge for what travels; regen ticking during a hold (2), a contact queued behind
+answering "dodged" (3) and the push leaving at the release (4) are mirrored as the game does them. The mirror keeps
+every i-frame window of the last second where the game keeps the last two, as before.
+
+### Fix round 2: the gates before and after
+
+| Gate | Before (A's code, the designer's pins not yet re-aimed) | Now |
+|---|---|---|
+| harness (`run_harness.py`) | FAIL (4 of 4,177): `grantOpens`, `stepVitals`, `vitalsStepCalls`, `frameOrder` | **PASS (4,185 checks)**: the four re-aimed, +8 (G3 `stepHead`, `startConnects`; G2 `stepRest`, `restLast`; s1 `mentorTotal`, `mentorNoBonus`, `bonusGuardThenPay`; s2 `pendingNoClaim`) |
+| `sim_range.py --check` | FAIL (1): the R8 row, x1.60; 538 PASS | **FAIL (1): the same row, x1.60**; 539 PASS (+1: G1's fence dash) |
+| `check_stage_mirror.py` | PASS | **PASS** |
+| `mirror_mutants.py` | 132 of 132 | **132 of 132 caught** |
+| `sim_combat.py --check` | PASS, 11 assertions | **PASS, 11 assertions**, its whole output byte-identical to f16515a's (it runs the mirror's LevelRun) |
+| `mutate.py` stale check, all entries | 17 stale of 1,764 | **0 stale of 1,795** (17 re-aimed, 31 new) |
+| `mutate.py`, filtered to VitalsService, WeaponService, DashProof, WaveService | (not run) | **260 run, 0 not caught** (baseline PASS 4,185) |
+
+### Fix round 2: new gates and their mutants
+
+- **G3, the wire that gates every enemy hit.** `startConnects` pins `\tRunService.Heartbeat:Connect(step)` whole in
+  `WeaponService.Start`; `stepHead` pins `step`'s head as one block from its first line, `local now = os.clock()`, then
+  `xpcall(trackAir, ...)`, then `xpcall(VitalsService.Step, ...)`, so nothing can sit between the function's start and
+  the two calls. The review's probes are `mutate.py` entries: "l4b g3: step never connected" (`Connect(function() end)`)
+  and "l4b g3: step returns before the proofs" (an early return when no arrow flies), both caught by these pins.
+- **G2, each part contained.** `stepVitals`, `stepRest` (whole lines under `xpcall`), `frameOrder` and `restLast` (the
+  proofs, then VitalsService, then the rest); `vitalsStepCalls` now counts `VitalsService.Step` once. Five mutants (each
+  part unprotected, the rest never run, the rest before VitalsService).
+- **G1.** The pin `grantOpens` reads `DashProof.Open(shooter, math.min(from or now, now), seconds)`. A's 19 G1 mutants
+  (the moment, the queue behind, the release, rule at `at`, struckBy's queue time, ClearThreats) are caught by
+  tests_l4b (g); 14 earlier F1 and ruling-18 entries were re-aimed to the new code, "l4b f1: a knock voids a held hit"
+  now being the mutant that lets a later decision land out of turn (the reversed pin).
+- **s1, payMentors' inputs.** `mentorTotal` pins the damage total as one block (`local total = 0`, the loop, `total +=
+  damage`), `mentorNoBonus` the guard on a bonus of nothing with its `continue`, `bonusGuardThenPay` its place before the
+  pay. Four mutants: the total as the top damage (the review's), the total starting at 1, the guard deleted (the
+  review's), the guard without its `continue`.
+- **s2.** `pendingNoClaim` pins pendingDash's early `0, 0, 0` with no claim; one mutant (the guard without the claim
+  test), caught by the pin: the rule is behaviourally equivalent, so only the pin holds the saving.

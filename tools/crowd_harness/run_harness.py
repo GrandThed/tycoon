@@ -1471,13 +1471,24 @@ L4B_LINES = {
                            r"\bdashClaimAt\s*=(?!=)|\biframes\w*\s*=(?!=)|\bDashProof\.Open\("),
     "ruleRead": (WEAPON_SERVICE, None, "text", "local rule = DashProof.Rule(config.movement, config.shooting)"),
     "ruleCalls": (WEAPON_SERVICE, None, "text", "DashProof.Rule("),
+    "pendingNoClaim": (WEAPON_SERVICE, PENDING_DASH_BODY, "lines",
+                       "\tif shooter == nil or shooter.dashClaimAt == nil then"),
     "pendingClaim": (WEAPON_SERVICE, PENDING_DASH_BODY, "text",
                      "return DashProof.Pending(shooter.dashClaimAt, dashRule(config), config.movement.dashIframes)"),
     "hookClaim": (WEAPON_SERVICE, WEAPON_START_BODY, "lines", "\t\tdashClaim = pendingDash,"),
-    "stepVitals": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\tVitalsService.Step(deltaTime)"),
-    "vitalsStepCalls": (WEAPON_SERVICE, None, "text", "VitalsService.Step("),
+    # G2 and G3 (docs/prompts/l4-w1b-fix2.md): step opens with the clock, then the proofs, then
+    # VitalsService, each under xpcall, with nothing between the function's start and the two
+    # (stepHead, one block); the rest comes after (stepRest, restLast); Start connects step itself.
+    "stepHead": (WEAPON_SERVICE, WEAPON_STEP_BODY, "text",
+                 "local function step(deltaTime: number): ()\n\tlocal now = os.clock()\n"
+                 "\txpcall(trackAir, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n"),
+    "stepVitals": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\txpcall(VitalsService.Step, stepFailed, deltaTime)"),
+    "stepRest": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\txpcall(stepRest, stepFailed, now, deltaTime)"),
+    "startConnects": (WEAPON_SERVICE, WEAPON_START_BODY, "lines", "\tRunService.Heartbeat:Connect(step)"),
+    "vitalsStepCalls": (WEAPON_SERVICE, None, "text", "VitalsService.Step"),
     "heartbeats": (WEAPON_SERVICE, None, "text", "Heartbeat:Connect("),
-    "grantOpens": (WEAPON_SERVICE, GRANT_IFRAMES_BODY, "text", "\tDashProof.Open(shooter, now, seconds)\n\tshowIframes(shooter, now)\n"),
+    "grantOpens": (WEAPON_SERVICE, GRANT_IFRAMES_BODY, "text",
+                   "\tDashProof.Open(shooter, math.min(from or now, now), seconds)\n\tshowIframes(shooter, now)\n"),
     "openCalls": (WEAPON_SERVICE, None, "text", "DashProof.Open("),
     "stepCalls": (WEAPON_SERVICE, None, "text", "DashProof.Step("),
     "claimWrites": (WEAPON_SERVICE, None, "regex", r"\bshooter\.dashClaimAt\s*=(?!=)"),
@@ -1522,6 +1533,9 @@ L4B_LINES = {
     "uiSeqWrites": (UI_CONTROLLER, None, "regex", r"\bst\.floorsSeq\s*=(?!=)"),
     "uiConnect": (UI_CONTROLLER, None, "lines", "\tremotes.runState.OnClientEvent:Connect(onRunState)"),
     # F6, WaveService.payMentors (B's lines; the rule itself is check_stage_mirror's MentorBonus).
+    # s1 (fix round 2): its inputs too: the damage total, and the guard on a bonus of nothing.
+    "mentorTotal": (WAVE_SERVICE, PAY_MENTORS_BODY, "text",
+                    "\tlocal total = 0\n\tfor _, damage in tally do\n\t\ttotal += damage\n\tend\n"),
     "mentorNone": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\tif total <= 0 then"),
     "mentorFloor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
                     "\t\tif mentor.waiting or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare then"),
@@ -1533,6 +1547,7 @@ L4B_LINES = {
                         "\t\tlocal bonus = Combat.MentorBonus(combatConfig, mentor.incomeRate, menteeRates)"),
     "mentorValor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\tstate.combat.valor += bonus"),
     "mentorCard": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\tArenaService.CreditMentor(mentor.userId, bonus)"),
+    "mentorNoBonus": (WAVE_SERVICE, PAY_MENTORS_BODY, "text", "\t\tif bonus <= 0 then\n\t\t\tcontinue\n\t\tend\n"),
     "mentorBonusCalls": (WAVE_SERVICE, None, "text", "Combat.MentorBonus("),
     "bossPaysMentors": (WAVE_SERVICE, None, "lines", "\t\tpayMentors(combatConfig, tally)"),
 }
@@ -1540,7 +1555,10 @@ L4B_LINES = {
 L4B_ORDER = {
     "trackOrder": (WEAPON_SERVICE, TRACK_AIR_BODY, "PositionRing.Record(shooter.history, now, position)",
                    "proveDash(shooter, now, position)"),
-    "frameOrder": (WEAPON_SERVICE, WEAPON_STEP_BODY, "trackAir(now, deltaTime)", "VitalsService.Step(deltaTime)"),
+    "frameOrder": (WEAPON_SERVICE, WEAPON_STEP_BODY, "xpcall(trackAir, stepFailed, now, deltaTime)",
+                   "xpcall(VitalsService.Step, stepFailed, deltaTime)"),
+    "restLast": (WEAPON_SERVICE, WEAPON_STEP_BODY, "xpcall(VitalsService.Step, stepFailed, deltaTime)",
+                 "xpcall(stepRest, stepFailed, now, deltaTime)"),
     "sendOrder": (ARENA_SERVICE, SEND_RUN_STATE_BODY,
                   "RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])", "play.cellsSent[userId] = seq"),
     "uiMergeThenSeq": (UI_CONTROLLER, APPLY_FLOORS_BODY,
@@ -1549,6 +1567,7 @@ L4B_ORDER = {
                         "RunFloors.Merge(held, st.floorsSeq, fresh, seq)", "local same = #fresh == #held"),
     "uiGuardThenFloors": (UI_CONTROLLER, ON_RUN_STATE_BODY, "if not isRunState(payload) then", "applyFloors(run.floors, "),
     "uiFloorsFirst": (UI_CONTROLLER, ON_RUN_STATE_BODY, "applyFloors(run.floors, ", "if run.levelId ~= st.levelId then"),
+    "bonusGuardThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY, "if bonus <= 0 then", "state.combat.valor += bonus"),
     "mentorFloorThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY,
                            "(tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare", "state.combat.valor += bonus"),
 }
