@@ -665,3 +665,8 @@ out into walking space, so they have about 1.3 studs of relief). Asked, Ben chos
 bigger uneven blocks, broken horizontal layers, fewer straight joints, boulder piles in corners and beside gates where
 nobody walks; no layout change (over "move the walls back for deep masses" and "good as they are"). Done in the same
 forest pass that dresses the mountain. **[Ben]**
+
+**The mountain and the walls approved (2026-10-22)** on `mountain_{far,yard,ledge,summit}_B.png`,
+`_L4_walls_before_after.png` and `plan_top_F2.png`: "yes, as it is". Offered climb markers on every ledge lip (the lead
+saw that the spiral cannot be read from the yard), Ben declined: **finding the way up is part of the challenge.** The
+upload runs now: 81 uploads (37 level meshes, 5 images, 4 forest props, 35 raider stages), one harvest paste. **[Ben]**
