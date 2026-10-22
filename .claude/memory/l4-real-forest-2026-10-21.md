@@ -67,7 +67,7 @@ room this key opens. Designer brief `docs/prompts/l4-w2-mountain.md` (designs on
 layout after the lead's `mountain-go.md`, new gate `tools/check_parkour.py`); then the forest is dressed round it and the
 W2 contract gets the `key` reward.
 
-**State 2026-10-22: uploads done, harvest paste pending.** Ben approved the rocks rework, the mountain and the less
+**State 2026-10-22: uploads and harvest done.** (Was: paste pending.) Ben approved the rocks rework, the mountain and the less
 regular walls ("yes, as it is"; he declined climb markers: finding the way up is part of the challenge) and all seven
 raiders. 81 uploads first try (`l4-real-forest` 9ad3cb5: 37 level meshes, 5 level images, 4 forest props, 35 raider
 stages; Assets.json v6 `levels.ForestRoad`, plan hash `23851a6f417491c1`); `harvest.luau` holds 81 records, put on Ben's
@@ -75,3 +75,7 @@ clipboard; he pastes in `tycoon\build\test.rbxl` (Edit mode). After "done": save
 `[HARVEST] {`, then runbook `docs/prompts/l4-w2-asset-run.md` steps 8+ (`raider_frames.py` does not exist yet: it is
 W2's D2 tool; templates do not wait for it). The L3 session `tycoon-87` acked the upload announcement; tell it when the
 harvest is done. W1b (old mission code out, the dash hold) is in its fix round in `tycoon-p5b`.
+**Harvest done 2026-10-22 00:43** (Ben pasted the Output into the chat; his clipboard also held it: 81 records, saved to
+scratch first): merged with no SIZE/FRAME/ROTATED line, 41 new templates (617 in all), manifest `ForestRoad ... in game`,
+six place files rebuilt on `l4-real-forest` (148dacd). `raider_frames.py` (W2 D2) still owed before W2 merges. The L3
+session was told the asset tools are free; Assets.json v6 lives only on this branch until it merges.
