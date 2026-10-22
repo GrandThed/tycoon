@@ -1157,4 +1157,102 @@ function L4BP.sourceTests(): ()
 end
 L1.group("l4b sourceTests", L4BP.sourceTests)
 
+-- L4 W2 (docs/prompts/l4-w2-contract.md 2.2, 3.2, 5, 8, section 0): the service lines that carry out
+-- LevelDress.Accept's answer, lower a seated head in every hit, send the pools' counts, carry the
+-- chest's key and pull the Z lever, read as text (FIXTURES.source.l4w2, run_harness.py's L4W2_LINES and
+-- L4W2_ORDER). The rules themselves are tests_l4w2.luau's. On L4BP (the bundle's 200-local limit).
+L4BP.W2 = {
+	LINES = {
+		constructHidden = { 1, "construct reads the hidden names from the accepted dress, none without one" },
+		constructWallRole = { 1, "construct knows a dress wall by LevelDress.WALL_ROLE" },
+		constructNoGroupNoWall = { 1, "and builds no wall, a camp's or the dress's, when the groups were refused" },
+		constructWallBranch = { 1, "a dress wall has a branch of its own" },
+		constructGroups = { 2, "the camp's wall and the dress wall are each put in BarrierGroups.BARRIER" },
+		constructArmed = { 1, "the dress wall collides from the build (no camp opens it)" },
+		constructCollides = { 3, "construct writes CanCollide three times: a piece that does not collide, the camp's wall off, the dress wall on" },
+		constructSkinnedIf = { 1, "a hidden piece is known by its name in the accepted set" },
+		constructSkinned = { 1, "and marked Skinned" },
+		constructSkinnedWrites = { 1, "made invisible and shadowless, collision and query untouched, before it is parented" },
+		dressUploaded = { 1, "dressOf asks Accept with Assets.json's uploaded hash" },
+		dressFailSpent = { 1, "the Z lever is spent by the build it fails" },
+		dressFailHash = { 1, "and fails it with the wrong hash, through the real refusal" },
+		dressAccept = { 1, "Accept is given the dress, the hash, the templates, the pieces, the left-out names, the groups, maxParts and the layout" },
+		dressGreyWarns = { 1, "a refused dress warns once that the level is grey" },
+		buildNilDress = { 1, "Build clears Dress first" },
+		buildNilHash = { 1, "and DressHash" },
+		buildDressOf = { 1, "Build asks dressOf with the pieces and the shortcut set" },
+		buildOverlay = { 1, "the dress's looks laid over Expeditions.json's" },
+		buildWalls = { 1, "the walls appended to the pieces" },
+		buildPlace = { 1, "and placed with them" },
+		buildLooks = { 1, "SetCamp's looks follow the dress while it is dressed" },
+		buildDress = { 1, "Build sets Dress to the layout" },
+		buildDressHash = { 1, "and DressHash to the plan hash" },
+		buildDressWrites = { 4, "Build writes the two attributes four times: nil first, the dress last" },
+		clearNilDress = { 1, "Clear clears Dress" },
+		clearNilHash = { 1, "and DressHash" },
+		gatherDrop = { 1, "gather drops each candidate's head by its seat (HitShapes.SeatDrop, crowd.restDrop)" },
+		gatherHead = { 1, "the head at height - headRadius - drop" },
+		gatherTest = { 1, "and the drop handed to the test" },
+		gatherSeatDrops = { 1, "SeatDrop is asked once in gather" },
+		rayDrop = { 1, "rayCandidates hands CrowdRay the drop" },
+		startPrewarm = { 1, "startLevel keeps the plan's kinds as the run's prewarm" },
+		startBuild = { 1, "and builds the level with the level file's layout (the dress's name)" },
+		pushPrewarm = { 1, "pushRunFields hands the prewarm to ArenaService" },
+		announceKey = { 1, "the chest's found event carries its key" },
+		sendPrewarm = { 1, "sendRunState sends the prewarm" },
+		sendPrewarmWrites = { 1, "and writes it once" },
+		leverDressFail = { 1, "the lever dressFail fails the next dress" },
+	},
+	ORDER = {
+		wallThenArmed = "construct: the dress wall's branch arms it",
+		hiddenThenSkinned = "construct: a hidden piece is marked inside its test",
+		failThenAccept = "dressOf: the lever's hash before Accept",
+		nilThenPieces = "Build: the words cleared before the pieces",
+		piecesThenDress = "Build: the dress asked after the pieces",
+		placeThenBuilt = "Build: placed before it is built",
+		builtThenDress = "Build: Dress set after the level stands",
+		dressThenHash = "Build: Dress, then DressHash",
+		clearNilThenParts = "Clear: the words gone before any Part",
+		gatherDropThenHead = "gather: the drop before the head",
+		cellsWentThenPrewarm = "sendRunState: the prewarm only with the cells",
+	},
+}
+
+function L4BP.w2SourceTests(): ()
+	print(" L4 W2: the lines that build the dress, seat the hits and send the pools (source.l4w2)")
+	local reading = FIXTURES.source.l4w2
+	local W2 = L4BP.W2
+	check(
+		#reading.missing == 0,
+		`every function the lines live in is there ({table.concat(reading.missing, ", ")})`
+	)
+	local keys = {}
+	for key in W2.LINES do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local expected = W2.LINES[key]
+		local count = reading.counts[key]
+		check(count == expected[1], `{expected[2]} ({key}: {tostring(count)}, expected {expected[1]})`)
+	end
+	local unknown = {}
+	for key in reading.counts do
+		if W2.LINES[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	for key, text in W2.ORDER do
+		check(reading.order[key] == true, `{text} ({key})`)
+	end
+	for key in reading.order do
+		if W2.ORDER[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	table.sort(unknown)
+	check(#unknown == 0, `every L4 W2 line read has an expected count here ({table.concat(unknown, ", ")})`)
+end
+L1.group("l4w2 sourceTests", L4BP.w2SourceTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

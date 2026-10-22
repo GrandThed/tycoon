@@ -343,6 +343,7 @@ RAY_ORIGINS = ((0.0, 5.0, 30.0), (3.0, 1.0, -25.0), (0.0, 22.0, 0.5), (-18.0, 9.
 RAY_WIDTHS = ((0.0, 0.0), (0.6, 0.6), (0.2, 1.5))  # (width, pad)
 RAY_SEED = 2214
 RAY_RANDOM = 160
+SEAT_GRID = (-0.25, 0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0, 1.4)  # L4W2-11: HitShapes.SeatDrop's seats, two outside 0..1 (it clamps)
 DORMANT_EDGES = (-1e-6, 0.0, 1e-6)
 BONUS_SHARES = (0.0, 0.1, 0.5, 1.0)
 TOLERANCE = 1e-9  # relative; the two sides do the same arithmetic on the same doubles
@@ -564,6 +565,10 @@ L2_REFUSALS = (
     ("a family that is a number", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("family", 5)),
     ("an empty family", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("family", "")),
     ("a family of 25 characters", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("family", "f" * 25)),
+    # L4 W2 (MISSIONS_DESIGN 28): a secret's key, the Castle Key's line.
+    ("a key that is a number", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("key", 5)),
+    ("an empty key", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("key", "")),
+    ("a key of 25 characters", lambda f, l, r: secret_entry(f, l["secrets"][0]["id"]).__setitem__("key", "k" * 25)),
 )
 
 
@@ -1293,11 +1298,13 @@ def wire(value):
     return value
 
 
-def ray_cases(data, expected, kinds):
+def ray_cases(data, expected, kinds, rest_drop):
     """HitShapes.CrowdRay, RayUpright and FlatToRect (L1b-W2-15, -16, -24) on grids: every kind,
     origins round it, aims at its shins, its body, its head's base, centre and top and past them,
     beside the capsule, at several widths and pads; RayUpright with low == high against Ray on
-    seeded rays; FlatToRect on a rectangle's inside, edges, corners and beyond."""
+    seeded rays; FlatToRect on a rectangle's inside, edges, corners and beyond. L4 W2 (L4W2-11):
+    HitShapes.SeatDrop on a grid of seats, and CrowdRay with a seated body's drop (half and fully
+    seated at crowd.restDrop), aimed at the lowered head and capsule top and at the standing head."""
     import random
 
     rows, mine = [], []
@@ -1321,6 +1328,32 @@ def ray_cases(data, expected, kinds):
     case = "ray.crowdRay"
     data["rayCases"].append({"id": case, "op": "crowdRay", "rows": rows})
     expected[case] = ("HitShapes.CrowdRay", f"{len(rows)} rays over {len(kinds)} kinds", mine)
+    # A restDrop under 0 and a height of 0 drop nothing (SeatDrop's guard).
+    rows = [[h, seat, drop] for h in (5.0, 6.5, 7.5, 14.0, 0.0) for seat in SEAT_GRID for drop in (rest_drop, 0.0, 0.5, -0.1)]
+    case = "ray.seatDrop"
+    data["rayCases"].append({"id": case, "op": "seatDrop", "rows": rows})
+    expected[case] = ("HitShapes.SeatDrop", f"{len(rows)} seats", [sr.hs_seat_drop(*row) for row in rows])
+    rows, mine = [], []
+    for name, kind in sorted(kinds.items()):
+        r, h, hr = kind["radius"], kind["height"], kind["headRadius"]
+        feet = (2.0, 1.0, -3.0)
+        top = max(h - 2 * hr, h / 2 + r)
+        for seat in (0.5, 1.0):
+            drop = sr.hs_seat_drop(h, seat, rest_drop)
+            aims = [(0.0, 0.5, 0.0), (0.0, h / 2 - drop, 0.0), (0.0, top - drop, 0.0), (0.0, h - hr - drop, 0.0),
+                    (0.0, h - hr, 0.0), (0.0, top, 0.0), (r + 0.4, h / 2 - drop, 0.0)]
+            for origin in RAY_ORIGINS:
+                o = (feet[0] + origin[0], feet[1] + origin[1], feet[2] + origin[2])
+                for aim in aims:
+                    target = (feet[0] + aim[0], feet[1] + aim[1], feet[2] + aim[2])
+                    direction = sr.v_sub(target, o)
+                    for width, pad in RAY_WIDTHS:
+                        rows.append([list(o), list(direction), 60.0, width, pad, list(feet), r, h, hr, drop])
+                        entry, crit = sr.hs_crowd_ray(o, direction, 60.0, width, pad, feet, r, h, hr, drop)
+                        mine.append(["nil" if entry is None else entry, crit])
+    case = "ray.crowdRaySeated"
+    data["rayCases"].append({"id": case, "op": "crowdRay", "rows": rows})
+    expected[case] = ("HitShapes.CrowdRay", f"{len(rows)} rays at seated bodies over {len(kinds)} kinds (drop)", mine)
     rng = random.Random(RAY_SEED)
     rows, mine = [], []
     for _ in range(RAY_RANDOM):
@@ -2721,7 +2754,7 @@ def main():
     grid_camp_cases(data, expected, combat["camps"])
     wave2_camp_cases(data, expected, combat["camps"], shipped_plans[:2])
     split_cases(data, expected)
-    ray_cases(data, expected, crowd_kinds)
+    ray_cases(data, expected, crowd_kinds, cfg["crowd"].get("restDrop") or 0.0)
     swing_cases(data, expected)
     tent_owes_cases(data, expected)
     combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds)

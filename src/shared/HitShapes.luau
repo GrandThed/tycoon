@@ -333,6 +333,9 @@ end
 -- (ground to the head's base, or to today's sphere top when that is higher, so no ray that hit
 -- the old body sphere misses) or its head sphere; the entry is the nearer of the two. It crits
 -- only when the unpadded ray touches the head: the pad forgives a miss, it never makes a headshot.
+-- L4 W2 (docs/prompts/l4-w2-contract.md §5): `drop` (nil = 0, SeatDrop's answer for a seated
+-- body) lowers the head and the capsule's top by that many studs; the capsule's foot stays on the
+-- ground (a capsule shorter than its own width is the sphere at its foot, RayUpright's rule).
 function HitShapes.CrowdRay(
 	origin: Vector3,
 	direction: Vector3,
@@ -342,10 +345,12 @@ function HitShapes.CrowdRay(
 	feet: Vector3,
 	radius: number,
 	height: number,
-	headRadius: number
+	headRadius: number,
+	drop: number?
 ): (number?, boolean)
-	local top = math.max(height - 2 * headRadius, height / 2 + radius)
-	local head = feet + Vector3.new(0, height - headRadius, 0)
+	local lower = drop or 0
+	local top = math.max(height - 2 * headRadius, height / 2 + radius) - lower
+	local head = feet + Vector3.new(0, height - headRadius - lower, 0)
 	local bodyEntry = HitShapes.RayUpright(
 		origin,
 		direction,
@@ -363,6 +368,46 @@ function HitShapes.CrowdRay(
 		return nil, false
 	end
 	return entry, HitShapes.Ray(origin, direction, reach, width, 0, head, headRadius) ~= nil
+end
+
+-- L4 W2 (docs/prompts/l4-w2-contract.md §5): how many studs a body's head and its capsule's top
+-- sit lower for its `seat` (0 standing .. 1 seated, clamped): height x restDrop x smoothstep(seat),
+-- the same easing the client draws the seat with. A restDrop that is not a finite number of at
+-- least 0 (a config without the key included), or a height that is not finite and above 0, drops
+-- nothing.
+function HitShapes.SeatDrop(height: number, seat: number, restDrop: number): number
+	if
+		type(restDrop) ~= "number"
+		or type(height) ~= "number"
+		or type(seat) ~= "number"
+		or not (restDrop >= 0 and restDrop < math.huge)
+		or not (height > 0 and height < math.huge)
+		or seat ~= seat
+	then
+		return 0
+	end
+	local u = math.min(math.max(seat, 0), 1)
+	return height * restDrop * u * u * (3 - 2 * u)
+end
+
+-- L4 W2 (§5): one step of a body's seat toward `goal` (1 while it rests, 0 otherwise) at a fixed
+-- pace both ways, 1 / blendSeconds a second, so a rise from seated takes blendSeconds. A pace that
+-- is not a finite number above 0 (a config without the key included) reaches the goal at once.
+-- Never past the goal, never outside 0..1.
+function HitShapes.SeatStep(seat: number, goal: number, dt: number, blendSeconds: number): number
+	local target = math.min(math.max(goal, 0), 1)
+	if
+		type(blendSeconds) ~= "number"
+		or not (blendSeconds > 0 and blendSeconds < math.huge)
+		or seat ~= seat
+	then
+		return target
+	end
+	local step = math.max(dt, 0) / blendSeconds
+	if target > seat then
+		return math.min(seat + step, target)
+	end
+	return math.max(seat - step, target)
 end
 
 -- L1b-W2-24: the flat distance from a point to a rectangle (centre, half extents); 0 inside or on

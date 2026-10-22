@@ -143,6 +143,8 @@ SOURCES = {
     # once per member per floor set (tests_l4b_run.luau).
     "DashProof": "src/combat/server/Services/DashProof.luau",
     "RunFloors": "src/shared/RunFloors.luau",
+    # L4 W2: the server's all-or-nothing reading of a level's dress (tests_l4w2.luau).
+    "LevelDress": "src/combat/server/Services/LevelDress.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -182,6 +184,8 @@ TESTS = [
     "tests_l3_w2.luau",
     "tests_l4b.luau",
     "tests_l4b_run.luau",
+    # L4 W2: LevelDress, StageFlow.Plan's kinds, the seat, the Castle Key (luau-engineer A's).
+    "tests_l4w2.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -225,8 +229,10 @@ def read_folder(repo: Path, folder: str, numbered: bool = False) -> list:
 
 def gate_reading() -> dict:
     """What tools/check_levels.py makes of the layouts: its Part count for each (its `N Parts`
-    lines). Always this checkout's files (the tool takes no root; a mutant root holds copies of the
-    same data). Empty when the tool cannot be imported: the cases that need it then fail."""
+    lines less a dressed level's walls: part_count's `walls` stays 0 here, so the count is
+    LevelGeometry.Pieces' alone, L4 W2). Always this checkout's files (the tool takes no root; a
+    mutant root holds copies of the same data). Empty when the tool cannot be imported: the cases
+    that need it then fail."""
     try:
         sys.path.insert(0, str(HERE.parent))
         import check_levels
@@ -1423,6 +1429,7 @@ def source_reading(repo: Path) -> dict:
         "l3": l3_reading(text),
         "l3w2": l3w2_reading(text, repo),
         "l4b": l4b_reading(text),
+        "l4w2": l4w2_reading(text),
     }
 
 
@@ -1663,6 +1670,138 @@ def l4b_reading(text) -> dict:
     return {"counts": counts, "order": order, "missing": sorted(p for p, ok in found.items() if not ok)}
 
 
+# L4 W2 (docs/prompts/l4-w2-contract.md 2.2, 3.2, 5, 8 and section 0; luau-a.md "For D2" 4): the lines
+# that carry out LevelDress.Accept's answer (LevelService), lower a seated head in every hit
+# (WeaponService), send the pools' counts (WaveService, ArenaService), carry the chest's key
+# (WaveService) and pull the Z lever (DebugService), read as text: none of those services loads
+# here. The rules themselves are tests_l4w2.luau's (LevelDress, HitShapes, StageFlow, SecretFlow).
+# Counted on the code (comments blanked) of the function each lives in, as L4B_LINES;
+# tests_l3_w2.luau holds every count to its expected value (L4BP.W2).
+CONSTRUCT_BODY = body_of("construct")
+DRESS_OF_BODY = body_of("dressOf")
+LEVEL_BUILD_BODY = body_of("LevelService.Build")
+LEVEL_CLEAR_BODY = body_of("LevelService.Clear")
+GATHER_BODY = body_of("gather")
+RAY_CANDIDATES_BODY = body_of("rayCandidates")
+START_LEVEL_BODY = body_of("startLevel")
+ANNOUNCE_SECRET_BODY = body_of("announceSecret")
+APPLY_LEVER_BODY = body_of("applyLever")
+L4W2_LINES = {
+    # LevelService: construct builds what Accept answered.
+    "constructHidden": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines",
+                        "\tlocal hidden: { [string]: boolean }? = if dressed ~= nil then dressed.hidden else nil"),
+    "constructWallRole": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tlocal isWall = piece.role == LevelDress.WALL_ROLE"),
+    "constructNoGroupNoWall": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tif (isBarrier or isWall) and not walls then"),
+    "constructWallBranch": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\telseif isWall then"),
+    "constructGroups": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER"),
+    "constructArmed": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart.CanCollide = true"),
+    "constructSkinnedIf": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tif hidden ~= nil and hidden[piece.name] then"),
+    "constructSkinned": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)"),
+    "constructSkinnedWrites": (LEVEL_SERVICE, CONSTRUCT_BODY, "text",
+                               "\t\t\tpart.Transparency = 1\n\t\t\tpart.CastShadow = false\n"
+                               "\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)\n\t\tend\n\t\tpart.Parent = folder\n"),
+    "constructCollides": (LEVEL_SERVICE, CONSTRUCT_BODY, "regex", r"\bpart\.CanCollide\s*=(?!=)"),
+    # dressOf: Accept asked with the uploaded hash (the Z lever's wrong one once), the templates,
+    # the names a found shortcut left out, the groups, maxParts and the layout's own name.
+    "dressUploaded": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\tlocal hash = uploadedHash(layoutName)"),
+    "dressFailSpent": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\t\tstate.failNextDress = false"),
+    "dressFailHash": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\t\thash = CONST.FAILED_HASH"),
+    "dressAccept": (LEVEL_SERVICE, DRESS_OF_BODY, "text",
+                    "LevelDress.Accept(\n\t\tCatalog.GetLevelDress(layoutName),\n\t\thash,\n\t\ttemplatesOf(layoutName),\n"
+                    "\t\tpieces,\n\t\tLevelDress.LeftOut(layout, open),\n\t\tBarrierGroups.Ensure(),\n\t\tmaxParts,\n"
+                    "\t\tlayoutName\n\t)"),
+    "dressGreyWarns": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\t\twarn(`[LevelService] the level is grey: {reason}`)"),
+    # Build: the dress asked after the pieces, the walls appended, the looks laid, Dress and
+    # DressHash set last; both cleared first.
+    "buildNilDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)"),
+    "buildNilHash": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)"),
+    "buildDressOf": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                     "\t\taccepted, planHash = dressOf(layout, layoutName, pieces, open, rules.maxParts)"),
+    "buildOverlay": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                     "\t\t\tlooks = LevelDress.Overlay(expeditions.looks, accepted.looks),"),
+    "buildWalls": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                   "\t\ttable.move(accepted.walls, 1, #accepted.walls, #built + 1, built)"),
+    "buildPlace": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                   "\tlocal camps, problem = place(folder, built, expeditions, reactive, ice, dressed)"),
+    "buildLooks": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                   "\tstate.looks = if dressed ~= nil then dressed.looks else expeditions.looks"),
+    "buildDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)"),
+    "buildDressHash": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                       "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, planHash)"),
+    "buildDressWrites": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "regex", r"SetAttribute\(CONST\.DRESS(?:_HASH)?_ATTRIBUTE,"),
+    # Clear: both words gone before any Part.
+    "clearNilDress": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)"),
+    "clearNilHash": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)"),
+    # WeaponService (contract 5): every candidate's head lowered by its seat, the drop handed on.
+    "gatherDrop": (WEAPON_SERVICE, GATHER_BODY, "lines",
+                   "\t\tlocal drop = HitShapes.SeatDrop(def.height, enemy.seat, restDrop)"),
+    "gatherHead": (WEAPON_SERVICE, GATHER_BODY, "lines",
+                   "\t\tlocal head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)"),
+    "gatherTest": (WEAPON_SERVICE, GATHER_BODY, "lines",
+                   "\t\t\ttest(body, def.radius, head, def.headRadius, enemy.position, def.height, drop)"),
+    "gatherSeatDrops": (WEAPON_SERVICE, GATHER_BODY, "text", "HitShapes.SeatDrop("),
+    "rayDrop": (WEAPON_SERVICE, RAY_CANDIDATES_BODY, "text", "\t\t\t\theadRadius,\n\t\t\t\tdrop\n\t\t\t)"),
+    # WaveService (3.2, section 0): the plan's kinds go out as the pools' counts; the dress named;
+    # the chest's key carried to the client.
+    "startPrewarm": (WAVE_SERVICE, START_LEVEL_BODY, "lines", "\trun.prewarm = plan.kinds"),
+    "startBuild": (WAVE_SERVICE, START_LEVEL_BODY, "text",
+                   "LevelService.Build(\n\t\t\tlayout,\n\t\t\tmap,\n\t\t\trules,\n"
+                   "\t\t\tUnlockService.FoundShortcuts(player, levelId),\n\t\t\tlevel.layout\n\t\t)"),
+    "pushPrewarm": (WAVE_SERVICE, PUSH_RUN_FIELDS_BODY, "text", "prewarm = run.prewarm,"),
+    "announceKey": (WAVE_SERVICE, ANNOUNCE_SECRET_BODY, "text", "key = opening.key,"),
+    # ArenaService (3.2): the counts only with a member's first RunState of a floor set.
+    "sendPrewarm": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent.prewarm = runFields.prewarm"),
+    "sendPrewarmWrites": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "regex", r"\bsent\.prewarm\s*=(?!=)"),
+    # DebugService (8): the Z lever.
+    "leverDressFail": (DEBUG_SERVICE, APPLY_LEVER_BODY, "text",
+                       'elseif lever == "dressFail" then\n\t\tLevelService.FailNextDress()'),
+}
+L4W2_ORDER = {
+    "wallThenArmed": (LEVEL_SERVICE, CONSTRUCT_BODY, "elseif isWall then", "part.CanCollide = true"),
+    "hiddenThenSkinned": (LEVEL_SERVICE, CONSTRUCT_BODY, "if hidden ~= nil and hidden[piece.name] then",
+                          "part:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)"),
+    "failThenAccept": (LEVEL_SERVICE, DRESS_OF_BODY, "hash = CONST.FAILED_HASH", "LevelDress.Accept("),
+    "nilThenPieces": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)",
+                      "local pieces, refused = piecesOf("),
+    "piecesThenDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local pieces, refused = piecesOf(",
+                        "accepted, planHash = dressOf("),
+    "placeThenBuilt": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local camps, problem = place(", "state.built = true"),
+    "builtThenDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "state.built = true",
+                       "folder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)"),
+    "dressThenHash": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "folder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)",
+                      "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, planHash)"),
+    "clearNilThenParts": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)",
+                          "folder:ClearAllChildren()"),
+    "gatherDropThenHead": (WEAPON_SERVICE, GATHER_BODY, "local drop = HitShapes.SeatDrop(",
+                           "local head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)"),
+    "cellsWentThenPrewarm": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "if cellsWent then", "sent.prewarm = runFields.prewarm"),
+}
+
+
+def l4w2_reading(text) -> dict:
+    """L4W2_LINES and L4W2_ORDER, read as l4b_reading reads L4B's."""
+    counts, found = {}, {}
+    for key, (rel, pattern, how, line) in L4W2_LINES.items():
+        code = luau_code(text(rel))
+        if pattern is not None:
+            body = pattern.search(code)
+            found[pattern.pattern] = body is not None
+            code = body.group(0) if body else ""
+        if how == "lines":
+            counts[key] = whole_lines(code, line)
+        elif how == "regex":
+            counts[key] = len(re.findall(line, code))
+        else:
+            counts[key] = code.count(line)
+    order = {}
+    for key, (rel, pattern, first, then) in L4W2_ORDER.items():
+        body = pattern.search(luau_code(text(rel)))
+        code = body.group(0) if body else ""
+        a, b = code.find(first), code.find(then)
+        order[key] = a >= 0 and b > a
+    return {"counts": counts, "order": order, "missing": sorted(p for p, ok in found.items() if not ok)}
+
+
 def w3_fix3_reading(text) -> dict:
     """The W3 third fix round's lines (W3_FIX3_LINES), counted in the function each belongs to.
     `text` reads a repo file (empty when missing)."""
@@ -1834,6 +1973,13 @@ def fixtures(repo: Path) -> dict:
             if not re.match(NUMBERED, path.stem)
         ),
         "layouts": layouts,
+        # L4 W2: every level's dress file (Config/LevelDress/<layout>.json) and the plan hash the
+        # upload recorded for it (Assets.json levels.<layout>.planHash), as LevelService reads both.
+        "levelDress": dict(read_folder(repo, "src/shared/Config/LevelDress")),
+        "levelHashes": {
+            name: (entry or {}).get("planHash")
+            for name, entry in ((read_optional(repo, "src/shared/Config/Assets.json") or {}).get("levels") or {}).items()
+        },
         "gate": gate_reading(),
         "source": source_reading(repo),
     }

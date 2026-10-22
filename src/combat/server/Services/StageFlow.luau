@@ -126,6 +126,13 @@ export type Plan = {
 	tents: { PlanTent },
 	-- L1b-W2-5's left side at the played difficulty: what the client prewarms its pool with.
 	population: number,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §3.2): the bodies of each crowd kind the run may show,
+	-- for the client's pool of that kind's model (RunState.prewarm): every resident (minDifficulty
+	-- applied, never countMult, as they are placed), every tent's stock, and of the locking camps'
+	-- waves the most any one wave fields of the kind: its groups (minDifficulty and countMult
+	-- applied, for a party of one), its boss and what the boss's `summon` attacks raise (the most
+	-- one call tops up to). A kind with none is absent.
+	kinds: { [string]: number },
 	-- L2-58: every block a body falls through (`collide` false: deep water, ice or not, the fix
 	-- round's Q3) that has a landing, in the layout's order (Landing).
 	waters: { Water },
@@ -602,6 +609,76 @@ local function populationOf(
 	return placed + tents + room + reserve
 end
 
+-- L4 W2 (§3.2): Plan's `kinds` (its type says what is counted). `residentStocks` is groupsOf's
+-- third answer, `tents` tentsOf's first; `countMult` is the played difficulty's.
+local function kindsOf(
+	level: Types.LevelConfig,
+	residentStocks: { [string]: { [string]: number } },
+	tents: { PlanTent },
+	rank: number,
+	ranks: { [string]: number }?,
+	countMult: number,
+	kinds: { [string]: Types.CrowdKindDef }?
+): { [string]: number }
+	local counts: { [string]: number } = {}
+	for _, stock in residentStocks do
+		for kind, count in stock do
+			counts[kind] = (counts[kind] or 0) + count
+		end
+	end
+	for _, tent in tents do
+		for _, kind in tent.kinds do
+			counts[kind] = (counts[kind] or 0) + 1
+		end
+	end
+	-- One wave's bodies at a time: a locking camp's waves follow each other.
+	local most: { [string]: number } = {}
+	for _, stage in level.stages do
+		local waves: { Types.MissionCrowdWave } = if stage.kind == KIND_CAMP
+			then stage.waves or {}
+			else {}
+		for _, wave in waves do
+			local here: { [string]: number } = {}
+			for _, unit in fieldedUnits(wave.groups or {}, rank, ranks) do
+				here[unit.kind] = (here[unit.kind] or 0)
+					+ math.max(math.round(unit.count * countMult), 0)
+			end
+			local boss = wave.boss
+			if boss ~= nil and type(boss.kind) == "string" then
+				here[boss.kind] = (here[boss.kind] or 0) + 1
+				local def = if kinds ~= nil then kinds[boss.kind] else nil
+				local attacks: { Types.CrowdAttackDef } = if def ~= nil
+						and def.attacks ~= nil
+					then def.attacks
+					else {}
+				-- A call tops its living summons up to its count, so one kind's calls never add up.
+				local calls: { [string]: number } = {}
+				for _, attack in attacks do
+					local raised = attack.summon
+					if attack.shape == "summon" and raised ~= nil then
+						calls[raised] = math.max(calls[raised] or 0, attack.count or 0)
+					end
+				end
+				for kind, count in calls do
+					here[kind] = (here[kind] or 0) + count
+				end
+			end
+			for kind, count in here do
+				most[kind] = math.max(most[kind] or 0, count)
+			end
+		end
+	end
+	for kind, count in most do
+		counts[kind] = (counts[kind] or 0) + count
+	end
+	for kind, count in counts do
+		if count <= 0 then
+			counts[kind] = nil
+		end
+	end
+	return counts
+end
+
 local function sumOf(byId: { [string]: number }): number
 	local total = 0
 	for _, value in byId do
@@ -852,8 +929,8 @@ end
 
 -- L2-13: the level file's `secrets` block against the layout's secrets. Every layout secret has
 -- an entry with a name; an entry's valor and materials, when given, are whole numbers >= 0, and
--- its family a short string. Which secrets may pay at all (a reward only behind a sold key) is
--- check_levels.py's rule (L2-18e), not a refusal here.
+-- its family and its key (L4 W2) short strings. Which secrets may pay at all (a reward only behind
+-- a sold key) is check_levels.py's rule (L2-18e), not a refusal here.
 local function secretProblems(
 	level: Types.LevelConfig,
 	layout: Types.LevelLayout,
@@ -895,6 +972,13 @@ local function secretProblems(
 			and (type(family) ~= "string" or family == "" or #family > Unlocks.MAX_FAMILY_LENGTH)
 		then
 			problem(`secrets.{id}.family is {tostring(family)}, not a family id`)
+		end
+		-- L4 W2 (§0): a key id is held to the family id's cap, in bytes, as the mirror counts.
+		local key = entry.key
+		if
+			key ~= nil and (type(key) ~= "string" or key == "" or #key > Unlocks.MAX_FAMILY_LENGTH)
+		then
+			problem(`secrets.{id}.key is {tostring(key)}, not a key id`)
 		end
 	end
 end
@@ -1879,6 +1963,15 @@ function StageFlow.Plan(
 			sumOf(tentStocks),
 			caps,
 			StageFlow.BossReserve(level, kinds)
+		),
+		kinds = kindsOf(
+			level,
+			residentStocks,
+			tents,
+			rank,
+			ranks,
+			level.difficulties[difficulty].countMult,
+			kinds
 		),
 		waters = waters,
 	}

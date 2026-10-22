@@ -43,12 +43,23 @@
 -- The host binds the keys (arrows, Enter) and calls Step and Confirm; `deps.keyHint` is the
 -- line that names them, shown at the foot of the card when the host passes one.
 --
+-- L4 W2 (docs/prompts/l4-w2-contract.md section 0; MISSIONS_DESIGN section 28): a secret that
+-- gives a level key (MapSecretState.key, the mountain's "castle") carries a small key glyph beside
+-- its icon, gold once found and dim before, like its key word. Forest Road now has four secrets:
+-- four 50 px cells no longer fit the row's 150 design px, and an even split (37.5) cut "2× JUMP"
+-- (about 47) short. So when the even 50s do not fit, each cell is as wide as its key word measured
+-- (TextService) plus a little, at least the icon and its glyph, at most 50, and all are scaled
+-- down together only if those still do not fit. Estimated at 11 px GothamBold ("2× JUMP" about
+-- 47, "FIRE" about 24, "ICE" about 18; TextService measures the real ones) the forest's four
+-- come to about 148 of 150, so every word fits whole and no cell shrinks.
+--
 -- L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-15, L3-16): tiers belong to each weapon on one
 -- ladder of 20, and the Armory shows them as "T3", so a difficulty's recommended tier reads the
 -- same way here (Hard's "T3" read "tier 4+" on the old slot ladder). Hard's x2.5 is data: the
 -- rewards line already reads it from the level file.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextService = game:GetService("TextService")
 local TweenService = game:GetService("TweenService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
@@ -96,10 +107,22 @@ export type MapScreenHandle = {
 -- One difficulty a level offers, as the card shows it.
 type Difficulty = { id: string, name: string, tier: number, rewardMult: number }
 
--- One secret on the card (MapSecretState), as checked off the network.
-type SecretMark = { id: string, name: string, needs: string, found: boolean }
+-- One secret on the card (MapSecretState), as checked off the network. L4 W2: `keyId` = the level
+-- key it gives (MapSecretState.key), nil for none.
+type SecretMark = { id: string, name: string, needs: string, found: boolean, keyId: string? }
 
-type SecretCell = { frame: Frame, icon: Frame, glyph: TextLabel, stroke: UIStroke, key: TextLabel }
+-- `key` is the word under the icon (what to bring); L4 W2: `keyGlyph` the level-key mark beside
+-- the icon, `keyInk` the bars it is drawn with and `keyBow` its ring.
+type SecretCell = {
+	frame: Frame,
+	icon: Frame,
+	glyph: TextLabel,
+	stroke: UIStroke,
+	key: TextLabel,
+	keyGlyph: Frame,
+	keyInk: { Frame },
+	keyBow: UIStroke,
+}
 
 type NodeView = {
 	node: Types.MapNode,
@@ -177,6 +200,10 @@ local REASON_NEEDS_NODE = "needsNode"
 local REASON_NEEDS_STARS = "needsStars"
 local SECRET_FOUND_GLYPH = "✓"
 local SECRET_UNFOUND_GLYPH = "?"
+-- L4 W2: design px added to a measured key word for its cell, and between the icon and the key
+-- glyph (also kept on the glyph's far side, so the icon stays centred in its cell).
+local SECRET_CELL_TEXT_PAD = 3
+local SECRET_KEY_GLYPH_GAP = 1
 -- Design px of overlap the spread takes for none.
 local SPREAD_EPSILON = 0.25
 
@@ -506,10 +533,16 @@ local function readSecrets(list: any): { SecretMark }
 			and typeof(entry.needs) == "string"
 			and typeof(entry.found) == "boolean"
 		then
-			table.insert(
-				marks,
-				{ id = entry.id, name = entry.name, needs = entry.needs, found = entry.found }
-			)
+			table.insert(marks, {
+				id = entry.id,
+				name = entry.name,
+				needs = entry.needs,
+				found = entry.found,
+				-- L4 W2: read loosely, so a server without the field shows no glyph.
+				keyId = if typeof(entry.key) == "string" and entry.key ~= ""
+					then entry.key
+					else nil,
+			})
 		end
 	end
 	return marks
@@ -551,7 +584,105 @@ local function secretCell(parent: Instance, order: number): SecretCell
 	key.Position = UDim2.fromScale(0.5, 1)
 	key.Size = UDim2.new(1, 0, 0, Theme.MAP_SECRET_ROW_HEIGHT - size)
 	key.TextTruncate = Enum.TextTruncate.AtEnd
-	return { frame = frame, icon = icon, glyph = glyph, stroke = stroke, key = key }
+	-- L4 W2: a level key drawn from Frames, so it reads the same in every font: a ring for the
+	-- bow, a bar for the shaft, a short bar down for the bit. Right of the icon, centred on it.
+	local glyphWidth = Theme.MAP_SECRET_KEY_GLYPH_WIDTH
+	local keyGlyph = Create("Frame", {
+		Name = "KeyGlyph",
+		Active = false,
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0.5, size / 2 + SECRET_KEY_GLYPH_GAP, 0, size / 2),
+		Size = UDim2.fromOffset(glyphWidth, glyphWidth / 2),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = frame,
+	}) :: Frame
+	local bow = Create("Frame", {
+		Name = "Bow",
+		Active = false,
+		Size = UDim2.fromScale(0.5, 1),
+		BackgroundTransparency = 1,
+		Parent = keyGlyph,
+	}) :: Frame
+	rounded(bow, UDim.new(0.5, 0))
+	local bowStroke = Create("UIStroke", {
+		Color = Theme.MAP_COLOR_DIM,
+		Thickness = Theme.STROKE_THICKNESS / 2,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Parent = bow,
+	}) :: UIStroke
+	local shaft = Create("Frame", {
+		Name = "Shaft",
+		Active = false,
+		Position = UDim2.fromScale(0.5, 0.4),
+		Size = UDim2.fromScale(0.5, 0.2),
+		BackgroundColor3 = Theme.MAP_COLOR_DIM,
+		BorderSizePixel = 0,
+		Parent = keyGlyph,
+	}) :: Frame
+	local keyBit = Create("Frame", {
+		Name = "Bit",
+		Active = false,
+		Position = UDim2.fromScale(0.82, 0.4),
+		Size = UDim2.fromScale(0.14, 0.55),
+		BackgroundColor3 = Theme.MAP_COLOR_DIM,
+		BorderSizePixel = 0,
+		Parent = keyGlyph,
+	}) :: Frame
+	return {
+		frame = frame,
+		icon = icon,
+		glyph = glyph,
+		stroke = stroke,
+		key = key,
+		keyGlyph = keyGlyph,
+		keyInk = { shaft, keyBit },
+		keyBow = bowStroke,
+	}
+end
+
+-- L4 W2: the key word under a secret's icon (Theme.MAP_SECRET_KEY_WORDS, else in capitals).
+local function keyWord(needs: string): string
+	return Theme.MAP_SECRET_KEY_WORDS[needs] or string.upper(needs)
+end
+
+-- L4 W2: each cell's width in design px (see the header): the old even 50s when they fit, else
+-- each its measured word (at least its icon and glyph), all scaled down together past the room.
+local function secretWidths(marks: { SecretMark }, room: number): { number }
+	local widths: { number } = {}
+	local count = #marks
+	if count * Theme.MAP_SECRET_CELL_WIDTH <= room then
+		for index = 1, count do
+			widths[index] = Theme.MAP_SECRET_CELL_WIDTH
+		end
+		return widths
+	end
+	local total = 0
+	local unbounded = Vector2.new(math.huge, math.huge)
+	for index, mark in marks do
+		local word = TextService:GetTextSize(
+			keyWord(mark.needs),
+			Theme.MAP_SECRET_KEY_TEXT,
+			Theme.FONT_BOLD,
+			unbounded
+		).X + SECRET_CELL_TEXT_PAD
+		local least = Theme.MAP_SECRET_ICON_SIZE
+			+ (
+				if mark.keyId ~= nil
+					then 2 * (Theme.MAP_SECRET_KEY_GLYPH_WIDTH + SECRET_KEY_GLYPH_GAP)
+					else 0
+			)
+		local width = math.min(Theme.MAP_SECRET_CELL_WIDTH, math.max(word, least))
+		widths[index] = width
+		total += width
+	end
+	if total > room and total > 0 then
+		local fit = room / total
+		for index, width in widths do
+			widths[index] = width * fit
+		end
+	end
+	return widths
 end
 
 -- One line of the card: a dim caption and its value.
@@ -987,21 +1118,25 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 			table.insert(cells, secretCell(card.secretsList, #cells + 1))
 		end
 		local room = Theme.MAP_CARD_WIDTH - Theme.MAP_CARD_PADDING * 2 - Theme.MAP_CARD_LABEL_WIDTH
-		local width = math.min(Theme.MAP_SECRET_CELL_WIDTH, room / math.max(#marks, 1))
+		local widths = secretWidths(marks, room)
 		for index, cell in cells do
 			local mark = marks[index]
 			cell.frame.Visible = mark ~= nil
 			if mark ~= nil then
-				cell.frame.Size = UDim2.new(0, width, 1, 0)
+				cell.frame.Size = UDim2.new(0, widths[index], 1, 0)
 				cell.icon.BackgroundTransparency = if mark.found then 0 else 1
 				cell.glyph.Text = if mark.found then SECRET_FOUND_GLYPH else SECRET_UNFOUND_GLYPH
 				cell.glyph.TextColor3 = if mark.found
 					then Theme.MAP_COLOR_INK
 					else Theme.MAP_COLOR_GOLD
-				cell.key.Text = Theme.MAP_SECRET_KEY_WORDS[mark.needs] or string.upper(mark.needs)
-				cell.key.TextColor3 = if mark.found
-					then Theme.MAP_COLOR_GOLD
-					else Theme.MAP_COLOR_DIM
+				cell.key.Text = keyWord(mark.needs)
+				local ink = if mark.found then Theme.MAP_COLOR_GOLD else Theme.MAP_COLOR_DIM
+				cell.key.TextColor3 = ink
+				cell.keyGlyph.Visible = mark.keyId ~= nil
+				cell.keyBow.Color = ink
+				for _, part in cell.keyInk do
+					part.BackgroundColor3 = ink
+				end
 			end
 		end
 	end

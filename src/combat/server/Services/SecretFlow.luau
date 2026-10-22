@@ -15,8 +15,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
 
 -- What a chest pays: whole numbers, flat (no rewardMult, any difficulty); family = a weapon
--- family the player now holds.
-export type Reward = { valor: number, materials: number, family: string? }
+-- family the player now holds. L4 W2 (docs/prompts/l4-w2-contract.md §0): key = a level key id the
+-- chest gives ("castle"). Nothing writes it: the opened secret is the key (Unlocks.HasLevelKey).
+export type Reward = { valor: number, materials: number, family: string?, key: string? }
 -- One chest: the layout's `Secret_<id>` block and the level file's entry. x, z = its centre on
 -- the flat and sx, sz its footprint's sizes (the fix round's s1: the trigger is measured to the
 -- footprint, so a big chest opens from beside it); floorY = the block's bottom (where a player
@@ -33,8 +34,15 @@ export type Site = {
 	reward: Reward?,
 }
 export type Verdict = "known" | "locked" | "nothing" | "pay"
--- What UnlockService.OpenSecret did: the verdict, and on "pay" what it credited (else 0 / nil).
-export type Opening = { verdict: Verdict, valor: number, materials: number, family: string? }
+-- What UnlockService.OpenSecret did: the verdict, and on "pay" what it credited (else 0 / nil),
+-- and the key it gave (L4 W2).
+export type Opening = {
+	verdict: Verdict,
+	valor: number,
+	materials: number,
+	family: string?,
+	key: string?,
+}
 -- L2-36: one shortcut's trigger box, from the layout's `shortcuts`: centre and size, studs.
 export type Shortcut = {
 	id: string,
@@ -59,18 +67,28 @@ local function whole(value: any): number
 	return if finite(value) and value >= 0 and value % 1 == 0 then value else 0
 end
 
--- The entry's reward, or nil when it is not a reward entry (none of valor, materials, family).
--- A malformed number pays 0: Validate refuses such a level before it is ever played, so this is
--- only the net.
+-- The entry's reward, or nil when it is not a reward entry (none of valor, materials, family,
+-- key: L4 W2, so a key-only chest still pays). A malformed number pays 0: Validate refuses such a
+-- level before it is ever played, so this is only the net.
 local function rewardOf(entry: Types.LevelSecretConfig?): Reward?
-	if entry == nil or (entry.valor == nil and entry.materials == nil and entry.family == nil) then
+	if
+		entry == nil
+		or (
+			entry.valor == nil
+			and entry.materials == nil
+			and entry.family == nil
+			and entry.key == nil
+		)
+	then
 		return nil
 	end
 	local family = entry.family
+	local key = entry.key
 	return {
 		valor = whole(entry.valor),
 		materials = whole(entry.materials),
 		family = if type(family) == "string" and family ~= "" then family else nil,
+		key = if type(key) == "string" and key ~= "" then key else nil,
 	}
 end
 
@@ -214,7 +232,13 @@ function SecretFlow.Open(
 		familiesOf(combat)[family] = true
 	end
 	secretsOf(combat, levelId)[site.id] = true
-	return { verdict = "pay", valor = reward.valor, materials = materials, family = family }
+	return {
+		verdict = "pay",
+		valor = reward.valor,
+		materials = materials,
+		family = family,
+		key = reward.key,
+	}
 end
 
 -- L2-36: every shortcut of a layout, in its order. An entry whose id is not a string, or whose
@@ -317,15 +341,17 @@ function SecretFlow.FoundShortcuts(
 end
 
 -- The map card's row for one player: every chest of the level in order, found from their own
--- profile's `combat.secrets[levelId]`.
+-- profile's `combat.secrets[levelId]`. L4 W2: a chest that gives a key names it (the key glyph).
 function SecretFlow.MapRow(sites: { Site }, found: { [string]: boolean }?): { Types.MapSecretState }
 	local row: { Types.MapSecretState } = {}
 	for _, site in sites do
+		local reward = site.reward
 		table.insert(row, {
 			id = site.id,
 			name = site.name,
 			needs = site.needs,
 			found = found ~= nil and found[site.id] == true,
+			key = if reward ~= nil then reward.key else nil,
 		})
 	end
 	return row

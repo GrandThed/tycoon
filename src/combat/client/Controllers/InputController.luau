@@ -600,7 +600,8 @@ local function autoMayTake(id: number): boolean
 end
 
 -- CrowdRenderer reports the ground point; the body sphere is centred at height/2 and the
--- head sphere sits at the top (INTERFACES P1 decision 1).
+-- head sphere sits at the top (INTERFACES P1 decision 1). L4 W2 (contract 5): a seated body's
+-- head and capsule top sit `drop` lower (HitShapes.SeatDrop), as the server judges them.
 -- R13: the trigger is a takeable body in the assist cone, but the shot flies the crosshair line
 -- itself and pierces, so it is held while a refused body lies on that line within the shot's hits
 -- (HitShapes.CrowdRay, the server's ray shape; CampAim.ShotSpares). A refused body gets the lag
@@ -627,7 +628,14 @@ local function enemyInSights(
 	table.clear(takenEntries)
 	table.clear(refusedSpheres)
 	CrowdRenderer.ForEach(
-		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
+		function(
+			id: number,
+			position: Vector3,
+			radius: number,
+			headRadius: number,
+			height: number,
+			drop: number
+		)
 			local taken = autoMayTake(id)
 			local pad = if taken then variant.pad else variant.pad + lagPad
 			local entry = HitShapes.CrowdRay(
@@ -639,7 +647,8 @@ local function enemyInSights(
 				position,
 				radius,
 				height,
-				headRadius
+				headRadius,
+				drop
 			)
 			if not taken then
 				if entry ~= nil and (refusedEntry == nil or entry < refusedEntry) then
@@ -649,7 +658,9 @@ local function enemyInSights(
 					-- Both spheres, as the line test reads both: the nearer one decides.
 					for sphere = 1, 2 do
 						local r = if sphere == 1 then radius else headRadius
-						local lift = if sphere == 1 then height * HALF else height - headRadius
+						local lift = if sphere == 1
+							then height * HALF
+							else height - headRadius - drop
 						local offset = position + Vector3.new(0, lift, 0) - origin
 						local along = offset:Dot(look)
 						table.insert(refusedSpheres, along)
@@ -666,7 +677,7 @@ local function enemyInSights(
 				return
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
-			local head = position + Vector3.new(0, height - headRadius, 0)
+			local head = position + Vector3.new(0, height - headRadius - drop, 0)
 			found = sphereInSights(origin, look, range, limit, body, radius + lagPad)
 				or sphereInSights(origin, look, range, limit, head, headRadius + lagPad)
 		end
@@ -728,7 +739,14 @@ local function enemyInReach(
 	local found = false
 	local refused = false
 	CrowdRenderer.ForEach(
-		function(id: number, position: Vector3, radius: number, headRadius: number, height: number)
+		function(
+			id: number,
+			position: Vector3,
+			radius: number,
+			headRadius: number,
+			height: number,
+			drop: number
+		)
 			if refused then
 				return
 			end
@@ -739,7 +757,7 @@ local function enemyInReach(
 				return
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
-			local head = position + Vector3.new(0, height - headRadius, 0)
+			local head = position + Vector3.new(0, height - headRadius - drop, 0)
 			local inside = inMeleeShape(
 				variant,
 				origin,

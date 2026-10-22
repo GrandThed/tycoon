@@ -122,6 +122,7 @@ Usage:
   py tools/sim_range.py --trials 60     # fewer random trials (faster, noisier)
   py tools/sim_range.py --levels-only   # only the level sections (with --check: their bands)
   py tools/sim_range.py --levels-only --level forest   # only Forest Road
+  py tools/sim_range.py --r8 --check   # R8 judged fairly (L4W2-13): whole sniper runs, its own gate
 """
 
 from __future__ import annotations
@@ -130,6 +131,7 @@ import argparse
 import heapq
 import json
 import math
+import os
 import random
 import re
 import sys
@@ -603,22 +605,38 @@ def hs_ray_upright(origin, direction, rng, width, pad, feet, low, high, radius):
 RAY_RULE = "capsule"
 
 
-def hs_crowd_ray(origin, direction, rng, width, pad, feet, radius, height, head_radius):
+def hs_crowd_ray(origin, direction, rng, width, pad, feet, radius, height, head_radius, drop=0.0):
     """HitShapes.CrowdRay: (entry, crit). The padded ray hits the body capsule (ground to the
     head's base, or to the old sphere's top when that is higher) or the head sphere; the entry is
-    the nearer; it crits when the unpadded ray touches the head. (None, False) for a miss."""
-    head = (feet[0], feet[1] + height - head_radius, feet[2])
+    the nearer; it crits when the unpadded ray touches the head. (None, False) for a miss. L4 W2
+    (L4W2-11): `drop` (HitShapes.SeatDrop, 0 standing) lowers the head and the capsule's top."""
+    head = (feet[0], feet[1] + height - head_radius - drop, feet[2])
     if RAY_RULE == "sphere":
         entry = hs_ray(origin, direction, rng, width, pad, (feet[0], feet[1] + height / 2, feet[2]), radius)
         if entry is None:
             return None, False
         return entry, hs_ray(origin, direction, rng, width, 0, head, head_radius) is not None
-    top = max(height - 2 * head_radius, height / 2 + radius)
+    top = max(height - 2 * head_radius, height / 2 + radius) - drop
     body = hs_ray_upright(origin, direction, rng, width, pad, feet, radius, top - radius, radius)
     entry = hs_earlier(body, hs_ray(origin, direction, rng, width, pad, head, head_radius))
     if entry is None:
         return None, False
     return entry, hs_ray(origin, direction, rng, width, 0, head, head_radius) is not None
+
+
+def hs_smoothstep(u):
+    """The seat's ease (HitShapes.SeatDrop): u clamped to 0..1, then u^2 (3 - 2u)."""
+    u = min(max(u, 0.0), 1.0)
+    return u * u * (3 - 2 * u)
+
+
+def hs_seat_drop(height, seat, rest_drop):
+    """HitShapes.SeatDrop (L4W2-11): how far a body `seat` of the way down (0 standing, 1 seated at a
+    fire) lowers its head and its capsule's top: height x crowd.restDrop x smoothstep(seat). A restDrop
+    that is not a finite number of at least 0, a height not finite and above 0, or a NaN seat: 0."""
+    if not (finite(rest_drop) and rest_drop >= 0 and finite(height) and height > 0) or seat != seat:
+        return 0.0
+    return height * rest_drop * hs_smoothstep(seat)
 
 
 def hs_flat_to_rect(x, z, cx, cz, hx, hz):
@@ -701,7 +719,8 @@ def hs_scatter(center, count, spacing, seed):
 class Enemy:
     """A dummy that never moves: body sphere centred height/2 up, head sphere at the top."""
 
-    __slots__ = ("id", "r", "hr", "height", "body_y", "body", "head", "hp", "max_hp", "armor", "alive", "back_at")
+    __slots__ = ("id", "r", "hr", "height", "body_y", "body", "head", "hp", "max_hp", "armor", "alive", "back_at",
+                 "drop")
 
     def __init__(self, ident, kind, x, z):
         self.id = ident
@@ -715,6 +734,7 @@ class Enemy:
         self.armor = max(kind["armor"], 0)
         self.alive = True
         self.back_at = 0.0
+        self.drop = 0.0  # L4 W2: how far its seat lowers its head and its capsule's top (HitShapes.SeatDrop)
 
 
 class World:
@@ -936,7 +956,7 @@ def strike(world, cfg, spec):
         def test(e):
             # WeaponService.rayCandidates: one HitShapes.CrowdRay per body (L1b-W2-15).
             entry, crit = hs_crowd_ray(origin, unit, size, width, pad, (e.body[0], e.body[1] - e.body_y, e.body[2]),
-                                       e.r, e.height, e.hr)
+                                       e.r, e.height, e.hr, e.drop)
             if entry is None:
                 return None
             return (entry, want_crit and crit)
@@ -982,7 +1002,7 @@ def path_candidates(world, origin, direction, reach, width, pad):
         if not e.alive:
             continue
         entry, crit = hs_crowd_ray(origin, unit, reach, width, pad, (e.body[0], e.body[1] - e.body_y, e.body[2]),
-                                   e.r, e.height, e.hr)
+                                   e.r, e.height, e.hr, e.drop)
         if entry is not None:
             found.append((entry, e.id, e, crit))
     found.sort(key=lambda f: (f[0], f[1]))
@@ -1914,6 +1934,11 @@ class Fighter(Enemy):
         # L1b-W2-10: a dormant body (its resting group far from every player) is not integrated,
         # not separated and not clamped; it stays where it stood.
         self.dormant = False
+        # L4 W2 (L4W2-11): CrowdService's seat, stepped as the client steps it (toward 1 while the
+        # wire says `rest`, else 0, at 1 / crowd.riseBlendSeconds a second), and whether its brain
+        # asked for a walk this step (the executor's `moving`).
+        self.seat = 0.0
+        self.moving = False
         self.spawn(0.0)
 
     def spawn(self, now):
@@ -1954,7 +1979,7 @@ class Fighter(Enemy):
 
     def place(self):
         self.body = (self.x, self.body_y, self.z)
-        self.head = (self.x, self.head_y, self.z)
+        self.head = (self.x, self.head_y - self.drop, self.z)
 
     def usable(self, index):
         """[choice] CrowdBrain.usable: may the body still use this attack at all? Not an
@@ -2436,6 +2461,31 @@ class ThreatRun:
     def before_think(self, now, dt):
         """Once per crowd step, after the player is tracked and before any body thinks (a level
         run's camp step)."""
+
+    def seat_goal(self, e):
+        """Where a body's seat is heading: 1 while the wire would say `rest`, else 0. Only a level's
+        resident sits (LevelRun)."""
+        return 0.0
+
+    def step_seats(self, dt):
+        """L4 W2 (L4W2-11, CrowdService's seat): every living body's seat moves toward its goal at
+        1 / crowd.riseBlendSeconds a second, a dormant one holds its goal; its drop (HitShapes.SeatDrop)
+        then lowers the head the next place() draws and the capsule CrowdRay tests."""
+        crowd = self.cfg["crowd"]
+        rest_drop = crowd.get("restDrop") or 0.0
+        blend = max(crowd.get("riseBlendSeconds") or 0.0, 1e-3)
+        for e in self.fighters:
+            if not e.alive:
+                continue
+            goal = self.seat_goal(e)
+            if e.dormant:
+                e.seat = goal
+            elif e.seat != goal:
+                step = dt / blend
+                e.seat = min(e.seat + step, goal) if goal > e.seat else max(e.seat - step, goal)
+            e.drop = hs_seat_drop(e.height, e.seat, rest_drop)
+            if e.dormant:
+                e.place()
 
     def swingable(self):
         """The bodies he may strike."""
@@ -3682,6 +3732,7 @@ class ThreatRun:
                     cx, cz = self.clamp_body(e.x - e.face[0] * (e.band_min - gap),
                                              e.z - e.face[1] * (e.band_min - gap), e.r, e.floor)
                     vx, vz = self.seek(e, cx, cz, e.speed, 0.0, dt)
+            e.moving = math.hypot(vx, vz) > MOVE_THRESHOLD
             if e.charge is not None and state == "attack":
                 # [lane] CrowdBrain.Carried: the brain carries the body down its lane.
                 c = e.charge
@@ -3737,6 +3788,7 @@ class ThreatRun:
                 b.x += nx * overlap * (1 - share_a)
                 b.z += nz * overlap * (1 - share_a)
                 ax, az = a.x, a.z
+        self.step_seats(dt)
         for e in live:
             e.x, e.z = self.clamp_body(e.x, e.z, e.r, e.floor)
             e.place()
@@ -5562,10 +5614,13 @@ MISSION_SEEDS = (11, 23, 37)
 # since L3 (they were 4/4 and 6/6). "One preset below" is the preset before it.
 GATE_PYTHON = (3, 12)  # the interpreter the bands are measured on: see interpreter_note
 FOREST_LEVEL = "forestRoad"
-FOREST_BOSS = "colossus"
-# Normal's first clear at the proving gear T1 (the old 2 / 2), from the start point to the Colossus's fall,
+# L4 W2 (L4W2-12, MISSIONS_DESIGN 26.4): the Chief's Clearing's boss is the Camp Chief, a crowd kind of its own
+# with the Colossus's body, slam, charge and call and the war-club sweep in place of the barrage (the
+# Colossus stays the range's and the Raider Arena's).
+FOREST_BOSS = "chief"
+# Normal's first clear at the proving gear T1 (the old 2 / 2), from the start point to the boss's fall,
 # walking included, every seed. L1b Wave 2 banded it 5.75-7 min; L1c (the Chief's Clearing redone:
-# an ambush of 10, then the Colossus, in place of 36 residents and two waves of about 35) takes
+# an ambush of 10, then the boss, in place of 36 residents and two waves of about 35) takes
 # about 1.4 minutes out of it, so it is re-measured at 4.75-5.3 min and banded 4.5-5.75
 # (docs/BALANCE.md "L1c").
 FOREST_CLEAR_SECONDS = (270.0, 345.0)
@@ -5585,7 +5640,7 @@ FOREST_TIMBER_PER_MINUTE = (37.8, 46.2)
 FOREST_CASH_PER_MINUTE_WAVE1 = 19800
 # The bow at T1 (the old 2 / 2; reported for Ben's bow question): the default ranged family alone against
 # these kinds, at the boss's spot in the boss room, aiming at the body and at the head.
-BOW_KINDS = ("brute", "armoured", "colossus")
+BOW_KINDS = ("brute", "armoured", FOREST_BOSS)
 BOW_SECONDS = 240.0
 TENT_AT_PACE = 1  # L1b-W4-28: at the recommended gear a tent sends at most this many bodies
 TENT_FAST = {"A": 2, "B": 3}  # ... and on Normal one gear preset up at least this many (B 4 -> 3: the fix round's R7, see BALANCE)
@@ -5604,12 +5659,12 @@ FOREST_HIT_SHARE = {"normal": 0.25, "hard": 0.30, "brutal": 0.30}
 HUMAN_REACTION_SECONDS = 0.55
 # "Clearly beyond the gear below" (the lead's ruling, fix round E4). One preset below the
 # recommended gear the human EITHER goes down (or meets the run cap) OR takes this many times as
-# long as his slowest clear at the recommended gear; and the Colossus alone is not killed inside
+# long as his slowest clear at the recommended gear; and the boss alone is not killed inside
 # FOREST_BELOW_BOSS seconds. An under-geared player who plays well and clears slowly is fine.
 # The lead's numbers are 1.8 and 135 s / 200 s. Hard's are his. Brutal's are the designer's:
 # its two presets are x2.17 apart in melee scale, where Hard's are x3.33 apart, and a third of a
 # clear is walking, countdowns and the bursts' own pace, so a slow Brutal clear at 4/4 takes
-# x1.5 and its Colossus 196-203 s. 1.8 and 200 s cannot hold there without retuning Brutal to
+# x1.5 and its boss 196-203 s. 1.8 and 200 s cannot hold there without retuning Brutal to
 # the gate.
 # L3-29: Hard at T3 and Brutal at T5 keep the clock they had at 4/4 and 6/6 (the reacting player's
 # mean clear over MISSION_SEEDS, measured before the remap: Hard 306.7 / 319.9 / 311.8 s, Brutal
@@ -5876,13 +5931,17 @@ def unlocks_cap(name):
 # L2-13: Unlocks.MAX_FAMILY_LENGTH (StageFlow's secrets and the remotes read it), the longest weapon
 # family id a secret may give, in bytes.
 SECRET_FAMILY_MAX = unlocks_cap("MAX_FAMILY_LENGTH")
+# L4 W2 (MISSIONS_DESIGN 28): a secret's `key` (the mountain's Castle Key) is held to the family id's
+# cap, Unlocks.MAX_FAMILY_LENGTH bytes, as StageFlow.secretProblems holds it.
+SECRET_KEY_MAX = SECRET_FAMILY_MAX
 
 
 def secret_problems(level, layout, problem):
     """StageFlow.secretProblems (L2-13), the last of Validate's lines: every layout secret has an
     entry in the level's `secrets` with a name; an entry's valor and materials, when given, are
-    whole numbers of at least 0, and its family a short string. Which secrets may pay at all is
-    tools/check_levels.py's rule (L2-18e), not a refusal."""
+    whole numbers of at least 0, and its family and (L4 W2) its key short strings, at most
+    Unlocks.MAX_FAMILY_LENGTH bytes. Which secrets may pay at all is tools/check_levels.py's rule
+    (L2-18e), not a refusal."""
     entries = level.get("secrets")
     if entries is not None and not isinstance(entries, (dict, list)):
         problem("secrets is not a table")
@@ -5907,6 +5966,9 @@ def secret_problems(level, layout, problem):
         if family is not None and (not isinstance(family, str) or family == ""
                                    or len(family.encode("utf-8")) > SECRET_FAMILY_MAX):
             problem(f"secrets.{sid}.family is {family}, not a family id")
+        key = entry.get("key")
+        if key is not None and (not isinstance(key, str) or key == "" or len(key.encode("utf-8")) > SECRET_KEY_MAX):
+            problem(f"secrets.{sid}.key is {key}, not a key id")
 
 
 # L2-34: the words a block's `react` may say (StageFlow.reactProblems).
@@ -7772,6 +7834,8 @@ class LevelRun(ThreatRun):
         self.walked = 0.0
         self.actions = []
         self.cleared_at = {}  # zone index -> when its camp was cleared
+        self.wallet_at = {}  # zone index -> the wallet at that clear (L4 W2, R8's whole runs)
+        self.scene_saved = None  # L4W2-13: the whole sniper run's own policy and anchor while it snipes
         self.reached_at = {}
         self.first_hit = {}  # group index -> the first hit of his that landed on a member
         self.first_windup = {}  # group index -> the first windup a member began
@@ -7810,6 +7874,10 @@ class LevelRun(ThreatRun):
                     body.resident = {"group": index, "post": post, "leg": post["leg"]}
                     body.face = (-math.sin(post["yaw"]), -math.cos(post["yaw"]))
                     group["members"].append(body)
+                    # L4W2-11: CrowdService.SpawnResident seats a body first shown at rest at once.
+                    body.seat = self.seat_goal(body)
+                    body.drop = hs_seat_drop(body.height, body.seat, cfg["crowd"].get("restDrop") or 0.0)
+                    body.place()
         # L1b-W2-6: each tent's stock is a group of its own, after the residents' (AddGroup answers
         # #plan.groups + t), with nobody out at the start. `only` places a tent only by its id.
         self.tents = []
@@ -8029,6 +8097,16 @@ class LevelRun(ThreatRun):
         """CrowdService.integrate's resting clause for a stood-down rusher (L1b-W4-22): it walks to
         its post unless an attack of its own is under way."""
         return cb_stands_down(group, b.kind.get("brain") != "keepAway") and b.state not in ("windup", "attack")
+
+    def seat_goal(self, e):
+        """L4W2-11: a resident sits while CampBrain.Shows says `rest`: its group held or at rest, its
+        brain asking for no walk this step, and a fire group (a guard, a patrol and a tent's group
+        stand)."""
+        if e.resident is None:
+            return 0.0
+        group = self.groups[e.resident["group"] - 1]
+        resting = group["held"] or group["state"] == "rest"
+        return 1.0 if resting and not e.moving and group["def"]["posture"] == "fire" else 0.0
 
     def may_target(self, e):
         """L1b-W4-21: a resident in fight goes only for a player its group knows; one that is not
@@ -8275,6 +8353,9 @@ class LevelRun(ThreatRun):
                 self.leave_zone(floor)
                 return
             if self.near(zone) or self.awake_in(floor) or not self.path:
+                if self.snipe_due(floor):
+                    self.begin_snipe(t)
+                    return
                 self.mode = "clear"
                 self.ground = zone["floorY"]
                 self.path = []
@@ -8411,7 +8492,12 @@ class LevelRun(ThreatRun):
             self.scene["phase"] = "in"
         elif kind == "sniper":
             # R8: on the spot if a resident can be seen from it, else the pull from the road by the
-            # camp's gate nearer the spot.
+            # camp's gate nearer the spot. L4W2-13's whole run (sniperFight) comes here from the
+            # road at `t0`, standing at `from`: the walk to the pull point and the crossing to the
+            # spot are straight lines at walk speed from there; today's course stands at the pull
+            # point at 0.
+            t0 = self.scene.get("t0", 0.0)
+            here = self.scene.get("from")
             self.scene["spot"] = spot["id"]
             sx, sy, sz = spot["at"]
             self.place_scene(sx, sz, sy)
@@ -8423,10 +8509,90 @@ class LevelRun(ThreatRun):
                 pulls.append(((zone["exit"][0] + after[0]) / 2, (zone["exit"][1] + after[1]) / 2, after[2]))
             pull = min(pulls, key=lambda q: math.hypot(q[0] - sx, q[1] - sz))
             self.place_scene(pull[0], pull[1], pull[2])
-            self.scene.update({"phase": "pull", "pulledFrom": None if seen else (pull[0], pull[1]),
-                               "travel": math.hypot(pull[0] - sx, pull[1] - sz) / self.move["walkSpeed"]})
+            walk = (0.0 if here is None or seen
+                    else math.hypot(pull[0] - here[0], pull[1] - here[1]) / self.move["walkSpeed"])
+            start = here if here is not None and seen else pull
+            self.scene.update({"phase": "walk" if walk > 0 else "pull", "pullFrom": t0 + walk,
+                               "pulledFrom": None if seen else (pull[0], pull[1]),
+                               "travel": math.hypot(start[0] - sx, start[1] - sz) / self.move["walkSpeed"]})
             if seen:
-                self.sniper_go(0.0)
+                self.sniper_go(t0)
+
+    def pulled(self, floor):
+        """R8's pull: a hit of his has landed on a group of this floor (a whole run has hit
+        others before)."""
+        return any(self.groups[index - 1]["def"]["floor"] == floor for index in self.first_hit)
+
+    def snipe_due(self, floor):
+        """L4W2-13: a whole sniper run (policy `snipe`) has not sniped yet and this is its spot's
+        camp."""
+        spot = self.policy.get("snipe")
+        return spot is not None and not self.scene and self.zones[floor - 1]["id"] == spot["camp"]
+
+    def begin_snipe(self, t):
+        """L4W2-13, the whole run's turn to the spot: where the mission player would engage his
+        spot's camp (steer), he takes up the bow and plays R8's course as today from where he
+        stands (start_scene with `t0` and `from`), never dodging, his Breath cast beside the bow."""
+        snipe = self.policy
+        # A pair player's kit is set aside: from the spot only the bow shoots.
+        self.scene_saved = {"policy": snipe, "anchor": self.anchor, "kit": self.kit}
+        self.kit = None
+        self.policy = dict(THREAT_POLICIES["sniper"], weapon=(snipe["bow"], None), spot=snipe["snipe"],
+                           breath=snipe.get("breath"), then="fight")
+        self.take_up(snipe["bow"])
+        self.scene.update({"t0": t, "from": (self.x - self.jitter[0], self.z - self.jitter[1]), "fromY": self.ground,
+                           "paidBefore": dict(self.wallet), "evadedBefore": self.world.evaded})
+        self.mode = "scene"
+        self.path = []
+        self.start_scene("sniper")
+
+    def end_snipe(self, t):
+        """L4W2-13: R8's course is over (his own minutes and pay booked); the mission from where he
+        stands (the contract's rule), or with `resume` "road" from the road where he turned off it,
+        after the straight walk back (he waits on the spot meanwhile, and shoots nothing)."""
+        sc = self.scene
+        before = sc.get("paidBefore") or {}
+        sc["ownPay"] = {key: self.wallet[key] - before.get(key, 0) for key in ("cash", "materials")}
+        sc["ownEvaded"] = self.world.evaded - sc.get("evadedBefore", 0)
+        if self.scene_saved["policy"].get("resume") == "road" and sc.get("from") is not None:
+            fx, fz = sc["from"]
+            gap = math.hypot(self.x - self.jitter[0] - fx, self.z - self.jitter[1] - fz)
+            sc["phase"] = "back"
+            sc["backUntil"] = t + gap / self.move["walkSpeed"]
+            return
+        self.fight_on(t)
+
+    def fight_on(self, t):
+        """L4W2-13: the whole run's fight half: the starter melee back in hand, the mission player's
+        course and the anchor his dodges keep to, on to clearing the spot's camp and the rest of the
+        level."""
+        sc = self.scene
+        sc["fightFrom"] = t
+        sc["phase"] = "fight"
+        saved = self.scene_saved
+        self.policy = saved["policy"]
+        self.anchor = saved["anchor"]
+        self.kit = saved["kit"]
+        if self.kit is not None:
+            self.wield(self.kit["melee"])
+        else:
+            self.take_up(self.cfg["loadout"]["melee"])
+        self.mode = "road"
+        self.target = self.order.index(sc["floor"])
+        self.path = []
+
+    def take_up(self, family):
+        """L4W2-13: the whole sniper run changes weapons (the bow for R8's course, the starter melee
+        for the mission): his variant, its scales and whether it is heavy, as __init__ sets them."""
+        self.variant = variant_of(self.cfg, family)
+        self.melee = self.variant["kind"] == "melee"
+        self.hit_scale = held_scale(self.cfg, family, False)
+        self.cast_scale = held_scale(self.cfg, family, True)
+        chain = self.variant.get("chain") or [1.0]
+        self.heavy = self.variant["damage"] * (max(chain) if self.melee else 1) >= self.cfg["crowd"]["heavyHit"]
+        self.world.scale = self.hit_scale
+        self.armed["hit"][family] = self.hit_scale
+        self.combo = 0
 
     def sniper_go(self, t):
         """R8: on to the spot, arriving after the straight crossing; no shot on the way."""
@@ -8500,7 +8666,8 @@ class LevelRun(ThreatRun):
     def scene_targets(self):
         """What a scene's bow may shoot: camp A's bodies he can see (scene_sees), worked out once a
         crowd step."""
-        if self.scene.get("kind") not in ("archer", "sniper") or self.scene.get("phase") in ("gone", "travel"):
+        if (self.scene.get("kind") not in ("archer", "sniper")
+                or self.scene.get("phase") in ("gone", "travel", "walk", "back")):
             return []
         step = self.world.now // self.interval
         if self.scene.get("seenAt") != step:
@@ -8594,15 +8761,27 @@ class LevelRun(ThreatRun):
         if sc["reached"] is None and any(shape in ("lunge", "arc", "lane") for _w, _d, _k, shape in self.log):
             sc["reached"] = t
         if sc["kind"] == "sniper":
-            if sc["phase"] == "pull" and (self.first_hit or t >= SNIPER_PULL_SECONDS):
+            if sc["phase"] == "back":
+                if t >= sc["backUntil"]:
+                    self.place_scene(sc["from"][0], sc["from"][1], sc["fromY"])
+                    self.fight_on(t)
+                return
+            if sc["phase"] == "walk" and t >= sc["pullFrom"]:
+                sc["phase"] = "pull"
+            if sc["phase"] == "pull" and (self.pulled(sc["floor"]) or t >= sc["pullFrom"] + SNIPER_PULL_SECONDS):
                 self.sniper_go(t)
             elif sc["phase"] == "travel" and t >= sc["arrived"]:
                 sc["phase"] = "spot"
             elif sc["phase"] == "spot" and (t >= sc["arrived"] + SNIPER_SPOT_SECONDS or not self.residents_left(sc["floor"])
                                             or t - max(self.last_landed or 0.0, sc["arrived"]) >= self.sniper_idle()):
                 sc["lastLanded"] = self.last_landed
-                sc["minutes"] = max(self.last_landed or 0.0, sc["arrived"] + self.sniper_idle()) / 60
-                self.end("stopped", t)
+                # His own minutes, from where his course began (today's course: the run's start).
+                sc["minutes"] = (max(self.last_landed or 0.0, sc["arrived"] + self.sniper_idle())
+                                 - sc.get("t0", 0.0)) / 60
+                if self.policy.get("then") == "fight":
+                    self.end_snipe(t)
+                else:
+                    self.end("stopped", t)
             if sc["phase"] == "spot":
                 for group in self.groups:
                     if group["def"]["floor"] == sc["floor"] and group["standDown"] and group["state"] == "fight":
@@ -8928,9 +9107,11 @@ class LevelRun(ThreatRun):
         self.path = []
 
     def on_camp_clear(self, floor, t):
-        """`campClear` (L1b-17): the bonus x rewardMult, split evenly among the fighting humans."""
+        """`campClear` (L1b-17): the bonus x rewardMult, split evenly among the fighting humans. L4
+        W2: the wallet then, bonus paid (R8's whole runs compose on it)."""
         self.cleared_at[floor] = t
         self.pay_clear_bonus(floor)
+        self.wallet_at[floor] = dict(self.wallet)
         if self.stop_zone == floor:
             self.end("stopped", t)
 
@@ -9463,6 +9644,7 @@ class LevelRun(ThreatRun):
         names = {zone["id"]: zone["name"] for zone in self.zones}
         return {"end": self.end_reason, "at": self.end_at, "camps": self.camps, "zones": self.zones,
                 "clearedAt": {self.zones[f - 1]["id"]: at for f, at in self.cleared_at.items()},
+                "walletAt": {self.zones[f - 1]["id"]: dict(w) for f, w in self.wallet_at.items()},
                 "reachedAt": {self.zones[f - 1]["id"]: at for f, at in self.reached_at.items()},
                 "waves": first["waves"] if first is not None else {}, "killed": self.killed,
                 "killedIn": {self.zones[f - 1]["id"]: k for f, k in self.killed_in.items() if f is not None},
@@ -9770,7 +9952,7 @@ def print_bow(rep):
     print()
     print(f"THE BOW (L1b Wave 3; Forest Road, Normal, gear {gear_text(rep['gear'])}, health {rep['hp']:.0f}, solo; "
           "Longbow damage " + ", ".join(f"{k} {v}" for k, v in rep["damage"].items())
-          + "; time = the start point to the Colossus's rise, the boss excluded; per camp: seconds / hits taken / "
+          + "; time = the start point to the boss's rise, the boss excluded; per camp: seconds / hits taken / "
           "crits landed)")
     means = {}
     for row in rep["rows"]:
@@ -9782,7 +9964,7 @@ def print_bow(rep):
             fight = f"{boss[1] - boss[0]:.1f} s" if boss and boss[1] is not None else "not reached"
             print(f"    seed {s['seed']}: {s['end']} at {s['at'] / 60:.2f} min, {s['downs']} down(s); {camps}; "
                   f"to the boss {fmt(to_rise(s), 0, 1).strip()} s, {s['hits']} hits, {s['crits']} crits in all; "
-                  f"the Colossus {fight}")
+                  f"the {FOREST_BOSS} {fight}")
         times = [to_rise(s) for s in row["seeds"]]
         means[(row["who"], row["label"])] = mean_of(times) if all(t is not None for t in times) else None
     for who in ("mission", "human"):
@@ -10402,7 +10584,8 @@ def print_snipers(snipers, mission, tag):
     """R8's table: every spot, every seed, against the mission player on the same seed."""
     if not snipers:
         return
-    print(f"    R8 snipers ({tag}, a straight course from every unreachable spot; cash / Timber a minute against the "
+    print(f"    R8's burst ({tag}, ungated: R8 is judged over whole runs by --r8, L4W2-13; today's straight course "
+          f"from every unreachable spot, his own pay over his own minutes; cash / Timber a minute against the "
           f"mission's on the same seed):")
     for spot, runs in snipers.items():
         owners = f" (owners of {SNIPER_SPOT_NEEDS[spot]} only)" if spot in SNIPER_SPOT_NEEDS else ""
@@ -10443,7 +10626,7 @@ def cash_rate(runs):
     return mean_of([pay_rate(r)[0] for r in runs]) if runs and all(r["end"] == "cleared" for r in runs) else None
 
 
-def colossus_seconds(runs):
+def boss_seconds(runs):
     """The mean of the boss's fight inside each run (None unless every run killed it)."""
     fights = [r["bosses"].get(FOREST_BOSS) for r in runs]
     if not fights or any(f is None or f[1] is None for f in fights):
@@ -10605,7 +10788,7 @@ def check_cave_runs(cfg, report, expect):
             ftag = f"forest, {names.get(difficulty, difficulty)} at gear {gear_text(fire['gear'])} (the Flamethrower's first run)"
             fname = cfg["weapons"][flame]["name"]
             mine, full = cash_rate(pair), cash_rate(bow)
-            boss, base = colossus_seconds(pair), colossus_seconds(bow)
+            boss, base = boss_seconds(pair), boss_seconds(bow)
             yard = mean_of([r["at"] for r in bow]) if bow and all(r["end"] == "cleared" for r in bow) else None
             lo, hi = ((s * yard for s in PAIR_CLEAR_SHARE) if yard is not None else (math.inf, -math.inf))
             expect(yard is not None and all(r["end"] == "cleared" and lo <= r["at"] <= hi and r["downs"] == 0 for r in pair),
@@ -10629,7 +10812,7 @@ def check_cave_runs(cfg, report, expect):
             # R2: the Frost Hammer is a Castle weapon arriving at T5 (lever-only in the Forest), so its
             # Forest balance rows are reported, not gated, until the Castle. What it fights with is gated.
             ice_pair, bow = ice["runs"], row.get("pairBow") or []
-            mine, boss, base, yard = cash_rate(ice_pair), colossus_seconds(ice_pair), colossus_seconds(bow), cash_rate(bow)
+            mine, boss, base, yard = cash_rate(ice_pair), boss_seconds(ice_pair), boss_seconds(bow), cash_rate(bow)
             fname = cfg["weapons"][report["frost"]]["name"]
             print(f"  note  {tag}: the {fname} (T{ice['tier']}, bar {ice['hp']:.0f}) + Longbow pair, reported until the "
                   f"Castle (R2): clears {clears(ice_pair)}; cash a minute "
@@ -10660,12 +10843,11 @@ def check_cave_runs(cfg, report, expect):
         sniper_gear = row["gear"] if row.get("cutSniper") else (row.get("under") or {}).get("gear")
         fire_rows = [spot for spot in snipers if " + " in spot]  # the courses that cast the fire family's ability
         for spot, runs in snipers.items():
-            good = all(sniper_rate(r)[0] < pay_rate(m)[0] and sniper_rate(r)[1] < pay_rate(m)[1] and r["evaded"] == 0
-                       for r, m in zip(runs, mission))
-            expect(good, f"{stag}: with the tunnel open, the sniper from {spot} earns less cash and less Timber a minute "
-                   f"than the mission player on the same seeds, every hit landing (R8, L2-37): " + "; ".join(
-                       f"seed {seed} {sniper_rate(r)[0]:,.0f} / {sniper_rate(r)[1]:.1f} against {pay_rate(m)[0]:,.0f} / "
-                       f"{pay_rate(m)[1]:.1f}" for seed, r, m in zip(MISSION_SEEDS, runs, mission)))
+            # The rate (R8, L2-37) is judged over whole runs by --r8 since L4 W2 (L4W2-13); here
+            # the burst, reported, and the fire courses' tiers.
+            print(f"  note  {stag}: with the tunnel open, the burst from {spot} (ungated; R8 is --r8): " + "; ".join(
+                f"seed {seed} {sniper_rate(r)[0]:,.0f} / {sniper_rate(r)[1]:.1f} against {pay_rate(m)[0]:,.0f} / "
+                f"{pay_rate(m)[1]:.1f}" for seed, r, m in zip(MISSION_SEEDS, runs, mission)))
             if spot in fire_rows:
                 armed(stag, f"the sniper from {spot}", sniper_gear, runs, (sword, longbow), breath=flame)
         ability = cfg["weapons"][flame]["ability"] if flame else {}
@@ -10884,7 +11066,7 @@ def check_forest(cfg, report, expect):
                    + "; ".join(run_text(seed, r) for seed, r in zip(MISSION_SEEDS, row["careless"])))
         if below is not None:
             # Clearly beyond the gear below: he goes down (or meets the cap), or takes this many
-            # times as long as his slowest clear at the recommended gear; the Colossus alone is
+            # times as long as his slowest clear at the recommended gear; the boss alone is
             # not killed inside FOREST_BELOW_BOSS seconds.
             slowest = max((r["at"] for r in human if r["end"] == "cleared"), default=None)
             times = HUMAN_BELOW_SLOWER[difficulty]
@@ -11066,35 +11248,302 @@ def check_scenes(cfg, row, tag, expect):
         expect(good, f"{tag}: the lose: every group of A that followed him onto the road turns home with its farthest body {lo:g}-{hi:g} studs past "
                f"A's east edge along the road, and is back at rest, healed, within {LOSE_REST_SECONDS:g} s: "
                + "; ".join(told))
-    # R8: the sniper must not pay. A straight course from every unreachable spot earns less cash and
-    # less Timber a minute than the mission player on the same seed, on Normal and on Hard, both at
-    # the proving gear; and every hit of his lands. One band per spot (R8's stop rule names one).
-    under = row["under"] or {}
-    snipers, mission = (row["sniper"], row["runs"]) if row["sniper"] else (under.get("sniper") or {}, under.get("runs"))
-    r8_gate(tag, "at the proving gear", snipers, mission, expect)
-    # L3-26: the same with only the bow upgraded (sword T1, bow SNIPER_BOW_TIER), against the
-    # mission player at that gear, on Normal and on Hard.
-    up = row.get("bowUp")
-    if up is not None:
-        r8_gate(tag, f"at gear {gear_text(up['gear'])} (only the bow upgraded, L3-26)", up["sniper"], up["runs"], expect)
+    # R8 (the sniper must not pay) is judged over whole runs since L4 W2 (L4W2-13): `--r8`, r8_check.
+    # This table is today's course on MISSION_SEEDS, its own pay over its own minutes: the burst,
+    # printed and not gated.
 
 
-def r8_gate(tag, where, snipers, mission, expect):
-    """R8's gate on one table: every spot earns less cash and less Timber a minute than the mission
-    player on the same seeds, and every hit lands (L4 W1: no spot is exempt)."""
-    for spot, runs in (snipers or {}).items():
-        told = []
-        good = landed = True
-        for seed, r, m in zip(MISSION_SEEDS, runs, mission):
-            cash, timber = sniper_rate(r)
-            mine_cash, mine_timber = pay_rate(m)
-            good = good and cash < mine_cash and timber < mine_timber
-            landed = landed and r["evaded"] == 0
-            told.append(f"seed {seed} {cash:,.0f} / {timber:.1f} against {mine_cash:,.0f} / {mine_timber:.1f}"
-                        + ("" if r["evaded"] == 0 else f", {r['evaded']} hit(s) of his blocked"))
-        expect(good and landed, f"{tag} {where}: the sniper from {spot} earns less cash and less Timber a minute than "
-               f"the mission player on the same seeds (R8; his minutes to his last landed hit, at least his arrival "
-               f"+ {SNIPER_IDLE_SECONDS:g} s), every hit lands: " + "; ".join(told))
+# ---------------------------------------------------------------------------------------------
+# R8 judged fairly (L4 W2: L4W2-13, MISSIONS_DESIGN 27.5, docs/prompts/l4-w2-contract.md section 6).
+# Ben's rule stands: no spot may out-earn fighting, and he said how it is judged: "a spot is compared
+# over a whole run (shoot what you can from it, then fight the rest) against fighting it all with the
+# same gear". The sniper's whole run: the mission player's own course from the level's start to where
+# he would engage the spot's camp, R8's straight course from there (the walk to the pull point and the
+# crossing to the spot at walk speed, the bow until nothing lands for SNIPER_IDLE_SECONDS:
+# LevelRun.begin_snipe), then the mission to the level's end (end_snipe) from the road where he turned
+# off it (R8_RESUME), fighting as R8_FIGHT says. A run's rate is its whole pay over its whole minutes
+# (a down: to the down). It is held to the player who fights it all with the same gear: the pair
+# player, sword and bow, each swing with the one that reaches (the lead's ruling on Ben's words,
+# 2026-10-22), at the same gear, difficulty and seeds R8_SEEDS. A spot fails when its mean cash a
+# minute or its mean Timber a minute is above his; the seeds whose run out-earns his are named, and
+# every hit from the spot must land. The same runs against the mission player with the sword alone
+# are printed beside it, not gated (L3-26's comparison, which reads Road2 and Road3 on Hard with the
+# bow at T4 about 1% over). Scope: the four tables (Normal and SNIPER_HARD, at the proving gear and
+# with only the bow at SNIPER_BOW_TIER), every listed spot, the frozen layout's and, at the proving
+# gear, the open tunnel's with the fire family's courses (L2-37, d-m4).
+# The gate simulates every whole run to its end (the lead's ruling). `--r8-compose` is a quicker look
+# (R8_COMPOSE): each sniper run simulated to the clear of its spot's camp, then the run of the player
+# who fights as he does, on that seed, from his clear of the same camp to his end (time and pay). It
+# is not the gate: on Hard with the bow at T4 it read Road3 x1.000 of the sword-alone player where the
+# whole runs read x0.984 (docs/BALANCE.md "L4 W2: R8 judged fairly"). A player who did not clear the
+# camp has no such half: that seed's sniper run is simulated whole either way.
+R8_SEEDS = tuple(range(1, 31))
+R8_COMPOSE = False
+# Where the fight half begins (the lead's ruling): back on the road where he turned off it, where the
+# mission player engages the camp, after the straight walk back. A spot that shoots nothing is not
+# sniping: from the spot itself (`--r8-resume spot`, the contract's first text) the four spots past camp
+# B's far end read 1.5-3.7% over the sword-alone player on Hard though nothing is ever shot from them (on
+# all 30 seeds), because the straight crossing puts him at camp B's far end, where the mission player on
+# Hard at T1 clears it with fewer leashes than from its entry: the fight's starting place, not the spot.
+R8_RESUME = "road"
+# How the sniper fights the rest: "sword", with the starter melee alone (the gate, as ruled and measured
+# on 2026-10-22), or "pair" (`--r8-fight pair`), sword and bow as the player he is held to: the stricter
+# reading of "then fight the rest", every part of both runs alike but the spot.
+R8_FIGHT = "sword"
+R8_TABLES = ("normal", "normal-bow", "hard", "hard-bow")
+THREAT_POLICIES["sniperFight"] = dict(THREAT_POLICIES["mission"],
+                                      label="the mission, R8's course from the spot, then the mission (L4W2-13)")
+R8_PAIR_LABEL = "the pair player (sword and bow)"
+_R8_CACHE = {}
+
+
+def _r8_context(config_path):
+    """A worker's (or the serial run's) Forest Road, built once: the config, the level, its layouts
+    (the main one, the frozen one, the open tunnel's with the main route) and the views by gear."""
+    found = _R8_CACHE.get(config_path)
+    if found is None:
+        cfg = load_config(config_path)
+        ctx = level_context()
+        combat_cfg = ctx["combat"]
+        level = resolve_level(ctx["files"][FOREST_LEVEL], combat_cfg["director"]["runCapSeconds"])
+        layout = load_level_layout(level["layout"])
+        cut = shortcut_layout(layout)
+        frozen = frozen_layout(layout, (combat_cfg["levels"].get("react") or {}).get("ice"))
+        found = {"cfg": cfg, "ctx": ctx, "level": level, "views": {},
+                 "layouts": {"main": layout, "frozen": frozen,
+                             "snipe": {**cut, "route": layout["route"]} if cut is not None else None}}
+        _R8_CACHE[config_path] = found
+    return found
+
+
+def _r8_task(task):
+    """One run of R8's gate, in a worker or in order: the mission player's whole run (`course`
+    None), the pair player's (`course` "pair": sword and bow, reported) or a whole sniper run,
+    trimmed to what the gate and its tables read."""
+    config_path, difficulty, gear, seed, course = task
+    c = _r8_context(config_path)
+    cfg, ctx, level = c["cfg"], c["ctx"], c["level"]
+    if (difficulty, gear) not in c["views"]:
+        c["views"][(difficulty, gear)] = level_view(cfg, level["difficulties"][difficulty], level["crowd"]["regenShare"],
+                                                    ctx["armory"], {"melee": gear[0], "ranged": gear[1]})
+    view, hp = c["views"][(difficulty, gear)]
+    if course is None or course == "pair":
+        policy = (THREAT_POLICIES["mission"] if course is None else
+                  dict(THREAT_POLICIES["mission"], pair=(cfg["loadout"]["melee"], cfg["loadout"]["ranged"])))
+        r = LevelRun(view, hp, ctx, level, c["layouts"]["main"], difficulty, policy, seed).run()
+        return {"end": r["end"], "at": r["at"], "wallet": r["wallet"], "clearedAt": r["clearedAt"],
+                "walletAt": r["walletAt"], "downs": r["downs"], "evaded": r["evaded"]}
+    policy = dict(THREAT_POLICIES["sniperFight"], snipe=course["spot"], bow=cfg["loadout"]["ranged"],
+                  breath=course.get("breath"), resume=course.get("resume"))
+    if course.get("fight") == "pair":
+        policy["pair"] = (cfg["loadout"]["melee"], cfg["loadout"]["ranged"])
+    run = LevelRun(view, hp, ctx, level, c["layouts"][course["layout"]], difficulty, policy, seed)
+    if course.get("stopZone") is not None:
+        run.stop_zone = next(z["floor"] for z in run.zones if z["id"] == course["stopZone"])
+    r = run.run()
+    sc = r["scene"]
+    t0 = sc.get("t0")
+    if "ownPay" in sc or t0 is None:
+        own, minutes, evaded = sc.get("ownPay"), sc.get("minutes"), sc.get("ownEvaded", 0)
+    else:
+        # The run ended on his course (his camp cleared from the spot, or a down).
+        before = sc.get("paidBefore") or {}
+        own = {key: r["wallet"][key] - before.get(key, 0) for key in ("cash", "materials")}
+        minutes, evaded = (r["at"] - t0) / 60, r["evaded"] - sc.get("evadedBefore", 0)
+    return {"end": r["end"], "at": r["at"], "wallet": r["wallet"], "downs": r["downs"], "evaded": r["evaded"],
+            "sniped": t0 is not None, "t0": t0, "ownPay": own, "ownMinutes": minutes, "ownEvaded": evaded,
+            "fightFrom": sc.get("fightFrom"), "fromSpot": sc.get("pulledFrom") is None,
+            "stoodDown": sc.get("stoodDown"), "kills": sum(r["killed"].values()), "hits": r["hits"],
+            "armed": r["armed"]}
+
+
+def r8_poolable():
+    """Worker processes import this file by its module's name. A copy run from memory (the SIM_CASES
+    of tools/check_levels_mutants.py) is not that file, so its runs stay in order, in its own code."""
+    module = sys.modules.get(_r8_task.__module__)
+    return getattr(module, "_r8_task", None) is _r8_task and getattr(module, "__file__", None) is not None
+
+
+def r8_map(tasks, jobs):
+    """Every task through _r8_task: in `jobs` worker processes when it can, else in order."""
+    if jobs > 1 and len(tasks) > 1 and r8_poolable():
+        import concurrent.futures
+
+        with concurrent.futures.ProcessPoolExecutor(max_workers=jobs) as pool:
+            return list(pool.map(_r8_task, tasks, chunksize=2))
+    return [_r8_task(task) for task in tasks]
+
+
+def r8_rate(run):
+    """L4W2-13: what a whole run paid a minute (cash, Timber): its whole pay over its whole minutes
+    (a down: to the down)."""
+    minutes = run["at"] / 60 if run["at"] else math.inf
+    return run["wallet"]["cash"] / minutes, run["wallet"]["materials"] / minutes
+
+
+def r8_burst(run):
+    """The burst (printed, not gated): what his course from the spot paid over its own minutes."""
+    minutes = run["ownMinutes"] or math.inf
+    own = run["ownPay"] or {"cash": 0, "materials": 0}
+    return own["cash"] / minutes, own["materials"] / minutes
+
+
+def r8_whole(course, mission, zone, compose):
+    """The whole run R8 rates: the course as simulated, and when it stopped at its camp's clear
+    (R8_COMPOSE), the mission player's own run after his clear of that camp. It carries his course's
+    own pay and minutes too (the burst)."""
+    own = {"ownMinutes": course["ownMinutes"], "ownPay": course["ownPay"] or {"cash": 0, "materials": 0},
+           "fightFrom": course["fightFrom"]}
+    if not compose or course["end"] != "stopped" or zone not in (mission.get("walletAt") or {}):
+        return {"at": course["at"], "wallet": course["wallet"], "end": course["end"], "composed": False, **own}
+    after = mission["at"] - mission["clearedAt"][zone]
+    wallet = {key: course["wallet"][key] + mission["wallet"][key] - mission["walletAt"][zone][key]
+              for key in ("cash", "materials")}
+    return {"at": course["at"] + after, "wallet": wallet, "end": mission["end"], "composed": True, **own}
+
+
+def r8_courses(report, cfg, with_cut):
+    """A table's courses: (key, layout, spot, fire family): every listed spot on the main layout,
+    the frozen layout's, and with `with_cut` the open tunnel's on its layout with the main route,
+    each also carrying the fire family (and from its nearest point when that differs)."""
+    found = [(spot["id"], "main", spot, None) for spot in report["spots"]]
+    found += [(spot["id"], "frozen", spot, None) for spot in report["iceSpots"]]
+    flame = report.get("flame")
+    if with_cut and report.get("cut") is not None:
+        for spot in report["cutSpots"]:
+            found.append((spot["id"], "snipe", spot, None))
+            if flame is None:
+                continue
+            ability = cfg["weapons"][flame]["ability"]["name"]
+            found.append((f"{spot['id']} + {ability}", "snipe", spot, flame))
+            if spot.get("near") is not None and tuple(spot["near"]) != tuple(spot["at"]):
+                found.append((f"{spot['id']} + {ability}, nearest point", "snipe", dict(spot, at=spot["near"]), flame))
+    return found
+
+
+def r8_report(cfg, config_path, jobs, tables=R8_TABLES, spot_filter=None, seeds=R8_SEEDS, compose=R8_COMPOSE,
+              resume=R8_RESUME, fight=R8_FIGHT):
+    """R8 over whole runs, every table: the mission player's runs and the pair player's first (each
+    seed's clear of every camp is where a composed sniper run stops), then every course on every seed."""
+    ctx = level_context()
+    combat_cfg = ctx["combat"]
+    level = resolve_level(ctx["files"][FOREST_LEVEL], combat_cfg["director"]["runCapSeconds"])
+    layout = load_level_layout(level["layout"])
+    report = {"spots": sniper_spots_of(level, layout, combat_cfg, cfg)}
+    shut = {spot["id"] for spot in report["spots"]}
+    cut = shortcut_layout(layout)
+    report["cut"] = cut
+    report["cutSpots"] = ([spot for spot in sniper_spots_of(level, cut, combat_cfg, cfg) if spot["id"] not in shut]
+                          if cut is not None else [])
+    frozen = frozen_layout(layout, (combat_cfg["levels"].get("react") or {}).get("ice"))
+    report["iceSpots"] = ([spot for spot in sniper_spots_of(level, frozen, combat_cfg, cfg) if spot["id"] not in shut]
+                          if frozen is not layout else [])
+    report["flame"] = next((f for f, w in cfg["weapons"].items() if w.get("element") == "fire"), None)
+    proving = mission_gear()
+    first = ctx["expeditions"]["difficulties"][0]
+    plan = []
+    for name in tables:
+        difficulty = first if name.startswith("normal") else SNIPER_HARD
+        bow = name.endswith("-bow")
+        gear = (proving["melee"], SNIPER_BOW_TIER if bow else proving["ranged"])
+        courses = [c for c in r8_courses(report, cfg, not bow) if spot_filter is None or c[0] == spot_filter]
+        names = ctx["expeditions"]["difficultyNames"]
+        where = ("only the bow upgraded, L3-26" if bow else "the proving gear")
+        plan.append({"name": name, "difficulty": difficulty, "gear": gear, "courses": courses,
+                     "tag": f"forest, {names.get(difficulty, difficulty)} at gear {gear[0]}/{gear[1]} ({where})"})
+    # The pair player (the gate's) and the mission player with the sword alone (printed).
+    players = (None, "pair")
+    missions = r8_map([(config_path, t["difficulty"], t["gear"], seed, who) for who in players for t in plan
+                       for seed in seeds], jobs)
+    for index, table in enumerate(plan):
+        table["missions"] = missions[index * len(seeds):(index + 1) * len(seeds)]
+        rest = missions[len(plan) * len(seeds):]
+        table["pairs"] = rest[index * len(seeds):(index + 1) * len(seeds)]
+    tasks = []
+    for table in plan:
+        # A composed run ends as the player who fights as he does.
+        like = table["pairs"] if fight == "pair" else table["missions"]
+        for key, where, spot, flame in table["courses"]:
+            for seed, mission in zip(seeds, like):
+                stop = (spot["camp"] if compose and spot["camp"] in (mission.get("walletAt") or {})
+                        else None)
+                tasks.append((config_path, table["difficulty"], table["gear"], seed,
+                              {"spot": spot, "layout": where, "breath": flame, "stopZone": stop,
+                               "resume": resume, "fight": fight}))
+    done = iter(r8_map(tasks, jobs))
+    for table in plan:
+        table["runs"] = {}
+        like = table["pairs"] if fight == "pair" else table["missions"]
+        for key, _where, spot, _flame in table["courses"]:
+            courses = [next(done) for _ in seeds]
+            table["runs"][key] = {"camp": spot["camp"], "courses": courses,
+                                  "whole": [r8_whole(c, m, spot["camp"], compose) for c, m in zip(courses, like)]}
+    return {"tables": plan, "seeds": seeds, "compose": compose, "jobs": jobs, "resume": resume, "fight": fight}
+
+
+def r8_rows(runs, against, seeds):
+    """One spot against one player's runs: (mean cash, mean Timber a minute of the whole sniper runs,
+    his means, the seeds out-earning him as text)."""
+    whole = [r8_rate(w) for w in runs["whole"]]
+    theirs = [pay_rate(m) for m in against]
+    out = [f"seed {seed} {w[0]:,.0f} / {w[1]:.1f} against {m[0]:,.0f} / {m[1]:.1f}"
+           for seed, w, m in zip(seeds, whole, theirs) if w[0] > m[0] or w[1] > m[1]]
+    return (mean_of([w[0] for w in whole]), mean_of([w[1] for w in whole]),
+            mean_of([m[0] for m in theirs]), mean_of([m[1] for m in theirs]), out)
+
+
+def print_r8(report):
+    seeds = report["seeds"]
+    print()
+    where = ("from the road where he turned off it" if report["resume"] == "road" else "from where he stands")
+    how = "sword and bow" if report["fight"] == "pair" else "the sword alone"
+    composed = " (composed: after his camp, his own kind of player's run on that seed)" if report["compose"] else ""
+    print(f"R8 JUDGED FAIRLY (L4W2-13; Forest Road; seeds {seeds[0]}-{seeds[-1]}; a whole run: the mission to the "
+          f"spot's camp, R8's straight course from the spot, then the mission {where} with {how} to the level's "
+          f"end{composed}; cash / Timber a minute, the mean over the seeds. GATED against {R8_PAIR_LABEL}; "
+          f"printed, not gated, against the mission player with the sword alone)")
+    for table in report["tables"]:
+        pair = [pay_rate(m) for m in table["pairs"]]
+        mine = [pay_rate(m) for m in table["missions"]]
+        print(f"  {table['tag']}: {R8_PAIR_LABEL} {mean_of([m[0] for m in pair]):,.0f} / "
+              f"{mean_of([m[1] for m in pair]):.1f} a minute; the sword alone {mean_of([m[0] for m in mine]):,.0f} / "
+              f"{mean_of([m[1] for m in mine]):.1f}; the pair "
+              + ", ".join(f"{end} {sum(1 for x in table['pairs'] if x['end'] == end)}"
+                          for end in sorted({x['end'] for x in table["pairs"]})))
+        for key, runs in table["runs"].items():
+            cash, timber, pair_cash, _pair_timber, out = r8_rows(runs, table["pairs"], seeds)
+            _c, _t, sword_cash, _st, sword_out = r8_rows(runs, table["missions"], seeds)
+            burst = [r8_burst(c) for c in runs["courses"]]
+            sniped = sum(1 for c in runs["courses"] if c["sniped"])
+            print(f"    {key:<34} {cash:>8,.0f} / {timber:5.1f} (x{cash / pair_cash:.3f} the pair's, out-earning seeds "
+                  f"{len(out)}; ungated: x{cash / sword_cash:.3f} the sword alone's, out-earning seeds "
+                  f"{len(sword_out)}); the burst (ungated) mean {mean_of([b[0] for b in burst]):,.0f} / "
+                  f"{mean_of([b[1] for b in burst]):.1f}, best {max(b[0] for b in burst):,.0f}; "
+                  f"kills in his run{' (to its stop: composed)' if report['compose'] else ''} "
+                  f"{mean_of([c['kills'] for c in runs['courses']]):.1f}; "
+                  f"sniped {sniped}/{len(seeds)}; downs {sum(c['downs'] for c in runs['courses'])}")
+
+
+def r8_check(report, expect):
+    """R8's gate (L4W2-13): per table and spot, the mean cash and the mean Timber a minute of the whole
+    sniper runs are not above the pair player's (sword and bow: "fighting it all with the same gear"),
+    every course turned to its spot (unless it fell or met the run cap before his camp: then it is the
+    mission's own run), and every hit from the spot lands."""
+    seeds = report["seeds"]
+    for table in report["tables"]:
+        for key, runs in table["runs"].items():
+            cash, timber, theirs_cash, theirs_timber, out = r8_rows(runs, table["pairs"], seeds)
+            blocked = [f"seed {seed} {c['ownEvaded']}" for seed, c in zip(seeds, runs["courses"]) if c["ownEvaded"]]
+            missed = [str(seed) for seed, c in zip(seeds, runs["courses"])
+                      if not c["sniped"] and c["end"] in ("cleared", "stopped")]
+            good = cash <= theirs_cash and timber <= theirs_timber and not blocked and not missed
+            expect(good, f"R8 (L4W2-13), {table['tag']}: the sniper from {key} earns no more cash and no more Timber "
+                   f"a minute than {R8_PAIR_LABEL} over a whole run at the same gear, the mean of seeds "
+                   f"{seeds[0]}-{seeds[-1]}: {cash:,.0f} / {timber:.1f} against {theirs_cash:,.0f} / {theirs_timber:.1f} "
+                   f"(x{cash / theirs_cash:.3f} / x{timber / theirs_timber:.3f}); every hit from the spot lands"
+                   + (f" (blocked: {', '.join(blocked)})" if blocked else "")
+                   + (f"; NEVER TURNED TO THE SPOT on seed(s) {', '.join(missed)}" if missed else "")
+                   + f"; out-earning seeds {len(out)}" + (": " + "; ".join(out) if out else ""))
 
 
 def plan_floor(plan, group_id):
@@ -11198,10 +11647,52 @@ def main():
                         help="only the bow report (L1b Wave 3): the Longbow against the Broadsword on Forest Road")
     parser.add_argument("--level", choices=("forest",), default=None,
                         help="with --levels-only: only that level")
+    parser.add_argument("--r8", action="store_true",
+                        help="only R8 judged fairly (L4W2-13): whole sniper runs against the mission player, every "
+                             "table, seeds R8_SEEDS; with --check its gate")
+    parser.add_argument("--jobs", type=int, default=max(1, min(8, (os.cpu_count() or 2) - 4)),
+                        help="with --r8: worker processes (1 = in order)")
+    parser.add_argument("--r8-table", dest="r8_table", choices=R8_TABLES, default=None,
+                        help="with --r8: only that table")
+    parser.add_argument("--r8-spot", dest="r8_spot", default=None, help="with --r8: only that course (its key)")
+    parser.add_argument("--r8-seeds", dest="r8_seeds", type=int, default=None,
+                        help="with --r8: only the first N of R8_SEEDS (a look, not the gate)")
+    parser.add_argument("--r8-compose", dest="r8_compose", action="store_true",
+                        help="with --r8: compose each sniper run with the mission's own run after his camp (a "
+                             "quicker look, not the gate)")
+    parser.add_argument("--r8-resume", dest="r8_resume", choices=("spot", "road"), default=R8_RESUME,
+                        help="with --r8: where the fight half begins (R8_RESUME)")
+    parser.add_argument("--r8-fight", dest="r8_fight", choices=("sword", "pair"), default=R8_FIGHT,
+                        help="with --r8: how the sniper fights the rest (R8_FIGHT)")
     args = parser.parse_args()
     cfg = load_config(args.config)
     if args.bow:
         print_bow(bow_report(cfg))
+        return
+    if args.r8:
+        seeds = R8_SEEDS[:args.r8_seeds] if args.r8_seeds else R8_SEEDS
+        r8 = r8_report(cfg, str(Path(args.config).resolve()), args.jobs,
+                       tables=(args.r8_table,) if args.r8_table else R8_TABLES, spot_filter=args.r8_spot,
+                       seeds=seeds, compose=R8_COMPOSE or args.r8_compose, resume=args.r8_resume,
+                       fight=args.r8_fight)
+        print_r8(r8)
+        if args.check:
+            failures = []
+
+            def expect(ok, text):
+                print(f"  {'PASS' if ok else 'FAIL'}  {text}")
+                if not ok:
+                    failures.append(text)
+
+            print()
+            print(f"  {interpreter_note()}")
+            if (seeds != R8_SEEDS or args.r8_spot or args.r8_table or args.r8_compose != R8_COMPOSE
+                    or args.r8_resume != R8_RESUME or args.r8_fight != R8_FIGHT):
+                print("  note  a part or a variant of R8 only (--r8-seeds, --r8-spot, --r8-table, --r8-compose, "
+                      "--r8-resume or --r8-fight): not the gate's run")
+            r8_check(r8, expect)
+            print(f"\nCHECK (R8): {'PASS' if not failures else 'FAIL (' + str(len(failures)) + ')'}")
+            sys.exit(0 if not failures else 1)
         return
     if args.levels_only:
         forest = forest_report(cfg)

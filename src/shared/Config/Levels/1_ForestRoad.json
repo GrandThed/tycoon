@@ -53,7 +53,7 @@
 			"lobber": { "cash": 700, "materials": 4 },
 			"marksman": { "cash": 600, "materials": 1 },
 			"armoured": { "cash": 1200, "materials": 2 },
-			"colossus": { "cash": 42900, "materials": 76 }
+			"chief": { "cash": 42900, "materials": 76 }
 		}
 	},
 	"stages": [
@@ -68,7 +68,7 @@
 			"gateSeconds": 0,
 			"waves": [
 				{ "groups": [] },
-				{ "groups": [], "boss": { "kind": "colossus", "at": [0, 30], "valor": 10 } }
+				{ "groups": [], "boss": { "kind": "chief", "at": [0, 30], "valor": 10 } }
 			]
 		}
 	],

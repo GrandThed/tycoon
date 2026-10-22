@@ -7015,3 +7015,138 @@ against 24,703 / 37.2; seed 23 18,374 / 27.6 against 23,330 / 34.8; seed 37 2,75
   - a waiting blow holding a field that is not clear;
   - a run starting with the deferral spent;
   - a run starting with a blow found.
+
+## L4 W2: the Camp Chief, the seated head and R8 judged fairly (2026-10-22)
+
+Contract `docs/prompts/l4-w2-contract.md` sections 2.4, 4, 5, 6 and 8 (rulings L4W2-11, -12, -13); Ben's rulings in
+MISSIONS_DESIGN 26.4, 27.2, 27.5 and 28. Report: `docs/prompts/l4-w2-code-reports/d1.md`. Measured on Python 3.12.10
+64-bit (the gate's).
+
+### L4 W2: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json crowd.kinds.chief` | none: the Clearing's boss was the `colossus` | **a kind of its own**, "Camp Chief": the Colossus's body (height 14, radius 4, head 1.6), speed 9, hp 4,700, no knockback, `rush`, boss, colour (110, 40, 60), enrage at 0.5 (windups x0.8, recovers x0.7, chains of 2); attacks `ring` (the slam), `lane` (the charge), `summon` 12 fodder, then the sweep | L4W2-12. His model is built and uploaded at the Colossus's size, so every hit shape and camp C geometry line stays. The Colossus stays the range's and the Raider Arena's |
+| the Chief's sweep (attack 4) | the Colossus's barrage (`lob` x5, enraged only) | **`arc`: reach 14, range 17, 150 degrees, height 6, windup 1.0, recover 1.6, damage 30, knockback 30, launch 3, cooldown 7, in both phases** | 26.4: "a wedge that fills after a warning: jump it or step out". Range 17 holds the hammer's posed sweep (17.10 at the impact; raiderpose `--check` allows range + 0.5). The angle, windup and recover are the ones the strips were posed with. Damage 30 is the Warlord's and the plated elite's arc; it keeps every difficulty under `FOREST_HIT_SHARE` (the study's ceiling was 33). Cooldown 7 sits between the slam's 6 and the charge's 8 |
+| the Chief's call | the Colossus's 12 | **12 fodder**, unchanged | the boss reserve stays 1 + 12 = 13, so Hard and Brutal stay at 157 of 160. The contract allowed 10-12 and at most 15 |
+| `Levels/1_ForestRoad.json` | stage C's boss `colossus`; reward `colossus` 42,900 / 76 | **`chief`**, the same 42,900 cash, 76 Timber and 10 Valor | Double Jump's price, the L3 climb and the chests' shares hang on that pay |
+| `ProvingGrounds.json crowd.restDrop` / `riseBlendSeconds` | Theme's `COMBAT_REST_DROP` 0.35 / `COMBAT_RISE_BLEND_SECONDS` 0.5, client only | **0.35 / 0.5, in config** | L4W2-11: the server seats its bodies as the client draws them, so a headshot on a seated raider lands where his head is drawn |
+| `Expeditions.json moods.forestRoad` | none | **lighting `brightness` 1.6, `outdoorAmbient` [110, 120, 130]; atmosphere `density` 0.38, `offset` 0, `color` [110, 124, 120], `decay` [92, 106, 100], `glare` 0, `haze` 1.6** | 27.2, mood B: the contract's start values, to be tuned from Ben's first Studio screenshots |
+| `Expeditions.json keys.castle` | none | **`{ "name": "Castle Key", "text": "Opens a sealed door in the Castle." }`** | 28: the mountain's chest gives it |
+| `Combat.json debug.dressFailAttribute` | none | **"DebugDressFail"** | the Z lever (contract 8) |
+| `sim_range.py FOREST_BOSS` | "colossus" | **"chief"**; `BOW_KINDS` follows it | every Forest boss band now measures the Chief. No band moved |
+| `sim_range.py`, the seat | none | **`hs_seat_drop`, `hs_crowd_ray(..., drop)`, every body's seat stepped as CrowdService steps it**, a resident seated at spawn when it is first shown at rest | mirrors HitShapes.SeatDrop, SeatStep and CrowdRay's `drop`; `check_stage_mirror.py` compares them (SeatDrop on seats -0.25 to 1.4, CrowdRay at half and fully seated bodies) |
+| `sim_range.py secret_problems` | | **the `key` line**: a string of 1 to 24 bytes, "secrets.<id>.key is ..., not a key id" | StageFlow.secretProblems' new line, word for word; three refusals in `check_stage_mirror.py` |
+
+### The Camp Chief against the bands
+
+No band moved; every one is re-measured on the Chief (`--check`: PASS, 495 lines).
+
+| Band | The Colossus (the L4 study) | The Camp Chief |
+|---|---|---|
+| alone in his camp, the reacting Broadsword, Normal T1 (64-90 s) | 81.2 s (79.3-82.3) | **80.4 s** (80.4-80.4) |
+| alone, Hard T3 / Brutal T5 (64-100 s) | 81.7 / 83.8 s | **86.0 / 85.2 s** |
+| hits of the boss on the reacting player | 0 | **0** |
+| fodder his call raises in that fight | 56-60 | **48** Normal, **60** Hard and Brutal |
+| the worst hit (25% / 30% / 30% of the bar) | the charge, 23.2% / 27.8% / 28.2% | the charge, the same; **the sweep 34 = 22% / 60 = 26% / 101 = 27%** |
+| one preset below, the boss alone (135 / 180 s) | not killed in 240 s | not killed in 240 s (4% / 2% of his health left) |
+| Normal first clear, walking included (4.5-5.75 min) | 4.75-5.3 min | **5.28 / 4.74 / 5.10 min** |
+| Hard / Brutal mean clear, within 5% of 5.21 / 5.19 min (L3-29) | 5.22 / 5.24 min | **5.25 (+0.7%) / 5.25 (+1.2%) min** |
+
+He uses the sweep as often as the slam and the charge. In a Normal run's 80-second fight he lands 9 slams, 8 charges,
+8 sweeps and 4 calls. The player with a human's reaction takes none of them (his only hits are the slingers' in camps A
+and B), and the reacting player takes none at any difficulty. `sim_combat.py --check`: PASS.
+
+### check_levels with the dress walls and the models (D2's measures)
+
+- Camp C's sight gate with the models' posed reach: eyes **+2.93** (was +4.09), cameras **+4.04**; `sightMargin` 1.5
+  holds. The floors rule's tallest body is the Chief, **24.13** (his hammer raised in the slam's windup): PASS.
+- Forest Road's Parts: 264 + 70 dress walls = **334 of 600**.
+- Every dress wall is unclimbable. The tightest is TreeLine2, 50 over the lookout's chest, which needs 43.
+
+### R8 judged fairly (L4W2-13, MISSIONS_DESIGN 27.5)
+
+**The lead's ruling (2026-10-22), on Ben's words.** Ben said "a spot is compared over a whole run (shoot what you
+can from it, then fight the rest) against fighting it all **with the same gear**". So R8 is held to the pair player:
+the player with the same gear, sword and bow, each swing with the one that reaches. He is measured at the same gear,
+difficulty and seeds 1-30. The ruling also:
+- keeps the sword-alone comparison (L3-26's) printed beside the gate, not gated, so its +1% stays visible;
+- accepts that the fight half starts back on the road (a spot that shoots nothing is not sniping);
+- accepts that every whole run is simulated to its end.
+
+**The rule as built.** R8's gate is its own line, `py -3.12 tools/sim_range.py --r8 --check`. It took 54 minutes on the
+owner's machine with 8 workers while `--check` and a variant ran beside it; `--jobs N` sets the workers.
+
+Per spot, the sniper's whole run on each of seeds 1-30:
+1. The mission player's own course from the start to where he would engage the spot's camp.
+2. R8's course as today from there: the straight walk to the pull point, the crossing to the spot, then the bow until
+   nothing lands for 10 s, never dodging. The fire courses cast Dragon's Breath beside it.
+3. Back on the road where he turned off it, then the mission with the starter sword to the level's end (`R8_FIGHT`
+   "sword").
+
+A run's rate is its whole pay over its whole minutes (a down: to the down). **A spot fails when its mean cash a minute
+or its mean Timber a minute over the 30 seeds is above the pair player's.** The gate names the seeds whose run
+out-earns his, and every hit from the spot must land.
+
+Scope:
+- Normal and Hard, each at the proving gear (T1/T1) and with only the bow at T4 (L3-26).
+- The eight listed spots and the frozen layout's (Creek).
+- At the proving gear, the open tunnel's spots (CaveMouth and CaveExit), each also with Dragon's Breath, and CaveExit
+  from its nearest point.
+
+`--check` keeps today's course on its three seeds as "R8's burst", printed and not gated. The fire courses' cast and
+tier gates (F6, R2) stay gated there.
+
+**The three choices, with what the other one gave:**
+
+| Choice | Ruled | The other, measured |
+|---|---|---|
+| whom R8 is held to | **the pair player** (sword and bow: "the same gear") | the mission player with the sword alone: Road3 x1.014 and Road2 x1.003 on Hard, sword T1 / bow T4, red. It is printed, ungated (the table below) |
+| where the fight half starts (`R8_RESUME`) | **"road"**: back where he turned off it, after the straight walk back. A spot that shoots nothing is not sniping | "spot" (`--r8-resume spot`, the contract's first text: "from where he stands"). The four spots past camp B's far end (RoadBC5, RoadBC6, GatehouseWalk, GatehouseTurn) read x1.015-x1.037 the sword-alone player's on Hard, **with nothing ever shot from them** (burst 0 on all 30 seeds). The straight crossing puts him at camp B's east end, and from there the mission player on Hard T1 clears B with fewer leashes than from its entry (seed 1: 437 s against 498 s, 10 leashes against 12). That measures the fight's starting place, not the spot |
+| whole runs or composed (`R8_COMPOSE`) | **whole runs**, each simulated to its end | `--r8-compose`: each run simulated to the clear of the spot's camp, then the same kind of player's own rest of that seed. It costs a fifth, but it read Road3 x1.000 of the sword-alone player where whole runs read x0.984 (fight from the spot), and x1.005 against x1.014 (fight from the road) |
+
+**Result: CHECK (R8): PASS** (46 lines). Ratios are the whole run's mean cash a minute over each player's, seeds 1-30
+(the Timber ratios differ from these by at most 0.032, the highest of all 0.842).
+
+| Table (pair player / sword alone, cash a minute) | Spot | Gated: x the pair | Ungated: x the sword alone (seeds out-earning) | The burst (his course alone, ungated): mean, best |
+|---|---|---|---|---|
+| Hard, sword T1 / bow T4 (39,183 / 24,019) | **Road3** | **x0.621** | x1.014 (19) | 30,201, best 63,950 |
+| | **Road2** | **x0.615** | x1.003 (13) | 26,346, best 45,551 |
+| | Road4 | x0.602 | x0.982 (11) | 6,696 |
+| | ShrineSignPad, Creek, RoadBC5, RoadBC6, GatehouseWalk, GatehouseTurn | x0.574-0.595 | x0.936-0.971 | 0 |
+| Hard, T1/T1 (29,615 / 24,019) | Road2 / Road3 | x0.803 / x0.801 | x0.990 (14) / x0.988 (9) | 18,306 / 15,552 |
+| | CaveMouth / with Dragon's Breath | x0.788 / x0.788 | x0.971 (10) / x0.972 (11) | 12,491 / 9,342 |
+| | the others | x0.413-0.778 (Road4 x0.540: 11 downs; CaveExit with Breath x0.413-0.424: 30 downs) | x0.510-0.966 | |
+| Normal, T1/T1 (30,729 / 26,543) | every spot | x0.487-0.842 (CaveExit with Breath: 13-16 downs) | x0.563-0.975 (at most 9) | at most 12,088 |
+| Normal, sword T1 / bow T4 (40,226 / 26,543) | every spot | x0.570-0.637 | x0.864-0.967 (at most 8) | at most 12,088 |
+
+No course out-earns the pair player on any seed of any table: every row has 0 seeds out-earning him.
+
+**The stricter reading, measured (not the gate).** `--r8-fight pair` has the sniper fight the rest with sword and bow,
+like the player he is held to, so the two runs differ in nothing but the spot. Hard, sword T1 / bow T4, seeds 1-30:
+
+| Road3 | Road2 | Road4 | Creek | ShrineSignPad | GatehouseTurn | RoadBC6 | RoadBC5 | GatehouseWalk |
+|---|---|---|---|---|---|---|---|---|
+| x0.982 (13 seeds out-earn) | x0.977 (9) | x0.975 (8) | x0.944 (5) | x0.939 (2) | x0.920 (1) | x0.910 | x0.909 | x0.902 |
+
+All pass, and the sniper's own course (the burst) is the same in both readings. From Road2 or Road3 a pull brings camp
+A's west groups to the plateau's edge, and the bow at x6.74 kills them in seconds while none can reach him (L4 W1's
+finding). Against the sword alone that is worth about +1% over a whole run. Against fighting with the same gear it is
+worth less than nothing: 2% under the pair even when the sniper also fights the rest with both weapons.
+**Road3 on Hard, sword T1 / bow T4 is closed** (contract section 6): green at x0.621 under the ruled gate and x0.982
+under the stricter reading.
+
+### R8: the mutants (`check_levels_mutants.py` SIM_CASES, D2's file)
+
+Both were proved red against the pair gate under that harness's in-memory copy, where the runs stay in order
+(`r8_poolable`). Each takes about 8 minutes: the sword-alone, pair and sniper runs of one Normal spot.
+
+| Case | `sim_range.py r8_rate` line swapped | Runs | Goes red (ships green) |
+|---|---|---|---|
+| L3-26, "R8's band at half the mission's pay" | its line went with the old `r8_gate` | retired | |
+| the whole pay over the sniper's own minutes | `minutes = run["ownMinutes"] or math.inf` | `--r8 --check --r8-table normal --r8-spot Road3` | Normal at the proving gear, Road3: x0.835 the pair's becomes x18.7 |
+| the fight half dropped from the clock (its pay kept) | `minutes = (run["fightFrom"] or run["at"]) / 60` | `--r8 --check --r8-table normal --r8-spot Road2` | Normal at the proving gear, Road2: x0.832 the pair's becomes x7.43 |
+
+The contract's "drops the fight half" taken literally, the run ending where today's course ends, cannot go red on this
+data. That run is the walk to the camp plus the course, and it pays less than the pair player on every row. So the
+mutant drops the fight half from the clock and keeps its pay.

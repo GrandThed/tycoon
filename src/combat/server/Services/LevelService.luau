@@ -43,6 +43,17 @@
 -- the air tracking found off its floor is judged with its feet led by its fall over its commit lag
 -- (WeaponService.FallSpeed, Tuning.CommitLag, WorldReact.FallDrop): the server's copy trails that
 -- player's screen, where a cell frozen now turns solid a round trip later.
+--
+-- L4 W2 (docs/prompts/l4-w2-contract.md §2.2, L4W2-2): a level may be built dressed. After the
+-- pieces are measured and before a Part is made, LevelDress.Accept decides from the level's dress
+-- file, the uploaded plan hash and the templates on this server, all or nothing. Refused, the
+-- level is today's grey level exactly, with one warn. Accepted, the dress's invisible walls are
+-- built beside the pieces (in BarrierGroups' group, holding from the build), every piece a mesh
+-- draws over shows nothing and carries `Skinned` (its collision and query kept), the level's
+-- Parts take the dress's looks over Expeditions.json's, and Workspace.Level's `Dress` and
+-- `DressHash` are set last: the clients draw the meshes only on that word (LevelScenery). Clear
+-- takes the word back first. FailNextDress (the Z lever) makes the next level's Accept see a hash
+-- that is not the uploaded one, so its grey build goes through the real refusal.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -55,6 +66,7 @@ local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local WorldReact = require(sharedFolder:WaitForChild("WorldReact"))
 
 local BarrierGroups = require(script.Parent:WaitForChild("BarrierGroups"))
+local LevelDress = require(script.Parent:WaitForChild("LevelDress"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
 
@@ -88,6 +100,12 @@ type Ice = {
 	shown: number,
 	cell: WorldReact.IceCell,
 }
+-- L4 W2: what a dressed build changes of the pieces (LevelDress.Accept's answer): the pieces a
+-- mesh draws over, by name, and the looks the level is built in.
+type Dressed = {
+	hidden: { [string]: boolean },
+	looks: Looks,
+}
 
 local CONST = {
 	LOBBY_FOLDER = "Lobby",
@@ -105,6 +123,16 @@ local CONST = {
 	-- material slides). Without that look, or with a material the engine does not know, the cell
 	-- keeps its look's own grip (one warn).
 	GRIP_LOOK = "ground",
+	-- L4 W2 (§2.2): infrastructure, like REACT_ATTRIBUTE. Workspace.Level's word to the clients
+	-- (the dressed layout's name and its plan hash), a hidden piece's mark, and where the uploaded
+	-- level meshes' templates live (ReplicatedStorage.Assets.Levels.<layout>).
+	DRESS_ATTRIBUTE = "Dress",
+	DRESS_HASH_ATTRIBUTE = "DressHash",
+	SKINNED_ATTRIBUTE = "Skinned",
+	ASSETS_FOLDER = "Assets",
+	LEVELS_FOLDER = "Levels",
+	-- What the Z lever hands LevelDress.Accept as the uploaded hash: never a real one.
+	FAILED_HASH = "(the dressFail lever)",
 	TEXT_FACES = table.freeze({
 		Enum.NormalId.Front,
 		Enum.NormalId.Back,
@@ -132,6 +160,8 @@ local state = {
 	reactedListeners = {} :: { (Reacted) -> () },
 	-- L2-53: the built level's ice cells (emptied by Clear).
 	ice = {} :: { Ice },
+	-- L4 W2 (§8, the Z lever): the next level's dress is refused through the real fallback.
+	failNextDress = false,
 }
 
 local LevelService = {}
@@ -335,15 +365,22 @@ local function setGate(gate: BasePart, closed: boolean, shown: number): ()
 	gate.CastShadow = closed
 end
 
--- Every piece as a Part under `folder`. Returns what SetCamp will need of each camp.
+-- Every piece as a Part under `folder`. Returns what SetCamp will need of each camp. L4 W2:
+-- `dressed` (nil = grey) gives the looks the level is built in (Expeditions.json's with the
+-- dress's laid over them) and the pieces a mesh draws over; its walls are among `pieces`.
 local function construct(
 	folder: Folder,
 	pieces: { LevelGeometry.Piece },
 	expeditions: Types.ExpeditionsConfig?,
 	reactive: { Reactive },
-	ice: { Ice }
+	ice: { Ice },
+	dressed: Dressed?
 ): { [string]: CampParts }
-	local looks: Looks? = if expeditions ~= nil then expeditions.looks else nil
+	local looks: Looks? = if dressed ~= nil
+		then dressed.looks
+		elseif expeditions ~= nil then expeditions.looks
+		else nil
+	local hidden: { [string]: boolean }? = if dressed ~= nil then dressed.hidden else nil
 	local camps: { [string]: CampParts } = {}
 	local walls = BarrierGroups.Ensure()
 	-- Asked once, and only of a level with ice (a lobby has none, and no warn is owed for it).
@@ -351,9 +388,11 @@ local function construct(
 	local gripAsked = false
 	for _, piece in pieces do
 		local isBarrier = piece.role == "barrier"
-		if isBarrier and not walls then
+		local isWall = piece.role == LevelDress.WALL_ROLE
+		if (isBarrier or isWall) and not walls then
 			-- The engine refused the groups (BarrierGroups said so once): a wall in the Default
-			-- group would stop the camera and every shot, so there is none.
+			-- group would stop the camera and every shot, so there is none. (A dress is never
+			-- accepted without them, so this skips no dress wall.)
 			continue
 		end
 		local box = piece.box
@@ -402,6 +441,14 @@ local function construct(
 				camp.locking = true
 				table.insert(camp.barriers, part)
 			end
+		elseif isWall then
+			-- L4 W2: a dress wall (a tree line, the yard's walls) is an invisible wall like a
+			-- camp's, in the same group, but it holds from the build: no camp opens it.
+			part.CollisionGroup = BarrierGroups.BARRIER
+			part.Transparency = 1
+			part.CanTouch = false
+			part.CastShadow = false
+			part.CanCollide = true
 		elseif piece.role == "gate" then
 			local shown = part.Transparency
 			setGate(part, false, shown)
@@ -447,9 +494,38 @@ local function construct(
 				cell = { react = react, box = box, heat = 0 },
 			})
 		end
+		if hidden ~= nil and hidden[piece.name] then
+			-- L4 W2: a mesh draws it. It still stops bodies, rays and the camera as built.
+			part.Transparency = 1
+			part.CastShadow = false
+			part:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)
+		end
 		part.Parent = folder
 	end
 	return camps
+end
+
+-- `pieces` as Parts under `folder` (construct, behind a pcall): what SetCamp will need of each
+-- camp, or nil and why. With nil the folder is left empty and so are `reactive` and `ice`: a Part
+-- could not be made and the ones before it are cleared away.
+local function place(
+	folder: Folder,
+	pieces: { LevelGeometry.Piece },
+	expeditions: Types.ExpeditionsConfig?,
+	reactive: { Reactive }?,
+	ice: { Ice }?,
+	dressed: Dressed?
+): ({ [string]: CampParts }?, string?)
+	local made: { Reactive } = reactive or {}
+	local cells: { Ice } = ice or {}
+	local ok, camps = pcall(construct, folder, pieces, expeditions, made, cells, dressed)
+	if not ok then
+		folder:ClearAllChildren()
+		table.clear(made)
+		table.clear(cells)
+		return nil, `a Part could not be made ({tostring(camps)})`
+	end
+	return camps, nil
 end
 
 -- `layout` as Parts under `folder`: what SetCamp will need of each camp, or nil and why. With
@@ -470,16 +546,7 @@ local function raise(
 	if pieces == nil then
 		return nil, problem
 	end
-	local made: { Reactive } = reactive or {}
-	local cells: { Ice } = ice or {}
-	local ok, camps = pcall(construct, folder, pieces, expeditions, made, cells)
-	if not ok then
-		folder:ClearAllChildren()
-		table.clear(made)
-		table.clear(cells)
-		return nil, `a Part could not be made ({tostring(camps)})`
-	end
-	return camps, nil
+	return place(folder, pieces, expeditions, reactive, ice, nil)
 end
 
 local function newFolder(name: string): Folder
@@ -590,17 +657,77 @@ function LevelService.LobbyBounds(): LevelGeometry.Bounds
 	return state.lobbyBounds or LevelGeometry.Bounds(LevelGeometry.BareLobby())
 end
 
+-- L4 W2: the uploaded level meshes' plan hash (Assets.json levels.<layout>.planHash; nil = none
+-- uploaded) and the names of the templates this server holds for them.
+local function uploadedHash(layoutName: string): string?
+	local assets = Catalog.GetAssetsConfig()
+	local uploaded = if assets ~= nil then assets.levels else nil
+	local entry = if uploaded ~= nil then uploaded[layoutName] else nil
+	local hash = if type(entry) == "table" then entry.planHash else nil
+	return if type(hash) == "string" then hash else nil
+end
+
+local function templatesOf(layoutName: string): { [string]: boolean }
+	local found: { [string]: boolean } = {}
+	local assets = ReplicatedStorage:FindFirstChild(CONST.ASSETS_FOLDER)
+	local levels = if assets ~= nil then assets:FindFirstChild(CONST.LEVELS_FOLDER) else nil
+	local own = if levels ~= nil then levels:FindFirstChild(layoutName) else nil
+	if own ~= nil then
+		for _, child in own:GetChildren() do
+			if child:IsA("Model") then
+				found[child.Name] = true
+			end
+		end
+	end
+	return found
+end
+
+-- L4 W2 (§2.2): the dress `layoutName` is built in and its plan hash (Accept held it to the
+-- uploaded one), or nil (grey) with one warn naming why. The Z lever's flag is spent here, by the
+-- first level that asks for a dress.
+local function dressOf(
+	layout: Types.LevelLayout,
+	layoutName: string,
+	pieces: { LevelGeometry.Piece },
+	open: { [string]: boolean }?,
+	maxParts: number
+): (LevelDress.Accepted?, string?)
+	local hash = uploadedHash(layoutName)
+	if state.failNextDress then
+		state.failNextDress = false
+		hash = CONST.FAILED_HASH
+	end
+	local accepted, reason = LevelDress.Accept(
+		Catalog.GetLevelDress(layoutName),
+		hash,
+		templatesOf(layoutName),
+		pieces,
+		LevelDress.LeftOut(layout, open),
+		BarrierGroups.Ensure(),
+		maxParts,
+		layoutName
+	)
+	if accepted == nil then
+		warn(`[LevelService] the level is grey: {reason}`)
+		return nil, nil
+	end
+	return accepted, hash
+end
+
 -- Builds `layout` under Workspace.Level, every camp open. false with one warn, and nothing
 -- built, when a level is already standing, before Init, when LevelGeometry.Pieces refuses the
 -- layout (gates with no fence, a camp and no levels.floorThickness, a size of 0 or less, over
 -- levels.maxParts), or when a Part cannot be made: the Parts made
 -- before it are cleared, so the next Build starts from an empty folder. Never yields. L2-36:
 -- `open` = the shortcut ids the leader has found (nil = none): a block that opens one is left out.
+-- L4 W2: `layoutName` (the level file's `layout`; nil = never dressed) names the dress file and
+-- the templates; a dress LevelDress.Accept refuses leaves the level grey, built as before it.
 function LevelService.Build(
 	layout: Types.LevelLayout,
 	expeditions: Types.ExpeditionsConfig,
 	rules: Types.CombatLevelsConfig,
-	open: { [string]: boolean }?
+	open: { [string]: boolean }?,
+	layoutName: string?
 ): boolean
 	local folder = state.levelFolder
 	if folder == nil then
@@ -611,11 +738,32 @@ function LevelService.Build(
 		warn("[LevelService] a level is already built; Clear it first")
 		return false
 	end
+	folder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)
+	folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)
 	local sizes = sizesOf(expeditions, rules)
+	local pieces, refused = piecesOf(layout, sizes, rules.maxParts, open)
+	if pieces == nil then
+		warn(`[LevelService] the level was not built: {refused}`)
+		return false
+	end
+	local accepted: LevelDress.Accepted? = nil
+	local planHash: string? = nil
+	if layoutName ~= nil then
+		accepted, planHash = dressOf(layout, layoutName, pieces, open, rules.maxParts)
+	end
+	local dressed: Dressed? = nil
+	local built = pieces
+	if accepted ~= nil then
+		dressed = {
+			hidden = accepted.hidden,
+			looks = LevelDress.Overlay(expeditions.looks, accepted.looks),
+		}
+		built = table.clone(pieces)
+		table.move(accepted.walls, 1, #accepted.walls, #built + 1, built)
+	end
 	local reactive: { Reactive } = {}
 	local ice: { Ice } = {}
-	local camps, problem =
-		raise(folder, layout, sizes, rules.maxParts, expeditions, open, reactive, ice)
+	local camps, problem = place(folder, built, expeditions, reactive, ice, dressed)
 	if camps == nil then
 		warn(`[LevelService] the level was not built: {problem}`)
 		return false
@@ -624,15 +772,30 @@ function LevelService.Build(
 	state.ice = ice
 	warnUnsized(layout, sizes)
 	state.camps = camps
-	state.looks = expeditions.looks
+	-- SetCamp recolours a checkpoint from these: the dress's looks while it is dressed.
+	state.looks = if dressed ~= nil then dressed.looks else expeditions.looks
 	state.built = true
+	if dressed ~= nil and layoutName ~= nil and planHash ~= nil then
+		-- Last: the clients draw the meshes on this word, so every Part is there by then.
+		folder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)
+		folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, planHash)
+	end
 	return true
 end
 
--- Destroys every Instance of the level. Idempotent; never yields.
+-- L4 W2 (§8, the Z lever): the next level that asks for a dress is refused it, as a dress whose
+-- hash is not the uploaded one is, and is built grey with the one warn. Spent by that build.
+function LevelService.FailNextDress(): ()
+	state.failNextDress = true
+end
+
+-- Destroys every Instance of the level. Idempotent; never yields. L4 W2: the clients are told
+-- the dress is gone before any Part of it is.
 function LevelService.Clear(): ()
 	local folder = state.levelFolder
 	if folder ~= nil then
+		folder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)
+		folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)
 		folder:ClearAllChildren()
 	end
 	state.camps = {}

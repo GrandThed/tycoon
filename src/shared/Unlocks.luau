@@ -386,6 +386,35 @@ function Unlocks.HoldsKey(
 		or Unlocks.HasElement(combat.families, weapons, starters, needs)
 end
 
+-- L4 W2 (docs/prompts/l4-w2-contract.md §0, MISSIONS_DESIGN §28): a level key ("castle") is held
+-- once a secret whose entry gives it (`key`) is opened in the profile (`combat.secrets[levelId]
+-- [secretId]`): the opened chest IS the key, so nothing else is ever written and the H lever's
+-- reset takes it back with the secret. `levels` = the level files (or resolved levels) to look in;
+-- a key no entry gives, or a word that is not a key id, is never held.
+function Unlocks.HasLevelKey(
+	combat: Types.CombatProfile?,
+	key: string,
+	levels: { { id: string, secrets: { [string]: Types.LevelSecretConfig }? } }
+): boolean
+	local opened: any = if combat ~= nil then combat.secrets else nil
+	if type(opened) ~= "table" or type(key) ~= "string" or key == "" then
+		return false
+	end
+	for _, level in levels do
+		local own: any = opened[level.id]
+		local entries = level.secrets
+		if type(own) ~= "table" or type(entries) ~= "table" then
+			continue
+		end
+		for secretId, entry in entries do
+			if type(entry) == "table" and entry.key == key and own[secretId] == true then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- L2-32: may this player hold `family` (its variant `variant`) in `slot` now? nil = yes; otherwise
 -- the ActionResult's reason, the first that applies in this order: no profile loaded; no such
 -- family or variant, or the family fills the other slot; not owned; not allowed here (gateOpen =

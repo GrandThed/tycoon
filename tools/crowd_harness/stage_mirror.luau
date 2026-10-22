@@ -891,7 +891,8 @@ for _, case in data.rayCases do
 					C.v(row[6]),
 					row[7],
 					row[8],
-					row[9]
+					row[9],
+					row[10]
 				)
 				found[index] = { if entry ~= nil then entry else "nil", crit }
 			elseif case.op == "rayUpright" then
@@ -907,6 +908,9 @@ for _, case in data.rayCases do
 					row[9]
 				)
 				found[index] = if entry ~= nil then entry else "nil"
+			elseif case.op == "seatDrop" then
+				-- L4 W2 (contract 5): rows { height, seat, restDrop }.
+				found[index] = Shapes.SeatDrop(row[1], row[2], row[3])
 			else
 				found[index] = Shapes.FlatToRect(row[1], row[2], row[3], row[4], row[5], row[6])
 			end

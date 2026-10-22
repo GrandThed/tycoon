@@ -33,6 +33,15 @@ into has a landing and `player.rescue.outside` covers a server frame of the dash
 Smash's fall in (g) (d-m3); a frozen sheet as deep as a floor (d-m6); a dash found through a MECHANICS
 alias (s1); and the bend rule, the cave's closed half and the walled camp on the frozen layout (s2).
 
+L4 Wave 2, "the forest and the raiders in the game" (docs/prompts/l4-w2-contract.md section 7, L4W2-14):
+the dress walls (Config/LevelDress/<layout>.json `barriers`, the invisible character-only walls a dressed
+level adds) only remove moves. Every "cannot" gate below holds without them (a grey level has none);
+every wall top is unclimbable; and the "can" claims are proved again with a blocking test (a flat move
+fails where it crosses a wall's footprint, grown by a body, below its top): the route and its gap (the
+trailhead's designed drop), the owners' reach to every double-jump secret (the lookout's designed drop),
+the sneak, the shortcut route and the ice crossing. Camp C's sight gate reads each model kind's posed
+reach from Config/RaiderModels.json (the drawn body is the larger of the model and the placeholder).
+
 L3 Wave 1, "tiers per weapon" (docs/prompts/l3-w1-contract.md, L3-25 and L3-28): the families a player
 can own without a lever are the starters, every family a secret pays behind a key and every firstClear
 family (ownable_families; the bend's known limit holds while none of them carries); R8's reach is the
@@ -57,6 +66,8 @@ What it reads, and copies no number from:
   Config/Levels/*.json        each level's stages (which kinds stand in which camp, the boss spot)
   Layouts/Levels/*.json       the layouts (one that names an `arena` is refused since L4 W1b:
                               ruling 27's adapter went with the Raider Arena)
+  Config/LevelDress/*.json    a dressed level's `barriers` (L4 W2; none without the file)
+  Config/RaiderModels.json    each model kind's posed reach (L4 W2, camp C's sight gate)
 
 Geometry rules, as LevelService builds them: a camp's fence stands OUTSIDE its floor rectangle,
 `levels.fenceThickness` thick, so a road runs up to the floor's edge and passes under the gate.
@@ -346,6 +357,12 @@ SIGHT_THEME_KEYS = ("COMBAT_CAMERA_COLLISION_RADIUS",)
 ABILITY_SERVICE_PATH = REPO_ROOT / "src" / "combat" / "server" / "Services" / "AbilityService.luau"
 RENDERER_PATH = REPO_ROOT / "src" / "combat" / "client" / "Controllers" / "CrowdRenderer.luau"
 RENDERER_KEYS = ("TORSO_WIDTH", "TORSO_DEPTH")
+# L4 W2 (contract 7): a dressed level's invisible walls, and the raider models' drawn reach.
+DRESS_DIR = CONFIG_DIR / "LevelDress"
+RAIDER_MODELS_PATH = CONFIG_DIR / "RaiderModels.json"
+# The "can" claims' blocking test: a flat move that crosses a dress wall's footprint grown by a
+# body's half width (BODY_RADIUS, below) while under its top is blocked.
+WALLS = True
 EPS = 1e-6
 SIDES = ("north", "south", "west", "east")
 # Where each side lies in a footprint (x0, x1, z0, z1).
@@ -358,7 +375,9 @@ SIDES_AT = {"west": 0, "east": 1, "north": 2, "south": 3}
 
 
 class Solid:
-    """Something a player can stand on, seen from above: a rectangle with a top and a bottom."""
+    """Something a player can stand on, seen from above: a rectangle with a top and a bottom. Kind
+    `barrier` (L4 W2) is a dress wall: never ground, never standable, never a sight blocker, always
+    tall (is_tall), counted in the Parts (part_count's `walls`)."""
 
     def __init__(self, name, kind, look, x0, x1, z0, z1, bottom, top):
         self.name, self.kind, self.look = name, kind, look
@@ -422,9 +441,11 @@ def wall_reach(thickness, barrier):
     return max((barrier or {}).get("thickness") or 0, thickness)
 
 
-def solids_of(layout, thickness, floor_depth=1.0):
+def solids_of(layout, thickness, floor_depth=1.0, barriers=None):
     """Every standing surface of a layout: solid blocks, camp floors (`floor_depth` deep under
-    their top: levels.floorThickness), fences, obstacles, secrets."""
+    their top: levels.floorThickness), fences, obstacles, secrets; and with `barriers` (a dress
+    file's list, L4 W2) one Solid of kind `barrier` per wall. Every gate but check_walls asks for
+    none: the "cannot" gates hold on the grey level, which has no walls (L4W2-14)."""
     found = [block_solid(b) for b in layout["blocks"] if b.get("collide") is not False]
     for camp in layout["camps"]:
         x0, x1, z0, z1 = camp_rect(camp)
@@ -443,6 +464,10 @@ def solids_of(layout, thickness, floor_depth=1.0):
         hx, hy, hz = secret["sx"] / 2, secret["sy"] / 2, secret["sz"] / 2
         found.append(Solid(f"Secret_{secret['id']}", "secret", "secret", secret["x"] - hx, secret["x"] + hx,
                            secret["z"] - hz, secret["z"] + hz, secret["y"] - hy, secret["y"] + hy))
+    for wall in barriers or []:
+        hx, hy, hz = wall["sx"] / 2, wall["sy"] / 2, wall["sz"] / 2
+        found.append(Solid(wall["name"], "barrier", "barrier", wall["x"] - hx, wall["x"] + hx, wall["z"] - hz,
+                           wall["z"] + hz, wall["y"] - hy, wall["y"] + hy))
     return found
 
 
@@ -496,7 +521,7 @@ def ice_config(levels):
     return ice if isinstance(ice, dict) else None
 
 
-def part_count(layout, fire_marker=None, ice=False):
+def part_count(layout, fire_marker=None, ice=False, walls=0):
     """The Parts LevelService.Build makes (LevelGeometry.Pieces): one per block; per camp the
     floor, the fence cut at its gates (four sides, one more piece per gate), the obstacles, the
     checkpoint marker, one marker per fire spot (only when Combat.json levels.fireMarkerSize
@@ -504,7 +529,9 @@ def part_count(layout, fire_marker=None, ice=False):
     (L1b-12) also has its gates and the four barrier boxes; per secret the marked block and its
     sign; and one ice piece per open cell of every ice block (L2-53, sim_range.ice_cells, only
     when levels.react.ice is given). `fire_marker` = levels.fireMarkerSize and `ice` =
-    levels.react.ice (default: read from Combat.json)."""
+    levels.react.ice (default: read from Combat.json). `walls`: a dressed level's barriers, one Part
+    each (L4 W2: LevelDress.Accept holds #pieces + #barriers to levels.maxParts); the harness asks
+    for LevelGeometry.Pieces' count alone (0)."""
     if fire_marker is None or ice is False:
         read = sr.load_config(sr.COMBAT_PATH)["levels"]
         fire_marker = (read.get("fireMarkerSize") or False) if fire_marker is None else fire_marker
@@ -518,7 +545,7 @@ def part_count(layout, fire_marker=None, ice=False):
         parts += (1 if camp.get("checkpoint") else 0) + (4 if layout.get("barrier") and locks else 0)
         parts += len(fire_spots(camp)) if fire_marker else 0
         parts += 1 if camp.get("tent") else 0
-    return parts + 2 * len(layout["secrets"])
+    return parts + 2 * len(layout["secrets"]) + walls
 
 
 # ---------------------------------------------------------------------------------------------
@@ -576,8 +603,9 @@ def climb_max(move, ability):
 
 
 def is_tall(solid):
-    """What may be an unclimbable wall: a block of look `wall`, or a camp's fence."""
-    return solid.kind == "fence" or (solid.kind == "block" and solid.look == "wall")
+    """What may be an unclimbable wall: a block of look `wall`, a camp's fence, or a dress wall
+    (L4 W2: check_walls holds every one of those unclimbable, so a new standable top fails by name)."""
+    return solid.kind in ("fence", "barrier") or (solid.kind == "block" and solid.look == "wall")
 
 
 def unclimbable(solids, move, ability):
@@ -1735,16 +1763,19 @@ def check_layout(name, layout, ctx, expect):
     check_parkour.check_climbs(sys.modules[__name__], name, layout, ctx, expect, solids, tall)
     # L2-47: the road's bends cannot be hopped.
     check_route_skips(name, layout, ctx, expect, solids, tall)
+    # L4 W2 (contract 7, L4W2-14): a dressed level's walls only remove moves.
+    walls = check_walls(name, layout, ctx, expect, solids, tall)
     deep = spec.get("deepWater")
     if deep:
         check_deep_water(name, layout, ctx, expect, solids, deep)
 
     check_kill_height(tag, layout, solids, levels, expect)
-    parts = part_count(layout, levels.get("fireMarkerSize") or False, ice_config(levels))
+    parts = part_count(layout, levels.get("fireMarkerSize") or False, ice_config(levels), walls)
     tents = sum(1 for c in layout["camps"] if c.get("tent"))
     cells = len(sr.ice_cells(layout, ice_config(levels)))
-    expect(parts <= levels["maxParts"], f"{tag} {parts} Parts, {tents} of them tent markers and {cells} ice cells (levels.maxParts "
-           f"{levels['maxParts']}; tools/crowd_harness holds the count to LevelGeometry.Pieces')")
+    expect(parts <= levels["maxParts"], f"{tag} {parts} Parts, {tents} of them tent markers, {cells} ice cells and {walls} "
+           f"dress walls (levels.maxParts {levels['maxParts']}; tools/crowd_harness holds the count less the walls to "
+           f"LevelGeometry.Pieces', LevelDress.Accept the whole)")
     facts["parts"] = parts
     return facts
 
@@ -2112,6 +2143,210 @@ def check_level_file(file, level, layouts, ctx, expect):
                    f"{tag} the {boss['kind']} rises on the floor less its radius {radius:g}, {from_entry:.0f} studs "
                    f"from the entry (threat.spawnClear {ctx['spawnClear']:g})")
     check_residents(name, level, layout, ctx, expect)
+
+
+# ---------------------------------------------------------------------------------------------
+# L4 W2: the dress walls (docs/prompts/l4-w2-contract.md section 7, L4W2-14)
+# ---------------------------------------------------------------------------------------------
+
+
+def dress_barriers(name):
+    """Config/LevelDress/<name>.json's `barriers` (the walls LevelDress.Accept arms when the level is
+    dressed), or None when the layout has no dress file (it is always grey)."""
+    path = DRESS_DIR / f"{name}.json"
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return list(data.get("barriers") or []) if isinstance(data, dict) else []
+
+
+def raider_models():
+    """Config/RaiderModels.json's kind entries ({} without the file: every kind is a placeholder)."""
+    if not RAIDER_MODELS_PATH.exists():
+        return {}
+    data = json.loads(RAIDER_MODELS_PATH.read_text(encoding="utf-8"))
+    return dict((data or {}).get("kinds") or {}) if isinstance(data, dict) else {}
+
+
+def drawn_body(ctx, kind, factor):
+    """How far a body of `kind` is drawn past its centre on the flat, and how high over its feet:
+    (out, up, how). The placeholder is its torso box (radius x `factor`, body_reach) and its height;
+    a kind whose model counts (Figures: the model's height, radius and headRadius are the kind's, the
+    contract's 3.1) is drawn at the model's posedReach over every pose before a hit, with its lit
+    cue at its largest where it has one (`withCue`). A model kind falls back to the placeholder when
+    its template is missing, so the drawn body is the larger of the two."""
+    body = ctx["kinds"].get(kind) or {}
+    radius = body.get("radius") or ctx["widest"]
+    out, up, how = radius * factor, float(body.get("height") or 0), "placeholder"
+    model = (ctx.get("raiders") or {}).get(kind)
+    if isinstance(model, dict) and all(is_number(model.get(k)) and is_number(body.get(k))
+                                       and abs(model[k] - body[k]) <= 1e-6 for k in ("height", "radius", "headRadius")):
+        reach = model.get("posedReach") or {}
+        reach = reach.get("withCue") or reach
+        if is_number(reach.get("out")) and is_number(reach.get("up")):
+            out, up, how = max(out, float(reach["out"])), max(up, float(reach["up"])), "model"
+    return out, up, how
+
+
+def wall_blocks(walls, ax, az, bx, bz, feet):
+    """L4W2-14's blocking test: the first dress wall a flat move from a to b with the feet at `feet`
+    crosses, its footprint grown by a body's half width, while the feet are under its top (and the
+    body over its foot); None when the move is clear."""
+    if not WALLS:
+        return None
+    for w in walls:
+        if w.top > feet + EPS and w.bottom < feet + BODY_HEIGHT - EPS and seg_hits_rect(
+                ax, az, bx, bz, (w.x0 - BODY_RADIUS, w.x1 + BODY_RADIUS, w.z0 - BODY_RADIUS, w.z1 + BODY_RADIUS)):
+            return w
+    return None
+
+
+def path_blocked(walls, solids, points, label):
+    """The first blocked leg of a path of route points ({x, z[, y]}): its description, or None. A point
+    without a height stands on the ground under it."""
+    def feet(p):
+        if "y" in p:
+            return p["y"]
+        top, _s = ground(solids, p["x"], p["z"])
+        return top if top is not None else -math.inf
+
+    for index in range(1, len(points)):
+        a, b = points[index - 1], points[index]
+        hit = wall_blocks(walls, a["x"], a["z"], b["x"], b["z"], max(feet(a), feet(b)))
+        if hit is not None:
+            return (f"{label} leg {index} ({a['x']:g}, {a['z']:g}) -> ({b['x']:g}, {b['z']:g}) crosses {hit.name} "
+                    f"(x {hit.x0:g}..{hit.x1:g}, z {hit.z0:g}..{hit.z1:g}, top {hit.top:g})")
+    return None
+
+
+def clear_takeoff(walls, s, kr, carry, feet, step=2.0):
+    """A straight flat line from a point of `s` (a Solid) to a point of the key rectangle `kr` no
+    longer than `carry` that crosses no dress wall: ((x, z), (x, z)), or None. Points of `s` on a
+    `step` grid and its edges within `carry` of `kr`; the line goes to the nearest point of `kr`,
+    else to any rim point of it in reach."""
+    x0, x1 = max(s.x0, kr[0] - carry), min(s.x1, kr[1] + carry)
+    z0, z1 = max(s.z0, kr[2] - carry), min(s.z1, kr[3] + carry)
+    if x1 < x0 - EPS or z1 < z0 - EPS:
+        return None
+    xs = sorted({x0, x1} | {x0 + step * k for k in range(int((x1 - x0) / step) + 1)})
+    zs = sorted({z0, z1} | {z0 + step * k for k in range(int((z1 - z0) / step) + 1)})
+    rim = ([(x, z) for x in (kr[0], kr[1]) for z in [kr[2] + step * k for k in range(int((kr[3] - kr[2]) / step) + 1)]]
+           + [(x, z) for z in (kr[2], kr[3]) for x in [kr[0] + step * k for k in range(int((kr[1] - kr[0]) / step) + 1)]])
+    for x in xs:
+        for z in zs:
+            if point_rect(kr, x, z) > carry + EPS:
+                continue
+            nx, nz = min(max(x, kr[0]), kr[1]), min(max(z, kr[2]), kr[3])
+            for tx, tz in [(nx, nz)] + rim:
+                if math.hypot(tx - x, tz - z) <= carry + EPS and wall_blocks(walls, x, z, tx, tz, feet) is None:
+                    return (x, z), (tx, tz)
+    return None
+
+
+def check_walls(name, layout, ctx, expect, solids, tall):
+    """L4W2-14 on a layout with a dress file: the walls only remove moves. Every wall a sound box, of
+    a name of its own; none reaches into ground a player stands on or into water (the creek, the
+    pond and their ice: the crossing); every one unclimbable (is_tall takes `barrier`, so its top
+    stands climb_max over every standable surface within wall_reach_of); and the "can" claims hold
+    with them up: the route (its gap leg is the trailhead's designed drop), the shortcut route and the
+    sneak cross no wall, and every double-jump secret's owner still reaches its key tops from some
+    surface in a straight line no wall crosses (the lookout's designed drop). The "cannot" gates
+    above ran without them. Returns the number of walls (the Parts gate counts them)."""
+    barriers = (ctx.get("dress") or {}).get(name)
+    if barriers is None:
+        return 0
+    tag = f"{name}:"
+    move, levels = ctx["move"], ctx["levels"]
+    names = [b.get("name") for b in barriers]
+    unsound = [str(b.get("name")) for b in barriers
+               if not all(is_number(b.get(k)) and math.isfinite(b[k]) for k in ("x", "y", "z", "sx", "sy", "sz"))
+               or min(b.get("sx") or 0, b.get("sy") or 0, b.get("sz") or 0) <= 0]
+    twins = sorted({str(n) for n in names if names.count(n) > 1 or not isinstance(n, str) or not n})
+    expect(bool(barriers) and not unsound and not twins,
+           f"{tag} the dress walls (Config/LevelDress/{name}.json barriers) are sound boxes with names of their own: "
+           + (f"{len(barriers)} walls" if barriers and not unsound and not twins else
+              f"unsound {unsound or 'none'}, repeated or unnamed {twins or 'none'}" if barriers else "none"))
+    if unsound or twins or not barriers:
+        return len(barriers)
+    walls = [s for s in solids_of(layout, levels["fenceThickness"], levels["floorThickness"], barriers)
+             if s.kind == "barrier"]
+    # No wall in ground a player stands on, nor over water (it would cut the crossing). A bramble is no
+    # ground (it burns; the walls end at the mouth it seals, which it overlaps to seal it).
+    grounds = [s for s in solids if (s.kind in ("floor", "secret") or (s.kind == "block" and s.look in GROUND_LOOKS))
+               and s.name not in tall]
+    grounds += [block_solid(b) for b in layout["blocks"] if b.get("collide") is False and b["look"] in ("water", "ice")]
+    inside = []
+    for w in walls:
+        for g in grounds:
+            if (min(w.x1, g.x1) - max(w.x0, g.x0) > EPS and min(w.z1, g.z1) - max(w.z0, g.z0) > EPS
+                    and w.bottom < g.top + BODY_HEIGHT - EPS and w.top > g.top + EPS):
+                inside.append(f"{w.name} over {g.name}")
+    expect(not inside, f"{tag} no dress wall reaches into ground a player stands on or water he wades or crosses on ice"
+           + (": " + ", ".join(inside[:6]) if inside else f" ({len(walls)} walls, {len(grounds)} grounds)"))
+    # Unclimbable: the walls are candidates; another unclimbable wall is no surface.
+    every = unclimbable(solids + walls, move, ctx["abilityHeight"])
+    climb, reach = climb_max(move, ctx["abilityHeight"]), wall_reach_of(move)
+    standable = ("block", "floor", "secret", "fence", "obstacle")
+    bare = exposed(solids)
+    low = []
+    tightest = (math.inf, None)
+    for w in walls:
+        beats = [(w.top - o.top, o.name) for o in solids if o.kind in standable and o.name not in tall and o.name in bare
+                 and w.gap_to(o) <= reach + EPS]
+        least = min(beats, default=None)
+        if least is not None and least[0] < tightest[0]:
+            tightest = (least[0], f"{w.name} over {least[1]}")
+        if w.name not in every:
+            low.append(f"{w.name} (top {w.top:g}, {least[0]:g} over {least[1]})" if least else w.name)
+    expect(not low, f"{tag} every dress wall is unclimbable: its top stands at least {climb:g} (climb_max) over every "
+           f"standable surface within {reach:.1f} (wall_reach_of), so none is a new standable top (L4W2-14)"
+           + (": not " + ", ".join(low[:6]) if low else
+              f" ({len(walls)} walls; the tightest {tightest[1]}, {tightest[0]:g} over)" if tightest[1] else ""))
+    # The "can" claims, with the walls up.
+    route = path_blocked(walls, solids, layout["route"], "route")
+    expect(route is None, f"{tag} with the dress walls up the route (and its gap, the trailhead's designed drop) "
+           f"crosses no wall, a body's half width {BODY_RADIUS:g} kept off each (L4W2-14)" + (f": {route}" if route else ""))
+    shortcut = path_blocked(walls, solids, layout.get("shortcutRoute") or [], "shortcut route")
+    expect(shortcut is None, f"{tag} with the dress walls up the shortcut route crosses no wall (L4W2-14)"
+           + (f": {shortcut}" if shortcut else f" ({len(layout.get('shortcutRoute') or [])} points)"))
+    sneak = path_blocked(walls, solids, layout.get("sneak") or [], "sneak")
+    expect(sneak is None, f"{tag} with the dress walls up the sneak path crosses no wall (L4W2-14)"
+           + (f": {sneak}" if sneak else f" ({len(layout.get('sneak') or [])} points)"))
+    rules = secret_rules(levels)
+    sold = ctx.get("abilityIds") or []
+    for secret in layout["secrets"]:
+        if secret["needs"] != AIR_JUMP or secret["needs"] not in sold or rules is None:
+            continue
+        sid = secret["id"]
+        chest = next((s for s in solids if s.name == f"Secret_{sid}"), None)
+        base = secret_base(solids, secret)
+        if chest is None or base is None:
+            continue  # check_secret_reach names it
+        keys = key_rects(solids, base, chest)
+        found, tried = None, []
+        for s in sorted(solids, key=lambda o: -o.top):
+            if (s.kind not in ("block", "floor", "secret") or s.name in tall or s.name not in bare
+                    or s.name in (base.name, chest.name)):
+                continue
+            for kr in keys:
+                need = kr[4] - s.top - STEP_UP
+                carry = air_carry(move, need)
+                if carry is None or rect_gap((s.x0, s.x1, s.z0, s.z1), kr[:4]) > carry + EPS:
+                    continue
+                tried.append(s.name)
+                line = clear_takeoff(walls, s, kr, carry, s.top)
+                if line is not None:
+                    found = (s.name, kr[5], line)
+                    break
+            if found:
+                break
+        expect(found is not None,
+               f"{tag} with the dress walls up the {sid}'s owner still reaches its ledge: a jump, the double jump and a "
+               f"dash carry him from a standable surface onto a key top in a straight line no wall crosses (L4W2-14)"
+               + (f": from {found[0]} ({found[2][0][0]:g}, {found[2][0][1]:g}) to {found[1]} ({found[2][1][0]:g}, "
+                  f"{found[2][1][1]:g})" if found else
+                  f": every take-off in reach is walled off ({', '.join(sorted(set(tried))) or 'none in reach'})"))
+    return len(walls)
 
 
 def rect_distance(x, z, x0, x1, z0, z1):
@@ -3100,9 +3335,10 @@ def reachable_solids(layout, solids, move, ability, skip, tall, grace=False):
     return [s for s in standable if s.name in seen]
 
 
-def walled_bodies(level, layout, ctx, cid):
-    """Every resident post of a camp at every difficulty: ({(x, z): (radius, label)}, the plated
-    residents, the tallest body of the camp, its boss included)."""
+def walled_bodies(level, layout, ctx, cid, factor=None):
+    """Every resident post of a camp at every difficulty: ({(x, z): (radius, label, kind)}, the plated
+    residents, the tallest body of the camp, its boss included). With `factor` (body_reach) the
+    tallest is the drawn one (drawn_body: a model kind's posed reach up, L4 W2)."""
     kinds, ranks = ctx["kinds"], ctx["ranks"]
     bodies, plated, tallest = {}, [], 0.0
     for difficulty in level["difficulties"]:
@@ -3115,15 +3351,17 @@ def walled_bodies(level, layout, ctx, cid):
                 key = (round(post["at"][0], 3), round(post["at"][2], 3))
                 radius = body.get("radius") or ctx["widest"]
                 if radius >= bodies.get(key, (0.0, ""))[0]:
-                    bodies[key] = (radius, f"{difficulty} {defn['id']} {kind}")
-                tallest = max(tallest, body.get("height") or 0)
+                    bodies[key] = (radius, f"{difficulty} {defn['id']} {kind}", kind)
+                tallest = max(tallest, body.get("height") or 0,
+                              drawn_body(ctx, kind, factor)[1] if factor is not None else 0)
                 if (body.get("plate") or 0) > 0:
                     plated.append(f"{difficulty} {defn['id']} {kind}")
     for stage in level["stages"]:
         if stage["kind"] == "camp" and stage.get("zone") == cid:
             for wave in stage.get("waves") or []:
                 if wave.get("boss") and wave["boss"]["kind"] in kinds:
-                    tallest = max(tallest, kinds[wave["boss"]["kind"]].get("height") or 0)
+                    tallest = max(tallest, kinds[wave["boss"]["kind"]].get("height") or 0,
+                                  drawn_body(ctx, wave["boss"]["kind"], factor)[1] if factor is not None else 0)
     return bodies, sorted(set(plated)), tallest
 
 
@@ -3371,8 +3609,8 @@ def check_walled(name, level, layout, ctx, expect, solids, facts=True, dry=None)
         expect(not low, f"{tag} every wall block within {reach:.1f} of its fenced rectangle stands at least as high as "
                f"its fence's top {wall_top:g}" + (": " + ", ".join(low) if low else
                                                   f" ({len(near)}: {', '.join(s.name for s in near) or 'none'})"))
-        # Plates (L1c-6).
-        bodies, plated, tallest = walled_bodies(level, layout, ctx, cid)
+        # Plates (L1c-6). L4 W2: the drawn bodies are the models' where a kind has one.
+        bodies, plated, tallest = walled_bodies(level, layout, ctx, cid, body_reach(ctx))
         expect(not plated, f"{tag} no resident carries a plate at any difficulty (L1c-6: the plate bar is drawn "
                f"through walls)" + (f": {', '.join(plated)}" if plated else f" ({len(bodies)} posts)"))
         # Floors (the fix round's m4): a camera that tops a tall wall from an outside surface
@@ -3449,7 +3687,7 @@ def check_walled(name, level, layout, ctx, expect, solids, facts=True, dry=None)
             fresh = {s.name for s in reachable_solids(layout, solids, move, ctx["abilityHeight"], f"Camp_{cid}_", tall)
                      } - before
         inside, cams, lazy, reached = sight_points(layout, solids, ctx, camp, gates, walls, tall, clip, fresh)
-        drawn = {at: (radius * factor, label) for at, (radius, label) in bodies.items()}
+        drawn = {at: (drawn_body(ctx, kind, factor)[0], label) for at, (_radius, label, kind) in bodies.items()}
 
         def judge(px, pz):
             """The least margin from (px, pz) to any drawn body through any gate, or None when no
@@ -3518,7 +3756,10 @@ def check_walled(name, level, layout, ctx, expect, solids, facts=True, dry=None)
         rows.append(f"{cid}: wall top {wall_top:g} (fence {fence.get('height')}, the highest camera {top_cam:.2f} over its "
                     f"surface); {len(inside)} eye points ({held} inside the camera clip), {len(cams)} camera points and "
                     f"{len(lazy)} fine ones near the gates ({proved} proved), {len(bodies)} posts; clip cameraClear "
-                    f"{clear:g} (a camera {keep:g} off the fence at worst), drawn body {factor:.3f} x radius")
+                    f"{clear:g} (a camera {keep:g} off the fence at worst), drawn body {factor:.3f} x radius or a "
+                    f"model's posed reach ("
+                    + ", ".join(sorted({f"{k} {drawn_body(ctx, k, factor)[0]:.2f}" for _r, _l, k in bodies.values()}))
+                    + f"), tallest {tallest:g}")
         for what in ("eye", "camera"):
             if tight[what] is not None:
                 t = tight[what]
@@ -3533,7 +3774,8 @@ def check_walled(name, level, layout, ctx, expect, solids, facts=True, dry=None)
         expect(not seen and (bool(inside) or fresh is not None), f"{tag}{added} from no eye point on an outside top a "
                f"player reaches and no camera "
                f"point its boom reaches (kept {keep:g} off the fence by the clip, levels.cameraClear {clear:g} "
-               f"less the shake), is any part of a drawn resident (radius x {factor:.3f}) seen through a gate, every "
+               f"less the shake), is any part of a drawn resident (radius x {factor:.3f}, or a model's posed reach) seen "
+               f"through a gate, every "
                f"difficulty (in plan: the walls are over every camera; only eyes in the doorway, {DOORWAY:g} from the "
                f"fence in a gate's lane, are exempt)"
                + (": " + "; ".join(seen[:3]) if seen else
@@ -5050,7 +5292,8 @@ def load_all():
            "dashes": dashing_abilities(proving), "rescue": combat["player"].get("rescue"),
            "weapons": proving["weapons"],
            "originWallChord": (proving.get("shooting") or {}).get("originWallChord"),
-           "armory": sr.load_config(sr.ARMORY_PATH)}
+           "armory": sr.load_config(sr.ARMORY_PATH),
+           "dress": {name: dress_barriers(name) for name in names}, "raiders": raider_models()}
     return combat, expeditions, layouts, sr.load_level_files(), ctx
 
 

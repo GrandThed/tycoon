@@ -91,14 +91,18 @@ THEME_NAMES = (
     "COMBAT_RANGE_CALL_SHAKE", "COMBAT_RANGE_CALL_SHAKE_HZ", "COMBAT_RANGE_CALL_STRETCH",
     "COMBAT_RANGE_BOSS_BREATH", "COMBAT_RANGE_BOSS_BREATH_HZ", "COMBAT_RANGE_ENRAGE_BREATH",
     "COMBAT_RANGE_ENRAGE_BREATH_HZ", "COMBAT_RANGE_ENRAGE_COLOR", "COMBAT_RANGE_ENRAGE_SHARE",
-    "COMBAT_RANGE_ENRAGE_GLOW_COLOR", "COMBAT_REST_DROP", "COMBAT_RISE_BLEND_SECONDS", "COMBAT_REST_HIP_SHARE",
+    "COMBAT_RANGE_ENRAGE_GLOW_COLOR", "COMBAT_REST_HIP_SHARE",
     "COMBAT_RANGE_CUE_CHARGE_SHARE", "COMBAT_RANGE_CUE_AIM_CHARGE_SHARE", "COMBAT_RANGE_CUE_BOSS_CHARGE_SHARE",
     "COMBAT_RANGE_ENRAGE_CORE_SCALE", "COMBAT_RANGE_PLATE_COLOR", "COMBAT_RANGE_CUE_BREAK_GROW", "COMBAT_RANGE_WARD_COLOR",
+    "COMBAT_RAIDER_WALK_EASE_RATE", "COMBAT_RAIDER_WALK_SETTLE",
 )
 RENDERER_NAMES = (
     "STAGGER_LEAN", "WINDUP_LEAN", "AIRBORNE_LEAN", "AIRBORNE_TUCK", "HEAD_TINT", "HEAD_TINT_SHARE",
     "LEG_SHADE", "LEG_SHADE_SHARE", "VISOR_COLOR", "VISOR_HOT_COLOR", "FLASH_COLOR",
 )
+# ProvingGrounds.json crowd keys (L4 W2, contract 5: the server steps the seat too, so the drop and
+# the rise are config, no longer Theme numbers): read by their config names.
+CROWD_NAMES = ("restDrop", "riseBlendSeconds")
 
 _NUMBER = r"-?\d+(?:\.\d+)?"
 _VALUE = re.compile(
@@ -126,11 +130,24 @@ def _read_constants(path: str, names: tuple[str, ...]) -> dict:
     return found
 
 
+def _read_crowd(path: str, names: tuple[str, ...]) -> dict:
+    with open(path, "r", encoding="utf-8") as fh:
+        crowd = json.load(fh).get("crowd") or {}
+    found = {n: float(crowd[n]) for n in names
+             if isinstance(crowd.get(n), (int, float)) and not isinstance(crowd.get(n), bool)}
+    missing = [n for n in names if n not in found]
+    if missing:
+        raise ValueError(f"{os.path.relpath(path, REPO_ROOT)} crowd no longer defines {', '.join(missing)}: re-port raiderpose.py")
+    return found
+
+
 class Constants:
-    """Theme.luau and CrowdRenderer.luau's numbers, by their Luau names."""
+    """Theme.luau and CrowdRenderer.luau's numbers, by their Luau names, and ProvingGrounds.json's
+    crowd numbers the pose reads, by their config names (CROWD_NAMES)."""
 
     def __init__(self):
-        self.values = {**_read_constants(THEME_PATH, THEME_NAMES), **_read_constants(RENDERER_PATH, RENDERER_NAMES)}
+        self.values = {**_read_constants(THEME_PATH, THEME_NAMES), **_read_constants(RENDERER_PATH, RENDERER_NAMES),
+                       **_read_crowd(PROVING_PATH, CROWD_NAMES)}
 
     def __getattr__(self, name: str):
         try:
@@ -141,27 +158,13 @@ class Constants:
 
 # --- kinds ------------------------------------------------------------------------------------
 
-# The Camp Chief is a new crowd kind (study report section 2; the economy-designer adds it to
-# ProvingGrounds.json). Until it exists the strips pose it with the study's proposal: the
-# Colossus's body and attacks with the war-club sweep in place of the barrage. Read the file
-# first; this is only the stand-in, and the report says which one a strip used.
-CHIEF_STAND_IN_SWEEP = {"shape": "arc", "reach": 14, "range": 16, "arcDegrees": 150, "height": 6,
-                        "windup": 1.0, "recover": 1.6}
-
-
-def load_kinds() -> tuple[dict, dict, dict]:
-    """(kinds, crowd.threat, notes): ProvingGrounds.json's crowd kinds, the chief included."""
-    with open(PROVING_PATH, "r", encoding="utf-8") as fh:
+def load_kinds(path: str = PROVING_PATH) -> tuple[dict, dict, dict]:
+    """(kinds, crowd.threat, notes): ProvingGrounds.json's crowd kinds. The Camp Chief is the real
+    `chief` kind (L4 W2 contract 4; its stand-in went with W2): a model whose kind is missing fails
+    --check by name."""
+    with open(path, "r", encoding="utf-8") as fh:
         crowd = json.load(fh)["crowd"]
-    kinds = dict(crowd["kinds"])
-    notes = {}
-    if "chief" not in kinds and "colossus" in kinds:
-        chief = json.loads(json.dumps(kinds["colossus"]))
-        chief["name"] = "Camp Chief"
-        chief["attacks"] = [a for a in chief["attacks"] if a.get("shape") != "lob"] + [dict(CHIEF_STAND_IN_SWEEP)]
-        kinds["chief"] = chief
-        notes["chief"] = "stand-in: the colossus's numbers with the study's sweep (no `chief` in ProvingGrounds.json yet)"
-    return kinds, crowd.get("threat", {}), notes
+    return dict(crowd["kinds"]), crowd.get("threat", {}), {}
 
 
 def load_models(path: str = MODELS_PATH) -> dict:
@@ -582,7 +585,7 @@ def rig(model: dict, rig_numbers: dict, consts: Constants, pose: Pose, *, seated
     torso_len = neck[1] - (hips["legL"][1] + hips["legR"][1]) / 2
 
     seat = smoothstep(min(max(pose.seat, 0.0), 1.0))
-    seat_drop = height * consts.COMBAT_REST_DROP * seat
+    seat_drop = height * consts.restDrop * seat
     walk = pose.walk_amp
     swing = k["legSwing"] * walk * math.sin(pose.walk_phase)
     facing = look_of(pose.yaw)
@@ -650,6 +653,32 @@ def rig(model: dict, rig_numbers: dict, consts: Constants, pose: Pose, *, seated
         r_leg = legs_frame * euler_yxz(beta, 0.0, gamma)
         out.pieces[name] = cf_at(hip_world) * r_leg * cf_at(v_mul(hip, -1.0))
     return out
+
+
+# --- the walk cycle --------------------------------------------------------------------------------
+
+
+def walk_step(phase: float, amp: float, travel: float, dt: float, speed: float, leg_length: float,
+              distance: float, near_studs: float, rig_numbers: dict, consts: Constants) -> tuple[float, float]:
+    """One frame of the walk cycle (RaiderPose.Walk, L4 W2 contract 3.3): (phase, amplitude).
+
+    `travel` = studs the drawn feet moved on the flat this frame, `dt` its seconds, `speed` the kind's,
+    `distance` the body's from the camera, `near_studs` the most it walks at (rig.walkNearStuds, or
+    Theme.COMBAT_RAIDER_WALK_NEAR_LOW on a low-end device). The phase runs 2 pi per strideLegs x
+    legLength of travel; the amplitude eases toward the pace's share of speed x walkFullShare (0 past
+    near_studs), at COMBAT_RAIDER_WALK_EASE_RATE, and snaps once within COMBAT_RAIDER_WALK_SETTLE."""
+    k = {**RIG_DEFAULTS, **(rig_numbers or {})}
+    stride = k["strideLegs"] * leg_length
+    if stride > 0:
+        phase = (phase + 2 * math.pi * travel / stride) % (2 * math.pi)
+    full = speed * k["walkFullShare"]
+    goal = min(max((travel / dt) / full, 0.0), 1.0) if distance <= near_studs and dt > 0 and full > 0 else 0.0
+    gap = goal - amp
+    if abs(gap) < consts.COMBAT_RAIDER_WALK_SETTLE:
+        amp = goal
+    else:
+        amp = amp + gap * (1 - math.exp(-dt * consts.COMBAT_RAIDER_WALK_EASE_RATE))
+    return phase, amp
 
 
 # --- the weapon arm's channel ----------------------------------------------------------------------
@@ -881,6 +910,50 @@ def posed_extent(model: dict, kind: dict, threat_cfg: dict, consts: Constants, r
     return out
 
 
+# --check's weapon rule (L4 W2 contract 3.4, risk 4): at an attack's impact the drawn weapon reaches
+# on the flat no farther than the attack itself (its `range`, or its `reach` when it has none) plus
+# this: a hammer drawn 17 studs out against a 16-stud sweep reads as a hit that never lands.
+IMPACT_SLACK = 0.5
+
+
+def impact_reach(model: dict, kind: dict, threat_cfg: dict, consts: Constants, rig_numbers: dict,
+                 pieces: dict[str, list[Vec]], held: list[Vec]) -> list[dict]:
+    """Per attack of the kind: the drawn weapon's flattest reach (studs from the body's axis) over the
+    blow, the strike phase from its impact (u = 0) to its end, enraged or not (a boss's enrage scales
+    only the clocks), against the attack's own reach. The weapon is the arm piece and the held model
+    (the Chief's hammer); the body stands where the rig puts it (a model's thrust moves the leading
+    foot and the arm's keys, never the root)."""
+    hold = model.get("hold")
+    hf = hold_frame(hold) if hold else None
+    scale = hold["scale"] if hold else 1.0
+    held_local = [hf.point(v_mul(v, scale)) for v in held] if hf else []
+    weapon = list(pieces.get("arm", []))
+    if hold and hold.get("piece", "arm") == "arm":
+        weapon += held_local
+    rows = []
+    for index, raw in enumerate(kind.get("attacks") or [], start=1):
+        limit = raw.get("range", raw.get("reach"))
+        if not isinstance(limit, (int, float)):
+            continue
+        worst, worst_at = 0.0, ""
+        for enraged in (False, True):
+            atk = attack_of(kind, index, threat_cfg, consts, enraged)
+            for step in range(0, 11):
+                age = atk.strike * step / 10
+                t = threat_pose(consts, kind, atk, "attack", age, enraged=enraged, server_now=age * 7.3)
+                pose = Pose(lean=t.lean, twist=t.twist, squash=drawn_squash(t.squash), thrust=t.thrust)
+                pose.arm = arm_channel(model, atk.shape, t, pose, rig_numbers, atk)
+                cf = rig(model, rig_numbers, consts, pose).pieces["arm"]
+                for v in weapon:
+                    w = cf.point(v)
+                    d = math.hypot(w[0], w[2])
+                    if d > worst:
+                        worst, worst_at = d, f"u {step / 10:.1f}{' enraged' if enraged else ''}"
+        rows.append({"index": index, "shape": raw.get("shape", ""), "reach": worst, "at": worst_at,
+                     "limit": float(limit), "ok": worst <= float(limit) + IMPACT_SLACK + 1e-9})
+    return rows
+
+
 def reach_record(extent: dict, radius: float) -> dict:
     """RaiderModels.json `posedReach`: what camp C's sight gate reads (studs from the body's axis and
     up from its feet; outRadii = out / radius, the unit check_levels' body_reach uses; withCue: the same
@@ -1094,6 +1167,11 @@ def check(models: dict, kinds: dict, threat_cfg: dict, consts: Constants, *, ext
               f"{rec['up']} up ({rec['upPose']}), lowest point {ext['down']:.2f} ({ext['downPose']})"
               + (f"; with its lit piece {rec['withCue']['out']} out, {rec['withCue']['up']} up" if rec.get("withCue") else "")
               + (f"; STALE config posedReach {stored or 'missing'}: re-run the generator" if stale else "; config posedReach matches"))
+        rows = impact_reach(model, kind, threat_cfg, consts, rig_numbers, pieces, held)
+        bad = [r for r in rows if not r["ok"]]
+        failures += 1 if bad else 0
+        print(f"[raiderpose] {kind_id}:   weapon at impact {'FAIL' if bad else 'PASS'} (within reach + {IMPACT_SLACK:g}): "
+              + "; ".join(f"{r['shape']} {r['reach']:.2f} of {r['limit']:g} ({r['at']}){'' if r['ok'] else ' OVER'}" for r in rows))
     return 1 if failures else 0
 
 

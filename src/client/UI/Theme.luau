@@ -1201,14 +1201,24 @@ local Theme = {
 	-- this often, at most this many times.
 	MAP_STATE_RETRY_SECONDS = 2,
 	MAP_STATE_RETRIES = 5,
-	-- L1b (docs/INTERFACES.md "L1b contracts" -> Client). A raider resting at a fire sits: its
-	-- body lowered by this share of its kind's height, legs out in front. Rising, it blends
-	-- from seated to standing over RISE_BLEND (and sits down again over the same time).
-	COMBAT_REST_DROP = 0.35,
-	COMBAT_RISE_BLEND_SECONDS = 0.5,
-	-- The seated legs: where they leave the body, as a share of the kind's radius in front of
-	-- its centre line (they then run forward their own standing length).
+	-- L1b (docs/INTERFACES.md "L1b contracts" -> Client). A raider resting at a fire sits; how far
+	-- and how fast are ProvingGrounds.json crowd.restDrop and crowd.riseBlendSeconds since L4 W2,
+	-- because the server lowers its hit shapes by the same seat. The placeholder's seated legs:
+	-- where they leave the body, as a share of the kind's radius in front of its centre line
+	-- (they then run forward their own standing length).
 	COMBAT_REST_HIP_SHARE = 0.3,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md 3.2-3.3): the raiders' models. The walk cycle's
+	-- amplitude eases toward its goal at this rate a second and snaps to it inside SETTLE (so an
+	-- idle crowd stops being redrawn); on a low-end device it stops past NEAR_LOW studs from the
+	-- camera (RaiderModels.json rig.walkNearStuds elsewhere). Models are built into their pools
+	-- this many a frame (each is about a dozen MeshParts).
+	COMBAT_RAIDER_WALK_EASE_RATE = 8,
+	COMBAT_RAIDER_WALK_SETTLE = 0.01,
+	COMBAT_RAIDER_WALK_NEAR_LOW = 60,
+	COMBAT_RAIDER_PREWARM_PER_FRAME = 4,
+	-- The plated elite's planks while plated (raiders.md section 3: today's shell was Metal; Wood
+	-- is the Studio alternative to try). Its colour is COMBAT_RANGE_PLATE_COLOR, the bar's.
+	COMBAT_RAIDER_PLATE_MATERIAL = Enum.Material.SmoothPlastic,
 	-- A woken group: a "!" over each of its bodies for this long, its foot this many studs
 	-- above the top of the head. Its size is studs plus pixels, so it grows near and keeps a
 	-- floor of pixels far away (about 31 px tall at 60 studs on a 375 px tall phone, 43 px on
@@ -1233,8 +1243,42 @@ local Theme = {
 	-- bottom-left buttons and hints. Never a tap target.
 	COMBAT_PERF_TEXT_SIZE = 12,
 	COMBAT_PERF_TRANSPARENCY = 0.35,
-	COMBAT_PERF_WIDTH = 140,
+	-- L4 W2: the line is "Server 0.4 ms · Frame 16.7 ms · Draw 1.2 ms", about 275 px at 12 px
+	-- Gotham; 300 design px fits from the margin at 375 x 667 and at 1920 x 1080.
+	COMBAT_PERF_WIDTH = 300,
 	COMBAT_PERF_HEIGHT = 16,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md 2.3, 8): LevelScenery, the dressed level on the client.
+	-- Clones a frame while a level's scenery is built (meshes, then props, then fires).
+	COMBAT_SCENERY_CLONES_PER_FRAME = 8,
+	-- The prop kit under ReplicatedStorage.Assets.Props for each dressed layout (a dress `props`
+	-- piece is <set>.<piece>); a layout not listed builds without props (one warn).
+	COMBAT_SCENERY_PROP_SETS = { ForestRoad = "Forest" } :: { [string]: string },
+	-- A dress `effects` fire: an invisible Part this big at the entry's point, with a flame
+	-- emitter and a light. Not on a low-end device (the Campfire prop's modelled flames stay).
+	COMBAT_SCENERY_FIRE_SIZE = Vector3.new(1.2, 0.4, 1.2),
+	COMBAT_SCENERY_FIRE_RATE = 14,
+	COMBAT_SCENERY_FIRE_LIFETIME_MIN = 0.5,
+	COMBAT_SCENERY_FIRE_LIFETIME_MAX = 0.9,
+	COMBAT_SCENERY_FIRE_SPEED_MIN = 2,
+	COMBAT_SCENERY_FIRE_SPEED_MAX = 4,
+	COMBAT_SCENERY_FIRE_SPREAD = 12, -- degrees off straight up
+	COMBAT_SCENERY_FIRE_PARTICLE_SIZE = 0.9, -- studs at birth, shrinking to nothing
+	COMBAT_SCENERY_FIRE_COLOR_HOT = Color3.fromRGB(255, 196, 92),
+	COMBAT_SCENERY_FIRE_COLOR_COOL = Color3.fromRGB(230, 84, 24),
+	COMBAT_SCENERY_FIRE_LIGHT_EMISSION = 1,
+	COMBAT_SCENERY_FIRE_LIGHT_COLOR = Color3.fromRGB(255, 160, 72),
+	COMBAT_SCENERY_FIRE_LIGHT_RANGE = 14,
+	COMBAT_SCENERY_FIRE_LIGHT_BRIGHTNESS = 1.6,
+	-- Studio's Y "walls" view: every invisible wall of the level drawn locally in this colour.
+	COMBAT_SCENERY_WALL_COLOR = Color3.fromRGB(230, 40, 40),
+	COMBAT_SCENERY_WALL_TRANSPARENCY = 0.55,
+	-- L4 W2 (8): the perf line's Frame and Draw are p95s over debug.perfLogSeconds, kept in buckets
+	-- this long, so the numbers roll once a step instead of jumping once a window.
+	COMBAT_PERF_CLIENT_STEP_SECONDS = 1,
+	-- L4 W2 (section 0): the level-key glyph beside a map secret's icon (a ring, a shaft and a bit
+	-- drawn from Frames), this wide and half as tall. With its gap on both sides a key secret's
+	-- cell is at least 16 + 2 x 13 = 42 design px, inside the 50 px cell.
+	MAP_SECRET_KEY_GLYPH_WIDTH = 12,
 
 	-- L2 Wave 1 (docs/prompts/l2-w1-contract.md, L2-3, L2-10, L2-14, L2-15).
 	-- The run layer's "Abilities" button, between Map and Return in the lobby. Map 72 +

@@ -44,6 +44,10 @@
 -- `grantMaterials` in the lobby pays every built band's material; `setTier` ("<family>=<tier>"),
 -- `grantStar` (a level id or "*") and `resetArmory` reach a T4, its Hard star and a fresh Armory
 -- without a Hard clear in every Studio session (the mock profile starts fresh each time).
+--
+-- L4 W2 (docs/prompts/l4-w2-contract.md §8, the Z key): `dressFail` makes the next level that is
+-- built refuse its dress through the real fallback (LevelService.FailNextDress), so the grey level
+-- and its one warn are seen without removing an asset (memory: playtest-repro-methods).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -64,6 +68,7 @@ local RangeService = require(script.Parent:WaitForChild("RangeService"))
 local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
 local UnlockService = require(script.Parent:WaitForChild("UnlockService"))
+local LevelService = require(script.Parent:WaitForChild("LevelService"))
 local RunFx = require(script.Parent:WaitForChild("RunFx"))
 
 local TICK_INTERVAL_SECONDS = 1
@@ -457,6 +462,9 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 		grantStar(player, value)
 	elseif lever == "resetArmory" then
 		resetArmory(player)
+	elseif lever == "dressFail" then
+		LevelService.FailNextDress()
+		RunFx.Push({ kind = "notice", text = "The next level is built grey (its dress refused)" })
 	else
 		warn(`[DebugService] unknown or mistyped lever "{lever}"`)
 	end
@@ -559,6 +567,11 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 	local resetArmoryAttribute = debugConfig.resetArmoryAttribute
 	if resetArmoryAttribute ~= nil and consumeNumber(resetArmoryAttribute) ~= nil then
 		applyLever(nil, "resetArmory", true)
+	end
+	-- L4 W2: the Z key's lever. A Combat.json without the key leaves it off.
+	local dressFailAttribute = debugConfig.dressFailAttribute
+	if dressFailAttribute ~= nil and consumeNumber(dressFailAttribute) ~= nil then
+		applyLever(nil, "dressFail", true)
 	end
 
 	-- States, read but never reset. God mode is applied when the attribute changes (and to

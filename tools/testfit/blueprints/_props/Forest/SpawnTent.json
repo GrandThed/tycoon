@@ -3,7 +3,7 @@
   "era": "Forest",
   "scale": 1.0,
   "footprint": [10, 11],
-  "note": "forest-kit is authored 1 unit = 1 stud (tools/assets/forest_kit.py), origin at the bottom centre, front -Z: one piece at the origin, unturned, placed by tools/levels/out/ForestRoad.dress.json `props`; a hide tipi inside a camp's 10 x 8 x 10 tent marker, door toward the camp, quarter turns only",
+  "note": "forest-kit is authored 1 unit = 1 stud (tools/assets/forest_kit.py), origin at the bottom centre, front -Z: one piece at the origin, unturned, placed by src/shared/Config/LevelDress/ForestRoad.json `props`; a hide tipi inside a camp's 10 x 8 x 10 tent marker, door toward the camp, quarter turns only",
   "pieces": [
     {"kit": "forest-kit", "model": "SpawnTent", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
   ]

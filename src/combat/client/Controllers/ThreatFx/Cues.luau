@@ -28,6 +28,16 @@
 --
 -- At most a few parts per body, pooled, parented into the body's own model so they show and
 -- hide with it. Paint writes only what changed.
+--
+-- L4 W2 (docs/prompts/l4-w2-contract.md 3.2; raiders.md section 2.6 and 4): a kind drawn as a
+-- model (Raiders/Figures) wears its horns, pack, barrel, shoulders, crown and planks as part of
+-- the model, so Attach gives it only the lit piece, riding the piece and point its
+-- RaiderModels.json `cue` names (the slinger's orb in the sling's pouch, the marksman's bolt tip,
+-- the lobber's round in the satchel, the Chief's core at model size), queued under that posed
+-- piece (QueueRig). Its sizes stay this module's rules except where the config gives them (the
+-- Chief's core: `size`, swelling to `charged`; enraged, the rest size still grows by
+-- COMBAT_RANGE_ENRAGE_CORE_SCALE and the charged one is never smaller than it). A model kind with
+-- no `cue` (fodder, the brute, the plated elite, whose plate is the model's) gets no set at all.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -38,6 +48,7 @@ local Theme = require(script.Parent.Parent.Parent:WaitForChild("UI"):WaitForChil
 -- swells and reddens as a windup charges; shell = the plate. `own` is the piece's transparency
 -- before the body's fade is laid over it.
 type Role = "plain" | "ember" | "glow" | "shell"
+-- rides = the model piece it is queued under (QueueRig); nil = the body's root (Queue).
 type Piece = {
 	part: Part,
 	offset: CFrame,
@@ -46,7 +57,12 @@ type Piece = {
 	role: Role,
 	swell: number,
 	own: number,
+	rides: string?,
 }
+-- A model kind's lit piece (Raiders/Figures.CueRig): the model piece it rides ("arm", "torso"; nil =
+-- the kind has none) and the point on it, in the model's frame; size and charged replace the rules'
+-- diameters where the config gives them.
+export type Rig = { piece: string?, point: Vector3, size: number?, charged: number? }
 -- swollen / charge / shell / glint are what was last painted: the charge the lit pieces were
 -- sized for, the step of it they were coloured for, the shell (0 = on, 1 = gone, between =
 -- the share of the break burst that has played), whether it was glinting and whether it
@@ -113,13 +129,75 @@ local function add(
 		role = role,
 		swell = swell,
 		own = 0,
+		rides = nil,
 	})
+end
+
+-- L4 W2: a model kind's one lit piece, or nil when its kind has none. `shape` = its first
+-- attack's; `lit` = its resting colour (the body's own toward white).
+local function attachRig(
+	model: Model,
+	rig: Rig,
+	shape: string?,
+	boss: boolean,
+	radius: number,
+	height: number,
+	lit: Color3,
+	enraged: boolean
+): CueSet?
+	local piece = rig.piece
+	if piece == nil then
+		return nil
+	end
+	local d: number, charged: number, color: Color3
+	if boss then
+		d = (rig.size or math.max(radius * 0.6, 0.8))
+			* (if enraged then Theme.COMBAT_RANGE_ENRAGE_CORE_SCALE else 1)
+		charged = math.max(rig.charged or height * Theme.COMBAT_RANGE_CUE_BOSS_CHARGE_SHARE, d)
+		color = if enraged then Theme.COMBAT_RANGE_ENRAGE_GLOW_COLOR else lit
+	elseif shape == "shot" then
+		d = rig.size or math.max(radius * 0.75, 0.6)
+		charged = rig.charged or height * Theme.COMBAT_RANGE_CUE_CHARGE_SHARE
+		color = lit
+	elseif shape == "lob" then
+		d = rig.size or math.max(radius * 0.8, 0.7)
+		charged = rig.charged or height * Theme.COMBAT_RANGE_CUE_CHARGE_SHARE
+		color = lit
+	elseif shape == "line" then
+		d = rig.size or 0.55
+		charged = rig.charged or height * Theme.COMBAT_RANGE_CUE_AIM_CHARGE_SHARE
+		color = lit
+	else
+		return nil
+	end
+	local set: CueSet = {
+		pieces = {},
+		swollen = 0,
+		charge = 0,
+		shell = 1,
+		glint = false,
+		warded = false,
+		fade = 0,
+	}
+	add(
+		set,
+		model,
+		"glow",
+		Enum.PartType.Ball,
+		Vector3.one * d,
+		CFrame.new(rig.point),
+		color,
+		charged / d
+	)
+	set.pieces[1].rides = piece
+	return set
 end
 
 -- The cue pieces for a kind, parented into `model`, or nil when the kind has no cue. The
 -- measurements are CrowdRenderer's figure: body radius and height, leg and torso heights, head
 -- radius, the torso's size and the kind's colour. `enraged` = a boss in its second phase;
--- `guards` = the kind is the guard some boss calls up.
+-- `guards` = the kind is the guard some boss calls up. `rig` (L4 W2) = the kind is drawn as a
+-- model: only its lit piece, where its config puts it.
 function Cues.Attach(
 	model: Model,
 	def: Types.CrowdKindDef,
@@ -131,13 +209,26 @@ function Cues.Attach(
 	torsoSize: Vector3,
 	color: Color3,
 	enraged: boolean,
-	guards: boolean
+	guards: boolean,
+	rig: Rig?
 ): CueSet?
 	local attacks = def.attacks
 	local first = if attacks ~= nil then attacks[1] else nil
 	local shape = if first ~= nil then first.shape else nil
 	local plated = (def.plate or 0) > 0
 	local boss = def.boss == true
+	if rig ~= nil then
+		return attachRig(
+			model,
+			rig,
+			shape,
+			boss,
+			radius,
+			height,
+			color:Lerp(WHITE, GLOW_REST_SHARE),
+			enraged
+		)
+	end
 	if
 		not plated
 		and not boss
@@ -448,6 +539,26 @@ function Cues.Queue(
 		count += 1
 		parts[count] = piece.part
 		frames[count] = root * piece.offset
+	end
+	return count
+end
+
+-- L4 W2: the same for a model kind's pieces, each under the posed model piece it rides (`posed` =
+-- piece name -> that piece's world frame this frame, Raiders/Figures).
+function Cues.QueueRig(
+	set: CueSet,
+	posed: { [string]: CFrame },
+	parts: { BasePart },
+	frames: { CFrame },
+	count: number
+): number
+	for _, piece in set.pieces do
+		local carrier: CFrame? = posed[piece.rides or "torso"]
+		if carrier ~= nil then
+			count += 1
+			parts[count] = piece.part
+			frames[count] = carrier * piece.offset
+		end
 	end
 	return count
 end

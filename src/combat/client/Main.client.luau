@@ -18,6 +18,9 @@
 -- P5: that gate is CameraController.IsCrowdCombat, true in the range AND in every crowd
 -- mission. The mode itself (the shared CombatMode, "range" or "mission") is read once in
 -- CameraController.Init, which is why CameraController comes before every controller that asks.
+-- L4 W2: LevelScenery draws a dressed level (the forest, its props and fires) and its mood on the
+-- server's word (Workspace.Level's Dress attributes); without that word it does nothing, so the
+-- range and the lobby boot it inert. It comes before CombatUIController, which hands it the toast.
 
 type Controller = {
 	Init: () -> (),
@@ -38,6 +41,7 @@ local controllers: { Controller } = {
 	require(controllersFolder:WaitForChild("AbilityFx") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("ThreatFx") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("VitalsController") :: ModuleScript) :: Controller,
+	require(controllersFolder:WaitForChild("LevelScenery") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("CombatUIController") :: ModuleScript) :: Controller,
 }
 

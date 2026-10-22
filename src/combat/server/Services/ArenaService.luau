@@ -187,6 +187,9 @@ export type RunFields = {
 	floors: { Types.RunFloor },
 	floorsSeq: number,
 	maxAlive: number,
+	-- L4 W2 (§3.2): the plan's bodies by kind; sent only with a member's first RunState of a
+	-- floor set, where the cells go (sendRunState). nil = none (the lobby).
+	prewarm: { [string]: number }?,
 }
 local runFields: RunFields = {
 	phase = "lobby",
@@ -647,7 +650,9 @@ end
 -- set carries the cells (a copy of `runState` whose floors have them) and notes the set as sent;
 -- every later one is `runState` itself, whose floors BuildRunState built without them. A member
 -- already noted for this set never reaches Attach: it copies every floor, and at
--- remotes.combatStateHz per member that copy would only be dropped.
+-- remotes.combatStateHz per member that copy would only be dropped. L4 W2 (§3.2): that first one
+-- also carries the run's `prewarm`, so every arrival (a start, a rejoin, a latecomer) fills its
+-- pools once per floor set, before the crowd announces a body to it.
 local function sendRunState(player: Player, userId: number, runState: Types.RunState): ()
 	local seq = runFields.floorsSeq
 	local sent = runState
@@ -656,6 +661,7 @@ local function sendRunState(player: Player, userId: number, runState: Types.RunS
 		if cellsWent then
 			sent = table.clone(runState)
 			sent.floors = floors
+			sent.prewarm = runFields.prewarm
 		end
 		play.cellsSent[userId] = seq
 	end

@@ -452,8 +452,8 @@ function W2B.realTests(): ()
 	end
 	local ok, problems = pcall(W2B.Flow.Validate, level, layout, L1.real.kinds, L1.real.ranks(), L1.real.rules, FIXTURES.proving.crowd.maxAlive)
 	check(ok and #problems == 0, `Validate finds nothing ({if ok then problems[1] or "none" else tostring(problems)})`)
-	-- Its boss is the Colossus, which calls 12: the reserve is 13.
-	check(W2B.Flow.BossReserve(level, L1.real.kinds) == 13, "its boss reserve is the Colossus's 13")
+	-- Its boss is the Camp Chief (L4 W2), which calls 12: the reserve is 13.
+	check(W2B.Flow.BossReserve(level, L1.real.kinds) == 13, "its boss reserve is the Camp Chief's 13")
 	for _, difficulty in L1.real.map.difficulties do
 		if level.difficulties[difficulty] == nil then
 			continue

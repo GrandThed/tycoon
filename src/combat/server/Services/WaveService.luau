@@ -123,6 +123,9 @@ type Run = {
 	floors: { Types.RunFloor },
 	-- The plan's population (L1b-11): the client prewarms its pool with it.
 	maxAlive: number,
+	-- L4 W2 (§3.2): the plan's bodies by kind (StageFlow.Plan's `kinds`), each kind's model pool;
+	-- nil in the lobby.
+	prewarm: { [string]: number }?,
 	runEndsAt: number,
 	-- os.clock() the summary ends and the party is back in the lobby; 0 = nothing pending.
 	returnAt: number,
@@ -206,6 +209,7 @@ local function freshRun(): Run
 		campClosedAt = 0,
 		floors = {},
 		maxAlive = 0,
+		prewarm = nil,
 		runEndsAt = 0,
 		returnAt = 0,
 		tempo = 1,
@@ -364,6 +368,7 @@ local function pushRunFields(): ()
 		floors = run.floors,
 		floorsSeq = boot.floorsSeq,
 		maxAlive = run.maxAlive,
+		prewarm = run.prewarm,
 	})
 end
 
@@ -1891,9 +1896,16 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	-- A start that threw after an earlier Build (between it and the run's own fields) left that
 	-- level standing in the lobby, and Build refuses a second one: what is not played goes first.
 	LevelService.Clear()
-	-- L2-36: the leader's save decides which shortcuts stand open, for everyone in the run.
+	-- L2-36: the leader's save decides which shortcuts stand open, for everyone in the run. L4 W2:
+	-- the level file's layout names its dress (a refused dress builds it grey, never refuses it).
 	if
-		not LevelService.Build(layout, map, rules, UnlockService.FoundShortcuts(player, levelId))
+		not LevelService.Build(
+			layout,
+			map,
+			rules,
+			UnlockService.FoundShortcuts(player, levelId),
+			level.layout
+		)
 	then
 		return "unavailable"
 	end
@@ -1939,6 +1951,9 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	run.rank = ranks[difficulty] or 0
 	setFloors(runFloors)
 	run.maxAlive = plan.population
+	-- L4 W2 (§3.2): each kind's pool, sent with the floor set's first RunState (below, before the
+	-- crowd's next step announces a resident).
+	run.prewarm = plan.kinds
 	-- The chests of the layout as it is built.
 	run.secretSites = SecretFlow.Sites(layout, level)
 	run.shortcuts = SecretFlow.Shortcuts(layout)
@@ -2040,6 +2055,8 @@ local function announceSecret(
 		materials = opening.materials,
 		material = material,
 		family = opening.family,
+		-- L4 W2 (§0): the key the chest gave, for the card's "<key> found" line.
+		key = opening.key,
 	}
 	if verdict == "locked" then
 		RemoteService.FireClient(player, "CombatFx", { fx })

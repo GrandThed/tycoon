@@ -686,6 +686,9 @@ MUTATIONS = {
     "review: a circle does not name its body": (VITALS, "\t\tenemyId = strike.bodyId,\n", "\t\tenemyId = 0,\n"),
     "review: the large line is fixed at 3": (CROWD, "separate(crowd.largeRadius)", "separate(3)"),
     "review: largeRadius may be tuned below 0": (TUNING, '\t"^crowd%.largeRadius$",\n', ""),
+    # L4 W2: the seat's numbers (the lead's NON_NEGATIVE_PATHS lines; tests_s2.luau's tuning cases).
+    "l4w2: restDrop may be tuned below 0": (TUNING, '\t"^crowd%.restDrop$",\n', ""),
+    "l4w2: riseBlendSeconds may be tuned below 0": (TUNING, '\t"^crowd%.riseBlendSeconds$",\n', ""),
     "review: a removed body is booked as a hit of 0": (
         TALLY,
         '\tif verdict == "gone" or verdict == "held" then\n',
@@ -2722,8 +2725,8 @@ L1B_W2_CROWD_MUTATIONS = {
     ),
     "l1b w2 crowd: CrowdRay's head at half height": (
         HITSHAPES,
-        "local head = feet + Vector3.new(0, height - headRadius, 0)\n\tlocal bodyEntry",
-        "local head = feet + Vector3.new(0, height / 2, 0)\n\tlocal bodyEntry",
+        "local head = feet + Vector3.new(0, height - headRadius - lower, 0)\n\tlocal bodyEntry",
+        "local head = feet + Vector3.new(0, height / 2 - lower, 0)\n\tlocal bodyEntry",
     ),
     "l1b w2 crowd: CrowdRay's body back to a sphere": (
         HITSHAPES,
@@ -4360,8 +4363,9 @@ L2_MUTATIONS = {
     "l2: a site stands on the block's centre": (SECRET_FLOW, "floorY = secret.y - secret.sy / 2,", "floorY = secret.y,"),
     "l2: a name alone is a reward entry": (
         SECRET_FLOW,
-        "if entry == nil or (entry.valor == nil and entry.materials == nil and entry.family == nil) then",
-        "if entry == nil then",
+        "\tif\n\t\tentry == nil\n\t\tor (\n\t\t\tentry.valor == nil\n\t\t\tand entry.materials == nil\n"
+        "\t\t\tand entry.family == nil\n\t\t\tand entry.key == nil\n\t\t)\n\tthen\n",
+        "\tif entry == nil then\n",
     ),
     "l2: a fractional amount pays": (
         SECRET_FLOW,
@@ -8029,6 +8033,11 @@ MUTATIONS.update(L3W2_FIX2_MUTATIONS)
 DASH_PROOF = "src/combat/server/Services/DashProof.luau"
 RUN_FLOORS = "src/shared/RunFloors.luau"
 FILES += [DASH_PROOF, RUN_FLOORS]
+# L4 W2 (tests_l4w2.luau): LevelDress, and the data its shipped case reads (every dress file and
+# Assets.json's levels block, run_harness.py's FIXTURES.levelDress and levelHashes).
+LEVEL_DRESS = "src/combat/server/Services/LevelDress.luau"
+FILES += [LEVEL_DRESS, "src/shared/Config/Assets.json"]
+FILES += [f"src/shared/Config/LevelDress/{path.name}" for path in sorted((repo / "src/shared/Config/LevelDress").glob("*.json"))]
 L4B_MUTATIONS = {
     # DashProof (A): tests_l4b (d), (e), (b), Rule and Open.
     "l4b: the proof not flat": (DASH_PROOF, "rule.span, true)", "rule.span, false)"),
@@ -8571,6 +8580,134 @@ L4B_FIX3_MUTATIONS = {
 }
 assert not set(L4B_FIX3_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX3_MUTATIONS) & set(MUTATIONS))
 MUTATIONS.update(L4B_FIX3_MUTATIONS)
+
+# L4 W2 (docs/prompts/l4-w2-contract.md 2.2, 3.2, 5, section 0): luau-engineer A's entries, each caught
+# by tests_l4w2.luau (luau-a.md "For D2" 3): LevelDress.Accept's refusals and its answer, LeftOut and
+# Overlay, StageFlow.Plan's kinds, the seat (HitShapes.SeatDrop, SeatStep, CrowdRay's drop, CrowdService's
+# stepping), the Castle Key (Validate's line, SecretFlow's reward, opening and map row, Unlocks.HasLevelKey).
+L4W2_A_MUTATIONS = {
+    # LevelDress.Accept
+    "l4w2 dress: a dress of another layout is taken": (LEVEL_DRESS, "\tif file.layout ~= layout then\n", "\tif false then\n"),
+    "l4w2 dress: any frame is taken": (LEVEL_DRESS, "\tif file.frame ~= LEVEL_FRAME then\n", "\tif false then\n"),
+    "l4w2 dress: nothing uploaded is not named": (LEVEL_DRESS, "\tif uploadedHash == nil then\n", "\tif false then\n"),
+    "l4w2 dress: another plan's hash is taken": (LEVEL_DRESS, 'if type(file.planHash) ~= "string" or file.planHash ~= uploadedHash then', 'if type(file.planHash) ~= "string" then'),
+    "l4w2 dress: a mesh with no template is taken": (LEVEL_DRESS, "\t\tif haveMeshes[name] ~= true then\n", "\t\tif false then\n"),
+    "l4w2 dress: a mesh with no name is taken": (LEVEL_DRESS, "\t\tif type(name) ~= \"string\" then\n\t\t\treturn nil, `mesh {index} has no name`\n", "\t\tif false then\n\t\t\treturn nil, `mesh {index} has no name`\n"),
+    "l4w2 dress: a hidden block no block is is taken": (LEVEL_DRESS, "\t\telseif open == nil or open[name] ~= true then\n", "\t\telseif false then\n"),
+    "l4w2 dress: a left-out block is refused": (LEVEL_DRESS, "\t\telseif open == nil or open[name] ~= true then\n", "\t\telse\n"),
+    "l4w2 dress: a named block is not hidden": (LEVEL_DRESS, "\t\tif blocks[name] then\n\t\t\thidden[name] = true\n", "\t\tif blocks[name] then\n\t\t\thidden[name] = nil\n"),
+    "l4w2 dress: a camp-piece name counts as a block": (LEVEL_DRESS, '\t\tif piece.role == "block" then\n\t\t\tblocks[piece.name] = true\n', "\t\tdo\n\t\t\tblocks[piece.name] = true\n"),
+    "l4w2 dress: a camp no piece has is taken": (LEVEL_DRESS, "\t\tif own == nil then\n\t\t\treturn nil, `hide.camps names the camp", "\t\tif own == nil then\n\t\t\town = {}\n\t\tend\n\t\tif false then\n\t\t\treturn nil, `hide.camps names the camp"),
+    "l4w2 dress: any role may be hidden": (LEVEL_DRESS, 'if type(role) ~= "string" or HIDEABLE[role] ~= true then', 'if type(role) ~= "string" then'),
+    "l4w2 dress: a role no piece of the camp has is taken": (LEVEL_DRESS, "\t\t\tif own[role] ~= true then\n", "\t\t\tif false then\n"),
+    "l4w2 dress: the camp roles hide nothing": (LEVEL_DRESS, "\t\tif wanted ~= nil and wanted[piece.role] then\n", "\t\tif false then\n"),
+    "l4w2 dress: the walls' groups are not asked": (LEVEL_DRESS, "\tif not groupsOk then\n", "\tif false then\n"),
+    "l4w2 dress: a barrier with no name is taken": (LEVEL_DRESS, 'if type(name) ~= "string" or name == "" or box == nil then', "if box == nil then"),
+    "l4w2 dress: a barrier's numbers are not checked": (LEVEL_DRESS, 'if type(name) ~= "string" or name == "" or box == nil then', 'if type(name) ~= "string" or name == "" then'),
+    "l4w2 dress: a NaN barrier is sound": (LEVEL_DRESS, "\t\tnot (finite(x) and finite(y) and finite(z) and finite(sx) and finite(sy) and finite(sz))\n", "\t\tfalse\n"),
+    "l4w2 dress: a flat barrier is sound": (LEVEL_DRESS, "\t\tor sx <= 0\n\t\tor sy <= 0\n\t\tor sz <= 0\n", ""),
+    "l4w2 dress: a barrier's name may be taken": (LEVEL_DRESS, "\t\tif named[name] then\n", "\t\tif false then\n"),
+    "l4w2 dress: the walls do not count": (LEVEL_DRESS, "\tlocal count = #pieces + #walls\n", "\tlocal count = #pieces\n"),
+    "l4w2 dress: maxParts one short": (LEVEL_DRESS, "\tif count > maxParts then\n", "\tif count >= maxParts then\n"),
+    "l4w2 dress: a wall is not armed": (LEVEL_DRESS, "\t\t\tcollide = true,\n", "\t\t\tcollide = false,\n"),
+    "l4w2 dress: a wall is a camp's barrier": (LEVEL_DRESS, "\t\t\trole = WALL_ROLE,\n", '\t\t\trole = "barrier",\n'),
+    "l4w2 dress: the dress's looks dropped": (LEVEL_DRESS, '\t\tlooks = if type(looks) == "table" then looks else {},\n', "\t\tlooks = {},\n"),
+    "l4w2 dress: Overlay writes the base": (LEVEL_DRESS, "= if base ~= nil then table.clone(base) else {}", "= if base ~= nil then base else {}"),
+    "l4w2 dress: Overlay keeps the base's look": (LEVEL_DRESS, "\t\t\tlooks[name] = look\n", "\t\t\tlooks[name] = looks[name] or look\n"),
+    "l4w2 dress: LeftOut leaves nothing out": (LEVEL_DRESS, "\t\t\tleft[block.name] = true\n", "\t\t\tleft[block.name] = nil\n"),
+    "l4w2 dress: LeftOut leaves out every opening block": (LEVEL_DRESS, "\t\t\tand open[block.opens] == true\n", ""),
+    # StageFlow.Plan's kinds
+    "l4w2 kinds: residents not counted": (FLOW, "\t\tfor kind, count in stock do\n\t\t\tcounts[kind] = (counts[kind] or 0) + count\n", "\t\tfor kind, count in stock do\n\t\t\tcounts[kind] = (counts[kind] or 0) + 0 * count\n"),
+    "l4w2 kinds: tents not counted": (FLOW, "\t\tfor _, kind in tent.kinds do\n\t\t\tcounts[kind] = (counts[kind] or 0) + 1\n", "\t\tfor _, kind in tent.kinds do\n\t\t\tcounts[kind] = (counts[kind] or 0) + 0\n"),
+    "l4w2 kinds: the waves summed, not the most": (FLOW, "\t\t\t\tmost[kind] = math.max(most[kind] or 0, count)\n", "\t\t\t\tmost[kind] = (most[kind] or 0) + count\n"),
+    "l4w2 kinds: countMult not applied": (FLOW, "\t\t\t\t\t+ math.max(math.round(unit.count * countMult), 0)\n", "\t\t\t\t\t+ unit.count\n"),
+    "l4w2 kinds: a wave's minDifficulty ignored": (FLOW, "\t\t\tfor _, unit in fieldedUnits(wave.groups or {}, rank, ranks) do\n", "\t\t\tfor _, unit in wave.groups or {} do\n"),
+    "l4w2 kinds: the boss not counted": (FLOW, "\t\t\t\there[boss.kind] = (here[boss.kind] or 0) + 1\n", "\t\t\t\there[boss.kind] = (here[boss.kind] or 0) + 0\n"),
+    "l4w2 kinds: a boss's calls added up": (FLOW, "\t\t\t\t\t\tcalls[raised] = math.max(calls[raised] or 0, attack.count or 0)\n", "\t\t\t\t\t\tcalls[raised] = (calls[raised] or 0) + (attack.count or 0)\n"),
+    "l4w2 kinds: a boss's calls not counted": (FLOW, "\t\t\t\t\there[kind] = (here[kind] or 0) + count\n\t\t\t\tend\n\t\t\tend\n\t\t\tfor kind, count in here do\n", "\t\t\t\t\there[kind] = (here[kind] or 0) + 0 * count\n\t\t\t\tend\n\t\t\tend\n\t\t\tfor kind, count in here do\n"),
+    "l4w2 kinds: an empty kind kept": (FLOW, "\t\tif count <= 0 then\n\t\t\tcounts[kind] = nil\n", "\t\tif count < 0 then\n\t\t\tcounts[kind] = nil\n"),
+    "l4w2 kinds: Plan reads no countMult": (FLOW, "\t\t\tlevel.difficulties[difficulty].countMult,\n", "\t\t\t1,\n"),
+    # The seat
+    "l4w2 seat: SeatDrop not eased": (HITSHAPES, "\treturn height * restDrop * u * u * (3 - 2 * u)\n", "\treturn height * restDrop * u\n"),
+    "l4w2 seat: SeatDrop not clamped": (HITSHAPES, "\tlocal u = math.min(math.max(seat, 0), 1)\n", "\tlocal u = seat\n"),
+    "l4w2 seat: SeatDrop takes a negative restDrop": (HITSHAPES, "\t\tor not (restDrop >= 0 and restDrop < math.huge)\n", "\t\tor not (restDrop < math.huge)\n"),
+    "l4w2 seat: SeatStep overshoots up": (HITSHAPES, "\t\treturn math.min(seat + step, target)\n", "\t\treturn seat + step\n"),
+    "l4w2 seat: SeatStep overshoots down": (HITSHAPES, "\treturn math.max(seat - step, target)\n", "\treturn seat - step\n"),
+    "l4w2 seat: SeatStep at twice the pace": (HITSHAPES, "\tlocal step = math.max(dt, 0) / blendSeconds\n", "\tlocal step = 2 * math.max(dt, 0) / blendSeconds\n"),
+    "l4w2 seat: SeatStep with no pace never moves": (HITSHAPES, "\t\treturn target\n\tend\n\tlocal step", "\t\treturn seat\n\tend\n\tlocal step"),
+    "l4w2 seat: CrowdRay's head not lowered": (HITSHAPES, "\tlocal head = feet + Vector3.new(0, height - headRadius - lower, 0)\n", "\tlocal head = feet + Vector3.new(0, height - headRadius, 0)\n"),
+    "l4w2 seat: CrowdRay's capsule top not lowered": (HITSHAPES, "\tlocal top = math.max(height - 2 * headRadius, height / 2 + radius) - lower\n", "\tlocal top = math.max(height - 2 * headRadius, height / 2 + radius)\n"),
+    "l4w2 seat: CrowdRay ignores its drop": (HITSHAPES, "\tlocal lower = drop or 0\n", "\tlocal lower = 0\n"),
+    "l4w2 seat: the crowd never steps a seat": (CROWD, "\tstepSeats(dt, crowd.riseBlendSeconds)\n", ""),
+    "l4w2 seat: a dormant body steps its seat": (CROWD, "\t\tenemy.seat = if enemy.dormant\n\t\t\tthen goal\n\t\t\telse HitShapes.SeatStep(enemy.seat, goal, dt, riseBlendSeconds)\n", "\t\tenemy.seat = HitShapes.SeatStep(enemy.seat, goal, dt, riseBlendSeconds)\n"),
+    "l4w2 seat: a dormant body stands": (CROWD, "\t\t\tthen goal\n\t\t\telse HitShapes.SeatStep(", "\t\t\tthen 0\n\t\t\telse HitShapes.SeatStep("),
+    "l4w2 seat: nobody's goal is the seat": (CROWD, '\t\tlocal goal = if enemy.state == "rest" then 1 else 0\n', "\t\tlocal goal = 0\n"),
+    "l4w2 seat: a resident placed at a fire stands": (CROWD, '\tenemy.seat = if shown == "rest" then 1 else 0\n', "\tenemy.seat = 0\n"),
+    "l4w2 seat: Get hides the seat": (CROWD, "\t\tseat = enemy.seat,\n", "\t\tseat = 0,\n"),
+    # The Castle Key
+    "l4w2 key: Validate takes any key": (FLOW, '\t\t\tkey ~= nil and (type(key) ~= "string" or key == "" or #key > Unlocks.MAX_FAMILY_LENGTH)\n', "\t\t\tfalse\n"),
+    "l4w2 key: Validate takes a long key": (FLOW, '(type(key) ~= "string" or key == "" or #key > Unlocks.MAX_FAMILY_LENGTH)', '(type(key) ~= "string" or key == "")'),
+    "l4w2 key: Validate takes an empty key": (FLOW, '(type(key) ~= "string" or key == "" or #key > Unlocks.MAX_FAMILY_LENGTH)', '(type(key) ~= "string" or #key > Unlocks.MAX_FAMILY_LENGTH)'),
+    "l4w2 key: a key is no reward field": (SECRET_FLOW, "\t\t\tand entry.key == nil\n", ""),
+    "l4w2 key: the reward drops its key": (SECRET_FLOW, '\t\tkey = if type(key) == "string" and key ~= "" then key else nil,\n', "\t\tkey = nil,\n"),
+    "l4w2 key: the opening drops its key": (SECRET_FLOW, "\t\tkey = reward.key,\n", "\t\tkey = nil,\n"),
+    "l4w2 key: the map row drops its key": (SECRET_FLOW, "\t\t\tkey = if reward ~= nil then reward.key else nil,\n", "\t\t\tkey = nil,\n"),
+    "l4w2 key: HasLevelKey needs no opening": (UNLOCKS, 'if type(entry) == "table" and entry.key == key and own[secretId] == true then', 'if type(entry) == "table" and entry.key == key then'),
+    "l4w2 key: HasLevelKey takes any key": (UNLOCKS, 'if type(entry) == "table" and entry.key == key and own[secretId] == true then', 'if type(entry) == "table" and own[secretId] == true then'),
+    "l4w2 key: HasLevelKey reads any level": (UNLOCKS, "\t\tlocal own: any = opened[level.id]\n", "\t\tlocal own: any = opened.otherLevel or opened[level.id]\n"),
+    "l4w2 key: HasLevelKey never held": (UNLOCKS, "\t\t\t\treturn true\n\t\t\tend\n\t\tend\n\tend\n\treturn false\nend\n", "\t\t\t\treturn false\n\t\t\tend\n\t\tend\n\tend\n\treturn false\nend\n"),
+}
+assert not set(L4W2_A_MUTATIONS) & set(MUTATIONS), sorted(set(L4W2_A_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W2_A_MUTATIONS)
+
+# L4 W2: the service lines run_harness.py's L4W2_LINES and L4W2_ORDER pin (tests_l3_w2.luau's L4BP.W2):
+# LevelService builds what Accept answered, WeaponService lowers a seated head, WaveService and
+# ArenaService send the pools' counts and the key, DebugService's Z lever.
+L4W2_PIN_MUTATIONS = {
+    "l4w2 pins: the dress wall not armed": (
+        LEVEL_SERVICE,
+        "\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = true\n",
+        "\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = false\n",
+    ),
+    "l4w2 pins: a hidden piece not marked Skinned": (
+        LEVEL_SERVICE, "\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)\n", ""),
+    "l4w2 pins: a hidden piece left visible": (
+        LEVEL_SERVICE,
+        "\t\t\tpart.Transparency = 1\n\t\t\tpart.CastShadow = false\n\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE",
+        "\t\t\tpart.CastShadow = false\n\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE",
+    ),
+    "l4w2 pins: no wall appended": (
+        LEVEL_SERVICE, "\t\ttable.move(accepted.walls, 1, #accepted.walls, #built + 1, built)\n", ""),
+    "l4w2 pins: the dress's looks not laid": (
+        LEVEL_SERVICE, "\t\t\tlooks = LevelDress.Overlay(expeditions.looks, accepted.looks),\n",
+        "\t\t\tlooks = expeditions.looks,\n"),
+    "l4w2 pins: Dress never set": (LEVEL_SERVICE, "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)\n", ""),
+    "l4w2 pins: Clear leaves the words": (
+        LEVEL_SERVICE,
+        "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)\n\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)\n"
+        "\t\tfolder:ClearAllChildren()",
+        "\t\tfolder:ClearAllChildren()",
+    ),
+    "l4w2 pins: the Z lever's hash never wrong": (LEVEL_SERVICE, "\t\thash = CONST.FAILED_HASH\n", ""),
+    "l4w2 pins: the shortcut's left-out names not given": (
+        LEVEL_SERVICE, "\t\tLevelDress.LeftOut(layout, open),\n", "\t\t{},\n"),
+    "l4w2 pins: a seated head not lowered in gather": (
+        WEAPON, "local head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)",
+        "local head = enemy.position + Vector3.new(0, def.height - def.headRadius, 0)"),
+    "l4w2 pins: CrowdRay not told the drop": (
+        WEAPON, "\t\t\t\theadRadius,\n\t\t\t\tdrop\n\t\t\t)", "\t\t\t\theadRadius\n\t\t\t)"),
+    "l4w2 pins: no prewarm": (WAVE_SERVICE, "\trun.prewarm = plan.kinds\n", ""),
+    "l4w2 pins: the level built with no dress name": (
+        WAVE_SERVICE, "\t\t\tUnlockService.FoundShortcuts(player, levelId),\n\t\t\tlevel.layout\n",
+        "\t\t\tUnlockService.FoundShortcuts(player, levelId),\n\t\t\tnil\n"),
+    "l4w2 pins: the chest's key not sent": (WAVE_SERVICE, "key = opening.key,", "key = nil,"),
+    "l4w2 pins: the prewarm with every RunState": (
+        ARENA_SERVICE, "\t\t\tsent.prewarm = runFields.prewarm\n\t\tend\n",
+        "\t\tend\n\t\tsent.prewarm = runFields.prewarm\n"),
+    "l4w2 pins: the Z lever does nothing": (DEBUG_SERVICE, "\t\tLevelService.FailNextDress()\n", ""),
+}
+assert not set(L4W2_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(L4W2_PIN_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W2_PIN_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

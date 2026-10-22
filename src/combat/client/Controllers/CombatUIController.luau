@@ -186,6 +186,7 @@ local ThreatFx = require(script.Parent:WaitForChild("ThreatFx"))
 local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 local CampFx = require(script.Parent:WaitForChild("CampFx"))
 local SecretFx = require(script.Parent:WaitForChild("SecretFx"))
+local LevelScenery = require(script.Parent:WaitForChild("LevelScenery"))
 local ReactFx = require(script.Parent:WaitForChild("ReactFx"))
 local Haptics = require(script.Parent:WaitForChild("Haptics"))
 
@@ -200,6 +201,7 @@ local ADMIT_CHECK_LEVER = "admitCheck"
 -- L3-28: T grants Timber (in the lobby, every built band's material), U the Hard star of every
 -- built band level (Unlocks.ALL_STARS), L resets the Armory. The mock profile starts fresh every
 -- Studio session, so without them the T4 gate would need a Hard clear in every session.
+-- L4 W2 (contract 8): Z builds the next level grey through the real fallback (`dressFail`).
 local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.N] = { lever = "skip", value = "stage" },
 	[Enum.KeyCode.B] = { lever = "skip", value = "boss" },
@@ -209,8 +211,13 @@ local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.T] = { lever = "grantMaterials", value = Theme.COMBAT_DEBUG_GRANT_TIMBER },
 	[Enum.KeyCode.U] = { lever = "grantStar", value = Unlocks.ALL_STARS },
 	[Enum.KeyCode.L] = { lever = "resetArmory", value = true },
+	[Enum.KeyCode.Z] = { lever = "dressFail", value = true },
 }
 local AIR_JUMP_KEY = Enum.KeyCode.J
+-- L4 W2: X switches every crowd body between its model and the placeholder, on this client only
+-- (CrowdRenderer.ToggleModels). Y and O are LevelScenery's own (the forest, grey and walls; the
+-- mood); they are only named in the hint below.
+local MODELS_KEY = Enum.KeyCode.X
 -- L2-38: F toggles the caller's fire family (the Flamethrower); L2-61: I the ice family (the
 -- Frost Hammer).
 local ELEMENT_FAMILY_KEYS: { [Enum.KeyCode]: string } = {
@@ -222,7 +229,7 @@ local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · F flamet
 	.. Format.Cash(Theme.COMBAT_DEBUG_GRANT_VALOR)
 	.. " Valor · T +"
 	.. Format.Cash(Theme.COMBAT_DEBUG_GRANT_TIMBER)
-	.. " Timber · U ★ Hard · L reset Armory"
+	.. " Timber · U ★ Hard · L reset Armory · Y scenery · O light · X models · Z grey level"
 -- L2-10: the Armory's key (ArmoryScreen.KEY, the hub's too), in the lobby, and what the first
 -- refused air jump says.
 local HOLD_ARMORY = "armory"
@@ -295,6 +302,35 @@ local START_REFUSALS: { [string]: string } = {
 }
 
 local CombatUIController = {}
+
+-- L4 W2: RunState.prewarm as a kind -> count map of whole numbers > 0, kept only for crowd kinds
+-- this client's config knows; nil when it is absent or holds none (an entry that is not a count
+-- is left out: a pool it misses still builds on demand).
+local function prewarmCounts(raw: any): { [string]: number }?
+	if typeof(raw) ~= "table" then
+		return nil
+	end
+	local crowd = Tuning.Get().crowd
+	local known = if crowd ~= nil then crowd.kinds else nil
+	if known == nil then
+		return nil
+	end
+	local counts: { [string]: number } = {}
+	local any = false
+	for kind, count in raw do
+		if
+			typeof(kind) == "string"
+			and known[kind] ~= nil
+			and typeof(count) == "number"
+			and count >= 1
+			and count < math.huge
+		then
+			counts[kind] = math.floor(count)
+			any = true
+		end
+	end
+	return if any then counts else nil
+end
 
 -- Only a table with the fields the HUD reads is trusted; RunState arrives from the network.
 local function isRunState(payload: any): boolean
@@ -1674,6 +1710,12 @@ local function bootMission(): ()
 			st.prewarmed = run.maxAlive
 			CrowdRenderer.Prewarm(run.maxAlive)
 		end
+		-- L4 W2: the plan's bodies by kind, for each kind's model pool (once per floors' set; the
+		-- renderer caps the total at crowd.maxAlive).
+		local kinds = prewarmCounts(run.prewarm)
+		if kinds ~= nil then
+			CrowdRenderer.Prewarm(kinds)
+		end
 		if run.material ~= st.material then
 			st.material = run.material
 			paintWallet()
@@ -1907,6 +1949,15 @@ local function bootMission(): ()
 			toggleArmory()
 			return
 		end
+		if studio and input.KeyCode == MODELS_KEY then
+			local on = CrowdRenderer.ToggleModels()
+			toast.Show(
+				if on then "Raiders: models" else "Raiders: placeholders",
+				Theme.TOAST_SECONDS,
+				false
+			)
+			return
+		end
 		local remote = remotes.requestDebug
 		if not studio or remote == nil then
 			return
@@ -1935,6 +1986,10 @@ local function bootMission(): ()
 	-- event, and with the notice line a third in one band of a landscape phone. The objective
 	-- line is the record of where the run stands. Personal notices keep the toast.
 	CombatFxController.SetToastHandler(function(text: string)
+		toast.Show(text, Theme.TOAST_ERROR_SECONDS, false)
+	end)
+	-- L4 W2: what Studio's Y and O did (LevelScenery binds them itself).
+	LevelScenery.SetToastHandler(function(text: string)
 		toast.Show(text, Theme.TOAST_ERROR_SECONDS, false)
 	end)
 	-- L1b: "Checkpoint" goes on the notice line under the wallet, the place the banner already

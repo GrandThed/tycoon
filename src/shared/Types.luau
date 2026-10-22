@@ -363,6 +363,11 @@ export type AssetsConfig = {
 	-- v5 (L3 W2, L3-42): shelf icons by set ("Weapons"), then model name; absent before v5. Luau
 	-- reads only `imageId`, through WeaponLook.IconId (0 = not harvested yet, or in moderation).
 	icons: { [string]: { [string]: AssetIcon } }?,
+	-- v6 (L4 W2, docs/prompts/l4-w2-contract.md §2.1): the uploaded level dress meshes by layout
+	-- ("ForestRoad"); absent before v6. Luau reads only `planHash`, which ties the dress file
+	-- (Config/LevelDress/<layout>.json) to the meshes that were uploaded (LevelDress.Accept); the
+	-- triangles, images and mesh ids beside it are the template generator's.
+	levels: { [string]: { planHash: string } }?,
 }
 
 -- Game.json v1.3 mirror; field names follow the JSON keys exactly.
@@ -1227,6 +1232,9 @@ export type CombatDebugConfig = {
 	setTierAttribute: string?,
 	grantStarAttribute: string?,
 	resetArmoryAttribute: string?,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §8, the Z key): a number attribute > 0 (consumed): the
+	-- next level is built grey through the real fallback (LevelService.FailNextDress). nil = off.
+	dressFailAttribute: string?,
 }
 -- Client presentation tunables (CombatFxController).
 export type CombatFeedbackConfig = {
@@ -1402,6 +1410,11 @@ export type RunState = {
 	floorsSeq: number,
 	-- L1b: the plan's population (the client's pool).
 	maxAlive: number,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §3.2): the plan's bodies by crowd kind (StageFlow.Plan's
+	-- `kinds`), for the client's pool of each kind's model. Rides only where the floors' cells do,
+	-- on a member's first RunState of a floorsSeq (ArenaService's send); absent after it, and in the
+	-- lobby. The client caps the total at crowd.maxAlive; an empty pool still builds on demand.
+	prewarm: { [string]: number }?,
 	leaderUserId: number,
 	result: RunResult?,
 }
@@ -1652,6 +1665,99 @@ export type WeaponModelsConfig = {
 	version: number,
 	folder: string,
 	families: { [string]: WeaponModelDef },
+}
+-- L4 W2 (docs/prompts/l4-w2-contract.md §3.1; docs/prompts/l4-w2-reports/raiders.md §2-§5):
+-- Config/RaiderModels.json, copied by tools/assets/raider_frames.py from the raider builder's
+-- config. Keys of `kinds` are crowd kind names; a kind's template is
+-- ReplicatedStorage.Assets.Props.<folder>.<model> (Base plus Stage0..Stage4 = its pieces in
+-- order). Every point and pivot is studs in the model's frame (feet at the origin, front -Z). An
+-- entry counts only when its height, radius and headRadius equal ProvingGrounds.json's kind's.
+-- A MeshPart's role: gear is never painted; cloth, clothLeg (the legs' cloth, its own shade),
+-- skin, glow and plate take the kind's paint (raiders.md §3: plate is the plated elite's shell,
+-- shown while plated).
+export type RaiderPartRole = "gear" | "cloth" | "clothLeg" | "skin" | "glow" | "plate"
+-- One piece: its stage's index, the point it turns about, and its MeshParts' roles by name.
+export type RaiderPiece = {
+	name: string,
+	stage: number,
+	pivot: { number },
+	parts: { [string]: RaiderPartRole },
+}
+-- Three angles (radians) of the arm piece; whirl and steady per raiders.md §2.
+export type RaiderArmShape = {
+	coil: { number },
+	strike: { number },
+	follow: { number },
+	whirl: { turns: number, sin: { number }, cos: { number } }?,
+	steady: boolean?,
+}
+export type RaiderArm = {
+	carry: { number },
+	seat: { number },
+	slump: { number },
+	shapes: { [string]: RaiderArmShape },
+}
+-- The lit piece rides points[point] carried by piece `piece`; size and charged = the Chief's core.
+export type RaiderCue = { piece: string, point: string, size: number?, charged: number? }
+-- The farthest any piece reaches (studs from the body's axis, and up from its feet) over every
+-- sampled pose before a hit; withCue = with the lit piece at its largest.
+export type RaiderPosedReach = {
+	out: number,
+	outRadii: number,
+	up: number,
+	outPose: string?,
+	upPose: string?,
+	withCue: { out: number, up: number }?,
+}
+-- A weapon template carried in the hand: Assets.Props.<folder>.<model> (pivot = its grip), placed
+-- at the arm piece x CFrame.fromMatrix(grip, right, up) and scaled by `scale` once.
+export type RaiderHold = {
+	model: string,
+	folder: string,
+	scale: number,
+	piece: string,
+	grip: { number },
+	right: { number },
+	up: { number },
+}
+export type RaiderKindModel = {
+	model: string,
+	height: number,
+	radius: number,
+	headRadius: number,
+	skin: { number },
+	pieces: { RaiderPiece },
+	points: { [string]: { number } },
+	legLength: number,
+	leadLeg: string,
+	armSwingShare: number,
+	arm: RaiderArm,
+	hold: RaiderHold?,
+	cue: RaiderCue?,
+	posedReach: RaiderPosedReach,
+}
+-- rig: the walk, seat and throw numbers every kind shares (raiders.md §2, raiderpose.py `rig`).
+export type RaiderRig = {
+	headKeep: number,
+	headNod: number,
+	headTurn: number,
+	legSwing: number,
+	armSwing: number,
+	walkLean: number,
+	strideLegs: number,
+	walkFullShare: number,
+	walkNearStuds: number,
+	stepShare: number,
+	seatLean: number,
+	seatSplay: number,
+	airTuck: number,
+	throwShare: number,
+}
+export type RaiderModelsConfig = {
+	version: number,
+	folder: string,
+	rig: RaiderRig,
+	kinds: { [string]: RaiderKindModel },
 }
 -- A crowd enemy kind: body sphere (radius, centre at height/2) + head sphere (crit weak point).
 export type CrowdKindDef = {
@@ -1907,6 +2013,13 @@ export type ProvingGroundsConfig = {
 		-- P4 Stop 2: a body of this radius or more is large: smaller bodies never push it and give
 		-- way to it, and it does not widen the crowd's neighbour search.
 		largeRadius: number,
+		-- L4 W2 (docs/prompts/l4-w2-contract.md §5): a body resting at a fire sits. Its `seat` (0
+		-- standing, 1 seated) moves toward 1 while its state is `rest` and toward 0 otherwise, at
+		-- 1 / riseBlendSeconds a second, on the server as on every client; seated, its head and its
+		-- body capsule's top are drawn and judged restDrop of its height lower, eased by smoothstep
+		-- (HitShapes.SeatDrop). A dormant body holds its goal.
+		restDrop: number,
+		riseBlendSeconds: number,
 		-- P4: rules of enemies that fight. spawnGrace = seconds a fresh enemy cannot start a
 		-- windup; spawnClear = a slot does not respawn while a player stands within this many
 		-- studs; maxShots = most enemy projectiles alive (a shooter waits when it is reached);
@@ -2382,9 +2495,18 @@ export type LevelConfig = {
 	secrets: { [string]: LevelSecretConfig }?,
 }
 -- L2-13: Config/Levels/<n>_<Name>.json `secrets.<id>`. A chest pays only when its entry has
--- valor, materials or family (a "reward entry"); a name alone pays nothing. Whole numbers >= 0.
-export type LevelSecretConfig =
-	{ name: string, valor: number?, materials: number?, family: string? }
+-- valor, materials, family or key (a "reward entry"); a name alone pays nothing. Whole numbers >= 0.
+-- L4 W2 (docs/prompts/l4-w2-contract.md §0, MISSIONS_DESIGN §28): `key` = a key id ("castle"), at
+-- most Unlocks.MAX_FAMILY_LENGTH bytes. A key is held once the secret that gives it is opened
+-- (Unlocks.HasLevelKey): it is never written anywhere else in the profile. Expeditions.json `keys`
+-- names it.
+export type LevelSecretConfig = {
+	name: string,
+	valor: number?,
+	materials: number?,
+	family: string?,
+	key: string?,
+}
 
 -- Layouts/Levels/<Name>.json. World coordinates, studs.
 export type LevelBlock = {
@@ -2488,6 +2610,58 @@ export type LevelLayout = {
 	shortcutRoute: { LevelRoutePoint }?,
 }
 
+-- L4 W2 (docs/prompts/l4-w2-contract.md §2.1): Config/LevelDress/<layout>.json, generated by
+-- tools/levels/forest.py. The game reads only the fields below; the file's others (`units`,
+-- `triangles`, `palette*`, `textures`, `bakedPieces`, `propPieces`, a prop's tags but `with`,
+-- `hide.keep`) are the tools'. `frame` must be "level" (world studs). The server accepts a dress
+-- all or nothing (LevelDress.Accept) before it hides anything; the client draws it only on the
+-- server's word (Workspace.Level's `Dress` and `DressHash`).
+export type LevelDress = {
+	version: number,
+	level: string,
+	layout: string,
+	planHash: string,
+	frame: string,
+	meshes: { LevelDressMesh },
+	props: { LevelDressProp },
+	effects: { LevelDressEffect },
+	barriers: { LevelDressBarrier },
+	-- blocks: the layout's block names drawn by a mesh; camps: camp id -> LevelGeometry's roles of
+	-- that camp drawn by a mesh ("floor", "fence", "obstacle", "fire", "tent"). Each hidden piece
+	-- keeps its collision and its query, shows nothing and carries the attribute `Skinned`.
+	hide: { blocks: { string }, camps: { [string]: { string } } },
+	-- Laid over Expeditions.json `looks` for the level's Parts while it is dressed.
+	looks: { [string]: LevelLook },
+}
+-- The template's name: ReplicatedStorage.Assets.Levels.<layout>.<name>, a Model the client
+-- parents as cloned (its parts are placed in the template). `group` orders the client's build.
+export type LevelDressMesh = { name: string, group: string }
+-- ReplicatedStorage.Assets.Props.Forest.<piece>, its pivot (the Base's bottom centre) at x, y, z,
+-- turned `yaw` degrees about +Y, scaled by `scale`. `with` = the level Part it stands with (it
+-- leaves when that Part does: a bramble that burns).
+export type LevelDressProp = {
+	piece: string,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number,
+	scale: number,
+	with: string?,
+}
+-- kind "fire": a fire's light and flames at x, y, z (client only).
+export type LevelDressEffect = { kind: string, x: number, y: number, z: number }
+-- One invisible wall of the dressed level (a tree line, the yard's walls): a centre and a size,
+-- world studs. The server builds it in BarrierGroups' group, collidable from the build.
+export type LevelDressBarrier = {
+	name: string,
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
+}
+
 -- Config/Expeditions.json
 export type LevelLook = { material: string, color: { number }, transparency: number? }
 export type MapNode = {
@@ -2521,7 +2695,15 @@ export type ExpeditionsConfig = {
 	-- Studio lever, a secret or a first clear writes it); the Armory lists a family it names.
 	-- L3-25: every non-starter family has a hint, this entry or the secret that pays it. nil = none.
 	found: { [string]: { node: string, text: string } }?,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §0): what a level key is called and what it opens, by
+	-- key id (a secret's `key`, Types.LevelSecretConfig). Presentation only: the key is held
+	-- through the secret that gives it (Unlocks.HasLevelKey). nil = no key is named.
+	keys: { [string]: { name: string, text: string } }?,
+	-- L4 W2 (§2.4, L4W2-7): a level's light while it is dressed, by level id, set by each client
+	-- and never by the server (a key left out leaves that Lighting property alone). nil = none.
+	moods: { [string]: LevelMood }?,
 }
+export type LevelMood = { lighting: WorldLightingConfig?, atmosphere: WorldAtmosphereConfig? }
 -- L2-6: one bought ability (named apart from the weapons' AbilityDef). price.valor is a whole
 -- number > 0; a bad entry is warned at Init and cannot be bought.
 export type UnlockAbilityDef = {
@@ -2656,7 +2838,9 @@ export type MapNodeState = {
 	secrets: { MapSecretState }?,
 }
 -- L2-15: needs = the layout's key ("doubleJump" | "fire" | "ice"); found = the receiver opened it.
-export type MapSecretState = { id: string, name: string, needs: string, found: boolean }
+-- L4 W2 (§0): key = the level key id the chest gives ("castle": the map row's key glyph); nil = none.
+export type MapSecretState =
+	{ id: string, name: string, needs: string, found: boolean, key: string? }
 export type MapState = { kind: "map", leaderUserId: number, nodes: { MapNodeState } }
 
 -- CombatFx gains two kinds. L1b: event: "closed" | "cleared" | "alert" | "checkpoint".
@@ -2696,6 +2880,9 @@ export type CombatFxSecret = {
 	materials: number,
 	material: string,
 	family: string?,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §0): on "found", the key id the chest gave (its card
+	-- adds "<Expeditions.json keys.<key>.name> found"); nil = none.
+	key: string?,
 }
 
 -- L1b (docs/INTERFACES.md "L1b contracts — the living road", Wave 1)

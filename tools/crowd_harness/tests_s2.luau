@@ -1105,6 +1105,13 @@ function S2.tuningTests(): ()
 	check(Tune.Validate("crowd.kinds.colossus.attacks.3.summon", "armoured") and not Tune.Validate("crowd.kinds.colossus.attacks.3.summon", "nobody"), "`summon` must name a kind of the base config")
 	check(Tune.Validate("crowd.kinds.colossus.enrage.at", 0.3) and not Tune.Validate("crowd.kinds.colossus.enrage.windupScale", -0.5) and not Tune.Validate("crowd.kinds.colossus.enrage.chain", -1), "the enrage numbers may not go below 0")
 	check(Tune.Validate("crowd.largeRadius", 2.5) and not Tune.Validate("crowd.largeRadius", -1), "crowd.largeRadius is tunable and may not go below 0")
+	-- L4 W2 (contract 5): the seat's two numbers, which the server and every client step with. The
+	-- shared fixture carries neither (its bodies stand), so they are lent to it for these two cases.
+	local before = { config.crowd.restDrop, config.crowd.riseBlendSeconds }
+	config.crowd.restDrop, config.crowd.riseBlendSeconds = 0.35, 0.5
+	check(Tune.Validate("crowd.restDrop", 0.35) and not Tune.Validate("crowd.restDrop", -0.1), "crowd.restDrop is tunable and may not go below 0")
+	check(Tune.Validate("crowd.riseBlendSeconds", 0.5) and not Tune.Validate("crowd.riseBlendSeconds", -1), "crowd.riseBlendSeconds is tunable and may not go below 0")
+	config.crowd.restDrop, config.crowd.riseBlendSeconds = before[1], before[2]
 	check(Tune.Validate("crowd.kinds.colossus.attacks.1.cooldown", 0) and not Tune.Validate("crowd.kinds.colossus.attacks.1.cooldown", -1) and not Tune.Validate("crowd.kinds.colossus.attacks.4.spread", -1), "nor an attack's cooldown, count or spread")
 end
 S2.tuningTests()

@@ -807,7 +807,9 @@ end
 -- Hits ---------------------------------------------------------------------------------------
 
 -- Every live enemy the broad phase returns, with its body and head spheres, handed to `test`,
--- which returns the ordering distance (nil = miss) and whether it was a crit.
+-- which returns the ordering distance (nil = miss) and whether it was a crit. L4 W2 (§5): a
+-- seated body's head is lowered by its seat's drop (HitShapes.SeatDrop on crowd.restDrop), and
+-- the drop goes to `test` for the ray's capsule (HitShapes.CrowdRay).
 local function gather(
 	config: Types.ProvingGroundsConfig,
 	center: Vector3,
@@ -818,10 +820,12 @@ local function gather(
 		head: Vector3,
 		headRadius: number,
 		feet: Vector3,
-		height: number
+		height: number,
+		drop: number
 	) -> (number?, boolean)
 ): { Candidate }
 	local found: { Candidate } = {}
+	local restDrop = config.crowd.restDrop
 	for _, id in CrowdService.Query(center, radius) do
 		local enemy = CrowdService.Get(id)
 		if enemy == nil or enemy.state == "dead" or enemy.hp <= 0 then
@@ -831,9 +835,11 @@ local function gather(
 		if def == nil then
 			continue
 		end
+		local drop = HitShapes.SeatDrop(def.height, enemy.seat, restDrop)
 		local body = enemy.position + Vector3.new(0, def.height / 2, 0)
-		local head = enemy.position + Vector3.new(0, def.height - def.headRadius, 0)
-		local order, crit = test(body, def.radius, head, def.headRadius, enemy.position, def.height)
+		local head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)
+		local order, crit =
+			test(body, def.radius, head, def.headRadius, enemy.position, def.height, drop)
 		if order ~= nil then
 			table.insert(found, { id = id, order = order, body = body, crit = crit })
 		end
@@ -1239,7 +1245,8 @@ end
 
 -- One ray against the crowd: the enemies it touches before `reach`, entry order. L1b-W2-15:
 -- HitShapes.CrowdRay, the body capsule or the head sphere, both padded; crit when the unpadded
--- ray touches the head (the pad forgives a miss, it does not make a headshot).
+-- ray touches the head (the pad forgives a miss, it does not make a headshot). L4 W2: a seated
+-- body's head and capsule top sit lower by its drop (gather's).
 local function rayCandidates(
 	config: Types.ProvingGroundsConfig,
 	origin: Vector3,
@@ -1259,7 +1266,8 @@ local function rayCandidates(
 			_head: Vector3,
 			headRadius: number,
 			feet: Vector3,
-			height: number
+			height: number,
+			drop: number
 		): (number?, boolean)
 			return HitShapes.CrowdRay(
 				origin,
@@ -1270,7 +1278,8 @@ local function rayCandidates(
 				feet,
 				r,
 				height,
-				headRadius
+				headRadius,
+				drop
 			)
 		end
 	)

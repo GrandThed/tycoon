@@ -74,6 +74,14 @@
 --
 -- L2 Wave 2 (docs/prompts/l2-w2-contract.md, section 2): the Armory panel has Weapons and
 -- Abilities tabs; its button keeps W1's slot and width, so the rows above do not change.
+--
+-- L4 W2 (docs/prompts/l4-w2-contract.md, section 8): the Studio perf line reads "Server 1.4 ms ·
+-- Frame 16.7 ms · Draw 2.1 ms". Frame is this client's Heartbeat dt and Draw what CrowdRenderer
+-- and LevelScenery spent drawing in a frame (DrawClock), each a p95 over Combat.json's
+-- debug.perfLogSeconds, kept in one-second buckets (Theme.COMBAT_PERF_CLIENT_STEP_SECONDS) so it
+-- rolls instead of jumping once a window. Studio only, as the server's part; the server's part
+-- still needs its attribute, the client's need only a second of samples. Same place, same label:
+-- it is wider (Theme.COMBAT_PERF_WIDTH), still a label over the bottom-left stack.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -91,6 +99,8 @@ local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
 local SoundController =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
+local DrawClock =
+	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("DrawClock"))
 
 export type Deps = {
 	-- L1: "Map" in the lobby; nil = no such button.
@@ -182,6 +192,28 @@ local ALT_HINT_LOCKED = "Alt · free cursor"
 local ALT_HINT_FREE = "Alt · aim"
 -- L1b-W2-23: the perf line reads in tenths of a millisecond; past this it drops the decimal.
 local PERF_TENTHS_BELOW = 100
+-- L4 W2: the client's two numbers are this percentile of their window's samples.
+local PERF_PERCENTILE = 0.95
+local PERF_SEPARATOR = " · "
+local MS_PER_SECOND = 1000
+
+-- "1.4 ms", or "123 ms" past PERF_TENTHS_BELOW (a finite value >= 0).
+local function perfMs(value: number): string
+	local tenths = math.round(value * 10)
+	return if tenths < PERF_TENTHS_BELOW * 10
+		then `{Format.Cash(tenths // 10)}.{tenths % 10} ms`
+		else `{Format.Cash(math.round(value))} ms`
+end
+
+-- The PERF_PERCENTILE of `samples` (sorted in place), nil for none.
+local function percentile(samples: { number }): number?
+	local count = #samples
+	if count == 0 then
+		return nil
+	end
+	table.sort(samples)
+	return samples[math.clamp(math.ceil(count * PERF_PERCENTILE), 1, count)]
+end
 
 local CombatHud = {}
 
@@ -566,6 +598,20 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		}) :: TextLabel,
 	}
 	local perfScale = Create("UIScale", { Parent = perf.line }) :: UIScale
+	-- L4 W2: this client's frame and draw times (see the header), Studio only and only with the
+	-- config's window. `frames` and `draws` are the bucket being filled (ms); `buckets` the
+	-- finished ones, newest last, at most `keep`; `frame` and `draw` the last p95s.
+	local perfWindow = if perfConfig ~= nil then perfConfig.debug.perfLogSeconds else nil
+	local clientPerf = {
+		on = RunService:IsStudio() and perfWindow ~= nil and perfWindow > 0,
+		keep = math.max(1, math.ceil((perfWindow or 0) / Theme.COMBAT_PERF_CLIENT_STEP_SECONDS)),
+		since = 0,
+		frames = {} :: { number },
+		draws = {} :: { number },
+		buckets = {} :: { { frames: { number }, draws: { number } } },
+		frame = nil :: number?,
+		draw = nil :: number?,
+	}
 
 	-- Fix round c1: the bottom-left buttons in rows (ActionRows) and the hint stack over them.
 	-- `scale`, `margin` (px from the left), `base` (px from the bottom to the rows' bottom edge),
@@ -834,26 +880,60 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	end
 
 	-- L1b-W2-23: shown in a live phase while the attribute holds a number, rounded to 0.1 ms.
+	-- L4 W2: and this client's Frame and Draw beside it once a second of them is in.
 	local function paintPerf(): ()
 		local name = perf.name
 		local value = if name ~= nil then Workspace:GetAttribute(name) else nil
-		local shown = fighting
-			and typeof(value) == "number"
-			and value == value
-			and value >= 0
-			and value < math.huge
-		perf.line.Visible = shown
-		if not shown then
-			return
+		local parts: { string } = {}
+		if typeof(value) == "number" and value == value and value >= 0 and value < math.huge then
+			table.insert(parts, "Server " .. perfMs(value))
 		end
-		local tenths = math.round(value * 10)
-		perf.line.Text = if tenths < PERF_TENTHS_BELOW * 10
-			then `Server {Format.Cash(tenths // 10)}.{tenths % 10} ms`
-			else `Server {Format.Cash(math.round(value))} ms`
+		local frame, draw = clientPerf.frame, clientPerf.draw
+		if frame ~= nil and draw ~= nil then
+			table.insert(parts, "Frame " .. perfMs(frame))
+			table.insert(parts, "Draw " .. perfMs(draw))
+		end
+		local shown = fighting and #parts > 0
+		perf.line.Visible = shown
+		if shown then
+			perf.line.Text = table.concat(parts, PERF_SEPARATOR)
+		end
 	end
 	local perfName = perf.name
 	if perfName ~= nil then
 		table.insert(connections, Workspace:GetAttributeChangedSignal(perfName):Connect(paintPerf))
+	end
+	-- L4 W2: one sample a frame; a bucket a step; the p95s over the kept buckets, then a paint.
+	-- The draw sum is taken every frame, also outside a fight, so each sample is one frame's work.
+	if clientPerf.on then
+		table.insert(
+			connections,
+			RunService.Heartbeat:Connect(function(deltaTime: number)
+				table.insert(clientPerf.frames, deltaTime * MS_PER_SECOND)
+				table.insert(clientPerf.draws, DrawClock.Take() * MS_PER_SECOND)
+				clientPerf.since += deltaTime
+				if clientPerf.since < Theme.COMBAT_PERF_CLIENT_STEP_SECONDS then
+					return
+				end
+				clientPerf.since = 0
+				local buckets = clientPerf.buckets
+				table.insert(buckets, { frames = clientPerf.frames, draws = clientPerf.draws })
+				clientPerf.frames = {}
+				clientPerf.draws = {}
+				while #buckets > clientPerf.keep do
+					table.remove(buckets, 1)
+				end
+				local frames: { number } = {}
+				local draws: { number } = {}
+				for _, bucket in buckets do
+					table.move(bucket.frames, 1, #bucket.frames, #frames + 1, frames)
+					table.move(bucket.draws, 1, #bucket.draws, #draws + 1, draws)
+				end
+				clientPerf.frame = percentile(frames)
+				clientPerf.draw = percentile(draws)
+				paintPerf()
+			end)
+		)
 	end
 
 	local function setRunState(run: Types.RunState): ()

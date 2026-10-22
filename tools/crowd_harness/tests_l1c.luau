@@ -311,7 +311,7 @@ function L1C.planTests(): ()
 	local waves = if stageDef ~= nil then stageDef.waves else {}
 	local first, second = waves[1] or {}, waves[2] or {}
 	check(#waves == 2 and #(first.groups or { 0 }) == 0 and first.boss == nil, "the Chief's Clearing's waves: an empty first wave (the ambush the close releases)")
-	check(#(second.groups or { 0 }) == 0 and second.boss ~= nil and second.boss.kind == "colossus", "then the Colossus alone")
+	check(#(second.groups or { 0 }) == 0 and second.boss ~= nil and second.boss.kind == "chief", "then the Camp Chief alone (L4W2-12)")
 	check(stageDef ~= nil and stageDef.gateSeconds == 0, `stepping in shuts the gate: the Chief's Clearing's gateSeconds is 0 (the L1c fix round's M3; {tostring(if stageDef ~= nil then stageDef.gateSeconds else nil)})`)
 	local bounds = L1.real.bounds(layout)
 	local expected = { normal = 10, hard = 12, brutal = 12 }
@@ -358,7 +358,7 @@ function L1C.planTests(): ()
 		check(#armour == 0, `{difficulty}: no plated kind in a walled camp: its bar would show through the wall (L1c-6){L1.real.list(armour)}`)
 		check(stage.waves == 2 and stage.boss[2] == true and stage.boss[1] ~= true and zone.tentStock == 0, `{difficulty}: two waves, the boss in the second, no tent stock`)
 		-- The empty wave clears on the field alone: with a body of the ambush alive it holds, and
-		-- the tick it is dead the breather starts, then the Colossus.
+		-- the tick it is dead the breather starts, then the Camp Chief.
 		local ok, state = pcall(L1.toFight, plan, table.find(plan.stages, stage) or 0)
 		if not ok then
 			check(false, `{difficulty}: the run reaches the clearing's fight ({tostring(state)})`)
@@ -371,7 +371,7 @@ function L1C.planTests(): ()
 		check(L1.find(cleared, "clear") ~= nil and state.step == "breather", `{difficulty}: and clears the tick the last one is dead: the breather ({L1.names(cleared)})`)
 		local boss = L1.advance(plan, state, { now = state.breatherUntil or now + 99 })
 		local wave = L1.get(boss, "wave")
-		check(wave.wave == 2 and state.wave == 2, `{difficulty}: then wave 2, the Colossus ({L1.names(boss)})`)
+		check(wave.wave == 2 and state.wave == 2, `{difficulty}: then wave 2, the Camp Chief ({L1.names(boss)})`)
 	end
 end
 L1.group("l1c planTests", L1C.planTests)

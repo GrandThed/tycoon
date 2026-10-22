@@ -64,6 +64,8 @@ local NON_NEGATIVE_PATHS = {
 	"^crowd%.heavyHit$",
 	"^crowd%.plateBreakSeconds$",
 	"^crowd%.largeRadius$",
+	"^crowd%.restDrop$",
+	"^crowd%.riseBlendSeconds$",
 	"^crowd%.threat%.[^.]+$",
 	"^crowd%.kinds%.[^.]+%.attacks%.%d+%.[^.]+$",
 	"^crowd%.kinds%.[^.]+%.bandMin$",

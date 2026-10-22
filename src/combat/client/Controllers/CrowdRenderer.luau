@@ -74,12 +74,11 @@
 --   height, a threat origin's height, the charge's bound, laneReach) read the body's own. A
 --   body whose floor has not arrived yet uses its own feet and no bound: nothing is dropped.
 --   Two new wire states are poses, drawn here with no animation id: `rest` is a raider
---   seated at a fire (lowered by Theme.COMBAT_REST_DROP of its height, legs out in front; the
---   figure has no arms to lower), `rise` is standing up. The seat eases both ways over
---   Theme.COMBAT_RISE_BLEND_SECONDS, so a sitter is slow to stand and a guard (standing at
---   rest, `idle` on the wire) never sits. The seat is information, so it is not thinned on
---   reducedMotion. The server's hit shapes do not sit: a seated head is drawn lower than the
---   head the server judges a crit on.
+--   seated at a fire (lowered by crowd.restDrop of its height, legs out in front), `rise` is
+--   standing up. The seat eases both ways over crowd.riseBlendSeconds, so a sitter is slow to
+--   stand and a guard (standing at rest, `idle` on the wire) never sits. The seat is
+--   information, so it is not thinned on reducedMotion. Since L4 W2 the server's hit shapes sit
+--   with it (HitShapes.SeatDrop): ForEach hands aim assist and auto-fire the same drop.
 -- * L1b Wave 2 ("Wave 2 — the long road" -> Client, L1b-W2-11). A spawn info carries the body
 --   as it stood when it was sent (SpawnSeed reads it), and that is the body's first sample,
 --   stamped at this client's render time: every resident is drawn on arrival, and a dormant
@@ -95,6 +94,16 @@
 --   cuts with the shared Region.Runway over those cells, so a brute's lane runs along the road
 --   and through a door exactly as far as the server lets the brute run. Nothing else changes:
 --   a body keeps its floor's height wherever on the region it stands.
+-- * L4 W2 ("L4 W2 contract", 3.2-3.3, 5, 8). A kind Config/RaiderModels.json names is drawn as
+--   its model (Raiders/Figures: one pool per kind, an invisible `Head` at the scored head that
+--   GetHead, the plate's bar and the "!" hang on); every other kind keeps the placeholder figure
+--   below, and the X key in Studio switches every live body between the two (ToggleModels).
+--   The pose of an attack is Raiders/RaiderPose.Threat, the one pure function the placeholder
+--   and the models both draw from (tools/check_raider_mirror.py holds it to raiderpose.py);
+--   the phase clock, the tint and the ground tell stay here. A model takes the lunge's thrust as
+--   a step of its leading foot and its arm's reach, never as a slide of the whole body, and the
+--   reactions that follow a landed hit (knockback, launch, the fling, a rise) move it whole on
+--   its rest pose. This module's frame time goes to DrawClock (Studio's "Draw N ms").
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -113,15 +122,21 @@ local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local Cues = require(script.Parent:WaitForChild("ThreatFx"):WaitForChild("Cues"))
 local SpawnSeed = require(script.Parent:WaitForChild("SpawnSeed"))
 local PlateBar = require(script.Parent:WaitForChild("ThreatFx"):WaitForChild("PlateBar"))
+local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
+local Figures = require(script.Parent:WaitForChild("Raiders"):WaitForChild("Figures"))
+local RaiderPose = require(script.Parent:WaitForChild("Raiders"):WaitForChild("RaiderPose"))
+local DrawClock = require(script.Parent:WaitForChild("DrawClock"))
 
 -- "block" (P4 wave 2): a plate turned the hit. Nothing moves; the shell glints.
 export type Reaction = "flash" | "flinch" | "knockback" | "launch" | "death" | "block"
+-- drop (L4 W2) = how far the seat lowers its head and its capsule's top (HitShapes.SeatDrop).
 export type ForEachCallback = (
 	id: number,
 	position: Vector3,
 	radius: number,
 	headRadius: number,
-	height: number
+	height: number,
+	drop: number
 ) -> ()
 -- P4 wave 2: one body's lane or line, for ThreatFx to draw. `striking` = its blow is under way
 -- (the charge, the shot); phaseAt = the server time that phase began; impactAt = the end of
@@ -194,7 +209,13 @@ type Entity = {
 	-- os.clock() at which a body that turned "dead" dies on its own; math.huge = not waiting.
 	deathDue: number,
 
+	-- model = what is drawn: the placeholder `body` (legs, torso, head, visor), or the model of
+	-- `figure` (L4 W2). anchor = the part at the scored head: the placeholder's head or the
+	-- figure's invisible `Head`.
 	model: Model,
+	body: Model,
+	anchor: BasePart,
+	figure: Figures.Figure?,
 	legs: BasePart,
 	torso: BasePart,
 	head: BasePart,
@@ -446,6 +467,34 @@ local VISOR_HOT_COLOR = Color3.fromRGB(255, 140, 40)
 local FLASH_COLOR = Color3.new(1, 1, 1)
 local BODY_MATERIAL = Enum.Material.SmoothPlastic
 local FLASH_MATERIAL = Enum.Material.Neon
+-- L4 W2: RaiderPose's numbers (Theme's and the figure colours above, by the names raiderpose.py
+-- reads; crowd.restDrop arrives through Figures.Retune), the one Threat input and answer every
+-- body's frame reuses, and crowd.riseBlendSeconds as last tuned.
+local poseConsts = Figures.Configure({
+	LEG_SHADE = LEG_SHADE,
+	LEG_SHADE_SHARE = LEG_SHADE_SHARE,
+	VISOR_COLOR = VISOR_COLOR,
+	VISOR_HOT_COLOR = VISOR_HOT_COLOR,
+	FLASH_COLOR = FLASH_COLOR,
+})
+local threatIn: RaiderPose.ThreatIn = {
+	shape = "",
+	phase = "none",
+	age = 0,
+	windup = 0,
+	strike = 0,
+	recover = 0,
+	reach = 0,
+	arc = 0,
+	lock = 0,
+	radius = 1,
+	serverNow = 0,
+	stride = 0,
+	unwind = 0,
+	held = 0,
+}
+local threatOut = RaiderPose.NewThreatOut()
+local riseSeconds = 0
 
 local PREWARM_PER_FRAME = 16
 local TWO_PI = 2 * math.pi
@@ -595,6 +644,9 @@ local function newEntity(): Entity?
 		phaseStart = 0,
 		deathDue = math.huge,
 		model = model,
+		body = model,
+		anchor = head,
+		figure = nil,
 		legs = legs,
 		torso = torso,
 		head = head,
@@ -719,6 +771,21 @@ end
 -- The white hit flash wins; under it the kind's colours, taken toward the attack's tint. The
 -- head goes half as far, so the crit point still reads as the crit point.
 local function paint(entity: Entity, flash: boolean): ()
+	local figure = entity.figure
+	if figure ~= nil then
+		-- L4 W2: the same rule per painted role of the model (RaiderPose.Paint).
+		entity.flashing = flash
+		Figures.Paint(
+			figure,
+			flash,
+			entity.tint,
+			entity.tintColor,
+			entity.glow,
+			entity.visorHot,
+			entity.enraged
+		)
+		return
+	end
 	local material = if flash or entity.glow then FLASH_MATERIAL else BODY_MATERIAL
 	local tint = entity.tint
 	if flash then
@@ -764,6 +831,10 @@ local function setVisorHot(entity: Entity, hot: boolean): ()
 	entity.visorHot = hot
 	entity.visor.Color = if hot then VISOR_HOT_COLOR else VISOR_COLOR
 	entity.visor.Material = if hot then FLASH_MATERIAL else BODY_MATERIAL
+	if entity.figure ~= nil then
+		-- A model's glow role (the Chief's eyes) is its visor.
+		paint(entity, entity.flashing)
+	end
 end
 
 local function setFade(entity: Entity, fade: number): ()
@@ -775,6 +846,10 @@ local function setFade(entity: Entity, fade: number): ()
 	entity.torso.Transparency = fade
 	entity.head.Transparency = fade
 	entity.visor.Transparency = fade
+	local figure = entity.figure
+	if figure ~= nil then
+		Figures.Fade(figure, fade)
+	end
 	local cues = entity.cues
 	if cues ~= nil then
 		Cues.Fade(cues, fade)
@@ -916,6 +991,32 @@ local function setThreat(entity: Entity, threat: Threat, at: number): ()
 	end
 end
 
+-- L4 W2: puts on the model of `look` (nil = the placeholder), keeping whether the body is drawn.
+-- Its cues and its bar ride the model, so they come off here and applyKind puts them on again.
+local function dressFigure(entity: Entity, look: Figures.Look?): ()
+	local current = entity.figure
+	if current == nil and look == nil then
+		return
+	end
+	if current ~= nil and look ~= nil and current.look.kind == look.kind then
+		current.look = look
+		return
+	end
+	local drawn = entity.model.Parent
+	entity.model.Parent = nil
+	undress(entity)
+	if current ~= nil then
+		entity.figure = nil
+		Figures.Give(current)
+	end
+	local figure = if look ~= nil then Figures.Take(look) else nil
+	entity.figure = figure
+	entity.model = if figure ~= nil then figure.model else entity.body
+	entity.anchor = if figure ~= nil then figure.anchor else entity.head
+	entity.model.Parent = drawn
+	entity.dirty = true
+end
+
 -- Sizes, offsets and colours from the kind's current def. Runs on spawn and when Tuning changes.
 local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 	local radius = math.max(def.radius, 0.1)
@@ -991,6 +1092,8 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 	entity.bodyColor = base
 	entity.legColor = base:Lerp(LEG_SHADE, LEG_SHADE_SHARE)
 	entity.headColor = base:Lerp(HEAD_TINT, HEAD_TINT_SHARE)
+	-- L4 W2: the kind's model when it has one (and models are on), else the figure above.
+	dressFigure(entity, Figures.Look(entity.kind, def))
 	paint(entity, entity.flashing)
 	entity.dirty = true
 
@@ -1009,11 +1112,12 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 		entity.torsoSize,
 		base,
 		entity.enraged,
-		entity.guards
+		entity.guards,
+		if entity.figure ~= nil then Figures.CueRig(entity.figure.look) else nil
 	)
 	-- A boss's plate is on the boss bar; a second bar over its head would only repeat it.
 	if (def.plate or 0) > 0 and not entity.boss and entity.phase == "alive" then
-		entity.bar = PlateBar.Take(entity.head, headRadius + Theme.COMBAT_RANGE_PLATE_BAR_RISE)
+		entity.bar = PlateBar.Take(entity.anchor, headRadius + Theme.COMBAT_RANGE_PLATE_BAR_RISE)
 		showBar(entity)
 	end
 	local cues = entity.cues
@@ -1086,6 +1190,13 @@ local function release(entity: Entity): ()
 	if entity.squash ~= 1 then
 		entity.torso.Size = entity.torsoSize
 		entity.squash = 1
+	end
+	local figure = entity.figure
+	if figure ~= nil then
+		entity.figure = nil
+		Figures.Give(figure)
+		entity.model = entity.body
+		entity.anchor = entity.head
 	end
 	table.insert(pool, entity)
 end
@@ -1840,9 +1951,11 @@ local function onRemove(payload: any): ()
 end
 
 -- seat (L1b): 0 standing, 1 seated at a fire. Seated, everything above the legs is lowered
--- by Theme.COMBAT_REST_DROP of the height and the legs lie on the ground pointing forward
--- (turned a quarter about the body's side, so their length runs along its facing); between
--- the two the legs swing through.
+-- by crowd.restDrop of the height (HitShapes.SeatDrop, as the server lowers its hit shapes)
+-- and the legs lie on the ground pointing forward (turned a quarter about the body's side, so
+-- their length runs along its facing); between the two the legs swing through. A model (L4 W2)
+-- comes here only after a landed hit has ended it (the fling, the topple, a vanish): its rest
+-- pose as a whole under `root`.
 local function queuePose(
 	entity: Entity,
 	root: CFrame,
@@ -1850,6 +1963,12 @@ local function queuePose(
 	tuck: number,
 	seat: number
 ): ()
+	local figure = entity.figure
+	if figure ~= nil then
+		moveCount =
+			Figures.QueueRest(figure, root, seat, entity.cues, moveParts, moveFrames, moveCount)
+		return
+	end
 	if math.abs(squash - entity.squash) > 0.005 then
 		local widen = 1 / math.sqrt(squash)
 		local size = entity.torsoSize
@@ -1872,7 +1991,7 @@ local function queuePose(
 			-(entity.radius * Theme.COMBAT_REST_HIP_SHARE + entity.legHeight * 0.5)
 		) * CFrame.Angles(-math.pi * 0.5, 0, 0)
 		legs = legs:Lerp(seated, eased)
-		root *= CFrame.new(0, -entity.height * Theme.COMBAT_REST_DROP * eased, 0)
+		root *= CFrame.new(0, -HitShapes.SeatDrop(entity.height, seat, poseConsts.restDrop), 0)
 	end
 	moveParts[n + 1] = entity.legs
 	moveFrames[n + 1] = feet * legs
@@ -2045,7 +2164,8 @@ end
 -- forward thrust in studs, twist in radians, squash. Runs the phase clock on first (the blow
 -- at the windup's end, recover after the strike) and keeps the tint and the ground tell in
 -- step. The wire ends a recover; the clock ends it too, so a lost packet never leaves a body
--- slumped.
+-- slumped. L4 W2: the numbers are RaiderPose.Threat's (threatOut keeps them for a model's arm
+-- this frame), the placeholder's and the models' alike.
 local function threatPose(entity: Entity, serverNow: number): (number, number, number, number)
 	if entity.threat == "windup" and serverNow >= entity.impactAt then
 		setThreat(entity, "attack", entity.impactAt)
@@ -2053,125 +2173,59 @@ local function threatPose(entity: Entity, serverNow: number): (number, number, n
 	if entity.threat == "attack" and serverNow >= entity.threatAt + entity.strikeSeconds then
 		setThreat(entity, "recover", entity.threatAt + entity.strikeSeconds)
 	end
-	local threat = entity.threat
-	local shape = entity.threatShape
-	local age = math.max(serverNow - entity.threatAt, 0)
-	local twistMost = entity.threatArc * 0.5 * Theme.COMBAT_RANGE_TELL_ARC_TWIST_SHARE
-	if threat == "windup" then
-		local u = if entity.windupSeconds > 0 then math.min(age / entity.windupSeconds, 1) else 1
-		local coil = Theme.COMBAT_RANGE_TELL_COIL_SHARE
-		-- Squared: a slow start and an unmistakable end, so the pose reads as building.
-		local build = math.min(u / coil, 1) ^ 2
-		-- Wave 2: a shooter's lit piece swells with the same build (ThreatFx/Cues). It runs
-		-- straight on the windup, not on the coil, so it is at its largest exactly at the shot.
-		entity.charge = u * u
-		setTint(
-			entity,
-			build * Theme.COMBAT_RANGE_TELL_HEAT_SHARE,
-			Theme.COMBAT_RANGE_TELL_COLOR,
-			false
-		)
-		local back = -Theme.COMBAT_RANGE_TELL_LEAN_BACK * build
-		if shape == "lunge" then
-			local pull = -entity.radius * Theme.COMBAT_RANGE_TELL_PULL_BACK * build
-			if u <= coil then
-				return back, pull, 0, 1
-			end
-			-- The last of the windup is the thrust leaving, so the figure is fully out
-			-- exactly at the impact and never after it.
-			local snap = ((u - coil) / (1 - coil)) ^ 2
-			return back + (Theme.COMBAT_RANGE_TELL_LEAN_FORWARD - back) * snap,
-				pull + (entity.threatReach - pull) * snap,
-				0,
-				1
-		elseif shape == "ring" then
-			-- Stop 2, the slam: up on its toes through the coil, then down, so the body is
-			-- flat on the floor exactly at the impact, when the front leaves its feet.
-			local rise = 1 + Theme.COMBAT_RANGE_RING_SLAM_RISE * build
-			if u <= coil then
-				return back, 0, 0, rise
-			end
-			local snap = ((u - coil) / (1 - coil)) ^ 2
-			return back + (Theme.COMBAT_RANGE_RING_SLAM_LEAN - back) * snap,
-				0,
-				0,
-				rise + (Theme.COMBAT_RANGE_RING_SLAM_SQUASH - rise) * snap
-		elseif shape == "summon" then
-			-- Stop 2, the call: head thrown back and the whole body shaking harder as it
-			-- builds. It hurts nobody, so the pose and the circle on the floor are all of it.
-			return -Theme.COMBAT_RANGE_CALL_LEAN * build,
-				0,
-				Theme.COMBAT_RANGE_CALL_SHAKE * build * math.sin(
-					serverNow * TWO_PI * Theme.COMBAT_RANGE_CALL_SHAKE_HZ
-				),
-				1 + Theme.COMBAT_RANGE_CALL_STRETCH * build
-		end
-		local tell = entity.tell
-		if tell ~= nil then
-			drawTell(entity, tell, u, false, 0)
-		end
-		return back, 0, -twistMost * build, 1
-	elseif threat == "attack" then
-		local u = if entity.strikeSeconds > 0 then math.min(age / entity.strikeSeconds, 1) else 1
-		local left = 1 - u
-		setTint(entity, 1, Theme.COMBAT_RANGE_TELL_COLOR, true)
-		local forward = Theme.COMBAT_RANGE_TELL_LEAN_FORWARD * left
-		if shape == "lunge" then
-			return forward, entity.threatReach * left * left, 0, 1
-		elseif shape == "lane" then
-			-- Head down for the whole charge. The run itself is stepRush's: the body is moved
-			-- on the server clock, not thrust from where it stands.
-			return Theme.COMBAT_RANGE_TELL_LEAN_FORWARD, 0, 0, 1
-		elseif shape == "ring" then
-			-- Down flat at the impact, rising again as the front runs out.
-			return Theme.COMBAT_RANGE_RING_SLAM_LEAN * left,
-				0,
-				0,
-				1 - (1 - Theme.COMBAT_RANGE_RING_SLAM_SQUASH) * left
-		end
-		local tell = entity.tell
-		if tell ~= nil then
-			drawTell(entity, tell, 1, true, u)
-		end
-		local sweep = smoothstep(math.min(u / Theme.COMBAT_RANGE_TELL_ARC_SWEEP_SHARE, 1))
-		return forward, 0, twistMost * (2 * sweep - 1), 1
-	end
-	if age >= entity.recoverSeconds then
+	local input = threatIn
+	input.shape = entity.threatShape
+	input.phase = entity.threat
+	input.age = math.max(serverNow - entity.threatAt, 0)
+	input.windup = entity.windupSeconds
+	input.strike = entity.strikeSeconds
+	input.recover = entity.recoverSeconds
+	input.reach = entity.threatReach
+	input.arc = entity.threatArc
+	input.lock = entity.threatLock
+	input.radius = entity.radius
+	input.serverNow = serverNow
+	-- A shooter walks through its recover and the slump lifts with its pace (stepAlive): a
+	-- slumped figure gliding over the floor reads as dragged.
+	input.stride = entity.stride
+	-- An arc's body unwinds from wherever it was last turned to: the end of its sweep, or part
+	-- of the way back when its windup was cancelled.
+	input.unwind = angleDelta(entity.yaw, entity.lastYaw)
+	-- Stop 2: an enraged boss may chain. The wire then goes from this blow straight to the
+	-- next windup, which this client learns a snapshot and its lag later; the slump waits
+	-- that long, so a chain shows no nod between its attacks.
+	input.held = if entity.enraged then interval + (lagEstimate or 0) else 0
+	local out = RaiderPose.Threat(input, poseConsts, threatOut)
+	if out.phase == "none" then
 		-- Over by this clock even if the wire never showed its blow or its recover: whatever
 		-- the wire names next is a new attack.
 		entity.threatOpen = false
 		setThreat(entity, "none", serverNow)
 		return 0, 0, 0, 1
 	end
-	-- Spent: slumped and dull, settling in fast and waking as the opening closes.
-	-- Stop 2: an enraged boss may chain. The wire then goes from this blow straight to the
-	-- next windup, which this client learns a snapshot and its lag later; the slump waits
-	-- that long, so a chain shows no nod between its attacks.
-	local held = if entity.enraged then interval + (lagEstimate or 0) else 0
-	local settle =
-		math.min(math.max(age - held, 0) / Theme.COMBAT_RANGE_TELL_SPENT_SETTLE_SECONDS, 1)
-	local wake =
-		math.min((entity.recoverSeconds - age) / Theme.COMBAT_RANGE_TELL_SPENT_WAKE_SECONDS, 1)
-	local spent = math.min(settle, wake)
+	if out.phase == "windup" then
+		-- Wave 2: a shooter's lit piece swells with the windup (ThreatFx/Cues).
+		entity.charge = out.charge
+	end
 	setTint(
 		entity,
-		spent * Theme.COMBAT_RANGE_TELL_SPENT_SHARE,
-		Theme.COMBAT_RANGE_TELL_SPENT_COLOR,
-		false
+		out.tint,
+		if out.tintColor == poseConsts.COMBAT_RANGE_TELL_SPENT_COLOR
+			then Theme.COMBAT_RANGE_TELL_SPENT_COLOR
+			else Theme.COMBAT_RANGE_TELL_COLOR,
+		out.glow
 	)
-	-- An arc's body unwinds from wherever it was last turned to: the end of its sweep, or part
-	-- of the way back when its windup was cancelled.
-	local twist = if shape == "arc"
-		then angleDelta(entity.yaw, entity.lastYaw) * (1 - settle)
-		else 0
-	-- The slump is a standing body's. A shooter walks through its recover, facing its target
-	-- even as it backs off, and a slumped figure gliding over the floor reads as dragged: the
-	-- pose lifts with its pace (stepAlive) and only the dull tint above goes with it.
-	local slump = spent * (1 - entity.stride)
-	return Theme.COMBAT_RANGE_TELL_SPENT_LEAN * slump,
-		0,
-		twist,
-		1 - (1 - Theme.COMBAT_RANGE_TELL_SPENT_SQUASH) * slump
+	-- The elite's ground wedge (only an arc has one): growing through the windup, sweeping
+	-- through the blow.
+	local tell = entity.tell
+	if tell ~= nil then
+		if out.phase == "windup" then
+			drawTell(entity, tell, out.u, false, 0)
+		elseif out.phase == "attack" then
+			drawTell(entity, tell, 1, true, out.u)
+		end
+	end
+	return out.lean, out.thrust, out.twist, out.squash
 end
 
 -- P4 wave 2: how far a lane's charge really runs: its range, or less where the arena's edge
@@ -2274,14 +2328,12 @@ local function stepAlive(
 		return
 	end
 	-- L1b: seated while the wire says `rest`, standing in every other state. The seat moves at
-	-- a fixed pace both ways, so a rise takes COMBAT_RISE_BLEND_SECONDS from seated (and a
-	-- guard's one-step `rise` changes nothing: it was standing).
+	-- a fixed pace both ways, so a rise takes crowd.riseBlendSeconds from seated (and a guard's
+	-- one-step `rise` changes nothing: it was standing). The server steps its own with the same
+	-- HitShapes.SeatStep.
 	local seatGoal = if entity.state == "rest" then 1 else 0
 	if entity.seat ~= seatGoal then
-		local stepSeat = dt / math.max(Theme.COMBAT_RISE_BLEND_SECONDS, 1e-3)
-		entity.seat = if seatGoal > entity.seat
-			then math.min(entity.seat + stepSeat, 1)
-			else math.max(entity.seat - stepSeat, 0)
+		entity.seat = HitShapes.SeatStep(entity.seat, seatGoal, dt, riseSeconds)
 	end
 	local targetYaw = sampleAt(entity, renderTime)
 	local turn = angleDelta(entity.yaw, targetYaw)
@@ -2290,6 +2342,7 @@ local function stepAlive(
 	local offset = Vector3.zero
 	local drawnYaw = entity.yaw
 	local squash = 1
+	local thrust = 0
 	-- Wave 2: the reel after a plate breaks is a stagger on the wire, crowd.plateBreakSeconds
 	-- from the hit. It holds by its clock (that hit may have thrown the body up, and `airborne`
 	-- shows over the stagger first) and then for as long as the wire still says stagger, so
@@ -2317,7 +2370,7 @@ local function stepAlive(
 			local gap = stride - entity.stride
 			entity.stride = if math.abs(gap) < 0.01 then stride else entity.stride + gap * leanAlpha
 		end
-		local leanAngle, thrust, twist, slump = threatPose(entity, serverNow)
+		local leanAngle, thrustNow, twist, slump = threatPose(entity, serverNow)
 		local facing = lookOf(entity.yaw)
 		local leanTo = facing * leanAngle
 		if entity.threat == "recover" then
@@ -2331,7 +2384,11 @@ local function stepAlive(
 			-- The attack's own clock is the easing: smoothing on top would show the blow late.
 			entity.lean = leanTo
 		end
-		offset = facing * thrust
+		-- A model steps its leading foot and reaches with its arm instead (Figures.Pose).
+		thrust = thrustNow
+		if entity.figure == nil then
+			offset = facing * thrust
+		end
 		drawnYaw += twist
 		squash = math.round(slump * 100) / 100
 	else
@@ -2414,6 +2471,17 @@ local function stepAlive(
 			entity.warded
 		)
 	end
+	local planks = entity.figure
+	if planks ~= nil then
+		-- L4 W2: a model's plate is its own planks, on the same rule as the shell.
+		Figures.Plate(
+			planks,
+			entity.plated,
+			(now - entity.breakAt) / Theme.COMBAT_RANGE_CUE_BREAK_SECONDS,
+			now - entity.glintAt < Theme.COMBAT_RANGE_CUE_GLINT_SECONDS,
+			entity.warded
+		)
+	end
 
 	local lean = entity.lean
 	local tumbleAngle = 0
@@ -2453,8 +2521,24 @@ local function stepAlive(
 
 	local shown = entity.position + offset
 	entity.shown = shown
+	-- L4 W2: a model's walk cycle and arm, which move with nothing above.
+	local figure = entity.figure
+	local posed = figure ~= nil
+		and Figures.Pose(
+			figure,
+			dt,
+			entity.position,
+			entity.yaw,
+			lean,
+			if entity.threat ~= "none" then threatOut else nil,
+			entity.threatShape,
+			threatIn,
+			entity.seat,
+			thrust
+		)
 	if
 		not entity.dirty
+		and not posed
 		and (shown - entity.lastShown).Magnitude < SETTLE_EPSILON
 		and math.abs(drawnYaw - entity.lastYaw) < SETTLE_EPSILON
 		and (lean - entity.lastLean).Magnitude < SETTLE_EPSILON
@@ -2473,6 +2557,24 @@ local function stepAlive(
 	entity.lastSquash = squash
 	entity.lastTuck = tuck
 	entity.lastSeat = entity.seat
+	if figure ~= nil then
+		-- The rig leans and turns the model itself; the root carries the feet and a launch.
+		moveCount = Figures.Queue(
+			figure,
+			rootFrame(entity, shown, 0, Vector3.zero, entity.launchAxis, tumbleAngle),
+			entity.yaw,
+			drawnYaw - entity.yaw,
+			lean,
+			squash,
+			entity.seat,
+			entity.state == "airborne",
+			entity.cues,
+			moveParts,
+			moveFrames,
+			moveCount
+		)
+		return
+	end
 	queuePose(
 		entity,
 		rootFrame(entity, shown, drawnYaw, lean, entity.launchAxis, tumbleAngle),
@@ -2542,6 +2644,7 @@ local function step(dt: number): ()
 		return
 	end
 	local now = os.clock()
+	Figures.BeginFrame()
 	local serverNow = Workspace:GetServerTimeNow()
 	local renderTime = serverNow - (lagEstimate or 0) - interval * INTERP_SNAPSHOTS
 	local yawAlpha = 1 - math.exp(-dt * YAW_SMOOTH_RATE)
@@ -2574,9 +2677,19 @@ local function step(dt: number): ()
 	if moveCount > 0 then
 		Workspace:BulkMoveTo(moveParts, moveFrames, Enum.BulkMoveMode.FireCFrameChanged)
 	end
+	-- L4 W2: Studio's "Draw N ms" (CombatHud) takes this frame's cost.
+	DrawClock.Add(os.clock() - now)
+end
+
+-- L4 W2: the seat's two numbers, and every kind's model checked again against its def.
+local function retune(): ()
+	Figures.Retune()
+	local crowd = Tuning.Get().crowd
+	riseSeconds = if crowd ~= nil then crowd.riseBlendSeconds or 0 else 0
 end
 
 local function onTuningChanged(): ()
+	retune()
 	for _, entity in active do
 		local def = kindDef(entity.kind)
 		if def ~= nil then
@@ -2736,13 +2849,36 @@ end
 -- P5: a mission's pool is filled to that mission's `crowd.maxAlive`, which CombatUIController
 -- hands over once the first RunState names the mission. Never past the bench's own cap, which
 -- is the most the server will ever field; a body past the pool is still built on demand.
-function CrowdRenderer.Prewarm(count: number): ()
-	if not started or destroyed or count ~= count then
+-- L4 W2: handed RunState.prewarm (the plan's bodies by kind), the model pools are filled too,
+-- each kind to its count and all of them together to the same cap.
+function CrowdRenderer.Prewarm(counts: number | { [string]: number }): ()
+	if not started or destroyed then
 		return
 	end
 	local crowd = Tuning.Get().crowd
 	local cap = if crowd ~= nil then crowd.maxAlive else 0
-	task.spawn(prewarm, math.max(math.min(math.floor(count), cap), 0))
+	if typeof(counts) == "number" then
+		if counts == counts then
+			task.spawn(prewarm, math.max(math.min(math.floor(counts), cap), 0))
+		end
+		return
+	end
+	task.spawn(Figures.Prewarm, counts, cap)
+end
+
+-- L4 W2, the X key in Studio: every kind's model, or every body the placeholder; the living
+-- bodies are re-dressed at once (one dying keeps what it wore). Answers whether models are on.
+function CrowdRenderer.ToggleModels(): boolean
+	Figures.SetEnabled(not Figures.Enabled())
+	for _, entity in active do
+		if entity.phase == "alive" then
+			local def = kindDef(entity.kind)
+			if def ~= nil then
+				applyKind(entity, def)
+			end
+		end
+	end
+	return Figures.Enabled()
 end
 
 -- Inert unless the range's combat runs. CameraController.IsCrowdCombat is that gate (the range,
@@ -2759,6 +2895,7 @@ function CrowdRenderer.Start(): ()
 	created.Parent = Workspace
 	folder = created
 	template = buildTemplate()
+	retune()
 
 	if CameraController.IsRange() then
 		CrowdRenderer.SetArena(Tuning.Get().arena)
@@ -2784,11 +2921,13 @@ function CrowdRenderer.Destroy(): ()
 		tuningConnection = nil
 	end
 	for _, entity in active do
-		entity.model:Destroy()
+		entity.body:Destroy()
 	end
 	for _, entity in pool do
-		entity.model:Destroy()
+		entity.body:Destroy()
 	end
+	-- Every model, drawn or pooled.
+	Figures.Destroy()
 	table.clear(active)
 	table.clear(pool)
 	bossEntity = nil
@@ -2833,13 +2972,14 @@ function CrowdRenderer.GetBody(id: number): Model?
 end
 
 -- L1b: the head part of a living, drawn body (what a mark over it is hung on: it follows the
--- body, seated or standing); nil once the body is gone, dying or not drawn yet.
+-- body, seated or standing); nil once the body is gone, dying or not drawn yet. L4 W2: a model's
+-- is its invisible anchor at the scored head (a new part when X re-dresses the body).
 function CrowdRenderer.GetHead(id: number): BasePart?
 	local entity = byId[id]
 	if entity == nil or entity.samples == 0 or entity.phase ~= "alive" then
 		return nil
 	end
-	return entity.head
+	return entity.anchor
 end
 
 -- L1b fix round: the camp floor a body stands on, as its top centre and half extents (half.Y
@@ -2870,12 +3010,20 @@ function CrowdRenderer.GetHpFraction(id: number): number?
 end
 
 -- Every living, drawn body: feet (interpolated, without reaction offsets), body radius, head
--- radius, height. Dying, dead-state and fading bodies are skipped so aim never locks a corpse.
--- The callback must not yield.
+-- radius, height, and (L4 W2) how far its seat lowers its head and its capsule's top, as the
+-- server judges it (HitShapes.SeatDrop). Dying, dead-state and fading bodies are skipped so aim
+-- never locks a corpse. The callback must not yield.
 function CrowdRenderer.ForEach(callback: ForEachCallback): ()
 	for _, entity in active do
 		if entity.phase == "alive" and entity.samples > 0 and entity.state ~= "dead" then
-			callback(entity.id, entity.position, entity.radius, entity.headRadius, entity.height)
+			callback(
+				entity.id,
+				entity.position,
+				entity.radius,
+				entity.headRadius,
+				entity.height,
+				HitShapes.SeatDrop(entity.height, entity.seat, poseConsts.restDrop)
+			)
 		end
 	end
 end

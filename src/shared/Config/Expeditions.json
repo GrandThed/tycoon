@@ -30,6 +30,15 @@
 		{ "id": "planet", "name": "Another Planet", "theme": "planet", "x": 0.72, "y": 0.33, "kind": "level", "from": "underworld", "requires": { "node": "underworld" } },
 		{ "id": "dream", "name": "The Dream", "theme": "dream", "x": 0.9, "y": 0.63, "kind": "level", "from": "planet", "requires": { "node": "planet" } }
 	],
+	"keys": {
+		"castle": { "name": "Castle Key", "text": "Opens a sealed door in the Castle." }
+	},
+	"moods": {
+		"forestRoad": {
+			"lighting": { "brightness": 1.6, "outdoorAmbient": [110, 120, 130] },
+			"atmosphere": { "density": 0.38, "offset": 0, "color": [110, 124, 120], "decay": [92, 106, 100], "glare": 0, "haze": 1.6 }
+		}
+	},
 	"themes": {
 		"forest": { "color": [70, 182, 101] },
 		"castle": { "color": [143, 163, 199] },

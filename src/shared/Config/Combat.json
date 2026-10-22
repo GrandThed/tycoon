@@ -99,6 +99,7 @@
 		"setTierAttribute": "DebugSetTier",
 		"grantStarAttribute": "DebugGrantStar",
 		"resetArmoryAttribute": "DebugResetArmory",
+		"dressFailAttribute": "DebugDressFail",
 		"perfLogSeconds": 10,
 		"perfAttribute": "CrowdPerfMs"
 	},
