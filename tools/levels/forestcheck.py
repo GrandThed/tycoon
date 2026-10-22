@@ -10,7 +10,9 @@ tools/levels/forest.py's docstring is proved on that build. One line per failure
      pieces are the tree-line walls, each in the character-only ArenaBarrier group.
   3. No new standable top: every wall's top stands UNCLIMB over every walkable top within
      UNCLIMB_REACH, no wall reaches into walkable ground or a designed drop, every wall is at
-     least a stud thick and lies inside the wire's +-1,000 studs.
+     least a stud thick and lies inside the wire's +-1,000 studs; no designed drop runs longer
+     than forest.DROP_MAX (a long one is a hole in the walls: the climb's summit once opened one
+     378 studs long through the forest).
   4. The region's walking space: inside any plateau cell, from its floor up to REACH_ABOVE, no
      dressing geometry stands more than 4 studs over the floor (0.3 of slack at a cell's edge),
      except a spawn tent inside its own layout marker.
@@ -25,6 +27,13 @@ tools/levels/forest.py's docstring is proved on that build. One line per failure
      and the layout Parts the dressing keeps visible), down-facing bottoms under the ground aside.
   7. The kit's own rules (forest_kit.problems), every mesh within the importer's limits, the
      triangle budget within 10 per cent, every prop a kit piece, every `with` a real block.
+  8. The climb (MISSIONS_DESIGN 28, tools/check_parkour.py CLIMBS): every tree-line wall along the
+     climb's yard, trail and path stands to the climb's wallTop (over every flight off the
+     summit); no tree on a ledge or the summit; no placed piece on a hop's take-off or landing
+     (HOP_CLEAR either side of the face the hop rises over); the summit's ring of standing stones
+     (the one place a stone may stand on walkable ground beside the island shrine's ring) keeps
+     every stone under REGION_PIECE_MAX, outside the chest's trigger (Combat.json
+     levels.secretReach from its footprint, and a margin) and on the summit's top.
 """
 
 from __future__ import annotations
@@ -40,6 +49,8 @@ from levelmesh import Rect
 
 EDGE_SLACK = 0.3
 ROCK_SKIN = 0.3  # a rock block over walkable ground lies within this of a collision solid (forest.THIN_OUT 0.12)
+HOP_CLEAR = 6.0  # a hop's take-off and landing: this far either side of the face it rises over (mountain.md 5)
+TRIGGER_MARGIN = 1.0  # a summit stone stands this much farther from the chest than its trigger reaches
 
 
 def run(build, data_path) -> list[str]:
@@ -62,6 +73,7 @@ def run(build, data_path) -> list[str]:
     out += walking_space_rule(build)
     out += stone_ground_rule(build)
     out += clearing_rule(build)
+    out += climb_rule(build, fresh)
     out += coplanar_rule(build)
     out += kit.problems()
     for m in build.meshes:
@@ -119,6 +131,9 @@ def barrier_rules(build, data) -> list[str]:
             out.append(f"{b['name']} lies outside the wire's +-{F.ORIGIN_LIMIT:.0f} studs")
         if b["sx"] < 0.99 or b["sz"] < 0.99:
             out.append(f"{b['name']} is thinner than a stud: a dash steps through it")
+    for k, d in enumerate(level.drops):
+        if max(d.x1 - d.x0, d.z1 - d.z0) > F.DROP_MAX + 1e-6:
+            out.append(f"designed drop {k + 1} ({d.x0:.0f}..{d.x1:.0f}, {d.z0:.0f}..{d.z1:.0f}) runs {max(d.x1 - d.x0, d.z1 - d.z0):.0f} studs, over DROP_MAX {F.DROP_MAX:g}: a hole in the walls")
     return out
 
 
@@ -223,8 +238,8 @@ def stone_ground_rule(build) -> list[str]:
     level = build.level
     ground = [(w.name, w.rect) for w in level.walks] + [(w.name, w.rect) for w in level.water]
     for item in build.P.items:
-        if kit.role_of(item["piece"]) != "rock" or item.get("island"):
-            continue
+        if kit.role_of(item["piece"]) != "rock" or item.get("island") or item.get("summit"):
+            continue  # the shrine's ring and the summit's (rule 8 holds the summit's)
         foot, _top = F.footprint(item)
         for name, r in ground:
             if foot.overlaps(r.grown(-EDGE_SLACK)):
@@ -263,6 +278,94 @@ def clearing_rule(build) -> list[str]:
             if bad:
                 out.append(f"camp {cid}: mesh {m.name} rises to {bad[1]:.2f} inside the walled rectangle, over its wall's top {top:.1f}")
     return out
+
+
+# ---------------------------------------------------------------- the climb
+
+
+def hop_zones(level) -> list[tuple[str, Rect]]:
+    """Every hop's take-off and landing on the climb: the strip HOP_CLEAR deep of the lower top and
+    of the upper one along the face where the two meet (the yard's hop onto the first ledge: the
+    first ledge's sides over the yard)."""
+    boxes = F.climb_boxes(level)
+    out = []
+    for (na, a, _ta), (nb, b, _tb) in zip(boxes, boxes[1:]):
+        ox = min(a.x1, b.x1) - max(a.x0, b.x0)
+        oz = min(a.z1, b.z1) - max(a.z0, b.z0)
+        if abs(ox) < 1e-6 and oz > 1e-6:
+            x = a.x1 if abs(a.x1 - b.x0) < 1e-6 else a.x0
+            z0, z1 = max(a.z0, b.z0), min(a.z1, b.z1)
+            out.append((f"{na} -> {nb}", Rect(x - HOP_CLEAR, x + HOP_CLEAR, z0, z1)))
+        elif abs(oz) < 1e-6 and ox > 1e-6:
+            z = a.z1 if abs(a.z1 - b.z0) < 1e-6 else a.z0
+            x0, x1 = max(a.x0, b.x0), min(a.x1, b.x1)
+            out.append((f"{na} -> {nb}", Rect(x0, x1, z - HOP_CLEAR, z + HOP_CLEAR)))
+    if boxes:
+        name, first, _top = boxes[0]
+        others = [r for _n, r, _t in boxes[1:]]
+        for side, (nx, nz) in F.SIDES.items():
+            edge = (first.x1 if nx > 0 else first.x0) if nx else (first.z1 if nz > 0 else first.z0)
+            probe = (edge + nx * 0.5, (first.z0 + first.z1) / 2) if nx else ((first.x0 + first.x1) / 2, edge + nz * 0.5)
+            if any(r.contains(*probe) for r in others):
+                continue  # that side stands against the mountain, not over the yard
+            zone = Rect(edge - HOP_CLEAR, edge + HOP_CLEAR, first.z0, first.z1) if nx else Rect(first.x0, first.x1, edge - HOP_CLEAR, edge + HOP_CLEAR)
+            out.append((f"the yard -> {name}", zone))
+    return out
+
+
+def climb_rule(build, data) -> list[str]:
+    """Rule 8 (see the docstring)."""
+    out = []
+    level = build.level
+    if not level.climb:
+        return out
+    wall_top = float(level.climb["wallTop"])
+    for b in data["barriers"]:
+        c, lo, hi = b["edge"]
+        if F.on_climb(level, b["side"], c, lo, hi) and b["y"] + b["sy"] / 2 < wall_top - 1e-6:
+            out.append(f"{b['name']} walls the climb's foot to {b['y'] + b['sy'] / 2:.1f}, under its wallTop {wall_top:.0f}: a flight off the summit clears it")
+    boxes = F.climb_boxes(level)
+    tops = {n: (r, t) for n, r, t in boxes}
+    zones = hop_zones(level)
+    summit_name = level.climb["summit"]
+    chest = next((s for s in level.layout.get("secrets") or [] if s.get("id") == level.climb["secret"]), None)
+    with open(F.COMBAT_JSON, encoding="utf-8") as fh:
+        reach = float(json.load(fh)["levels"]["secretReach"])
+    for item in build.P.items:
+        foot, top = F.footprint(item)
+        on = [n for n, (r, t) in tops.items() if r.contains(item["x"], item["z"]) and abs(item["y"] - t) < 1.0]
+        role = kit.role_of(item["piece"])
+        if on and role in ("tree", "hero"):
+            out.append(f"{item['piece']} at ({item['x']}, {item['z']}) stands on {on[0]}: no tree on the climb's ledges")
+        for label, zone in zones:
+            if foot.overlaps(zone) and top > zone_floor(item, tops) + 0.5:
+                out.append(f"{item['piece']} at ({item['x']}, {item['z']}) stands on the hop {label}'s take-off or landing")
+                break
+        if item.get("summit"):
+            sr, stop = tops.get(summit_name, (None, None))
+            if item["summit"] != summit_name or sr is None:
+                out.append(f"{item['piece']} at ({item['x']}, {item['z']}) is tagged for a summit the climb does not have")
+                continue
+            if top - stop > F.REGION_PIECE_MAX + 1e-6:
+                out.append(f"summit stone {item['piece']} at ({item['x']}, {item['z']}) stands {top - stop:.2f} tall, over {F.REGION_PIECE_MAX}")
+            if not (sr.contains(foot.x0, foot.z0) and sr.contains(foot.x1, foot.z1)):
+                out.append(f"summit stone {item['piece']} at ({item['x']}, {item['z']}) reaches past the summit's top")
+            if chest:
+                cr = Rect.of(chest)
+                gap = math.hypot(max(0.0, cr.x0 - foot.x1, foot.x0 - cr.x1), max(0.0, cr.z0 - foot.z1, foot.z0 - cr.z1))
+                if gap < reach + TRIGGER_MARGIN:
+                    out.append(f"summit stone {item['piece']} at ({item['x']}, {item['z']}) stands {gap:.2f} from the chest, inside its trigger and margin ({reach + TRIGGER_MARGIN:g})")
+    return out
+
+
+def zone_floor(item, tops) -> float:
+    """The floor under a placement (a ledge's top or the yard's 0), for the hop-zone test: a
+    piece wholly under it (a stone of the yard's scree) is no obstacle."""
+    best = 0.0
+    for r, t in tops.values():
+        if r.contains(item["x"], item["z"]):
+            best = max(best, t)
+    return min(best, item["y"])
 
 
 # ---------------------------------------------------------------- coplanar overlaps
@@ -509,6 +612,57 @@ def mutants(build, data_path) -> list[tuple[str, bool, str]]:
     finally:
         if os.path.isfile(tmp):
             os.remove(tmp)
+
+    # rule 3 again: the summit's bogus drop (the generator before F2) through the forest
+    build.level.drops.append(Rect(-596.0, -218.0, -110.0, -98.0))
+    expect("a designed drop through the forest", [x for x in barrier_rules(build, data) if "DROP_MAX" in x])
+    build.level.drops.pop()
+
+    # rule 4b on the mountain: its thin faces' blocks pushed out over the yard
+    if build.level.climb:
+        mount = F.ART["cliff"]["mount"]
+        try:
+            F.ART["cliff"]["mount"] = dict(mount, front=[0.6, 1.4], lift=0.4)
+            rocks = F.Bake("RockFaces", "palette", group="rock")
+            F.mountain_faces(build.level, rocks)
+            build.meshes.append(rocks)
+            expect("mountain face standing out", [x for x in walking_space_rule(build) if "RockFaces" in x])
+            build.meshes.pop()
+        finally:
+            F.ART["cliff"]["mount"] = mount
+
+    # rule 8: the climb (a wall under its wallTop, a fir on a hop's landing, a summit stone over
+    # 4 studs, one inside the chest's trigger)
+    if build.level.climb:
+        d = copy.deepcopy(data)
+        for b in d["barriers"]:
+            c, lo, hi = b["edge"]
+            if F.on_climb(build.level, b["side"], c, lo, hi):
+                b["sy"] -= 60.0
+                b["y"] -= 30.0
+                break
+        expect("climb wall under its wallTop", [x for x in climb_rule(build, d) if "walls the climb" in x])
+        boxes = F.climb_boxes(build.level)
+        _n, r3, t3 = boxes[2]
+        _n, r4, _t4 = boxes[3]
+        x = (r3.x0 + r3.x1) / 2
+        z = r3.z0 + 2.0 if abs(r3.z0 - r4.z1) < 1e-6 else r3.z1 - 2.0
+        build.P.items.append({"piece": "FirHeroB", "x": x, "y": t3, "z": z, "yaw": 0.0, "scale": 0.7})
+        expect("fir on a hop's take-off", [x for x in climb_rule(build, data) if x.startswith("FirHeroB")])
+        build.P.items = [dict(i) for i in saved]
+        for it in build.P.items:
+            if it.get("summit"):
+                it["scale"] *= 2.0
+                break
+        expect("summit stone over 4 studs", [x for x in climb_rule(build, data) if "tall, over" in x])
+        build.P.items = [dict(i) for i in saved]
+        chest = next(s for s in build.level.layout["secrets"] if s["id"] == build.level.climb["secret"])
+        for it in build.P.items:
+            if it.get("summit"):
+                it["x"], it["z"] = chest["x"] + 4.5, chest["z"]
+                break
+        expect("summit stone in the chest's trigger", [x for x in climb_rule(build, data) if "inside its trigger" in x])
+        build.P.items = [dict(i) for i in saved]
 
     # rule 7: the kit and the mesh limits
     for piece, role, maker, label in (

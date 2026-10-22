@@ -169,15 +169,17 @@ def water_sheets(layout, looks):
     return out
 
 
-def shoulder_camera(feet, target, combat_camera, pitch_deg=-9.0, size=(1600, 900)):
-    """The game's camera behind a player standing at `feet` and facing `target`."""
+def shoulder_camera(feet, target, combat_camera, pitch_deg=-9.0, size=(1600, 900), zoom=None):
+    """The game's camera behind a player standing at `feet` and facing `target` (`zoom`: the
+    boom's length, Combat.json camera.defaultZoom unless a view looks steeply up, where the game's
+    camera pulls in off the ground)."""
     fx, fy, fz = feet
     dx, dz = target[0] - fx, target[2] - fz
     d = math.hypot(dx, dz) or 1.0
     ux, uz = dx / d, dz / d
     rx, rz = -uz, ux  # right of the facing (Y up, looking along +ux,+uz): (x, z) -> (-z, x)
     off = combat_camera["shoulderOffset"]
-    zoom = combat_camera["defaultZoom"]
+    zoom = combat_camera["defaultZoom"] if zoom is None else zoom
     head = (fx + rx * off[0], fy + 4.5 + off[1], fz + rz * off[0])
     p = math.radians(pitch_deg)
     look = (ux * math.cos(p), math.sin(p), uz * math.cos(p))
@@ -202,7 +204,14 @@ VIEWS = {
     "shrine": {"feet": (-398, -1, 88), "target": (-400, 0, 128), "moods": "A", "label": "The island shrine from the frozen creek (ice not drawn)", "pitch": -7},
     "gap": {"feet": (-446, 0, 2), "target": (-410, -4, -8), "moods": "A", "label": "The trailhead gap and the lookout's gully"},
     "gatehouse": {"feet": (214, 8, -44), "target": (290, 14, -44), "moods": "A", "label": "The gatehouse from the road"},
+    "gatehouseWalk": {"feet": (280, 12, -45), "target": (312, 14, -44), "moods": "A", "label": "Inside the gatehouse, the canyon walls", "pitch": 4},
     "clearing": {"feet": (304, 12, -6), "target": (313.5, 12, 70), "moods": "AB", "label": "The Chief's Clearing from inside, his hall"},
+    # The mountain climb (MISSIONS_DESIGN 28): from the trailhead, from the yard's mouth up the spiral,
+    # on ledge 4 facing the hop onto ledge 5, and on the summit by the chest over the forest.
+    "mountain_far": {"feet": (-474, 0, -2), "target": (-612, 0, -104), "moods": "B", "label": "The mountain from the trailhead", "pitch": 16},
+    "mountain_yard": {"feet": (-646, 0, -70), "target": (-596, 0, -90), "moods": "B", "label": "The climb from the yard, up the spiral", "pitch": 24, "zoom": 9},
+    "mountain_ledge": {"feet": (-581, 100, -136), "target": (-612, 100, -134), "moods": "B", "label": "On ledge 4, the hop onto ledge 5 ahead", "pitch": 8},
+    "mountain_summit": {"feet": (-620, 200, -105), "target": (-560, 200, -112), "moods": "B", "label": "The summit and its chest, the forest below", "pitch": -16},
 }
 
 
@@ -257,7 +266,7 @@ def build_scenes(args):
             scenes.append(spec)
             continue
         view = VIEWS[name]
-        cam, yaw = shoulder_camera(view["feet"], view["target"], combat["camera"], view.get("pitch", -9.0))
+        cam, yaw = shoulder_camera(view["feet"], view["target"], combat["camera"], view.get("pitch", -9.0), zoom=view.get("zoom"))
         for mood in (args.moods or view["moods"]):
             if mood not in view["moods"] and not args.moods:
                 continue

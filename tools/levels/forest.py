@@ -33,8 +33,14 @@ proves each one on every run):
   * Camp C: nothing of the clearing shows above its wall; the Chief's tent is walk-through.
   * Rock never reaches into walking space: over walkable ground, up to REACH_ABOVE, every rock
     vertex lies on a collision solid's skin (a thin face's blocks at most THIN_OUT out of their
-    wall), and no kit stone stands on walkable ground or water (the island shrine's ring aside).
-    Every rock is in the language of Ben's references (2026-10-21): stacked chamfered blocks.
+    wall), and no kit stone stands on walkable ground or water (the island shrine's ring and the
+    summit's aside). Every rock is in the language of Ben's references (2026-10-21): clustered
+    chamfered blocks, cut by pack_cells with no grid, course or long straight joint (his second
+    look, the same day: "less regular walls").
+  * The climb (MISSIONS_DESIGN 28, tools/check_parkour.py CLIMBS): its yard, trail and path are
+    walled to the climb's wallTop; its summit opens no designed drop; no tree on a ledge or the
+    summit, nothing on a hop's take-off or landing; the summit's ring of standing stones stays
+    under 4 studs and outside the chest's trigger.
   * Coplanar faces of two different looks never overlap (they shimmer).
 
 **Frames and units:** the level frame is Roblox world studs, as the layout writes them; yaw in
@@ -57,6 +63,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "assets"))
+sys.path.insert(0, os.path.join(REPO_ROOT, "tools"))
+import check_parkour  # noqa: E402  (CLIMBS only: the climb's pieces and its wall's height)
 import forest_kit as kit  # noqa: E402
 import levelmesh as lm  # noqa: E402
 from forest_palette import BARK, CAMP, FOLIAGE, GROUND, ROCK  # noqa: E402
@@ -77,6 +85,7 @@ UNCLIMB = 43.0
 UNCLIMB_REACH = 49.3
 COVER_MAX = 3.5
 REGION_PIECE_MAX = 4.0  # the lead's rule for the region's walking space
+DROP_MAX = 50.0  # a double-jump secret's designed drop: only across to a block a double jump can carry (the lookout's is 18)
 ORIGIN_LIMIT = 1000.0
 TRI_BUDGET = 150000  # the whole level at the game camera (the lead's budget); check fails at +10%
 
@@ -112,46 +121,59 @@ ART = {
         "extra": [[-436.0, -422.0, -52.0, -8.0], [-438.0, -424.0, 8.0, 44.0], [-438.0, -408.0, 34.0, 46.0], [-462.0, -434.0, -48.0, -40.0]],
     },
     "water": {"bed": -3.6, "bank": 4.0},
-    "trees": {"near": [5.0, 11.0], "mid": [11.0, 19.0], "nearStep": 7.2, "midStep": 7.8},
-    "blanket": {"start": 17.0, "cell": 14.0, "under": 6.5, "low": 14.0, "high": 27.0},
+    # Round the climb's yard (seen from inside it and from the ledges above, never along a road):
+    # the near band at `yardNear` of its trees, no middle band, the thicket band `yardEdge` times
+    # as sparse, and the canopy from `blanket.yardStart` (it stands where the middle band would).
+    "trees": {"near": [5.0, 11.0], "mid": [11.0, 19.0], "nearStep": 7.2, "midStep": 7.8, "yardNear": 0.45, "yardEdge": 2.4},
+    "blanket": {"start": 17.0, "cell": 15.0, "under": 6.5, "low": 14.0, "high": 27.0, "yardStart": 11.0, "deep": 3},
     "massif": {"reach": 28.0, "margin": 3.0, "slope": 2.2},
     "backdrop": {"inner": 40.0, "outer": 520.0, "ring": 20, "rows": 6, "peak": [40.0, 110.0]},
     "camps": {"clutterA": 12, "clutterB": 20, "clutterC": 12, "seats": 4},
-    # Ben's rock references (2026-10-21): the cliffs are stacked chamfered blocks (rock_faces).
-    # Per style, studs: column width and block height ranges, how far a block's front stands out of
-    # the collision face (negative: behind it), the front corners' extra rise, the chamfer, how deep
-    # the dark backing lies, the front's slide (a tilt), a corner cut.
+    # Ben's rock references (2026-10-21): the cliffs are clustered chamfered blocks (rock_faces), cut
+    # by pack_cells (his second look, the same day: "less regular walls", no grid, no course).
+    # Per style, studs: the blocks' width and height ranges (their means set the size and how much
+    # taller than wide a block is), the spread of one block's size round that mean, how far a block's
+    # front stands out of the collision face (negative: behind it), the front corners' extra rise
+    # (its facets), the chamfer, how deep the dark backing lies, the front's slide (a tilt), how far
+    # the chamfer runs in (times the bevel), the shortest edge a block keeps, and (`mass`, default 2.4)
+    # how many blocks across a mass of pack_cells is (a small face wants smaller masses).
     "cliff": {
         "gap": 0.14,  # between two blocks: the backing's crevice
         "crevice": 2.0,  # some crevices up to this many times wider
-        "poke": [-1.5, 3.2],  # a column over a free top edge
-        "crown": 0.45,  # the tilt of a free column's top
+        "poke": [-1.5, 3.2],  # a block over a free top edge
+        "crown": 0.45,  # the tilt of a free block's top
         "crownBevel": 2.0,  # and its bigger chamfer
         "thinBack": 1.5,  # how deep a thin face's blocks may sit back, where the wall is thick enough
-        "tier": [16.0, 30.0],  # a face taller than the top of this is cut into tiers of these heights
-        "seam": 0.12,  # the slant of the seam between two tiers (rise over run)
         "skyline": 16.0,  # studs: how long a rise or fall of a free top's skyline runs
         "talus": [3.0, 24.0],  # a face nobody stands at bulges this much more at its foot, fading over this height
         "clear": 1.5,  # and every block of it stops this far short of ground a walker stands on or falls into
         "nearReach": 32.0,  # a face this near a walker carries the "near" blocks
-        "stretch": [18.0, 34.0],  # a long face is judged near or far, and tiered, stretch by stretch
-        "thin": {"width": [5.0, 12.0], "height": [10.0, 20.0], "front": [-1.2, 0.06], "lift": 0.06, "bevel": [0.36, 0.55],
-                 "back": 0.8, "shear": 0.2, "slant": 1.2, "tilt": 0.22, "round": 1.6},
-        "tunnel": {"width": [16.0, 26.0], "height": [18.0, 28.0], "front": [-1.0, 0.06], "lift": 0.06, "bevel": [0.4, 0.6],
-                   "back": 0.8, "shear": 0.2, "slant": 1.2, "tilt": 0.2, "round": 1.4},
-        "step": {"width": [2.0, 6.0], "height": [3.0, 6.0], "front": [-0.7, 0.06], "lift": 0.06, "bevel": [0.25, 0.45],
-                 "back": 1.0, "shear": 0.12, "slant": 0.6, "tilt": 0.25, "round": 1.4},
-        "near": {"width": [5.0, 13.0], "height": [10.0, 24.0], "front": [0.5, 4.5], "lift": 1.3, "bevel": [0.55, 1.05],
-                 "back": 0.3, "shear": 0.55, "slant": 1.8, "tilt": 0.25, "round": 1.9,
-                 "poke": [-2.0, 5.5]},
-        "far": {"width": [11.0, 18.0], "height": [16.0, 30.0], "front": [0.8, 4.5], "lift": 1.6, "bevel": [0.8, 1.4],
-                "back": 0.3, "shear": 0.8, "slant": 2.5, "tilt": 0.25, "round": 1.8,
-                "poke": [-2.0, 6.0]},
-        "pillar": {"width": [3.0, 7.0], "height": [4.5, 10.0], "front": [0.3, 2.2], "lift": 0.7, "bevel": [0.4, 0.8],
-                   "back": 0.3, "shear": 0.4, "slant": 0.9, "tilt": 0.25, "round": 1.7},
-        "gully": {"width": [3.5, 8.0], "height": [6.0, 12.0], "front": [0.3, 1.6], "lift": 0.4, "bevel": [0.4, 0.8],
-                  "back": 1.0, "shear": 0.3, "slant": 0.8, "tilt": 0.22, "round": 1.6},
-        "cap": {"width": [6.0, 11.0], "front": [0.5, 2.4], "lift": 0.4, "bevel": [0.5, 0.9], "back": 1.5, "shear": 0.4,
+        "blend": 30.0,  # and they grow to the "far" ones over this many studs farther
+        "foot": [0.55, 24.0],  # a thin face's blocks at its foot: this share of the size, growing over this height
+        "thin": {"width": [8.0, 17.0], "height": [14.0, 32.0], "spread": [0.5, 1.7], "front": [-1.3, 0.06], "lift": 0.9,
+                 "bevel": [0.5, 0.95], "back": 0.8, "shear": 0.35, "round": 2.3, "minEdge": 1.5},
+        "tunnel": {"width": [14.0, 26.0], "height": [18.0, 32.0], "spread": [0.6, 1.5], "front": [-1.0, 0.06], "lift": 0.6,
+                   "bevel": [0.45, 0.8], "back": 0.8, "shear": 0.3, "round": 2.0, "minEdge": 1.5},
+        "step": {"width": [2.5, 6.0], "height": [3.0, 6.0], "spread": [0.6, 1.4], "front": [-0.7, 0.06], "lift": 0.3,
+                 "bevel": [0.25, 0.45], "back": 1.0, "shear": 0.12, "round": 1.6, "minEdge": 0.7},
+        "near": {"width": [9.0, 19.0], "height": [16.0, 36.0], "spread": [0.5, 1.7], "front": [0.5, 4.5], "lift": 1.3,
+                 "bevel": [0.6, 1.1], "back": 0.3, "shear": 0.55, "round": 2.0, "minEdge": 1.5, "poke": [-2.0, 5.5]},
+        "far": {"width": [13.0, 26.0], "height": [24.0, 48.0], "spread": [0.55, 1.6], "front": [0.8, 4.5], "lift": 1.6,
+                "bevel": [0.8, 1.4], "back": 0.3, "shear": 0.8, "round": 1.9, "minEdge": 2.0, "poke": [-2.0, 6.0]},
+        "pillar": {"width": [5.0, 10.0], "height": [7.0, 15.0], "spread": [0.6, 1.5], "front": [0.3, 2.2], "lift": 0.45,
+                   "bevel": [0.4, 0.8], "back": 0.3, "shear": 0.4, "round": 1.8, "minEdge": 1.0, "mass": 1.7},
+        "gully": {"width": [6.0, 13.0], "height": [11.0, 22.0], "spread": [0.6, 1.5], "front": [0.3, 1.6], "lift": 0.4,
+                  "bevel": [0.4, 0.8], "back": 1.0, "shear": 0.3, "round": 1.7, "minEdge": 1.0},
+        # The mountain's faces (mountain_faces): thin where a body stands beside them (the yard, a
+        # ledge below), the big "mountUp" blocks bulging above that reach, finer blocks in the `fine`
+        # band under a ledge's top (band, size share), where the player stands and looks at them.
+        # `wrap`: how far a block high on one of the tower's outer corners may run round it.
+        "mount": {"width": [9.0, 20.0], "height": [16.0, 36.0], "spread": [0.5, 1.6], "front": [-1.3, 0.06], "lift": 0.9,
+                  "bevel": [0.6, 1.0], "back": 1.2, "shear": 0.35, "round": 2.3, "minEdge": 2.0, "above": "mountUp",
+                  "fine": [16.0, 0.3], "wrap": 4.0},
+        "mountUp": {"width": [10.0, 20.0], "height": [20.0, 42.0], "spread": [0.5, 1.7], "front": [1.0, 7.0], "lift": 1.6,
+                    "bevel": [0.8, 1.4], "back": 0.3, "shear": 0.8, "round": 1.9, "minEdge": 1.8},
+        "cap": {"width": [8.0, 14.0], "front": [0.5, 2.4], "lift": 0.4, "bevel": [0.5, 0.9], "back": 1.5, "shear": 0.4,
                 "overhang": 0.6, "moss": 0.25, "rim": 3.0, "narrow": [12.0, 20.0], "floor": 0.35, "slant": 1.2, "tilt": 0.18, "round": 1.8},
     },
     # The massif round the walled camp, the plateau's lips and the gully's walls: columns of
@@ -163,6 +185,27 @@ ART = {
                "anchors": ["StoneMonolith", "StoneTall", "StandingStone", "StoneSlim", "StoneBroad", "RockB", "StoneLean", "RockB"],
                "small": ["RockA", "RockFlat", "RockSmall", "RockSmall"], "pebbles": 0.3, "bank": 18.0, "foot": 22.0, "clear": 5.0,
                "bed": 0.6},
+    # The mountain (the climb, MISSIONS_DESIGN 28): its cap stones (mean size, spread, shortest edge,
+    # the mass factor, how far a stone's top rises over the top's lift, the grout's width, the
+    # chamfer's run, the overhang over a side that drops), the scree on the yard at its foot (how
+    # far out, how many, their radii and tops), the summit's ring of standing stones (radius from
+    # the chest, the gap toward the last hop in degrees, heights) and the yard's firs (as shares of
+    # the yard's rect, in its far corners).
+    "mountain": {
+        "cap": {"size": 9.5, "spread": [0.55, 1.6], "minEdge": 1.2, "mass": 1.0, "rise": 0.04, "tilt": 0.05, "gap": 0.2, "inset": 0.35, "overhang": 0.15},
+        "scree": {"band": 7.0, "count": 24, "size": [0.7, 2.0], "rise": [0.1, 0.18]},
+        "ring": {"radius": 10.5, "open": 100.0, "height": [2.8, 3.7]},
+        "yardFirs": [[0.06, 0.06], [0.94, 0.06]],
+    },
+    # Boulder piles where nobody walks (boulder_piles): how far out of a camp's fence line and along
+    # past a gate's end, how far out of a wall's corner, how near walkable ground a corner must be,
+    # the least distance between two piles, and the heap (piece, distance from the pile's centre,
+    # scale).
+    "piles": {"out": 5.0, "along": 5.0, "corner": 3.0, "beside": 8.0, "spacing": 10.0,
+              "heap": [["RockB", 0.0, 1.15], ["StoneBroad", 2.6, 0.9], ["Pebbles", 2.2, 1.0]]},
+    # Firs on the cave ridge's wide tops, and round the walled camp's rim: the spacing, studs.
+    "ridgeFirs": 15.0,
+    "crownFirs": 15.0,
     "massifRock": {"cell": [8.0, 12.0], "slant": 1.6, "poke": [0.3, 2.4], "bevel": [0.6, 1.2], "lift": 0.5, "shear": 0.5,
                    "minRise": 1.5, "keep": 1.5, "round": 1.6,
                    "stack": [10.0, 18.0], "ledge": [0.35, 0.9]},
@@ -276,6 +319,12 @@ class Level:
         for w in self.pillars:
             b = self.blocks[w.name]
             self.solids.append(Solid(w.name, w.rect.x0, w.rect.x1, b["y"] - b["sy"] / 2, w.top, w.rect.z0, w.rect.z1, "pillar"))
+        # A climb (tools/check_parkour.py CLIMBS, MISSIONS_DESIGN 28): the mountain's yard, ledges
+        # and summit, dressed by mountain_faces and walled to its wallTop.
+        self.climb = check_parkour.CLIMBS.get(self.layout_name)
+        self.climb_pieces = set()
+        if self.climb:
+            self.climb_pieces = set(self.climb["yard"]) | set(self.climb["ledges"]) | {self.climb["summit"]}
         self.drops = self.find_drops()
         self.roofed = {w.name for w in self.walks if w.kind == "path" and self.is_roofed(w)}
 
@@ -340,7 +389,9 @@ class Level:
         walkable whole (no wall between them and the ground they open off):
           * a route leg marked `via: gap`: the void between the two blocks it jumps, the road's width;
           * a double-jump secret's ledge: the void between the ledge and the nearest walkable block
-            across from it, over their shared span (the lookout's 18-stud gap)."""
+            across from it, over their shared span (the lookout's 18-stud gap), when that block is no
+            farther than DROP_MAX. A climb's summit has none: every fall off it is designed onto a
+            lower ledge or the walled yard (check_parkour's fall table)."""
         drops = []
         route = self.layout.get("route") or []
         for a, b in zip(route, route[1:]):
@@ -358,7 +409,7 @@ class Level:
                 z0, z1 = (ra.z1, rb.z0) if ra.z1 <= rb.z0 else (rb.z1, ra.z0)
                 drops.append(Rect(max(ra.x0, rb.x0), min(ra.x1, rb.x1), z0, z1))
         for s in self.layout.get("secrets") or []:
-            if s.get("needs") != "doubleJump":
+            if s.get("needs") != "doubleJump" or (self.climb and s.get("id") == self.climb["secret"]):
                 continue
             ledge = next((w for w in self.pillars if w.rect.contains(s["x"], s["z"])), None)
             if ledge is None:
@@ -378,7 +429,7 @@ class Level:
                     if gap is not None and gap > 0 and (best is None or gap < best[0]):
                         lo, hi = (L.x1, r.x0) if r.x0 >= L.x1 else (r.x1, L.x0)
                         best = (gap, Rect(lo, hi, max(r.z0, L.z0), min(r.z1, L.z1)))
-            if best is not None:
+            if best is not None and best[0] <= DROP_MAX:
                 drops.append(best[1])
         return drops
 
@@ -440,7 +491,8 @@ NOISE = lm.Noise(20261021)
 def barriers(level: Level):
     """The walls at the walkable edge: every stretch of the walkable whole's outline that no layout
     wall already closes, one box per stretch, outside it, from killY - 2 to `barrier.height` over
-    the highest walkable top within 20 studs. Thickness `barrier.thickness`, cut short of any other
+    the highest walkable top within 20 studs (a climb's yard, trail and path: to the climb's
+    wallTop, over every flight off its summit). Thickness `barrier.thickness`, cut short of any other
     walkable ground; each stretch runs on past its ends by its thickness, so outer corners close."""
     parts = level.union_parts()
     rects = [p[0] for p in parts]
@@ -501,6 +553,8 @@ def barriers(level: Level):
                 ext0 = ext1 = depth
                 lo_y = level.kill_y - 2.0
                 hi_y = ref + float(level.barrier["height"])
+                if on_climb(level, side, c, a2, b2):
+                    hi_y = max(hi_y, float(level.climb["wallTop"]))
                 a3, b3 = a2 - ext0, b2 + ext1
                 # Never run on into walkable ground past an end.
                 for o in rects:
@@ -534,6 +588,37 @@ def barriers(level: Level):
         for key in ("x", "y", "z", "sx", "sy", "sz"):
             box[key] = round(box[key], 3)
     return out
+
+
+def climb_yard(level: Level):
+    """The climb's yard (the first of CLIMBS `yard`: the ground round the mountain), or None."""
+    if not level.climb or level.climb["yard"][0] not in level.blocks:
+        return None
+    return Rect.of(level.blocks[level.climb["yard"][0]])
+
+
+def yard_nearest(level: Level, rects, x, z) -> bool:
+    """Is the climb's yard the walkable ground nearest to (x, z)?"""
+    yard = climb_yard(level)
+    return yard is not None and yard.distance(x, z) <= min(r.distance(x, z) for r in rects) + 1e-6
+
+
+def climb_outline(level: Level) -> list[Rect]:
+    """The ground at a climb's foot (check_parkour CLIMBS `yard`: the yard, the trail, the path)."""
+    if not level.climb:
+        return []
+    return [Rect.of(level.blocks[n]) for n in level.climb["yard"] if n in level.blocks]
+
+
+def on_climb(level: Level, side, c, a, b) -> bool:
+    """Does the walled stretch [a, b] of line c on `side` run along a climb's yard piece?"""
+    nx, nz = SIDES[side]
+    for r in climb_outline(level):
+        edge = (r.x1 if nx > 0 else r.x0) if nx else (r.z1 if nz > 0 else r.z0)
+        lo, hi = (r.z0, r.z1) if nx else (r.x0, r.x1)
+        if abs(edge - c) < 1e-4 and min(b, hi) - max(a, lo) > 1e-3:
+            return True
+    return False
 
 
 def reference_top(walk_tops, side, c, a, b, reach):
@@ -970,7 +1055,7 @@ def skins(level: Level, ground: Ground):
         elif w.kind == "camp":
             camp += ribbon(level, ground, parts, w, lifts["camp"], False, grow=0.6, seed=7.0)
             road_rim += ribbon(level, ground, parts, w, lifts["rim"], True, grow=0.6, seed=7.0)
-        elif w in level.pillars:
+        elif w in level.pillars and w.name not in level.climb_pieces:  # the mountain's tops: mountain_caps
             road_rim += ribbon(level, ground, parts, w, lifts["top"], False, grow=-0.25, seed=3.0)
     return {"road": road, "roadRim": road_rim, "camp": camp, "cave": cave}, deck
 
@@ -1056,6 +1141,8 @@ def rock_faces(level: Level, ground: Ground):
     pillar_tops = {s.name: s.hi[1] for s in level.solids if s.kind == "pillar"}
     walled = walled_floors(level)
     for axis, sign, plane, (u0, u1, v0, v1), s in exposed_faces(level):
+        if s.name in level.climb_pieces:
+            continue  # the mountain: mountain_faces and mountain_caps
         seed = hash01(axis * 7.0 + sign, plane, u0, v0) * 1000.0
         if axis == 1:
             if sign < 0:
@@ -1086,13 +1173,16 @@ def rock_faces(level: Level, ground: Ground):
             block_face(bake, axis, sign, plane, (u0, u1, v0c, v1), style, seed, reach=reach, free_top=free,
                        back=thin_depth(level, parts, s, axis, sign, (u0 + u1) / 2, (v0c + v1) / 2))
             continue
-        # A face nobody stands at: stretches of it seen only from far carry bigger blocks.
-        for k, (a, b) in enumerate(split_span(u0, u1, ART["cliff"]["stretch"], seed + 5.0)):
-            near = face_distance(walk_rects, axis, sign, plane, a, b, screens) < ART["cliff"]["nearReach"]
-            style = "pillar" if s.kind == "pillar" else "near" if near else "far"
-            top = v1 + ART["cliff"]["gap"] / 2 if s.kind == "pillar" else v1  # its blocks end flush with the ledge's top
-            block_face(bake, axis, sign, plane, (a, b, v0c, top), style, seed + 101.0 * k, free_top=free,
-                       pillar=s.kind == "pillar", backing=k == 0, backing_region=(u0, u1, v0c, v1), open_rects=open_rects)
+        # A face nobody stands at: where only far walkers see it, it carries bigger blocks (the sizes
+        # blend along it, so no seam runs up the face where near turns to far).
+        if s.kind == "pillar":
+            top = v1 + ART["cliff"]["gap"] / 2  # its blocks end flush with the ledge's top
+            block_face(bake, axis, sign, plane, (u0, u1, v0c, top), "pillar", seed, pillar=True, backing_region=(u0, u1, v0c, v1),
+                       open_rects=open_rects)
+            continue
+        near_at = face_reach(walk_rects, axis, sign, plane, u0, u1, screens)
+        style = "near" if min(near_at(u0 + (u1 - u0) * k / 8) for k in range(9)) < ART["cliff"]["nearReach"] else "far"
+        block_face(bake, axis, sign, plane, (u0, u1, v0c, v1), style, seed, free_top=free, open_rects=open_rects, near_at=near_at)
     ridge_firs(level, bake)
     crown_firs(level, ground, parts, bake)
     return bake
@@ -1306,6 +1396,24 @@ def face_distance(walk_rects, axis, sign, plane, u0, u1, screens=()) -> float:
     return best
 
 
+def face_reach(walk_rects, axis, sign, plane, u0, u1, screens=()):
+    """How near a walker comes to each point of a face (face_distance, sampled every 6 studs and
+    read between): the size of its blocks blends from "near" to "far" along it."""
+    n = max(1, int(math.ceil((u1 - u0) / 6.0)))
+    marks = [u0 + (u1 - u0) * k / n for k in range(n + 1)]
+    dists = [face_distance(walk_rects, axis, sign, plane, max(u0, u - 3.0), min(u1, u + 3.0), screens) for u in marks]
+
+    def at(u):
+        t = min(max((u - u0) / max(u1 - u0, 1e-9) * n, 0.0), float(n))
+        k = min(int(t), n - 1)
+        a, b = dists[k], dists[k + 1]
+        if math.isinf(a) or math.isinf(b):
+            return min(a, b)
+        return lerp(a, b, t - k)
+
+    return at
+
+
 def covered_above(level: Level, s, axis, sign, plane, u0, u1, top) -> bool:
     """Does another solid sit on this face's top edge (a roof over a wall)? Then no block may
     stand over the edge."""
@@ -1327,7 +1435,7 @@ def ridge_firs(level: Level, bake: Bake):
         if s.kind != "wall" or min(r.x1 - r.x0, r.z1 - r.z0) < 12.0:
             continue
         top = s.hi[1]
-        step = 12.0
+        step = ART["ridgeFirs"]
         z = r.z0 + 3.5
         while z < r.z1 - 3.0:
             x = r.x0 + 3.5 + hash01(z, s.hi[1]) * 4
@@ -1354,12 +1462,12 @@ def crown_firs(level: Level, ground: Ground, parts, bake: Bake):
             while u < hi_u - 2.0:
                 d = 3.5 + 6.0 * hash01(u, plane, 1.0)
                 x, z = (u, plane + nz * d) if nz else (plane + nx * d, u)
-                piece = "FirHeroA" if hash01(x, z, 3.0) < 0.55 else "FirMassB"
+                piece = "FirHeroA" if hash01(x, z, 3.0) < 0.4 else "FirMassB"
                 scale = 0.9 + 0.35 * hash01(z, x)
                 # no branch over walkable ground (the gatehouse walk passes close by)
                 if not any(r.contains(x, z) for r in walk_rects) and min(p[0].distance(x, z) for p in parts) > reach_of(piece) * scale + 0.4:
                     bake.extend(kit.build(piece).transformed(x, ground.at(x, z) - 0.5, z, hash01(x, z) * 360, scale))
-                u += 12.0 + 6.0 * hash01(u, plane, 2.0)
+                u += ART["crownFirs"] + 6.0 * hash01(u, plane, 2.0)
 
 
 REACH_ABOVE = 36.0  # a double jump (30) and a head over the floor, with a margin
@@ -1403,15 +1511,12 @@ def split_span(lo, hi, size, seed) -> list[tuple[float, float]]:
     return list(zip(cuts, cuts[1:]))
 
 
-def joint_grid(u0, u1, v0, v1, wsize, hsize, seed, slant, tilt, tops=None, crowns=None, base=0.0, head=0.0):
-    """A face cut into blocks the way the references stack them: columns of different widths whose
+def joint_grid(u0, u1, v0, v1, wsize, hsize, seed, slant, tilt):
+    """A flat region (a wall's top, the massif's plan) cut into columns of different widths whose
     joints lean a little (`slant`: how far a joint's foot and head may stray, studs), each column
-    cut into blocks of its own heights by joints tilted up to `tilt` (rise over run), so no joint
-    runs across the face and no block is a rectangle. `tops`: each column's own top (a column may
-    stand over a free top edge); `crowns`: the tilt of each column's top joint; `base` and `head`:
-    the tilt of the whole grid's bottom and top lines (a tier's seam runs slanted, through the
-    middle of the span, so two tiers meet on one line). Returns (column, row, quad, is_top) with
-    the quad counter-clockwise in (u, v)."""
+    cut into blocks of its own heights by joints tilted up to `tilt` (rise over run). Returns
+    (column, row, quad, is_top) with the quad counter-clockwise in (u, v). A cliff face is cut by
+    pack_cells instead (no column runs up it)."""
     cols = split_span(u0, u1, wsize, seed)
     n = len(cols)
     joints = []
@@ -1432,17 +1537,17 @@ def joint_grid(u0, u1, v0, v1, wsize, hsize, seed, slant, tilt, tops=None, crown
     mid = (u0 + u1) / 2
     out = []
     for k in range(n):
-        top = tops[k] if tops else v1
+        top = v1
         rows = split_span(v0, top, hsize, seed + 17.0 * k + 1.0)
         um = (cols[k][0] + cols[k][1]) / 2
         half = (cols[k][1] - cols[k][0]) / 2
-        lines = [(v0, base, mid)]
+        lines = [(v0, 0.0, mid)]
         for j in range(1, len(rows)):
             room = 0.3 * min(rows[j - 1][1] - rows[j - 1][0], rows[j][1] - rows[j][0])
             t = (hash01(seed, k, j, 23.0) - 0.5) * 2 * tilt
             t = max(-room / max(half, 1e-6), min(room / max(half, 1e-6), t))
             lines.append((rows[j][0], t, um))
-        lines.append((top, crowns[k], um) if crowns else (top, head, mid))
+        lines.append((top, 0.0, mid))
 
         def cross(kj, line):
             h, t, uref = line
@@ -1457,17 +1562,218 @@ def joint_grid(u0, u1, v0, v1, wsize, hsize, seed, slant, tilt, tops=None, crown
     return out
 
 
+def clip_half(poly, a, b, c):
+    """The part of a convex (u, v) polygon where a u + b v <= c (one Sutherland-Hodgman pass)."""
+    out = []
+    n = len(poly)
+    for i in range(n):
+        p, q = poly[i], poly[(i + 1) % n]
+        dp = a * p[0] + b * p[1] - c
+        dq = a * q[0] + b * q[1] - c
+        if dp <= 0.0:
+            out.append(p)
+        if (dp < 0.0 < dq) or (dq < 0.0 < dp):
+            t = dp / (dp - dq)
+            out.append((p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t))
+    return out
+
+
+def poly_area(poly) -> float:
+    n = len(poly)
+    return 0.5 * sum(poly[i][0] * poly[(i + 1) % n][1] - poly[(i + 1) % n][0] * poly[i][1] for i in range(n))
+
+
+def simplify_poly(poly, min_edge, keep=4):
+    """A convex polygon with its short edges and near-straight corners dropped, vertex by vertex,
+    each time the one whose loss cuts the least area: it stays convex and only shrinks (the crevice
+    widens there), and a block costs fewer triangles."""
+    pts = list(poly)
+    while len(pts) > keep:
+        n = len(pts)
+        best = None
+        for k in range(n):
+            a, b, c = pts[k - 1], pts[k], pts[(k + 1) % n]
+            loss = abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2
+            short = min(math.hypot(b[0] - a[0], b[1] - a[1]), math.hypot(c[0] - b[0], c[1] - b[1]))
+            off = 2 * loss / max(1e-9, math.hypot(c[0] - a[0], c[1] - a[1]))  # how far b stands off the chord
+            if short < min_edge or off < 0.12 * min_edge:
+                if best is None or loss < best[0]:
+                    best = (loss, k)
+        if best is None:
+            break
+        del pts[best[1]]
+    return pts
+
+
+def split_cell(poly, size, aspect, seed, out, depth=0):
+    """Cut a convex cell into blocks the way the references stack them: a cell much taller than
+    the block size wanted there (`size(u, v)`, a block `aspect` times as tall as wide) is cut by a
+    near-level joint, a much wider one by a near-upright joint, each tilted its own way and placed
+    off-centre, and each half is cut again on its own: every joint ends on another (a T), so no
+    joint or course runs across the face."""
+    us = [p[0] for p in poly]
+    vs = [p[1] for p in poly]
+    w, h = max(us) - min(us), max(vs) - min(vs)
+    cu, cv = (min(us) + max(us)) / 2, (min(vs) + max(vs)) / 2
+    want = size(cu, cv) * (0.7 + 0.6 * hash01(seed, 31.0))
+    tw = want / aspect
+    if depth > 9 or (h <= want * 1.45 and w <= tw * 1.45):
+        out.append(poly)
+        return
+    t = 0.36 + 0.28 * hash01(seed, 32.0)
+    lean = (hash01(seed, 33.0) - 0.5) * 2
+    if h / want >= w / tw:
+        # a near-level joint: v - tilt (u - cu) = cut
+        tilt = 0.32 * lean
+        cut = min(vs) + h * t
+        a, b, c = -tilt, 1.0, cut - tilt * cu
+    else:
+        # a near-upright joint: u - lean (v - cv) = cut
+        tilt = 0.22 * lean
+        cut = min(us) + w * t
+        a, b, c = 1.0, -tilt, cut - tilt * cv
+    lo = clip_half(poly, a, b, c)
+    hi = clip_half(poly, -a, -b, -c)
+    for k, part in enumerate((lo, hi)):
+        if len(part) >= 3 and poly_area(part) > 0.25:
+            split_cell(part, size, aspect, hash01(seed, 34.0 + k) * 1000.0, out, depth + 1)
+
+
+def pack_cells(u0, u1, v0, v1, size, seed, aspect, spread, crown=None, min_edge=1.0, mass=2.4):
+    """A face region cut into blocks the way Ben's references cluster them (2026-10-21, his second
+    look: "less regular walls": bigger uneven blocks, broken layers, fewer straight joints). First
+    masses: seeds thrown like a Poisson disc whose radius follows `mass` times `size(u, v)` (the
+    mean block height there) times a spread per seed (`spread` = [least, most]: big masses beside
+    small ones), stretched `aspect` times taller than wide, and the masses are the seeds' power
+    diagram (each seed weighted by its radius), so their outlines run every way. Then each mass is
+    stacked into blocks by split_cell. `crown(u)` gives a free top edge its skyline: (height, tilt)
+    of the mass whose centre stands at u; without it every block stops at v1. Returns [(outline
+    ccw in (u, v), the mass's spread share 0..1, the mass's index, touches_top)]."""
+    asp = max(0.2, aspect)
+    lo_s, hi_s = spread
+
+    def msize(u, v):
+        return mass * size(u, v)
+
+    probes = [msize(u0 + (u1 - u0) * i / 6, v0 + (v1 - v0) * j / 6) for i in range(7) for j in range(7)]
+    smin, smax = min(probes), max(probes)
+    rmax = 0.5 * smax * hi_s
+    step = max(0.75, 0.3 * smin * lo_s)
+    poke = 0.0
+    if crown is not None:
+        poke = max(0.0, max(crown(u0 + (u1 - u0) * i / 12)[0] for i in range(13)) - v1) + 0.5
+    # candidates: a jittered lattice in the stretched frame (x = u * asp, y = v)
+    cands = []
+    ny = max(1, int(math.ceil((v1 - v0) / step)))
+    nx = max(1, int(math.ceil((u1 - u0) * asp / step)))
+    for j in range(ny):
+        for i in range(nx):
+            x = u0 * asp + (i + 0.15 + 0.7 * hash01(seed, i, j, 1.0)) * step
+            y = v0 + (j + 0.15 + 0.7 * hash01(seed, i, j, 2.0)) * step
+            if x > u1 * asp or y > v1:
+                continue
+            share = hash01(seed, i, j, 3.0)
+            r = 0.5 * msize(x / asp, y) * (lo_s + (hi_s - lo_s) * share)
+            # big seeds tend to go first, so small ones fill between them
+            cands.append((0.55 * hash01(seed, i, j, 4.0) + 0.45 * (1.0 - share), x, y, r, share))
+    cands.sort()
+    g = 2.0 * rmax
+    grid: dict[tuple[int, int], list[int]] = {}
+    seeds: list[tuple[float, float, float, float]] = []
+    for _key, x, y, r, share in cands:
+        gi, gj = int(math.floor(x / g)), int(math.floor(y / g))
+        ok = True
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                for k in grid.get((gi + di, gj + dj), ()):
+                    sx, sy, sr, _ = seeds[k]
+                    if (sx - x) ** 2 + (sy - y) ** 2 < (0.9 * (sr + r)) ** 2:
+                        ok = False
+                        break
+                if not ok:
+                    break
+            if not ok:
+                break
+        if ok:
+            grid.setdefault((gi, gj), []).append(len(seeds))
+            seeds.append((x, y, r, share))
+    top = v1 + poke
+    frame = [(u0 * asp, v0), (u1 * asp, v0), (u1 * asp, top), (u0 * asp, top)]
+    reach = int(math.ceil(2.6 * (2 * rmax) / g)) + 1
+    out = []
+    for idx, (x, y, r, share) in enumerate(seeds):
+        poly = frame
+        gi, gj = int(math.floor(x / g)), int(math.floor(y / g))
+        for di in range(-reach, reach + 1):
+            for dj in range(-reach, reach + 1):
+                for k in grid.get((gi + di, gj + dj), ()):
+                    if k == idx:
+                        continue
+                    sx, sy, sr, _ = seeds[k]
+                    if (sx - x) ** 2 + (sy - y) ** 2 > (2.6 * (sr + r)) ** 2:
+                        continue
+                    poly = clip_half(poly, 2 * (sx - x), 2 * (sy - y), sx * sx + sy * sy - x * x - y * y - sr * sr + r * r)
+                    if len(poly) < 3:
+                        break
+                if len(poly) < 3:
+                    break
+            if len(poly) < 3:
+                break
+        if len(poly) < 3:
+            continue
+        cell = [(p[0] / asp, p[1]) for p in poly]
+        if crown is not None and max(p[1] for p in cell) > v1 + 1e-6:
+            uc = sum(p[0] for p in cell) / len(cell)
+            h, tilt = crown(uc)
+            cell = clip_half(cell, -tilt, 1.0, h - tilt * uc)
+        elif crown is None:
+            cell = clip_half(cell, 0.0, 1.0, v1)
+        if len(cell) < 3 or poly_area(cell) < 0.5:
+            continue
+        blocks: list = []
+        split_cell(kit.poly_ccw(cell), size, aspect, hash01(seed, idx, 30.0) * 1000.0, blocks)
+        for b in blocks:
+            b = simplify_poly(kit.poly_ccw(b), min_edge)
+            if len(b) < 3 or poly_area(b) < 0.4:
+                continue
+            out.append((b, share, idx, max(p[1] for p in b) > v1 - 0.5))
+    return out
+
+
+def thin_front(st, fmin, prom, lean) -> tuple[float, float]:
+    """A thin face's block: its highest corner from `fmin` (deep) up to the style's front (the big,
+    prominent ones), never over THIN_OUT, and its front leaning back from that corner by up to the
+    style's lift (`lean` 0..1 of it), each corner its own share: a faceted front, never a flat
+    tile. Returns (front, lift_max) for block_poly."""
+    peak = min(THIN_OUT, fmin + (st["front"][1] - fmin) * prom ** 0.6)
+    tilt = min(st["lift"], peak - fmin) * lean
+    return peak - tilt, tilt
+
+
+def style_size(st) -> tuple[float, float]:
+    """A style's mean block height and its blocks' aspect (height over width)."""
+    h = (st["height"][0] + st["height"][1]) / 2
+    w = (st["width"][0] + st["width"][1]) / 2
+    return h, h / w
+
+
 def block_face(bake: Bake, axis, sign, plane, region, style, seed, reach=None, free_top=False, pillar=False, back=None,
-               backing=True, backing_region=None, open_rects=None):
-    """One face region as a cliff of stacked chamfered blocks (see rock_faces). `style` names the
-    block sizes and reliefs in ART.cliff: "thin" (a face over walking ground), "tunnel" (the cave's
-    inside), "near" and "far" (faces nobody touches, by how far the nearest walker is), "step" (the
-    face of a step between two walks). `back`: how deep the backing lies behind the face (a thin
-    face's blocks may sit back as far as the wall's thickness allows). `reach`: a thin face bulges
-    only above it. `free_top`: the face's top edge is open sky, so its columns stand over it, each
-    to its own height, their tops tilted. `open_rects`: the ground walkers may stand on or fall
-    into; a block of a face nobody stands at still stops ART.cliff.clear short of it."""
+               backing=True, backing_region=None, open_rects=None, near_at=None):
+    """One face region as a cliff of clustered chamfered blocks (see rock_faces): `pack_cells` cuts
+    it (no tier, course or column running across it), and each block is a chamfered prism standing
+    out of the dark backing. `style` names the block sizes and reliefs in ART.cliff: "thin" (a face
+    over walking ground), "tunnel" (the cave's inside), "near" and "far" (faces nobody touches, by
+    how far the nearest walker is: `near_at(u)` gives that distance along the face and the sizes
+    blend from near to far, so no stretch seam runs up it), "pillar" (a ledge's side), "step" (the
+    face of a step between two walks), "gully". `back`: how deep the backing lies behind the face
+    (a thin face's blocks may sit back as far as the wall's thickness allows). `reach`: a thin face
+    bulges, and carries the bigger blocks, only above it. `free_top`: the face's top edge is open
+    sky, so its blocks stand over it, each to its own height, their tops tilted. `open_rects`: the
+    ground walkers may stand on or fall into; a block of a face nobody stands at still stops
+    ART.cliff.clear short of it. (The mountain's faces have their own maker, mountain_faces.)"""
     u0, u1, v0, v1 = region
+    if u1 - u0 < 0.3 or v1 - v0 < 0.3:
+        return
     cf = ART["cliff"]
     st = cf[style]
     o, eu, ev, ew = face_frame(axis, sign, plane)
@@ -1483,82 +1789,92 @@ def block_face(bake: Bake, axis, sign, plane, region, style, seed, reach=None, f
         a, b, c, d = fp(bu0, bv0, -depth), fp(bu1, bv0, -depth), fp(bu1, bv1, -depth), fp(bu0, bv1, -depth)
         bake.toward(a, b, c, ROCK.ROCK_SHADE, ew)
         bake.toward(a, c, d, ROCK.ROCK_SHADE, ew)
-    thin = style in ("thin", "tunnel", "step")
+    thin = style in ("thin", "tunnel", "step", "mount")
     near = cf["near"]
+    far = cf["far"]
+    above = cf[st.get("above", "near")]  # a thin face's blocks over every walker's reach
+    base_h, aspect = style_size(st)
+    near_h, _ = style_size(near)
+    far_h, _ = style_size(far)
+    above_h, _ = style_size(above)
+
+    def blend(u):
+        """0 by a near walker, 1 where only far ones see the face."""
+        return smoothstep(cf["nearReach"], cf["nearReach"] + cf["blend"], near_at(u))
+
+    def size(u, v):
+        h = lerp(near_h, far_h, blend(u)) if near_at is not None else base_h
+        if thin and reach is not None:
+            h = lerp(h, above_h, smoothstep(reach, reach + 10.0, v))
+            # at the foot, beside the walker, the blocks are broken smaller (the references' cliffs
+            # stand on their rubble), the big slabs above
+            base, rise = cf["foot"]
+            floor = reach - REACH_ABOVE
+            h *= lerp(base, 1.0, smoothstep(floor + 2.0, floor + rise, v))
+        return h
+
+    crown = None
+    if free_top:
+        poke = st.get("poke", cf["poke"])
+
+        def crown(u):
+            # The skyline rises and falls in groups of blocks (smooth along the face, a little
+            # jitter each), never an even row of merlons.
+            swell = 0.5 + 0.5 * NOISE.n2(u / cf["skyline"], plane * 0.013 + axis, 17.0)
+            jit = hash01(seed, round(u, 1), 2.0)
+            return v1 + poke[0] + (poke[1] - poke[0]) * (0.75 * swell + 0.25 * jit), (hash01(seed, round(u, 1), 3.0) - 0.5) * 2 * cf["crown"]
+
+    cells = pack_cells(u0, u1, v0, v1, size, seed, aspect, st["spread"], crown=crown, min_edge=st.get("minEdge", 1.0), mass=st.get("mass", 2.4))
     m = kit.Mesh("cliff")
     fmin = max(st["front"][0], -depth + 0.3) if thin else st["front"][0]
-    # A tall face is cut into tiers, each with its own columns: no joint runs up the whole face,
-    # and each tier's blocks have their own widths (the references' stacked masses). Each stretch
-    # of the face has its own tier heights, so no seam runs across it either.
-    cells = []
-    stretches = split_span(u0, u1, cf["stretch"], seed + 2.0) if u1 - u0 > cf["stretch"][1] else [(u0, u1)]
-    for e, (ea, eb) in enumerate(stretches):
-        eseed = seed + 313.0 * e
-        tiers = split_span(v0, v1, cf["tier"], eseed + 3.0) if v1 - v0 > cf["tier"][1] else [(v0, v1)]
-        # each seam between two tiers runs slanted, its own way (no course line across a wall)
-        seams = [0.0] + [(hash01(eseed, t, 4.0) - 0.5) * 2 * cf["seam"] for t in range(1, len(tiers))] + [0.0]
-        for t, (ta, tb) in enumerate(tiers):
-            last = t == len(tiers) - 1
-            tseed = eseed + 59.0 * t
-            # A thin face's tiers wholly over every walker's reach carry the bigger blocks of a
-            # face nobody stands at (they are only ever seen from below, from afar).
-            sz = cf["near"] if (style == "thin" and reach is not None and ta >= reach) else st
-            n = len(split_span(ea, eb, sz["width"], tseed))
-            ttops = tcrowns = None
-            if last and free_top:
-                # The skyline rises and falls in groups of columns (smooth along the face, a little
-                # jitter each), never an even row of merlons.
-                poke = st.get("poke", cf["poke"])
-                spans = split_span(ea, eb, sz["width"], tseed)
-                ttops = []
-                for k, (ka, kb) in enumerate(spans):
-                    swell = 0.5 + 0.5 * NOISE.n2((ka + kb) / 2 / cf["skyline"], plane * 0.013 + axis, 17.0)
-                    ttops.append(tb + poke[0] + (poke[1] - poke[0]) * (0.75 * swell + 0.25 * hash01(tseed, k, 2.0)))
-                tcrowns = [(hash01(tseed, k, 3.0) - 0.5) * 2 * cf["crown"] for k in range(n)]
-            for k, j, quad, is_top in joint_grid(ea, eb, ta, tb, sz["width"], sz["height"], tseed, st["slant"], st["tilt"], ttops, tcrowns,
-                                                 base=seams[t], head=seams[t + 1]):
-                cells.append((k + 1000 * t + 100000 * e, j, quad, is_top and last))
-    for k, j, quad, is_top in cells:
-        hh = hash01(seed, k, j, 6.0)
+    for n, (quad, share, mass, is_top) in enumerate(cells):
+        # The blocks of one mass share its relief and tone, give or take: a mass reads as one rock
+        # split by cracks, the step between two masses as the joint between two rocks.
+        hh = 0.7 * hash01(seed, mass, 6.0) + 0.3 * hash01(seed, n, 6.0)
         va = min(q[1] for q in quad)
         vb = max(q[1] for q in quad)
+        uc = sum(q[0] for q in quad) / len(quad)
+        cst = st
+        if near_at is not None:
+            cst = far if blend(uc) > 0.5 else near
         if thin:
             # In front of walkers no block stands more than THIN_OUT out of the collision face; the
-            # relief is in how far each block sits back (most near the front, some deep).
-            front = fmin + (st["front"][1] - fmin) * hh ** 0.55
-            lift_max = max(0.0, min(st["lift"], THIN_OUT - front))
+            # relief is in how far each block sits back (the big ones near the front, the small
+            # ones deep), and in its front's facets (each corner lifted on its own).
+            front, lift_max = thin_front(st, fmin, 0.55 * hh + 0.45 * share, hash01(seed, n, 15.0))
             if reach is not None and axis != 1 and va > reach:
                 ramp = min(1.0, (va - reach) / 10.0)
-                bulge = near["front"][0] + (near["front"][1] - near["front"][0]) * hh
+                bulge = above["front"][0] + (above["front"][1] - above["front"][0]) * hh
                 front = max(front, ramp * bulge)
-                lift_max = lift_max + ramp * (near["lift"] - lift_max)
+                lift_max = lift_max + ramp * (above["lift"] - lift_max)
+                cst = above if ramp > 0.5 else st
         else:
-            cluster = 0.5 + 0.5 * NOISE.n2(sum(q[0] for q in quad) / 4 / 13.0, (va + vb) / 2 / 17.0, seed * 0.01)
-            front = st["front"][0] + (st["front"][1] - st["front"][0]) * (0.65 * hh + 0.35 * cluster)
+            cluster = 0.5 + 0.5 * NOISE.n2(uc / 13.0, (va + vb) / 2 / 17.0, seed * 0.01)
+            front = cst["front"][0] + (cst["front"][1] - cst["front"][0]) * (0.45 * hh + 0.3 * cluster + 0.25 * share)
             if style in ("near", "far", "pillar"):
                 foot = max(0.0, 1.0 - (va - v0) / max(1.0, cf["talus"][1]))
                 front += cf["talus"][0] * foot * foot
-            lift_max = st["lift"]
+            lift_max = cst["lift"]
         if open_rects and axis != 1:
             # a block's front slides and leans: ground just past either end of it counts too
             room = room_ahead(open_rects, axis, sign, plane, min(q[0] for q in quad) - cf["clear"], max(q[0] for q in quad) + cf["clear"])
             front = max(0.0, min(front, room - cf["clear"]))
         if pillar and vb > v1 - 4.0:
-            # the lookout's top edge stays honest for the double jump onto it
+            # a ledge's top edge stays honest for the double jump onto it
             front = min(front, 0.25)
             lift_max = min(lift_max, 0.05)
-        bevel = st["bevel"][0] + (st["bevel"][1] - st["bevel"][0]) * hash01(seed, k, j, 7.0)
+        bevel = cst["bevel"][0] + (cst["bevel"][1] - cst["bevel"][0]) * hash01(seed, n, 7.0)
         if is_top and free_top:
             bevel *= cf["crownBevel"]
-        lifts = [lift_max * hash01(seed, k, j, 8.0 + q) for q in range(4)]
-        sh = st["shear"]
-        shear = ((hash01(seed, k, j, 12.0) - 0.5) * 2 * sh, (hash01(seed, k, j, 13.0) - 0.5) * 2 * sh)
+        lifts = [lift_max * hash01(seed, n, 8.0 + q) for q in range(len(quad))]
+        sh = cst["shear"]
+        shear = ((hash01(seed, n, 12.0) - 0.5) * 2 * sh, (hash01(seed, n, 13.0) - 0.5) * 2 * sh)
         if is_top and not free_top:
             shear = (shear[0], min(shear[1], 0.0))  # a capped top edge: no front slides over it
-        tone = hash01(seed, k, 5.0) * 0.6 + 0.4 * hash01(seed, k, j, 9.0)
-        crevice = gap * (1.0 + cf["crevice"] * hash01(seed, k, j, 17.0))
+        tone = 0.65 * hash01(seed, mass, 5.0) + 0.35 * hash01(seed, n, 5.0)
+        crevice = gap * (1.0 + cf["crevice"] * hash01(seed, n, 17.0))
         kit.block_poly(m, o, eu, ev, ew, quad, -depth, front, bevel, shear=shear, lift=lifts, tone=tone,
-                       sides=front - bevel > -depth + 0.3, gap=crevice, inset=bevel * st["round"])
+                       sides=front - bevel > -depth + 0.3, gap=crevice, inset=bevel * cst["round"])
     bake.extend(m.tris)
 
 
@@ -1627,7 +1943,7 @@ def step_faces(level: Level, bake: Bake):
     walkers."""
     for lo in level.walks:
         for hi in level.walks:
-            if hi.top - lo.top < 0.5 or lo is hi:
+            if hi.top - lo.top < 0.5 or lo is hi or (lo.name in level.climb_pieces and hi.name in level.climb_pieces):
                 continue
             a, b = lo.rect, hi.rect
             for axis, plane, sign, span in (
@@ -1640,6 +1956,277 @@ def step_faces(level: Level, bake: Bake):
                     continue
                 seed = hash01(plane, span[0], lo.top, 4.0) * 1000.0
                 block_face(bake, axis, sign, plane, (span[0], span[1], lo.top - 0.6, hi.top + 0.05), "step", seed)
+
+
+# ---------------------------------------------------------------- the mountain (the climb)
+
+
+def climb_boxes(level: Level) -> list[tuple[str, Rect, float]]:
+    """The climb's ledges and its summit (check_parkour CLIMBS) as (name, plan rect, top)."""
+    if not level.climb:
+        return []
+    out = []
+    for name in list(level.climb["ledges"]) + [level.climb["summit"]]:
+        b = level.blocks.get(name)
+        if b:
+            out.append((name, Rect.of(b), b["y"] + b["sy"] / 2))
+    return out
+
+
+def mountain_faces(level: Level, bake: Bake) -> None:
+    """The mountain (MISSIONS_DESIGN 28), the forest's landmark, in Ben's clustered-block style (his
+    second reference is a rock tower): every side of its ledges and its core as cliffs of
+    pack_cells blocks, the sides of different pillars that share a plane packed as one face (no
+    seam where one pillar's side runs on into the next; a block crossing a step in the skyline is
+    cut there, at the real corner). Where a body stands beside a face (the yard, or the ledge in
+    front of it) the face is thin (THIN_OUT) up to REACH_ABOVE over that floor, and the big
+    "mountUp" blocks bulge only above it, the ones at the tower's outer corners wrapping round them
+    (no notch at a corner, a broken silhouette); in ART.cliff.mount.fine under a ledge's top, and
+    over a ledge in front, the blocks are finer (where the player stands and looks at them); a
+    ledge's top edge stays honest: flush in its last four studs, the bulge fading in below."""
+    boxes = climb_boxes(level)
+    if not boxes:
+        return
+    cf = ART["cliff"]
+    st = cf["mount"]
+    above = cf[st["above"]]
+    gap = cf["gap"]
+    ext = st["wrap"]
+    groups: dict[tuple, list] = {}
+    for name, r, top in boxes:
+        for axis, sign, plane, lo, hi in ((0, -1, r.x0, r.z0, r.z1), (0, 1, r.x1, r.z0, r.z1), (2, -1, r.z0, r.x0, r.x1), (2, 1, r.z1, r.x0, r.x1)):
+            groups.setdefault((axis, sign, round(plane, 4)), []).append((lo, hi, top, name))
+    base_h, aspect = style_size(st)
+    above_h, _ = style_size(above)
+    band, share = st["fine"]
+    m = kit.Mesh("mountain")
+    for (axis, sign, plane), segs in sorted(groups.items()):
+        segs.sort()
+
+        def cover(u, axis=axis, sign=sign, plane=plane):
+            """The top of the pillar standing in front of the face at u (the floor a body stands on
+            there), or the yard's 0."""
+            best = 0.0
+            x, z = (plane + sign * 0.01, u) if axis == 0 else (u, plane + sign * 0.01)
+            for _n, r, top in boxes:
+                if r.x0 < x < r.x1 and r.z0 < z < r.z1:
+                    best = max(best, top)
+            return best
+
+        def top_at(u, segs=segs):
+            for lo, hi, top, _n in segs:
+                if lo - 1e-6 <= u <= hi + 1e-6:
+                    return top
+            return None
+
+        def floor_over(a, b, cover=cover):
+            """The highest floor in front over [a, b] and a body's width either side."""
+            return max(cover(a - 1.5 + (b - a + 3.0) * k / 8) for k in range(9))
+
+        def open_end(u, step, name, axis=axis, sign=sign, plane=plane):
+            """Is the mountain's outside past this end of a pillar's side (an outer corner)?"""
+            ua, ub = (u - ext, u) if step < 0 else (u, u + ext)
+            wa, wb = plane - sign * (st["back"] + 0.5), plane + sign * (ext + 1.0)
+            wa, wb = min(wa, wb), max(wa, wb)
+            box = Rect(wa, wb, ua, ub) if axis == 0 else Rect(ua, ub, wa, wb)
+            return not any(r.overlaps(box) for n, r, _t in boxes if n != name)
+
+        exposed = [(lo, hi, top, open_end(lo, -1, name), open_end(hi, 1, name)) for lo, hi, top, name in segs
+                   if any(cover(lo + (hi - lo) * (k + 0.5) / 12) < top - 0.5 for k in range(12))]
+        if not exposed:
+            continue
+        u0, u1 = min(e[0] for e in exposed), max(e[1] for e in exposed)
+        vtop = max(e[2] for e in exposed)
+
+        def size(u, v, cover=cover, top_at=top_at, vtop=vtop):
+            floor = cover(u)
+            top = top_at(u)
+            h = lerp(base_h, above_h, smoothstep(floor + REACH_ABOVE, floor + REACH_ABOVE + 20.0, v))
+            fine = lerp(share, 1.0, smoothstep(0.0, band, (top if top is not None else vtop) - v))
+            if floor > 0.5:  # over a ledge in front: the rock beside the player
+                fine = min(fine, lerp(share, 1.0, smoothstep(floor + 18.0, floor + 40.0, v)))
+            return h * fine
+
+        seed = 9000.0 + hash01(axis, sign, plane) * 1000.0
+        o, eu, ev, ew = face_frame(axis, sign, plane)
+        depth = st["back"]
+        # the dark backing, per exposed pillar side, from the floor in front to its top
+        for lo, hi, top, _ol, _oh in exposed:
+            fl = min(cover(lo + (hi - lo) * (k + 0.5) / 12) for k in range(12))
+            for a, b, c in (((lo, fl - 1.0), (hi, fl - 1.0), (hi, top - 0.05)), ((lo, fl - 1.0), (hi, top - 0.05), (lo, top - 0.05))):
+                pts = [tuple(o[i] + eu[i] * p[0] + ev[i] * p[1] - ew[i] * depth for i in range(3)) for p in (a, b, c)]
+                bake.toward(*pts, ROCK.ROCK_SHADE, ew)
+        cells = pack_cells(u0 - ext, u1 + ext, -1.0, vtop, size, seed, aspect, st["spread"], min_edge=st["minEdge"])
+        yard_reach = REACH_ABOVE + 2.0
+        for n, (quad, sh_share, mass, _top) in enumerate(cells):
+            qa, qb = min(p[1] for p in quad), max(p[1] for p in quad)
+            for lo, hi, top, open_lo, open_hi in exposed:
+                # a block high on the tower's outer corner wraps round it
+                wrap = qa > yard_reach and qb < top - 10.0
+                elo = lo - ext if (wrap and open_lo) else lo
+                ehi = hi + ext if (wrap and open_hi) else hi
+                piece = clip_half(quad, 1.0, 0.0, ehi)
+                piece = clip_half(piece, -1.0, 0.0, -elo) if len(piece) >= 3 else piece
+                piece = clip_half(piece, 0.0, 1.0, top - 0.05 + gap / 2) if len(piece) >= 3 else piece
+                if len(piece) < 3 or poly_area(piece) < 0.4:
+                    continue
+                piece = simplify_poly(kit.poly_ccw(piece), st["minEdge"] * 0.6)
+                if len(piece) < 3:
+                    continue
+                ua, ub = min(p[0] for p in piece), max(p[0] for p in piece)
+                va, vb = min(p[1] for p in piece), max(p[1] for p in piece)
+                if ub <= lo + 0.3 or ua >= hi - 0.3:
+                    continue  # all of it past the corner: the next face carries that corner
+                ia, ib = max(lo, ua), min(hi, ub)
+                if vb < min(cover(ia + (ib - ia) * (k + 0.5) / 5) for k in range(5)) - 0.5:
+                    continue  # wholly behind the pillar in front
+                hh = 0.7 * hash01(seed, mass, 6.0) + 0.3 * hash01(seed, n, 6.0)
+                reach = floor_over(max(lo, ua), min(hi, ub)) + REACH_ABOVE
+                fmin = max(st["front"][0], -depth + 0.3)
+                front, lift_max = thin_front(st, fmin, 0.55 * hh + 0.45 * sh_share, hash01(seed, n, 15.0))
+                cst = st
+                if va > reach:
+                    ramp = min(1.0, (va - reach) / 10.0)
+                    bulge = above["front"][0] + (above["front"][1] - above["front"][0]) * (0.6 * hh + 0.4 * hash01(seed, n, 14.0))
+                    front = max(front, ramp * bulge)
+                    lift_max = lift_max + ramp * (above["lift"] - lift_max)
+                    cst = above if ramp > 0.5 else st
+                    # past a corner the block stands out at least as far as it wraps
+                    front = max(front, max(lo - ua, ub - hi, 0.0) + 0.6)
+                # the ledge's top edge: flush in its last four studs, the bulge fading in below
+                edge = 0.25 + 0.3 * max(0.0, (top - 4.0) - vb)
+                if front > edge:
+                    front = edge
+                    if vb > top - 4.0:
+                        lift_max = min(lift_max, 0.05)
+                bevel = cst["bevel"][0] + (cst["bevel"][1] - cst["bevel"][0]) * hash01(seed, n, 7.0)
+                lifts = [lift_max * hash01(seed, n, 8.0 + q) for q in range(len(piece))]
+                sh = cst["shear"] if va > reach + 10.0 else min(cst["shear"], 0.2)
+                shear = ((hash01(seed, n, 12.0) - 0.5) * 2 * sh, (hash01(seed, n, 13.0) - 0.5) * 2 * sh)
+                if vb > top - 4.0:
+                    shear = (shear[0], min(shear[1], 0.0))  # no front slides over the ledge's edge
+                # nor past a side's end where the next pillar stands (its top is walking space)
+                su = shear[0] if open_hi else min(shear[0], max(0.0, hi - ub))
+                su = su if open_lo else max(su, -max(0.0, ua - lo))
+                shear = (su, shear[1])
+                tone = 0.65 * hash01(seed, mass, 5.0) + 0.35 * hash01(seed, n, 5.0)
+                crevice = gap * (1.0 + cf["crevice"] * hash01(seed, n, 17.0))
+                kit.block_poly(m, o, eu, ev, ew, piece, -depth, front, bevel, shear=shear, lift=lifts, tone=tone,
+                               sides=front - bevel > -depth + 0.3, gap=crevice, inset=bevel * cst["round"])
+    bake.extend(m.tris)
+
+
+def cap_paint(role, n, tone):
+    """A ledge's cap stone: its top light (the lit tops of the references, and "stand here"), a few
+    with lichen, its edge rock."""
+    if role == "cap" and n[1] > kit.ROCK_TOP:
+        return ROCK.LICHEN if tone < 0.1 else ROCK.ROCK_LIGHT
+    return ROCK.ROCK if n[1] > 0.3 else ROCK.ROCK_DARK
+
+
+def mountain_caps(level: Level, bake: Bake) -> None:
+    """Every ledge's top and the summit paved with flat cap stones (ART.mountain.cap), flush with
+    the top (the pillar top's lift), lighter than the faces, over a dark grout at the rim's lift:
+    what reads as "stand here" from below and from the ledge before. A cap overhangs a side that
+    drops by a little (it hides the face blocks' upper ends), never a side against a taller pillar."""
+    mc = ART["mountain"]["cap"]
+    boxes = climb_boxes(level)
+    lifts = ART["lifts"]
+    for k, (name, r, top) in enumerate(boxes):
+        grow = {}
+        for side, (nx, nz) in SIDES.items():
+            x = (r.x1 + 0.5 if nx > 0 else r.x0 - 0.5) if nx else (r.x0 + r.x1) / 2
+            z = (r.z1 + 0.5 if nz > 0 else r.z0 - 0.5) if nz else (r.z0 + r.z1) / 2
+            taller = any(o.contains(x, z) and otop > top for _n, o, otop in boxes)
+            grow[side] = 0.0 if taller else mc["overhang"]
+        rr = Rect(r.x0 - grow["west"], r.x1 + grow["east"], r.z0 - grow["north"], r.z1 + grow["south"])
+        y = top + lifts["rim"]
+        bake.up((r.x0, y, r.z0), (r.x1, y, r.z0), (r.x1, y, r.z1), ROCK.ROCK_SHADE)
+        bake.up((r.x0, y, r.z0), (r.x1, y, r.z1), (r.x0, y, r.z1), ROCK.ROCK_SHADE)
+        o, eu, ev, ew = face_frame(1, 1, top)
+        m = kit.Mesh("caps")
+        seed = 9500.0 + k
+        for n, (quad, sh, _mass, _t) in enumerate(pack_cells(rr.x0, rr.x1, rr.z0, rr.z1, lambda u, v: mc["size"], seed, 1.0, mc["spread"],
+                                                            min_edge=mc["minEdge"], mass=mc["mass"])):
+            front = lifts["top"] + mc["rise"] * hash01(seed, n, 1.0)
+            tilt = [mc["tilt"] * hash01(seed, n, 3.0 + q) for q in range(len(quad))]  # a stone's own lie
+            kit.block_poly(m, o, eu, ev, ew, quad, lifts["rim"], front, 0.05, lift=tilt, tone=hash01(seed, n, 2.0), paint=cap_paint,
+                           sides=False, gap=mc["gap"], inset=mc["inset"])
+        bake.extend(m.tris)
+
+
+def mountain_scree(level: Level, ground: Ground, bake: Bake) -> None:
+    """Scree at the mountain's foot: flat stones laid on the yard's floor (never over REACH's 0.2,
+    so nothing stands up in the walking space), thickest against the faces and thinning out."""
+    boxes = climb_boxes(level)
+    if not boxes:
+        return
+    ms = ART["mountain"]["scree"]
+    foot = Rect(min(b[1].x0 for b in boxes), max(b[1].x1 for b in boxes), min(b[1].z0 for b in boxes), max(b[1].z1 for b in boxes))
+    yard = [Rect.of(level.blocks[n]) for n in level.climb["yard"] if n in level.blocks]
+    m = kit.Mesh("scree")
+    rnd = random.Random(2810)
+    area = foot.grown(ms["band"])
+    placed = 0
+    tries = 0
+    stones: list[tuple[float, float, float]] = []
+    while placed < ms["count"] and tries < ms["count"] * 30:
+        tries += 1
+        x = rnd.uniform(area.x0, area.x1)
+        z = rnd.uniform(area.z0, area.z1)
+        d = foot.distance(x, z)
+        if d <= 0.3 or d > ms["band"] or rnd.random() > (1.0 - d / ms["band"]) ** 1.5:
+            continue
+        rad = ms["size"][0] + (ms["size"][1] - ms["size"][0]) * rnd.random() ** 1.6
+        if not any(yr.contains(x, z, -rad) for yr in yard) or any(math.hypot(x - sx, z - sz) < rad + sr + 0.2 for sx, sz, sr in stones):
+            continue
+        sides = 5 + int(rnd.random() * 2)
+        rot = rnd.uniform(0, math.tau)
+        outline = [(x + math.cos(rot + i * math.tau / sides + rnd.uniform(-0.25, 0.25)) * rad * rnd.uniform(0.8, 1.1),
+                    z + math.sin(rot + i * math.tau / sides + rnd.uniform(-0.25, 0.25)) * rad * rnd.uniform(0.8, 1.1)) for i in range(sides)]
+        o, eu, ev, ew = face_frame(1, 1, ground.at(x, z))
+        kit.block_poly(m, o, eu, ev, ew, outline, 0.02, ms["rise"][0] + (ms["rise"][1] - ms["rise"][0]) * rnd.random(), 0.05,
+                       tone=rnd.random(), sides=False, inset=rad * 0.45)
+        stones.append((x, z, rad))
+        placed += 1
+    bake.extend(m.tris)
+
+
+SUMMIT_RING = ("StandingStone", "StoneTall", "StoneSlim", "StoneLean", "StoneBroad")
+
+
+def dress_mountain(level: Level, ground: Ground, P: Placements) -> None:
+    """The summit's ring of standing stones round the chest (each under REGION_PIECE_MAX, outside the
+    chest's trigger and off the last hop's landing, open toward it), and a few firs in the yard's
+    far corners, off every hop line and the trail's mouth."""
+    boxes = climb_boxes(level)
+    if not boxes:
+        return
+    mc = ART["mountain"]
+    summit = level.blocks[level.climb["summit"]]
+    chest = next((s for s in level.layout.get("secrets") or [] if s.get("id") == level.climb["secret"]), None)
+    top = summit["y"] + summit["sy"] / 2
+    cx, cz = (chest["x"], chest["z"]) if chest else (summit["x"], summit["z"])
+    # the last hop lands over the summit's side that faces the last ledge
+    last = level.blocks[level.climb["ledges"][-1]]
+    lx, lz = last["x"] - cx, last["z"] - cz
+    land = math.atan2(lz, lx)
+    ring = mc["ring"]
+    for k, piece in enumerate(SUMMIT_RING):
+        t = (k + 0.5) / len(SUMMIT_RING)
+        a = land + math.radians(ring["open"]) / 2 + t * (math.tau - math.radians(ring["open"]))
+        x, z = cx + ring["radius"] * math.cos(a), cz + ring["radius"] * math.sin(a)
+        h = kit.build(piece).bounds()[1][1]
+        scale = min(ring["height"][0] + (ring["height"][1] - ring["height"][0]) * hash01(x, z, 1.0), REGION_PIECE_MAX - 0.2) / h
+        P.add(piece, x, top, z, -math.degrees(a) + 180.0, scale, summit=level.climb["summit"])
+    yard = Rect.of(level.blocks[level.climb["yard"][0]])
+    foot = Rect(min(b[1].x0 for b in boxes), max(b[1].x1 for b in boxes), min(b[1].z0 for b in boxes), max(b[1].z1 for b in boxes))
+    for k, (fx, fz) in enumerate(mc["yardFirs"]):
+        x = yard.x0 + fx * (yard.x1 - yard.x0)
+        z = yard.z0 + fz * (yard.z1 - yard.z0)
+        if foot.distance(x, z) < 6.0:
+            continue
+        P.add("FirHeroA" if k % 2 == 0 else "FirHeroB", x, ground.at(x, z) - 0.1, z, hash01(x, z) * 360.0, 0.9 + 0.2 * hash01(z, x), band="yard")
 
 
 # ---------------------------------------------------------------- placements
@@ -2013,6 +2600,8 @@ def dress_pillars(level: Level, P: Placements):
     """A lone fir and ferns on the back corners of every pillar's top (the lookout rock), away
     from its chest and from the side players jump onto it from."""
     for w in level.pillars:
+        if w.name in level.climb_pieces:
+            continue  # the mountain: no fir on a hop's take-off or landing (dress_mountain)
         r = w.rect
         chest = next((s for s in level.layout.get("secrets") or [] if r.contains(s["x"], s["z"])), None)
         drop = next((d for d in level.drops if d.distance((r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2) < max(r.x1 - r.x0, r.z1 - r.z0)), None)
@@ -2103,6 +2692,7 @@ def plant(level: Level, ground: Ground, P: Placements, reserved: list[Rect]):
         return any(r.contains(x, z) for r in reserved)
 
     rng = random.Random(77)
+    yard = climb_yard(level)
     # the thicket band, along every walled stretch (the barriers' own edges)
     for bar in level._barriers:
         c, a, b = bar["edge"]
@@ -2110,6 +2700,7 @@ def plant(level: Level, ground: Ground, P: Placements, reserved: list[Rect]):
         camp_edge = any(abs(c - v) < 1.5 for v in camp_edge_lines(level, bar["side"]))
         if camp_edge:
             continue
+        sparse = tr["yardEdge"] if yard is not None and yard_nearest(level, rects, (c + nx * 2.0) if nx else (a + b) / 2, (c + nz * 2.0) if nz else (a + b) / 2) else 1.0
         t = a + rng.uniform(0.5, 2.5)
         while t < b - 0.5:
             d = rng.uniform(1.6, 2.6)
@@ -2121,7 +2712,7 @@ def plant(level: Level, ground: Ground, P: Placements, reserved: list[Rect]):
                 yaw += rng.uniform(-14, 14)
                 scale = min(rng.uniform(0.9, 1.15), EDGE_BAND_MAX / kit.build(piece).bounds()[1][1])
                 P.add(piece, px, ground.at(px, pz), pz, yaw, scale, band="edge")
-            t += rng.uniform(5.6, 7.4)
+            t += rng.uniform(5.6, 7.4) * sparse
     # near and middle bands: a jittered grid
     for band, (d0, d1), step, choose in (
         ("near", tr["near"], tr["nearStep"], near_piece),
@@ -2134,6 +2725,10 @@ def plant(level: Level, ground: Ground, P: Placements, reserved: list[Rect]):
                 px = x + (hash01(x, z, 1.0) - 0.5) * step * 0.8
                 pz = z + (hash01(x, z, 2.0) - 0.5) * step * 0.8
                 d = dist_u(px, pz)
+                if yard is not None and d0 <= d < d1 and yard_nearest(level, rects, px, pz):
+                    if band == "mid" or hash01(px, pz, 11.0) > tr["yardNear"]:
+                        x += step
+                        continue
                 if d0 <= d < d1 and not blocked(px, pz, 1.0):
                     piece, scale = choose(hash01(px, pz, 3.0), hash01(px, pz, 4.0))
                     # No branch over walkable ground: a tree's reach stays outside it.
@@ -2274,6 +2869,75 @@ def foot_boulders(level: Level, ground: Ground, P: Placements, reserved: list[Re
             u += sc["foot"] * (0.7 + 0.6 * hash01(u, 5.0))
 
 
+def boulder_piles(level: Level, ground: Ground, P: Placements, reserved: list[Rect]) -> list[Rect]:
+    """Boulder piles where nobody walks (Ben's second look at the rocks, 2026-10-21): beside every
+    open camp's gates, just outside the fence line and the road, and at the corners where a tall
+    wall's end stands beside walkable ground (the gatehouse's mouth, the clearing's east gate):
+    the cliff's blocks fallen into a heap, a big stone, a smaller one or two and pebbles, every
+    stone's footprint off walkable ground and water (rule 4c). Returns the piles' footprints with
+    a margin (the trees keep off them)."""
+    bp = ART["piles"]
+    parts = level.union_parts()
+    rects = [p[0] for p in parts]
+    grounds = rects + [w.rect for w in level.water]
+    tall = [s for s in level.solids if s.kind in ("wall", "fence", "pillar") and s.hi[1] - s.lo[1] > 20 and s.name not in level.climb_pieces]
+    # the ground a wall's corner must stand beside to be seen: not the cave's inside, not a walled
+    # camp's floor (its wall hides everything outside it)
+    walled = walled_floors(level)
+    seen = [p[0] for p in parts if p[3] not in level.roofed and not any(p[0].overlaps(f) for f in walled)]
+    anchors = []
+    for cid, camp in sorted(level.camps.items()):
+        if camp.get("locks"):
+            continue
+        t = level.fence_thickness(camp)
+        for side, a, b in level.gate_spans(camp):
+            nx, nz = SIDES[side]
+            out = (camp["sx"] if nz == 0 else camp["sz"]) / 2 + t + bp["out"]
+            for end, step in ((a, -1), (b, 1)):
+                along = end + step * bp["along"]
+                x = camp["x"] + nx * out + (along if nz else 0.0)
+                z = camp["z"] + nz * out + (along if nx else 0.0)
+                anchors.append((x, z, (nx, nz), True))
+    for s in tall:
+        r = s.rect
+        for cx, cz, dx, dz in ((r.x0, r.z0, -1, -1), (r.x1, r.z0, 1, -1), (r.x0, r.z1, -1, 1), (r.x1, r.z1, 1, 1)):
+            x, z = cx + dx * bp["corner"], cz + dz * bp["corner"]
+            q = min(seen, key=lambda q: q.distance(x, z))
+            if q.distance(x, z) > bp["beside"]:
+                continue
+            # seen from there: no tall wall between the corner and that ground
+            qx, qz = min(max(x, q.x0), q.x1), min(max(z, q.z0), q.z1)
+            steps = max(2, int(math.hypot(qx - x, qz - z) / 0.5))
+            if any(o.rect.contains(x + (qx - x) * k / steps, z + (qz - z) * k / steps) for o in tall for k in range(steps + 1)):
+                continue
+            if any(o.rect.contains(x, z, 0.5) for o in level.solids):
+                continue
+            anchors.append((x, z, (dx, dz), False))
+    out = []
+    taken: list[tuple[float, float]] = []
+    for x, z, (dx, dz), gate in anchors:
+        if any(math.hypot(x - tx, z - tz) < bp["spacing"] for tx, tz in taken):
+            continue
+        if any(r.contains(x, z, 1.0) for r in grounds) or any(r.contains(x, z, 1.0) for r in ground.ravine):
+            continue
+        if not gate and any(r.contains(x, z) for r in reserved):
+            continue  # a camp's own outskirts: its tents and racks stand there
+        placed = 0
+        for k, (piece, off, scale) in enumerate(bp["heap"]):
+            ang = math.atan2(dz, dx) + (hash01(x, z, 3.0 + k) - 0.5) * 2.2
+            px, pz = x + math.cos(ang) * off, z + math.sin(ang) * off
+            item = {"piece": piece, "x": px, "y": 0.0, "z": pz, "yaw": hash01(px, pz, 5.0) * 360.0, "scale": scale * (0.9 + 0.25 * hash01(px, pz, 6.0))}
+            foot, _top = footprint(item)
+            if any(foot.overlaps(r.grown(0.2)) for r in grounds) or any(foot.overlaps(s.rect) for s in tall):
+                continue
+            P.add(piece, px, ground.at(px, pz) - 0.08, pz, item["yaw"], item["scale"], band="pile")
+            out.append(foot.grown(0.6))
+            placed += 1
+        if placed:
+            taken.append((x, z))
+    return out
+
+
 EDGE_BAND_MAX = 3.9  # the thicket band reaches over the walkable edge: kept under the 4-stud rule
 
 
@@ -2341,7 +3005,8 @@ def blanket(level: Level, ground: Ground, reserved: list[Rect]):
             cz = ground.z0 + (j + 0.5) * cell
             r = Rect(cx - cell / 2, cx + cell / 2, cz - cell / 2, cz + cell / 2)
             d = min(q.distance(cx, cz) for q in rects) - cell * 0.7
-            if d < bl["start"] - cell * 0.5:
+            start = bl["yardStart"] if yard_nearest(level, rects, cx, cz) else bl["start"]
+            if d < start - cell * 0.5:
                 continue
             if any(q.overlaps(r) for q in tall) or any(q.overlaps(r) for q in ground.ravine) or any(q.overlaps(r) for q in reserved):
                 continue
@@ -2377,6 +3042,28 @@ def blanket(level: Level, ground: Ground, reserved: list[Rect]):
         x, z = vxz(i, j)
         return (x, ground.at(x, z) + bl["under"], z)
 
+    # How many cells in from the canopy's edge each cell lies: an underside `deep` cells in is
+    # never seen (the tops above it are opaque, and no walker gets under it), so it is left out.
+    depth = [[0 if on[j][i] else -1 for i in range(nx)] for j in range(nz)]
+    frontier = []
+    for j in range(nz):
+        for i in range(nx):
+            if on[j][i] and any(not (0 <= i + di < nx and 0 <= j + dj < nz) or not on[j + dj][i + di]
+                                for di in (-1, 0, 1) for dj in (-1, 0, 1)):
+                depth[j][i] = 1
+                frontier.append((i, j))
+    level_n = 1
+    while frontier:
+        nxt = []
+        for i, j in frontier:
+            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                ii, jj = i + di, j + dj
+                if 0 <= ii < nx and 0 <= jj < nz and depth[jj][ii] == 0:
+                    depth[jj][ii] = level_n + 1
+                    nxt.append((ii, jj))
+        frontier = nxt
+        level_n += 1
+
     tris = []
     for j in range(nz):
         for i in range(nx):
@@ -2387,7 +3074,7 @@ def blanket(level: Level, ground: Ground, reserved: list[Rect]):
                 t = up(*t)
                 tris.append((*t, canopy_colour(t, i, j)))
             ua, ub, uc, ud = under(i, j), under(i + 1, j), under(i + 1, j + 1), under(i, j + 1)
-            for t in ((ua, uc, ub), (ua, ud, uc)):
+            for t in ((ua, uc, ub), (ua, ud, uc)) if depth[j][i] < bl["deep"] else ():
                 n = lm.tri_normal(*t)
                 t = t if n[1] < 0 else (t[0], t[2], t[1])
                 tris.append((*t, FOLIAGE.FIR_DARK))
@@ -2485,13 +3172,18 @@ class Build:
         dress_brambles(level, self.ground, self.P)
         dress_pillars(level, self.P)
         dress_islands(level, self.ground, self.P)
+        dress_mountain(level, self.ground, self.P)
         stones = scatter_stones(level, self.ground, self.P, reserved)
-        plant(level, self.ground, self.P, reserved + stones)
+        piles = boulder_piles(level, self.ground, self.P, reserved)
+        plant(level, self.ground, self.P, reserved + stones + piles)
         foot_boulders(level, self.ground, self.P, reserved)
         columns = massif_columns(level, self.ground) + lip_columns(level, self.ground)
         flat, slopes = self.ground.meshes()
         skin, deck = skins(level, self.ground)
         rocks = rock_faces(level, self.ground)
+        mountain_faces(level, rocks)
+        mountain_caps(level, rocks)
+        mountain_scree(level, self.ground, rocks)
         step_faces(level, rocks)
         gully_faces(level, self.ground, rocks)
         rocks.extend(columns)
