@@ -2,9 +2,9 @@
 
 **Ben: your one step here is step 7, the harvest paste.** About 3 minutes, any time before your look.
 
-**One run, one paste** (contract `docs/prompts/l4-w2-contract.md` §10 step 3): **82 uploads, one harvest paste of 82
-records**, then templates.
-- The forest, 47: 38 baked meshes, its palette and 4 ground textures (43, `upload_level.py`), and 4 props (Bramble,
+**One run, one paste** (contract `docs/prompts/l4-w2-contract.md` §10 step 3): **81 uploads, one harvest paste of 81
+records**, then templates. (Numbers as of the F2 forest, plan hash `23851a6f417491c1`: `l4-w2-reports/forest2.md`.)
+- The forest, 46: 37 baked meshes, its palette and 4 ground textures (42, `upload_level.py`), and 4 props (Bramble,
   Campfire, ChiefTent, SpawnTent; `upload_models.py --props --era Forest`).
 - The raiders, 35: seven kinds, five stages each (`upload_models.py --props --era Raiders`).
 
@@ -33,7 +33,7 @@ the v6 `assets_config.py`). Its `assets\` is the main checkout's (a junction) an
 - A prop stage whose `modelAssetId` is non-zero is never uploaded again, even when its GLB changed: clear it through
   `assets_config.save_assets` first. Level meshes and images are hash-checked instead: a changed file goes up again by
   itself and its harvested ids are cleared.
-- **Geometry is frozen from step 1.** The plan hash (`5a954ad6ec3b9853` on 2026-10-21) moves with the layout,
+- **Geometry is frozen from step 1.** The plan hash (`23851a6f417491c1` since the F2 forest pass, 2026-10-21) moves with the layout,
   `Combat.json levels.fenceThickness`, a stage's `kind`, `zone` or boss point (`at`), the generator's art numbers or a
   forest-kit piece; it no longer moves with a boss's kind, his Valor or any wave number (L4W2-4). If it moves after the
   uploads: steps 1, 4 (only the changed GLBs go up; with none changed, zero uploads and the hash in Assets.json is
@@ -53,11 +53,11 @@ the v6 `assets_config.py`). Its `assets\` is the main checkout's (a junction) an
       py tools/levels/forest.py check
       git status --short src/shared/Config/LevelDress/
       ```
-      - `build` ends with `wrote the upload record ...\assets\build\levels\ForestRoad.json`, `wrote 38 meshes + palette`,
+      - `build` ends with `wrote the upload record ...\assets\build\levels\ForestRoad.json`, `wrote 37 meshes + palette`,
         `wrote ...\src\shared\Config\LevelDress\ForestRoad.json`; `check` ends `check: PASS`. A `note: ... is missing`
         line means a texture is missing: make it (second line), then build again.
-      - `planHash` in `src/shared/Config/LevelDress/ForestRoad.json` and in the upload record: `5a954ad6ec3b9853`,
-        unless a geometry input changed since 2026-10-21. `git status` shows no change to the data file (the build is
+      - `planHash` in `src/shared/Config/LevelDress/ForestRoad.json` and in the upload record: `23851a6f417491c1`,
+        unless a geometry input changed since the F2 pass (commit f2f7080). `git status` shows no change to the data file (the build is
         byte-identical); a change there is a geometry change: stop and tell the lead.
 - [ ] 2. **The raider merge**, from a fresh palette (the palette cache trap):
       ```
@@ -76,22 +76,23 @@ the v6 `assets_config.py`). Its `assets\` is the main checkout's (a junction) an
       rm -f assets/build/palettes/forest-kit.*
       "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era Forest
       ```
-      - `done: 4 blueprint(s), 0 with problems`. Three warnings are expected: `geometry 0.05 / 0.30 / 0.26 studs below
-        ground` on Campfire, ChiefTent and SpawnTent (the pieces sit a little into the ground, like the baked ones).
-      - The palette it builds holds the level palette's 55 swatches exactly (checked 2026-10-21), so the props wear the
+      - `done: 4 blueprint(s), 0 with problems`. Three warnings are expected: `geometry 0.08 / 0.30 / 0.26 studs below
+        ground` (0.08 on the 2026-10-22 run) on Campfire, ChiefTent and SpawnTent (the pieces sit a little into the ground, like the baked ones).
+      - The palette it builds holds the level palette's 56 swatches exactly (F2 report, 2026-10-21), so the props wear the
         baked forest's colours.
 - [ ] 4. **Lead: announce, then the level uploads:**
       ```
       py tools/assets/upload_level.py --level ForestRoad --dry-run
-      py tools/assets/upload_level.py --level ForestRoad --only Dress_4 --only Hills_1
+      py tools/assets/upload_level.py --level ForestRoad --only Dress_5 --only Hills_2
       py tools/assets/upload_level.py --level ForestRoad
       ```
-      - Dry run: 43 `would upload` lines, then `dry run: 43 upload(s) pending (5 image(s), 38 mesh(es)), nothing sent,
+      - Dry run: 42 `would upload` lines, then `dry run: 42 upload(s) pending (5 image(s), 37 mesh(es)), nothing sent,
         nothing written`. Any `WARNING` line: nothing was uploaded; fix what it names (usually: re-run step 1).
-      - The trial, 2 uploads: `Dress_4` has the most triangles (14,201, 1.5 MB) and `Hills_1` the widest box (1,496
-        studs, past the Valley's proven 1,444). An error other than "Unknown Error" here: stop and tell the lead.
+      - The trial, 2 uploads: `Dress_5` has the most triangles (15,854, 1.71 MB, under the Valley's proven 16,037) and
+        `Hills_2` the widest box (1,320.6 studs, under the Valley's proven 1,444). An error other than "Unknown Error"
+        here: stop and tell the lead.
       - The real run: `ForestRoad: 0 image(s) and 2 mesh(es) already uploaded and unchanged, skipped`, then
-        `ForestRoad: uploaded 41/41`. On "Unknown Error", run the same line again: finished uploads are skipped.
+        `ForestRoad: uploaded 40/40`. On "Unknown Error", run the same line again: finished uploads are skipped.
       - `Assets.json` becomes v6 (a new top-level `levels` block).
 - [ ] 5. **Lead: the props uploads**, then the manifest:
       ```
@@ -111,22 +112,22 @@ the v6 `assets_config.py`). Its `assets\` is the main checkout's (a junction) an
       ```
       py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip
       ```
-      - `wrote tools\assets\harvest.luau with 82 asset(s) to harvest`: 39 `prop`, 5 `levelTexture`, 38 `levelMesh`.
+      - `wrote tools\assets\harvest.luau with 81 asset(s) to harvest`: 39 `prop`, 5 `levelTexture`, 37 `levelMesh`.
         Nothing else was pending on 2026-10-21, so any other count: stop and tell the lead.
       - Commit `harvest.luau`. **Copy it again when Ben says "ready to paste"** (`cat tools/assets/harvest.luau | clip`).
-      - A repeat (step 12) emits only the records still missing: fewer than 82 is right then.
+      - A repeat (step 13) emits only the records still missing: fewer than 81 is right then.
 - [ ] 7. **Ben: the one harvest paste.** Open the **local** file `C:\Users\benja\Desktop\tycoon\build\test.rbxl` in
       Studio, with File (*Archivo*) → Open (*Abrir*). **Not the published game. Do not press Play.**
       - Why this file: it is a local, unpublished place, and in Edit mode nothing in it runs. The script needs only
         Studio's InsertService, which every place has, so the dungeon files give nothing more. `proving.rbxl` is the
         file you play in: one Play press there would start a run.
       1. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** → Enter → wait for
-         `[HARVEST-DONE] 82 loaded, 0 failed` in Output (*Salida*). It takes longer than the last paste: some meshes
-         are 1.5 MB.
+         `[HARVEST-DONE] 81 loaded, 0 failed` in Output (*Salida*). It takes longer than the last paste: some meshes
+         are 1.7 MB.
       2. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
       3. Tell Claude **"done"**, and nothing else. **Do not paste the Output into the chat, and do not copy anything
          else** before Claude answers: your clipboard holds the result.
-      - If the number is not 82 or "failed" is not 0: tell Claude the line as it reads.
+      - If the number is not 81 or "failed" is not 0: tell Claude the line as it reads.
 - [ ] 8. **Lead: save the clipboard to a file first, count, then merge from the file.**
       ```
       powershell -NoProfile -Command "[IO.File]::WriteAllText('<a scratch file>', (Get-Clipboard -Raw), (New-Object Text.UTF8Encoding $false))"
@@ -134,9 +135,9 @@ the v6 `assets_config.py`). Its `assets\` is the main checkout's (a junction) an
       py tools/assets/harvest.py --props --file <that scratch file>
       py tools/gen_asset_manifest.py
       ```
-      - The count must be step 6's: 82 the first time. `[HARVEST-FAIL]` appears once in a good Output (the echoed
+      - The count must be step 6's: 81 the first time. `[HARVEST-FAIL]` appears once in a good Output (the echoed
         script).
-      - The merge prints `merged 39 prop stage(s)`, `merged 5 level image(s) and 38 level mesh(es)`, then `every
+      - The merge prints `merged 39 prop stage(s)`, `merged 5 level image(s) and 37 level mesh(es)`, then `every
         uploaded asset is harvested; next: py tools/assets/gen_templates.py --props, then py tools/assets/gen_templates.py
         --levels`, and exits 0.
       - **No `SIZE CHECK:`, `FRAME:` or `ROTATED:` line.** Each refuses what it names, merges the rest and exits 1:
@@ -163,13 +164,14 @@ the v6 `assets_config.py`). Its `assets\` is the main checkout's (a junction) an
       py tools/gen_asset_manifest.py
       py tools/gen_asset_manifest.py --check
       ```
-      - `297 prop template(s): 11 written, 286 unchanged, 0 removed`, `38 level template(s): 38 written, 0 unchanged,
-        0 removed`, then `CHECK: PASS -- 618 template(s) up to date` (569 before).
+      - `297 prop template(s): 11 written, 286 unchanged, 0 removed`, `37 level template(s): 37 written, 0 unchanged,
+        0 removed`, then `CHECK: PASS -- 617 template(s) up to date` (569 before).
       - New: `templates/_props/Forest/<Piece>.rbxmx` (4), `templates/_props/Raiders/<Model>.rbxmx` (7: Base and
-        Stage0..Stage4, one MeshPart per kit), `templates/_levels/ForestRoad/<Mesh>.rbxmx` (38: a Model holding one
+        Stage0..Stage4, one MeshPart per kit), `templates/_levels/ForestRoad/<Mesh>.rbxmx` (37: a Model holding one
         MeshPart `Mesh`, already in the level frame).
-      - The manifest reads 4/4 for Forest and 7/7 for Raiders on every column, and `ForestRoad | 5a954ad6ec3b9853 | 38
-        | 144656 | 5/5 | 5/5 | 38/38 | 38/38 | 38/38 | in game`.
+      - The manifest reads 4/4 for Forest and 7/7 for Raiders on every column, and `ForestRoad | 23851a6f417491c1 | 37
+        | 159046 | 5/5 | 5/5 | 37/37 | 37/37 | 37/37 | in game` (159,046 = the meshes' triangles; with the props the
+        level is 163,647).
 - [ ] 11. **Lead: the project files**, if not done yet (proved with a scratch Rojo build, pipeline report §4):
       - `combat.project.json`: `"templates/_levels"` appended to `globIgnorePaths`, and under
         `ReplicatedStorage.Assets`, beside `Props`:
@@ -182,7 +184,7 @@ the v6 `assets_config.py`). Its `assets\` is the main checkout's (a junction) an
         (`.proving.project.json` is generated from it by `tools/proving_project.py`.)
       - `default.project.json`, `orbital.project.json`, `boomtown.project.json`, `metropolis.project.json`:
         `"templates/_levels"` appended to `globIgnorePaths`, nothing else. Without it the hub's
-        `ServerStorage.Assets` (`$path: templates`) takes `_levels` in as a folder of 38 models.
+        `ServerStorage.Assets` (`$path: templates`) takes `_levels` in as a folder of 37 models.
 - [ ] 12. **Lead: sourcemaps and the six place files** (Git Bash, in `tycoon-p5`):
       ```
       export PATH="$HOME/.rokit/bin:$PATH"

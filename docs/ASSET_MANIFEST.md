@@ -503,6 +503,35 @@ Summary: 15 families: 15/15 blueprints, 15/15 uploaded, 15/15 harvested, 15/15 t
 | 14 | `splitbow` | `Splitbow` | yes | 1/1 | 1/1 | 1/1 | yes | grip, holster, nock, splitDown, splitUp, tip | yes | yes |
 | 15 | `warhammer` | `Warhammer` | yes | 1/1 | 1/1 | 1/1 | yes | grip, head, holster, tip | yes | yes |
 
+## Props — Forest
+
+Blueprints: `tools/testfit/blueprints/_props/Forest/` -- templates: `templates/_props/Forest/` -- in game: `ReplicatedStorage/Assets/Props/Forest/` (a prop folder, not an era).
+
+Summary: 4/4 blueprints, 4/4 uploaded, 0/4 harvested, 0/4 templated
+
+| # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
+|---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
+| 1 | `Bramble` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 2 | `Campfire` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 3 | `ChiefTent` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 4 | `SpawnTent` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+
+## Props — Raiders
+
+Blueprints: `tools/testfit/blueprints/_props/Raiders/` -- templates: `templates/_props/Raiders/` -- in game: `ReplicatedStorage/Assets/Props/Raiders/` (a prop folder, not an era).
+
+Summary: 7/7 blueprints, 7/7 uploaded, 0/7 harvested, 0/7 templated
+
+| # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
+|---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
+| 1 | `RaiderArmoured` | — | prop | yes | raider-cloth, raider-kit, raider-plate, raider-skin | 5 | 5/5 | 5/5 | 0/5 | — |
+| 2 | `RaiderBrute` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 0/5 | — |
+| 3 | `RaiderChief` | — | prop | yes | raider-cloth, raider-glow, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 0/5 | — |
+| 4 | `RaiderFodder` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 0/5 | — |
+| 5 | `RaiderLobber` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 0/5 | — |
+| 6 | `RaiderMarksman` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 0/5 | — |
+| 7 | `RaiderSlinger` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 0/5 | — |
+
 ## Baked paths
 
 Pipeline: `tools/paths/texture.py` (two PNGs -> Decals) and `tools/paths/bake.py` (two GLBs per piece -> Models) -> `tools/assets/upload_paths.py` -> Studio harvest -> `tools/assets/gen_templates.py --paths` -> `templates/_paths/<Era>/<pieceId>.rbxmx` -> `ReplicatedStorage/Assets/Paths/<Era>/`.
@@ -526,6 +555,16 @@ A mesh without a harvested mesh id has no template, and neither has a palette me
 | Set | Plots | Meshes | Triangles | Palette asset/image | Uploaded | Harvested | Templates | Status |
 |-----|-------|--------|-----------|---------------------|----------|-----------|-----------|--------|
 | Valley | 10 | 28 | 131768 | 122048418008875/138692341998180 | 28/28 | 28/28 | 28/28 | in game |
+
+## Levels
+
+Pipeline: the level's generator (`tools/levels/forest.py build` for ForestRoad: one GLB per mesh -> Models; its palette and ground textures -> Decals; the upload record) -> `tools/assets/upload_level.py` -> Studio harvest (the size check) -> `tools/assets/gen_templates.py --levels` -> `templates/_levels/<Level>/<Mesh>.rbxmx` -> `ReplicatedStorage/Assets/Levels/<Level>/` (the combat place).
+
+A mesh has a template once it and the image it wears are harvested. The game draws a level's dressing only when every one of its meshes has a template and the plan hash matches its dress data; otherwise it keeps the grey level.
+
+| Level | Plan hash | Meshes | Triangles | Images uploaded | Images harvested | Meshes uploaded | Meshes harvested | Templates | Status |
+|-------|-----------|--------|-----------|-----------------|------------------|-----------------|------------------|-----------|--------|
+| ForestRoad | `23851a6f417491c1` | 37 | 159046 | 5/5 | 0/5 | 37/37 | 0/37 | 0/37 | uploaded, awaiting harvest |
 
 ## Totals
 

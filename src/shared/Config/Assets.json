@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "textures": {
     "castle-kit": {
       "vipSwatchAssetId": 103844883997226,
@@ -8332,6 +8332,72 @@
         ]
       }
     },
+    "Forest": {
+      "Bramble": {
+        "stages": [
+          {
+            "modelAssetId": 129086437811947,
+            "parts": [
+              {
+                "kit": "forest-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.537, 2.734, 3.426],
+                "offset": [-0.029, 1.326, 0.006]
+              }
+            ]
+          }
+        ]
+      },
+      "Campfire": {
+        "stages": [
+          {
+            "modelAssetId": 139409694777571,
+            "parts": [
+              {
+                "kit": "forest-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.989, 2.08, 4.024],
+                "offset": [0.017, 0.96, -0.044]
+              }
+            ]
+          }
+        ]
+      },
+      "ChiefTent": {
+        "stages": [
+          {
+            "modelAssetId": 139023341306320,
+            "parts": [
+              {
+                "kit": "forest-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [27.215, 16.135, 26.67],
+                "offset": [0.0, 7.768, -1.335]
+              }
+            ]
+          }
+        ]
+      },
+      "SpawnTent": {
+        "stages": [
+          {
+            "modelAssetId": 117136852187466,
+            "parts": [
+              {
+                "kit": "forest-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.786, 8.186, 10.207],
+                "offset": [-0.093, 3.83, -0.362]
+              }
+            ]
+          }
+        ]
+      }
+    },
     "Metropolis": {
       "ApartmentA": {
         "stages": [
@@ -12154,6 +12220,799 @@
                 "imageId": 127722554741114,
                 "size": [7.0, 1.9964, 5.12],
                 "offset": [0.0, 0.9982, -0.94]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "Raiders": {
+      "RaiderArmoured": {
+        "stages": [
+          {
+            "modelAssetId": 91869976168447,
+            "parts": [
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.28, 1.516, 1.43],
+                "offset": [0.0, 5.922, 0.065]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.28, 1.4, 1.46],
+                "offset": [0.0, 5.7, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 92653366126909,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.541, 3.05, 1.625],
+                "offset": [-0.25, 3.475, 0.039]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.842, 2.058, 1.399],
+                "offset": [0.0, 4.009, -0.045]
+              },
+              {
+                "kit": "raider-plate",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.462, 2.398, 1.806],
+                "offset": [-0.435, 3.749, -0.039]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.723, 2.3, 0.633],
+                "offset": [-0.628, 3.91, -0.006]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 114922104069283,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.73, 0.818, 0.52],
+                "offset": [1.156, 4.289, 0.06]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.4, 2.996, 1.861],
+                "offset": [1.286, 2.122, -0.786]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.509, 1.421, 0.639],
+                "offset": [1.255, 3.44, -0.054]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 94980868044956,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.72, 2.343, 0.651],
+                "offset": [-0.46, 1.749, 0.026]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.641, 1.54, 0.92],
+                "offset": [-0.462, 0.77, -0.1]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 131069994410759,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.72, 2.343, 0.651],
+                "offset": [0.46, 1.749, 0.026]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.638, 1.54, 0.92],
+                "offset": [0.454, 0.77, -0.1]
+              }
+            ]
+          }
+        ]
+      },
+      "RaiderBrute": {
+        "stages": [
+          {
+            "modelAssetId": 94157768087760,
+            "parts": [
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.121, 2.72, 1.88],
+                "offset": [0.0, 6.84, -0.05]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.44, 1.6, 1.66],
+                "offset": [0.0, 6.6, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 124517327880049,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.689, 3.236, 2.18],
+                "offset": [-0.026, 3.868, 0.021]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.312, 2.32, 2.54],
+                "offset": [-0.007, 4.62, 0.271]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.915, 2.4, 1.988],
+                "offset": [0.0, 4.6, -0.006]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 101162148976870,
+            "parts": [
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.729, 2.147, 3.975],
+                "offset": [0.349, 3.636, -2.022]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.859, 2.124, 2.508],
+                "offset": [0.046, 4.482, -0.726]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 134600484816918,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.064, 2.601, 1.151],
+                "offset": [-0.632, 1.959, 0.087]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.998, 0.82, 1.228],
+                "offset": [-0.648, 0.41, -0.106]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 117402406296859,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.064, 2.593, 1.151],
+                "offset": [0.688, 1.959, 0.087]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.987, 0.82, 1.228],
+                "offset": [0.666, 0.41, -0.106]
+              }
+            ]
+          }
+        ]
+      },
+      "RaiderChief": {
+        "stages": [
+          {
+            "modelAssetId": 102942104408874,
+            "parts": [
+              {
+                "kit": "raider-glow",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.64, 0.36, 0.27],
+                "offset": [0.0, 12.71, -1.465]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.507, 4.35, 3.964],
+                "offset": [0.0, 12.485, -0.165]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.535, 2.94, 2.7],
+                "offset": [0.0, 12.4, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 78660313427549,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.909, 6.211, 3.709],
+                "offset": [0.13, 7.405, 0.036]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.489, 7.95, 5.153],
+                "offset": [-0.345, 7.275, 0.501]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.809, 4.8, 3.45],
+                "offset": [-0.685, 8.35, 0.075]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 84511363077051,
+            "parts": [
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.599, 1.677, 1.863],
+                "offset": [3.406, 7.579, -0.247]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.033, 4.355, 2.491],
+                "offset": [3.115, 8.078, -0.125]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 130651357869034,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.1, 4.682, 2.204],
+                "offset": [-1.25, 3.619, 0.142]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.007, 2.82, 2.402],
+                "offset": [-1.261, 1.41, -0.169]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 132077826487047,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.1, 4.682, 2.204],
+                "offset": [1.25, 3.619, 0.142]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.031, 2.82, 2.408],
+                "offset": [1.259, 1.41, -0.166]
+              }
+            ]
+          }
+        ]
+      },
+      "RaiderFodder": {
+        "stages": [
+          {
+            "modelAssetId": 134495109435583,
+            "parts": [
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.237, 1.668, 1.392],
+                "offset": [-0.014, 4.324, 0.139]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.092, 1.26, 1.214],
+                "offset": [0.0, 4.3, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 107737965274507,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.287, 1.84, 0.936],
+                "offset": [0.0, 2.54, -0.001]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.667, 1.843, 1.113],
+                "offset": [-0.184, 2.758, 0.067]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.184, 1.7, 0.414],
+                "offset": [-0.419, 2.91, 0.003]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 127719749974119,
+            "parts": [
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.68, 1.234, 1.672],
+                "offset": [0.94, 2.043, -0.761]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.465, 1.454, 0.444],
+                "offset": [0.845, 2.727, -0.021]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 74906682933473,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.5, 1.767, 0.44],
+                "offset": [-0.32, 1.209, -0.003]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.409, 1.13, 0.64],
+                "offset": [-0.33, 0.565, -0.12]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 114224993524326,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.5, 1.767, 0.44],
+                "offset": [0.32, 1.209, -0.003]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.409, 1.13, 0.64],
+                "offset": [0.33, 0.565, -0.12]
+              }
+            ]
+          }
+        ]
+      },
+      "RaiderLobber": {
+        "stages": [
+          {
+            "modelAssetId": 123394931162365,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.191, 0.43, 0.527],
+                "offset": [0.0, 4.045, -0.257]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.36, 1.003, 1.251],
+                "offset": [0.0, 4.488, 0.069]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.111, 1.26, 1.233],
+                "offset": [0.0, 4.3, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 107853689768618,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.376, 1.78, 1.065],
+                "offset": [0.006, 2.55, -0.008]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.293, 2.186, 1.693],
+                "offset": [0.002, 2.593, 0.277]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.318, 1.74, 0.432],
+                "offset": [-0.468, 2.85, 0.024]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 81429345975238,
+            "parts": [
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.42, 0.581, 0.479],
+                "offset": [1.02, 2.429, -0.039]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.5, 1.482, 0.48],
+                "offset": [0.928, 2.681, -0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 99537350854975,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.56, 1.732, 0.491],
+                "offset": [-0.36, 1.188, -0.003]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.466, 1.111, 0.66],
+                "offset": [-0.371, 0.555, -0.13]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 107387527542977,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.56, 1.732, 0.491],
+                "offset": [0.36, 1.188, -0.003]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.466, 1.111, 0.66],
+                "offset": [0.371, 0.555, -0.13]
+              }
+            ]
+          }
+        ]
+      },
+      "RaiderMarksman": {
+        "stages": [
+          {
+            "modelAssetId": 121070420533409,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.186, 1.3, 1.106],
+                "offset": [0.0, 4.755, 0.147]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.954, 0.16, 0.368],
+                "offset": [0.0, 4.755, -0.327]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.014, 1.23, 1.143],
+                "offset": [0.0, 4.75, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 79658380917795,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.204, 2.67, 1.001],
+                "offset": [0.017, 2.785, 0.009]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.065, 1.906, 1.214],
+                "offset": [0.01, 3.444, 0.127]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.329, 0.24, 0.36],
+                "offset": [0.0, 4.1, 0.02]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 92066653439613,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.928, 0.939, 0.782],
+                "offset": [0.091, 3.453, -0.155]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.784, 0.67, 2.17],
+                "offset": [0.3, 3.455, -1.135]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.689, 0.655, 1.115],
+                "offset": [0.152, 3.242, -0.59]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 70941617117637,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.48, 2.022, 0.422],
+                "offset": [-0.3, 1.339, -0.003]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.39, 1.267, 0.62],
+                "offset": [-0.309, 0.633, -0.11]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 109749498344263,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.48, 2.022, 0.422],
+                "offset": [0.3, 1.339, -0.003]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.39, 1.267, 0.62],
+                "offset": [0.309, 0.633, -0.11]
+              }
+            ]
+          }
+        ]
+      },
+      "RaiderSlinger": {
+        "stages": [
+          {
+            "modelAssetId": 76066778006393,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.13, 1.142, 1.489],
+                "offset": [0.0, 4.414, 0.273]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.954, 0.16, 0.368],
+                "offset": [0.0, 4.355, -0.327]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.014, 1.23, 1.143],
+                "offset": [0.0, 4.35, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87464492478350,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.207, 1.8, 0.908],
+                "offset": [0.003, 2.58, 0.023]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.503, 1.76, 0.894],
+                "offset": [-0.217, 2.64, -0.062]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.127, 1.71, 0.375],
+                "offset": [-0.399, 2.925, 0.012]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 92869033668153,
+            "parts": [
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.399, 1.68, 0.409],
+                "offset": [0.93, 1.82, -0.12]
+              },
+              {
+                "kit": "raider-skin",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.449, 1.438, 0.406],
+                "offset": [0.804, 2.769, -0.012]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 138762939131667,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.48, 1.785, 0.422],
+                "offset": [-0.3, 1.219, -0.003]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.39, 1.142, 0.62],
+                "offset": [-0.309, 0.571, -0.11]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 106774483284279,
+            "parts": [
+              {
+                "kit": "raider-cloth",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.48, 1.785, 0.422],
+                "offset": [0.3, 1.219, -0.003]
+              },
+              {
+                "kit": "raider-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.39, 1.142, 0.62],
+                "offset": [0.309, 0.571, -0.11]
               }
             ]
           }
@@ -16919,6 +17778,417 @@
         "assetId": 131554944715656,
         "imageId": 127356628127071,
         "sha256": "66baad5412cf1252f87d10ef0663c4b689f0c88b539355fd9602c74c26bc9a59"
+      }
+    }
+  },
+  "levels": {
+    "ForestRoad": {
+      "planHash": "23851a6f417491c1",
+      "triangles": 159046,
+      "images": {
+        "camp": {
+          "assetId": 130314800485649,
+          "imageId": 0,
+          "sha256": "eaba6016af0d67c5ecac6380c84c845b78ad4b9e5be4d3c56a2afd903e22a7a3"
+        },
+        "forestFloor": {
+          "assetId": 106545826600979,
+          "imageId": 0,
+          "sha256": "9cf1aa8837912b80e252b72717941bc53bac8fcc6634186493722aee88d60062"
+        },
+        "palette": {
+          "assetId": 132739189966206,
+          "imageId": 0,
+          "sha256": "5a3228677b2e22ce6814aa14976b9fa9e086e9f303c06cdfa8accda032a108f5"
+        },
+        "road": {
+          "assetId": 92234340759724,
+          "imageId": 0,
+          "sha256": "fa35ecefd5a2e49f8e6b91281ad23fe7e46e92805dff6f8cabef2592d9806e8a"
+        },
+        "roadRim": {
+          "assetId": 119053848853575,
+          "imageId": 0,
+          "sha256": "35a17852a7103df1f0029ac1e8dbea45d282372073373ebc03b6c315346fef95"
+        }
+      },
+      "meshes": {
+        "BridgeDeck": {
+          "assetId": 75670124878972,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "fa380322b5efb34bf4fd77567d722fa3301cfcb50f94fd82eb660e1918399434",
+          "triangles": 340,
+          "look": "palette",
+          "group": "camp"
+        },
+        "CampFloor": {
+          "assetId": 121924107295154,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "8298a2c9ec083c8c1209e23b62e513e5dbf75f7f7d76f9f86a21bff838d4d633",
+          "triangles": 924,
+          "look": "texture",
+          "texture": "camp",
+          "group": "skin"
+        },
+        "Canopy_1": {
+          "assetId": 73683363151673,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "ef7cbc01f92783d450e2af724e39e3d5f455b72c419e4e92655bbaba408472bb",
+          "triangles": 3429,
+          "look": "palette",
+          "group": "canopy"
+        },
+        "Canopy_2": {
+          "assetId": 140110206570372,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "2053c5e15746a5298d501cb0fce70621e37606780f3cdd4c3211c81559b72b0f",
+          "triangles": 2199,
+          "look": "palette",
+          "group": "canopy"
+        },
+        "Canopy_3": {
+          "assetId": 107594824351568,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "357253148be2a693a7674dbc01a5beb37b43e6fef26c383a622d4467a7e896bd",
+          "triangles": 1799,
+          "look": "palette",
+          "group": "canopy"
+        },
+        "Canopy_4": {
+          "assetId": 98031439808340,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "237b07ac7b4ece83e7822dff539928809840230641e884878448ff0f2c55af16",
+          "triangles": 3177,
+          "look": "palette",
+          "group": "canopy"
+        },
+        "CaveFloor": {
+          "assetId": 93705981432446,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "d6459ccc2f27e61b37089765f9b000bb717edaf137d209357af88471a1b5d313",
+          "triangles": 904,
+          "look": "texture",
+          "texture": "roadRim",
+          "group": "skin"
+        },
+        "Cover": {
+          "assetId": 138392486938715,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "721cb9ed45803b4cc502db8a5490b0632693375d0fcda5dda94374318bf6b03d",
+          "triangles": 3432,
+          "look": "palette",
+          "group": "camp"
+        },
+        "Dress_1": {
+          "assetId": 74345307228599,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "81e8b9e21659c3a70711d346fdef8e9c73b76db841f2c36b90b4d0dd35200d71",
+          "triangles": 6046,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_10": {
+          "assetId": 98027082630363,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "8bb0fa1594247453299d6bdfcf60367cb0bb0b2a512f68c16e7ce9077c657330",
+          "triangles": 6527,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_11": {
+          "assetId": 99430664440134,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "644b95a9fadce1cce7cbef1e5ca5e513ca174ac67943da20cf8fc0252b4fb25b",
+          "triangles": 2871,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_2": {
+          "assetId": 72766192219303,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "d981890120678aedde3f63a356caa19773ab386737b3727858b8bb25e730003b",
+          "triangles": 8153,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_3": {
+          "assetId": 120059813606412,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "d6957f418f8656f41c9e4863070e3533d8f8c556ba580503bd7303bd440eecda",
+          "triangles": 11020,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_4": {
+          "assetId": 71508959483880,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "ef0360bddf165be209afc0b86aefc3aa19015a1e8ed7388b31b5ac44824320da",
+          "triangles": 8645,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_5": {
+          "assetId": 99605376274353,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "b670b97d7dba657ab684e0f3f4291f994dfeb7be3e99383182c22a29bbf40db2",
+          "triangles": 15854,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_6": {
+          "assetId": 84017213146013,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "f95fdbd3704ebccca8900fd3547dd44556137e5fcba25b504fafa76fafc2e7a8",
+          "triangles": 11585,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_7": {
+          "assetId": 118180275425186,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "873556d61fc9ac7542aeac5122aed8388354de285facf2f8040dfae6b40d326e",
+          "triangles": 7082,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_8": {
+          "assetId": 140680234276049,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "7eee6ba165fafcaf98be15c156974f1408d32bdc5189bbaae216838ab57476ed",
+          "triangles": 6773,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Dress_9": {
+          "assetId": 76639972862665,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "3474a60a9b03d314c58b7530487d949e3eaf8fa96e277da04a52243c1d9800b2",
+          "triangles": 10687,
+          "look": "palette",
+          "group": "dress"
+        },
+        "Floor": {
+          "assetId": 106418621039370,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "cda06baa114b60737a579c46ee2c6f801ce054a5190c29afe1aed0de31e0b3a3",
+          "triangles": 1368,
+          "look": "texture",
+          "texture": "forestFloor",
+          "group": "ground"
+        },
+        "Hills_1": {
+          "assetId": 118363782364825,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "5e0e578879172e7d9ec3b8795cb0b714d30fee13ddf5d024f1a1686cbd4380e0",
+          "triangles": 233,
+          "look": "palette",
+          "group": "backdrop"
+        },
+        "Hills_2": {
+          "assetId": 88452613378565,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "d7764e82ea765d6346fff118aa6a9535c77e5e7a23bd39ee1367478389f84d3a",
+          "triangles": 233,
+          "look": "palette",
+          "group": "backdrop"
+        },
+        "Hills_3": {
+          "assetId": 76933825300012,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "626326d3f0e85039f7dea725cd4427115579c5e652c6c7326bfbd8b519803582",
+          "triangles": 151,
+          "look": "palette",
+          "group": "backdrop"
+        },
+        "Hills_4": {
+          "assetId": 139991708549222,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "cf419c146f6e9bab97d35fd3fc797065d5af00ed4410b507ce900829047accfc",
+          "triangles": 151,
+          "look": "palette",
+          "group": "backdrop"
+        },
+        "Lintel": {
+          "assetId": 100670152668028,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "d1d1e7901bb8d5843dcabf9fdb7b211717a3328f2e3a08f2b0b1c5cb9b5a3f4d",
+          "triangles": 208,
+          "look": "palette",
+          "group": "camp"
+        },
+        "Road": {
+          "assetId": 127775507179349,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "fe363d87570a07f798e6682c8f50cd843a8f991149d6cdfe2ee26989501b7913",
+          "triangles": 3056,
+          "look": "texture",
+          "texture": "road",
+          "group": "skin"
+        },
+        "RoadRim_1": {
+          "assetId": 119327652715512,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "de22213469e12bd0ad63351a2b9e2566eec12aa9bff00314749217044814716c",
+          "triangles": 2380,
+          "look": "texture",
+          "texture": "roadRim",
+          "group": "skin"
+        },
+        "RoadRim_2": {
+          "assetId": 72285696235513,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "070361dfc55fcb6fb1c84c8635b54c42c4f8a50ca00c182a5feb4af3180e8699",
+          "triangles": 1664,
+          "look": "texture",
+          "texture": "roadRim",
+          "group": "skin"
+        },
+        "Rock_1": {
+          "assetId": 101488104808345,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "d3d9b7b0ab993b5b56402a7726cd65207d54d2b5349bc6b0a68176591b2e1b3b",
+          "triangles": 7572,
+          "look": "palette",
+          "group": "rock"
+        },
+        "Rock_2": {
+          "assetId": 70825938054041,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "b7eae61146560dd62617d6d916ae31915b11084b09425aa44892652984b50901",
+          "triangles": 4995,
+          "look": "palette",
+          "group": "rock"
+        },
+        "Rock_3": {
+          "assetId": 133978269411396,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "88efe9bd8a3104c0346496513bc703651b0b2a4039a760e70d81b78f471c2d27",
+          "triangles": 4483,
+          "look": "palette",
+          "group": "rock"
+        },
+        "Rock_4": {
+          "assetId": 124892831689413,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "e3ffb21778779098238fb4a06482aa5bb9a0843c59172989d342c3998c79abca",
+          "triangles": 4075,
+          "look": "palette",
+          "group": "rock"
+        },
+        "Rock_5": {
+          "assetId": 79457467461064,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "111cd59a5ac609199522e1c94dde3358a858e4a50e1d1cd48acbb0364e824492",
+          "triangles": 3682,
+          "look": "palette",
+          "group": "rock"
+        },
+        "Rock_6": {
+          "assetId": 105840898454105,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "eba3b44b92924764f06841330d0dce8fdc2227b89aad3c379248c05f772904e2",
+          "triangles": 4872,
+          "look": "palette",
+          "group": "rock"
+        },
+        "Slopes_1": {
+          "assetId": 89982091881668,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "078c03e88be258265006dc24cb097738f26698837a4c8426ad1825b5322be231",
+          "triangles": 3566,
+          "look": "palette",
+          "group": "ground"
+        },
+        "Slopes_2": {
+          "assetId": 129709535183819,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "af0b088f9f2d253c00e6b7d7aa87a7884c95848d61435a6c7a9731f954baed97",
+          "triangles": 1711,
+          "look": "palette",
+          "group": "ground"
+        },
+        "Slopes_3": {
+          "assetId": 113737796360815,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "afea7f908965ba846a42500e0ad3eb98fd4b9868ec579aa512ba870fd9b73a31",
+          "triangles": 3199,
+          "look": "palette",
+          "group": "ground"
+        }
       }
     }
   }
