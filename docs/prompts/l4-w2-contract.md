@@ -17,6 +17,16 @@ posed reach) and `docs/prompts/l4-w2-reports/pipeline.md` + `l4-w2-asset-run.md`
 - The starting numbers the draft proposed (mood B's `outdoorAmbient` [110, 120, 130], the low-end walk radius 60, 8
   clones a frame) are accepted as starting values; Ben's Studio look tunes the mood.
 
+- **The mountain and the Castle Key join W2 (MISSIONS_DESIGN §28; layout and data landed in cd93c27, gates in
+  `tools/check_parkour.py`; detail in `docs/prompts/l4-w2-reports/mountain.md` "What the game code needs").** A:
+  `Types.LevelSecretConfig.key: string?`; `StageFlow.secretProblems` validates `key` (D1 mirrors it in
+  `sim_range.secret_problems`); a pure `Unlocks.HasLevelKey(combat, key)` (held once the secret that gives it is in
+  `combat.secrets`; no profile change); the chest's reward carries the key to the client. D1:
+  `Expeditions.json keys.castle = { name = "Castle Key", text = "Opens a sealed door in the Castle." }`. ui: the chest's
+  reward card adds a "Castle Key found" line; the map's secret row shows a key glyph (`MapSecretState.key`). The end
+  screen's row is W3's. The climb's movement is already gated offline (`check_parkour.py` plus its mutants join §11's list);
+  Ben judges the jumps in Studio.
+
 ## 1. Rulings (detail in the section named)
 
 - **L4W2-1.** One dress file per level, generated into Config: `forest.py build` writes
@@ -298,7 +308,8 @@ py tools/proving_project.py && rojo build .proving.project.json -o build/proving
 for p in boomtown metropolis orbital; do rojo build $p.project.json -o build/$p.rbxl; done
 py tools/crowd_harness/run_harness.py $R $L
 py tools/check_stage_mirror.py && py tools/crowd_harness/mirror_mutants.py --luau $L
-py tools/levels/forest.py check && py tools/testfit/raiderpose.py --check
+py tools/levels/forest.py check && py tools/levels/forest.py mutants && py tools/testfit/raiderpose.py --check
+py -3.12 tools/check_parkour.py && py -3.12 tools/check_parkour.py --mutants
 py tools/check_raider_mirror.py --luau $L           # and its mutants
 py tools/assets/raider_frames.py --check --require-harvest && py tools/assets/weapon_frames.py --check --require-harvest
 py tools/assets/gen_templates.py --check && py tools/gen_asset_manifest.py --check
