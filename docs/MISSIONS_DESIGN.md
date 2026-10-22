@@ -670,3 +670,10 @@ forest pass that dresses the mountain. **[Ben]**
 `_L4_walls_before_after.png` and `plan_top_F2.png`: "yes, as it is". Offered climb markers on every ledge lip (the lead
 saw that the spiral cannot be read from the yard), Ben declined: **finding the way up is part of the challenge.** The
 upload runs now: 81 uploads (37 level meshes, 5 images, 4 forest props, 35 raider stages), one harvest paste. **[Ben]**
+
+**R8 judged fairly, as built (2026-10-22, lead's reading of §27.5):** the comparison is **against fighting it all with the
+same gear**, so at sword T1 / bow T4 the fighter uses both weapons (the simulator's pair player), not the sword alone. Under
+it every spot on every table earns x0.41-0.84 of the fighter's cash a minute over seeds 1-30. Against the sword-only
+fighter, Road3 and Road2 on Hard would read x1.014 and x1.003 (a gain of about 1%); that table stays printed, ungated.
+After sniping, the fight resumes on the road where the player left it (read literally, "from where he stands", four spots
+that shoot nothing failed on a route quirk). Told to Ben; his word overrides.
