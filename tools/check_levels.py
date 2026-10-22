@@ -93,6 +93,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sim_range as sr  # noqa: E402  (the arena adapter and the config loaders live there)
+import check_parkour  # noqa: E402  (L4 W2: the climbs; it reads this module only when called)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = REPO_ROOT / "src" / "shared" / "Config"
@@ -109,7 +110,8 @@ EXPECTED = {
         "camps": {"A": (85, 85), "B": (141, 133), "C": (115, 115)},
         "campTolerance": 0.10,
         "routeStuds": (900, 1100),
-        "secrets": {"lookout": "doubleJump", "cache": "fire", "shrine": "ice"},
+        # L4 W2 (MISSIONS_DESIGN 28): the mountain's summit chest, the Castle Key, behind the double jump.
+        "secrets": {"lookout": "doubleJump", "cache": "fire", "shrine": "ice", "mountain": "doubleJump"},
         "climbs": 1,
         "gaps": 1,
         # L2 W3 (L2-52, L2-57, L2-60): deep water that a frost swing freezes, and the island it leads to.
@@ -1211,7 +1213,8 @@ def check_secret_reach(name, layout, ctx, expect, solids, tall):
         keys = key_rects(solids, base, chest)
         skip = {base.name, chest.name}
         # (a) The owner's band, and the trigger holds a standable point on a key top.
-        road, away = route_height_near(layout, secret["x"], secret["z"])
+        # L4 W2: a climb's chest (tools/check_parkour.py CLIMBS) is held to the band over its last ledge.
+        road, away = check_parkour.ledge_below(layout, secret) or route_height_near(layout, secret["x"], secret["z"])
         rise = base.top - road
         lo = move["jumpHeight"] + STEP_UP
         hi = move["jumpHeight"] + move["doubleJumpHeight"] - LOOKOUT_UNDER_DOUBLE
@@ -1704,7 +1707,7 @@ def check_layout(name, layout, ctx, expect):
     wanted = spec.get("secrets")
     if wanted is not None:
         found = {s["id"]: s["needs"] for s in layout["secrets"]}
-        expect(found == wanted, f"{tag} three secrets, {', '.join(f'{k} ({v})' for k, v in wanted.items())}: "
+        expect(found == wanted, f"{tag} {len(wanted)} secrets, {', '.join(f'{k} ({v})' for k, v in wanted.items())}: "
                + ", ".join(f"{k} ({v})" for k, v in found.items()))
     for secret in layout["secrets"]:
         word = NEED_WORDS.get(secret["needs"], "?")
@@ -1728,6 +1731,8 @@ def check_layout(name, layout, ctx, expect):
                f"{sign.get('y', 0):g} ({held} of {(cells + 1) ** 2} samples), {away:.0f} studs from the route")
     # L2-18 (a) to (d): the secrets a bought ability opens.
     check_secret_reach(name, layout, ctx, expect, solids, tall)
+    # L4 W2 (MISSIONS_DESIGN 28): the climbs tools/check_parkour.py names, on this module's helpers.
+    check_parkour.check_climbs(sys.modules[__name__], name, layout, ctx, expect, solids, tall)
     # L2-47: the road's bends cannot be hopped.
     check_route_skips(name, layout, ctx, expect, solids, tall)
     deep = spec.get("deepWater")

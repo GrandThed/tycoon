@@ -66,6 +66,7 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 import check_levels as cl  # noqa: E402
+import check_parkour  # noqa: E402
 
 REPO = TOOLS.parent
 
@@ -854,11 +855,12 @@ CASES = (
      lambda d: block(d, "ShrineIsland").__setitem__("x", -436 + 4 * 72 / 11 + 8), {}, COPLANAR, True),
     ("W3 fix3 fd-m1 control: the island at z 128.05 (its south face the inset off the row line)",
      lambda d: block(d, "ShrineIsland").__setitem__("z", 128.05), {}, COPLANAR, False),
-    # fd-m2: a sheet thicker than the fastest fall's step (0.685 here: a fall from the jumps' apex over
-    # the lookout at 240 Hz) and thinner than a root (2).
-    ("W3 fix3 fd-m2: ice.thickness 0.6 (the fastest fall moves 0.685 a physics step)",
-     lambda d: ice(d).__setitem__("thickness", 0.6), {}, SHEET, True),
-    ("W3 fix3 fd-m2 control: ice.thickness 0.7", lambda d: ice(d).__setitem__("thickness", 0.7), {}, SHEET, False),
+    # fd-m2: a sheet thicker than the fastest fall's step and thinner than a root (2). Re-aimed by L4 W2: the
+    # rule falls from the jumps' apex over the highest top reached anywhere, now the mountain's summit, 234.8
+    # down to the lowest sheet: 1.265 a physics step at 240 Hz (it was 0.644 over the lookout).
+    ("W3 fix3 fd-m2: ice.thickness 1.2 (the fastest fall moves 1.265 a physics step)",
+     lambda d: ice(d).__setitem__("thickness", 1.2), {}, SHEET, True),
+    ("W3 fix3 fd-m2 control: ice.thickness 1.3", lambda d: ice(d).__setitem__("thickness", 1.3), {}, SHEET, False),
     ("W3 fix3 fd-m2: ice.thickness 2 (a root fits wholly inside)", lambda d: ice(d).__setitem__("thickness", 2), {},
      SHEET, True),
     ("W3 fix3 fd-m2: ice.thickness 4 (d-m6's floor: a root fits wholly inside)",
@@ -934,6 +936,10 @@ CASES = (
      lambda d: (d["expeditions"]["difficulties"].append("overdrive"),
                 d["ctx"]["armory"]["ladder"].__setitem__("starAlso", ["brutal", "overdrive"])), {}, TROPHY, False),
 )
+# L4 W2 (MISSIONS_DESIGN 28): tools/check_parkour.py's mutants, each through every gate, and a control.
+CASES += tuple((f"L4 W2: {label}", (lambda m: lambda d: m(layout(d)))(mutate), {}, rule, True)
+               for label, mutate, rule in check_parkour.MUTANTS)
+CASES += (("L4 W2 control: the shipped climb", None, {}, "the mountain climb: no fall leaves the yard", False),)
 
 
 def matches(rule, text):

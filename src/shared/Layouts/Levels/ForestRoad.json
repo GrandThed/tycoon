@@ -370,7 +370,18 @@
 		{ "name": "GatehouseWallS", "look": "wall", "x": 280.75, "y": 38, "z": -35, "sx": 49.5, "sy": 76, "sz": 2 },
 		{ "name": "GatehouseWallE", "look": "wall", "x": 322.5, "y": 38, "z": -41.25, "sx": 2, "sy": 76, "sz": 25.5 },
 		{ "name": "GatehouseWallW", "look": "wall", "x": 304.5, "y": 38, "z": -32.25, "sx": 2, "sy": 76, "sz": 7.5 },
-		{ "name": "TrailEnd", "look": "path", "x": 379, "y": 10, "z": -10, "sx": 16, "sy": 4, "sz": 16 }
+		{ "name": "TrailEnd", "look": "path", "x": 379, "y": 10, "z": -10, "sx": 16, "sy": 4, "sz": 16 },
+		{ "name": "MountainPath", "look": "path", "x": -530, "y": -2, "z": 0, "sx": 96, "sy": 4, "sz": 16 },
+		{ "name": "MountainTrail", "look": "path", "x": -570, "y": -2, "z": -35, "sx": 16, "sy": 4, "sz": 54 },
+		{ "name": "MountainYard", "look": "ground", "x": -610, "y": -2, "z": -110, "sx": 96, "sy": 4, "sz": 96 },
+		{ "name": "MountainLedge1", "look": "ground", "x": -608, "y": 10.5, "z": -86, "sx": 24, "sy": 29, "sz": 20 },
+		{ "name": "MountainLedge2", "look": "ground", "x": -586, "y": 23, "z": -88, "sx": 20, "sy": 54, "sz": 24 },
+		{ "name": "MountainLedge3", "look": "ground", "x": -586, "y": 35.5, "z": -112, "sx": 20, "sy": 79, "sz": 24 },
+		{ "name": "MountainLedge4", "look": "ground", "x": -588, "y": 48, "z": -134, "sx": 24, "sy": 104, "sz": 20 },
+		{ "name": "MountainLedge5", "look": "ground", "x": -612, "y": 60.5, "z": -134, "sx": 24, "sy": 129, "sz": 20 },
+		{ "name": "MountainLedge6", "look": "ground", "x": -634, "y": 73, "z": -132, "sx": 20, "sy": 154, "sz": 24 },
+		{ "name": "MountainLedge7", "look": "ground", "x": -634, "y": 85.5, "z": -108, "sx": 20, "sy": 179, "sz": 24 },
+		{ "name": "MountainSummit", "look": "ground", "x": -610, "y": 98, "z": -110, "sx": 28, "sy": 204, "sz": 28 }
 	],
 	"secrets": [
 		{
@@ -405,6 +416,17 @@
 			"sy": 4,
 			"sz": 6,
 			"sign": { "x": -385, "y": 0, "z": 13, "text": "ISLAND SHRINE - needs ICE" }
+		},
+		{
+			"id": "mountain",
+			"needs": "doubleJump",
+			"x": -610,
+			"y": 202,
+			"z": -110,
+			"sx": 6,
+			"sy": 4,
+			"sz": 6,
+			"sign": { "x": -490, "y": 0, "z": -5, "text": "MOUNTAIN - needs DOUBLE JUMP" }
 		}
 	],
 	"shortcuts": [

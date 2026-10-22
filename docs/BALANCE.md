@@ -6538,3 +6538,44 @@ edge is always in view from below. Options for the lead:
 `tools/crowd_harness/tests_l2.luau` (realTests): the "from the road below" case read Road5's 8 as a literal. Under the
 new ledge, one jump from 8 would reach the chest's band. It now reads the road from the layout's route point nearest
 the chest (0). Shown red with the old 8 (1 of 4,032 checks), green as written.
+
+## L4 W2: the mountain climb and the Castle Key (2026-10-21)
+
+Ben's request (MISSIONS_DESIGN 28): a parkour of double jumps round a mountain behind the trailhead, one lap of about
+eight, 1-2 minutes, wide ledges, a miss drops you to the ledge below; a summit chest that gives the Castle Key. Measured
+on Python 3.12.10 64-bit (the gate's). Report: `docs/prompts/l4-w2-reports/mountain.md`; gate: `tools/check_parkour.py`.
+
+### L4 W2: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Layouts/Levels/ForestRoad.json` blocks | 61 | **72**: `MountainPath` (96 x 16 off the trailhead's west edge), `MountainTrail` (16 x 54 north), `MountainYard` (96 x 96, x -658..-562, z -158..-62), `MountainLedge1..7` and `MountainSummit` (the core, 28 x 28) | a walled yard behind the trailhead with a 200-stud stepped mountain in it |
+| ledge tops | | **25, 50, ..., 175, the summit 200: every hop 25** | one jump and check_levels' step up reach 21 (4 short); the double jump peaks at 30 (5 over); horizontally a dash outreaches the double jump, so only height makes a hop need it |
+| hops | | **flush**: each ledge's face rises straight off the end of the one below (no gap) | a missed double jump hits the face and drops back onto the ledge it left (Ben's "a miss drops you to the ledge below") |
+| ledges | | **24 x 20** (the lookout ledge is 24 x 14); faces 20-24 wide | a phone's thumb; LEDGE_MIN 14 x 20, FACE_MIN 14 |
+| the `mountain` secret | | **(-610, 202, -110)** on the summit, needs `doubleJump`; sign "MOUNTAIN - needs DOUBLE JUMP" at (-490, 0, -5) on the path | the fourth Forest chest (the lead's ruling) |
+| `Config/Levels/1_ForestRoad.json` `secrets.mountain` | | **`{ "name": "Mountain Summit", "valor": 4, "materials": 50, "key": "castle" }`** | below |
+| `check_levels.py` | | the pinned secrets with `mountain`; L2-18a judges a climb's chest over its last ledge (`check_parkour.ledge_below`); one call to `check_parkour.check_climbs` | the band would otherwise measure the summit against the road 200 below |
+
+### The pay
+
+The Forest's Normal clear pays about 10 Valor (Double Jump costs "one clear") and holds 220 Timber, in about 5 minutes:
+roughly 2 Valor and 44 Timber a minute. A first climb is about a minute (a perfect one 21 s) and is the hardest
+double-jump test in the game, so **4 Valor and 50 Timber** (23% of the Normal stock) pay about two minutes' Valor and a
+minute's Timber, once per player. Between the lookout (3 + 50, a 15-second detour that also gives the Flamethrower) and
+the shrine (6 + 60, which needs Castle gear and stays the best chest). The Castle Key is the prize. Inside L2-13 /
+L2-37 (2 or more Valor, under Double Jump's 10; 15-30% of the stock).
+
+### Flight, the new measure
+
+`check_parkour.flight_reach` is longer than check_levels' `stray_reach` because MovementController lets the double
+jump fire any time after `airJumpDelay` and *set* the rise (late in a fall it buys most), and an air dash's flat mover
+leaves no fall speed. From 200 up: 90.8 studs (stray_reach 66.2; no dash 61.1); from 50 up: 69.0. After a landed slam
+the dash key dashes for `slamCooldown` 1.8 s, so three dashes fit in one flight: 133.3 from 200 up (an outer bound,
+reported, not gated). The yard's only mouth is 116-181 studs from every top: past each flight plus Leap Smash's 32
+plus 10 (tightest L2, +5.1), and past even the three-dash bound by 10.8 or more.
+
+One gate number moved: check_levels' frozen-sheet bound (W3 fd-m2) falls from the jumps' apex over the highest top
+reached anywhere, now the summit, so the fastest fall onto the ice is 1.265 studs a physics step (was 0.644). The
+shipped sheet, `levels.react.ice.thickness` 1.9, still passes (under the root's 2); the mutant pair around the bound
+moved from 0.6 / 0.7 to 1.2 / 1.3. No game number changed; nothing in `Economy.luau`.
