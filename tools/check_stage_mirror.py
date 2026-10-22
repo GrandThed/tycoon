@@ -6,7 +6,10 @@
 `tools/sim_range.py` mirror them by hand, and every balance band is measured on those mirrors: a
 mirror that has drifted measures a game nobody plays. This tool gives both sides the same inputs
 (every level file Catalog reads, its layout, Combat.json, Expeditions.json, ProvingGrounds.json)
-and compares what they answer, value by value:
+and compares what they answer, value by value. L4 W1b (L4B-6) adds one hand-written level to the
+shipped ones, FIELD_LEVEL on FIELD_LAYOUT: one gateless camp that locks, ten waves with bosses at 5
+and 10, merging on the director's breather. It is what the Raider Arena resolved to before the arena
+went, and the only level whose scripted runs reach Advance's merge and the director's breather:
 
   * `StageFlow.Resolve` against `sim_range.resolve_level`: every level file as a level;
   * `StageFlow.Validate` against `sim_range.level_problems`: the shipped levels are playable on
@@ -48,9 +51,9 @@ and compares what they answer, value by value:
   * `StageFlow.BurstPoint` and `BossPoint` against `sim_range.burst_point` and the boss's place;
   * `Combat.CampWave` against `sim_combat.camp_wave`: every wave of every camp of every level, at
     every difficulty, for parties of 1 to coop.maxParty;
-  * `Combat.CampReward` against `sim_combat.camp_reward`: every priced kind (and one that is not)
-    under each of those specs, and a grid of prices under reward multipliers that leave halves
-    (the shipped prices times 1, 2 and 4 never round);
+  * `Combat.KillReward` against `sim_combat.kill_reward` at each of those specs' rewardMult: every
+    priced kind (and one that is not) (until L4 W1b this was Combat.CampReward, which went with the
+    C1 missions; the grid of prices that round at halves is KillReward's, below);
   * `Combat.BurstSeconds`, `Tempo`, `ShouldMerge` and `BreatherSeconds` against their mirrors, on
     grids built from those specs (the bursts each wave really has, its expected kills a second)
     and on the thresholds themselves;
@@ -130,6 +133,13 @@ and compares what they answer, value by value:
     functions left without a mirror on purpose, StrikeTier, HeldFamily and SavedPower, with why
     (ARMORY_UNMIRRORED): listed in a note, and the run fails when one is no longer in the Luau.
 
+  * L4 W1b fix round (F6, review 3-m3): `Combat.MentorBonus` against `sim_combat.mentor_bonus` on every
+    call `sim_combat.mentor_pay` (WaveService.payMentors' mirror) makes on assertions 12 and 13's boss
+    kills (`sim_combat.mentor_fixtures`) and on the edges of hostRate x mentorRatio (a rate exactly on
+    it, EDGE either side, none, 0) for three host rates; then each of those kills paid by mentor_pay
+    on the Luau's answers against its own. payMentors' deciding lines are run_harness.py's L4B_LINES
+    pins; the `<` made `<=` mutant is in tools/crowd_harness/mirror_mutants.py.
+
 It fails when either side changes alone. A function of the Luau that the simulators do not
 mirror (the rescue, the skips, the map) is listed, not compared: tools/crowd_harness tests those.
 
@@ -173,9 +183,65 @@ DRIVER = HARNESS / "stage_mirror.luau"
 # LevelGeometry cuts deep water into ice cells with it, and it reads Unlocks.
 MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "Unlocks", "WorldReact",
            "LevelGeometry", "CampBrain", "StageFlow")  # in load order
+# L4B-6: the hand-written field, a copy of tools/crowd_harness's L1.fieldLevel on L1W.field (the old
+# Raider Arena as it resolved, the C1 Village mission's crowd block on the Village arena's layout).
+# No shipped level merges or takes the director's breather since the arena went; this one does, so
+# LevelRun.advance's merge and breather stay held to StageFlow.Advance.
+def _field_wave(*pairs):
+    return {"groups": [{"kind": kind, "count": count} for kind, count in pairs]}
+
+
+FIELD_LEVEL = {
+    "version": 1, "id": "field", "name": "Field", "layout": "Field", "material": "Timber", "targetMinutes": 12,
+    "difficulties": {"normal": {"hpScale": 1.5, "damageScale": 1.12, "plateScale": 1, "countMult": 1, "rewardMult": 1,
+                                "recommendedTier": 2}},
+    "crowd": {"regenShare": 0.077, "maxAlive": 60, "burst": 10, "burstSpacing": 3.5,
+              "rewards": {"fodder": {"cash": 60, "materials": 0}, "slinger": {"cash": 300, "materials": 1},
+                          "brute": {"cash": 1200, "materials": 4}, "marksman": {"cash": 350, "materials": 1},
+                          "lobber": {"cash": 350, "materials": 1}, "armoured": {"cash": 1500, "materials": 5},
+                          "colossus": {"cash": 18000, "materials": 30}, "warlord": {"cash": 30000, "materials": 50}}},
+    "stages": [{"kind": "camp", "name": "Field", "zone": "field", "targetWaveSeconds": 45, "merge": True, "waves": [
+        _field_wave(("fodder", 48)),
+        _field_wave(("fodder", 72)),
+        _field_wave(("fodder", 24), ("slinger", 3), ("fodder", 24), ("slinger", 3), ("fodder", 24)),
+        _field_wave(("fodder", 24), ("brute", 2), ("slinger", 3), ("fodder", 24), ("brute", 2), ("slinger", 3),
+                    ("fodder", 24)),
+        {"groups": [], "boss": {"kind": "colossus", "at": [0, 40], "valor": 10}},
+        _field_wave(("fodder", 24), ("marksman", 2), ("lobber", 2), ("fodder", 24), ("slinger", 3), ("brute", 2),
+                    ("fodder", 24), ("marksman", 2), ("lobber", 2)),
+        _field_wave(("fodder", 36), ("marksman", 3), ("lobber", 3), ("slinger", 3), ("fodder", 36), ("brute", 3),
+                    ("fodder", 24)),
+        _field_wave(("fodder", 24), ("armoured", 3), ("marksman", 2), ("fodder", 24), ("lobber", 3), ("slinger", 3),
+                    ("armoured", 3), ("fodder", 24)),
+        _field_wave(("fodder", 36), ("armoured", 3), ("marksman", 3), ("lobber", 3), ("fodder", 36), ("brute", 3),
+                    ("armoured", 3), ("slinger", 4), ("fodder", 36)),
+        {"groups": [], "boss": {"kind": "warlord", "at": [0, 28], "valor": 25}},
+    ]}],
+}
+FIELD_LAYOUT = {
+    "version": 1, "start": {"x": 0, "y": 0, "z": 0}, "killY": -8, "barrier": {"height": 80, "thickness": 8},
+    "camps": [{
+        "id": "field", "x": 0, "y": 0, "z": 0, "sx": 110, "sz": 110,
+        "floor": {"material": "Grass", "color": [106, 127, 63]},
+        "fence": {"height": 4, "material": "WoodPlanks", "color": [112, 84, 56]},
+        "gates": [], "entry": {"x": -12, "z": -12}, "exit": {"x": 0, "z": 0},
+        "spawns": [{"x": 0, "z": -46}, {"x": 32.5, "z": -32.5}, {"x": 46, "z": 0}, {"x": 32.5, "z": 32.5},
+                   {"x": 0, "z": 46}, {"x": -32.5, "z": 32.5}, {"x": -46, "z": 0}, {"x": -32.5, "z": -32.5}],
+        "obstacles": [
+            {"x": 9.2, "z": 22.3, "sx": 5, "sy": 3.5, "sz": 5, "material": "Slate", "color": [110, 110, 105]},
+            {"x": 22.3, "z": -9.2, "sx": 6, "sy": 4, "sz": 5, "material": "Slate", "color": [102, 104, 100]},
+            {"x": -9.2, "z": -22.3, "sx": 5, "sy": 3.5, "sz": 6, "material": "Slate", "color": [110, 110, 105]},
+            {"x": -22.3, "z": 9.2, "sx": 5, "sy": 3, "sz": 5, "material": "Slate", "color": [102, 104, 100]},
+            {"x": 12.6, "z": -30.4, "sx": 12, "sy": 2, "sz": 3, "material": "Wood", "color": [96, 70, 45]},
+            {"x": -30.4, "z": -12.6, "sx": 3, "sy": 2, "sz": 12, "material": "Wood", "color": [86, 62, 40]},
+            {"x": -12.6, "z": 30.4, "sx": 12, "sy": 2, "sz": 3, "material": "Wood", "color": [96, 70, 45]},
+            {"x": 30.4, "z": 12.6, "sx": 3, "sy": 2, "sz": 12, "material": "Wood", "color": [86, 62, 40]}],
+        "locks": True}],
+    "blocks": [], "secrets": [], "route": []}
+
 # The functions each comparison needs; one that is missing fails the run by name.
-NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
-                     "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
+NEEDED = {"Combat": ("CampWave", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
+                     "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock", "MentorBonus"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint", "Ceiling",
                         "GateNudge",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve",
@@ -287,6 +353,35 @@ BURST_SIZES = (1, 2, 3, 9, 16)
 # Prices and reward multipliers whose products end in halves and thirds: (cash, materials, mult).
 REWARD_GRID = tuple((cash, materials, mult) for cash in (1, 3, 5, 7, 100) for materials in (0, 1, 3)
                     for mult in (0.5, 1.5, 2.5, 1 / 3, 4))
+# The L4 W1b fix round's F6: the host rates the mentor edges are asked at (each times mentorRatio is
+# a whole number, so "exactly at the threshold" is exact on both sides).
+MENTOR_HOSTS = (0.0, 8000.0, sc.MENTOR_HOST_RATE)
+
+
+def mentor_cases(combat):
+    """Combat.MentorBonus's cases: (host rate, party rates). First every call sim_combat.mentor_pay
+    makes on assertions 12 and 13's boss kills (sim_combat.mentor_fixtures, recorded through its
+    `bonus_of`), then the edges: a party of none, a rate exactly at hostRate x mentorRatio, EDGE
+    either side of it, 0, a mix. Returns the cases and, per fixture, its members and tally."""
+    calls = []
+
+    def record(cfg, host, rates):
+        calls.append((host, list(rates)))
+        return sc.mentor_bonus(cfg, host, rates)
+
+    fixtures = sc.mentor_fixtures(combat)
+    for members, tally in fixtures.values():
+        sc.mentor_pay(combat, members, tally, bonus_of=record)
+    ratio = combat["coop"]["mentorRatio"]
+    for host in MENTOR_HOSTS:
+        edge = host * ratio
+        calls += [(host, []), (host, [edge]), (host, [edge - EDGE]), (host, [edge + EDGE]), (host, [0.0]),
+                  (host, [edge - EDGE, edge, edge + EDGE, 0.0, host, 2 * host])]
+    unique = []
+    for case in calls:
+        if case not in unique:
+            unique.append(case)
+    return unique, fixtures
 STATE_FIELDS = ("stage", "step", "wave", "firstWave", "gateAt", "breatherUntil", "cleared", "lastCleared", "settled",
                 "approached",
                 "reached", "done", "closedAt", "fought", "ended")
@@ -615,7 +710,7 @@ def ice_cases(data, expected, raw_layouts, rules):
     whole is not inset): the touching pools at a wider inset, and pools that meet another only in
     part, at another top, and at a corner."""
     ice = (rules.get("react") or {}).get("ice")
-    views = [(name, layout, ice) for name, layout in raw_layouts.items() if not layout.get("arena")]
+    views = [(name, layout, ice) for name, layout in raw_layouts.items()]
     forest = raw_layouts.get("ForestRoad")
     if forest is not None and isinstance(ice, dict):
         views += [("ForestRoad, inset 0", forest, {**ice, "inset": 0}),
@@ -1458,17 +1553,17 @@ def wave2_camp_cases(data, expected, rules, plans):
                       f"{len(ops)} calls", rows)
 
 
-def combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds, below):
+def combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds):
     """Combat.ClearBonus, DeadFraction and WaveStock (L1b-W2-21, -26): every camp's stock of every
     level at every difficulty under several shares (the boss room's with what its waves queue), a
     grid of prices that round at halves and an unpriced kind; DeadFraction on a grid; WaveStock on
     every wave with and without an elite."""
     rows, mine = [], []
     for file in files:
-        level = sr.resolve_level(file, None, 0, "normal") if not file.get("mission") else None
+        level = sr.resolve_level(file, 0)
         if level is None or not level.get("camps"):
             continue
-        layout = sr.load_level_layout(file["layout"], below)
+        layout = sr.load_level_layout(file["layout"])
         for difficulty, scales in level["difficulties"].items():
             plan = sr.plan_level(level, layout, difficulty, rules, ranks, crowd_kinds)
             if plan is None:
@@ -2045,14 +2140,14 @@ def wave4_camp_cases(data, expected, rules, raw_layouts):
     timeline(data, expected, "region guard: Melee on the surface last stood on (R16)", defn, rules, ops)
 
 
-def fielded_cases(data, expected, files, rules, ranks, crowd_kinds, below):
+def fielded_cases(data, expected, files, rules, ranks, crowd_kinds):
     """StageFlow.Fielded (L1b-W4-30) on every open camp of the shipped plans: no tent, nothing sent,
     some, the whole stock and past it."""
     for number, file in enumerate(files, 1):
-        level = sr.resolve_level(file, None, 0, "normal") if not file.get("mission") else None
+        level = sr.resolve_level(file, 0)
         if level is None or not level.get("camps"):
             continue
-        layout = sr.load_level_layout(file["layout"], below)
+        layout = sr.load_level_layout(file["layout"])
         for difficulty in level["difficulties"]:
             plan = sr.plan_level(level, layout, difficulty, rules, ranks, crowd_kinds)
             if plan is None:
@@ -2347,19 +2442,16 @@ def main():
     combat, expeditions, ranks = ctx["combat"], ctx["expeditions"], ctx["ranks"]
     rules, director = combat["levels"], combat["director"]
     crowd_kinds, crowd_max = cfg["crowd"]["kinds"], cfg["crowd"]["maxAlive"]
-    files = sr.load_level_files()
-    missions = [sr.load_config(path) for path in sorted(sr.MISSIONS_DIR.glob("*.json")) if sr.is_catalog_name(path.stem)]
-    by_mission = {mission["id"]: mission for mission in missions}
+    files = sr.load_level_files() + [copy.deepcopy(FIELD_LEVEL)]
     raw_layouts = {path.stem: sr.load_config(path) for path in sorted(sr.LEVEL_LAYOUT_DIR.glob("*.json"))}
-    first = expeditions["difficulties"][0]
-    below = combat["player"]["rescue"]["below"]
+    raw_layouts[FIELD_LEVEL["layout"]] = copy.deepcopy(FIELD_LAYOUT)
     plan_difficulties = list(expeditions["difficulties"]) + ["nope"]
     parties = range(1, combat["coop"]["maxParty"] + 1)
     # L3-17: the families a first clear may give, and the starters it may not (Unlocks.Starters).
     vet = {"weapons": cfg["weapons"], "starters": starters_of(cfg)}
 
     def resolved(file):
-        return sr.resolve_level(file, by_mission.get(file.get("mission")), director["runCapSeconds"], first)
+        return sr.resolve_level(file, director["runCapSeconds"])
 
     # The cases, and the Python's own answers to them.
     report = Report(args.show)
@@ -2369,7 +2461,7 @@ def main():
     must_refuse = set()
     # L2 W2: cases both sides must ACCEPT (a refusal of a sound tunnel on both sides is a drift too).
     must_accept = set()
-    data = {"combat": combat, "expeditions": expeditions, "proving": cfg, "levels": files, "missions": missions,
+    data = {"combat": combat, "expeditions": expeditions, "proving": cfg, "levels": files,
             "layouts": raw_layouts, "ranks": ranks, "planDifficulties": plan_difficulties, "pointCases": [],
             "waveCases": [], "refusalCases": [], "traces": [], "busyCases": list(BUSY_CASES),
             "campRules": combat["camps"], "campCases": [], "splitCases": [], "rayCases": [], "swingCases": [],
@@ -2410,7 +2502,8 @@ def main():
     for number, file in enumerate(files, 1):
         name = file["id"]
         level = resolved(file)
-        layout = sr.load_level_layout(file["layout"], below)
+        # Catalog.GetLevelLayout's answer (a fresh copy; the field's is FIELD_LAYOUT).
+        layout = copy.deepcopy(raw_layouts[file["layout"]])
         expected[f"level.{number}.resolve"] = ("StageFlow.Resolve", name, plain(level))
         if level is None:
             continue
@@ -2539,8 +2632,9 @@ def main():
                         data["waveCases"].append({"id": case, "level": number, "difficulty": difficulty, "stage": index,
                                                   "wave": wave, "party": party, "kinds": kinds})
                         expected[case] = ("Combat.CampWave", label, plain(spec))
-                        expected[case + ".rewards"] = ("Combat.CampReward", label, {
-                            kind: list(sc.camp_reward(level["crowd"]["rewards"], kind, spec)) for kind in kinds})
+                        expected[case + ".rewards"] = ("Combat.KillReward", label, {
+                            kind: list(sc.kill_reward(level["crowd"]["rewards"], kind, spec["rewardMult"]))
+                            for kind in kinds})
                         target = stage["targetWaveSeconds"] if stage.get("targetWaveSeconds") is not None else 0
                         count = len(sc.crowd_bursts(spec, level["crowd"]["burst"]))
                         for tempo in TEMPO_GRID:
@@ -2548,71 +2642,70 @@ def main():
                         rate = spec["total"] / target if target > 0 else 0
                         for kills in KILL_GRID:
                             tempos[(kills, director["windowSeconds"], rate)] = None
-        if not file.get("mission"):
-            for label, change in (("as shipped", lambda _file: None),) + REFUSALS:
-                changed = copy.deepcopy(file)
-                change(changed)
+        for label, change in (("as shipped", lambda _file: None),) + REFUSALS:
+            changed = copy.deepcopy(file)
+            change(changed)
+            case = f"refusal.{number}.{len(data['refusalCases'])}"
+            data["refusalCases"].append({"id": case, "file": changed, "rules": rules})
+            level_changed = resolved(changed)
+            refused = level_changed is None or bool(sr.level_problems(level_changed, layout, rules, crowd_kinds, ranks,
+                                                                      crowd_max, **vet))
+            expected[case] = ("ruling 6: refused alike", f"{name}, {label}", refused)
+            if label != "as shipped":
+                must_refuse.add(case)
+        # And Combat.json without one of the numbers a run reads: unavailable on both sides.
+        for key in sr.LEVEL_RULES_NEEDED:
+            short_rules = {name_: value for name_, value in rules.items() if name_ != key}
+            case = f"refusal.{number}.{len(data['refusalCases'])}"
+            data["refusalCases"].append({"id": case, "file": file, "rules": short_rules})
+            expected[case] = ("ruling 6: refused alike", f"{name}, Combat.json without levels.{key}",
+                              bool(sr.level_problems(level, layout, short_rules, crowd_kinds, ranks, crowd_max, **vet)))
+        # L1b: each of Validate's new lines, broken once.
+        if file.get("camps"):
+            for label, change in L1B_REFUSALS:
+                changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
+                change(changed, raw, short_rules)
                 case = f"refusal.{number}.{len(data['refusalCases'])}"
-                data["refusalCases"].append({"id": case, "file": changed, "rules": rules})
+                data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
                 level_changed = resolved(changed)
-                refused = level_changed is None or bool(sr.level_problems(level_changed, layout, rules, crowd_kinds, ranks,
-                                                                          crowd_max, **vet))
-                expected[case] = ("ruling 6: refused alike", f"{name}, {label}", refused)
-                if label != "as shipped":
-                    must_refuse.add(case)
-            # And Combat.json without one of the numbers a run reads: unavailable on both sides.
-            for key in sr.LEVEL_RULES_NEEDED:
-                short_rules = {name_: value for name_, value in rules.items() if name_ != key}
+                refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
+                                                                          ranks, crowd_max, **vet))
+                expected[case] = ("L1b: Validate's new lines refuse alike", f"{name}, {label}", refused)
+                must_refuse.add(case)
+        # L2-13: each of Validate's secrets lines, broken once.
+        if file.get("secrets") and raw_layouts[file["layout"]].get("secrets"):
+            for label, change in L2_REFUSALS:
+                changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
+                change(changed, raw, short_rules)
                 case = f"refusal.{number}.{len(data['refusalCases'])}"
-                data["refusalCases"].append({"id": case, "file": file, "rules": short_rules})
-                expected[case] = ("ruling 6: refused alike", f"{name}, Combat.json without levels.{key}",
-                                  bool(sr.level_problems(level, layout, short_rules, crowd_kinds, ranks, crowd_max, **vet)))
-            # L1b: each of Validate's new lines, broken once.
-            if file.get("camps"):
-                for label, change in L1B_REFUSALS:
+                data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
+                level_changed = resolved(changed)
+                refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
+                                                                          ranks, crowd_max, **vet))
+                expected[case] = ("L2: Validate's secrets lines refuse alike", f"{name}, {label}", refused)
+                must_refuse.add(case)
+        # L2-34, L2-36: the react, opens and shortcuts lines, on a test tunnel of their own; L2-52,
+        # L2-58: the ice and landing lines, on a test pool.
+        if raw_layouts[file["layout"]].get("blocks"):
+            w2 = "L2 W2: Validate's react, opens and shortcuts lines refuse alike"
+            w3 = "L2 W3: Validate's ice and landing lines refuse alike"
+            l3 = "L3: Validate's firstClear lines refuse alike"
+            for cases, verdict, title in ((L2W2_ACCEPTED, False, w2), (L2W2_REFUSALS, True, w2),
+                                          (L2W3_ACCEPTED, False, w3), (L2W3_REFUSALS, True, w3),
+                                          (L3_ACCEPTED, False, l3), (L3_REFUSALS, True, l3)):
+                for label, change in cases:
                     changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
                     change(changed, raw, short_rules)
                     case = f"refusal.{number}.{len(data['refusalCases'])}"
                     data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
                     level_changed = resolved(changed)
-                    refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
-                                                                              ranks, crowd_max, **vet))
-                    expected[case] = ("L1b: Validate's new lines refuse alike", f"{name}, {label}", refused)
-                    must_refuse.add(case)
-            # L2-13: each of Validate's secrets lines, broken once.
-            if file.get("secrets") and raw_layouts[file["layout"]].get("secrets"):
-                for label, change in L2_REFUSALS:
-                    changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
-                    change(changed, raw, short_rules)
-                    case = f"refusal.{number}.{len(data['refusalCases'])}"
-                    data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
-                    level_changed = resolved(changed)
-                    refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules, crowd_kinds,
-                                                                              ranks, crowd_max, **vet))
-                    expected[case] = ("L2: Validate's secrets lines refuse alike", f"{name}, {label}", refused)
-                    must_refuse.add(case)
-            # L2-34, L2-36: the react, opens and shortcuts lines, on a test tunnel of their own; L2-52,
-            # L2-58: the ice and landing lines, on a test pool.
-            if raw_layouts[file["layout"]].get("blocks"):
-                w2 = "L2 W2: Validate's react, opens and shortcuts lines refuse alike"
-                w3 = "L2 W3: Validate's ice and landing lines refuse alike"
-                l3 = "L3: Validate's firstClear lines refuse alike"
-                for cases, verdict, title in ((L2W2_ACCEPTED, False, w2), (L2W2_REFUSALS, True, w2),
-                                              (L2W3_ACCEPTED, False, w3), (L2W3_REFUSALS, True, w3),
-                                              (L3_ACCEPTED, False, l3), (L3_REFUSALS, True, l3)):
-                    for label, change in cases:
-                        changed, raw, short_rules = copy.deepcopy(file), copy.deepcopy(raw_layouts[file["layout"]]), dict(rules)
-                        change(changed, raw, short_rules)
-                        case = f"refusal.{number}.{len(data['refusalCases'])}"
-                        data["refusalCases"].append({"id": case, "file": changed, "rules": short_rules, "layout": raw})
-                        level_changed = resolved(changed)
-                        refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules,
-                                                                                  crowd_kinds, ranks, crowd_max, **vet))
-                        expected[case] = (title, f"{name}, {label}", refused)
-                        if verdict:
-                            must_refuse.add(case)
-                        else:
-                            must_accept.add(case)
+                    refused = level_changed is None or bool(sr.level_problems(level_changed, raw, short_rules,
+                                                                              crowd_kinds, ranks, crowd_max, **vet))
+                    expected[case] = (title, f"{name}, {label}", refused)
+                    if verdict:
+                        must_refuse.add(case)
+                    else:
+                        must_accept.add(case)
     for target in sorted({key[0] for key in bursts}):
         for count in (0, -1):
             bursts[(target, count, 1.0)] = None
@@ -2631,10 +2724,10 @@ def main():
     ray_cases(data, expected, crowd_kinds)
     swing_cases(data, expected)
     tent_owes_cases(data, expected)
-    combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds, below)
+    combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds)
     region_cases(data, expected, raw_layouts)
     wave4_camp_cases(data, expected, combat["camps"], raw_layouts)
-    fielded_cases(data, expected, files, rules, ranks, crowd_kinds, below)
+    fielded_cases(data, expected, files, rules, ranks, crowd_kinds)
     armory_cases(data, expected, report, cfg)
     first_clear_cases(data, expected, report, files, resolved, plan_difficulties)
     data["burstCases"] = [list(key) for key in bursts]
@@ -2642,17 +2735,14 @@ def main():
     data["mergeCases"] = [list(key) for key in merges]
     data["breatherCases"] = breathers
     data["rewardCases"] = [list(case) for case in REWARD_GRID]
+    mentors, mentor_fixtures = mentor_cases(combat)
+    data["mentorCases"] = [[host, rates] for host, rates in mentors]
 
     # The bundle: the data, the real sources, the driver. In a folder of its own.
     parts = [f"local DATA: any = {to_luau(data)}\n", "local SOURCES = {}\n"]
-    arenas = sorted({layout["arena"] for layout in raw_layouts.values() if layout.get("arena")})
     for name in MODULES:
         path = Path(swapped[name]) if name in swapped else ROOT / sources[name]
         parts.append(wrap(name, path.read_text(encoding="utf-8")))
-    for arena in arenas:
-        path = ROOT / "src" / "shared" / "Layouts" / "Arenas" / f"{arena}.luau"
-        if path.exists():
-            parts.append(wrap(f"Arena_{arena}", path.read_text(encoding="utf-8")))
     parts.append(DRIVER.read_text(encoding="utf-8"))
     with tempfile.TemporaryDirectory() as scratch:
         work = Path(args.keep) if args.keep else Path(scratch)
@@ -2739,9 +2829,6 @@ def main():
             report.compare(kind, f"({', '.join(f'{v:g}' for v in case)})", got[index] if index < len(got) else None,
                            mirror(*case))
 
-    grid("Combat.CampReward", "grid.campReward", data["rewardCases"],
-         lambda cash, materials, mult: list(sc.camp_reward({"probe": {"cash": cash, "materials": materials}}, "probe",
-                                                            {"rewardMult": mult})))
     grid("Combat.KillReward", "grid.killReward", data["rewardCases"],
          lambda cash, materials, mult: list(sc.kill_reward({"probe": {"cash": cash, "materials": materials}}, "probe",
                                                             mult)) + list(sc.kill_reward({}, "probe", mult)))
@@ -2750,6 +2837,26 @@ def main():
     grid("Combat.ShouldMerge", "grid.shouldMerge", data["mergeCases"], lambda tempo, dead: sc.should_merge(tempo, dead, director))
     grid("Combat.BreatherSeconds", "grid.breatherSeconds", [(tempo,) for tempo in breathers],
          lambda tempo: sc.breather_seconds(tempo, director))
+
+    # F6: Combat.MentorBonus case by case, then each of assertions 12 and 13's boss kills paid by
+    # sim_combat.mentor_pay twice, once on its own mentor_bonus and once on the Luau's answers.
+    got = answers.get("grid.mentorBonus")
+    if isinstance(got, dict) and "threw" in got:
+        report.compare("Combat.MentorBonus", "grid.mentorBonus", got, None)
+    else:
+        got = got or []
+        luau_bonus = {}
+        for index, (host, rates) in enumerate(mentors):
+            theirs = got[index] if index < len(got) else None
+            luau_bonus[(host, tuple(rates))] = theirs
+            report.compare("Combat.MentorBonus", f"host {host:g}/s, party [{', '.join(f'{r:g}' for r in rates)}]",
+                           theirs, sc.mentor_bonus(combat, host, rates))
+        for name, (members, tally) in mentor_fixtures.items():
+            replayed = sc.mentor_pay(combat, members, tally,
+                                     bonus_of=lambda _cfg, host, rates: luau_bonus.get((host, tuple(rates))) or 0)
+            report.compare("Combat.MentorBonus through sim_combat.mentor_pay (assertions 12, 13)", name,
+                           {str(user): valor for user, valor in replayed.items()},
+                           {str(user): valor for user, valor in sc.mentor_pay(combat, members, tally).items()})
 
     # The scripted runs: the first tick at which the two sides part, per run.
     extra_state = set()

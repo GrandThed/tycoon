@@ -4,12 +4,11 @@ with stubbed Roblox globals and runs the tests_*.luau cases under the plain luau
 P5 adds tests_p5.luau: the mission scales, kill info, KillAll, VitalsService.SetMission and
 the pure PositionRing (the server's own reading of a player's speed).
 L1 adds the pure rules of a run through a level: StageFlow (tests_l1.luau, with Combat and
-Economy, which it is checked against) and LevelGeometry (tests_l1_world.luau). The Village
-mission and Combat.json are injected as FIXTURES, the way Armory.json is.
+Economy, which it is checked against) and LevelGeometry (tests_l1_world.luau). Combat.json is
+injected as a FIXTURE, the way Armory.json is.
 "The real files" (tests_l1.luau) runs those same rules on the data that ships: every level
-file, layout, mission and the map are injected as they stand, the arena layouts a level names
-are bundled as modules, and tools/check_levels.py is asked for its Part counts and its own
-reading of each arena, so the Luau rules and the Python gate are held to one answer.
+file, layout and the map are injected as they stand, and tools/check_levels.py is asked for its
+Part counts, so the Luau rules and the Python gate are held to one answer.
 L1b adds the pure CampBrain (how a camp's resident groups rest, wake, chase and go home) and two
 case files: tests_l1b_crowd.luau (CampBrain and CrowdService's floors and groups) and
 tests_l1b.luau (StageFlow's open camps, checkpoints and clear field, Combat's per-kill split with
@@ -59,6 +58,11 @@ PrepareCharacter, and the client lines that tear down, re-show and drive the mod
 Its second fix round (docs/prompts/l3-w2-fix2.md G1 to G3) pins the flush another player's swing
 runs first (its first code line in T9's branch, before SwingOther), the order in Muzzle and a new
 rig's first state, and that the stage hears no gamepad stick.
+L4 W1b (docs/prompts/l4-w1b-contract.md) retires the C1 mission code: the Village mission, the
+missions' and the arenas' fixtures and the Raider Arena's adapter go (the cases that used the arena
+only as a fixture for a rule that stays play the hand-written L1W.field / L1.field instead), and
+adds the pure DashProof (tests_l4b.luau: a dash's i-frames once the server's ring has seen it) and
+RunFloors (tests_l4b_run.luau: RunState's region cells once per member per floor set).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -135,6 +139,10 @@ SOURCES = {
     "ProfileCopy": "src/shared/ProfileCopy.luau",
     # L3 W2: what a player's weapons look like, read by the server and every client (tests_l3_w2.luau).
     "WeaponLook": "src/shared/WeaponLook.luau",
+    # L4 W1b: a dash's proof against the server's ring (tests_l4b.luau) and RunState's floors sent
+    # once per member per floor set (tests_l4b_run.luau).
+    "DashProof": "src/combat/server/Services/DashProof.luau",
+    "RunFloors": "src/shared/RunFloors.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -172,6 +180,8 @@ TESTS = [
     "tests_l3_ui.luau",
     # L3 W2: WeaponLook on built inputs and on the shipped WeaponModels.json, then T1 to T14 as text.
     "tests_l3_w2.luau",
+    "tests_l4b.luau",
+    "tests_l4b_run.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -215,18 +225,14 @@ def read_folder(repo: Path, folder: str, numbered: bool = False) -> list:
 
 def gate_reading() -> dict:
     """What tools/check_levels.py makes of the layouts: its Part count for each (its `N Parts`
-    lines) and, for a layout that names an arena, the level layout its own adapter reads out of
-    that arena. Always this checkout's files (the tool takes no root; a mutant root holds copies
-    of the same data). Empty when the tool cannot be imported: the cases that need it then fail."""
+    lines). Always this checkout's files (the tool takes no root; a mutant root holds copies of the
+    same data). Empty when the tool cannot be imported: the cases that need it then fail."""
     try:
         sys.path.insert(0, str(HERE.parent))
         import check_levels
 
         layouts = check_levels.load_all()[2]
-        return {
-            "parts": {name: check_levels.part_count(layout) for name, layout in layouts.items()},
-            "arenas": {name: layout for name, layout in layouts.items() if layout.get("arena")},
-        }
+        return {"parts": {name: check_levels.part_count(layout) for name, layout in layouts.items()}}
     except (Exception, SystemExit) as problem:  # the harness still runs, and says so
         print(f"run_harness: tools/check_levels.py could not be read ({problem!r})", file=sys.stderr)
         return {}
@@ -1416,7 +1422,245 @@ def source_reading(repo: Path) -> dict:
         "w3fix3": w3_fix3_reading(text),
         "l3": l3_reading(text),
         "l3w2": l3w2_reading(text, repo),
+        "l4b": l4b_reading(text),
     }
+
+
+# L4 W1b (docs/prompts/l4-w1b-contract.md §4, §5): the lines that apply L4B-7 (a dash's i-frames once
+# the server's ring has seen it) in WeaponService and L4B-8 (a floor set's cells once per member) in
+# ArenaService and WaveService, none of which loads here. Each: (file, function body or None for the
+# whole file's code, how it is counted, the text, the count expected), counted on the code with its
+# comments blanked (luau_code); "lines" = whole lines with their indentation, "text" = occurrences,
+# "regex" = matches. The expected counts are tests_l3_w2.luau's (L4BP).
+ON_DASH_BODY = re.compile(r"(?ms)^function WeaponService\.OnDash\(.*?^end$")
+PROVE_DASH_BODY = re.compile(r"(?ms)^local function proveDash\(.*?^end$")
+PENDING_DASH_BODY = re.compile(r"(?ms)^local function pendingDash\(.*?^end$")
+WEAPON_STEP_BODY = re.compile(r"(?ms)^local function step\(.*?^end$")
+WEAPON_START_BODY = re.compile(r"(?ms)^function WeaponService\.Start\(.*?^end$")
+GRANT_IFRAMES_BODY = re.compile(r"(?ms)^function WeaponService\.GrantIframes\(.*?^end$")
+SEND_RUN_STATE_BODY = re.compile(r"(?ms)^local function sendRunState\(.*?^end$")
+BUILD_RUN_STATE_BODY = re.compile(r"(?ms)^function ArenaService\.BuildRunState\(.*?^end$")
+ADMIT_BODY = re.compile(r"(?ms)^function ArenaService\.Admit\(.*?^end$")
+REMOVE_BODY = re.compile(r"(?ms)^function ArenaService\.Remove\(.*?^end$")
+SET_FLOORS_BODY = re.compile(r"(?ms)^local function setFloors\(.*?^end$")
+PUSH_RUN_FIELDS_BODY = re.compile(r"(?ms)^local function pushRunFields\(.*?^end$")
+# The L4 W1b fix round (docs/prompts/l4-w1b-fix-round.md F3, F4, F6): the client's half of the
+# cells-once rule, in CombatUIController (both functions are nested in bootMission, one tab in),
+# and the mentor pay's deciding lines in WaveService.payMentors.
+UI_CONTROLLER = "src/combat/client/Controllers/CombatUIController.luau"
+APPLY_FLOORS_BODY = re.compile(r"(?ms)^\tlocal function applyFloors\(.*?^\tend$")
+ON_RUN_STATE_BODY = re.compile(r"(?ms)^\tlocal function onRunState\(.*?^\tend$")
+PAY_MENTORS_BODY = re.compile(r"(?ms)^local function payMentors\(.*?^end$")
+# Fix round 3 (docs/prompts/l4-w1b-fix3.md): G2's warn handler (m2) and H2's per-shooter xpcall in
+# WeaponService; H1's hold on a clear field in WaveService (luau-b-3.md).
+STEP_FAILED_BODY = re.compile(r"(?ms)^local function stepFailed\(.*?^end$")
+FIELD_HELD_BODY = re.compile(r"(?ms)^local function fieldHeld\(.*?^end$")
+ADVANCE_BODY = re.compile(r"(?ms)^local function advance\(.*?^end$")
+TICK_BODY = re.compile(r"(?ms)^local function tick\(.*?^end$")
+BOOT_BODY = re.compile(r"(?ms)^function WaveService\.Boot\(.*?^end$")
+ON_DOWN_BODY = re.compile(r"(?ms)^function WaveService\.OnDown\(.*?^end$")
+FRESH_RUN_BODY = re.compile(r"(?ms)^local function freshRun\(.*?^end$")
+L4B_LINES = {
+    # L4B-7, WeaponService.
+    "dashGrantsNothing": (WEAPON_SERVICE, ON_DASH_BODY, "regex",
+                          r"\bGrantIframes\(|\bDashProof\.|\bshowIframes\(|\bopenIframes\(|\biframes\w*\s*=(?!=)"),
+    "dashClaim": (WEAPON_SERVICE, ON_DASH_BODY, "lines", "\tshooter.dashClaimAt = now"),
+    "dashStamp": (WEAPON_SERVICE, ON_DASH_BODY, "lines", "\tshooter.lastDashAt = now"),
+    "dashDown": (WEAPON_SERVICE, ON_DASH_BODY, "lines",
+                 "\tif character == nil or root == nil or VitalsService.IsDown(player) or not mayAct(player) then"),
+    "trackRecordThenProve": (WEAPON_SERVICE, TRACK_AIR_BODY, "text",
+                             "\t\tPositionRing.Record(shooter.history, now, position)\n\t\tif shooter.dashClaimAt ~= nil then\n"
+                             "\t\t\tproveDash(shooter, now, position)\n\t\tend\n"),
+    "trackNoRootClears": (WEAPON_SERVICE, TRACK_AIR_BODY, "lines", "\t\t\tshooter.dashClaimAt = nil"),
+    # H2 (fix round 3, luau-a-3.md): each shooter's air tracking (trackOne, nested in trackAir) runs
+    # under its own xpcall, the loop holding nothing else.
+    "trackEach": (WEAPON_SERVICE, TRACK_AIR_BODY, "text",
+                  "\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n"),
+    "trackOneDefined": (WEAPON_SERVICE, TRACK_AIR_BODY, "lines",
+                        "\tlocal function trackOne(player: Player, shooter: Shooter): ()"),
+    "trackOneNames": (WEAPON_SERVICE, None, "text", "trackOne"),
+    "proveStep": (WEAPON_SERVICE, PROVE_DASH_BODY, "text",
+                  "\tlocal verdict = DashProof.Step(\n\t\tshooter,\n\t\tshooter.history,\n\t\tnow,\n\t\tposition,\n"
+                  "\t\tdashRule(config),\n\t\tconfig.movement.dashIframes\n\t)\n"),
+    "proveShows": (WEAPON_SERVICE, PROVE_DASH_BODY, "text", '\tif verdict == "proven" then\n\t\tshowIframes(shooter, now)\n\tend\n'),
+    "proveWritesNothing": (WEAPON_SERVICE, PROVE_DASH_BODY, "regex",
+                           r"\bdashClaimAt\s*=(?!=)|\biframes\w*\s*=(?!=)|\bDashProof\.Open\("),
+    "ruleRead": (WEAPON_SERVICE, None, "text", "local rule = DashProof.Rule(config.movement, config.shooting)"),
+    "ruleCalls": (WEAPON_SERVICE, None, "text", "DashProof.Rule("),
+    "pendingNoClaim": (WEAPON_SERVICE, PENDING_DASH_BODY, "lines",
+                       "\tif shooter == nil or shooter.dashClaimAt == nil then"),
+    "pendingClaim": (WEAPON_SERVICE, PENDING_DASH_BODY, "text",
+                     "return DashProof.Pending(shooter.dashClaimAt, dashRule(config), config.movement.dashIframes)"),
+    "hookClaim": (WEAPON_SERVICE, WEAPON_START_BODY, "lines", "\t\tdashClaim = pendingDash,"),
+    # G2 and G3 (docs/prompts/l4-w1b-fix2.md): step opens with the clock, then the proofs, then
+    # VitalsService, each under xpcall, with nothing between the function's start and the two
+    # (stepHead, one block); the rest comes after (stepRest, restLast); Start connects step itself.
+    "stepHead": (WEAPON_SERVICE, WEAPON_STEP_BODY, "text",
+                 "local function step(deltaTime: number): ()\n\tlocal now = os.clock()\n"
+                 "\txpcall(trackAir, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n"),
+    "stepVitals": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\txpcall(VitalsService.Step, stepFailed, deltaTime)"),
+    "stepRest": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\txpcall(stepRest, stepFailed, now, deltaTime)"),
+    "startConnects": (WEAPON_SERVICE, WEAPON_START_BODY, "lines", "\tRunService.Heartbeat:Connect(step)"),
+    # m2 (fix round 3): G2's handler as one block: keyed by the message, warned once, never silent.
+    "stepFailedBody": (WEAPON_SERVICE, STEP_FAILED_BODY, "text",
+                       "local function stepFailed(problem: any): ()\n\tlocal message = tostring(problem)\n"
+                       "\tif state.stepErrors[message] then\n\t\treturn\n\tend\n\tstate.stepErrors[message] = true\n"
+                       "\twarn(debug.traceback(`[WeaponService] Heartbeat: {message}`, 2))\nend"),
+    "vitalsStepCalls": (WEAPON_SERVICE, None, "text", "VitalsService.Step"),
+    "heartbeats": (WEAPON_SERVICE, None, "text", "Heartbeat:Connect("),
+    "grantOpens": (WEAPON_SERVICE, GRANT_IFRAMES_BODY, "text",
+                   "\tDashProof.Open(shooter, math.min(from or now, now), seconds)\n\tshowIframes(shooter, now)\n"),
+    "openCalls": (WEAPON_SERVICE, None, "text", "DashProof.Open("),
+    "stepCalls": (WEAPON_SERVICE, None, "text", "DashProof.Step("),
+    "claimWrites": (WEAPON_SERVICE, None, "regex", r"\bshooter\.dashClaimAt\s*=(?!=)"),
+    "resetDropsClaim": (WEAPON_SERVICE, RESET_AIR_BODY, "text", "shooter.dashClaimAt = nil"),
+    # L4B-8, ArenaService.
+    "runStateSpelled": (ARENA_SERVICE, None, "text", '"RunState"'),
+    "sendRunStateCalls": (ARENA_SERVICE, None, "text", "sendRunState("),
+    "attachCalls": (ARENA_SERVICE, None, "text", "RunFloors.Attach("),
+    "sendSkip": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\tif play.cellsSent[userId] ~= seq then"),
+    "sendAttach": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines",
+                   "\t\tlocal floors, cellsWent = RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])"),
+    "sendCellsWent": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\tif cellsWent then"),
+    "sendClone": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent = table.clone(runState)"),
+    "sendFloors": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent.floors = floors"),
+    "sendFloorsWrites": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "regex", r"\bsent\.floors\s*=(?!=)"),
+    "sendNote": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\tplay.cellsSent[userId] = seq"),
+    "sendFires": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", '\tRemoteService.FireClient(player, "RunState", sent)'),
+    "buildAttach": (ARENA_SERVICE, BUILD_RUN_STATE_BODY, "text",
+                    "local floors = RunFloors.Attach(runFields.floors, runFields.floorsSeq, runFields.floorsSeq)"),
+    "buildFloors": (ARENA_SERVICE, BUILD_RUN_STATE_BODY, "lines", "\t\tfloors = floors,"),
+    "buildSeq": (ARENA_SERVICE, BUILD_RUN_STATE_BODY, "lines", "\t\tfloorsSeq = runFields.floorsSeq,"),
+    "admitClears": (ARENA_SERVICE, ADMIT_BODY, "lines", "\tplay.cellsSent[player.UserId] = nil"),
+    "removeClears": (ARENA_SERVICE, REMOVE_BODY, "lines", "\tplay.cellsSent[member.userId] = nil"),
+    "noteWrites": (ARENA_SERVICE, None, "regex", r"\bplay\.cellsSent\[[^\]]*\]\s*=(?!=)"),
+    # L4B-8, WaveService.
+    "floorsAssigned": (WAVE_SERVICE, None, "regex", r"\brun\.floors\s*=(?!=)"),
+    "seqRaised": (WAVE_SERVICE, SET_FLOORS_BODY, "lines", "\tboot.floorsSeq += 1"),
+    "seqWrites": (WAVE_SERVICE, None, "regex", r"\bboot\.floorsSeq\s*(?:\+=|=(?!=))"),
+    "setFloorsCalls": (WAVE_SERVICE, None, "text", "setFloors("),
+    "startSets": (WAVE_SERVICE, None, "lines", "\tsetFloors(runFloors)"),
+    "lobbySets": (WAVE_SERVICE, None, "lines", "\tsetFloors({})"),
+    "pushSeq": (WAVE_SERVICE, PUSH_RUN_FIELDS_BODY, "lines", "\t\tfloorsSeq = boot.floorsSeq,"),
+    # L4B-8, CombatUIController (the client's half; F3, F4).
+    "uiHeld": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tlocal held = st.floors"),
+    "uiMerge": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tfresh = RunFloors.Merge(held, st.floorsSeq, fresh, seq)"),
+    "uiSeq": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tst.floorsSeq = seq"),
+    "uiKeep": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tst.floors = fresh"),
+    "uiCall": (UI_CONTROLLER, ON_RUN_STATE_BODY, "lines",
+               '\t\tapplyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)'),
+    "uiApplyCalls": (UI_CONTROLLER, None, "text", "applyFloors("),
+    "uiMergeCalls": (UI_CONTROLLER, None, "text", "RunFloors.Merge("),
+    "uiSeqWrites": (UI_CONTROLLER, None, "regex", r"\bst\.floorsSeq\s*=(?!=)"),
+    "uiConnect": (UI_CONTROLLER, None, "lines", "\tremotes.runState.OnClientEvent:Connect(onRunState)"),
+    # F6, WaveService.payMentors (B's lines; the rule itself is check_stage_mirror's MentorBonus).
+    # s1 (fix round 2): its inputs too: the damage total, and the guard on a bonus of nothing.
+    "mentorTotal": (WAVE_SERVICE, PAY_MENTORS_BODY, "text",
+                    "\tlocal total = 0\n\tfor _, damage in tally do\n\t\ttotal += damage\n\tend\n"),
+    "mentorNone": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\tif total <= 0 then"),
+    "mentorFloor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                    "\t\tif mentor.waiting or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare then"),
+    "menteeOther": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\t\t\tother ~= mentor"),
+    "menteeFloor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                    "\t\t\t\tand (tally[other.userId] or 0) / total >= coop.mentorMinDamageShare"),
+    "menteeRate": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\t\t\ttable.insert(menteeRates, other.incomeRate)"),
+    "mentorBonusCall": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                        "\t\tlocal bonus = Combat.MentorBonus(combatConfig, mentor.incomeRate, menteeRates)"),
+    "mentorValor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\tstate.combat.valor += bonus"),
+    "mentorCard": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\tArenaService.CreditMentor(mentor.userId, bonus)"),
+    "mentorNoBonus": (WAVE_SERVICE, PAY_MENTORS_BODY, "text", "\t\tif bonus <= 0 then\n\t\t\tcontinue\n\t\tend\n"),
+    "mentorBonusCalls": (WAVE_SERVICE, None, "text", "Combat.MentorBonus("),
+    "bossPaysMentors": (WAVE_SERVICE, None, "lines", "\t\tpayMentors(combatConfig, tally)"),
+    # H1 (fix round 3, luau-b-3.md), WaveService: the field is held while a fighter's blow waits.
+    "h1Body": (WAVE_SERVICE, FIELD_HELD_BODY, "text",
+               "\tlocal waits = false\n\tfor _, member in ArenaService.GetMembers() do\n"
+               "\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then\n"
+               "\t\t\twaits = true\n\t\t\tbreak\n\t\tend\n\tend\n\tif delta == nil then\n"
+               "\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n\tend\n"
+               "\trun.blowWaits = waits\n\tif not waits or not StageFlow.FieldClear(plan, flow, input) then\n"
+               "\t\trun.heldSince = 0\n\t\treturn false\n\tend\n\tif run.heldSince == 0 then\n\t\trun.heldSince = now\n"
+               "\tend\n\tlocal tuning = Tuning.Get()\n\tlocal rule = DashProof.Rule(tuning.movement, tuning.shooting)\n"
+               "\tlocal lapse = if rule ~= nil then rule.lapse else 0\n\treturn now - run.heldSince <= lapse + delta\nend"),
+    "h1Asks": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+               "\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then"),
+    "h1DownKeeps": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+                    "\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)"),
+    "h1Notes": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\trun.blowWaits = waits"),
+    "h1ClearOnly": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+                    "\tif not waits or not StageFlow.FieldClear(plan, flow, input) then"),
+    "h1Resets": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\t\trun.heldSince = 0"),
+    "h1Starts": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\t\trun.heldSince = now"),
+    "h1Rule": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\tlocal rule = DashProof.Rule(tuning.movement, tuning.shooting)"),
+    "h1Lapse": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\tlocal lapse = if rule ~= nil then rule.lapse else 0"),
+    "h1Cap": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\treturn now - run.heldSince <= lapse + delta"),
+    "h1Writes": (WAVE_SERVICE, None, "regex", r"\brun\.(?:blowWaits|heldSince)\s*=(?!=)"),
+    "h1Defs": (WAVE_SERVICE, None, "lines", "local function fieldHeld("),
+    "h1Calls": (WAVE_SERVICE, None, "regex", r"\bfieldHeld\("),
+    "h1AdvanceDelta": (WAVE_SERVICE, None, "lines",
+                       "local function advance(combatConfig: Types.CombatConfig, delta: number?): ()"),
+    "h1AdvanceHolds": (WAVE_SERVICE, ADVANCE_BODY, "lines", "\tif fieldHeld(plan, flow, input, now, delta) then"),
+    "h1AdvanceHoldWrites": (WAVE_SERVICE, ADVANCE_BODY, "lines", "\t\tinput.spawningDone = false"),
+    "h1SpawningWrites": (WAVE_SERVICE, None, "regex", r"\binput\.spawningDone\s*=(?!=)"),
+    "h1AdvanceCalls": (WAVE_SERVICE, None, "regex", r"(?<![\w.])advance\(combatConfig[,)]"),
+    "h1TickDelta": (WAVE_SERVICE, None, "lines", "local function tick(delta: number): ()"),
+    "h1TickAdvance": (WAVE_SERVICE, TICK_BODY, "lines", "\tadvance(combatConfig, delta)"),
+    "h1DownAdvance": (WAVE_SERVICE, ON_DOWN_BODY, "lines", "\t\tadvance(combatConfig)"),
+    "h1BootTick": (WAVE_SERVICE, BOOT_BODY, "lines", "\t\ttick(delta)"),
+    "h1FreshBlowWaits": (WAVE_SERVICE, FRESH_RUN_BODY, "lines", "\t\tblowWaits = false,"),
+    "h1FreshHeldSince": (WAVE_SERVICE, FRESH_RUN_BODY, "lines", "\t\theldSince = 0,"),
+    "h1DashProof": (WAVE_SERVICE, None, "lines", 'local DashProof = require(script.Parent:WaitForChild("DashProof"))'),
+}
+# Two lines that must come in this order inside their function: (key, file, body, first, then).
+L4B_ORDER = {
+    "trackOrder": (WEAPON_SERVICE, TRACK_AIR_BODY, "PositionRing.Record(shooter.history, now, position)",
+                   "proveDash(shooter, now, position)"),
+    "frameOrder": (WEAPON_SERVICE, WEAPON_STEP_BODY, "xpcall(trackAir, stepFailed, now, deltaTime)",
+                   "xpcall(VitalsService.Step, stepFailed, deltaTime)"),
+    "restLast": (WEAPON_SERVICE, WEAPON_STEP_BODY, "xpcall(VitalsService.Step, stepFailed, deltaTime)",
+                 "xpcall(stepRest, stepFailed, now, deltaTime)"),
+    "sendOrder": (ARENA_SERVICE, SEND_RUN_STATE_BODY,
+                  "RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])", "play.cellsSent[userId] = seq"),
+    "uiMergeThenSeq": (UI_CONTROLLER, APPLY_FLOORS_BODY,
+                       "RunFloors.Merge(held, st.floorsSeq, fresh, seq)", "st.floorsSeq = seq"),
+    "uiMergeThenSame": (UI_CONTROLLER, APPLY_FLOORS_BODY,
+                        "RunFloors.Merge(held, st.floorsSeq, fresh, seq)", "local same = #fresh == #held"),
+    "uiGuardThenFloors": (UI_CONTROLLER, ON_RUN_STATE_BODY, "if not isRunState(payload) then", "applyFloors(run.floors, "),
+    "uiFloorsFirst": (UI_CONTROLLER, ON_RUN_STATE_BODY, "applyFloors(run.floors, ", "if run.levelId ~= st.levelId then"),
+    "bonusGuardThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY, "if bonus <= 0 then", "state.combat.valor += bonus"),
+    "mentorFloorThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY,
+                           "(tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare", "state.combat.valor += bonus"),
+    # H1 (fix round 3): the hold reads the input advance has built, and comes before StageFlow decides.
+    "h1InputThenHold": (WAVE_SERVICE, ADVANCE_BODY, "runCap = run.runEndsAt > 0 and now >= run.runEndsAt,",
+                        "if fieldHeld(plan, flow, input, now, delta) then"),
+    "h1HoldThenAdvance": (WAVE_SERVICE, ADVANCE_BODY, "input.spawningDone = false",
+                          "local actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)"),
+}
+
+
+def l4b_reading(text) -> dict:
+    """L4B_LINES counted on the code (comments blanked) of the function each belongs to, and the
+    L4B_ORDER pairs (True when both are there, in that order). `found` names the bodies found.
+    `text` reads a repo file (empty when missing)."""
+    counts, found = {}, {}
+    for key, (rel, pattern, how, line) in L4B_LINES.items():
+        code = luau_code(text(rel))
+        if pattern is not None:
+            body = pattern.search(code)
+            found[pattern.pattern] = body is not None
+            code = body.group(0) if body else ""
+        if how == "lines":
+            counts[key] = whole_lines(code, line)
+        elif how == "regex":
+            counts[key] = len(re.findall(line, code))
+        else:
+            counts[key] = code.count(line)
+    order = {}
+    for key, (rel, pattern, first, then) in L4B_ORDER.items():
+        body = pattern.search(luau_code(text(rel)))
+        code = body.group(0) if body else ""
+        a, b = code.find(first), code.find(then)
+        order[key] = a >= 0 and b > a
+    return {"counts": counts, "order": order, "missing": sorted(p for p, ok in found.items() if not ok)}
 
 
 def w3_fix3_reading(text) -> dict:
@@ -1564,23 +1808,15 @@ def w3_fix_reading(text, react_text: str, freeze_text: str) -> dict:
 
 
 def sources(repo: Path) -> dict:
-    """SOURCES, plus every arena a level layout names: an arena is a .luau data module, bundled
-    like a source and loaded as `Arena_<name>`."""
-    found = dict(SOURCES)
-    layouts = dict(read_folder(repo, "src/shared/Layouts/Levels"))
-    for arena in sorted({layout["arena"] for layout in layouts.values() if layout.get("arena")}):
-        if (repo / f"src/shared/Layouts/Arenas/{arena}.luau").exists():
-            found[f"Arena_{arena}"] = f"src/shared/Layouts/Arenas/{arena}.luau"
-    return found
+    """SOURCES. (Until L4 W1b also every arena a level layout named, for ruling 27's adapter: no
+    layout names one since the Raider Arena went.)"""
+    return dict(SOURCES)
 
 
 def fixtures(repo: Path) -> dict:
     """One local for every config a case reads (the bundle is one chunk of at most 200 locals)."""
     layouts = dict(read_folder(repo, "src/shared/Layouts/Levels"))
-    bundled = sources(repo)
-    arenas = sorted({layout["arena"] for layout in layouts.values() if layout.get("arena")})
     return {
-        "village": read(repo, "src/shared/Config/Missions/1_Village.json"),
         "combat": read(repo, "src/shared/Config/Combat.json"),
         # The real files, as they ship (tests_l1.luau "the real files").
         "expeditions": read(repo, "src/shared/Config/Expeditions.json"),
@@ -1589,7 +1825,6 @@ def fixtures(repo: Path) -> dict:
         # that read it then fail).
         "weaponModels": read_optional(repo, "src/shared/Config/WeaponModels.json"),
         "levels": [content for _, content in read_folder(repo, "src/shared/Config/Levels", True)],
-        "missions": [content for _, content in read_folder(repo, "src/shared/Config/Missions", True)],
         # Files of those two folders that Catalog does not read (it takes <n>_<Name> only), while
         # tools/check_levels.py reads every *.json there.
         "unread": sorted(
@@ -1599,7 +1834,6 @@ def fixtures(repo: Path) -> dict:
             if not re.match(NUMBERED, path.stem)
         ),
         "layouts": layouts,
-        "arenas": [arena for arena in arenas if f"Arena_{arena}" in bundled],
         "gate": gate_reading(),
         "source": source_reading(repo),
     }

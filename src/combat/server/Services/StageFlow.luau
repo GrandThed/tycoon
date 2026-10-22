@@ -216,8 +216,6 @@ local KIND_CAMP = "camp"
 local WIRE_REACH = 1000
 -- Under this Roblox destroys falling parts before the rescue could see them.
 local LOWEST_KILL_Y = -450
--- The arena adapter's one camp (ruling 27).
-local ARENA_ZONE = "arena"
 -- The numbers a run reads, by where they are kept: Validate names every one that is missing.
 local NEEDED = {
 	rules = {
@@ -264,86 +262,30 @@ local StageFlow = {}
 
 -- Levels -------------------------------------------------------------------------------------
 
--- A level file as a level. One with no `mission` is taken as it stands (nil when it lacks
--- stages, difficulties or a crowd block; its `camps` are {} when it names none). One that names
--- a mission (the Raider Arena, ruling 27) borrows that mission's crowd block and becomes one camp
--- of all its waves, with the director's breather and merging: the arena as P5 played it, every
--- kill paid as it falls (L1b-15). Its one difficulty is `firstDifficulty`, the first of
--- Expeditions.json `difficulties`: the map offers that one for a level that names no others, so
--- the two can never disagree.
-function StageFlow.Resolve(
-	file: Types.LevelFile,
-	mission: Types.MissionConfig?,
-	runCapSeconds: number,
-	firstDifficulty: string?
-): Types.LevelConfig?
-	if file.mission == nil then
-		local stages = file.stages
-		local difficulties = file.difficulties
-		local crowd = file.crowd
-		if stages == nil or difficulties == nil or crowd == nil then
-			return nil
-		end
-		local ownCap = file.runCapSeconds
-		return {
-			version = file.version,
-			id = file.id,
-			name = file.name,
-			layout = file.layout,
-			mission = nil,
-			material = file.material or "",
-			targetMinutes = file.targetMinutes or 0,
-			-- A level that names no cap of its own runs under the director's.
-			runCapSeconds = if ownCap ~= nil and ownCap > 0 then ownCap else runCapSeconds,
-			difficulties = difficulties,
-			crowd = crowd,
-			stages = stages,
-			camps = file.camps or {},
-			secrets = file.secrets,
-		}
-	end
-	local block = if mission ~= nil then mission.crowd else nil
-	if mission == nil or block == nil or firstDifficulty == nil then
+-- A level file as a level, taken as it stands: nil when it lacks stages, difficulties or a crowd
+-- block; its `camps` are {} when it names none. (Ruling 27's mission branch went with the Raider
+-- Arena in L4 W1b: no level borrows a mission's crowd block.)
+function StageFlow.Resolve(file: Types.LevelFile, runCapSeconds: number): Types.LevelConfig?
+	local stages = file.stages
+	local difficulties = file.difficulties
+	local crowd = file.crowd
+	if stages == nil or difficulties == nil or crowd == nil then
 		return nil
 	end
-	local only: Types.LevelDifficulty = {
-		hpScale = block.hpScale,
-		damageScale = block.damageScale,
-		plateScale = block.plateScale,
-		countMult = 1,
-		rewardMult = 1,
-		recommendedTier = file.recommendedTier or 0,
-	}
-	local camp: Types.LevelStage = {
-		kind = KIND_CAMP,
-		name = file.name,
-		zone = ARENA_ZONE,
-		waves = block.waves,
-		targetWaveSeconds = mission.targetWaveSeconds,
-		breatherSeconds = nil,
-		merge = true,
-		maxAlive = nil,
-	}
+	local ownCap = file.runCapSeconds
 	return {
 		version = file.version,
 		id = file.id,
 		name = file.name,
 		layout = file.layout,
-		mission = file.mission,
-		material = mission.material,
-		targetMinutes = mission.targetMinutes,
-		runCapSeconds = runCapSeconds,
-		difficulties = { [firstDifficulty] = only },
-		crowd = {
-			regenShare = block.regenShare,
-			maxAlive = block.maxAlive,
-			burst = block.burst,
-			burstSpacing = block.burstSpacing,
-			eliteKind = block.eliteKind,
-			rewards = block.rewards,
-		},
-		stages = { camp },
-		camps = {},
+		material = file.material or "",
+		targetMinutes = file.targetMinutes or 0,
+		-- A level that names no cap of its own runs under the director's.
+		runCapSeconds = if ownCap ~= nil and ownCap > 0 then ownCap else runCapSeconds,
+		difficulties = difficulties,
+		crowd = crowd,
+		stages = stages,
+		camps = file.camps or {},
 		secrets = file.secrets,
 	}
 end

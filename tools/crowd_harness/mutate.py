@@ -41,7 +41,6 @@ FILES = [
     COMBAT,
     "src/shared/Economy.luau",
     "src/shared/Config/Combat.json",
-    "src/shared/Config/Missions/1_Village.json",
     "src/shared/CrowdCodec.luau",
     "src/shared/HitShapes.luau",
     "src/shared/Armory.luau",
@@ -106,10 +105,14 @@ MUTATIONS = {
     ),
     "18: no knock window at the decision": (
         VITALS,
-        "local voided = covered or now < vitals.knockUntil",
-        "local voided = covered",
+        "\tif at < vitals.knockUntil then\n\t\tentry.covered = true\n\tend\n",
+        "",
     ),
-    "18: hits waiting at the knock not voided": (VITALS, "other.covered = true", "other.covered = other.covered"),
+    "18: hits waiting at the knock not voided": (
+        VITALS,
+        "\t\t\tif other.vitals == vitals and struckBy(other, at) then\n\t\t\t\tother.covered = true\n",
+        "\t\t\tif other.vitals == vitals and struckBy(other, at) then\n\t\t\t\tother.covered = other.covered\n",
+    ),
     "21: reach measured in 3D": (
         BRAIN,
         "local distance = flat.Magnitude\n\tif distance > FACING_EPSILON then\n\t\tmind.facing = flat.Unit\n\tend\n\tlocal ready",
@@ -222,8 +225,8 @@ MUTATIONS = {
     "lob: judged at its throw": (VITALS, "\tstrike.at += seconds\n", ""),
     "lob: a knock voids one still in the air": (
         VITALS,
-        "if other.vitals == vitals and other.strike.at <= now then",
-        "if other.vitals == vitals then",
+        "return other.strike.at <= at and other.queuedAt <= at",
+        "return other.queuedAt <= at",
     ),
     "lob: pushed along its throw": (VITALS, 'elseif shape == "lob" then strike.aim', "elseif false then strike.aim"),
     "lob: with nothing under its target it lands at the root": (
@@ -602,7 +605,11 @@ MUTATIONS = {
     "boss: its attacks outlive it": (CROWD, "dismiss(enemy, boss)", "dismiss(enemy, false)"),
     "boss: every kind's attacks die with it": (CROWD, "dismiss(enemy, boss)", "dismiss(enemy, true)"),
     "boss: its queued impact is still handed over": (CROWD, "\tCrowdBrain.Recall(ids)\n", ""),
-    "boss: decisions still waiting are kept": (VITALS, "if not ids[entry.strike.bodyId] then", "if true then"),
+    "boss: decisions still waiting are kept": (
+        VITALS,
+        "if not ids[entry.strike.bodyId] then",
+        "if true then",
+    ),
     "boss: what travels is kept": (VITALS, "\tThreatField.Drop(ids, raise)\n", ""),
     "boss: its ring is kept": (FIELD, "return not ids[ring.strike.bodyId]", "return true"),
     "boss: its charge is kept": (FIELD, "return not ids[charge.strike.bodyId]", "return true"),
@@ -815,8 +822,8 @@ MUTATIONS = {
     # Review round: ruling 18 judged from state (VitalsService.RunLost).
     "p5 lost: a member on the pad still fights": (
         VITALS,
-        "if member.bot or player == nil or member.waiting then",
-        "if member.bot or player == nil then",
+        "\t\tif member.waiting then\n\t\t\tcontinue\n\t\tend\n\t\ttable.insert(fighters, member.userId)",
+        "\t\ttable.insert(fighters, member.userId)",
     ),
     "p5 lost: a dead partner still stands": (
         VITALS,
@@ -841,7 +848,7 @@ MUTATIONS = {
     # Second review round.
     "p5: a start does not wait for bodies": (
         VITALS,
-        "if not member.bot and player ~= nil and bodyOf(player) == nil then",
+        "if bodyOf(member.player) == nil then",
         "if false then",
     ),
     "p5: ClearThreats keeps the queued decisions": (
@@ -1143,12 +1150,6 @@ L1_MUTATIONS = {
         "\town[difficulty] = true\n\town.normal = true\n\treturn true\n",
     ),
     "l1: the arena adapter without bankEachWave": (FLOW, "\t\tbankEachWave = true,\n", "\t\tbankEachWave = false,\n"),
-    "l1: the arena adapter without merging": (FLOW, "\t\tmerge = true,\n", "\t\tmerge = false,\n"),
-    "l1: the arena is always played on normal": (
-        FLOW,
-        "difficulties = { [firstDifficulty] = only },",
-        "difficulties = { normal = only },",
-    ),
     "l1: burst rows stepping outward": (
         FLOW,
         "local inward = Vector3.new(zone.rect.x - at.X, 0, zone.rect.z - at.Z)",
@@ -1581,19 +1582,6 @@ WORLD_MUTATIONS = {
         "if value ~= nil and value > 0 and isFinite(value) then",
         "if value ~= nil and value > 0 then",
     ),
-    # ------------------------------------------------------------------ the arena as a level
-    # caught by: the party enters at the first player spawn and leaves at the pad
-    "world: the arena's entry is its pad": (
-        GEOMETRY,
-        "local first = listOf(arena.playerSpawns)[1] or pad",
-        "local first = pad",
-    ),
-    # caught by: every table is new: changing the level leaves the arena's module untouched
-    "world: the level shares the arena's obstacle tables": (
-        GEOMETRY,
-        "table.insert(obstacles, table.clone(obstacle))",
-        "table.insert(obstacles, obstacle)",
-    ),
     # ------------------------------------------------------------------ what Pieces refuses
     # caught by: a camp with gates and no fence is refused, by name
     "world: gates with no fence are built": (
@@ -1818,12 +1806,6 @@ WORLD_MUTATIONS = {
         "z = sign.z,\n\t\tsx = size.sx,\n\t\tsy = size.sy,\n\t\tsz = size.sz,",
         "z = sign.z,\n\t\tsx = size.sz,\n\t\tsy = size.sy,\n\t\tsz = size.sx,",
     ),
-    # caught by: FromArena: the arena's size.x is the camp's width and its size.z the depth
-    "world: the arena's camp is as wide as the arena is deep": (
-        GEOMETRY,
-        "sx = arena.size.x,\n\t\tsz = arena.size.z,",
-        "sx = arena.size.z,\n\t\tsz = arena.size.x,",
-    ),
 }
 MUTATIONS.update(WORLD_MUTATIONS)
 
@@ -1841,13 +1823,8 @@ REAL_MUTATIONS = {
     ),
     "real: a level file's id dropped for its layout's": (
         FLOW,
-        "\t\t\tversion = file.version,\n\t\t\tid = file.id,\n",
-        "\t\t\tversion = file.version,\n\t\t\tid = file.layout,\n",
-    ),
-    "real: the arena's level takes its mission's id": (
-        FLOW,
-        "\t\tid = file.id,\n\t\tname = file.name,\n\t\tlayout = file.layout,\n\t\tmission = file.mission,",
-        "\t\tid = mission.id,\n\t\tname = file.name,\n\t\tlayout = file.layout,\n\t\tmission = file.mission,",
+        "\t\tversion = file.version,\n\t\tid = file.id,\n",
+        "\t\tversion = file.version,\n\t\tid = file.layout,\n",
     ),
     "real: the plan's floor as deep as it is wide": (
         FLOW,
@@ -2310,11 +2287,6 @@ L1B_RUN_MUTATIONS = {
         GEOMETRY,
         "local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, thickness) else {}",
         "local gates: { Box } = LevelGeometry.GateBoxes(camp, thickness)",
-    ),
-    "l1b: FromArena not locking": (
-        GEOMETRY,
-        "\t\tlocks = true,\n\t\tspots = nil,",
-        "\t\tlocks = nil,\n\t\tspots = nil,",
     ),
     "l1b: a fire marker on a spot that is no fire": (
         GEOMETRY,
@@ -4433,7 +4405,11 @@ L2_MUTATIONS = {
         "found = found ~= nil and found[site.id] ~= nil,",
     ),
     # StageFlow's secrets lines and map rows (L2-13, L2-15).
-    "l2: Resolve drops the secrets": (FLOW, "\t\t\tsecrets = file.secrets,\n\t\t}\n\tend", "\t\t}\n\tend"),
+    "l2: Resolve drops the secrets": (
+        FLOW,
+        "\t\tsecrets = file.secrets,\n\t}\nend",
+        "\t}\nend",
+    ),
     "l2: Validate skips the secrets": (FLOW, "\tsecretProblems(level, layout, problem)\n", ""),
     "l2: an entry needs no name": (
         FLOW,
@@ -7654,7 +7630,7 @@ L3W2_FIX_MUTATIONS = {
     "l3w2 fix S2: the admit's handler leaves before the hook": (
         ARENA_SERVICE,
         "\t\t\t\tplaceBody(live)\n",
-        "\t\t\t\tplaceBody(live)\n\t\t\t\tif live.bot then\n\t\t\t\t\treturn\n\t\t\t\tend\n",
+        "\t\t\t\tplaceBody(live)\n\t\t\t\tif live.waiting then\n\t\t\t\t\treturn\n\t\t\t\tend\n",
     ),
     "l3w2 fix S2: ArenaService keeps no hook": (ARENA_SERVICE, "\thooks.character = hook\n", "\tlocal _ = hook\n"),
     "l3w2 fix S2: a second writer clears the hook": (
@@ -8044,6 +8020,558 @@ L3W2_FIX2_MUTATIONS = {
     ),
 }
 MUTATIONS.update(L3W2_FIX2_MUTATIONS)
+
+# ------------------------------------------------------------------------------------------------
+# L4 W1b (docs/prompts/l4-w1b-contract.md §4, §5; docs/prompts/l4-w1b-reports/luau-a.md and
+# luau-b.md, "For the designer"). DashProof and RunFloors load in the harness: their mutants are
+# caught by tests_l4b.luau and tests_l4b_run.luau. WeaponService, ArenaService and WaveService do not:
+# theirs are caught by the source.l4b pins (run_harness.py L4B_LINES, tests_l3_w2.luau L4BP).
+DASH_PROOF = "src/combat/server/Services/DashProof.luau"
+RUN_FLOORS = "src/shared/RunFloors.luau"
+FILES += [DASH_PROOF, RUN_FLOORS]
+L4B_MUTATIONS = {
+    # DashProof (A): tests_l4b (d), (e), (b), Rule and Open.
+    "l4b: the proof not flat": (DASH_PROOF, "rule.span, true)", "rule.span, false)"),
+    "l4b: no lookback": (DASH_PROOF, "local window = now - claimAt + rule.lookback", "local window = now - claimAt"),
+    "l4b: a claim never lapses": (DASH_PROOF, "if now > claimAt + rule.lapse then", "if false then"),
+    "l4b: the share at 0": (DASH_PROOF, "speed = share * distance / seconds,", "speed = 0,"),
+    "l4b: Open never reaches back": (
+        DASH_PROOF,
+        "windows.iframesFrom = math.min(windows.iframesFrom, from)",
+        "windows.iframesFrom = windows.iframesFrom",
+    ),
+    # PositionRing (A): tests_l4b (d), a fall at 120 studs/s proves nothing only when flat.
+    "l4b: Motion's flat ignored": (RING, "\t\tif flat == true then\n", "\t\tif false then\n"),
+    # WeaponService (A): the source.l4b pins. F1 moved the per-frame decision into DashProof.Step,
+    # so the window's start is now DashProof's (tests_l4b), and OnDash's grant is the review's own
+    # mutant (slice 3 m2: a GrantIframes call; dashGrantsNothing).
+    "l4b: OnDash opens on the request": (
+        WEAPON,
+        "\tshooter.dashClaimAt = now\nend",
+        "\tshooter.dashClaimAt = now\n\tWeaponService.GrantIframes(player, movement.dashIframes)\nend",
+    ),
+    "l4b: the window from the proof": (
+        DASH_PROOF,
+        "DashProof.Open(claimant, claimAt, seconds)",
+        "DashProof.Open(claimant, now, seconds)",
+    ),
+    "l4b: the claim never judged": (WEAPON, "\t\t\tproveDash(shooter, now, position)\n", ""),
+    "l4b: resetAir keeps the claim": (
+        WEAPON,
+        "\t-- The last body's dash is not this one's.\n\tshooter.dashClaimAt = nil\n",
+        "",
+    ),
+    # RunFloors (A's module; B's eight scratch mutants, written here): tests_l4b_run.
+    "l4b: Attach always sends the cells": (RUN_FLOORS, "local withCells = sentSeq ~= seq", "local withCells = true"),
+    "l4b: Attach never sends the cells": (RUN_FLOORS, "local withCells = sentSeq ~= seq", "local withCells = false"),
+    "l4b: Attach strips the run's own floors": (
+        RUN_FLOORS,
+        "\tlocal copy = table.clone(floor)\n\tcopy.cells = nil\n",
+        "\tlocal copy = floor\n\tcopy.cells = nil\n",
+    ),
+    "l4b: Attach drops a field": (
+        RUN_FLOORS,
+        "\tcopy.cells = nil\n\treturn copy\n",
+        "\tcopy.cells = nil\n\tcopy.ceiling = nil\n\treturn copy\n",
+    ),
+    "l4b: Attach says nothing went": (RUN_FLOORS, "\treturn out, withCells\n", "\treturn out, false\n"),
+    "l4b: Merge keeps the cells across a set": (RUN_FLOORS, "local same = heldSeq == seq", "local same = true"),
+    "l4b: Merge never keeps the cells": (RUN_FLOORS, "local same = heldSeq == seq", "local same = false"),
+    "l4b: Merge prefers the held cells": (
+        RUN_FLOORS,
+        "\t\tif copy.cells == nil and same then\n",
+        "\t\tif same then\n",
+    ),
+    # ArenaService (B): the source.l4b pins.
+    "l4b: a member's note is never written": (ARENA_SERVICE, "\t\tplay.cellsSent[userId] = seq\n", ""),
+    "l4b: the one payload carries the cells": (
+        ARENA_SERVICE,
+        "RunFloors.Attach(runFields.floors, runFields.floorsSeq, runFields.floorsSeq)",
+        "RunFloors.Attach(runFields.floors, runFields.floorsSeq, nil)",
+    ),
+    "l4b: a first send drops its cells": (ARENA_SERVICE, "\t\t\tsent.floors = floors\n", ""),
+    "l4b: a send asks Attach with the set": (
+        ARENA_SERVICE,
+        "RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])",
+        "RunFloors.Attach(runFields.floors, seq, seq)",
+    ),
+    "l4b: an admit keeps the note": (ARENA_SERVICE, "\tplay.cellsSent[player.UserId] = nil\n", ""),
+    "l4b: a removal keeps the note": (ARENA_SERVICE, "\tplay.cellsSent[member.userId] = nil\n", ""),
+    "l4b: the summary card skips the attach": (
+        ARENA_SERVICE,
+        'sendRunState(player, userId, ArenaService.BuildRunState("summary", summary, result))',
+        'RemoteService.FireClient(player, "RunState", ArenaService.BuildRunState("summary", summary, result))',
+    ),
+    "l4b: the broadcast skips the attach": (
+        ARENA_SERVICE,
+        "\t\t\tsendRunState(member.player, userId, runState)\n",
+        '\t\t\tRemoteService.FireClient(member.player, "RunState", runState)\n',
+    ),
+    "l4b: RunState names no set": (ARENA_SERVICE, "\t\tfloorsSeq = runFields.floorsSeq,\n", "\t\tfloorsSeq = 0,\n"),
+    # WaveService (B): the source.l4b pins.
+    "l4b: the number never moves": (WAVE_SERVICE, "\tboot.floorsSeq += 1\n", ""),
+    "l4b: a start's floors are no new set": (WAVE_SERVICE, "\tsetFloors(runFloors)\n", "\trun.floors = runFloors\n"),
+    "l4b: the lobby's empty list is no new set": (
+        WAVE_SERVICE,
+        "\trun = freshRun()\n\tsetFloors({})\n\tArenaService.SetLevel(nil)\n",
+        "\trun = freshRun()\n\tArenaService.SetLevel(nil)\n",
+    ),
+    "l4b: a session reset's empty list is no new set": (
+        WAVE_SERVICE,
+        "\trun = freshRun()\n\tsetFloors({})\n\tboot.returning = false\n",
+        "\trun = freshRun()\n\tboot.returning = false\n",
+    ),
+    "l4b: RunFields carry a stale number": (WAVE_SERVICE, "\t\tfloorsSeq = boot.floorsSeq,\n", "\t\tfloorsSeq = 1,\n"),
+}
+MUTATIONS.update(L4B_MUTATIONS)
+
+
+# ------------------------------------------------------------------------------------------------
+# The L4 W1b fix round (docs/prompts/l4-w1b-fix-round.md; docs/prompts/l4-w1b-fix-reports/designer.md
+# lists each entry and what catches it). F1: DashProof.Step and the hold in VitalsService load in the
+# harness (tests_l4b.luau); F2, F3 and F6's service and client lines are the source.l4b pins
+# (run_harness.py L4B_LINES / L4B_ORDER, tests_l3_w2.luau L4BP). Run them alone with
+# `mutate.py <root> <luau> "l4b f"`.
+UI_CONTROLLER = "src/combat/client/Controllers/CombatUIController.luau"
+FILES.append(UI_CONTROLLER)
+L4B_FIX_MUTATIONS = {
+    # F1, DashProof.Step / Verdict / Rule / Pending (A): tests_l4b.
+    "l4b f1: Step opens unless lapsed": (
+        DASH_PROOF,
+        "\tif verdict == \"proven\" then\n\t\tclaimant.dashClaimAt = nil\n\t\tDashProof.Open(",
+        "\tif verdict ~= \"lapsed\" then\n\t\tclaimant.dashClaimAt = nil\n\t\tDashProof.Open(",
+    ),
+    "l4b f1: Step drops a claim not proven on its first frame": (
+        DASH_PROOF,
+        "\telseif verdict == \"lapsed\" then\n\t\tclaimant.dashClaimAt = nil\n\tend\n\treturn verdict",
+        "\telse\n\t\tclaimant.dashClaimAt = nil\n\tend\n\treturn verdict",
+    ),
+    "l4b f1: a proof keeps the claim": (
+        DASH_PROOF,
+        "\tif verdict == \"proven\" then\n\t\tclaimant.dashClaimAt = nil\n",
+        "\tif verdict == \"proven\" then\n",
+    ),
+    "l4b f1: a lapse keeps the claim": (
+        DASH_PROOF,
+        "\telseif verdict == \"lapsed\" then\n\t\tclaimant.dashClaimAt = nil\n",
+        "\telseif verdict == \"lapsed\" then\n",
+    ),
+    "l4b f1: no rule keeps the claim": (
+        DASH_PROOF,
+        "\tif rule == nil then\n\t\tclaimant.dashClaimAt = nil\n\t\treturn \"lapsed\"",
+        "\tif rule == nil then\n\t\treturn \"lapsed\"",
+    ),
+    "l4b f1: the proof speed passed, not reached": (DASH_PROOF, "if speed >= rule.speed then", "if speed > rule.speed then"),
+    "l4b f1: a lapse beats a proof": (
+        DASH_PROOF,
+        "\tlocal window = now - claimAt + rule.lookback\n",
+        "\tif now > claimAt + rule.lapse then\n\t\treturn \"lapsed\"\n\tend\n\tlocal window = now - claimAt + rule.lookback\n",
+    ),
+    "l4b f1: a negative lookback is a rule": (DASH_PROOF, "lookback >= 0 and lookback < math.huge", "lookback < math.huge"),
+    "l4b f1: Pending never lapses": (
+        DASH_PROOF,
+        "return claimAt, claimAt + math.max(seconds, 0), claimAt + rule.lapse",
+        "return claimAt, claimAt + math.max(seconds, 0), math.huge",
+    ),
+    "l4b f1: Pending's window empty": (
+        DASH_PROOF,
+        "return claimAt, claimAt + math.max(seconds, 0), claimAt + rule.lapse",
+        "return claimAt, claimAt, claimAt + rule.lapse",
+    ),
+    "l4b f1: Pending without a rule": (
+        DASH_PROOF,
+        "if claimAt == nil or rule == nil then\n\t\treturn 0, 0, 0",
+        "if claimAt == nil then\n\t\treturn 0, 0, 0",
+    ),
+    # RunFloors' "every floor is new" (slice 1 S2; "l4b: Attach strips the run's own floors" already
+    # covers bare's clone): tests_l4b's RunFloors group.
+    "l4b f1: Attach shares the floor it sends with cells": (
+        RUN_FLOORS,
+        "out[index] = if withCells then table.clone(floor) else bare(floor)",
+        "out[index] = if withCells then floor else bare(floor)",
+    ),
+    "l4b f1: Merge shares the incoming floor": (
+        RUN_FLOORS,
+        "\t\tlocal copy = table.clone(floor)\n\t\tif copy.cells",
+        "\t\tlocal copy = floor\n\t\tif copy.cells",
+    ),
+    # F1, VitalsService's hold (A): tests_l4b (g) and the hold group.
+    "l4b f1: the hold outlives the lapse": (
+        VITALS,
+        "return now <= lapseAt and met(from, untilClock, impact, limit)",
+        "return met(from, untilClock, impact, limit)",
+    ),
+    "l4b f1: nothing is held": (VITALS, "return now <= lapseAt and met(from, untilClock, impact, limit)", "return false"),
+    "l4b f1: held whatever the claim's window": (
+        VITALS,
+        "return now <= lapseAt and met(from, untilClock, impact, limit)",
+        "return now <= lapseAt",
+    ),
+    "l4b f1: decide never holds": (
+        VITALS,
+        "\t\tor (not voided and awaitsDash(player, strike.at, entry.decideAt, now))\n",
+        "\t\tor false\n",
+    ),
+    "l4b f1: a held hit lands on a new body": (VITALS, "\t\tif hold.humanoid ~= humanoid then", "\t\tif false then"),
+    "l4b f1: a held hit judged by a later knock": (
+        VITALS,
+        "\tif at < vitals.knockUntil then\n",
+        "\tif now < vitals.knockUntil then\n",
+    ),
+    "l4b f1: a knock voids a held hit": (
+        VITALS,
+        "\t\t(hold == nil and #vitals.waiting > 0)\n\t\tor (not voided",
+        "\t\tfalse\n\t\tor (not voided",
+    ),
+    "l4b f1: a striker's death drops a held hit": (
+        VITALS,
+        "\tThreatField.Drop(ids, raise)\n",
+        "\tfor _, vitals in vitalsByPlayer do\n\t\ttable.clear(vitals.waiting)\n\tend\n\tThreatField.Drop(ids, raise)\n",
+    ),
+    "l4b f1: an aimed miss is held": (
+        VITALS,
+        "\t\theld\n\t\tand not voided\n\t\tand (#vitals.waiting > 0 or awaitsDash(",
+        "\t\tnot voided\n\t\tand (#vitals.waiting > 0 or awaitsDash(",
+    ),
+    "l4b f1: what travels is never held": (
+        VITALS,
+        "\t\tand (#vitals.waiting > 0 or awaitsDash(player, impactAt, limit, now))\n",
+        "\t\tand false\n",
+    ),
+    "l4b f1: a held shot is stopped on them": (
+        VITALS,
+        "\t\ttable.insert(vitals.waiting, entry)\n\t\treturn \"dodged\"\n",
+        "\t\ttable.insert(vitals.waiting, entry)\n\t\treturn \"landed\"\n",
+    ),
+    "l4b f1: a held travelling hit judged when it left": (VITALS, "\t\tstruck.at = impactAt\n", ""),
+    "l4b f1: no knock window for what travels": (
+        VITALS,
+        "local voided = shielded(player, impactAt, limit) or now < vitals.knockUntil",
+        "local voided = shielded(player, impactAt, limit)",
+    ),
+    # Re-aimed in fix round 3 (H2, luau-a-3.md: settle takes a due entry out before deciding it).
+    "l4b f1: settle drops a held entry": (
+        VITALS,
+        "\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n",
+        "\t\tif due then\n\t\t\tdecide(config, entry, now)\n",
+    ),
+    "l4b f1: a held entry judged again at the release": (
+        VITALS,
+        "\t\theld, position, at = hold.inShape, hold.position, hold.at\n",
+        "\t\theld, position, at = inPlan(strike, position), position, hold.at\n",
+    ),
+    "l4b f1: a held hit pushed from the live root": (
+        VITALS,
+        "\t\theld, position, at = hold.inShape, hold.position, hold.at\n",
+        "\t\theld, at = hold.inShape, hold.at\n",
+    ),
+    "l4b f1: VitalsService connects its own Heartbeat": (
+        VITALS,
+        "\t\tshotsAlive = ThreatField.ShotsAlive,\n\t})\nend",
+        "\t\tshotsAlive = ThreatField.ShotsAlive,\n\t})\n\tgame:GetService(\"RunService\").Heartbeat:Connect(VitalsService.Step)\nend",
+    ),
+    # F1 and F2, WeaponService (A's lines): the source.l4b pins. The first five are the review's
+    # (slice 3 m2: the lapse branch is now Step's, above; slice 1 m1: the claim test and the lookback).
+    "l4b f2: OnDash opens through DashProof": (
+        WEAPON,
+        "\tshooter.dashClaimAt = now\nend",
+        "\tshooter.dashClaimAt = now\n\tDashProof.Open(shooter, now, movement.dashIframes)\nend",
+    ),
+    "l4b f2: OnDash writes the window": (
+        WEAPON,
+        "\tshooter.dashClaimAt = now\nend",
+        "\tshooter.dashClaimAt = now\n\tshooter.iframesUntil = now + movement.dashIframes\nend",
+    ),
+    "l4b f2: OnDash keeps no cooldown": (WEAPON, "\tshooter.lastDashAt = now\n", ""),
+    "l4b f2: OnDash while down": (
+        WEAPON,
+        "if character == nil or root == nil or VitalsService.IsDown(player) or not mayAct(player) then",
+        "if character == nil or root == nil or not mayAct(player) then",
+    ),
+    "l4b f2: judged only without a claim": (
+        WEAPON,
+        "\t\tif shooter.dashClaimAt ~= nil then\n\t\t\tproveDash(",
+        "\t\tif shooter.dashClaimAt == nil then\n\t\t\tproveDash(",
+    ),
+    "l4b f2: no root keeps the claim": (
+        WEAPON,
+        "\t\t\t-- No body to prove a dash with, and none to shield.\n\t\t\tshooter.dashClaimAt = nil\n",
+        "",
+    ),
+    "l4b f2: a lapse shows the attribute": (
+        WEAPON,
+        "\tif verdict == \"proven\" then\n\t\tshowIframes(shooter, now)\n\tend\n",
+        "\tif verdict == \"lapsed\" then\n\t\tshowIframes(shooter, now)\n\tend\n",
+    ),
+    "l4b f2: proveDash opens by itself": (
+        WEAPON,
+        "\tif verdict == \"proven\" then\n\t\tshowIframes(shooter, now)\n\tend\n",
+        "\tif verdict ~= \"lapsed\" then\n\t\tDashProof.Open(shooter, now, config.movement.dashIframes)\n\t\tshowIframes(shooter, now)\n\tend\n",
+    ),
+    "l4b f2: a lookback of 1e6": (
+        WEAPON,
+        "local rule = DashProof.Rule(config.movement, config.shooting)",
+        "local rule = DashProof.Rule(config.movement, { originLagMaxSeconds = 1e6 } :: any)",
+    ),
+    "l4b f1: VitalsService decides before the proofs": (
+        WEAPON,
+        "\txpcall(trackAir, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n",
+        "\txpcall(VitalsService.Step, stepFailed, deltaTime)\n\txpcall(trackAir, stepFailed, now, deltaTime)\n",
+    ),
+    "l4b f1: VitalsService never stepped": (
+        WEAPON,
+        "\txpcall(VitalsService.Step, stepFailed, deltaTime)\n",
+        "",
+    ),
+    "l4b f1: no claim hook": (
+        WEAPON,
+        "\t\tdashClaim = pendingDash,\n",
+        "\t\tdashClaim = function()\n\t\t\treturn 0, 0, 0\n\t\tend,\n",
+    ),
+    "l4b f1: the hook ignores the claim": (
+        WEAPON,
+        "return DashProof.Pending(shooter.dashClaimAt, dashRule(config), config.movement.dashIframes)",
+        "return DashProof.Pending(nil, dashRule(config), config.movement.dashIframes)",
+    ),
+    "l4b f1: a grant from the past": (
+        WEAPON,
+        "\tDashProof.Open(shooter, math.min(from or now, now), seconds)\n",
+        "\tDashProof.Open(shooter, math.min(from or now, now) - 0.3, seconds)\n",
+    ),
+    "l4b f1: a second Heartbeat": (
+        WEAPON,
+        "\tRunService.Heartbeat:Connect(step)\n",
+        "\tRunService.Heartbeat:Connect(step)\n\tRunService.Heartbeat:Connect(VitalsService.Step)\n",
+    ),
+    # F3, ArenaService.sendRunState (B's final lines): the source.l4b pins. "review 5/6/7" are the
+    # review's slice 2 m1 mutants 5 to 7; the note never written is "l4b: a member's note ..." above.
+    "l4b f3: the skip never passes": (
+        ARENA_SERVICE,
+        "\tif play.cellsSent[userId] ~= seq then\n",
+        "\tif false then\n",
+    ),
+    "l4b f3: the skip always passes": (
+        ARENA_SERVICE,
+        "\tif play.cellsSent[userId] ~= seq then\n",
+        "\tif true then\n",
+    ),
+    "l4b f3: the skip reads never sent": (
+        ARENA_SERVICE,
+        "\tif play.cellsSent[userId] ~= seq then\n",
+        "\tif play.cellsSent[userId] == nil then\n",
+    ),
+    "l4b f3: review 5, no cells ever go": (ARENA_SERVICE, "\t\tif cellsWent then\n", "\t\tif false then\n"),
+    "l4b f3: review 6, the bare floors sent after the swap": (
+        ARENA_SERVICE,
+        "\t\t\tsent.floors = floors\n",
+        "\t\t\tsent.floors = floors\n\t\t\tsent.floors = runState.floors\n",
+    ),
+    "l4b f3: review 7, the cells on every send": (
+        ARENA_SERVICE,
+        "\t\tif cellsWent then\n",
+        "\t\tif cellsWent or true then\n",
+    ),
+    "l4b f3: the shared payload mutated": (
+        ARENA_SERVICE,
+        "\t\t\tsent = table.clone(runState)\n",
+        "\t\t\tsent = runState\n",
+    ),
+    "l4b f3: the bare payload fired": (
+        ARENA_SERVICE,
+        "\tRemoteService.FireClient(player, \"RunState\", sent)\n",
+        "\tRemoteService.FireClient(player, \"RunState\", runState)\n",
+    ),
+    # F3 and F4, CombatUIController (the ui-engineer's final lines): the source.l4b pins. "review 1-4"
+    # are the review's slice 2 m1 mutants 1 to 4.
+    "l4b f3: review 1, the client never merges": (
+        UI_CONTROLLER,
+        "\t\tfresh = RunFloors.Merge(held, st.floorsSeq, fresh, seq)\n",
+        "",
+    ),
+    "l4b f3: review 2, the client never keeps the set's number": (UI_CONTROLLER, "\t\tst.floorsSeq = seq\n", ""),
+    "l4b f3: review 3, the client's call names no set": (
+        UI_CONTROLLER,
+        'applyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)',
+        "applyFloors(run.floors, 0)",
+    ),
+    "l4b f3: review 4, the client merges against the incoming list": (
+        UI_CONTROLLER,
+        "RunFloors.Merge(held, st.floorsSeq, fresh, seq)",
+        "RunFloors.Merge(fresh, st.floorsSeq, fresh, seq)",
+    ),
+    # F4 undone: the call back after the wallet, past the new-level branch.
+    "l4b f4: the client takes the floors after the level branch": moved_down(
+        UI_CONTROLLER,
+        '\t\tapplyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)\n',
+        "\t\t\tpaintWallet()\n\t\tend\n",
+    ),
+    "l4b f3: the client keeps the number before it merges": moved_down(
+        UI_CONTROLLER,
+        "\t\tfresh = RunFloors.Merge(held, st.floorsSeq, fresh, seq)\n",
+        "\t\tst.floorsSeq = seq\n",
+    ),
+    "l4b f3: the client merges against nothing held": (
+        UI_CONTROLLER,
+        "\t\tlocal held = st.floors\n",
+        "\t\tlocal held = {}\n",
+    ),
+    "l4b f3: the client never keeps the merged floors": (UI_CONTROLLER, "\t\tst.floors = fresh\n", ""),
+    "l4b f3: the client never listens for RunState": (
+        UI_CONTROLLER,
+        "\tremotes.runState.OnClientEvent:Connect(onRunState)\n",
+        "",
+    ),
+    # F6, WaveService.payMentors (B's lines): the source.l4b pins. "review 1/2" are slice 3 m3's
+    # first two; its third (Combat.MentorBonus `<=`) is check_stage_mirror's, not this tool's.
+    "l4b f6: review 1, a waiting mentor paid": (
+        WAVE_SERVICE,
+        "if mentor.waiting or (tally[mentor.userId]",
+        "if (tally[mentor.userId]",
+    ),
+    "l4b f6: an idle mentor paid": (
+        WAVE_SERVICE,
+        "\t\tif mentor.waiting or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare then\n",
+        "\t\tif mentor.waiting then\n",
+    ),
+    "l4b f6: a mentor at the floor unpaid": (
+        WAVE_SERVICE,
+        "(tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare",
+        "(tally[mentor.userId] or 0) / total <= coop.mentorMinDamageShare",
+    ),
+    "l4b f6: review 2, mentees under the floor": (
+        WAVE_SERVICE,
+        "\t\t\t\tand (tally[other.userId] or 0) / total >= coop.mentorMinDamageShare\n",
+        "",
+    ),
+    "l4b f6: a mentee at the floor dropped": (
+        WAVE_SERVICE,
+        "(tally[other.userId] or 0) / total >= coop.mentorMinDamageShare",
+        "(tally[other.userId] or 0) / total > coop.mentorMinDamageShare",
+    ),
+    "l4b f6: the mentor's own rate as the mentee's": (
+        WAVE_SERVICE,
+        "table.insert(menteeRates, other.incomeRate)",
+        "table.insert(menteeRates, mentor.incomeRate)",
+    ),
+    "l4b f6: the bonus against rate 0": (
+        WAVE_SERVICE,
+        "Combat.MentorBonus(combatConfig, mentor.incomeRate, menteeRates)",
+        "Combat.MentorBonus(combatConfig, 0, menteeRates)",
+    ),
+    "l4b f6: the wallet unpaid": (WAVE_SERVICE, "\t\tstate.combat.valor += bonus\n", ""),
+    "l4b f6: the boss pays no mentor": (WAVE_SERVICE, "\t\tpayMentors(combatConfig, tally)\n", ""),
+}
+assert not set(L4B_FIX_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4B_FIX_MUTATIONS)
+
+# The L4 W1b fix round 2 (docs/prompts/l4-w1b-fix2.md): G1 (a held hit keeps the knock rules: the
+# moment, the queue behind it, the release), G2 (each part of WeaponService's step contained), G3
+# (the review's two probes of the wire that gates every enemy hit), luau-engineer A's entries
+# (luau-a-2.md); s1 (payMentors' inputs) and s2 (no rule built without a claim), the designer's.
+# G1's are caught by tests_l4b (g); the WeaponService and WaveService ones by source.l4b's pins.
+L4B_FIX2_MUTATIONS = {
+    'l4b g1: a released knock voids nothing waiting behind it': (VITALS, '\t\tfor _, other in vitals.waiting do\n\t\t\tif struckBy(other, at) then', '\t\tfor _, other in vitals.waiting do\n\t\t\tif false then'),
+    "l4b g1: a released knock's i-frames from the release": (VITALS, 'grantIframes(player, knockIframes, at)', 'grantIframes(player, knockIframes)'),
+    "l4b g1: a released knock's window from the release": (VITALS, 'vitals.knockUntil = at + knockIframes', 'vitals.knockUntil = now + knockIframes'),
+    'l4b g1: a knock voids what joined the queue after it': (VITALS, 'return other.strike.at <= at and other.queuedAt <= at', 'return other.strike.at <= at'),
+    'l4b g1: a waiting decision judged at the release': (VITALS, 'held, position, at = hold.inShape, hold.position, hold.at', 'held, position = hold.inShape, hold.position'),
+    'l4b g1: the release asks no window again': (VITALS, '\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n', ''),
+    # Re-aimed in fix round 3 (H2: the release puts a still-waiting entry back on the front).
+    'l4b g1: the release drops one that still waits': (VITALS, '\t\tif decide(config, entry, now) then\n\t\t\ttable.insert(list, 1, entry)\n\t\t\treturn\n\t\tend\n', '\t\tdecide(config, entry, now)\n'),
+    'l4b g1: ClearThreats keeps the waiting': (VITALS, '\t\ttable.clear(vitals.waiting)\n', ''),
+    'l4b g1: what travels never waits behind': (VITALS, 'and (#vitals.waiting > 0 or awaitsDash(player, impactAt, limit, now))', 'and awaitsDash(player, impactAt, limit, now)'),
+    'l4b g1: the knock window only at the first try': (VITALS, '\tif at < vitals.knockUntil then\n\t\tentry.covered = true', '\tif hold == nil and at < vitals.knockUntil then\n\t\tentry.covered = true'),
+    'l4b g1: rule at the release': (VITALS, 'local verdict = rule(config, vitals, strike, held, voided, position, humanoid, at, now)', 'local verdict = rule(config, vitals, strike, held, voided, position, humanoid, now, now)'),
+    'l4b g1: regen from the release': (VITALS, 'vitals.lastHurtAt = math.max(vitals.lastHurtAt, at)', 'vitals.lastHurtAt = now'),
+    'l4b g1: the down runs from the release': (VITALS, 'vitals.downUntil = at + downSeconds', 'vitals.downUntil = now + downSeconds'),
+    'l4b g1: upAt from the release': (VITALS, 'fx.upAt = Workspace:GetServerTimeNow() + downSeconds - (now - at)', 'fx.upAt = Workspace:GetServerTimeNow() + downSeconds'),
+    "l4b g1: the hold's moment wrong": (VITALS, 'entry.hold = { at = now, inShape = held', 'entry.hold = { at = now - 0.2, inShape = held'),
+    'l4b g1: the waiting never released': (VITALS, '\t\tif #vitals.waiting > 0 then\n\t\t\trelease(config, vitals, now)', '\t\tif false then\n\t\t\trelease(config, vitals, now)'),
+    "l4b g1: a travelling wait's moment its impact": (VITALS, '\t\t\t\tat = now,\n', '\t\t\t\tat = impactAt,\n'),
+    'l4b g1: a knock voids queued hits raised after it': (VITALS, '\t\t\tif other.vitals == vitals and struckBy(other, at) then', '\t\t\tif other.vitals == vitals and other.strike.at <= at then'),
+    'l4b g1: the down starts at the release': (VITALS, '\t\tvitals.downFrom = at\n', '\t\tvitals.downFrom = now\n'),
+    'l4b g3: step never connected': (WEAPON, '\tRunService.Heartbeat:Connect(step)\n', '\tRunService.Heartbeat:Connect(function() end)\n'),
+    'l4b g3: step returns before the proofs': (WEAPON, '\tlocal now = os.clock()\n\txpcall(trackAir, stepFailed, now, deltaTime)\n', '\tlocal now = os.clock()\n\tif #state.projectiles == 0 then\n\t\treturn\n\tend\n\txpcall(trackAir, stepFailed, now, deltaTime)\n'),
+    'l4b g2: the proofs unprotected': (WEAPON, '\txpcall(trackAir, stepFailed, now, deltaTime)\n', '\ttrackAir(now, deltaTime)\n'),
+    'l4b g2: VitalsService unprotected': (WEAPON, '\txpcall(VitalsService.Step, stepFailed, deltaTime)\n', '\tVitalsService.Step(deltaTime)\n'),
+    'l4b g2: the rest unprotected': (WEAPON, '\txpcall(stepRest, stepFailed, now, deltaTime)\n', '\tstepRest(now, deltaTime)\n'),
+    'l4b g2: the rest never runs': (WEAPON, '\txpcall(stepRest, stepFailed, now, deltaTime)\n', ''),
+    'l4b g2: the rest before VitalsService': (WEAPON, '\txpcall(VitalsService.Step, stepFailed, deltaTime)\n\txpcall(stepRest, stepFailed, now, deltaTime)\n', '\txpcall(stepRest, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n'),
+    "l4b s1: the total is the top damage": (
+        WAVE_SERVICE,
+        "\t\ttotal += damage\n",
+        "\t\ttotal = math.max(total, damage)\n",
+    ),
+    "l4b s1: the total starts at one": (
+        WAVE_SERVICE,
+        "\tlocal total = 0\n\tfor _, damage in tally do\n",
+        "\tlocal total = 1\n\tfor _, damage in tally do\n",
+    ),
+    "l4b s1: a bonus of nothing is paid": (
+        WAVE_SERVICE,
+        "\t\tif bonus <= 0 then\n\t\t\tcontinue\n\t\tend\n",
+        "",
+    ),
+    "l4b s1: the guard on nothing turns nobody back": (
+        WAVE_SERVICE,
+        "\t\tif bonus <= 0 then\n\t\t\tcontinue\n",
+        "\t\tif bonus <= 0 then\n",
+    ),
+    "l4b s2: a rule built with no claim": (
+        WEAPON,
+        "\tif shooter == nil or shooter.dashClaimAt == nil then\n\t\treturn 0, 0, 0\n",
+        "\tif shooter == nil then\n\t\treturn 0, 0, 0\n",
+    ),
+}
+assert not set(L4B_FIX2_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX2_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4B_FIX2_MUTATIONS)
+
+# The L4 W1b fix round 3 (docs/prompts/l4-w1b-fix3.md): H1 (a stage's clear waits while a fighter's
+# decision waits for a dash claim: VitalsService.HasWaiting, WaveService.fieldHeld), H2 (each entry
+# leaves its list before it is decided; each shooter's air tracking under its own xpcall), luau-engineer
+# A's entries (luau-a-3.md) and B's (luau-b-3.md); and m2 (5-fix2-diff.md): G2's warn handler, the
+# review's three probes. VitalsService's are caught by tests_l4b (g); WeaponService's and WaveService's by
+# source.l4b's pins (trackEach, trackOneDefined, trackOneNames, stepFailedBody, h1*).
+L4B_FIX3_MUTATIONS = {
+    'l4b h2: the release takes an entry out only once it is decided': (VITALS, '\t\ttable.remove(list, 1)\n\t\tif not entry.covered then\n\t\t\t-- Its whole span is past; asked again now, the windows a proof or a released knock\n\t\t\t-- opened from earlier moments count.\n\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n\t\tend\n\t\tif decide(config, entry, now) then\n\t\t\ttable.insert(list, 1, entry)\n\t\t\treturn\n\t\tend\n\t\tentry = list[1]\n', '\t\tif not entry.covered then\n\t\t\t-- Its whole span is past; asked again now, the windows a proof or a released knock\n\t\t\t-- opened from earlier moments count.\n\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n\t\tend\n\t\tif decide(config, entry, now) then\n\t\t\treturn\n\t\tend\n\t\ttable.remove(list, 1)\n\t\tentry = list[1]\n'),
+    'l4b h2: the release puts a held entry back behind the others': (VITALS, '\t\t\ttable.insert(list, 1, entry)\n', '\t\t\ttable.insert(list, entry)\n'),
+    'l4b h2: the queue takes an entry out only once it is decided': (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n\t\tend\n', '\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n\t\tend\n\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n'),
+    "l4b h2: the queue asks a due entry's i-frames before taking it out": (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n', '\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n'),
+    'l4b h2: the queue never takes a due entry out': (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n', '\t\tindex += 1\n'),
+    'l4b h1: HasWaiting(player) never true': (VITALS, '\t\treturn vitals ~= nil and #vitals.waiting > 0\n', '\t\treturn false\n'),
+    'l4b h1: HasWaiting() never true': (VITALS, '\t\tif #vitals.waiting > 0 then\n\t\t\treturn true\n', '\t\tif false then\n\t\t\treturn true\n'),
+    'l4b h1: HasWaiting(player) answers for anyone': (VITALS, '\tif player ~= nil then\n\t\tlocal vitals = vitalsByPlayer[player]\n\t\treturn vitals', '\tif false then\n\t\tlocal vitals = vitalsByPlayer[player]\n\t\treturn vitals'),
+    'l4b h1: HasWaiting reads the queue, not the waiting': (VITALS, '\t\treturn vitals ~= nil and #vitals.waiting > 0\n', '\t\treturn vitals ~= nil and #pending > 0\n'),
+    "l4b h2: one shooter's throw stops the rest": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\ttrackOne(player, shooter)\n\tend\n'),
+    "l4b h2: a shooter's throw ends the loop": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\tif not xpcall(trackOne, stepFailed, player, shooter) then\n\t\t\tbreak\n\t\tend\n\tend\n'),
+    'l4b h2: no shooter is tracked': (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', ''),
+    "l4b h2: a shooter's throw is swallowed": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, function() end, player, shooter)\n\tend\n'),
+    'l4b h2: trackOne holds nothing (the body back in the loop, unprotected)': (WEAPON, '\tlocal function trackOne(player: Player, shooter: Shooter): ()\n', '\tlocal function trackOne(_player: Player, _shooter: Shooter): () end\n\tlocal function trackTwo(player: Player, shooter: Shooter): ()\n'),
+    'l4b m2: every frame warns (the note deleted)': (WEAPON, '\tstate.stepErrors[message] = true\n', ''),
+    'l4b m2: nothing is ever warned (the guard always true)': (WEAPON, '\tif state.stepErrors[message] then\n\t\treturn\n\tend\n', '\tif true then\n\t\treturn\n\tend\n'),
+    'l4b m2: a throw is swallowed (the warn deleted)': (WEAPON, '\twarn(debug.traceback(`[WeaponService] Heartbeat: {message}`, 2))\n', ''),
+    'l4b h1: a waiting blow never found': (WAVE_SERVICE, '\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then\n', '\t\tif false then\n'),
+    "l4b h1: the down's advance forgets the tick's finding": (WAVE_SERVICE, '\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n', '\t\treturn waits and StageFlow.FieldClear(plan, flow, input)\n'),
+    "l4b h1: the down's advance never holds": (WAVE_SERVICE, '\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n', '\t\treturn false\n'),
+    "l4b h1: the tick's finding never noted": (WAVE_SERVICE, '\trun.blowWaits = waits\n', ''),
+    'l4b h1: the deferral never starts over': (WAVE_SERVICE, '\t\trun.heldSince = 0\n', ''),
+    "l4b h1: the deferral's start never noted": (WAVE_SERVICE, '\t\trun.heldSince = now\n', ''),
+    'l4b h1: the deferral never capped': (WAVE_SERVICE, '\treturn now - run.heldSince <= lapse + delta\n', '\treturn true\n'),
+    'l4b h1: the cap a frame short': (WAVE_SERVICE, '\treturn now - run.heldSince <= lapse + delta\n', '\treturn now - run.heldSince <= lapse\n'),
+    'l4b h1: the cap at nothing': (WAVE_SERVICE, '\tlocal lapse = if rule ~= nil then rule.lapse else 0\n', '\tlocal lapse = 0\n'),
+    'l4b h1: a waiting blow holds a field that is not clear': (WAVE_SERVICE, '\tif not waits or not StageFlow.FieldClear(plan, flow, input) then\n', '\tif not waits then\n'),
+    'l4b h1: the hold never asked': (WAVE_SERVICE, '\tif fieldHeld(plan, flow, input, now, delta) then\n', '\tif false then\n'),
+    'l4b h1: the hold changes nothing': (WAVE_SERVICE, '\t\tinput.spawningDone = false\n', ''),
+    'l4b h1: the hold after StageFlow decided': (WAVE_SERVICE, '\tif fieldHeld(plan, flow, input, now, delta) then\n\t\t-- StageFlow.FieldClear reads this first: the field does not read clear.\n\t\tinput.spawningDone = false\n\tend\n\tlocal actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)\n', '\tlocal actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)\n\tif fieldHeld(plan, flow, input, now, delta) then\n\t\t-- StageFlow.FieldClear reads this first: the field does not read clear.\n\t\tinput.spawningDone = false\n\tend\n'),
+    'l4b h1: the tick passes no frame': (WAVE_SERVICE, '\tadvance(combatConfig, delta)\n', '\tadvance(combatConfig)\n'),
+    "l4b h1: the down's advance passes a frame": (WAVE_SERVICE, '\t\tadvance(combatConfig)\n', '\t\tadvance(combatConfig, 0)\n'),
+    'l4b h1: the tick told a frame of nothing': (WAVE_SERVICE, '\t\ttick(delta)\n', '\t\ttick(0)\n'),
+    'l4b h1: a run starts with the deferral spent': (WAVE_SERVICE, '\t\theldSince = 0,\n', '\t\theldSince = 1,\n'),
+    'l4b h1: a run starts with a blow found': (WAVE_SERVICE, '\t\tblowWaits = false,\n', '\t\tblowWaits = true,\n'),
+}
+assert not set(L4B_FIX3_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX3_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4B_FIX3_MUTATIONS)
+
 
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when

@@ -13,14 +13,18 @@
 -- This file builds nothing of a level and decides nowhere a body goes. LevelService owns the
 -- Instances; WaveService hands in the placer (StageFlow's rule for where a member belongs);
 -- MoveMember here is the one function that moves a member's body. The C1 arena builder stays
--- for the range alone (BuildProvingArena, ProvingSpawn), unchanged.
+-- for the range alone (BuildProvingArena, ProvingSpawn).
 --
--- The weapons decide max HP: a human's Humanoid is VitalsService's alone (P5 ruling 11); this
--- file sizes only the debug bots.
+-- The weapons decide max HP: a member's Humanoid is VitalsService's alone (P5 ruling 11).
 --
 -- The run's numbers in RunState are pushed here by WaveService through SetRunFields: WaveService
 -- sits above this service in the boot order, so it cannot be required from here, and one payload
 -- builder for the whole HUD is worth the indirection.
+--
+-- L4B-8 (docs/prompts/l4-w1b-contract.md §5): a floor's region cells ride on a member's first
+-- RunState of each floor set (RunFields.floorsSeq) and never again in it; every other RunState
+-- carries the floors without them. `cellsSent` is what each member has been sent, cleared at the
+-- admit and the removal so every arrival gets them once.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -29,12 +33,12 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
+local RunFloors = require(sharedFolder:WaitForChild("RunFloors"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local RunRegistry = require(script.Parent:WaitForChild("RunRegistry"))
-local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
 local BarrierGroups = require(script.Parent:WaitForChild("BarrierGroups"))
 
 -- The range's degrade arena: no Layouts/Arenas/<name> module means one pad and no walls.
@@ -46,13 +50,10 @@ local SPAWN_SIZE = Vector3.new(6, 1, 6)
 -- Studs above a feet point a character is placed at, so nobody is put inside the geometry.
 local SPAWN_CLEARANCE = 4
 local WALL_THICKNESS = 1
-local BOT_USER_ID_BASE = -1000
-local DEFAULT_BOT_HP = 150
 -- What MoveMember writes on the character it moved, for the client that owns the body: where
 -- its feet were put (a Vector3) and a count that goes up by one with every move.
 local PLACED_ATTRIBUTE = "Placed"
 local PLACED_SEQ_ATTRIBUTE = "PlacedSeq"
-local NEUTRAL_EMPOWER = 1
 -- Shown as the session card's title when Expeditions.json is missing.
 local DEFAULT_SESSION_NAME = "Expeditions"
 
@@ -63,13 +64,12 @@ export type Admission = "ok" | "full" | "over" | "locked"
 -- still counted, their membership and any expected-list entry ignored), so one Studio client can
 -- see the verdict a real joiner would get without anyone being sent home.
 export type AdmissionHint = { probe: boolean }
--- What is being played (L1 ruling 3). `mission` = the mission whose record the level writes.
+-- What is being played (L1 ruling 3).
 export type LevelInfo = {
 	id: string,
 	name: string,
 	difficulty: string,
 	material: string,
-	mission: string?,
 }
 
 local partyOrder: { number } = {}
@@ -120,6 +120,9 @@ local play = {
 	-- across their characters and for the life of the server (a failed trip home re-admits the
 	-- same client), so one client never sees a value twice.
 	placedSeq = {} :: { [number]: number },
+	-- L4B-8: per userId, the floor set (RunFields.floorsSeq) whose cells that member was sent;
+	-- nil = none yet. Cleared at Admit and Remove, so every arrival gets them once.
+	cellsSent = {} :: { [number]: number },
 }
 
 -- Handed in by the services above this one in the boot order.
@@ -179,8 +182,10 @@ export type RunFields = {
 	left: number,
 	bossName: string?,
 	gateIn: number?,
-	-- L1b: every camp's floor in floor-index order ({} in the lobby), and the plan's population.
+	-- L1b: every camp's floor in floor-index order ({} in the lobby), cells included, and the
+	-- plan's population. L4B-8: `floorsSeq` names this floor set; it changes with every new set.
 	floors: { Types.RunFloor },
+	floorsSeq: number,
 	maxAlive: number,
 }
 local runFields: RunFields = {
@@ -205,12 +210,13 @@ local runFields: RunFields = {
 	bossName = nil,
 	gateIn = nil,
 	floors = {},
+	floorsSeq = 0,
 	maxAlive = 0,
 }
 
 local ArenaService = {}
 
--- The range's arena builder (C1, unchanged) --------------------------------------------------
+-- The range's arena builder (C1) ------------------------------------------------------------
 
 local function colorOf(rgb: { number }): Color3
 	return Color3.fromRGB(rgb[1] or 255, rgb[2] or 255, rgb[3] or 255)
@@ -233,12 +239,6 @@ local function newPart(name: string, size: Vector3, position: Vector3, parent: I
 	part.Anchored = true
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
-	-- The arena's own collision group, kept from C1 (EnemyService registers it; it is never
-	-- Init'd since P5, so the group is the default one until L4 removes this).
-	local group = EnemyService.ArenaCollisionGroup()
-	if group ~= nil then
-		part.CollisionGroup = group
-	end
 	part.Parent = parent
 	return part
 end
@@ -297,8 +297,6 @@ local function buildFallbackArena(folder: Folder): ()
 	arena.floorHalfSize = Vector3.new(FALLBACK_FLOOR_SIZE / 2, 0, FALLBACK_FLOOR_SIZE / 2)
 	buildLobbyPad(folder, Vector3.new(0, 0.5, 0), Color3.fromRGB(96, 104, 120))
 	arena.playerSpawns = { arena.lobbyPosition }
-	EnemyService.SetSpawnPoints({})
-	EnemyService.SetArenaGeometry({}, {}, floor)
 end
 
 local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
@@ -309,7 +307,6 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 	floor.Material = materialOf(layout.floor.material)
 	arena.floorHalfSize = Vector3.new(sizeX / 2, 0, sizeZ / 2)
 
-	local fence: { BasePart } = {}
 	local wall = layout.wall
 	if wall ~= nil then
 		local height = wall.height
@@ -339,12 +336,11 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 			local part = newPart(`Fence{index}`, side.size, side.position, folder)
 			part.Color = color
 			part.Material = material
-			table.insert(fence, part)
 		end
 		-- The invisible wall behind the fence (P5 review): from the floor up to `barrierHeight`,
 		-- its inner face on the fence's outer face, `barrierThickness` deep outward, the two Z
 		-- sides running past the X sides so the corners close. Only characters collide with it
-		-- (BarrierGroups), and it is not handed to EnemyService as a wall.
+		-- (BarrierGroups).
 		local barrierHeight = wall.barrierHeight
 		if barrierHeight ~= nil and barrierHeight > 0 and BarrierGroups.Ensure() then
 			local depth = math.max(wall.barrierThickness or WALL_THICKNESS, WALL_THICKNESS)
@@ -378,8 +374,6 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 		end
 	end
 
-	-- Handed to EnemyService: only real cover sends an enemy to the pathfinder.
-	local cover: { BasePart } = {}
 	for index, obstacle in layout.obstacles do
 		local part = newPart(
 			`Obstacle{index}`,
@@ -389,9 +383,7 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 		)
 		part.Color = colorOf(obstacle.color)
 		part.Material = materialOf(obstacle.material)
-		table.insert(cover, part)
 	end
-	EnemyService.SetArenaGeometry(cover, fence, floor)
 
 	buildLobbyPad(
 		folder,
@@ -406,12 +398,6 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 	if #arena.playerSpawns == 0 then
 		arena.playerSpawns = { arena.lobbyPosition }
 	end
-
-	local enemyPoints: { Vector3 } = {}
-	for _, point in layout.enemySpawns do
-		table.insert(enemyPoints, Vector3.new(point.x, 0, point.z))
-	end
-	EnemyService.SetSpawnPoints(enemyPoints)
 end
 
 -- The range's folder, made on first use: a mission server never has one.
@@ -475,18 +461,6 @@ function ArenaService.ProvingSpawn(): (SpawnLocation?, CFrame)
 end
 
 -- Members and their summaries ----------------------------------------------------------------
-
--- Bots only (P5 ruling 11): a human's maximum is VitalsService's, through the character hook.
-local function applyMaxHp(member: Types.RunMember): ()
-	local humanoid = member.humanoid
-	if humanoid == nil or not member.bot then
-		return
-	end
-	local config = combatConfig
-	local botHp = if config ~= nil then config.debug.botHp else DEFAULT_BOT_HP
-	humanoid.MaxHealth = botHp
-	humanoid.Health = botHp
-end
 
 local function emptySummary(missionId: string): Types.RunSummary
 	return {
@@ -552,47 +526,31 @@ end
 
 local function isDown(member: Types.RunMember): boolean
 	local source = hooks.down
-	return not member.bot and source ~= nil and source(member.userId)
+	return source ~= nil and source(member.userId)
 end
 
 local function isEngaged(member: Types.RunMember): boolean
 	local source = hooks.engaged
-	return not member.bot and source ~= nil and source(member.userId)
+	return source ~= nil and source(member.userId)
 end
 
--- L1 ruling 7: the host when the host is in the roster, else the first human in party order.
--- 0 with no human member.
+-- L1 ruling 7: the host when the host is in the roster, else the first member in party order.
+-- 0 with nobody in it.
 function ArenaService.LeaderUserId(): number
-	local host = party[session.hostUserId]
-	if host ~= nil and not host.bot then
-		return host.userId
+	if party[session.hostUserId] ~= nil then
+		return session.hostUserId
 	end
-	for _, userId in partyOrder do
-		local member = party[userId]
-		if member ~= nil and not member.bot then
-			return userId
-		end
-	end
-	return 0
+	return partyOrder[1] or 0
 end
 
 local function memberEntry(member: Types.RunMember, leader: number): Types.PartyMember
 	local humanoid = member.humanoid
-	local now = os.clock()
 	return {
 		userId = member.userId,
 		name = member.name,
 		hp = if humanoid ~= nil then humanoid.Health else 0,
 		maxHp = if humanoid ~= nil then humanoid.MaxHealth else 0,
-		-- L1 ruling 7: there is no Ready button; the field goes in L4.
-		ready = false,
 		alive = ArenaService.IsAlive(member),
-		bot = member.bot,
-		abilityReadyIn = {
-			melee = math.max(0, member.abilityReadyAt.melee - now),
-			ranged = math.max(0, member.abilityReadyAt.ranged - now),
-		},
-		stance = member.stance,
 		-- The leader: the one whose Depart and Abandon the server takes.
 		host = member.userId == leader,
 		waiting = member.waiting,
@@ -603,7 +561,8 @@ local function memberEntry(member: Types.RunMember, leader: number): Types.Party
 end
 
 -- One payload for the whole HUD, so the client never derives a phase. `summary` and `result` are
--- one member's own (the summary phase, and the card on the way home).
+-- one member's own (the summary phase, and the card on the way home). Its floors never carry
+-- their cells (L4B-8): only the sends below add them, once per member per floor set.
 function ArenaService.BuildRunState(
 	phase: Types.RunPhase,
 	summary: Types.RunSummary?,
@@ -618,10 +577,10 @@ function ArenaService.BuildRunState(
 			table.insert(members, memberEntry(member, leader))
 		end
 	end
+	local floors = RunFloors.Attach(runFields.floors, runFields.floorsSeq, runFields.floorsSeq)
 	return {
 		kind = "run",
 		phase = phase,
-		overdrive = false,
 		wave = runFields.wave,
 		waves = runFields.waves,
 		alive = runFields.alive,
@@ -646,7 +605,8 @@ function ArenaService.BuildRunState(
 		left = runFields.left,
 		bossName = runFields.bossName,
 		gateIn = runFields.gateIn,
-		floors = runFields.floors,
+		floors = floors,
+		floorsSeq = runFields.floorsSeq,
 		maxAlive = runFields.maxAlive,
 		leaderUserId = leader,
 		result = result,
@@ -683,24 +643,38 @@ function ArenaService.GetSessionSummary(userId: number): Types.RunSummary
 	return summary
 end
 
+-- L4B-8: every RunState a member is sent goes through here. The member's first one of a floor
+-- set carries the cells (a copy of `runState` whose floors have them) and notes the set as sent;
+-- every later one is `runState` itself, whose floors BuildRunState built without them. A member
+-- already noted for this set never reaches Attach: it copies every floor, and at
+-- remotes.combatStateHz per member that copy would only be dropped.
+local function sendRunState(player: Player, userId: number, runState: Types.RunState): ()
+	local seq = runFields.floorsSeq
+	local sent = runState
+	if play.cellsSent[userId] ~= seq then
+		local floors, cellsWent = RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])
+		if cellsWent then
+			sent = table.clone(runState)
+			sent.floors = floors
+		end
+		play.cellsSent[userId] = seq
+	end
+	RemoteService.FireClient(player, "RunState", sent)
+end
+
 -- Each member's own card, with the run's result. A member with no result (admitted during the
 -- summary) is told the phase and gets no card.
 local function sendSummaryTo(player: Player, userId: number): ()
 	local result = play.results[userId]
 	local summary = if result ~= nil then ArenaService.GetSummary(userId) else nil
-	RemoteService.FireClient(
-		player,
-		"RunState",
-		ArenaService.BuildRunState("summary", summary, result)
-	)
+	sendRunState(player, userId, ArenaService.BuildRunState("summary", summary, result))
 end
 
 function ArenaService.BroadcastSummary(): ()
 	for _, userId in partyOrder do
 		local member = party[userId]
-		local player = if member ~= nil then member.player else nil
-		if player ~= nil then
-			sendSummaryTo(player, userId)
+		if member ~= nil then
+			sendSummaryTo(member.player, userId)
 		end
 	end
 end
@@ -714,9 +688,8 @@ function ArenaService.Broadcast(phase: Types.RunPhase): ()
 	local runState = ArenaService.BuildRunState(phase, nil, nil)
 	for _, userId in partyOrder do
 		local member = party[userId]
-		local player = if member ~= nil then member.player else nil
-		if player ~= nil then
-			RemoteService.FireClient(player, "RunState", runState)
+		if member ~= nil then
+			sendRunState(member.player, userId, runState)
 		end
 	end
 end
@@ -778,17 +751,17 @@ function ArenaService.SetCharacterHook(hook: (player: Player, character: Model) 
 	hooks.character = hook
 end
 
--- Called after every move this service makes of a human member's body.
+-- Called after every move this service makes of a member's body.
 function ArenaService.SetMovedHook(hook: (player: Player) -> ()): ()
 	hooks.moved = hook
 end
 
--- Fills PartyMember.down (always false for bots).
+-- Fills PartyMember.down.
 function ArenaService.SetDownSource(source: (userId: number) -> boolean): ()
 	hooks.down = source
 end
 
--- Fills PartyMember.engaged (L1b; always false for bots, and without a source).
+-- Fills PartyMember.engaged (L1b; always false without a source).
 function ArenaService.SetEngagedSource(source: (userId: number) -> boolean): ()
 	hooks.engaged = source
 end
@@ -814,21 +787,6 @@ end
 
 -- The registry -------------------------------------------------------------------------------
 
-local function humanIds(): { number }
-	local ids: { number } = {}
-	for _, userId in partyOrder do
-		local member = party[userId]
-		if member ~= nil and not member.bot then
-			table.insert(ids, userId)
-		end
-	end
-	return ids
-end
-
-local function humanCount(): number
-	return #humanIds()
-end
-
 local function isExpected(userId: number): boolean
 	local ticket = session.ticket
 	return ticket ~= nil and table.find(ticket.expected, userId) ~= nil
@@ -850,7 +808,7 @@ local function reservedSeats(except: number?): number
 	return reserved
 end
 
--- Humans + bots + seats held for the departing party. Also what the registry advertises as
+-- Members + seats held for the departing party. Also what the registry advertises as
 -- partySize, so the hub's `full` pre-filter agrees with the admission check here.
 local function seatsTaken(except: number?): number
 	return #partyOrder + reservedSeats(except)
@@ -913,7 +871,8 @@ local function publishNow(): ()
 		partySize = seatsTaken(nil),
 		accessCode = ticket.accessCode,
 		public = ticket.public,
-		memberIds = humanIds(),
+		-- A copy: Publish yields, and the roster may change while it does.
+		memberIds = table.clone(partyOrder),
 	})
 end
 
@@ -968,18 +927,6 @@ local function resetSession(): ()
 	-- Queued, not called: this runs from PlayerRemoving and from ReturnService immediately
 	-- before DataService.Release, and the registry retry backoff must never delay a save.
 	clearRun(session.hostUserId)
-	-- Debug bots belong to the session: left behind they would hold seats in the next one.
-	for _, userId in table.clone(partyOrder) do
-		local member = party[userId]
-		if member ~= nil and member.bot then
-			local character = member.character
-			if character ~= nil then
-				character:Destroy()
-			end
-			party[userId] = nil
-			table.remove(partyOrder, table.find(partyOrder, userId) :: number)
-		end
-	end
 	memberCache = nil
 	session.open = false
 	session.missionId = ""
@@ -1031,9 +978,8 @@ function ArenaService.MoveMember(member: Types.RunMember, feet: Vector3): boolea
 	character:SetAttribute(PLACED_ATTRIBUTE, feet)
 	character:SetAttribute(PLACED_SEQ_ATTRIBUTE, seq)
 	local hook = hooks.moved
-	local player = member.player
-	if hook ~= nil and player ~= nil then
-		hook(player)
+	if hook ~= nil then
+		hook(member.player)
 	end
 	return true
 end
@@ -1085,12 +1031,10 @@ end
 local function watchCharacter(member: Types.RunMember, character: Model): ()
 	member.character = character
 	member.humanoid = character:FindFirstChildOfClass("Humanoid")
-	applyMaxHp(member)
-	local player = member.player
-	local connections = if player ~= nil then characterConnections[player] else nil
+	local connections = characterConnections[member.player]
 	-- First, and whatever the body still lacks: a character whose Humanoid has not arrived yet
 	-- must already be stopped by a camp's invisible wall, or it walks out of a closed camp.
-	if player ~= nil and BarrierGroups.Ensure() then
+	if BarrierGroups.Ensure() then
 		-- Every part of the body, and whatever it is given later (accessories, tools): only this
 		-- group is stopped by a camp's invisible wall.
 		for _, descendant in character:GetDescendants() do
@@ -1197,6 +1141,9 @@ function ArenaService.Admit(player: Player): ()
 	if session.firstArrivalAt == 0 then
 		session.firstArrivalAt = os.clock()
 	end
+	-- L4B-8: whatever this client held, its next RunState carries the cells (a rejoin after a
+	-- failed trip home is the same client, and its floors may be another set's by now).
+	play.cellsSent[player.UserId] = nil
 
 	local member = byPlayer[player]
 	if member == nil then
@@ -1205,21 +1152,11 @@ function ArenaService.Admit(player: Player): ()
 			userId = player.UserId,
 			name = player.Name,
 			player = player,
-			bot = false,
-			ready = false,
 			character = nil,
 			humanoid = nil,
-			stance = "melee",
-			abilityReadyAt = { melee = 0, ranged = 0 },
-			godMode = false,
-			respawnAt = 0,
-			spawnIndex = 0,
 			waiting = false,
 			-- The hub refreshed incomeAtSave at departure, so this is the city's current rate.
 			incomeRate = if state ~= nil then state.incomeAtSave else 0,
-			drawStartedAt = 0,
-			empoweredUntil = 0,
-			empowerMult = NEUTRAL_EMPOWER,
 		}
 		member = newMember
 		party[player.UserId] = newMember
@@ -1299,10 +1236,6 @@ function ArenaService.IsExpected(userId: number): boolean
 	return isExpected(userId)
 end
 
-function ArenaService.BotCount(): number
-	return #partyOrder - humanCount()
-end
-
 function ArenaService.GetHostUserId(): number
 	return session.hostUserId
 end
@@ -1311,7 +1244,7 @@ end
 -- BuildRunState projects.
 --
 -- Cached and returned BY REFERENCE: the run loop asks for it several times a frame. The roster
--- only changes on Admit/Remove/AddBot/RemoveBot, which is where the cache is dropped. Callers
+-- only changes on Admit/Remove, which is where the cache is dropped. Callers
 -- iterate it; none of them may mutate it.
 function ArenaService.GetMembers(): { Types.RunMember }
 	local cached = memberCache
@@ -1337,7 +1270,7 @@ function ArenaService.GetMemberFor(player: Player): Types.RunMember?
 	return byPlayer[player]
 end
 
--- Humans + bots, waiting or not: the count wave size and boss HP scale by.
+-- Every member, waiting or not: the count wave size and boss HP scale by.
 function ArenaService.PartySize(): number
 	return #partyOrder
 end
@@ -1391,103 +1324,6 @@ function ArenaService.MarkDied(userId: number): ()
 	sessionSummaryFor(userId).died = true
 end
 
--- Debug bots (inert until L4) -----------------------------------------------------------------
-
--- A bot's feet: where the placer would put it, else the origin.
-local function placeBot(member: Types.RunMember, model: Model): ()
-	local placer = hooks.placer
-	local feet = Vector3.zero
-	if placer ~= nil then
-		feet, member.waiting = placer(member)
-	end
-	model:PivotTo(CFrame.new(feet + Vector3.new(0, SPAWN_CLEARANCE, 0)))
-end
-
--- Debug bots (Studio only): server rigs that hold a party slot. The crowd cannot target them,
--- so DebugService's lever refuses to add any (P5 ruling 24); these stay until L4 decides.
-function ArenaService.AddBot(index: number): Types.RunMember?
-	local userId = BOT_USER_ID_BASE - index
-	if party[userId] ~= nil then
-		return party[userId]
-	end
-	local config = combatConfig
-	if config == nil then
-		return nil
-	end
-	local model, humanoid, _root = EnemyService.BuildRig(colorOf(config.enemy.botColor))
-	model.Name = `Bot_{index}`
-	local member: Types.RunMember = {
-		userId = userId,
-		name = `Bot {index}`,
-		player = nil,
-		bot = true,
-		ready = true,
-		character = model,
-		humanoid = humanoid,
-		stance = "melee",
-		abilityReadyAt = { melee = 0, ranged = 0 },
-		godMode = false,
-		respawnAt = 0,
-		spawnIndex = index,
-		waiting = false,
-		incomeRate = config.debug.botIncomeRate,
-		drawStartedAt = 0,
-		empoweredUntil = 0,
-		empowerMult = NEUTRAL_EMPOWER,
-	}
-	placeBot(member, model)
-	model.Parent = workspace
-	applyMaxHp(member)
-	party[userId] = member
-	table.insert(partyOrder, userId)
-	memberCache = nil
-	publishRun()
-	ArenaService.Broadcast(runFields.phase)
-	return member
-end
-
-function ArenaService.RemoveBot(index: number): ()
-	local userId = BOT_USER_ID_BASE - index
-	local member = party[userId]
-	if member == nil then
-		return
-	end
-	local character = member.character
-	if character ~= nil then
-		character:Destroy()
-	end
-	party[userId] = nil
-	play.runSummaries[userId] = nil
-	play.sessionSummaries[userId] = nil
-	local position = table.find(partyOrder, userId)
-	if position ~= nil then
-		table.remove(partyOrder, position)
-	end
-	memberCache = nil
-	publishRun()
-	ArenaService.Broadcast(runFields.phase)
-end
-
--- Bots have no Roblox respawn path of their own.
-function ArenaService.RespawnBot(member: Types.RunMember): ()
-	local config = combatConfig
-	if not member.bot or config == nil then
-		return
-	end
-	local old = member.character
-	if old ~= nil then
-		old:Destroy()
-	end
-	local model, humanoid, _root = EnemyService.BuildRig(colorOf(config.enemy.botColor))
-	model.Name = `Bot_{member.spawnIndex}`
-	placeBot(member, model)
-	model.Parent = workspace
-	member.character = model
-	member.humanoid = humanoid
-	member.respawnAt = 0
-	applyMaxHp(member)
-end
-
 -- Leaving --------------------------------------------------------------------------------------
 
 -- Leaving, teleporting home, or disconnecting all end here. The session (and its registry
@@ -1503,6 +1339,7 @@ function ArenaService.Remove(player: Player): ()
 	play.sessionSummaries[member.userId] = nil
 	play.admittedAt[member.userId] = nil
 	play.results[member.userId] = nil
+	play.cellsSent[member.userId] = nil
 	local index = table.find(partyOrder, member.userId)
 	if index ~= nil then
 		table.remove(partyOrder, index)
@@ -1516,7 +1353,7 @@ function ArenaService.Remove(player: Player): ()
 		characterConnections[player] = nil
 	end
 
-	if humanCount() == 0 then
+	if #partyOrder == 0 then
 		resetSession()
 		return
 	end
@@ -1528,7 +1365,7 @@ end
 -- being admitted: Remove never ran for them, so the session they opened would otherwise linger.
 -- Never during the first ticket read, whose arrival is about to be admitted.
 function ArenaService.ResetIfEmpty(): ()
-	if not session.open or session.ticketPending or humanCount() > 0 then
+	if not session.open or session.ticketPending or #partyOrder > 0 then
 		return
 	end
 	resetSession()

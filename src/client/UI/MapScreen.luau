@@ -94,7 +94,7 @@ export type MapScreenHandle = {
 }
 
 -- One difficulty a level offers, as the card shows it.
-type Difficulty = { id: string, name: string, tier: number?, rewardMult: number }
+type Difficulty = { id: string, name: string, tier: number, rewardMult: number }
 
 -- One secret on the card (MapSecretState), as checked off the network.
 type SecretMark = { id: string, name: string, needs: string, found: boolean }
@@ -308,37 +308,24 @@ local function starRow(
 	return row, items
 end
 
--- What a level offers, in the map's difficulty order. A level file that names a `mission` (the
--- Raider Arena, ruling 27) has no table of its own: it plays at the first difficulty, at x1,
--- with the file's recommended tier. No file (a node not built yet) offers nothing.
+-- What a level offers, in the map's difficulty order. No file (a node not built yet), or a file
+-- with no difficulty table, offers nothing.
 local function difficultiesOf(map: Types.ExpeditionsConfig, node: Types.MapNode): { Difficulty }
 	local out: { Difficulty } = {}
 	local levelId = node.level
 	local file = if levelId ~= nil then Catalog.GetLevelFile(levelId) else nil
-	if file == nil then
+	local defs = if file ~= nil then file.difficulties else nil
+	if defs == nil then
 		return out
 	end
-	local defs = file.difficulties
-	if defs ~= nil then
-		for _, id in map.difficulties do
-			local def = defs[id]
-			if def ~= nil then
-				table.insert(out, {
-					id = id,
-					name = map.difficultyNames[id] or id,
-					tier = def.recommendedTier,
-					rewardMult = def.rewardMult,
-				})
-			end
-		end
-	elseif file.mission ~= nil then
-		local first = map.difficulties[1]
-		if first ~= nil then
+	for _, id in map.difficulties do
+		local def = defs[id]
+		if def ~= nil then
 			table.insert(out, {
-				id = first,
-				name = map.difficultyNames[first] or first,
-				tier = file.recommendedTier,
-				rewardMult = 1,
+				id = id,
+				name = map.difficultyNames[id] or id,
+				tier = def.recommendedTier,
+				rewardMult = def.rewardMult,
 			})
 		end
 	end
@@ -1059,8 +1046,7 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 					picked = entry
 				end
 				item.name.Text = entry.name
-				local tier = entry.tier
-				item.tier.Text = if tier ~= nil then TIER_PREFIX .. Format.Cash(tier) else ""
+				item.tier.Text = TIER_PREFIX .. Format.Cash(entry.tier)
 				item.mult.Text = "×" .. Format.Rate(entry.rewardMult)
 				item.stroke.Transparency = if chosen then 0 else 1
 				item.button.BackgroundColor3 = if chosen

@@ -1,14 +1,12 @@
 --!strict
--- Owns the Expeditions place HUD (C1 contract, docs/INTERFACES.md "Combat client"). Same
--- shape as the hub's UIController: the client is a display and input device. It renders the
--- Snapshot and the RunState the server pushes, routes button presses into InputController,
--- and sends Ready / Leave / RetryLoad / Debug intents. It never decides a phase, a reward,
--- a cooldown or a max HP. The Humanoid the server sized with Armory.MaxHp is the only
--- source for the HP bar.
+-- Owns the dungeon place's HUD (the Expeditions place). Same shape as the hub's UIController:
+-- the client is a display and input device. It renders the Snapshot, the RunState and the
+-- MapState the server pushes, and sends Start / Abandon / Leave / RetryLoad / Armory / Debug
+-- intents. It never decides a phase, a reward, a cooldown or a max HP.
 --
--- This module is the one place that reads the profile: it forwards the equipped gear to
--- InputController, the ability cooldowns to the HUD, and the mission material to
--- CombatFxController. Everything else is pushed, never pulled.
+-- This module is the one place that reads the profile: it hands the Snapshot's `combat` to the
+-- Armory screen, SecretFx and the Studio strip, and the RunState's run phase to InputController
+-- and the camera. Everything else is pushed, never pulled.
 --
 -- Degrades like the hub: a profile that will not load shows the same safe-mode card instead
 -- of a kick, a RunState that never arrives leaves the HUD in its lobby state, and the
@@ -35,18 +33,16 @@
 -- every frame from CrowdRenderer.GetBoss, and laid out here against the panel's column; the
 -- pointer ring of the vitals HUD is told where the bar ends so it keeps under it.
 --
--- P5 (docs/INTERFACES.md "P5 contracts", rulings 5, 19, 22 and 25): three boots, chosen once
--- from the shared CombatMode. The range bench (`bootRange`), a crowd mission (`bootMission`),
--- and the C1 mission HUD (`boot`) for a build without the range's combat. That last one is
--- unreachable while ProvingGrounds.json ships and cannot fight any more (the server dropped
--- the C1 attack handlers in Wave 1); it warns if it is ever taken, and Wave 3 deletes it. A
--- crowd mission
--- mounts the range's HUD stack (crosshair, Feedback's overlay, AbilityBar, the vitals HUD,
--- BossBar; the touch buttons come with InputController and MovementController) under the run
--- layer of CombatHud with no Attack / stance / ability cluster: on a phone attacks are the
--- range's auto-fire and auto-swing. Wave banners, `bossDown` and `mentor` stay
--- CombatFxController's; there is no per-kill pop (ruling 23). The summary card and the Studio
--- keys are L1's (below); the C1 lever strip stays, its spawn buttons naming crowd kinds.
+-- P5 (docs/INTERFACES.md "P5 contracts", rulings 5, 19, 22 and 25): two boots, chosen once
+-- from the shared CombatMode: the range bench (`bootRange`) and a crowd mission
+-- (`bootMission`). A build without the range's combat (no ProvingGrounds config: no weapons,
+-- every level refused) boots no HUD and says so once; L4 W1b deleted the C1 HUD that used to
+-- boot there. A crowd mission mounts the range's HUD stack (crosshair, Feedback's overlay,
+-- AbilityBar, the vitals HUD, BossBar; the touch buttons come with InputController and
+-- MovementController) under the run layer of CombatHud: on a phone attacks are the range's
+-- auto-fire and auto-swing. Wave banners, `bossDown` and `mentor` stay CombatFxController's;
+-- there is no per-kill pop (ruling 23). The summary card and the Studio keys are L1's
+-- (below); the lever strip's spawn buttons name crowd kinds.
 --
 -- Mission layout (review of 2026-10-13; the ScreenGui is the viewport less the top inset):
 --  * The boss bar sits in the top strip between the run header and the party list, shrunk to
@@ -71,8 +67,6 @@
 --  * The summary card shows for a RunState that carries a `result`; Enter (or its button) is
 --    "Back to camp" (RequestAbandon), and Abandon in a live run is the same intent.
 --  * Studio keys: N finishes the stage, B jumps to the boss, G steps the gear (RequestDebug).
---  * The C1 `boot` is still unreachable and still cannot fight; it is kept typechecking against
---    the level's RunState until L4 deletes it.
 --
 -- L1 fix round (docs/prompts/l1-fix-round.md, part U), all in `bootMission`:
 --  * Abandon's key is Backspace, pressed twice (CombatHud.PressAbandon), in every live phase
@@ -141,6 +135,12 @@
 --    held families' tiers instead of the frozen slot `gear`.
 --  * Studio keys: T grants Theme.COMBAT_DEBUG_GRANT_TIMBER, U the Hard star of every built band
 --    level, L resets the Armory (tiers, loadout, stars); the strip has each as a button.
+--
+-- L4 W1b (docs/prompts/l4-w1b-contract.md, L4B-8): a floor's chase-region cells ride only this
+-- member's first RunState of a floor set (RunState.floorsSeq); every RunState's floors are merged
+-- through RunFloors.Merge, which keeps the cells it was sent until the seq moves on. Fix round F4:
+-- the cells are one-shot (the server has noted them as sent), so `onRunState` applies the floors
+-- first, before anything that could throw, or one error would lose them for the whole run.
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -156,6 +156,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
+local RunFloors = require(sharedFolder:WaitForChild("RunFloors"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 
@@ -188,14 +189,10 @@ local SecretFx = require(script.Parent:WaitForChild("SecretFx"))
 local ReactFx = require(script.Parent:WaitForChild("ReactFx"))
 local Haptics = require(script.Parent:WaitForChild("Haptics"))
 
-local HUMANOID_WAIT_SECONDS = 5
-local DEFAULT_HIT_MARKER_SECONDS = 0.12
 -- Cursor-hold reasons (CameraController.SetCursorHold): each modal frees the mouse by name.
 local HOLD_LOAD = "load"
 local HOLD_DEBUG = "debug"
 local HOLD_RANGE_PANEL = "rangePanel"
-local MELEE_SLOT = "melee"
-local RANGED_SLOT = "ranged"
 local ADMIT_CHECK_LEVER = "admitCheck"
 -- L1 ruling 33, Studio only: the keys, the lever each sends and the line that names them.
 -- L1b-W4-31: on the road N stops at the next open camp's approach before the boss room.
@@ -332,35 +329,18 @@ local function isRunResult(payload: any): boolean
 end
 
 -- L1: the crowd kinds a level rewards, which are the kinds it can field: what the Studio
--- strip's spawn buttons name. A level file that names a `mission` (the Raider Arena) takes
--- them from that mission's crowd block. No level (the lobby) has none.
+-- strip's spawn buttons name. No level (the lobby) has none.
 local function rewardedKinds(levelId: string): { string }
 	local kinds: { string } = {}
 	local file = if levelId ~= "" then Catalog.GetLevelFile(levelId) else nil
-	if file == nil then
-		return kinds
-	end
-	local crowd = file.crowd
+	local crowd = if file ~= nil then file.crowd else nil
 	local rewards = if crowd ~= nil then crowd.rewards else nil
-	local missionId = file.mission
-	if rewards == nil and missionId ~= nil then
-		local mission = Catalog.GetMissionById(missionId)
-		local block = if mission ~= nil then mission.crowd else nil
-		rewards = if block ~= nil then block.rewards else nil
-	end
 	if rewards ~= nil then
 		for kind in rewards do
 			table.insert(kinds, kind)
 		end
 	end
 	return kinds
-end
-
--- Ability keys are config ids ("fanTheHammer"); the button shows them as words. Truncation
--- on the button handles the long ones — the Q / E letter is the real affordance.
-local function prettify(key: string): string
-	local spaced = key:gsub("(%l)(%u)", "%1 %2")
-	return spaced:sub(1, 1):upper() .. spaced:sub(2)
 end
 
 -- RangeStats arrives from the network: only a table with every readout field is shown.
@@ -716,20 +696,7 @@ local function forwardPoint(
 	local layout = if file ~= nil then Catalog.GetLevelLayout(file.layout) else nil
 	local target: Vector3? = nil
 	local distance = math.huge
-	if layout ~= nil and layout.arena ~= nil then
-		-- A layout that names an arena holds nothing else. The server turns the arena into one
-		-- camp centred on the world origin (LevelGeometry.FromArena, ruling 13): forward is
-		-- its middle, and the body is in it when it is over its floor.
-		local arena = Catalog.GetArenaLayout(layout.arena)
-		if arena ~= nil then
-			target = Vector3.zero
-			distance = math.max(
-				math.abs(position.X) - arena.size.x / 2,
-				math.abs(position.Z) - arena.size.z / 2,
-				0
-			)
-		end
-	elseif layout ~= nil and typeof(layout.route) == "table" then
+	if layout ~= nil and typeof(layout.route) == "table" then
 		target, distance = routeForward(layout.route, position)
 	end
 	if target == nil then
@@ -956,339 +923,6 @@ local function bootRange(): ()
 	end
 end
 
--- The C1 HUD. Unreachable while ProvingGrounds.json ships, and it cannot fight (see the header
--- and CameraController.IsCrowdCombat); kept reading the level's RunState until L4 deletes it.
-local function boot(): ()
-	local player = Players.LocalPlayer
-	local playerGui = player:WaitForChild("PlayerGui")
-	local armoryConfig = Catalog.GetArmoryConfig()
-	local combatConfig = Catalog.GetCombatConfig()
-	local hitMarkerSeconds = if combatConfig ~= nil
-		then combatConfig.feel.hitMarkerSeconds
-		else DEFAULT_HIT_MARKER_SECONDS
-	-- The load card needs the pointer until the profile arrives.
-	CameraController.SetCursorHold(HOLD_LOAD, true)
-
-	local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
-	local stateChanged = remotesFolder:WaitForChild("StateChanged") :: RemoteEvent
-	local actionResult = remotesFolder:WaitForChild("ActionResult") :: RemoteEvent
-	local runStateEvent = remotesFolder:WaitForChild("RunState") :: RemoteEvent
-	local requestSnapshot = remotesFolder:WaitForChild("RequestSnapshot") :: RemoteEvent
-	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
-	local requestLeave = remotesFolder:WaitForChild("RequestLeave") :: RemoteEvent
-	-- C1 adds RequestDebug; an older server build simply has no lever strip.
-	local requestDebug =
-		remotesFolder:WaitForChild("RequestDebug", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
-
-	local screenGui = Create("ScreenGui", {
-		Name = "ExpeditionHUD",
-		ResetOnSpawn = false,
-		-- Sibling, like the hub: the ZINDEX_* constants order the overlay roots only, so a
-		-- scrim can never cover its own card and swallow the Return tap.
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		Parent = playerGui,
-	}) :: ScreenGui
-
-	local loaded = false
-	-- Two connections per character (Health and the MaxHealth the server sets on admit);
-	-- both are dropped when the next character arrives so a respawn leaks nothing.
-	local healthConnections: { RBXScriptConnection } = {}
-	local applyLayout: () -> ()
-	local material = ""
-
-	-- Same client-side debounce as the hub's panels (review of 2026-09-17): ten taps on
-	-- Return must not become ten RequestLeave intents against the rate limit. One window for
-	-- all three buttons, exactly as a hub panel shares one per sheet.
-	local lastIntentTime = 0
-	local function fireIntent(remote: RemoteEvent): ()
-		local now = os.clock()
-		if now - lastIntentTime < Theme.ACTION_DEBOUNCE_SECONDS then
-			return
-		end
-		lastIntentTime = now
-		remote:FireServer()
-	end
-
-	local toast = Toast.new(screenGui)
-	local loadScreen = LoadScreen.new(screenGui, {
-		onRetry = function()
-			requestRetryLoad:FireServer()
-		end,
-		onLeave = function()
-			-- Kick, not RequestLeave: with no profile loaded the server has nothing to send
-			-- home with, and rejoining lands the player back in the hub (the root place).
-			player:Kick("Rejoin to load your save.")
-		end,
-	})
-	local hud = CombatHud.new(screenGui, {
-		onLeave = function()
-			fireIntent(requestLeave)
-		end,
-		onStance = function()
-			InputController.ToggleStance()
-		end,
-		onAttackDown = function()
-			InputController.AttackDown()
-		end,
-		onAttackUp = function()
-			InputController.AttackUp()
-		end,
-		onAbility = function(slot: string)
-			InputController.UseAbility(slot)
-		end,
-		onAttackInput = function(input: InputObject)
-			CameraController.AdoptTouch(input)
-		end,
-	})
-	local summaryCard = SummaryCard.new(screenGui, {
-		onBack = function() end,
-		onReturn = function()
-			fireIntent(requestLeave)
-		end,
-		canReturn = true,
-	})
-	-- Studio only, by contract: a live client never builds the strip at all, and the
-	-- server ignores the remote even if one were forged.
-	local debugPanel = if RunService:IsStudio()
-		then DebugPanel.new(screenGui, {
-			onLever = function(lever: string, value: any)
-				if requestDebug ~= nil then
-					requestDebug:FireServer(lever, value)
-				end
-			end,
-			onToggle = function(open: boolean)
-				CameraController.SetCursorHold(HOLD_DEBUG, open)
-			end,
-		})
-		else nil
-
-	-- The two ability buttons are named by the equipped weapons, so a tier change renames
-	-- them. A starter weapon has no ability and hides its button.
-	local function abilityInfo(slot: string, tier: number): CombatHud.AbilityInfo?
-		local cfg = armoryConfig
-		if cfg == nil then
-			return nil
-		end
-		local tierDef = Armory.TierDef(cfg, slot, tier)
-		if tierDef == nil or tierDef.ability == "" then
-			return nil
-		end
-		local ability = Armory.AbilityDef(cfg, tierDef.ability)
-		if ability == nil then
-			return nil
-		end
-		return { name = prettify(tierDef.ability), cooldown = ability.cooldown }
-	end
-
-	local function onSnapshot(payload: { [string]: any }): ()
-		local state = payload.state
-		if typeof(state) ~= "table" then
-			return
-		end
-		if not loaded then
-			loaded = true
-			loadScreen.Hide() -- permanent: the profile is here
-			CameraController.SetCursorHold(HOLD_LOAD, false)
-		end
-		-- Applied before the ambient starts, and on every snapshot, because the server stays
-		-- authoritative.
-		applySettings(state)
-		local eraName = payload.eraName
-		if typeof(eraName) == "string" then
-			-- The arena's era decides the ambient bed, exactly as the hub's plot does.
-			SoundController.SetAmbientEra(eraName)
-		end
-
-		local combat = state.combat
-		if typeof(combat) ~= "table" then
-			return
-		end
-		local gear = combat.gear
-		local ascension = combat.ascension
-		if typeof(gear) == "table" and typeof(ascension) == "table" then
-			InputController.SetGear(gear)
-			-- The strip's tier buttons name a family (L3-28), which this HUD has none of: they
-			-- stay inert here, as everything that fights does.
-			hud.SetAbilities({
-				melee = abilityInfo(MELEE_SLOT, gear.melee),
-				ranged = abilityInfo(RANGED_SLOT, gear.ranged),
-			})
-		end
-		-- Wallet: cash and Valor are always shown; the material chip needs the level, so it
-		-- stays blank until a RunState names one.
-		local materials = combat.materials
-		local materialName = material
-		local amount = 0
-		if typeof(materials) == "table" and materialName ~= "" then
-			local owned = materials[materialName]
-			amount = if typeof(owned) == "number" then owned else 0
-		end
-		hud.SetWallet(
-			if typeof(state.cash) == "number" then state.cash else 0,
-			materialName,
-			amount,
-			if typeof(combat.valor) == "number" then combat.valor else 0
-		)
-	end
-
-	local function onLoadStatus(payload: { [string]: any }): ()
-		local phase = payload.phase
-		if phase ~= "loading" and phase ~= "failed" then
-			return
-		end
-		local attempt = payload.attempt
-		local retryAvailableIn = payload.retryAvailableIn
-		loadScreen.Apply({
-			phase = phase,
-			attempt = if typeof(attempt) == "number" then attempt else 1,
-			retryAvailableIn = if typeof(retryAvailableIn) == "number" then retryAvailableIn else 0,
-		})
-	end
-
-	local function onStateChanged(payload: any): ()
-		if typeof(payload) ~= "table" then
-			return
-		end
-		if payload.kind == "snapshot" then
-			onSnapshot(payload)
-		elseif payload.kind == "loadStatus" then
-			onLoadStatus(payload)
-		end
-	end
-
-	local lastPhase = ""
-	local function onRunState(payload: any): ()
-		if not isRunState(payload) then
-			return
-		end
-		local run = (payload :: any) :: Types.RunState
-		if run.material ~= material then
-			-- The wallet's material chip is the level's, and the Snapshot in hand was read
-			-- before this RunState named it. Ask for a fresh one.
-			material = run.material
-			CombatFxController.SetMaterial(material)
-			requestSnapshot:FireServer()
-		end
-		hud.SetMission(if run.levelName ~= "" then run.levelName else DEFAULT_MAP_NAME)
-		CameraController.SetPhase(run.phase)
-		hud.SetRunState(run)
-		InputController.SetPhase(run.phase)
-		if debugPanel ~= nil then
-			debugPanel.SetWave(run.wave)
-			debugPanel.SetKinds(rewardedKinds(run.levelId))
-		end
-		CombatFxController.SetParty(run.party)
-		local result = run.result
-		if isRunResult(result) and result ~= nil then
-			if lastPhase ~= "summary" and run.phase == "summary" then
-				SoundController.Play("runEnd")
-			end
-			local returnIn = run.returnIn
-			summaryCard.Show(run.summary, result, {
-				partySize = #run.party,
-				returnIn = if typeof(returnIn) == "number" then returnIn else nil,
-				canBack = false,
-				waves = run.waves,
-				difficultyName = run.difficulty,
-				mapName = DEFAULT_MAP_NAME,
-			})
-		else
-			summaryCard.Hide()
-		end
-		-- A wave clear is the moment the pool is flushed, so ask for the Snapshot that
-		-- carries the new wallet instead of waiting for the next one.
-		if lastPhase == "wave" and run.phase == "breather" then
-			SoundController.Play("waveClear")
-			requestSnapshot:FireServer()
-		end
-		lastPhase = run.phase
-	end
-
-	local function onActionResult(payload: any): ()
-		local text, isError = actionResultText(payload)
-		if text ~= nil then
-			toast.Show(text, Theme.TOAST_ERROR_SECONDS, isError)
-		end
-	end
-
-	-- The HP bar follows the Humanoid the server sized, across every respawn.
-	local function bindCharacter(character: Model): ()
-		for _, connection in healthConnections do
-			connection:Disconnect()
-		end
-		table.clear(healthConnections)
-		local humanoid = character:WaitForChild("Humanoid", HUMANOID_WAIT_SECONDS) :: Humanoid?
-		if humanoid == nil then
-			return -- a character without a Humanoid is not ours to render
-		end
-		local function push(): ()
-			hud.SetHealth(humanoid.Health, humanoid.MaxHealth)
-			CombatFxController.SetHealth(humanoid.Health, humanoid.MaxHealth)
-		end
-		table.insert(healthConnections, humanoid.HealthChanged:Connect(push))
-		-- MaxHealth is set once by ArenaService on admit, which can land after this bind.
-		table.insert(
-			healthConnections,
-			humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(push)
-		)
-		push()
-	end
-
-	applyLayout = function(): ()
-		local size = screenGui.AbsoluteSize
-		if size.X <= 0 or size.Y <= 0 then
-			return -- AbsoluteSize is zero before the first layout; the signal re-enters
-		end
-		local scale = math.clamp(
-			math.min(size.X / Theme.DESIGN_WIDTH, size.Y / Theme.DESIGN_HEIGHT),
-			Theme.MIN_SCALE,
-			Theme.MAX_SCALE
-		)
-		hud.SetLayout(scale, size)
-		summaryCard.SetScale(scale)
-		loadScreen.SetScale(scale)
-		toast.SetLayout(scale, size.X > size.Y, 0)
-		if debugPanel ~= nil then
-			debugPanel.SetLayout(scale, size)
-		end
-	end
-
-	InputController.SetStanceChanged(function(stance: string)
-		hud.SetStance(stance)
-	end)
-	CombatFxController.SetBannerHandler(function(title: string)
-		-- The banner fades; the toast is the record of it for anyone looking elsewhere.
-		toast.Show(title, Theme.TOAST_ERROR_SECONDS, false)
-	end)
-	CombatFxController.SetToastHandler(function(text: string)
-		toast.Show(text, Theme.TOAST_ERROR_SECONDS, false)
-	end)
-	CombatFxController.SetHitMarkerHandler(function(heavy: boolean)
-		hud.ShowHitMarker(heavy, hitMarkerSeconds)
-	end)
-	-- The reticle follows the camera and the bow every frame; the HUD writes only changes.
-	RunService.RenderStepped:Connect(function()
-		hud.SetAiming(CameraController.IsActive(), CameraController.IsAiming())
-		hud.SetCharge(InputController.GetCharge())
-	end)
-	hud.SetStance(InputController.GetStance())
-
-	stateChanged.OnClientEvent:Connect(onStateChanged)
-	actionResult.OnClientEvent:Connect(onActionResult)
-	runStateEvent.OnClientEvent:Connect(onRunState)
-	player.CharacterAdded:Connect(bindCharacter)
-	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
-
-	local character = player.Character
-	if character ~= nil then
-		bindCharacter(character)
-	end
-	applyLayout()
-	-- One explicit request on boot: the server's join snapshot may have fired before this
-	-- connection existed; duplicate snapshots are harmless by design.
-	requestSnapshot:FireServer()
-end
-
 -- The dungeon place (L1): a lobby camp with the map, a level, a summary, and the lobby again.
 -- The run layer is CombatHud's; the fight is the range's. See the header for what is mounted.
 -- One function, so its state lives in tables: Studio gives a function 200 local registers.
@@ -1372,6 +1006,8 @@ local function bootMission(): ()
 		bossLimit = nil :: number?,
 		vitalsLayout = nil :: VitalsHud.Layout?,
 		floors = {} :: { Types.RunFloor },
+		-- L4B-8: the floorsSeq `floors` belong to (nil = none yet).
+		floorsSeq = nil :: number?,
 		wallet = { cash = 0, valor = 0, materials = {} :: { [string]: any } },
 		-- L2 W2: the Snapshot's `combat.families` (the families written to the profile).
 		families = {} :: { [string]: any },
@@ -1699,8 +1335,6 @@ local function bootMission(): ()
 		armoryScreen.Toggle()
 	end
 
-	-- The cluster's handlers are never pressed (it is not shown); they route to the range path
-	-- like every other entry point, so a stray call still does the right thing.
 	local hud = CombatHud.new(screenGui, {
 		onMap = if mapScreen ~= nil then openMap else nil,
 		onArmory = toggleArmory,
@@ -1716,11 +1350,6 @@ local function bootMission(): ()
 		-- press the camera keeps a cursor the player freed with Alt to click it.
 		abandonKey = if UserInputService.KeyboardEnabled then ABANDON_KEY.Name else nil,
 		onAbandonArmed = CameraController.KeepAltFree,
-		onStance = InputController.ToggleStance,
-		onAttackDown = InputController.AttackDown,
-		onAttackUp = InputController.AttackUp,
-		onAbility = InputController.UseAbility,
-		actions = false,
 		runButtons = not proving,
 		keyHint = if studio then DEBUG_HINT else nil,
 	})
@@ -1914,9 +1543,15 @@ local function bootMission(): ()
 	-- it (read by CrowdRenderer.ReadCells, so a malformed list is dropped the same way) and are
 	-- compared by value too: they bound the drawn charge (L1b-W4-33). L1c-5a: so does `locks`,
 	-- and the same list goes to the camera, which keeps its boom out of a locking camp.
+	-- L4B-8: the cells come only with this member's first RunState of a floor set
+	-- (RunState.floorsSeq); RunFloors.Merge keeps them on the floors of that set until the seq
+	-- moves on, so the floors compared here still carry them.
 	local function sameCells(a: { Types.CampRect }?, b: { Types.CampRect }?): boolean
+		if a == b then
+			return true -- the same list, kept by Merge: the common case
+		end
 		if a == nil or b == nil then
-			return a == b
+			return false
 		end
 		if #a ~= #b then
 			return false
@@ -1935,7 +1570,7 @@ local function bootMission(): ()
 		return true
 	end
 
-	local function applyFloors(list: { any }): ()
+	local function applyFloors(list: { any }, seq: number): ()
 		local held = st.floors
 		local fresh: { Types.RunFloor } = {}
 		for _, entry in list do
@@ -1961,6 +1596,8 @@ local function bootMission(): ()
 				fence = if typeof(entry.fence) == "number" then entry.fence else nil,
 			})
 		end
+		fresh = RunFloors.Merge(held, st.floorsSeq, fresh, seq)
+		st.floorsSeq = seq
 		local same = #fresh == #held
 		if same then
 			for index, floor in fresh do
@@ -1994,13 +1631,17 @@ local function bootMission(): ()
 			return
 		end
 		local run = (payload :: any) :: Types.RunState
+		-- L4B-8, fix round F4: the floors first. A set's cells come once, with the RunState that
+		-- also names the new level, so nothing that can throw may run before they are kept. A
+		-- server that sends no seq sends the cells every time, which Merge takes as they come.
+		applyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)
 		local phase = run.phase
 		local last = st.phase
 		local live = LIVE_PHASES[phase] == true
 		local over = RUN_OVER_PHASES[phase] == true
 
 		-- The level, not the mission: its kinds for the Studio strip, its pool of bodies, its
-		-- material for the wallet and the reward pops, its floor for the crowd.
+		-- material for the wallet (its floors for the crowd went first, above).
 		if run.levelId ~= st.levelId then
 			st.levelId = run.levelId
 			st.prewarmed = 0
@@ -2035,10 +1676,8 @@ local function bootMission(): ()
 		end
 		if run.material ~= st.material then
 			st.material = run.material
-			CombatFxController.SetMaterial(run.material)
 			paintWallet()
 		end
-		applyFloors(run.floors)
 
 		local difficultyName = run.difficulty
 		if expeditions ~= nil then
@@ -2052,21 +1691,18 @@ local function bootMission(): ()
 		end
 		CameraController.SetPhase(phase)
 		hud.SetRunState(run)
-		CombatFxController.SetParty(run.party)
 		if debugPanel ~= nil then
 			debugPanel.SetWave(run.wave)
 		end
 
 		local userId = player.UserId
-		local humans = 0
+		local members = 0
 		local waiting = false
 		for _, member in run.party do
 			if typeof(member) ~= "table" then
 				continue
 			end
-			if not member.bot then
-				humans += 1
-			end
+			members += 1
 			if member.userId == userId then
 				VitalsController.SetServerDown(member.down == true)
 				-- Waiting in the lobby camp for the next boundary (ruling 18): the server
@@ -2115,7 +1751,7 @@ local function bootMission(): ()
 			summaryCard.Show(run.summary, result, {
 				partySize = #run.party,
 				returnIn = if typeof(returnIn) == "number" then returnIn else nil,
-				canBack = humans <= 1 or run.leaderUserId == userId,
+				canBack = members <= 1 or run.leaderUserId == userId,
 				waves = run.waves,
 				difficultyName = difficultyName,
 				mapName = mapName,
@@ -2405,12 +2041,9 @@ function CombatUIController.Start(): ()
 	elseif CameraController.IsCrowdCombat() then
 		task.spawn(bootMission)
 	else
-		-- Start runs once, so this is said once.
-		warn(
-			"[CombatUIController] Config/ProvingGrounds is missing: booting the C1 mission HUD,"
-				.. " which cannot fight since P5 Wave 1 (the server has no C1 attack handlers)"
-		)
-		task.spawn(boot)
+		-- Start runs once, so this is said once. Without the config there are no weapons and the
+		-- server refuses every level, so there is nothing for a HUD to show.
+		warn("[CombatUIController] Config/ProvingGrounds is missing: no weapons, so no HUD")
 	end
 end
 

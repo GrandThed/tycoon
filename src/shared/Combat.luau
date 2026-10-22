@@ -1,14 +1,12 @@
 --!strict
--- Pure combat math (docs/INTERFACES.md "C0 contracts" → "src/shared/Combat.luau"): wave specs,
--- enemy stats, reward shares, away efficiency and the pacing tempo. No RNG anywhere — every
+-- Pure combat math (docs/INTERFACES.md "C0 contracts" → "src/shared/Combat.luau"): a camp's
+-- waves and rewards, reward shares, away efficiency and the pacing tempo. No RNG anywhere — every
 -- result is a deterministic function of config plus state — and no Roblox globals beyond the
 -- `script` needed to require Economy, so tools/sim_combat.py mirrors this file function for
 -- function (and imports the sim_economy mirror of Economy for the cash multiplier).
+-- L4 W1b deleted C1's wave, enemy and hit math with the services that read it.
 
 local Economy = require(script.Parent:WaitForChild("Economy"))
--- C1: the hit/ability formulas start from the equipped weapon, and Armory owns that lookup.
--- Armory is pure too, so this is not a cycle and sim_combat.py mirrors both files together.
-local Armory = require(script.Parent:WaitForChild("Armory"))
 
 -- Structural copies of the shapes in Types.luau: requiring Types would need more than `script`
 -- provides for a pure module, and the old solver compares nested tables invariantly, so every
@@ -34,48 +32,7 @@ type CombatProfile = {
 	stars: { [string]: { [string]: boolean } }?,
 }
 
-type EnemyDef = {
-	template: string,
-	kind: string,
-	hp: number,
-	damage: number,
-	speed: number,
-	reach: number,
-	attackCooldown: number,
-	cash: number,
-	materials: number,
-	elite: boolean,
-	color: { number }?,
-}
-type CompositionDef = { fromWave: number, weights: { [string]: number } }
-type WaveTableDef = {
-	baseCount: number,
-	countPerWave: number,
-	hpGrowth: number,
-	damageGrowth: number,
-	rewardGrowth: number,
-	composition: { CompositionDef },
-}
-type BossPatternDef = {
-	kind: "slam" | "charge" | "summon",
-	cooldown: number,
-	windupSeconds: number,
-	radius: number?,
-	damageMult: number?,
-	enemy: string?,
-	count: number?,
-}
-type BossDef = {
-	template: string,
-	enemy: string,
-	hpMult: number,
-	damageMult: number,
-	cashMult: number,
-	materialsMult: number,
-	valor: number,
-	patterns: { BossPatternDef }?,
-}
--- P5: the mission's `crowd` block (Types.MissionCrowdConfig and friends).
+-- A level's camp waves and rewards (Types.MissionCrowdGroup and friends).
 type MissionCrowdGroup = {
 	kind: string,
 	count: number,
@@ -85,35 +42,17 @@ type MissionCrowdGroup = {
 type MissionCrowdBoss = { kind: string, at: { number }, valor: number }
 type MissionCrowdWave = { groups: { MissionCrowdGroup }, boss: MissionCrowdBoss? }
 type MissionCrowdReward = { cash: number, materials: number }
-type MissionCrowdConfig = {
-	hpScale: number,
-	plateScale: number,
-	damageScale: number,
-	regenShare: number,
-	maxAlive: number,
-	burst: number,
-	burstSpacing: number,
-	eliteKind: string?,
-	waves: { MissionCrowdWave },
-	rewards: { [string]: MissionCrowdReward },
-}
+-- Missions/1_Village.json, the hub's stub until W3 (L4B-1): what Depart and the tile read.
 type MissionConfig = {
 	version: number,
 	id: string,
 	era: number,
 	eraName: string,
 	name: string,
-	arena: string,
 	material: string,
 	waves: number,
-	bossWaves: { number },
 	recommendedPower: number,
 	targetMinutes: number,
-	targetWaveSeconds: number,
-	enemies: { [string]: EnemyDef },
-	waveTable: WaveTableDef,
-	bosses: { [string]: BossDef },
-	crowd: MissionCrowdConfig?,
 }
 
 type CombatCoopConfig = {
@@ -150,7 +89,6 @@ type CombatDirectorConfig = {
 	eliteTempo: number,
 	breatherSeconds: number,
 	breatherMaxSeconds: number,
-	maxAlive: number,
 	runCapSeconds: number,
 }
 -- The two Combat.json blocks these functions read; callers pass the whole Types.CombatConfig.
@@ -201,109 +139,6 @@ type GameConfig = {
 	neighbors: { perPlayer: number, maxBonus: number },
 }
 
--- Exact structural copies of Armory.luau's own local config types (which are not exported).
--- The old solver compares nested tables invariantly, so every field below must stay in lockstep
--- with Armory.luau AND Types.luau; a mismatch shows up as a type error at the first Armory call.
-type BandDef = { band: number, eraName: string, material: string }
-type WeaponClassDef = {
-	kind: string,
-	range: number,
-	arcDegrees: number?,
-	chain: { number }?,
-	windows: { number }?,
-	comboReset: number?,
-	finisherKnockback: number?,
-	fire: string?,
-	cooldown: number?,
-	chargeSeconds: number?,
-	minDamageFraction: number?,
-	spreadDegrees: number?,
-	pierce: number?,
-}
-type AbilityDef = {
-	kind: string,
-	cooldown: number,
-	damageMult: number,
-	radius: number?,
-	shots: number?,
-	knockback: number?,
-	stunSeconds: number?,
-	dashStuds: number?,
-	dotSeconds: number?,
-	dotTicks: number?,
-	pierce: number?,
-}
-type WeaponStarterDef = {
-	name: string,
-	class: string,
-	damage: number,
-	hp: number,
-	ability: string,
-	model: string,
-}
-type WeaponTierDef = {
-	tier: number,
-	band: number,
-	cost: number,
-	unlockRate: number,
-	name: string,
-	class: string,
-	damage: number,
-	hp: number,
-	ability: string,
-	model: string,
-	partyEffect: string?,
-}
-type ArmorySlotDef = { starter: WeaponStarterDef, tiers: { WeaponTierDef } }
-type AscensionLevelDef = {
-	level: number,
-	materials: { [string]: number },
-	valor: number,
-	damageMult: number,
-	hpMult: number,
-	abilityMult: number,
-}
-type AscensionConfig = {
-	requiresRebirth: number,
-	levelsPerRebirth: number,
-	levels: { AscensionLevelDef },
-}
-type PartyEffectDef = {
-	kind: "rally" | "warcry",
-	radius: number,
-	healFraction: number?,
-	damageMult: number?,
-	seconds: number?,
-}
-type ArmoryLadderBand = { levelId: string, material: string }
-type ArmoryLadder = {
-	damage: { number },
-	hp: { melee: { number }, ranged: { number } },
-	rangeHp: number,
-	bandSize: number,
-	bands: { ArmoryLadderBand },
-	costs: { number },
-	starDifficulty: string,
-	starAlso: { string }?,
-}
-type ArmoryWindow = { start: number, top: number }
-type ArmoryLegacyCost = { material: string, amount: number }
-type ArmoryLegacy = { gearCosts: { ArmoryLegacyCost } }
-type ArmoryConfig = {
-	version: number,
-	baseHp: number,
-	power: { hpWeight: number, tierWeight: number? },
-	bands: { BandDef },
-	classes: { [string]: WeaponClassDef },
-	abilities: { [string]: AbilityDef },
-	slots: { [string]: ArmorySlotDef },
-	ascension: AscensionConfig,
-	partyEffects: { [string]: PartyEffectDef },
-	ladder: ArmoryLadder?,
-	windows: { [string]: ArmoryWindow }?,
-	legacy: ArmoryLegacy?,
-}
-
 -- The slices of PlayerState these functions read; callers pass the whole state.
 type CombatOwner = { era: number, rebirthCount: number, combat: CombatProfile }
 type CashOwner = { legacy: number, legacyShop: LegacyShopState }
@@ -314,24 +149,9 @@ export type RewardShare = { cash: number, materials: number, valor: number }
 -- Per userId: the fractions SplitCarry has not paid yet, each under 1. Kept for a run.
 export type Carry = { [number]: RewardShare }
 
--- One wave, fully resolved: how many enemies and by how much their stats and rewards are
--- multiplied. `boss` is the entry for this wave when it is a boss wave. `bossHpMult` (C2) is the
--- party-size HP factor that only the boss entity takes; see EnemyStats.
-export type WaveSpec = {
-	count: number,
-	hpMult: number,
-	damageMult: number,
-	rewardMult: number,
-	bossHpMult: number,
-	boss: BossDef?,
-	weights: { [string]: number },
-}
-
-export type EnemyStats = { hp: number, damage: number, cash: number, materials: number }
-
 -- P5: one crowd wave, fully resolved (docs/INTERFACES.md "P5 contracts" → "Server modules").
--- `groups` counts are already scaled for party size and Overdrive; `total` leaves the boss out.
--- The scales multiply ProvingGrounds.json's tier-1 kind numbers.
+-- `groups` counts are already scaled for party size and the difficulty; `total` leaves the boss
+-- out. The scales multiply ProvingGrounds.json's tier-1 kind numbers.
 export type CrowdWaveSpec = {
 	wave: number,
 	groups: { { kind: string, count: number } },
@@ -345,8 +165,8 @@ export type CrowdWaveSpec = {
 	rewardMult: number,
 }
 
--- L1: what a difficulty (or, for the arena adapter, the mission's own block) scales a camp by.
--- A structural slice of Types.LevelDifficulty: a whole one may be passed.
+-- L1: what a difficulty scales a camp by. A structural slice of Types.LevelDifficulty: a whole
+-- one may be passed.
 export type CampScales = {
 	hpScale: number,
 	damageScale: number,
@@ -384,107 +204,6 @@ function Combat.MissionUnlocked(
 		return false
 	end
 	return true
-end
-
--- The composition in force at `wave`: the last entry whose fromWave has been reached. A shallow
--- clone, never the config's own table: a spawner that normalises or drops a weight must not be
--- able to edit Missions/*.json for the rest of the server's life.
-local function weightsForWave(mission: MissionConfig, wave: number): { [string]: number }
-	local weights: { [string]: number } = {}
-	local bestFromWave = -math.huge
-	for _, entry in mission.waveTable.composition do
-		if entry.fromWave <= wave and entry.fromWave > bestFromWave then
-			bestFromWave = entry.fromWave
-			weights = table.clone(entry.weights)
-		end
-	end
-	return weights
-end
-
--- Party size scales COUNT for ordinary enemies (never their HP or damage): more players must not
--- make each raider tankier. Overdrive is the only thing that raises hp/damage across the board.
--- C2 (Ben's ruling): the ONE boss entity is the exception, because a boss that melts in seconds
--- under four players is no boss. tools/sim_combat.py mirrors this exactly:
---   extras     = max(partySize, 1) - 1
---   bossHpMult = 1 + coop.bossHpPerExtraPlayer * extras
-function Combat.WaveSpec(
-	mission: MissionConfig,
-	wave: number,
-	partySize: number,
-	overdrive: boolean,
-	combatCfg: CombatRules
-): WaveSpec
-	local waveTable = mission.waveTable
-	local overdriveCfg = combatCfg.overdrive
-	local extras = math.max(partySize, 1) - 1
-	local baseCount = waveTable.baseCount + waveTable.countPerWave * (wave - 1)
-	local partyMult = 1 + combatCfg.coop.countPerExtraPlayer * extras
-	local count = math.round(
-		baseCount * partyMult * (if overdrive then overdriveCfg.countMult else NEUTRAL_MULT)
-	)
-	return {
-		count = count,
-		hpMult = (1 + waveTable.hpGrowth) ^ (wave - 1)
-			* (if overdrive then overdriveCfg.hpMult else NEUTRAL_MULT),
-		damageMult = (1 + waveTable.damageGrowth) ^ (wave - 1)
-			* (if overdrive then overdriveCfg.damageMult else NEUTRAL_MULT),
-		rewardMult = (1 + waveTable.rewardGrowth) ^ (wave - 1)
-			* (if overdrive then overdriveCfg.rewardMult else NEUTRAL_MULT),
-		bossHpMult = 1 + combatCfg.coop.bossHpPerExtraPlayer * extras,
-		boss = mission.bosses[tostring(wave)],
-		weights = weightsForWave(mission, wave),
-	}
-end
-
--- Cash and materials are FIXED per enemy (no RNG, no loot tables): the wave multipliers are the
--- only thing that moves them. The boss multipliers ride on the ONE entity the spawner marks with
--- `isBoss` -- never on the ordinary enemies of the same key, which would have turned every brute
--- in Village wave 10 into a Warlord (the sim measured 7:58 -> 10:37). nil for an unknown key.
--- C2: the boss entity's HP also takes spec.bossHpMult, applied AFTER the boss and Overdrive
--- multipliers and before the single rounding:
---   hp = round(enemy.hp * spec.hpMult * boss.hpMult * spec.bossHpMult)   -- boss entity
---   hp = round(enemy.hp * spec.hpMult)                                   -- everything else
-function Combat.EnemyStats(
-	mission: MissionConfig,
-	key: string,
-	spec: WaveSpec,
-	isBoss: boolean?
-): EnemyStats?
-	local enemy = mission.enemies[key]
-	if enemy == nil then
-		return nil
-	end
-	-- The key check stays as a guard so a mismarked spawn cannot apply another enemy's boss
-	-- multipliers; tools/sim_combat.py gates on exactly these two conditions.
-	local boss = spec.boss
-	local applyBoss = isBoss == true and boss ~= nil and boss.enemy == key
-	local bossHp = if applyBoss and boss ~= nil then boss.hpMult else NEUTRAL_MULT
-	local bossDamage = if applyBoss and boss ~= nil then boss.damageMult else NEUTRAL_MULT
-	local bossCash = if applyBoss and boss ~= nil then boss.cashMult else NEUTRAL_MULT
-	local bossMaterials = if applyBoss and boss ~= nil then boss.materialsMult else NEUTRAL_MULT
-	local partyHp = if applyBoss then spec.bossHpMult else NEUTRAL_MULT
-	return {
-		hp = math.round(enemy.hp * spec.hpMult * bossHp * partyHp),
-		damage = math.round(enemy.damage * spec.damageMult * bossDamage),
-		cash = math.round(enemy.cash * spec.rewardMult * bossCash),
-		materials = math.round(enemy.materials * spec.rewardMult * bossMaterials),
-	}
-end
-
--- Valor only ever drops from bosses; Overdrive pays the reward multiplier on it like cash.
-function Combat.BossValor(
-	mission: MissionConfig,
-	wave: number,
-	overdrive: boolean,
-	combatCfg: CombatRules
-): number
-	local boss = mission.bosses[tostring(wave)]
-	if boss == nil then
-		return 0
-	end
-	return math.round(
-		boss.valor * (if overdrive then combatCfg.overdrive.rewardMult else NEUTRAL_MULT)
-	)
 end
 
 -- What the Expedition tile compares the player's Gear Power against. Overdrive multiplies enemy
@@ -588,103 +307,6 @@ function Combat.Tempo(
 	return math.clamp(actual / expectedKillsPerSecond, director.tempoMin, director.tempoMax)
 end
 
--- ---------------------------------------------------------------------------------------------
--- C1: wave shaping and hit math. Still no RNG: every spawn order, interval and damage number is
--- a function of config, wave and the profile, so tools/sim_combat.py reproduces a run exactly.
--- ---------------------------------------------------------------------------------------------
-
--- Deterministic largest-remainder allocation, then an interleave. The alternative (rolling a
--- weighted die per spawn) would make two identical runs differ and the sim untrustworthy.
--- Ties break on the key name ascending, which is why every loop below sorts first.
-function Combat.WaveComposition(count: number, weights: { [string]: number }): { string }
-	local keys: { string } = {}
-	local total = 0
-	for key, weight in weights do
-		if weight > 0 then
-			table.insert(keys, key)
-			total += weight
-		end
-	end
-	if count <= 0 or total <= 0 or #keys == 0 then
-		return {}
-	end
-	table.sort(keys)
-
-	local quota: { [string]: number } = {}
-	local fraction: { [string]: number } = {}
-	local assigned = 0
-	for _, key in keys do
-		local exact = count * weights[key] / total
-		local whole = math.floor(exact)
-		quota[key] = whole
-		fraction[key] = exact - whole
-		assigned += whole
-	end
-	-- Largest remainders take the rounding leftovers.
-	local byFraction = table.clone(keys)
-	table.sort(byFraction, function(a: string, b: string): boolean
-		if fraction[a] == fraction[b] then
-			return a < b
-		end
-		return fraction[a] > fraction[b]
-	end)
-	local leftover = count - assigned
-	local index = 1
-	while leftover > 0 do
-		local key = byFraction[index]
-		quota[key] += 1
-		leftover -= 1
-		index += 1
-		if index > #byFraction then
-			index = 1
-		end
-	end
-
-	-- Interleave: always place the key that is furthest behind its own quota, so a 70/30 wave
-	-- arrives mixed instead of as two blocks.
-	local placed: { [string]: number } = {}
-	for _, key in keys do
-		placed[key] = 0
-	end
-	local order: { string } = {}
-	for _ = 1, count do
-		local bestKey: string? = nil
-		local bestRatio = math.huge
-		for _, key in keys do
-			local target = quota[key]
-			if target > 0 and placed[key] < target then
-				local ratio = placed[key] / target
-				if ratio < bestRatio then
-					bestRatio = ratio
-					bestKey = key
-				end
-			end
-		end
-		if bestKey == nil then
-			break
-		end
-		placed[bestKey] += 1
-		table.insert(order, bestKey)
-	end
-	return order
-end
-
--- Seconds between two spawns of the same wave: the whole wave is meant to land inside
--- targetWaveSeconds, and a party killing fast (tempo > 1) gets it sooner.
-function Combat.SpawnInterval(
-	mission: MissionConfig,
-	spec: WaveSpec,
-	tempo: number,
-	overdrive: boolean,
-	combatCfg: CombatRules
-): number
-	if spec.count <= 0 or tempo <= 0 then
-		return mission.targetWaveSeconds
-	end
-	local rateMult = if overdrive then combatCfg.overdrive.spawnRateMult else NEUTRAL_MULT
-	return mission.targetWaveSeconds / spec.count / tempo / rateMult
-end
-
 -- The breather stretches when the party is struggling (tempo at tempoMin) and shrinks to the
 -- floor when they are ahead: the director only ever changes PACING, never enemy stats.
 function Combat.BreatherSeconds(tempo: number, director: CombatDirectorConfig): number
@@ -702,82 +324,6 @@ function Combat.ShouldMerge(
 	director: CombatDirectorConfig
 ): boolean
 	return tempo >= director.mergeTempo and deadFraction >= director.mergeThreshold
-end
-
-local function gearTier(state: CombatOwner, slot: string): number
-	if slot == "ranged" then
-		return state.combat.gear.ranged
-	end
-	return state.combat.gear.melee
-end
-
-local function ascensionTier(state: CombatOwner, slot: string): number
-	if slot == "ranged" then
-		return state.combat.ascension.ranged
-	end
-	return state.combat.ascension.melee
-end
-
--- Step is 1..3 of the melee chain; the class's chain multiplier is the whole difference between
--- a normal hit and the finisher (chain[3] = 1.6 in Armory.json), so no extra finisher factor.
-function Combat.MeleeDamage(cfg: ArmoryConfig, state: CombatOwner, step: number): number
-	local tier = gearTier(state, "melee")
-	local def = Armory.TierDef(cfg, "melee", tier)
-	if def == nil then
-		return 0
-	end
-	local class = Armory.ClassDef(cfg, def.class)
-	local chain = if class ~= nil then class.chain else nil
-	local stepMult = if chain ~= nil and chain[step] ~= nil then chain[step] else NEUTRAL_MULT
-	return Armory.WeaponDamage(cfg, "melee", tier, ascensionTier(state, "melee")) * stepMult
-end
-
--- `charge` is the SERVER's clamped draw fraction (elapsed / chargeSeconds), never the client's
--- claim. Non-charge families ignore it entirely.
-function Combat.RangedDamage(cfg: ArmoryConfig, state: CombatOwner, charge: number): number
-	local tier = gearTier(state, "ranged")
-	local def = Armory.TierDef(cfg, "ranged", tier)
-	if def == nil then
-		return 0
-	end
-	local base = Armory.WeaponDamage(cfg, "ranged", tier, ascensionTier(state, "ranged"))
-	local class = Armory.ClassDef(cfg, def.class)
-	if class == nil or class.fire ~= "charge" then
-		return base
-	end
-	local floorFraction = class.minDamageFraction or 0
-	return base * (floorFraction + (1 - floorFraction) * math.clamp(charge, 0, 1))
-end
-
-local function slotAbility(cfg: ArmoryConfig, state: CombatOwner, slot: string): AbilityDef?
-	local def = Armory.TierDef(cfg, slot, gearTier(state, slot))
-	if def == nil or def.ability == "" then
-		return nil
-	end
-	return Armory.AbilityDef(cfg, def.ability)
-end
-
--- Ascension scales abilities on its own curve (abilityMult), which is why this is not simply
--- WeaponDamage x damageMult.
-function Combat.AbilityDamage(cfg: ArmoryConfig, state: CombatOwner, slot: string): number
-	local ability = slotAbility(cfg, state, slot)
-	if ability == nil then
-		return 0
-	end
-	local ascLevel = ascensionTier(state, slot)
-	local levelDef = if ascLevel > 0 then cfg.ascension.levels[ascLevel] else nil
-	local ascMult = if levelDef ~= nil then levelDef.abilityMult else NEUTRAL_MULT
-	local base = Armory.WeaponDamage(cfg, slot, gearTier(state, slot), ascLevel)
-	return base * ability.damageMult * ascMult
-end
-
--- 0 for a weapon with no ability: the caller reads that as "nothing to fire", never as "ready".
-function Combat.AbilityCooldown(cfg: ArmoryConfig, state: CombatOwner, slot: string): number
-	local ability = slotAbility(cfg, state, slot)
-	if ability == nil then
-		return 0
-	end
-	return ability.cooldown
 end
 
 -- L1b-15: what a kill pays is split the moment it falls, so a share is often a fraction of a
@@ -821,12 +367,9 @@ function Combat.SplitCarry(
 end
 
 -- ---------------------------------------------------------------------------------------------
--- P5: crowd missions. Party size scales the counts of the ordinary groups and the boss body's
--- HP only (the C2 rule); Overdrive scales counts, HP, damage and rewards, never plates or regen.
--- L1: the three rules below (CampWave, CampReward, BurstSeconds) are the ones a run reads; a
--- level's camp passes its difficulty's scales. CrowdWave, CrowdReward and BurstInterval are the
--- mission-shaped callers kept for the simulator's assertions, and give the same numbers.
--- tools/sim_combat.py mirrors all six exactly.
+-- P5, L1: a level's camps. Party size scales the counts of the ordinary groups and the boss
+-- body's HP only (the C2 rule); a camp's difficulty passes its scales. tools/sim_combat.py
+-- mirrors every rule below exactly.
 -- ---------------------------------------------------------------------------------------------
 
 -- One wave of a camp, resolved for a difficulty and a party. `rank` is the played difficulty's
@@ -926,15 +469,6 @@ function Combat.DeadFraction(spawned: number, queuedAlive: number): number
 	return math.min(math.max((spawned - math.max(queuedAlive, 0)) / spawned, 0), 1)
 end
 
--- KillReward at the spec's rewardMult (the mission-shaped callers' form).
-function Combat.CampReward(
-	rewards: { [string]: MissionCrowdReward },
-	kind: string,
-	spec: CrowdWaveSpec
-): (number, number)
-	return Combat.KillReward(rewards, kind, spec.rewardMult)
-end
-
 -- Seconds between two bursts of the same wave: the whole wave is meant to land inside
 -- targetWaveSeconds, and a party killing fast (tempo > 1) gets it sooner.
 function Combat.BurstSeconds(targetWaveSeconds: number, bursts: number, tempo: number): number
@@ -942,63 +476,6 @@ function Combat.BurstSeconds(targetWaveSeconds: number, bursts: number, tempo: n
 		return targetWaveSeconds
 	end
 	return targetWaveSeconds / bursts / tempo
-end
-
--- nil when the mission has no `crowd` block or no such wave.
-function Combat.CrowdWave(
-	mission: MissionConfig,
-	wave: number,
-	partySize: number,
-	overdrive: boolean,
-	combatCfg: CombatRules
-): CrowdWaveSpec?
-	local crowd = mission.crowd
-	if crowd == nil then
-		return nil
-	end
-	local waveDef = crowd.waves[wave]
-	if waveDef == nil then
-		return nil
-	end
-	local overdriveCfg = combatCfg.overdrive
-	local spec = Combat.CampWave(waveDef, crowd.regenShare, {
-		hpScale = crowd.hpScale * (if overdrive then overdriveCfg.hpMult else NEUTRAL_MULT),
-		damageScale = crowd.damageScale
-			* (if overdrive then overdriveCfg.damageMult else NEUTRAL_MULT),
-		plateScale = crowd.plateScale,
-		countMult = if overdrive then overdriveCfg.countMult else NEUTRAL_MULT,
-		rewardMult = if overdrive then overdriveCfg.rewardMult else NEUTRAL_MULT,
-	}, 0, {}, partySize, combatCfg)
-	spec.wave = wave
-	return spec
-end
-
-function Combat.CrowdReward(
-	mission: MissionConfig,
-	kind: string,
-	spec: CrowdWaveSpec
-): (number, number)
-	local crowd = mission.crowd
-	if crowd == nil then
-		return 0, 0
-	end
-	return Combat.CampReward(crowd.rewards, kind, spec)
-end
-
--- BurstSeconds, faster under Overdrive.
-function Combat.BurstInterval(
-	mission: MissionConfig,
-	bursts: number,
-	tempo: number,
-	overdrive: boolean,
-	combatCfg: CombatRules
-): number
-	local seconds = Combat.BurstSeconds(mission.targetWaveSeconds, bursts, tempo)
-	if bursts <= 0 or tempo <= 0 then
-		return seconds
-	end
-	local rateMult = if overdrive then combatCfg.overdrive.spawnRateMult else NEUTRAL_MULT
-	return seconds / rateMult
 end
 
 return Combat

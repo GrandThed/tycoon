@@ -2,8 +2,8 @@
 -- The arithmetic of a level's grey blocks (docs/INTERFACES.md "L1 contracts" → "Server modules"
 -- → "A — the world", rulings 27, 29 and 31; "L1b contracts" → "LevelGeometry"): where a camp's
 -- floor, fence, gates, invisible wall and fire markers stand (gates and the wall only for the
--- camp that locks, L1b-12), how deep the ground is built, what a layout's bounds are, the adapter that reads
--- the C1 Village arena as a level of one camp, and the whole list of Parts a layout becomes.
+-- camp that locks, L1b-12), how deep the ground is built, what a layout's bounds are, and the
+-- whole list of Parts a layout becomes. (The C1 arena's adapter went with the arena in L4 W1b.)
 -- LevelService turns that list into Instances and does no arithmetic of its own.
 --
 -- Pure: tables and numbers only. No Vector3, no Instance, no clock and nothing yields; it
@@ -76,8 +76,6 @@ export type Piece = {
 	opens: string?,
 }
 
--- The id of the one camp an arena becomes (ruling 27; StageFlow.Resolve names the same zone).
-local ARENA_CAMP_ID = "arena"
 -- Two edges closer than this are one edge: layouts are written in halves and quarters of a stud.
 local SEAM = 1e-6
 -- The looks of the blocks a body lands on (tools/check_levels.py GROUND_LOOKS names the same
@@ -96,7 +94,7 @@ local SIDES: { [string]: Side } = {
 	west = { alongX = false, sign = -1 },
 	east = { alongX = false, sign = 1 },
 }
--- The order boxes are returned in: the C1 arena's (its Fence1..4 and Barrier1..4).
+-- The order boxes are returned in (Fence1..4 and Barrier1..4).
 local SIDE_ORDER = { "north", "south", "west", "east" }
 
 local LevelGeometry = {}
@@ -346,7 +344,7 @@ end
 -- The visible fence, cut at the gates: per side (north, south, west, east) the stretches no gate
 -- opens, in order along the side. It stands outside the floor's edge; the north and south sides
 -- run past the west and east ones by the thickness, so the corners close. Empty without a
--- fence. With no gate it is the C1 arena's four boxes.
+-- fence. With no gate it is four boxes.
 function LevelGeometry.FenceBoxes(camp: Types.LevelCamp, thickness: number): { Box }
 	local boxes: { Box } = {}
 	local height = fenceHeight(camp)
@@ -694,62 +692,6 @@ function LevelGeometry.Bounds(layout: Types.LevelLayout, floorThickness: number?
 	}
 end
 
--- Ruling 27: the C1 arena read as a level. One camp, "arena", that locks (L1b-12), whose floor
--- top is the world origin: the arena's size, floor, fence and cover; no gates; the party enters
--- at the first
--- player spawn (else the pad) and leaves and starts at the pad; the crowd arrives at the
--- arena's enemy spawns. The invisible wall is the arena's (none without barrierHeight; a
--- thickness of 0 means the fence's). Every table is new: the arena's own is a shared module.
-function LevelGeometry.FromArena(arena: Types.ArenaLayout, killY: number): Types.LevelLayout
-	local pad = arena.lobbyPad
-	local first = listOf(arena.playerSpawns)[1] or pad
-	local spawns: { Types.ArenaPoint } = {}
-	for _, point in listOf(arena.enemySpawns) do
-		table.insert(spawns, { x = point.x, z = point.z })
-	end
-	local obstacles: { Types.ArenaObstacle } = {}
-	for _, obstacle in listOf(arena.obstacles) do
-		table.insert(obstacles, table.clone(obstacle))
-	end
-	local wall = arena.wall
-	local barrier: Types.LevelBarrier? = nil
-	if wall ~= nil and wall.barrierHeight ~= nil and wall.barrierHeight > 0 then
-		barrier = { height = wall.barrierHeight, thickness = wall.barrierThickness or 0 }
-	end
-	local camp: Types.LevelCamp = {
-		id = ARENA_CAMP_ID,
-		x = 0,
-		y = 0,
-		z = 0,
-		sx = arena.size.x,
-		sz = arena.size.z,
-		floor = { material = arena.floor.material, color = table.clone(arena.floor.color) },
-		fence = if wall ~= nil
-			then { height = wall.height, material = wall.material, color = table.clone(wall.color) }
-			else nil,
-		gates = {},
-		entry = { x = first.x, z = first.z },
-		exit = { x = pad.x, z = pad.z },
-		checkpoint = nil,
-		spawns = spawns,
-		obstacles = obstacles,
-		locks = true,
-		spots = nil,
-	}
-	return {
-		version = 1,
-		arena = nil,
-		start = { x = pad.x, y = 0, z = pad.z },
-		spawns = nil,
-		killY = killY,
-		barrier = barrier,
-		camps = { camp },
-		blocks = {},
-		secrets = {},
-		route = {},
-	}
-end
-
 -- The stand-in lobby, built when Layouts/Levels has no lobby file: one pad of look `lobby` and
 -- four points on it. It lies 1,500 studs north of the world origin, clear of every camp (each
 -- is within 1,000 studs of the origin on every axis). The pad is a deep block and the kill
@@ -759,7 +701,6 @@ function LevelGeometry.BareLobby(): Types.LevelLayout
 	local z = -1500
 	return {
 		version = 1,
-		arena = nil,
 		start = { x = 0, y = 0, z = z },
 		spawns = {
 			{ x = -6, y = 0, z = z - 6 },
@@ -898,22 +839,17 @@ end
 -- Secret_lookout). L2-36: a block whose `opens` names a shortcut in `open` (the leader's found
 -- shortcuts; nil = none) is left out, as if the layout did not hold it, before any block is
 -- measured; every other block keeps its `react` and `opens` on its piece.
--- nil and one line saying why when the layout cannot be built: it still
--- names an arena, a camp has gates and no fence, a camp's fence names a thickness that is not a
--- positive number, a camp's floor has no depth (`sizes.floor`),
--- a piece has a position that is not a number or a size that is not positive (a block, a
--- camp, a piece of cover or a secret with a size of 0 or less), or it is more than `maxParts`
--- Parts.
+-- nil and one line saying why when the layout cannot be built: a camp has gates and no fence, a
+-- camp's fence names a thickness that is not a positive number, a camp's floor has no depth
+-- (`sizes.floor`), a piece has a position that is not a number or a size that is not positive (a
+-- block, a camp, a piece of cover or a secret with a size of 0 or less), or it is more than
+-- `maxParts` Parts.
 function LevelGeometry.Pieces(
 	layout: Types.LevelLayout,
 	sizes: Sizes,
 	maxParts: number,
 	open: { [string]: boolean }?
 ): ({ Piece }?, string?)
-	if layout.arena ~= nil and layout.camps == nil then
-		return nil,
-			`the layout names the arena "{layout.arena}": resolve it with LevelGeometry.FromArena`
-	end
 	local depth = depthOf(sizes.floor)
 	local pieces: { Piece } = {}
 	local blocks = listOf(layout.blocks)

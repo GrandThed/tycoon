@@ -1000,4 +1000,161 @@ function W2L3.sourceTests(): ()
 end
 L1.group("l3w2 sourceTests", W2L3.sourceTests)
 
+-- L4 W1b (docs/prompts/l4-w1b-contract.md §4, §5): the service lines that apply L4B-7 and L4B-8, read as
+-- text (FIXTURES.source.l4b, run_harness.py's L4B_LINES and L4B_ORDER; none of the three services
+-- loads here). The rules themselves are tests_l4b.luau's (DashProof) and tests_l4b_run.luau's (RunFloors).
+local L4BP: any = {
+	LINES = {
+		dashGrantsNothing = { 0, "WeaponService.OnDash grants nothing: no GrantIframes, DashProof, showIframes or window write (L4B-7)" },
+		dashClaim = { 1, "OnDash records the claim at the request (dashClaimAt = now)" },
+		dashStamp = { 1, "and stamps the cooldown (lastDashAt = now)" },
+		dashDown = { 1, "and refuses a downed player" },
+		trackRecordThenProve = { 1, "trackAir proves a pending claim right after this frame's ring sample" },
+		trackNoRootClears = { 1, "and a frame with no living root drops the claim" },
+		trackEach = { 1, "trackAir runs each shooter under its own xpcall, the loop holding nothing else (H2)" },
+		trackOneDefined = { 1, "one shooter's air tracking (trackOne) lives inside trackAir (H2)" },
+		trackOneNames = { 2, "trackOne is named twice: its definition and the xpcall (H2)" },
+		proveStep = { 1, "proveDash runs DashProof.Step on the ring, now, the root, the rule and dashIframes" },
+		proveShows = { 1, "and shows the attribute only for a proof" },
+		proveWritesNothing = { 0, "proveDash itself writes no claim and no window (Step does)" },
+		ruleRead = { 1, "the rule is read from movement and shooting (dashRule)" },
+		ruleCalls = { 1, "DashProof.Rule( is spelled once" },
+		pendingNoClaim = { 1, "pendingDash answers 0, 0, 0 before building a rule when there is no claim (s2)" },
+		pendingClaim = { 1, "pendingDash answers DashProof.Pending on the shooter's claim (F1)" },
+		hookClaim = { 1, "VitalsService is handed pendingDash as its dashClaim hook (F1)" },
+		stepHead = { 1, "step opens with the clock, then the proofs, then VitalsService, nothing between (G3)" },
+		stepVitals = { 1, "WeaponService's step runs VitalsService.Step under xpcall (F1: one handler; G2)" },
+		stepRest = { 1, "and the rest under xpcall (G2)" },
+		startConnects = { 1, "Start connects step itself to the Heartbeat (G3)" },
+		stepFailedBody = { 1, "stepFailed as one block: each message warned once, with its traceback, never silent (G2; m2)" },
+		vitalsStepCalls = { 1, "VitalsService.Step is named once" },
+		heartbeats = { 1, "WeaponService connects one Heartbeat" },
+		grantOpens = { 1, "GrantIframes opens from now, or the earlier `from` (G1), through DashProof.Open, then shows it" },
+		openCalls = { 1, "DashProof.Open( is spelled once in WeaponService (GrantIframes)" },
+		stepCalls = { 1, "DashProof.Step( is spelled once (proveDash)" },
+		claimWrites = { 3, "shooter.dashClaimAt is written three times: OnDash, trackAir's no-root clear, resetAir" },
+		resetDropsClaim = { 1, "resetAir drops a pending claim" },
+		runStateSpelled = { 1, "ArenaService spells \"RunState\" once: sendRunState's FireClient (L4B-8)" },
+		sendRunStateCalls = { 3, "sendRunState( three times: its definition, sendSummaryTo, Broadcast" },
+		attachCalls = { 2, "RunFloors.Attach( twice: sendRunState and BuildRunState" },
+		sendSkip = { 1, "sendRunState reaches Attach only for a member not noted for this set (slice 2 s1)" },
+		sendAttach = { 1, "and asks Attach with the member's note" },
+		sendCellsWent = { 1, "and swaps the cells in only when Attach says they went (F3)" },
+		sendClone = { 1, "on a copy of the RunState, never the one Broadcast shares (F3)" },
+		sendFloors = { 1, "and sends the floors Attach answered" },
+		sendFloorsWrites = { 1, "sent.floors is written only there" },
+		sendNote = { 1, "and records the set it sent" },
+		sendFires = { 1, "and fires what it built (sent), not the bare RunState" },
+		buildAttach = { 1, "BuildRunState builds its floors with no cells (sentSeq = the set)" },
+		buildFloors = { 1, "BuildRunState's payload carries those floors" },
+		buildSeq = { 1, "and the set's number" },
+		admitClears = { 1, "Admit clears the member's note: a rejoin gets the cells" },
+		removeClears = { 1, "Remove clears it too" },
+		noteWrites = { 3, "play.cellsSent[...] is written three times (the send, Admit, Remove)" },
+		floorsAssigned = { 1, "WaveService assigns run.floors once (in setFloors)" },
+		seqRaised = { 1, "setFloors raises boot.floorsSeq" },
+		seqWrites = { 1, "and nothing else writes it" },
+		setFloorsCalls = { 4, "setFloors( four times: its definition, the start, the lobby, Reset" },
+		startSets = { 1, "a start's floors are a new set" },
+		lobbySets = { 2, "the lobby's and a session reset's empty list are new sets too" },
+		pushSeq = { 1, "pushRunFields hands the set's number to ArenaService" },
+		uiHeld = { 1, "applyFloors merges against what it holds (F3)" },
+		uiMerge = { 1, "and through RunFloors.Merge with the held set's number" },
+		uiSeq = { 1, "then keeps the incoming set's number" },
+		uiKeep = { 1, "and keeps the merged floors" },
+		uiCall = { 1, "onRunState hands over the floors with the RunState's floorsSeq (0 when missing)" },
+		uiApplyCalls = { 2, "applyFloors( twice: its definition and onRunState" },
+		uiMergeCalls = { 1, "RunFloors.Merge( once in CombatUIController" },
+		uiSeqWrites = { 1, "st.floorsSeq is written only there" },
+		uiConnect = { 1, "onRunState is the RunState listener" },
+		mentorTotal = { 1, "payMentors weighs every share against the sum of the boss's damage (s1)" },
+		mentorNone = { 1, "payMentors pays nobody when nobody hurt the boss (F6)" },
+		mentorFloor = { 1, "a mentor waiting in the lobby camp or under the damage floor is not paid" },
+		menteeOther = { 1, "a mentee is another member" },
+		menteeFloor = { 1, "whose share of the boss reached the floor" },
+		menteeRate = { 1, "and the mentee's own income rate is what is weighed" },
+		mentorBonusCall = { 1, "against the mentor's rate, through Combat.MentorBonus (check_stage_mirror compares it)" },
+		mentorValor = { 1, "the bonus goes to the mentor's Valor" },
+		mentorCard = { 1, "and onto the mentor's card" },
+		mentorNoBonus = { 1, "a mentor whose bonus is nothing gets no Valor, card or toast (s1)" },
+		mentorBonusCalls = { 1, "Combat.MentorBonus( once in WaveService" },
+		bossPaysMentors = { 1, "the boss's kill pays the mentors" },
+		h1Body = { 1, "fieldHeld as one block: a waiting blow holds a clear field, the down keeps the tick's finding, the cap (H1)" },
+		h1Asks = { 1, "fieldHeld asks HasWaiting of every fighter" },
+		h1DownKeeps = { 1, "the down's advance keeps the last tick's finding (its list is already empty)" },
+		h1Notes = { 1, "the tick notes what it found" },
+		h1ClearOnly = { 1, "only a field that would read clear is held" },
+		h1Resets = { 1, "the deferral starts over when nothing waits" },
+		h1Starts = { 1, "the deferral's start is noted" },
+		h1Rule = { 1, "the lapse is the rule WeaponService proves claims by" },
+		h1Lapse = { 1, "no rule, no lapse (nothing can wait)" },
+		h1Cap = { 1, "never held longer than a lapse and the frame" },
+		h1Writes = { 3, "blowWaits and heldSince are written only in fieldHeld" },
+		h1Defs = { 1, "fieldHeld is defined once" },
+		h1Calls = { 2, "fieldHeld( twice: its definition and advance" },
+		h1AdvanceDelta = { 1, "advance takes the frame (nil from OnDown)" },
+		h1AdvanceHolds = { 1, "advance asks fieldHeld with the frame" },
+		h1AdvanceHoldWrites = { 1, "a held field does not read clear" },
+		h1SpawningWrites = { 1, "input.spawningDone is written only there" },
+		h1AdvanceCalls = { 2, "advance is called by the tick and by OnDown" },
+		h1TickDelta = { 1, "tick takes the Heartbeat's frame" },
+		h1TickAdvance = { 1, "the tick passes its frame to advance" },
+		h1DownAdvance = { 1, "OnDown passes none: the down keeps the tick's finding" },
+		h1BootTick = { 1, "Boot's Heartbeat passes its frame to the tick" },
+		h1FreshBlowWaits = { 1, "a run starts with no blow found" },
+		h1FreshHeldSince = { 1, "and no deferral" },
+		h1DashProof = { 1, "WaveService requires DashProof for the lapse" },
+	},
+	ORDER = {
+		trackOrder = "trackAir: the ring sample comes before the claim is judged",
+		frameOrder = "step: the proofs (trackAir) come before VitalsService decides (F1)",
+		restLast = "step: the rest after VitalsService (G2)",
+		sendOrder = "sendRunState: Attach comes before the note",
+		uiMergeThenSeq = "applyFloors: the merge reads the held number before it is replaced",
+		uiMergeThenSame = "and the comparison sees the merged floors",
+		uiGuardThenFloors = "onRunState: the floors after the guard",
+		uiFloorsFirst = "and before the new-level branch (F4)",
+		mentorFloorThenPay = "payMentors: the mentor's floor is tested before the pay",
+		bonusGuardThenPay = "payMentors: a bonus of nothing is turned back before the pay (s1)",
+		h1InputThenHold = "advance: the hold reads the input it has built (H1)",
+		h1HoldThenAdvance = "advance: the hold before StageFlow decides (H1)",
+	},
+}
+
+function L4BP.sourceTests(): ()
+	print(" L4 W1b: the lines that apply the dash proof and the floor sets (source.l4b)")
+	local reading = FIXTURES.source.l4b
+	check(
+		#reading.missing == 0,
+		`every function the lines live in is there ({table.concat(reading.missing, ", ")})`
+	)
+	local keys = {}
+	for key in L4BP.LINES do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local expected = L4BP.LINES[key]
+		local count = reading.counts[key]
+		check(count == expected[1], `{expected[2]} ({key}: {tostring(count)}, expected {expected[1]})`)
+	end
+	local unknown = {}
+	for key in reading.counts do
+		if L4BP.LINES[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	for key, text in L4BP.ORDER do
+		check(reading.order[key] == true, `{text} ({key})`)
+	end
+	for key in reading.order do
+		if L4BP.ORDER[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	table.sort(unknown)
+	check(#unknown == 0, `every line read has an expected count here ({table.concat(unknown, ", ")})`)
+end
+L1.group("l4b sourceTests", L4BP.sourceTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

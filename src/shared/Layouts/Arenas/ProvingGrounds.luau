@@ -1,7 +1,7 @@
 --!strict
 -- Proving Grounds, the P1 test range (docs/COMBAT_DESIGN.md section 8, INTERFACES "P1 contracts").
--- The same data-file rules as Arenas/Village.luau: plain numbers, Enum.Material NAMES and RGB
--- triples, so ArenaService owns every Instance.
+-- A data file: plain numbers, Enum.Material NAMES and RGB triples, so ArenaService owns every
+-- Instance.
 --
 -- Geometry that the config depends on:
 -- * origin = arena centre, floor TOP face at y = 0. The lobby pad sits near the +Z edge and the
@@ -11,8 +11,8 @@
 --   with it by hand.
 -- * The dummy field (|x| <= 20, z from -10 to 85) is kept flat: the only geometry in it is the
 --   0.2-stud distance strips, which neither trip a character nor block a hitscan ray.
--- * Obstacles here are range furniture, not cover the mission AI paths around. P1 crowd steering
---   only separates enemies, so nothing solid sits in the lane a chasing set runs down.
+-- * Obstacles here are range furniture, not cover. The crowd only separates its bodies, so nothing
+--   solid sits in the lane a chasing set runs down.
 
 local SPAWN_Z = 90
 -- Half-width of the dummy lane; the strips span it and the tally posts stand just outside.
@@ -157,18 +157,6 @@ local layout: Types.ArenaLayout = {
 		{ x = 8, z = SPAWN_Z + 4 },
 		{ x = -8, z = SPAWN_Z - 4 },
 		{ x = 8, z = SPAWN_Z - 4 },
-	},
-	-- Required by the contract (8, round-robin) but unused by the range: the dummy sets place
-	-- their own crowds. Kept on the far half, clear of every obstacle.
-	enemySpawns = {
-		{ x = 0, z = -95 },
-		{ x = -60, z = -95 },
-		{ x = 60, z = -95 },
-		{ x = -95, z = -60 },
-		{ x = 95, z = -60 },
-		{ x = -95, z = 0 },
-		{ x = 95, z = 0 },
-		{ x = 0, z = -60 },
 	},
 	obstacles = obstacles,
 }

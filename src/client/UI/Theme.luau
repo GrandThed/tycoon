@@ -310,26 +310,21 @@ local Theme = {
 	LOAD_TICK_SECONDS = 0.25, -- countdown / slow-line refresh cadence
 	LOAD_RETRY_ACK_SECONDS = 5, -- "Retrying…" re-arms to Retry if no status answers by then
 
-	-- C0 combat place (src/combat/client): lobby/wave HUD and the summary card. The HP bar
-	-- reads the local Humanoid, the party list mirrors RunState.party, and the tempo dot
-	-- colours the director's pace — no combat input exists yet.
+	-- C0 combat place (src/combat/client): the run layer (CombatHud) and the summary card. The
+	-- party list mirrors RunState.party, and the tempo dot colours the director's pace.
 	COMBAT_TEMPO_DOT_SIZE = 14,
 	COMBAT_TEMPO_CALM = 0.9, -- below this the director is holding back
 	COMBAT_TEMPO_HOT = 1.3, -- at or above this it is merging waves
+	-- The C1 HP bar's width, kept as the width of the Alt and key hints over the run's buttons.
 	COMBAT_HP_BAR_WIDTH = 200,
-	COMBAT_HP_BAR_HEIGHT = 18,
-	COMBAT_HP_LABEL_HEIGHT = 16,
 	COMBAT_PARTY_WIDTH = 160,
 	COMBAT_PARTY_ROW_HEIGHT = 34,
 	COMBAT_PARTY_BAR_HEIGHT = 6,
 	COMBAT_PARTY_NAME_HEIGHT = 16,
 	COMBAT_SUMMARY_WIDTH = 320,
-	-- Portrait cannot fit the HP block and both buttons on one line, so the HP block lifts
-	-- above the button row whenever their combined design width does not fit.
-	COMBAT_HP_BUTTONS_GAP = 8,
 
-	-- C2 combat client (src/combat/client, ui-engineer A): co-op party rows, the waiting
-	-- banner and party fx. Presentation only; every co-op number arrives in RunState/CombatFx.
+	-- C2 combat client (src/combat/client, ui-engineer A): co-op party rows and the waiting
+	-- banner. Presentation only; every co-op number arrives in RunState.
 	COMBAT_PARTY_SHARE_WIDTH = 36, -- right edge of a party row, fits "100%"
 	COMBAT_PARTY_STATUS_HEIGHT = 14, -- "joins next wave" line that replaces a waiting HP bar
 	-- Mid screen, under the tallest (4-row) party list in portrait and clear of both thumb
@@ -337,29 +332,14 @@ local Theme = {
 	COMBAT_WAITING_TOP_FRACTION = 0.55,
 	COMBAT_WAITING_WIDTH = 260,
 	COMBAT_WAITING_HEIGHT = 40,
-	COMBAT_WAITING_TOAST_COOLDOWN = 3, -- seconds between "waiting" refusal toasts
 	-- Another player's swing: their weapon class is not sent, so one fixed pose window.
 	COMBAT_REMOTE_SWING_SECONDS = 0.35,
-	COMBAT_PARTY_RING_SECONDS = 0.6,
-	COMBAT_PARTY_RING_TRANSPARENCY = 0.35,
-	COMBAT_PARTY_PULSE_SECONDS = 0.5,
-	COMBAT_PARTY_PULSE_FILL = 0.45,
 
-	-- C1 combat controls. Touch-first: the attack button owns the bottom-right thumb arc,
-	-- the two ability buttons stack immediately left of it and the stance pill sits above
-	-- them. Every one of these is at or above TAP_TARGET_MIN / MIN_SCALE (44 / 0.9167 = 48
-	-- design px), so nothing shrinks below a 44 physical px target on the smallest viewport.
-	-- C2.5: one right-thumb cluster; the attack button grew (the thumb's resting target) and
-	-- the stance pill became a round button on the arc between the two abilities.
-	COMBAT_ATTACK_BUTTON_SIZE = 88,
-	COMBAT_ABILITY_BUTTON_SIZE = 56,
+	-- Combat controls. Every tap target is at or above TAP_TARGET_MIN / MIN_SCALE (44 / 0.9167
+	-- = 48 design px), so nothing shrinks below a 44 physical px target on the smallest viewport.
 	COMBAT_CONTROL_GAP = 8,
-	COMBAT_STANCE_SIZE = 52,
-	COMBAT_STANCE_GLYPH_TEXT = 20,
-	COMBAT_CLUSTER_GAP = 10, -- ring gap between the attack button and its satellites
-	COMBAT_CLUSTER_STROKE_TRANSPARENCY = 0.6,
 	-- Roblox's touch jump button, mirrored from the PlayerModule's TouchJump sizing so the
-	-- cluster never covers it: small screens (shorter side <= 500 px) get a 70 px button
+	-- thumb cluster never covers it: small screens (shorter side <= 500 px) get a 70 px button
 	-- 95 px from the right and 90 px from the bottom, larger ones 120 px, 170 / 210 px in.
 	COMBAT_JUMP_SMALL_AXIS = 500,
 	COMBAT_JUMP_SMALL_SIZE = 70,
@@ -369,8 +349,6 @@ local Theme = {
 	COMBAT_JUMP_SMALL_BOTTOM_PAD = 20,
 	COMBAT_JUMP_LARGE_BOTTOM_FACTOR = 1.75,
 	COMBAT_ALT_HINT_HEIGHT = 16,
-	COMBAT_ABILITY_KEY_HEIGHT = 12,
-	COMBAT_ABILITY_NAME_HEIGHT = 12,
 	COMBAT_ABILITY_MIN_TEXT = 8,
 	-- No image asset exists for a radial sweep (every id in the project is still 0), so a
 	-- cooldown "ring" is a dark wipe that falls from the top of the round button plus the
@@ -382,48 +360,29 @@ local Theme = {
 	COMBAT_WALLET_WIDTH = 352,
 	COMBAT_WALLET_HEIGHT = 26,
 	COMBAT_WALLET_GAP = 6,
-	COMBAT_WALLET_MIN_TEXT = 9,
-	COMBAT_BOSS_WIDTH = 300,
 	COMBAT_BOSS_BAR_HEIGHT = 14,
 	COMBAT_BOSS_LABEL_HEIGHT = 16,
 	COMBAT_HEADER_TIMER_WIDTH = 74,
 	COMBAT_PARTY_DOWN_TRANSPARENCY = 0.55,
 	COMBAT_TIMER_TICK_SECONDS = 0.25,
 
-	-- C1 feedback (CombatFxController). Durations that the server owns arrive in
-	-- Combat.json `feedback`; only the presentation shape lives here.
-	COMBAT_DAMAGE_TEXT_SIZE = 20,
+	-- C1 feedback (CombatFxController: the Mentor line and the banners). Durations that the
+	-- server owns arrive in Combat.json `feedback`; only the presentation shape lives here.
 	COMBAT_DAMAGE_FINISHER_TEXT_SIZE = 30,
 	COMBAT_DAMAGE_BILLBOARD_WIDTH = 140,
 	COMBAT_DAMAGE_BILLBOARD_HEIGHT = 40,
 	COMBAT_DAMAGE_RISE = 4.5,
 	COMBAT_DAMAGE_JITTER = 1.2, -- studs of sideways offset so stacked numbers stay readable
 	COMBAT_DAMAGE_MAX_ACTIVE = 24, -- a merged wave can land dozens of hits in one frame
-	COMBAT_KILL_PARTICLES = 10,
-	COMBAT_HIT_HIGHLIGHT_SECONDS = 0.16,
-	COMBAT_HIT_HIGHLIGHT_FILL = 0.55,
-	COMBAT_TELL_HIGHLIGHT_FILL = 0.75,
-	COMBAT_KNOCKBACK_STUDS = 1.6,
-	COMBAT_KNOCKBACK_SECONDS = 0.18,
 	COMBAT_CAMERA_KICK_DECAY = 9, -- per second; the kick is gone inside ~0.2 s
-	COMBAT_ABILITY_RING_SECONDS = 0.35,
-	COMBAT_ABILITY_RING_HEIGHT = 0.4,
-	COMBAT_ABILITY_RING_TRANSPARENCY = 0.4,
 	COMBAT_BANNER_WIDTH = 340,
 	COMBAT_BANNER_HEIGHT = 58,
 	COMBAT_BANNER_TEXT = 28,
 	COMBAT_BANNER_SUB_TEXT = 14,
 	COMBAT_BANNER_TOP_FRACTION = 0.22,
-	-- Vignette: four edge bars with a UIGradient fade, because there is no vignette image
-	-- asset. Pulses while the local HP is under feedback.lowHpFraction.
-	COMBAT_VIGNETTE_THICKNESS = 96,
-	COMBAT_VIGNETTE_TRANSPARENCY = 0.35,
-	COMBAT_VIGNETTE_PULSE_SECONDS = 1.1,
-	COMBAT_HURT_FLASH_TRANSPARENCY = 0.75,
-	COMBAT_HURT_FLASH_SECONDS = 0.25,
 
 	-- C1 weapon visuals (WeaponController): procedural Motor6D poses on the local rig and a
-	-- tracer per shot. Angles are degrees; the pose engine converts.
+	-- bolt per instant shot. Angles are degrees; the pose engine converts.
 	COMBAT_SWING_WINDUP_FRACTION = 0.35, -- share of the class window spent winding up
 	COMBAT_SWING_WINDUP_DEGREES = -55,
 	COMBAT_SWING_STRIKE_DEGREES = 95,
@@ -431,8 +390,6 @@ local Theme = {
 	COMBAT_DRAW_DEGREES = 80,
 	COMBAT_SHOOT_KICK_DEGREES = 25,
 	COMBAT_SHOOT_KICK_SECONDS = 0.1,
-	COMBAT_BEAM_SECONDS = 0.16,
-	COMBAT_BEAM_WIDTH = 0.35,
 	COMBAT_FINISHER_STRIKE_MULT = 1.25, -- the finisher's pose travels further than a slash
 	COMBAT_WEAPON_WAIT_SECONDS = 3, -- WaitForChild budget for the arm that holds the shoulder joint
 	-- L3 W2 (docs/prompts/l3-w2-contract.md, L3-51, L3-58, §11.6): how HeldWeapons hangs a weapon
@@ -451,15 +408,8 @@ local Theme = {
 		* CFrame.Angles(0, math.rad(90), 0)
 		* CFrame.Angles(math.rad(90), 0, 0),
 
-	-- C1 input. The dash a burst ability performs locally; the server already resolved the
-	-- damage along the same segment, so this is presentation that never changes a hit.
-	COMBAT_DASH_SECONDS = 0.18,
-	COMBAT_AIM_MIN_STUDS = 1, -- a crosshair point closer than this to the head aims along the view
-	COMBAT_DASH_MAX_FORCE = 100000,
-	COMBAT_REMOTE_WAIT_SECONDS = 10, -- a remote C1 adds may be missing in an older build
-	-- Workspace/Enemies is built by ArenaService at server boot, so it is normally already
-	-- replicated; the budget only covers a slow join. Missing means "safe mode, no arena".
-	COMBAT_ARENA_WAIT_SECONDS = 20,
+	-- Combat input: a remote a later wave adds may be missing in an older server build.
+	COMBAT_REMOTE_WAIT_SECONDS = 10,
 
 	-- C2.5 shoulder camera (CameraController). Config owns offset, FOV, zoom range and the
 	-- per-device sensitivities; these are the feel of the rig itself. Rotation rates follow the
@@ -479,28 +429,16 @@ local Theme = {
 	COMBAT_CAMERA_TOUCH_SPLIT = 0.5, -- touches starting right of this viewport fraction aim
 	COMBAT_CAMERA_COLLISION_RADIUS = 0.5,
 	COMBAT_CAMERA_COLLISION_PAD = 0.2,
-	-- Trauma shake: feel.shakeLight / shakeHeavy add trauma (0-1); the view moves by trauma
+	-- Trauma shake: hits and hurts add trauma (0-1); the view moves by trauma
 	-- squared times these maxima and trauma drains at the decay rate.
 	COMBAT_SHAKE_MAX_DEGREES = 3,
 	COMBAT_SHAKE_MAX_STUDS = 0.35,
 	COMBAT_SHAKE_ROLL_RATIO = 0.5,
 	COMBAT_SHAKE_FREQUENCY = 18,
 	COMBAT_SHAKE_DECAY_PER_SECOND = 2.2,
-	COMBAT_FINISHER_KICK_MULT = 1.6,
 
-	-- C2.5 reticle (CombatHud): centre crosshair, hit marker and the bow's draw ring, in
-	-- design px scaled with the HUD.
-	COMBAT_RETICLE_SIZE = 72,
-	COMBAT_CROSSHAIR_LENGTH = 8,
-	COMBAT_CROSSHAIR_THICKNESS = 2,
-	COMBAT_CROSSHAIR_GAP = 5,
+	-- The outline on the range crosshair's pieces (Crosshair).
 	COMBAT_RETICLE_STROKE_TRANSPARENCY = 0.5,
-	COMBAT_HIT_MARKER_OFFSET = 12,
-	COMBAT_HIT_MARKER_LENGTH = 8,
-	COMBAT_CHARGE_RING_DOTS = 20,
-	COMBAT_CHARGE_RING_RADIUS = 26,
-	COMBAT_CHARGE_DOT_SIZE = 5,
-	COMBAT_CHARGE_DOT_IDLE_TRANSPARENCY = 0.7,
 
 	-- C2.5 weapon feel (WeaponController): swing trail, animation fit, shots in flight.
 	COMBAT_TRAIL_NEAR = 0.3, -- studs down the hand's -Y (toward the fingers)
@@ -510,19 +448,10 @@ local Theme = {
 	COMBAT_ANIMATION_FADE_SECONDS = 0.05,
 	COMBAT_ANIMATION_MIN_SPEED = 0.6,
 	COMBAT_ANIMATION_MAX_SPEED = 3,
-	COMBAT_ARROW_COLOR = Color3.fromRGB(150, 110, 70),
-	COMBAT_ARROW_LENGTH = 2.4,
-	COMBAT_ARROW_THICKNESS = 0.12,
-	COMBAT_ARROW_TRAIL_WIDTH = 0.06,
-	COMBAT_ARROW_TRAIL_SECONDS = 0.12,
-	COMBAT_ARROW_STICK_SECONDS = 1,
 	COMBAT_BOLT_LENGTH = 3,
 	COMBAT_BOLT_THICKNESS = 0.1,
 	-- Gun bolts fly this many times feel.arrowSpeed: a bullet slower than an arrow reads wrong.
 	COMBAT_BOLT_SPEED_FACTOR = 3,
-	COMBAT_PROJECTILE_FADE_SECONDS = 0.3,
-	COMBAT_PROJECTILE_CLAIM_RADIUS = 5, -- studs off a shot's line a hit may be and still be its
-	COMBAT_HIT_DELAY_MAX_SECONDS = 0.4, -- a hit is never shown later than this after the server
 	COMBAT_MUZZLE_FLASH_SIZE = 0.6,
 	COMBAT_MUZZLE_FLASH_GROWTH = 2,
 	COMBAT_MUZZLE_FLASH_TRANSPARENCY = 0.15,
@@ -530,9 +459,7 @@ local Theme = {
 	COMBAT_MUZZLE_LIGHT_BRIGHTNESS = 3,
 	COMBAT_MUZZLE_LIGHT_RANGE = 10,
 
-	-- C2.5 impact and telegraphs (CombatFxController). Counts come from feel.hitSparkCount;
-	-- these shape the spray.
-	COMBAT_SPARK_SURFACE_OFFSET = 0.8, -- studs back toward the attacker from the enemy root
+	-- C2.5 impact sparks (FeedbackController's hit layer): these shape the spray.
 	COMBAT_SPARK_LIFETIME_MIN = 0.12,
 	COMBAT_SPARK_LIFETIME_MAX = 0.3,
 	COMBAT_SPARK_SPEED_MIN = 14,
@@ -541,28 +468,6 @@ local Theme = {
 	COMBAT_SPARK_GRAVITY = 40,
 	COMBAT_SPARK_DRAG = 4,
 	COMBAT_SPARK_SIZE = 0.25,
-	COMBAT_KILL_POP_START = 0.6,
-	COMBAT_KILL_POP_END = 4,
-	COMBAT_KILL_POP_SECONDS = 0.18,
-	COMBAT_KILL_POP_TRANSPARENCY = 0.3,
-	-- Warmer and brighter than the red attack tell, so "about to hit" reads apart from it.
-	COMBAT_TELEGRAPH_COLOR = Color3.fromRGB(255, 120, 60),
-	COMBAT_TELEGRAPH_SUMMON_COLOR = Color3.fromRGB(170, 100, 235),
-	COMBAT_TELEGRAPH_HIGHLIGHT_FILL = 0.35,
-	COMBAT_TELEGRAPH_AREA_TRANSPARENCY = 0.75,
-	COMBAT_TELEGRAPH_FILL_TRANSPARENCY = 0.4,
-	COMBAT_TELEGRAPH_THICKNESS = 0.1,
-	COMBAT_TELEGRAPH_LIFT = 0.05, -- studs above the floor, doubled for the fill on top
-	COMBAT_TELEGRAPH_MIN_SIZE = 0.2,
-	COMBAT_TELEGRAPH_LINGER_SECONDS = 0.12,
-	COMBAT_TELEGRAPH_GROUND_PROBE = 12,
-	COMBAT_TELEGRAPH_FLOOR_Y = 0, -- arena floor top face, when the probe finds nothing
-	-- Used only when the server omits a radius; the server's number is the real one.
-	COMBAT_TELEGRAPH_DEFAULT_RADIUS = 10,
-	COMBAT_TELEGRAPH_DEFAULT_HALF_WIDTH = 2.5,
-	COMBAT_TELEGRAPH_SUMMON_RADIUS = 6,
-	COMBAT_TELEGRAPH_MARK_SIZE = 44,
-	COMBAT_TELEGRAPH_MARK_RISE = 2.2,
 
 	-- P1 Proving Grounds feedback (FeedbackController, Crosshair, RangePanel). There is no
 	-- sound, so every hit must be seen. How strong each layer is comes from
@@ -1185,7 +1090,6 @@ local Theme = {
 	-- material: one press pays T2 and T3 (100 + 250) for one weapon.
 	COMBAT_DEBUG_GRANT_TIMBER = 500,
 	COMBAT_DEBUG_GRANT_VALOR = 10,
-	COMBAT_DEBUG_MAX_SPAWN_KEYS = 3,
 
 	-- L1 (docs/INTERFACES.md "L1 contracts"): the expeditions map (UI/MapScreen) and the run
 	-- layer's new pieces. The map's colours are the ones of the picture Ben approved

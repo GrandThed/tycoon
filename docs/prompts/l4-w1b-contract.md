@@ -252,3 +252,12 @@ in the lobby.
 - The hub's `fakeParty` / `fakeInvite` levers and the fakeRuns lever (live party UI; W3 for fakeRuns).
 - `MissionCrowdGroup`, `MissionCrowdBoss`, `MissionCrowdWave`, `MissionCrowdReward`: levels use them; a rename is churn.
 - `Combat.json animations.playerSlash` / `playerLunge`, `player.respawnSeconds`, `comboTimingTolerance`, `rescue`.
+
+## 10. Lead's rulings after the review (2026-10-21; detail in `l4-w1b-fix-round.md`)
+
+- **The dash keeps today's feel (F1):** a hit decided while a dash claim is pending, which that claim would cover, is held
+  until the claim is proven (voided) or lapses (lands); pending claims are proven before hits are decided, in one fixed
+  order per frame. This replaces §4.5's "the server's copy must have moved before the decision".
+- **What L4B-7 stops (F5):** a request-only forger (a dash claimed with no movement) and a dash into a wall. It does not
+  stop a modified client that moves its own root: the game has no movement anti-cheat, and such a client can already step
+  out of any shape. Leap Smash and Impale Dash keep their server-granted i-frames at the cast.

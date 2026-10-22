@@ -24,8 +24,9 @@ Validate's firstClear lines; L3-25: every non-starter family's shelf hint, a fir
 found node, the owned families counting firstClear in the bend's known limit, R8's reach following
 the longest ownable ranged family; L3-28: the three lever attributes), and re-aimed by L4 W1 (the
 lookout at the trailhead: L2-18's cases on its new ledge, the ridge's line at 55, the d-M1 cases with
-L2's lookout put back, L3-26 as a tighter R8 band), shown red on a mutated copy of the shipped data, and
-green again on the data as it ships.
+L2's lookout put back, L3-26 as a tighter R8 band), and of L4 W1b (check_adapters_gone: a level file that names
+a mission, a layout that names an arena, a proving level with no map node or two), shown red on a mutated copy of
+the shipped data, and green again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
@@ -153,6 +154,9 @@ SHEET = "with the ice frozen, every frozen sheet is thicker than"
 HINT = "map: every weapons family that is not a starter has a shelf hint"
 FIRST_NODE = "map: every firstClear family with a `found` entry"
 PRESETS = "Combat.json debug.gearPresets are"
+# L4 W1b (§3): the tripwires for ruling 27's adapters, gone with the Raider Arena.
+PROVING = "Combat.json debug.provingLevel"
+ADAPTERS = "no level file names a mission and no layout an arena"
 # The L3 W1 fix round (docs/prompts/l3-w1-fix-round.md R1).
 TROPHY = "Armory.json ladder (R1)"
 
@@ -935,6 +939,18 @@ CASES = (
     ("R1 control: that difficulty listed in starAlso",
      lambda d: (d["expeditions"]["difficulties"].append("overdrive"),
                 d["ctx"]["armory"]["ladder"].__setitem__("starAlso", ["brutal", "overdrive"])), {}, TROPHY, False),
+    # L4 W1b (docs/prompts/l4-w1b-contract.md §3): check_adapters_gone. A level file that still names a
+    # mission, a layout that still names an arena, a proving level no map node names or two nodes name.
+    ("L4 W1b: Forest Road's file names a mission", lambda d: level(d).__setitem__("mission", "village"), {}, ADAPTERS,
+     True),
+    ("L4 W1b: Forest Road's layout names an arena", lambda d: layout(d).__setitem__("arena", "Village"), {}, ADAPTERS,
+     True),
+    ("L4 W1b: debug.provingLevel names a level with no node and no file",
+     lambda d: d["combat"]["debug"].__setitem__("provingLevel", "outpost"), {}, PROVING, True),
+    ("L4 W1b: a second map node names Forest Road's level",
+     lambda d: d["expeditions"]["nodes"].append(dict(d["expeditions"]["nodes"][0], id="outpost", x=0.5, y=0.1)), {},
+     PROVING, True),
+    ("L4 W1b control: the shipped proving level, its one node", lambda d: None, {}, PROVING, False),
 )
 # L4 W2 (MISSIONS_DESIGN 28): tools/check_parkour.py's mutants, each through every gate, and a control.
 CASES += tuple((f"L4 W2: {label}", (lambda m: lambda d: m(layout(d)))(mutate), {}, rule, True)

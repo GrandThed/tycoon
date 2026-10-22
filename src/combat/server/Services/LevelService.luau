@@ -504,7 +504,7 @@ end
 local function lobbyLayout(expeditions: Types.ExpeditionsConfig?): Types.LevelLayout
 	local name = if expeditions ~= nil then expeditions.lobby.layout else nil
 	local layout = if name ~= nil then Catalog.GetLevelLayout(name) else nil
-	if layout ~= nil and layout.arena == nil and layout.start ~= nil then
+	if layout ~= nil and layout.start ~= nil then
 		return layout
 	end
 	warn(`[LevelService] no lobby layout (Layouts/Levels/{name or "?"}); using the bare pad`)
@@ -592,8 +592,8 @@ end
 
 -- Builds `layout` under Workspace.Level, every camp open. false with one warn, and nothing
 -- built, when a level is already standing, before Init, when LevelGeometry.Pieces refuses the
--- layout (it still names an arena, gates with no fence, a camp and no levels.floorThickness, a
--- size of 0 or less, over levels.maxParts), or when a Part cannot be made: the Parts made
+-- layout (gates with no fence, a camp and no levels.floorThickness, a size of 0 or less, over
+-- levels.maxParts), or when a Part cannot be made: the Parts made
 -- before it are cleared, so the next Build starts from an empty folder. Never yields. L2-36:
 -- `open` = the shortcut ids the leader has found (nil = none): a block that opens one is left out.
 function LevelService.Build(

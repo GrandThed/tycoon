@@ -18,7 +18,6 @@ local L1: any = {
 	Flow = load("StageFlow"),
 	Combat = load("Combat"),
 	Geo = load("LevelGeometry"),
-	village = FIXTURES.village,
 	combat = FIXTURES.combat,
 	rules = { gateSeconds = 3, triggerBelow = 4, triggerHeight = 30, closeInset = 2, closeGraceSeconds = 0.5, crowdCeiling = 200, floorThickness = 4, startSpacing = 4, startCooldownSeconds = 2, fenceThickness = 1, boxMargin = 40, maxParts = 600, checkpointReach = 8, walletSendSeconds = 1, regionLockMargin = 8, doorSpare = 0.5 },
 	-- ProvingGrounds.json crowd.maxAlive, for Validate's population gate.
@@ -97,6 +96,52 @@ function L1.level(): any
 			} },
 		},
 	}
+end
+
+-- L4B-6: one camp of ten waves, bosses at 5 and 10, that merges and takes the director's breather,
+-- on L1W.field's gateless locking camp. Written out by hand: it is what the Raider Arena resolved
+-- to (the C1 Village mission's crowd block) before the arena went in L4 W1b, and no shipped level
+-- plays merging or the director's breather since. Resolve takes it as it stands.
+function L1.fieldLevel(): any
+	local function wave(...: any): any
+		local groups = {}
+		for _, pair in { ... } do
+			table.insert(groups, { kind = pair[1], count = pair[2] })
+		end
+		return { groups = groups }
+	end
+	return {
+		version = 1, id = "field", name = "Field", layout = "Field",
+		material = "Timber", targetMinutes = 12,
+		difficulties = { normal = { hpScale = 1.5, damageScale = 1.12, plateScale = 1, countMult = 1, rewardMult = 1, recommendedTier = 2 } },
+		crowd = {
+			regenShare = 0.077, maxAlive = 60, burst = 10, burstSpacing = 3.5,
+			rewards = {
+				fodder = { cash = 60, materials = 0 }, slinger = { cash = 300, materials = 1 }, brute = { cash = 1200, materials = 4 },
+				marksman = { cash = 350, materials = 1 }, lobber = { cash = 350, materials = 1 }, armoured = { cash = 1500, materials = 5 },
+				colossus = { cash = 18000, materials = 30 }, warlord = { cash = 30000, materials = 50 },
+			},
+		},
+		stages = {
+			{ kind = "camp", name = "Field", zone = "field", targetWaveSeconds = 45, merge = true, waves = {
+				wave({ "fodder", 48 }),
+				wave({ "fodder", 72 }),
+				wave({ "fodder", 24 }, { "slinger", 3 }, { "fodder", 24 }, { "slinger", 3 }, { "fodder", 24 }),
+				wave({ "fodder", 24 }, { "brute", 2 }, { "slinger", 3 }, { "fodder", 24 }, { "brute", 2 }, { "slinger", 3 }, { "fodder", 24 }),
+				{ groups = {}, boss = { kind = "colossus", at = { 0, 40 }, valor = 10 } },
+				wave({ "fodder", 24 }, { "marksman", 2 }, { "lobber", 2 }, { "fodder", 24 }, { "slinger", 3 }, { "brute", 2 }, { "fodder", 24 }, { "marksman", 2 }, { "lobber", 2 }),
+				wave({ "fodder", 36 }, { "marksman", 3 }, { "lobber", 3 }, { "slinger", 3 }, { "fodder", 36 }, { "brute", 3 }, { "fodder", 24 }),
+				wave({ "fodder", 24 }, { "armoured", 3 }, { "marksman", 2 }, { "fodder", 24 }, { "lobber", 3 }, { "slinger", 3 }, { "armoured", 3 }, { "fodder", 24 }),
+				wave({ "fodder", 36 }, { "armoured", 3 }, { "marksman", 3 }, { "lobber", 3 }, { "fodder", 36 }, { "brute", 3 }, { "armoured", 3 }, { "slinger", 4 }, { "fodder", 36 }),
+				{ groups = {}, boss = { kind = "warlord", at = { 0, 28 }, valor = 25 } },
+			} },
+		},
+	}
+end
+
+-- The field as WaveService.readLevel and startLevel have it: the level and its layout.
+function L1.field(): (any, any)
+	return L1.Flow.Resolve(L1.fieldLevel(), 1800), L1W.field()
 end
 
 L1.kinds = {
@@ -223,73 +268,23 @@ function L1.group(name: string, cases: () -> ()): ()
 end
 
 function L1.resolveTests(): ()
-	print(" Resolve: the Raider Arena is a level of one camp (ruling 27)")
+	print(" Resolve: a level file as it stands")
 	local Flow = L1.Flow
 	local Combat = L1.Combat
-	local village = L1.village
-	local block = village.crowd
-	local file = { version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village", recommendedTier = 2 }
-	local level = Flow.Resolve(file, village, 1800, "normal")
-	local stage = level.stages[1]
-	local bosses = {}
-	for index, wave in stage.waves do
-		if wave.boss ~= nil then
-			table.insert(bosses, tostring(index))
-		end
-	end
-	check(#level.stages == 1 and stage.kind == "camp" and stage.zone == "arena" and stage.name == "Raider Arena", "one stage: a camp named after the level, in the zone `arena`")
-	check(#stage.waves == 10 and table.concat(bosses, ",") == "5,10", `ten waves, bosses at 5 and 10 ({table.concat(bosses, ",")})`)
-	check(stage.merge == true and stage.breatherSeconds == nil and stage.bankEachWave == nil and #level.camps == 0, "it merges and takes the director's breather; it banks nothing (L1b-15: every kill is paid) and has no resident camps")
-	check(stage.targetWaveSeconds == village.targetWaveSeconds and stage.maxAlive == nil, "the mission's targetWaveSeconds; no cap of its own")
-	local normal = level.difficulties.normal
-	check(normal.hpScale == block.hpScale and normal.damageScale == block.damageScale and normal.plateScale == block.plateScale, "Normal's three scales are the block's")
-	check(normal.countMult == 1 and normal.rewardMult == 1 and normal.recommendedTier == 2 and next(level.difficulties, "normal") == nil, "countMult 1, rewardMult 1, the file's recommendedTier, and no other difficulty")
-	check(level.material == village.material and level.targetMinutes == village.targetMinutes and level.runCapSeconds == 1800 and level.mission == "village", "the mission's material and minutes, the director's cap, and the mission it writes")
-	check(level.crowd.regenShare == block.regenShare and level.crowd.maxAlive == block.maxAlive and level.crowd.burst == block.burst and level.crowd.burstSpacing == block.burstSpacing and level.crowd.rewards == block.rewards, "its crowd numbers are the block's")
-	check(Flow.Resolve(file, nil, 1800, "normal") == nil and Flow.Resolve(file, { id = "bare", material = "Timber" }, 1800, "normal") == nil, "a file whose mission is missing, or has no crowd block, is no level")
-
 	local own = L1.level()
-	local asItStands = Flow.Resolve(own, nil, 1800)
-	check(asItStands ~= nil and asItStands.stages == own.stages and asItStands.crowd == own.crowd and asItStands.difficulties == own.difficulties and asItStands.runCapSeconds == 900 and asItStands.mission == nil, "a file with no mission is taken as it stands, with its own run cap")
+	local asItStands = Flow.Resolve(own, 1800)
+	check(asItStands ~= nil and asItStands.stages == own.stages and asItStands.crowd == own.crowd and asItStands.difficulties == own.difficulties and asItStands.runCapSeconds == 900 and asItStands.camps ~= nil and #asItStands.camps == 0, "a file is taken as it stands, with its own run cap (and no resident camps when it names none)")
+	check(asItStands.material == "Timber" and asItStands.targetMinutes == 7 and asItStands.id == "road" and asItStands.layout == "Road", "its material, minutes, id and layout are the file's")
 	own.runCapSeconds = 0
-	check(Flow.Resolve(own, nil, 1800).runCapSeconds == 1800, "(a file that names no cap runs under the director's)")
+	check(Flow.Resolve(own, 1800).runCapSeconds == 1800, "(a file that names no cap runs under the director's)")
 	for _, key in { "stages", "difficulties", "crowd" } do
 		local broken = L1.level()
 		broken[key] = nil
-		check(Flow.Resolve(broken, nil, 1800) == nil, `a file without {key} is no level`)
+		check(Flow.Resolve(broken, 1800) == nil, `a file without {key} is no level`)
 	end
-
-	print(" Combat: CampWave on the adapter is CrowdWave on the mission")
-	local allSame = true
-	local shown = ""
-	for _, party in { 1, 3 } do
-		for wave = 1, 10 do
-			local camp = Combat.CampWave(stage.waves[wave], level.crowd.regenShare, normal, 1, { normal = 1 }, party, L1.combat)
-			local crowd = Combat.CrowdWave(village, wave, party, false, L1.combat)
-			local same = camp.total == crowd.total and #camp.groups == #crowd.groups and camp.boss == crowd.boss and camp.bossHpMult == crowd.bossHpMult and camp.hpScale == crowd.hpScale and camp.plateScale == crowd.plateScale and camp.damageScale == crowd.damageScale and camp.regenShare == crowd.regenShare and camp.rewardMult == crowd.rewardMult and crowd.wave == wave
-			for index, group in crowd.groups do
-				local other = camp.groups[index]
-				same = same and other ~= nil and other.kind == group.kind and other.count == group.count
-			end
-			if not same and shown == "" then
-				shown = `wave {wave}, party {party}`
-			end
-			allSame = allSame and same
-		end
-	end
-	check(allSame, `all ten waves, solo and in a party of three: groups, counts, boss, every scale ({shown})`)
-	local spec = Combat.CrowdWave(village, 1, 1, false, L1.combat)
-	local rewardsSame = true
-	for kind in block.rewards do
-		local cash, materials = Combat.CampReward(level.crowd.rewards, kind, spec)
-		local wasCash, wasMaterials = Combat.CrowdReward(village, kind, spec)
-		rewardsSame = rewardsSame and cash == wasCash and materials == wasMaterials
-	end
-	local nothing, none = Combat.CampReward(level.crowd.rewards, "nobody", spec)
-	check(rewardsSame and nothing == 0 and none == 0, "CampReward is CrowdReward for every kind, and 0 for a kind with no price")
-	check(Combat.BurstSeconds(45, 6, 1.5) == Combat.BurstInterval(village, 6, 1.5, false, L1.combat) and Combat.BurstSeconds(45, 0, 1) == 45 and Combat.BurstSeconds(45, 6, 0) == 45, "BurstSeconds is BurstInterval without Overdrive, and the whole target with no burst or no tempo")
-	local overdrive = Combat.CrowdWave(village, 1, 1, true, L1.combat)
-	check(overdrive.hpScale == block.hpScale * L1.combat.overdrive.hpMult and overdrive.rewardMult == L1.combat.overdrive.rewardMult, "(CrowdWave still takes Overdrive, for the simulator's old assertions)")
+	local field = L1.field()
+	local stage = field.stages[1]
+	check(#field.stages == 1 and stage.zone == "field" and #stage.waves == 10 and stage.merge == true and stage.breatherSeconds == nil and stage.maxAlive == nil and field.runCapSeconds == 1800, "the hand-written field (L4B-6): one camp of ten waves that merges, takes the director's breather and the level's cap")
 
 	print(" Combat: minDifficulty and countMult")
 	local waveDef = { groups = { { kind = "fodder", count = 8 }, { kind = "armoured", count = 3, minDifficulty = "hard" }, { kind = "slinger", count = 1, minDifficulty = "nightmare" } } }
@@ -412,17 +407,15 @@ function L1.planTests(): ()
 	layout.killY = -450
 	check(#problems(nil, layout) == 0, "(-450 itself is allowed)")
 
-	print(" the Village arena as a level, through both adapters")
-	local arenaFile = { version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village", recommendedTier = 2 }
-	local arenaLevel = Flow.Resolve(arenaFile, L1.village, 1800, "normal")
-	local arenaLayout = L1.Geo.FromArena(L1W.village(), -8)
-	local arenaProblems = Flow.Validate(arenaLevel, arenaLayout, config.crowd.kinds, L1.ranks, L1.rules, L1.crowdMax)
-	check(#arenaProblems == 0, `the real Village mission on the Village arena validates ({arenaProblems[1] or "none"})`)
-	local arenaPlan = Flow.Plan(arenaLevel, arenaLayout, "normal", L1.rules, L1.Geo.Bounds(arenaLayout))
-	local camp = arenaPlan.stages[1]
-	check(#arenaPlan.stages == 1 and arenaPlan.camps == 1 and camp.waves == 10 and camp.boss[5] == true and camp.boss[10] == true and camp.merge and camp.maxAlive == L1.village.crowd.maxAlive and camp.zone.locks == true, "its plan: one camp of ten waves, bosses at 5 and 10, the block's cap; the arena locks")
-	check(camp.zone.rect.hx == 55 and camp.zone.rect.x == 0 and camp.zone.floorY == 0 and #camp.zone.spawns == 8 and L1.same(arenaPlan.start, vec(0, 0, 0)), "at the world origin, 110 x 110, eight spawn points: the arena's numbers do not change")
-	check(Flow.Begin(arenaPlan).step == "armed" and Flow.Plan(arenaLevel, arenaLayout, "hard", L1.rules, L1.bounds) == nil, "it begins armed (no road), and has no Hard")
+	print(" the field: one camp of ten waves on a gateless camp that locks (L4B-6)")
+	local fieldLevel, fieldLayout = L1.field()
+	local fieldProblems = Flow.Validate(fieldLevel, fieldLayout, config.crowd.kinds, L1.ranks, L1.rules, L1.crowdMax)
+	check(#fieldProblems == 0, `the hand-written field validates ({fieldProblems[1] or "none"})`)
+	local fieldPlan = Flow.Plan(fieldLevel, fieldLayout, "normal", L1.rules, L1.Geo.Bounds(fieldLayout))
+	local camp = fieldPlan.stages[1]
+	check(#fieldPlan.stages == 1 and fieldPlan.camps == 1 and camp.waves == 10 and camp.boss[5] == true and camp.boss[10] == true and camp.merge and camp.maxAlive == fieldLevel.crowd.maxAlive and camp.zone.locks == true, "its plan: one camp of ten waves, bosses at 5 and 10, the level's cap; the camp locks")
+	check(camp.zone.rect.hx == 55 and camp.zone.rect.x == 0 and camp.zone.floorY == 0 and #camp.zone.spawns == 8 and L1.same(fieldPlan.start, vec(0, 0, 0)), "at the world origin, 110 x 110, eight spawn points: the layout's numbers")
+	check(Flow.Begin(fieldPlan).step == "armed" and Flow.Plan(fieldLevel, fieldLayout, "hard", L1.rules, L1.bounds) == nil, "it begins armed (no road), and has no Hard")
 end
 L1.group("planTests", L1.planTests)
 
@@ -536,11 +529,10 @@ function L1.waveTests(): ()
 	state = L1.toFight(plan, 6, 0)
 	check(plan.stages[6].boss[1] == true and #L1.advance(plan, state, { now = 20, fieldClear = false, mergeOk = true }) == 0, "never OUT OF a boss wave")
 
-	print(" the arena plays as at P5: ten waves, the director's breathers and merges, each clear counting its waves")
+	print(" the field plays as the arena did at P5: ten waves, the director's breathers and merges, each clear counting its waves")
 	local Geo = L1.Geo
-	local arenaLevel = Flow.Resolve({ version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village" }, L1.village, 1800, "normal")
-	local arenaLayout = Geo.FromArena(L1W.village(), -8)
-	plan = Flow.Plan(arenaLevel, arenaLayout, "normal", L1.rules, Geo.Bounds(arenaLayout))
+	local fieldLevel, fieldLayout = L1.field()
+	plan = Flow.Plan(fieldLevel, fieldLayout, "normal", L1.rules, Geo.Bounds(fieldLayout))
 	state = Flow.Begin(plan)
 	actions = L1.advance(plan, state, { now = 0, roots = { vec(0, 3, 0) } })
 	check(L1.names(actions) == "gate", "the party starts on the pad, inside the trigger: the countdown begins at once")
@@ -774,12 +766,11 @@ function L1.skipTests(): ()
 	check(state.step == "fight" and L1.names(actions) == "close wave" and actions[2].wave == 2, "in the countdown of the boss's camp: the gates close now, on his wave")
 
 	local Geo = L1.Geo
-	local arenaLevel = Flow.Resolve({ version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village" }, L1.village, 1800, "normal")
-	local arenaLayout = Geo.FromArena(L1W.village(), -8)
-	local arena = Flow.Plan(arenaLevel, arenaLayout, "normal", rules, Geo.Bounds(arenaLayout))
+	local fieldLevel, fieldLayout = L1.field()
+	local arena = Flow.Plan(fieldLevel, fieldLayout, "normal", rules, Geo.Bounds(fieldLayout))
 	state = Flow.Begin(arena)
 	actions = Flow.Skip(arena, state, "boss", 0, rules)
-	check(L1.names(actions) == "move gate" and state.firstWave == 5 and state.step == "gate", "the arena, before its gates: B arms wave 5")
+	check(L1.names(actions) == "move gate" and state.firstWave == 5 and state.step == "gate", "the field (one camp of ten waves), before its gates: B arms wave 5")
 	actions = L1.advance(arena, state, { now = 3 })
 	check(L1.at(actions, 2).wave == 5 and state.settled == 4, "it opens on wave 5, with waves 1 to 4 settled unpaid")
 	actions = Flow.Skip(arena, state, "boss", 4, rules)
@@ -787,7 +778,7 @@ function L1.skipTests(): ()
 	check(#Flow.Skip(arena, state, "boss", 5, rules) == 0, "and then none is left")
 	state = Flow.Begin(arena)
 	actions = Flow.Skip(arena, state, "stage", 0, rules)
-	check(L1.names(actions) == "move gate" and state.firstWave == 1, "N in the arena before its gates: the countdown")
+	check(L1.names(actions) == "move gate" and state.firstWave == 1, "N in the field before its gates: the countdown")
 
 	print(" Force (the wave lever)")
 	state = L1.toFight(arena, 1, 0)
@@ -805,21 +796,21 @@ function L1.mapTests(): ()
 		difficulties = { "normal", "hard", "brutal" },
 		nodes = {
 			{ id = "forestRoad", name = "Forest Road", level = "forestRoad" },
-			{ id = "raiderArena", name = "Raider Arena", level = "raiderArena", from = "forestRoad" },
+			{ id = "outpost", name = "Outpost", level = "outpost", from = "forestRoad" },
 			{ id = "castle", name = "Castle", from = "forestRoad", requires = { node = "forestRoad" } },
 			{ id = "keep", name = "Keep", level = "keep", requires = { node = "forestRoad" } },
 			{ id = "vault", name = "Vault", level = "vault", requires = { stars = 2 } },
 			{ id = "ruin", name = "Ruin", level = "ruin" },
 		},
 	}
-	local built = { forestRoad = true, raiderArena = true, keep = true, vault = true }
+	local built = { forestRoad = true, outpost = true, keep = true, vault = true }
 	local none = {}
 	local function node(leader: any, own: any, id: string): any
 		return Flow.NodeState(map, built, leader, own, id)
 	end
 	local road = node(none, none, "forestRoad")
 	check(road.open == true and road.reason == nil and #road.stars == 0 and road.id == "forestRoad", "a built node that asks for nothing is open")
-	check(node(none, none, "raiderArena").open == true, "so is the arena, from the start")
+	check(node(none, none, "outpost").open == true, "so is a side node that asks for nothing, from the start")
 	local starred = { forestRoad = { normal = true } }
 	local castle = node(starred, starred, "castle")
 	check(castle.open == false and castle.reason == "notBuilt", "a node with no level is not built, whatever else is true: notBuilt wins")
@@ -829,7 +820,7 @@ function L1.mapTests(): ()
 	check(node(starred, none, "keep").open == true, "the leader's star opens it for a member who has none")
 	local vault = node(starred, none, "vault")
 	check(vault.open == false and vault.reason == "needsStars" and vault.needs == "2", "a node that asks for stars says how many")
-	check(node({ forestRoad = { normal = true, hard = true } }, none, "vault").open == true and node({ forestRoad = { normal = true }, raiderArena = { normal = true } }, none, "vault").open == true, "two stars, on one level or two, open it")
+	check(node({ forestRoad = { normal = true, hard = true } }, none, "vault").open == true and node({ forestRoad = { normal = true }, outpost = { normal = true } }, none, "vault").open == true, "two stars, on one level or two, open it")
 	local mine = node(none, { forestRoad = { hard = true, normal = true } }, "forestRoad")
 	check(table.concat(mine.stars, ",") == "normal,hard", `a node's stars are the receiver's own, in the map's order ({table.concat(mine.stars, ",")})`)
 	check(node(none, none, "nowhere") == nil, "(no such node: nil)")
@@ -839,12 +830,12 @@ function L1.mapTests(): ()
 	check(Flow.Award(stars, "forestRoad", "hard") == false, "and says it is new only once")
 	check(stars.forestRoad.normal == nil and stars.forestRoad.brutal == nil and next(stars, "forestRoad") == nil, "no other difficulty and no other level gets one")
 
-	local state = Flow.MapState(map, built, starred, { raiderArena = { normal = true } }, 42)
+	local state = Flow.MapState(map, built, starred, { outpost = { normal = true } }, 42)
 	local ids = {}
 	for _, entry in state.nodes do
 		table.insert(ids, entry.id)
 	end
-	check(state.kind == "map" and state.leaderUserId == 42 and table.concat(ids, ",") == "forestRoad,raiderArena,castle,keep,vault,ruin", "MapState lists every node in the config's order, with the leader's id")
+	check(state.kind == "map" and state.leaderUserId == 42 and table.concat(ids, ",") == "forestRoad,outpost,castle,keep,vault,ruin", "MapState lists every node in the config's order, with the leader's id")
 	check(#state.nodes[1].stars == 0 and state.nodes[2].stars[1] == "normal" and state.nodes[4].open == true and state.nodes[5].open == false, "each with the receiver's own stars, and open by the leader's")
 end
 L1.group("mapTests", L1.mapTests)
@@ -890,10 +881,11 @@ L1.group("crowdTests", L1.crowdTests)
 
 function L1.campNumberTests(): ()
 	print(" Combat, by hand: Forest Road's numbers")
-	-- Everything above checks CampWave, CampReward and BurstSeconds against their own callers
-	-- (CrowdWave, CrowdReward, BurstInterval), which a mutant changes with them. These are worked
-	-- by hand. The inputs are a copy of Config/Levels/1_ForestRoad.json and of Combat.json `coop`
-	-- as they stood on 2026-10-13: the files may be retuned, the arithmetic here stays.
+	-- CampWave, KillReward and BurstSeconds, worked by hand. Until L4 W1b the cases above also held
+	-- each to its C1 twin (CrowdWave, CampReward, BurstInterval); those went with the missions, so
+	-- these are the arithmetic's own guard. The inputs are a copy of Config/Levels/1_ForestRoad.json
+	-- and of Combat.json `coop` as they stood on 2026-10-13: the files may be retuned, the
+	-- arithmetic here stays.
 	local Combat = L1.Combat
 	local rules = { coop = { countPerExtraPlayer = 0.6, bossHpPerExtraPlayer = 0.75 } }
 	local ranks = { normal = 1, hard = 2, brutal = 3 }
@@ -941,11 +933,11 @@ function L1.campNumberTests(): ()
 	check(four.boss == bossDef.boss and four.bossHpMult == 3.25 and spec(waveDef, "normal", 4).bossHpMult == 3.25 and spec(waveDef, "hard", 2).bossHpMult == 1.75, `for a party of four it is x3.25 (1 + 0.75 x 3), whatever the difficulty ({four.bossHpMult})`)
 
 	local function pay(kind: string, mult: number): string
-		local cash, materials = Combat.CampReward(rewards, kind, { rewardMult = mult })
+		local cash, materials = Combat.KillReward(rewards, kind, mult)
 		return `{cash}/{materials}`
 	end
 	local function paid(kind: string, difficulty: string, party: number): string
-		local cash, materials = Combat.CampReward(rewards, kind, spec(waveDef, difficulty, party))
+		local cash, materials = Combat.KillReward(rewards, kind, spec(waveDef, difficulty, party).rewardMult)
 		return `{cash}/{materials}`
 	end
 	check(paid("brute", "normal", 1) == "2000/6" and paid("colossus", "normal", 1) == "29000/70" and paid("fodder", "normal", 1) == "100/0", `a kill on Normal pays its kind's price: a brute 2000 and 6, the Colossus 29000 and 70 (2026-10-13's price) ({paid("brute", "normal", 1)})`)
@@ -1105,16 +1097,11 @@ function L1.shapeTests(): ()
 	level.stages = {}
 	check(L1.has(problems(level), "it has no stage"), "a level with no stage")
 
-	print(" Resolve: the arena's one difficulty is the map's first")
-	local file = { version = 1, id = "raiderArena", name = "Raider Arena", layout = "RaiderArena", mission = "village", recommendedTier = 2 }
-	local easy = Flow.Resolve(file, L1.village, 1800, "easy")
-	check(easy ~= nil and easy.difficulties.easy ~= nil and easy.difficulties.easy.hpScale == L1.village.crowd.hpScale and easy.difficulties.normal == nil, "on a map whose first difficulty is `easy` the arena is played on `easy`: one source, the map")
-	check(Flow.Resolve(file, L1.village, 1800, nil) == nil, "(a map with no difficulty: no level)")
-
 	print(" what only a camp that is not square, or a start off the axes, shows (the real files' mutations, on fixtures)")
-	local arena = Flow.Resolve(file, L1.village, 1800, "normal")
-	local own = Flow.Resolve(L1.level(), nil, 1800, "normal")
-	check(arena ~= nil and arena.id == "raiderArena" and own ~= nil and own.id == "road" and own.layout == "Road", "a level keeps its file's id: not its mission's (village), not its layout's (Road)")
+	local roadFile = L1.level()
+	roadFile.id = "roadNorth"
+	local own = Flow.Resolve(roadFile, 1800)
+	check(own ~= nil and own.id == "roadNorth" and own.layout == "Road", "a level keeps its file's id, not its layout's (Road)")
 	local plan = L1.plan()
 	local b = plan.stages[4].zone
 	check(b.rect.hx == 50 and b.rect.hz == 47 and b.inner.hx == 48 and b.inner.hz == 45 and b.trigger.hx == 51 and b.trigger.hz == 48, "camp B is 100 x 94: its floor, its close's rectangle and its trigger each keep their own width and depth")
@@ -1602,16 +1589,14 @@ L1.group("fuzzTests", L1.fuzzTests)
 -- The real files ---------------------------------------------------------------------------------
 -- Everything above runs on fixtures written for the cases. These run the same rules on the data
 -- that ships, read the way WaveService.resolveLevel, WaveService.startLevel and LevelService read
--- it: the level files, their layouts, the missions, the map, the crowd kinds, Combat.json
--- `levels`. tools/check_levels.py passes the same files in Python and never meets these rules;
--- where the two disagree on a field, the owner's first Depart answers "unavailable".
--- run_harness.py injects the files (FIXTURES), bundles the arena a layout names, and asks
--- check_levels.py for its Part counts and its own reading of that arena (FIXTURES.gate).
+-- it: the level files, their layouts, the map, the crowd kinds, Combat.json `levels`.
+-- tools/check_levels.py passes the same files in Python and never meets these rules; where the
+-- two disagree on a field, the owner's first Depart answers "unavailable". run_harness.py injects
+-- the files (FIXTURES) and asks check_levels.py for its Part counts (FIXTURES.gate).
 
 L1.real = {
 	map = FIXTURES.expeditions,
 	levels = FIXTURES.levels,
-	missions = FIXTURES.missions,
 	layouts = FIXTURES.layouts,
 	kinds = FIXTURES.proving.crowd.kinds,
 	rules = FIXTURES.combat.levels,
@@ -1654,38 +1639,37 @@ function L1.real.file(levelId: string): any
 	return nil
 end
 
--- A layout by its file's name; one that names an arena is read through LevelGeometry.FromArena
--- as WaveService does, the kill height its floor less player.rescue.below. nil and why.
+-- A layout by its file's name, as WaveService reads it. nil and why.
 function L1.real.layout(name: string): (any, string?)
 	local layout = L1.real.layouts[name]
 	if layout == nil then
 		return nil, `no Layouts/Levels/{name}.json`
 	end
-	local arena = layout.arena
-	if arena == nil then
-		return layout, nil
-	end
-	if table.find(FIXTURES.arenas, arena) == nil then
-		return nil, `no Layouts/Arenas/{arena}.luau`
-	end
-	return L1.Geo.FromArena(load("Arena_" .. arena), -L1.real.rescue.below), nil
+	return layout, nil
 end
 
--- WaveService.resolveLevel: the file, the mission it names, the level, its layout.
+-- WaveService.resolveLevel: the file, the level, its layout.
 function L1.real.resolve(levelId: string): any
 	local file = L1.real.file(levelId)
 	if file == nil then
 		return { why = "no level file" }
 	end
-	local mission = nil
-	for _, candidate in L1.real.missions do
-		if file.mission ~= nil and candidate.id == file.mission then
-			mission = candidate
+	local layout, why = L1.real.layout(file.layout)
+	local read, level = pcall(L1.Flow.Resolve, file, L1.combat.director.runCapSeconds)
+	return { file = file, level = if read then level else nil, layout = layout, why = why }
+end
+
+-- WaveService's start request (RequestStartLevel): the level must be a node's, and that node open
+-- for the leader, before any file is read. A level no node names is "locked".
+function L1.real.startable(levelId: string, leaderStars: any): boolean
+	local map = L1.real.map
+	for _, node in map.nodes do
+		if node.level == levelId then
+			local state = L1.Flow.NodeState(map, L1.real.built(), leaderStars, leaderStars, node.id)
+			return state ~= nil and state.open
 		end
 	end
-	local layout, why = L1.real.layout(file.layout)
-	local read, level = pcall(L1.Flow.Resolve, file, mission, L1.combat.director.runCapSeconds, L1.real.map.difficulties[1])
-	return { file = file, mission = mission, level = if read then level else nil, layout = layout, why = why }
+	return false
 end
 
 -- LevelService.sizesOf: what a layout does not say and the config does. The L2 W3 fix round's
@@ -2215,7 +2199,7 @@ function L1.realLevelTests(): ()
 		table.insert(played, id)
 		local got = real.resolve(id)
 		local file, level, layout = got.file, got.level, got.layout
-		check(level ~= nil and level.id == id, `{id}: Resolve reads its file {if file ~= nil and file.mission ~= nil then "through the mission " .. file.mission else "as it stands"}, and the level keeps the id its node names`)
+		check(level ~= nil and level.id == id, `{id}: Resolve reads its file as it stands, and the level keeps the id its node names`)
 		check(layout ~= nil, `{id}: its layout {if file ~= nil then file.layout else "?"} is there{if got.why ~= nil then " (" .. got.why .. ")" else ""}`)
 		if level == nil or layout == nil then
 			continue
@@ -2249,7 +2233,19 @@ function L1.realLevelTests(): ()
 			end
 		end
 	end
-	check(table.find(played, "forestRoad") ~= nil and table.find(played, "raiderArena") ~= nil, `the map's built levels are played here: {table.concat(played, ", ")}`)
+	-- L4 W1b fix round (slice 3 S2): a rule, not today's map. Every level file a node plays was
+	-- resolved, validated and planned above, and none is left out (the Castle's file joins it here).
+	local playedIds: { [string]: boolean } = {}
+	for _, id in played do
+		playedIds[id] = true
+	end
+	local unplayed: { string } = {}
+	for _, file in real.levels do
+		if not playedIds[file.id] then
+			table.insert(unplayed, tostring(file.id))
+		end
+	end
+	check(#played > 0 and #unplayed == 0, `every level file is played by a map node, and was checked here ({#played}: {table.concat(played, ", ")}){real.list(unplayed)}`)
 
 	-- What Play does first in a proving build (ruling 32), and what its panel offers.
 	local debug = L1.combat.debug
@@ -2372,57 +2368,15 @@ function L1.realWorldTests(): ()
 		check(#unsound == 0 and #points >= 2, `the lobby's start and its {#points - 1} spawn points stand on its floor, inside nothing, and the rescue leaves them be{real.list(unsound)}`)
 	end
 
-	-- The arena's two adapters: LevelGeometry.FromArena on the real module against the layout
-	-- check_levels.py (sim_range.arena_as_layout) reads out of the same file.
-	local seen = 0
-	for name, theirs in real.gate.arenas or {} do
-		seen += 1
-		local ours = real.layout(name)
-		local a = if ours ~= nil then ours.camps[1] else nil
-		local b = theirs.camps[1]
-		if ours == nil or a == nil or b == nil then
-			check(false, `{name}: both adapters read the arena {tostring(theirs.arena)}`)
-			continue
-		end
-		local differs: { string } = {}
-		local function same(what: string, x: any, y: any): ()
-			if type(x) ~= "number" or type(y) ~= "number" or not near(x, y) then
-				table.insert(differs, `{what} {tostring(x)} / {tostring(y)}`)
-			end
-		end
-		same("camp sx", a.sx, b.sx)
-		same("camp sz", a.sz, b.sz)
-		same("camp x", a.x, b.x)
-		same("camp y", a.y, b.y)
-		same("camp z", a.z, b.z)
-		same("fence height", if a.fence ~= nil then a.fence.height else nil, if b.fence ~= nil then b.fence.height else nil)
-		same("gates", #a.gates, #b.gates)
-		same("entry x", a.entry.x, b.entry.x)
-		same("entry z", a.entry.z, b.entry.z)
-		same("exit x", a.exit.x, b.exit.x)
-		same("exit z", a.exit.z, b.exit.z)
-		same("start x", ours.start.x, theirs.start.x)
-		same("start y", ours.start.y, theirs.start.y)
-		same("start z", ours.start.z, theirs.start.z)
-		same("killY", ours.killY, theirs.killY)
-		same("barrier height", if ours.barrier ~= nil then ours.barrier.height else nil, if theirs.barrier ~= nil then theirs.barrier.height else nil)
-		same("barrier thickness", if ours.barrier ~= nil then ours.barrier.thickness else nil, if theirs.barrier ~= nil then theirs.barrier.thickness else nil)
-		same("spawn points", #a.spawns, #b.spawns)
-		for index, point in a.spawns do
-			local other = b.spawns[index]
-			same(`spawn {index} x`, point.x, if other ~= nil then other.x else nil)
-			same(`spawn {index} z`, point.z, if other ~= nil then other.z else nil)
-		end
-		same("obstacles", #(a.obstacles or {}), b.obstacleCount)
-		check(#differs == 0, `{name}: LevelGeometry.FromArena and check_levels.py's adapter read the arena {tostring(theirs.arena)} alike: size, fence, entry, exit, start, kill height, invisible wall, {#a.spawns} spawn points in order, {#(a.obstacles or {})} obstacles (ours / theirs){real.list(differs)}`)
-	end
-	local arenaLayouts = 0
-	for _, layout in real.layouts do
+	-- L4 W1b: no layout names an arena (ruling 27's adapters went with the Raider Arena), and
+	-- check_levels.py refuses one that does.
+	local named: { string } = {}
+	for name, layout in real.layouts do
 		if layout.arena ~= nil then
-			arenaLayouts += 1
+			table.insert(named, name)
 		end
 	end
-	check(seen == arenaLayouts, `check_levels.py read every layout that names an arena ({seen} of {arenaLayouts})`)
+	check(#named == 0, `no shipped layout names an arena{real.list(named)}`)
 end
 L1.group("realWorldTests", L1.realWorldTests)
 
@@ -2556,21 +2510,6 @@ function L1.realRunTests(): ()
 			end
 		end
 
-		-- The arena as P5 played it (ruling 27, and the skeleton Ben ruled for every era).
-		if id == "raiderArena" then
-			local plan = real.plan(level, layout, "normal", bounds)
-			local stage = if plan ~= nil then plan.stages[1] else nil
-			local bosses: { string } = {}
-			if stage ~= nil then
-				for wave = 1, stage.waves do
-					if stage.boss[wave] then
-						table.insert(bosses, tostring(wave))
-					end
-				end
-			end
-			check(stage ~= nil and #plan.stages == 1 and stage.waves == 10 and table.concat(bosses, " ") == "5 10", `raiderArena: one camp of ten waves, bosses at 5 and 10 ({table.concat(bosses, " ")})`)
-			check(stage ~= nil and stage.merge and stage.breatherSeconds == nil and stage.zone.locks == true, "raiderArena: its camp locks, merges, and takes the director's breather (and every kill is paid as it falls)")
-		end
 	end
 end
 L1.group("realRunTests", L1.realRunTests)
@@ -2599,8 +2538,38 @@ function L1.realMapTests(): ()
 			table.insert(other, `{node.id} ({if got ~= nil then tostring(got.reason) else "missing"})`)
 		end
 	end
-	check(table.concat(open, " ") == "forestRoad raiderArena", `forestRoad and raiderArena are open ({table.concat(open, " ")})`)
+	check(table.concat(open, " ") == "forestRoad", `forestRoad alone is open ({table.concat(open, " ")})`)
 	check(#unbuilt == #map.nodes - #open and #other == 0, `the other {#unbuilt} have no level file and are locked, each "notBuilt": {table.concat(unbuilt, ", ")}{real.list(other)}`)
+	-- L4 W1b section 3: the Raider Arena is hidden by deleting its data. A level no node names (its
+	-- old id, or any other) is "locked" before any file is read, and every level file has a node.
+	local nodeless: { string } = {}
+	for _, file in real.levels do
+		if not real.startable(file.id, {}) then
+			table.insert(nodeless, file.id)
+		end
+	end
+	check(real.startable("forestRoad", {}) and not real.startable("noSuchLevel", {}) and #nodeless == 0, `RequestStartLevel: forestRoad starts, a level no node names is locked, and every level file is an open node's{real.list(nodeless)}`)
+	-- L4 W1b fix round (slice 3 S2): side nodes are in the design (a secret's second exit), so the
+	-- rule is what one must be, not that none ships: it hangs off a main node and its theme is drawn.
+	local kinds: { [string]: string } = {}
+	for _, node in map.nodes do
+		kinds[node.id] = node.kind
+	end
+	local bonus = 0
+	local astray: { string } = {}
+	for _, node in map.nodes do
+		if node.kind ~= "bonus" then
+			continue
+		end
+		bonus += 1
+		if node.from == nil or kinds[node.from] ~= "level" then
+			table.insert(astray, `{node.id} hangs off {tostring(node.from)}, not a level node`)
+		end
+		if map.themes[node.theme] == nil then
+			table.insert(astray, `{node.id}'s theme {tostring(node.theme)} is no map theme`)
+		end
+	end
+	check(#astray == 0, `every side node ({bonus} here) hangs off a level node and has a map theme{real.list(astray)}`)
 
 	local ids: { [string]: number } = {}
 	for _, node in map.nodes do

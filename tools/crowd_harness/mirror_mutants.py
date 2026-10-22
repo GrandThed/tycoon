@@ -290,6 +290,14 @@ MUTANTS = [
      "elseif false then"),
     ("Armory R6: Problems takes a negative HP entry", "Armory",
      "if not finite(value) or value < 0 then\n\t\t\t\t\tproblem(", "if not finite(value) then\n\t\t\t\t\tproblem("),
+    # The L4 W1b fix round's F6 (review 3-m3): Combat.MentorBonus against sim_combat.mentor_pay's calls
+    # and the edges of hostRate x mentorRatio. The first is the review's own mutant 3.
+    ("MentorBonus F6: a mentee exactly at the ratio carried", "Combat", "\t\tif rate < threshold then\n",
+     "\t\tif rate <= threshold then\n"),
+    ("MentorBonus F6: the ratio ignored", "Combat", "local threshold = hostRate * coop.mentorRatio",
+     "local threshold = hostRate"),
+    ("MentorBonus F6: one mentorValor whatever the head count", "Combat", "return mentored * coop.mentorValor",
+     "return if mentored > 0 then coop.mentorValor else 0"),
 ]
 
 

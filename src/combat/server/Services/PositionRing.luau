@@ -66,13 +66,16 @@ end
 -- (Vector3.zero when no stretch moved). The L2 W2 third fix round's m1: the aim rule leads the
 -- head along it, the server's own measure of the motion, never along the velocity a client
 -- replicates for its character.
+-- `flat` (L4 W1b, L4B-7: DashProof) measures the horizontal displacement only, so a fall or a
+-- launch never reads as a dash; nil or false = the whole displacement, as before.
 -- 0 (and no way) for an empty history or a window that is not positive.
 function PositionRing.Motion(
 	history: History,
 	now: number,
 	position: Vector3,
 	window: number,
-	span: number
+	span: number,
+	flat: boolean?
 ): (number, Vector3)
 	local count = history.count
 	-- Written so that a NaN window, which fails every comparison, also returns 0.
@@ -107,6 +110,9 @@ function PositionRing.Motion(
 		end
 		local elapsed = endAt - history.times[anchor]
 		local moved = endPosition - history.positions[anchor]
+		if flat == true then
+			moved = Vector3.new(moved.X, 0, moved.Z)
+		end
 		local distance = moved.Magnitude
 		local speed = distance / math.max(elapsed, stretch)
 		-- A NaN fails the comparison and is dropped. A speed above 0 has a distance above 0.

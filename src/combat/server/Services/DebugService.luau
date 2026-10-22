@@ -7,8 +7,8 @@
 -- Two lever shapes:
 -- * ACTIONS (wave, spawn, killAll, setGear, grantMaterials, grantValor) are consumed: the
 --   attribute is reset the moment it is read, so one edit fires exactly once.
--- * STATES (godMode, bots) are read every tick and left alone, because "god mode is on" and
---   "there are two bots" are conditions, not events.
+-- * STATES (godMode) are read every tick and left alone, because "god mode is on" is a
+--   condition, not an event.
 --
 -- C2 adds `admitCheck` (remote only): the caller is judged by the SAME CheckAdmission a real
 -- arrival runs, as a stranger arriving now, and gets the verdict as a toast; nobody is sent home.
@@ -20,7 +20,7 @@
 -- P5 (docs/INTERFACES.md "P5 contracts", ruling 25): the levers point at the crowd. `wave`
 -- forces a wave of the live camp, `spawn` raises a crowd kind at the camp's next spawn point,
 -- `godMode` and `setGear` go through VitalsService, `killAll` kills the crowd with its rewards.
--- Debug bots are Humanoid rigs the crowd cannot target: the `bots` lever only warns.
+-- L4 W1b (L4B-4) deleted the debug bots and their lever: Humanoid rigs the crowd never targeted.
 --
 -- L1 (docs/INTERFACES.md "L1 contracts", rulings 33 and 34): `skip` takes "stage" (the N key:
 -- finish this part of the level) and "boss" (the B key); `gear` "next" (the G key) steps the
@@ -72,7 +72,6 @@ local isStudio = RunService:IsStudio()
 local tickAccumulator = 0
 local levelConnection: RBXScriptConnection? = nil
 local warnedRange = false
-local warnedBots = false
 -- The godMode attribute is a state, applied when it changes, so the remote lever's own setting
 -- for one player is not overwritten by the poll a second later.
 local lastGodAttribute: boolean? = nil
@@ -240,10 +239,7 @@ local function setGodMode(player: Player?, enabled: boolean): ()
 		return
 	end
 	for _, member in ArenaService.GetMembers() do
-		local target = member.player
-		if target ~= nil then
-			VitalsService.SetGod(target, enabled)
-		end
+		VitalsService.SetGod(member.player, enabled)
 	end
 end
 
@@ -385,14 +381,6 @@ local function resetArmory(player: Player?): ()
 	RunFx.Push({ kind = "notice", text = "Armory reset: tiers, loadout and stars" })
 end
 
--- P5 ruling 24: the crowd targets Players only, so a bot would stand in a camp doing nothing.
-local function refuseBots(): ()
-	if not warnedBots then
-		warnedBots = true
-		warn("[DebugService] debug bots are not supported against the crowd (L5 decides)")
-	end
-end
-
 -- Spelled out so the literal types survive: a singleton union returned across modules reaches
 -- the caller as plain `string` under the old solver.
 local function refusalReason(verdict: string): ("full" | "over" | "locked")?
@@ -447,8 +435,6 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 		WaveService.KillAll()
 	elseif lever == "setGear" and typeof(value) == "string" then
 		setGear(player, value)
-	elseif lever == "bots" and typeof(value) == "number" then
-		refuseBots()
 	elseif lever == "grantMaterials" and typeof(value) == "number" then
 		grantMaterials(player, value)
 	elseif lever == "grantValor" and typeof(value) == "number" then
@@ -582,10 +568,6 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 		lastGodAttribute = god
 		setGodMode(nil, god)
 	end
-	local bots = workspace:GetAttribute(debugConfig.botsAttribute)
-	if typeof(bots) == "number" and bots > 0 then
-		refuseBots()
-	end
 end
 
 function DebugService.Init(): ()
@@ -604,7 +586,7 @@ function DebugService.Start(): ()
 	end
 	local debugConfig = combatConfig.debug
 	levelConnection = RunService.Heartbeat:Connect(function(delta: number)
-		-- The range has no run, no bots and no waves; its attributes stay untouched too.
+		-- The range has no run and no waves; its attributes stay untouched too.
 		if RangeService.IsActive() then
 			return
 		end
