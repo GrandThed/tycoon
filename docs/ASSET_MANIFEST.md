@@ -507,30 +507,30 @@ Summary: 15 families: 15/15 blueprints, 15/15 uploaded, 15/15 harvested, 15/15 t
 
 Blueprints: `tools/testfit/blueprints/_props/Forest/` -- templates: `templates/_props/Forest/` -- in game: `ReplicatedStorage/Assets/Props/Forest/` (a prop folder, not an era).
 
-Summary: 4/4 blueprints, 4/4 uploaded, 4/4 harvested, 0/4 templated
+Summary: 4/4 blueprints, 4/4 uploaded, 4/4 harvested, 4/4 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `Bramble` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 1/1 | — |
-| 2 | `Campfire` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 1/1 | — |
-| 3 | `ChiefTent` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 1/1 | — |
-| 4 | `SpawnTent` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 1/1 | — |
+| 1 | `Bramble` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `Campfire` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `ChiefTent` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `SpawnTent` | — | prop | yes | forest-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Props — Raiders
 
 Blueprints: `tools/testfit/blueprints/_props/Raiders/` -- templates: `templates/_props/Raiders/` -- in game: `ReplicatedStorage/Assets/Props/Raiders/` (a prop folder, not an era).
 
-Summary: 7/7 blueprints, 7/7 uploaded, 7/7 harvested, 0/7 templated
+Summary: 7/7 blueprints, 7/7 uploaded, 7/7 harvested, 7/7 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `RaiderArmoured` | — | prop | yes | raider-cloth, raider-kit, raider-plate, raider-skin | 5 | 5/5 | 5/5 | 5/5 | — |
-| 2 | `RaiderBrute` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | — |
-| 3 | `RaiderChief` | — | prop | yes | raider-cloth, raider-glow, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | — |
-| 4 | `RaiderFodder` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | — |
-| 5 | `RaiderLobber` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | — |
-| 6 | `RaiderMarksman` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | — |
-| 7 | `RaiderSlinger` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | — |
+| 1 | `RaiderArmoured` | — | prop | yes | raider-cloth, raider-kit, raider-plate, raider-skin | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 2 | `RaiderBrute` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 3 | `RaiderChief` | — | prop | yes | raider-cloth, raider-glow, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 4 | `RaiderFodder` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 5 | `RaiderLobber` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 6 | `RaiderMarksman` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 7 | `RaiderSlinger` | — | prop | yes | raider-cloth, raider-kit, raider-skin | 5 | 5/5 | 5/5 | 5/5 | yes |
 
 ## Baked paths
 
@@ -564,7 +564,7 @@ A mesh has a template once it and the image it wears are harvested. The game dra
 
 | Level | Plan hash | Meshes | Triangles | Images uploaded | Images harvested | Meshes uploaded | Meshes harvested | Templates | Status |
 |-------|-----------|--------|-----------|-----------------|------------------|-----------------|------------------|-----------|--------|
-| ForestRoad | `23851a6f417491c1` | 37 | 159046 | 5/5 | 5/5 | 37/37 | 37/37 | 0/37 | harvested, templates stale |
+| ForestRoad | `23851a6f417491c1` | 37 | 159046 | 5/5 | 5/5 | 37/37 | 37/37 | 37/37 | in game |
 
 ## Totals
 
