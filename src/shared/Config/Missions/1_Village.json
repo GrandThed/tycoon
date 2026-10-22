@@ -5,7 +5,7 @@
 	"eraName": "Village",
 	"name": "Forest Road",
 	"material": "Timber",
-	"waves": 3,
+	"waves": 2,
 	"targetMinutes": 5,
 	"recommendedPower": 64
 }

@@ -1434,34 +1434,67 @@ def source_reading(repo: Path) -> dict:
 # "regex" = matches. The expected counts are tests_l3_w2.luau's (L4BP).
 ON_DASH_BODY = re.compile(r"(?ms)^function WeaponService\.OnDash\(.*?^end$")
 PROVE_DASH_BODY = re.compile(r"(?ms)^local function proveDash\(.*?^end$")
-OPEN_IFRAMES_BODY = re.compile(r"(?ms)^local function openIframes\(.*?^end$")
+PENDING_DASH_BODY = re.compile(r"(?ms)^local function pendingDash\(.*?^end$")
+WEAPON_STEP_BODY = re.compile(r"(?ms)^local function step\(.*?^end$")
+WEAPON_START_BODY = re.compile(r"(?ms)^function WeaponService\.Start\(.*?^end$")
+GRANT_IFRAMES_BODY = re.compile(r"(?ms)^function WeaponService\.GrantIframes\(.*?^end$")
 SEND_RUN_STATE_BODY = re.compile(r"(?ms)^local function sendRunState\(.*?^end$")
 BUILD_RUN_STATE_BODY = re.compile(r"(?ms)^function ArenaService\.BuildRunState\(.*?^end$")
 ADMIT_BODY = re.compile(r"(?ms)^function ArenaService\.Admit\(.*?^end$")
 REMOVE_BODY = re.compile(r"(?ms)^function ArenaService\.Remove\(.*?^end$")
 SET_FLOORS_BODY = re.compile(r"(?ms)^local function setFloors\(.*?^end$")
 PUSH_RUN_FIELDS_BODY = re.compile(r"(?ms)^local function pushRunFields\(.*?^end$")
+# The L4 W1b fix round (docs/prompts/l4-w1b-fix-round.md F3, F4, F6): the client's half of the
+# cells-once rule, in CombatUIController (both functions are nested in bootMission, one tab in),
+# and the mentor pay's deciding lines in WaveService.payMentors.
+UI_CONTROLLER = "src/combat/client/Controllers/CombatUIController.luau"
+APPLY_FLOORS_BODY = re.compile(r"(?ms)^\tlocal function applyFloors\(.*?^\tend$")
+ON_RUN_STATE_BODY = re.compile(r"(?ms)^\tlocal function onRunState\(.*?^\tend$")
+PAY_MENTORS_BODY = re.compile(r"(?ms)^local function payMentors\(.*?^end$")
 L4B_LINES = {
     # L4B-7, WeaponService.
-    "dashNoOpen": (WEAPON_SERVICE, ON_DASH_BODY, "text", "openIframes("),
+    "dashGrantsNothing": (WEAPON_SERVICE, ON_DASH_BODY, "regex",
+                          r"\bGrantIframes\(|\bDashProof\.|\bshowIframes\(|\bopenIframes\(|\biframes\w*\s*=(?!=)"),
     "dashClaim": (WEAPON_SERVICE, ON_DASH_BODY, "lines", "\tshooter.dashClaimAt = now"),
-    "trackRecordThenClaim": (WEAPON_SERVICE, TRACK_AIR_BODY, "text",
-                             "\t\tPositionRing.Record(shooter.history, now, position)\n\t\tlocal claimAt = shooter.dashClaimAt\n"),
-    "trackProve": (WEAPON_SERVICE, TRACK_AIR_BODY, "lines", "\t\t\tproveDash(shooter, now, position, claimAt)"),
-    "proveVerdict": (WEAPON_SERVICE, PROVE_DASH_BODY, "text",
-                     "DashProof.Verdict(shooter.history, now, position, claimAt, rule)"),
-    "proveOpen": (WEAPON_SERVICE, PROVE_DASH_BODY, "text", "openIframes(shooter, now, claimAt, config.movement.dashIframes)"),
-    "openIframesCalls": (WEAPON_SERVICE, None, "text", "openIframes("),
-    "openThroughProof": (WEAPON_SERVICE, OPEN_IFRAMES_BODY, "text", "DashProof.Open(shooter, from, seconds)"),
+    "dashStamp": (WEAPON_SERVICE, ON_DASH_BODY, "lines", "\tshooter.lastDashAt = now"),
+    "dashDown": (WEAPON_SERVICE, ON_DASH_BODY, "lines",
+                 "\tif character == nil or root == nil or VitalsService.IsDown(player) or not mayAct(player) then"),
+    "trackRecordThenProve": (WEAPON_SERVICE, TRACK_AIR_BODY, "text",
+                             "\t\tPositionRing.Record(shooter.history, now, position)\n\t\tif shooter.dashClaimAt ~= nil then\n"
+                             "\t\t\tproveDash(shooter, now, position)\n\t\tend\n"),
+    "trackNoRootClears": (WEAPON_SERVICE, TRACK_AIR_BODY, "lines", "\t\t\tshooter.dashClaimAt = nil"),
+    "proveStep": (WEAPON_SERVICE, PROVE_DASH_BODY, "text",
+                  "\tlocal verdict = DashProof.Step(\n\t\tshooter,\n\t\tshooter.history,\n\t\tnow,\n\t\tposition,\n"
+                  "\t\tdashRule(config),\n\t\tconfig.movement.dashIframes\n\t)\n"),
+    "proveShows": (WEAPON_SERVICE, PROVE_DASH_BODY, "text", '\tif verdict == "proven" then\n\t\tshowIframes(shooter, now)\n\tend\n'),
+    "proveWritesNothing": (WEAPON_SERVICE, PROVE_DASH_BODY, "regex",
+                           r"\bdashClaimAt\s*=(?!=)|\biframes\w*\s*=(?!=)|\bDashProof\.Open\("),
+    "ruleRead": (WEAPON_SERVICE, None, "text", "local rule = DashProof.Rule(config.movement, config.shooting)"),
+    "ruleCalls": (WEAPON_SERVICE, None, "text", "DashProof.Rule("),
+    "pendingClaim": (WEAPON_SERVICE, PENDING_DASH_BODY, "text",
+                     "return DashProof.Pending(shooter.dashClaimAt, dashRule(config), config.movement.dashIframes)"),
+    "hookClaim": (WEAPON_SERVICE, WEAPON_START_BODY, "lines", "\t\tdashClaim = pendingDash,"),
+    "stepVitals": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\tVitalsService.Step(deltaTime)"),
+    "vitalsStepCalls": (WEAPON_SERVICE, None, "text", "VitalsService.Step("),
+    "heartbeats": (WEAPON_SERVICE, None, "text", "Heartbeat:Connect("),
+    "grantOpens": (WEAPON_SERVICE, GRANT_IFRAMES_BODY, "text", "\tDashProof.Open(shooter, now, seconds)\n\tshowIframes(shooter, now)\n"),
+    "openCalls": (WEAPON_SERVICE, None, "text", "DashProof.Open("),
+    "stepCalls": (WEAPON_SERVICE, None, "text", "DashProof.Step("),
+    "claimWrites": (WEAPON_SERVICE, None, "regex", r"\bshooter\.dashClaimAt\s*=(?!=)"),
     "resetDropsClaim": (WEAPON_SERVICE, RESET_AIR_BODY, "text", "shooter.dashClaimAt = nil"),
     # L4B-8, ArenaService.
     "runStateSpelled": (ARENA_SERVICE, None, "text", '"RunState"'),
     "sendRunStateCalls": (ARENA_SERVICE, None, "text", "sendRunState("),
     "attachCalls": (ARENA_SERVICE, None, "text", "RunFloors.Attach("),
-    "sendAttach": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "text",
-                   "local floors, cellsWent = RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])"),
-    "sendFloors": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\tsent.floors = floors"),
-    "sendNote": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\tplay.cellsSent[userId] = seq"),
+    "sendSkip": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\tif play.cellsSent[userId] ~= seq then"),
+    "sendAttach": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines",
+                   "\t\tlocal floors, cellsWent = RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])"),
+    "sendCellsWent": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\tif cellsWent then"),
+    "sendClone": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent = table.clone(runState)"),
+    "sendFloors": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent.floors = floors"),
+    "sendFloorsWrites": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "regex", r"\bsent\.floors\s*=(?!=)"),
+    "sendNote": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\tplay.cellsSent[userId] = seq"),
+    "sendFires": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", '\tRemoteService.FireClient(player, "RunState", sent)'),
     "buildAttach": (ARENA_SERVICE, BUILD_RUN_STATE_BODY, "text",
                     "local floors = RunFloors.Attach(runFields.floors, runFields.floorsSeq, runFields.floorsSeq)"),
     "buildFloors": (ARENA_SERVICE, BUILD_RUN_STATE_BODY, "lines", "\t\tfloors = floors,"),
@@ -1477,13 +1510,47 @@ L4B_LINES = {
     "startSets": (WAVE_SERVICE, None, "lines", "\tsetFloors(runFloors)"),
     "lobbySets": (WAVE_SERVICE, None, "lines", "\tsetFloors({})"),
     "pushSeq": (WAVE_SERVICE, PUSH_RUN_FIELDS_BODY, "lines", "\t\tfloorsSeq = boot.floorsSeq,"),
+    # L4B-8, CombatUIController (the client's half; F3, F4).
+    "uiHeld": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tlocal held = st.floors"),
+    "uiMerge": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tfresh = RunFloors.Merge(held, st.floorsSeq, fresh, seq)"),
+    "uiSeq": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tst.floorsSeq = seq"),
+    "uiKeep": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tst.floors = fresh"),
+    "uiCall": (UI_CONTROLLER, ON_RUN_STATE_BODY, "lines",
+               '\t\tapplyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)'),
+    "uiApplyCalls": (UI_CONTROLLER, None, "text", "applyFloors("),
+    "uiMergeCalls": (UI_CONTROLLER, None, "text", "RunFloors.Merge("),
+    "uiSeqWrites": (UI_CONTROLLER, None, "regex", r"\bst\.floorsSeq\s*=(?!=)"),
+    "uiConnect": (UI_CONTROLLER, None, "lines", "\tremotes.runState.OnClientEvent:Connect(onRunState)"),
+    # F6, WaveService.payMentors (B's lines; the rule itself is check_stage_mirror's MentorBonus).
+    "mentorNone": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\tif total <= 0 then"),
+    "mentorFloor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                    "\t\tif mentor.waiting or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare then"),
+    "menteeOther": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\t\t\tother ~= mentor"),
+    "menteeFloor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                    "\t\t\t\tand (tally[other.userId] or 0) / total >= coop.mentorMinDamageShare"),
+    "menteeRate": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\t\t\ttable.insert(menteeRates, other.incomeRate)"),
+    "mentorBonusCall": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                        "\t\tlocal bonus = Combat.MentorBonus(combatConfig, mentor.incomeRate, menteeRates)"),
+    "mentorValor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\tstate.combat.valor += bonus"),
+    "mentorCard": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\tArenaService.CreditMentor(mentor.userId, bonus)"),
+    "mentorBonusCalls": (WAVE_SERVICE, None, "text", "Combat.MentorBonus("),
+    "bossPaysMentors": (WAVE_SERVICE, None, "lines", "\t\tpayMentors(combatConfig, tally)"),
 }
 # Two lines that must come in this order inside their function: (key, file, body, first, then).
 L4B_ORDER = {
     "trackOrder": (WEAPON_SERVICE, TRACK_AIR_BODY, "PositionRing.Record(shooter.history, now, position)",
-                   "proveDash(shooter, now, position, claimAt)"),
+                   "proveDash(shooter, now, position)"),
+    "frameOrder": (WEAPON_SERVICE, WEAPON_STEP_BODY, "trackAir(now, deltaTime)", "VitalsService.Step(deltaTime)"),
     "sendOrder": (ARENA_SERVICE, SEND_RUN_STATE_BODY,
                   "RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])", "play.cellsSent[userId] = seq"),
+    "uiMergeThenSeq": (UI_CONTROLLER, APPLY_FLOORS_BODY,
+                       "RunFloors.Merge(held, st.floorsSeq, fresh, seq)", "st.floorsSeq = seq"),
+    "uiMergeThenSame": (UI_CONTROLLER, APPLY_FLOORS_BODY,
+                        "RunFloors.Merge(held, st.floorsSeq, fresh, seq)", "local same = #fresh == #held"),
+    "uiGuardThenFloors": (UI_CONTROLLER, ON_RUN_STATE_BODY, "if not isRunState(payload) then", "applyFloors(run.floors, "),
+    "uiFloorsFirst": (UI_CONTROLLER, ON_RUN_STATE_BODY, "applyFloors(run.floors, ", "if run.levelId ~= st.levelId then"),
+    "mentorFloorThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY,
+                           "(tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare", "state.combat.valor += bonus"),
 }
 
 

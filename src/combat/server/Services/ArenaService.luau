@@ -644,17 +644,21 @@ function ArenaService.GetSessionSummary(userId: number): Types.RunSummary
 end
 
 -- L4B-8: every RunState a member is sent goes through here. The member's first one of a floor
--- set carries the cells (a copy of `runState` whose floors have them), every later one is
--- `runState` itself, and the set is noted as sent either way.
+-- set carries the cells (a copy of `runState` whose floors have them) and notes the set as sent;
+-- every later one is `runState` itself, whose floors BuildRunState built without them. A member
+-- already noted for this set never reaches Attach: it copies every floor, and at
+-- remotes.combatStateHz per member that copy would only be dropped.
 local function sendRunState(player: Player, userId: number, runState: Types.RunState): ()
 	local seq = runFields.floorsSeq
-	local floors, cellsWent = RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])
 	local sent = runState
-	if cellsWent then
-		sent = table.clone(runState)
-		sent.floors = floors
+	if play.cellsSent[userId] ~= seq then
+		local floors, cellsWent = RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])
+		if cellsWent then
+			sent = table.clone(runState)
+			sent.floors = floors
+		end
+		play.cellsSent[userId] = seq
 	end
-	play.cellsSent[userId] = seq
 	RemoteService.FireClient(player, "RunState", sent)
 end
 

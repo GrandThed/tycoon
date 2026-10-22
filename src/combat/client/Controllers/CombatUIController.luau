@@ -138,7 +138,9 @@
 --
 -- L4 W1b (docs/prompts/l4-w1b-contract.md, L4B-8): a floor's chase-region cells ride only this
 -- member's first RunState of a floor set (RunState.floorsSeq); every RunState's floors are merged
--- through RunFloors.Merge, which keeps the cells it was sent until the seq moves on.
+-- through RunFloors.Merge, which keeps the cells it was sent until the seq moves on. Fix round F4:
+-- the cells are one-shot (the server has noted them as sent), so `onRunState` applies the floors
+-- first, before anything that could throw, or one error would lose them for the whole run.
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -1629,13 +1631,17 @@ local function bootMission(): ()
 			return
 		end
 		local run = (payload :: any) :: Types.RunState
+		-- L4B-8, fix round F4: the floors first. A set's cells come once, with the RunState that
+		-- also names the new level, so nothing that can throw may run before they are kept. A
+		-- server that sends no seq sends the cells every time, which Merge takes as they come.
+		applyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)
 		local phase = run.phase
 		local last = st.phase
 		local live = LIVE_PHASES[phase] == true
 		local over = RUN_OVER_PHASES[phase] == true
 
 		-- The level, not the mission: its kinds for the Studio strip, its pool of bodies, its
-		-- material for the wallet, its floors for the crowd.
+		-- material for the wallet (its floors for the crowd went first, above).
 		if run.levelId ~= st.levelId then
 			st.levelId = run.levelId
 			st.prewarmed = 0
@@ -1672,8 +1678,6 @@ local function bootMission(): ()
 			st.material = run.material
 			paintWallet()
 		end
-		-- A server that sends no seq sends the cells every time, which Merge takes as they come.
-		applyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)
 
 		local difficultyName = run.difficulty
 		if expeditions ~= nil then

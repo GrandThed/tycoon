@@ -6571,6 +6571,12 @@ half health 16, the kite 6), so no run moved: every gate line is byte-identical 
 new gate holds it: a forged still dash 0%, a walk (1.00 studs in 0.05 s) never proves one, a real dash (6.67) does.
 The cost the contract states (§4.5) is a feel change only Ben can judge: a dash pressed into a wall earns nothing.
 
+**Corrected by the fix round (below).** As built at 1ae8bfb, "no run moved" was a property of this mirror, not of the
+game: the mirror opened a proven dash's window at its first frame, while the game opened it only when the ring proved
+the claim, a few Heartbeats later, so a hit decided in between landed in the game and was dodged here (slice 3 m1
+measured 33 such voids on Forest Road). The fix round's F1 holds those decisions until the claim resolves, so the game
+now does what the mirror did; the mirror models the hold itself, and the claim is true again on that footing.
+
 ### L4 W1b: the gates before and after
 
 | Gate | HEAD | Now |
@@ -6603,3 +6609,107 @@ an equal duo nobody, a mentee at exactly hostRate x mentorRatio is not carried, 
 waiting mentor nothing). `sim_range.py` loses the Raider Arena report and its 12 gate lines (the bosses' 64-90 s and
 77-101 s bands, the 10-15 min clear, the stand-down, the arena's hit share and regen), `--mission` and `--level arena`.
 Its range bosses (P4 Stop 2 and 3) keep their own bands.
+
+## L4 W1b fix round: the dash held for its proof, and the gates it needed (2026-10-21)
+
+Rulings `docs/prompts/l4-w1b-fix-round.md` (F1, F2, F3, F6 and two suggestions are the designer's), report
+`docs/prompts/l4-w1b-fix-reports/designer.md`. No number a run plays moved. Measured on Python 3.12.10 64-bit (the
+gate's) unless said otherwise; "before" is this worktree at the start of the round (the W1b build with the engineers'
+fix-round code, the simulator not yet changed), run on the same machine.
+
+### Fix round: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Config/Missions/1_Village.json waves` | 3 | **2** | slice 3 S4: the hub card reads "Waves cleared n / waves", and a Forest Road clear counts the `clear` actions of its one locking camp, the Chief's Clearing, which has 2 waves (the ambush, then the Colossus); open camps emit `campClear`. W3 replaces the stub |
+| `sim_range.py DASH_PROOF_FRAMES` (new, simulator only) | (none) | **2** | F1: the ring proves a real dash two Heartbeats after it begins (one after its first moving sample at a smooth 60 Hz, tests_l4b (a)). With the hold its value moves no outcome of a proven dash; it is there so the mirror carries a proof time, as the game does |
+
+### Fix round: the dash in the simulator (F1)
+
+The game now holds a decision that falls while the player's dash claim is pending, when the claim's window would
+cover it, until the claim resolves: proven, it is voided as before L4; lapsed (`dashSeconds + originLagMaxSeconds` =
+0.45 s after the request), it lands then. The mirror (`start_dash`, `settle_claim`, `awaits`, `hold`, `release`):
+- a dash records a claim (its window from the request, its proof time `DASH_PROOF_FRAMES` Heartbeats on if its own
+  clamped path proves it, else none, and its lapse), and opens no window by itself;
+- each frame, before anything is decided (WeaponService's one order), a claim past its proof opens its window from the
+  request, and one never proven is over once the frame is past its lapse;
+- a decision the pending claim would cover (VitalsService's `met`) is held with what the commit rule found at its own
+  moment, hit or miss (the instant shapes), or the contact (shots, charges and rings, which fly on, as for a dodge);
+- a held decision is judged when its claim is over: voided by an i-frame that met its span, a knock since then voiding
+  nothing; a downed player is judged by nothing; it outlives its striker's death; ClearThreats takes it with the rest.
+
+So a proven dash's outcome is the one it had before W1b, whatever the latency; only an unproven dash's covered hits
+move, to its lapse. Slice 3 m1's delay model (a window counts only for a hit decided two Heartbeats after the dash
+began) no longer describes the game: it modelled the proof's latency without the hold, which is what F1 removed.
+
+**Result.** `sim_range.py --check` prints every line it printed before, byte for byte (the whole output compared),
+but two: the `DASH PROOF` report gains the held decisions, and one gate line is new.
+
+| Policy | Dashes / never proven | Held, then voided at the proof / judged unvoided at a lapse |
+|---|---|---|
+| a human's reaction, attacks the nearest | 54 / 0 | 1 / 0 |
+| reacts to every tell, attacks the nearest | 37 / 0 | 26 / 0 |
+| ... carrying broadsword and longbow | 1 / 0 | 1 / 0 |
+| ... carrying frostHammer and longbow | 2 / 0 | 2 / 0 |
+| wakes a group, runs out, comes back | 6 / 0 | 3 / 0 |
+| reacts to every tell, attacks (range) | 2 / 0 | 0 / 0 |
+| stands to half health, then fights (range) | 16 / 0 | 0 / 0 |
+
+The 33 Forest Road decisions held for a proof are slice 3 m1's 33 "margin 0" voids (a dash begun in the frame of the
+decision): the game now dodges them, as the mirror always had. No simulated dash went unproven, so nothing was held to
+a lapse in a gated run. The new gate line runs the hold through the simulator's own code on one lunge decided in the
+frame of the press: dodged once the ring proves the dash (2 Heartbeats later), landing 0.467 s after the press when it
+is never proven (the first Heartbeat past the 0.45 s lapse), and at once with no dash. The reviewer's suggested line
+("a dash begun in the decision's frame does not dodge") is the opposite of F1's rule and was not added.
+
+**The R8 row.** Unchanged at **x1.60**: Road3, Hard, sword T1 / bow T4: seed 11 39,504 / 55.1 against 24,703 / 37.2;
+seed 23 18,374 / 27.6 against 23,330 / 34.8; seed 37 2,756 / 0.0 against 21,332 / 31.9. Slice 3 m1's x1.65 came from
+the delay model above. The known limit stands as L4 W1 left it: the only failing line.
+
+**What the mirror does not model.** The planner (`plan_hits`) still dates an unproven dash's hits at their decision,
+not at the lapse; it only orders failing plans by when their first hit lands, and no gated run dashed unproven. When a
+held hit lands at a lapse in the same frame as a decision that was queued before it, the game walks its queue in
+insertion order and the mirror releases the held one first; this can only matter for an unproven dash.
+
+### Fix round: the gates before and after
+
+| Gate | Before | Now |
+|---|---|---|
+| harness (`run_harness.py`) | FAIL (2 of 4,133): B's two re-indented `sendRunState` pins (A's fixture and pins applied) | **PASS (4,162 checks)**: +29 (5 sendRunState, 9 client, 10 payMentors pins, 5 orders) |
+| `sim_range.py --check` | FAIL (1): the R8 row, x1.60; 537 PASS | **FAIL (1): the same row, x1.60**; 538 PASS (+1: the F1 hold) |
+| `check_stage_mirror.py` | PASS | **PASS**, with `Combat.MentorBonus` 28 cases and its 11 boss kills through `mentor_pay` compared (F6) |
+| `mirror_mutants.py` | 129 of 129 | **132 of 132 caught** (+3: MentorBonus `<` made `<=`, the ratio ignored, one mentorValor whatever the head count) |
+| `check_levels.py` | PASS | **PASS** (222 lines) |
+| `check_levels_mutants.py` | PASS | **MUTANTS: PASS** (274 cases as expected, about 3 h beside the other runs) |
+| `sim_combat.py --check` | PASS, 11 assertions | **PASS, 11 assertions**, 12 and 13 now read their boss kills from `sim_combat.mentor_fixtures`, the list check_stage_mirror replays |
+| `mutate.py`, filtered to the changed files | (not run) | **269 run, 0 not caught** (baseline PASS 4,162), filtered to DashProof, VitalsService, WeaponService, ArenaService, WaveService, CombatUIController and RunFloors |
+
+### Fix round: new gates and their mutants
+
+- **F2, WeaponService (the source.l4b pins, A's lines).** OnDash grants nothing (one regex counts 0 of `GrantIframes(`,
+  `DashProof.`, `showIframes(`, `openIframes(` and any i-frame write), stamps `lastDashAt`, refuses a downed player;
+  trackAir proves a pending claim right after the ring sample, and a frame with no living root drops it; proveDash is
+  one `DashProof.Step` call and shows the attribute only for a proof; the rule read once; pendingDash is VitalsService's
+  `dashClaim` hook; `step` runs `trackAir`, then `VitalsService.Step` (one Heartbeat). The verdict and lapse branches
+  moved into the pure `DashProof.Step`, which tests_l4b runs. Every review mutant of slice 3 m2 and slice 1 m1 is a
+  `mutate.py` entry, caught: open unless lapsed and the lapse branch made `else` (tests_l4b), OnDash calling
+  `GrantIframes` (dashGrantsNothing), the no-root clear deleted (trackNoRootClears), the claim test inverted
+  (trackRecordThenProve), a 1e6 lookback (ruleRead), the cooldown stamp deleted (dashStamp), the down refusal dropped
+  (dashDown).
+- **F3, the cells-once lines.** Server (B's): the skip test, Attach as a whole line, `if cellsWent then`, the clone, the
+  swap (and one write of `sent.floors`), the note and the FireClient of `sent`. Client (the ui-engineer's, a new body
+  regex for two functions nested one tab in): merge against the held list, through `RunFloors.Merge` with the held
+  set's number, keep the incoming number after it (order pinned), keep the merged floors; onRunState's call with the
+  RunState's `floorsSeq`, after the guard and before the new-level branch (F4); the one RunState listener. The review's
+  seven are caught: 1 (uiMerge), 2 (uiSeq), 3 (uiCall), 4 (uiMerge and the orders), 5 and 7 (sendCellsWent), 6
+  (sendFloorsWrites).
+- **F6, the mentor pay.** payMentors' deciding lines are pinned whole (nobody paid at a total of 0, the mentor's
+  waiting-and-floor test, a mentee is another member over the floor, the mentee's own rate, the MentorBonus call
+  against the mentor's rate, the Valor, the card, the boss kill's call). `check_stage_mirror.py` compares the real
+  `Combat.MentorBonus` with `sim_combat.mentor_bonus` on every call `mentor_pay` makes on assertions 12 and 13's boss
+  kills, plus a rate exactly at, and 1e-7 either side of, hostRate x mentorRatio for three host rates; then pays each
+  of those kills with the Luau's answers. Review mutants 1 and 2 are caught by the pins (mentorFloor, menteeFloor);
+  mutant 3 (`rate < threshold` made `<=`) by the mirror: 6 of the 28 cases differ.
+- **Slice 3 S2.** The two real-file checks that pinned today's map became rules: every level file is played by a map
+  node and was resolved, validated and planned (1 today); every side node hangs off a level node and has a map theme
+  (0 today).

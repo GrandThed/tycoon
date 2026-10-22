@@ -207,9 +207,18 @@ TELL_MARGIN_SECONDS = 0.05
 # that never moves the character earns none (dash_proof).
 DASH_UPTIME = (0.20, 0.50)
 # L4B-7: every dash the simulator's players made and how many the server's ring would never have
-# proven (DashProof.Verdict), by policy label: [dashes, unproven]. Expected 0 unproven on open
-# ground; a dash pressed against a fence is listed, not failed (print_dash_proof).
+# proven (DashProof.Verdict), by policy label: [dashes, unproven, decisions held for a claim and
+# voided at its proof, held and judged unvoided at its lapse]. Expected 0 unproven on open ground
+# (so 0 judged at a lapse); a dash pressed against a fence is listed, not failed (print_dash_proof).
 DASH_TALLY = {}
+# The L4 W1b fix round's F1 (docs/prompts/l4-w1b-fix-round.md): the ring proves a real dash this many
+# Heartbeats after it begins (one after its first moving sample at a smooth 60 Hz, tests_l4b (a); two
+# after the server's copy starts to move). Until then, and for an unproven claim until its lapse
+# (dashSeconds + originLagMaxSeconds after the request), a decision the claim's window would cover is
+# held (VitalsService's awaitsDash): proven, it is voided as before L4; lapsed, it lands then. So a
+# proven dash's outcome is the one it had before W1b whatever this number is: only an unproven dash's
+# covered hits move, to its lapse (start_dash, settle_claim, release).
+DASH_PROOF_FRAMES = 2
 # An i-frame dodge leaves at least this wide a window to press in (dashIframes + lag).
 DASH_WINDOW_SECONDS = 0.20
 # A knock carries the player out of the shape of a second enemy of the same kind standing up to
@@ -1628,9 +1637,10 @@ def print_dash_proof():
         return
     print()
     print("DASH PROOF (L4B-7; a dash's i-frames once the server's ring has seen it): per policy, dashes made / "
-          "never proven (0 expected on open ground; one pressed against a fence is listed, not failed)")
-    for label, (made, unproven) in sorted(DASH_TALLY.items()):
-        print(f"  {label}: {made} / {unproven}")
+          "never proven (0 expected on open ground; one pressed against a fence is listed, not failed); F1: "
+          "decisions held for a pending claim, voided at its proof / judged unvoided at its lapse")
+    for label, (made, unproven, voided, landed) in sorted(DASH_TALLY.items()):
+        print(f"  {label}: {made} / {unproven}; held {voided} / {landed}")
 
 
 def load_arena(name):
@@ -2213,6 +2223,15 @@ class ThreatRun:
         self.down_until = None
         self.down_span = (math.inf, -math.inf)  # the last time down: (from, until)
         self.windows = []  # i-frame windows (from, until): dash, knock and get-up
+        # F1: the dash claim the ring has not proven yet (start_dash; None = none), the decisions held
+        # for it (release), and when an unproven one lapses after its request (DashProof.Rule's lapse:
+        # None when the rule cannot be built, and then nothing is held).
+        self.claim = None
+        self.holds = []
+        lookback = shooting.get("originLagMaxSeconds")
+        self.dash_lapse = (self.move["dashSeconds"] + lookback
+                           if isinstance(lookback, (int, float)) and lookback >= 0 and dash_proof(
+                               self.move, math.inf) else None)
         self.knock_until = -math.inf  # [together] the last knock voids what is decided before this
         self.knock = None  # the slide a knock gave him: (unit x, unit z, speed, from)
         self.lift = None  # the launch that came with it: (from, until, apex)
@@ -2450,7 +2469,64 @@ class ThreatRun:
 
     def shielded(self, start, until, t):
         """Did an i-frame meet [start, until], or does the last knock still void hits at t?"""
-        return t < self.knock_until or any(a <= until and b >= start for a, b in self.windows)
+        return t < self.knock_until or self.covered(start, until)
+
+    def covered(self, start, until):
+        """Did an i-frame meet [start, until]? (VitalsService's `covered`: the windows alone.)"""
+        return any(a <= until and b >= start for a, b in self.windows)
+
+    def awaits(self, impact, decided):
+        """F1, VitalsService.awaitsDash: must a decision on [impact, decided] wait? Yes while a dash
+        claim is pending (settle_claim ends it at its proof or its lapse) and its window, once
+        proven, would meet that span (`met`: until > max(from, impact), from <= decided)."""
+        claim = self.claim
+        return (claim is not None and claim["until"] > max(claim["from"], impact)
+                and claim["from"] <= decided)
+
+    def hold(self, impact, decided, kind, attack, held, voided, push, volley):
+        """F1: a decision kept for the pending claim, with what the commit rule found at its own
+        moment (in the shape, the push from where the root was); released by release()."""
+        self.holds.append({"impact": impact, "decided": decided, "kind": kind, "attack": attack, "held": held,
+                           "voided": voided, "push": push, "volley": volley})
+
+    def settle_claim(self, t):
+        """F1, DashProof.Step in this frame, before anything is decided (WeaponService's one order):
+        a claim the ring proves opens its window from the request; one never proven is over once
+        `t` is past its lapse."""
+        claim = self.claim
+        if claim is None:
+            return
+        if claim["proof"] is not None:
+            if t >= claim["proof"] - THREAT_EPS:
+                self.windows.append((claim["from"], claim["until"]))
+                self.claim = None
+        elif t > claim["lapse"] + THREAT_EPS:
+            self.claim = None
+
+    def release(self, t):
+        """F1, VitalsService.decide on the held decisions once their claim is over: each is judged as
+        it was at its own moment (in the shape or not, the push), voided only by an i-frame that met
+        its span (a proven dash's, from the request); a knock since then voids nothing. A downed
+        player is judged by nothing, and a barrage he has answered is done."""
+        if not self.holds:
+            return
+        kept = []
+        for entry in self.holds:
+            if self.awaits(entry["impact"], entry["decided"]):
+                kept.append(entry)
+                continue
+            if self.down_until is not None or self.was_down(entry["impact"]):
+                continue
+            volley = entry["volley"]
+            if volley is not None and volley in self.volleys:
+                continue
+            voided = entry["voided"] or self.covered(entry["impact"], entry["decided"])
+            tally = DASH_TALLY.setdefault(self.policy.get("label") or "?", [0, 0, 0, 0])
+            tally[2 if voided else 3] += 1
+            if (self.rule(t, entry["impact"], entry["kind"], entry["attack"], entry["held"], voided, entry["push"],
+                          knock=False) and volley is not None):
+                self.volleys.add(volley)
+        self.holds = kept
 
     def control(self, t, dt):
         if self.down_until is not None:
@@ -2715,17 +2791,20 @@ class ThreatRun:
     def start_dash(self, t, direction):
         """MovementController: the whole distance in dashSeconds; WeaponService.OnDash records the
         claim, and its i-frames (from the request) count only once the ring has seen the dash
-        (L4B-7: dash_proven). An unproven dash moves him all the same."""
+        (L4B-7: dash_proven), DASH_PROOF_FRAMES later; a claim never proven lapses (F1: the
+        decisions it would cover wait for either, settle_claim). An unproven dash moves him all
+        the same. A newer claim replaces a pending one (OnDash)."""
         proven = self.dash_proven(direction)
         speed = self.move["dashDistance"] / self.dash_seconds
         self.dash = (direction[0] * speed, direction[1] * speed, t + self.dash_seconds)
         self.dash_ready = t + self.move["dashCooldown"]
-        if proven:
-            self.windows.append((t, t + self.move["dashIframes"]))
-        else:
+        if self.dash_lapse is not None:
+            self.claim = {"from": t, "until": t + self.move["dashIframes"],
+                          "proof": t + DASH_PROOF_FRAMES * FRAME if proven else None, "lapse": t + self.dash_lapse}
+        if not proven:
             self.unproven += 1
         self.dashes += 1
-        tally = DASH_TALLY.setdefault(self.policy.get("label") or "?", [0, 0])
+        tally = DASH_TALLY.setdefault(self.policy.get("label") or "?", [0, 0, 0, 0])
         tally[0] += 1
         tally[1] += 0 if proven else 1
 
@@ -3027,15 +3106,16 @@ class ThreatRun:
         counts[0] += 1
         counts[1] += 1 if landed else 0
 
-    def rule(self, t, impact, kind, attack, held, voided, push):
+    def rule(self, t, impact, kind, attack, held, voided, push, knock=True):
         """VitalsService.rule: one standing player's outcome of one attack, judged at t. `held` =
         the shape holds him; `voided` = an i-frame met its span or a knock was decided with it.
-        Returns True when the hit lands."""
+        `knock` False: a decision held for a dash claim (F1), whose knock window was judged at its
+        own moment, not now. Returns True when the hit lands."""
         if not held:
             self.whiffed += 1
             self.tally(kind, False)
             return False
-        if voided or t < self.knock_until:
+        if voided or (knock and t < self.knock_until):
             self.dodged += 1  # ruling 7: a voided hit that would have landed shows "dodged"
             self.tally(kind, False)
             return False
@@ -3085,7 +3165,11 @@ class ThreatRun:
 
     def resolve(self, t):
         """[commit] Walks the queue as VitalsService.settle does and decides every impact whose
-        T + lag has come: a lunge, an arc, a line, and a lob at its landing."""
+        T + lag has come: a lunge, an arc, a line, and a lob at its landing. F1: the dash claim is
+        judged first (settle_claim), the decisions held for it are released, and a decision a still
+        pending claim would cover is held (hold) with what was found at its moment, hit or miss."""
+        self.settle_claim(t)
+        self.release(t)
         self.judging, self.pending = self.pending, []
         for entry in self.judging:
             decided, impact, kind, attack, ex, ez, face, voided, aim, _thrown, floor_y = entry
@@ -3109,8 +3193,11 @@ class ThreatRun:
                 push = face
             away = math.hypot(push[0], push[1])
             push = (push[0] / away, push[1] / away) if away > EPSILON else face
-            if (self.rule(t, impact, kind, attack, held, voided or self.shielded(impact, decided, t), push)
-                    and volley is not None):
+            voided = voided or self.shielded(impact, decided, t)
+            if not voided and self.awaits(impact, decided):
+                self.hold(impact, decided, kind, attack, held, False, push, volley)
+                continue
+            if self.rule(t, impact, kind, attack, held, voided, push) and volley is not None:
                 self.volleys.add(volley)
         self.judging = ()
         self.windows = [w for w in self.windows if w[1] >= t - 1.0]
@@ -3135,8 +3222,12 @@ class ThreatRun:
             if (self.down_until is None and not shot["done"] and to >= start and not self.was_down(now - lag)
                     and point_segment_gap(root, self.shot_at(shot, start), self.shot_at(shot, to)) <= shot["radius"]):
                 shot["done"] = True  # one attack, one outcome each
-                if self.rule(now, now - lag, shot["kind"], shot["attack"], True,
-                             self.shielded(now - lag, now, now), shot["push"]):
+                voided = self.shielded(now - lag, now, now)
+                if not voided and self.awaits(now - lag, now):
+                    # F1 (judgeTravelling): held for the dash claim; ThreatField hears "dodged"
+                    # and the shot flies on, landing from the queue if the claim lapses.
+                    self.hold(now - lag, now, shot["kind"], shot["attack"], True, False, shot["push"], None)
+                elif self.rule(now, now - lag, shot["kind"], shot["attack"], True, voided, shot["push"]):
                     continue  # the one that lands ends it; a voided one flies on
             if now - lag < shot["ends"]:
                 kept.append(shot)
@@ -3160,8 +3251,11 @@ class ThreatRun:
                      charge["z"] + charge["face"][1] * self.charge_run(charge, to))
                 if point_segment_gap((self.x, self.z), a, b) <= (attack.get("width") or 0) / 2:
                     charge["done"] = True
-                    self.rule(now, now - lag, charge["kind"], attack, True,
-                              self.shielded(now - lag, now, now), charge["face"])
+                    voided = self.shielded(now - lag, now, now)
+                    if not voided and self.awaits(now - lag, now):
+                        self.hold(now - lag, now, charge["kind"], attack, True, False, charge["face"], None)  # F1
+                    else:
+                        self.rule(now, now - lag, charge["kind"], attack, True, voided, charge["face"])
             if now - lag < charge["end"]:
                 kept.append(charge)
             elif not charge["done"] and not charge["blind"]:
@@ -3186,7 +3280,11 @@ class ThreatRun:
                 if away <= radius and not (left + (away + half) / speed < start or left + (away - half) / speed > to):
                     ring["done"] = True  # each player at most once per ring
                     push = ((self.x - ring["x"]) / away, (self.z - ring["z"]) / away) if away > EPSILON else (0.0, 1.0)
-                    self.rule(now, now - lag, ring["kind"], attack, True, self.shielded(now - lag, now, now), push)
+                    voided = self.shielded(now - lag, now, now)
+                    if not voided and self.awaits(now - lag, now):
+                        self.hold(now - lag, now, ring["kind"], attack, True, False, push, None)  # F1
+                    else:
+                        self.rule(now, now - lag, ring["kind"], attack, True, voided, push)
             if speed > 0 and now - lag < ends:
                 kept.append(ring)
             elif not ring["done"] and not ring["blind"]:
@@ -4520,6 +4618,32 @@ def print_threat(cfg, env, facts, rows, roles, plates, ab_rows=()):
         print("  same weapon; unplated = from its first hit to the kill of an elite with no plate.")
 
 
+HOLD_PROBE_LABEL = "F1 hold probe"
+
+
+def dash_hold_probe(cfg, env):
+    """The L4 W1b fix round's F1 on the simulator's own code (start_dash, settle_claim, awaits, hold,
+    release): one lunge that holds the root, decided in the very frame a dash is pressed, under a
+    dash the ring proves (into open ground), one it never proves (into the fence), and no dash.
+    Returns {case: (the times it landed, dodged)}; the frames run from 1 s, Heartbeat by Heartbeat."""
+    attack = {"shape": "lunge", "range": 6.0, "width": 4.0, "damage": 1.0, "knockback": 0, "launch": 0}
+    t0 = 1.0
+    found = {}
+    for case in ("proven", "unproven", "none"):
+        run = ThreatRun(cfg, env, COUNT_SET, dict(THREAT_POLICIES["stand"], label=HOLD_PROBE_LABEL), 1, seconds=2.0,
+                        immortal=True)
+        x0, x1, z0, z1 = run.player_box()
+        run.x, run.z = (x1 if case == "unproven" else (x0 + x1) / 2), (z0 + z1) / 2
+        if case != "none":
+            run.start_dash(t0, (1.0, 0.0))
+        run.pending.append([t0, t0, "probe", attack, run.x - 2.0, run.z, (1.0, 0.0), False, None, None, 0.0])
+        for frame in range(int(round(0.8 / FRAME))):
+            run.resolve(t0 + frame * FRAME)
+        found[case] = ([when for when, *_rest in run.log], run.dodged)
+    DASH_TALLY.pop(HOLD_PROBE_LABEL, None)  # a probe, not a player: kept out of the DASH PROOF report
+    return found
+
+
 def check_threat(cfg, env, facts, rows, roles, plates, expect):
     """The P4 bands. `expect` is check()'s PASS/FAIL printer."""
     hp = facts["hp"]
@@ -4589,6 +4713,18 @@ def check_threat(cfg, env, facts, rows, roles, plates, expect):
            f"dash: L4B-7, a forged still dash is invulnerable {facts['dashForged']:.0%} of the time; a walk "
            f"({walk_flat:.2f} studs in {move.get('dashProofSeconds', 0):g} s) never proves one, a real dash "
            f"({dash_flat:.2f}) does")
+    # F1: a hit decided in the very frame of the press waits for the claim: voided once the ring
+    # proves the dash (as before W1b), landing on the first Heartbeat past the lapse when it never
+    # does, and at its own decision with no dash at all.
+    probe = dash_hold_probe(cfg, env)
+    lapse = move["dashSeconds"] + cfg["shooting"]["originLagMaxSeconds"]
+    late = probe["unproven"][0]
+    expect(probe["proven"] == ([], 1) and len(late) == 1 and 0 < late[0] - (1.0 + lapse) <= FRAME + THREAT_EPS
+           and probe["unproven"][1] == 0 and probe["none"] == ([1.0], 0),
+           f"dash: F1, a hit decided in the frame a dash is pressed is held for the claim: dodged once the ring "
+           f"proves it ({DASH_PROOF_FRAMES} Heartbeats later; landed {probe['proven'][0] or 'never'}), landing "
+           f"{', '.join(f'{when - 1.0:.3f}' for when in late) or 'never'} s after the press when it is never "
+           f"proven (the lapse, {lapse:.2f} s), and at once with no dash ({probe['none'][0]})")
     expect(facts["dashWindow"] >= DASH_WINDOW_SECONDS and move["dashDistance"] >= facts["longest"],
            f"dash: the i-frame dodge's press window {facts['dashWindow']:.2f} s >= {DASH_WINDOW_SECONDS}, and its "
            f"{move['dashDistance']:.0f} studs >= the longest way out of a shape {facts['longest']:.1f}")
@@ -8436,6 +8572,7 @@ class LevelRun(ThreatRun):
 
     def clear_threats(self):
         self.pending = []
+        self.holds = []  # F1: VitalsService.ClearThreats empties the whole queue, held entries too
         self.shots = []
         self.charges = []
         self.rings = []

@@ -133,6 +133,13 @@ went, and the only level whose scripted runs reach Advance's merge and the direc
     functions left without a mirror on purpose, StrikeTier, HeldFamily and SavedPower, with why
     (ARMORY_UNMIRRORED): listed in a note, and the run fails when one is no longer in the Luau.
 
+  * L4 W1b fix round (F6, review 3-m3): `Combat.MentorBonus` against `sim_combat.mentor_bonus` on every
+    call `sim_combat.mentor_pay` (WaveService.payMentors' mirror) makes on assertions 12 and 13's boss
+    kills (`sim_combat.mentor_fixtures`) and on the edges of hostRate x mentorRatio (a rate exactly on
+    it, EDGE either side, none, 0) for three host rates; then each of those kills paid by mentor_pay
+    on the Luau's answers against its own. payMentors' deciding lines are run_harness.py's L4B_LINES
+    pins; the `<` made `<=` mutant is in tools/crowd_harness/mirror_mutants.py.
+
 It fails when either side changes alone. A function of the Luau that the simulators do not
 mirror (the rescue, the skips, the map) is listed, not compared: tools/crowd_harness tests those.
 
@@ -234,7 +241,7 @@ FIELD_LAYOUT = {
 
 # The functions each comparison needs; one that is missing fails the run by name.
 NEEDED = {"Combat": ("CampWave", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
-                     "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock"),
+                     "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock", "MentorBonus"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint", "Ceiling",
                         "GateNudge",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve",
@@ -346,6 +353,35 @@ BURST_SIZES = (1, 2, 3, 9, 16)
 # Prices and reward multipliers whose products end in halves and thirds: (cash, materials, mult).
 REWARD_GRID = tuple((cash, materials, mult) for cash in (1, 3, 5, 7, 100) for materials in (0, 1, 3)
                     for mult in (0.5, 1.5, 2.5, 1 / 3, 4))
+# The L4 W1b fix round's F6: the host rates the mentor edges are asked at (each times mentorRatio is
+# a whole number, so "exactly at the threshold" is exact on both sides).
+MENTOR_HOSTS = (0.0, 8000.0, sc.MENTOR_HOST_RATE)
+
+
+def mentor_cases(combat):
+    """Combat.MentorBonus's cases: (host rate, party rates). First every call sim_combat.mentor_pay
+    makes on assertions 12 and 13's boss kills (sim_combat.mentor_fixtures, recorded through its
+    `bonus_of`), then the edges: a party of none, a rate exactly at hostRate x mentorRatio, EDGE
+    either side of it, 0, a mix. Returns the cases and, per fixture, its members and tally."""
+    calls = []
+
+    def record(cfg, host, rates):
+        calls.append((host, list(rates)))
+        return sc.mentor_bonus(cfg, host, rates)
+
+    fixtures = sc.mentor_fixtures(combat)
+    for members, tally in fixtures.values():
+        sc.mentor_pay(combat, members, tally, bonus_of=record)
+    ratio = combat["coop"]["mentorRatio"]
+    for host in MENTOR_HOSTS:
+        edge = host * ratio
+        calls += [(host, []), (host, [edge]), (host, [edge - EDGE]), (host, [edge + EDGE]), (host, [0.0]),
+                  (host, [edge - EDGE, edge, edge + EDGE, 0.0, host, 2 * host])]
+    unique = []
+    for case in calls:
+        if case not in unique:
+            unique.append(case)
+    return unique, fixtures
 STATE_FIELDS = ("stage", "step", "wave", "firstWave", "gateAt", "breatherUntil", "cleared", "lastCleared", "settled",
                 "approached",
                 "reached", "done", "closedAt", "fought", "ended")
@@ -2699,6 +2735,8 @@ def main():
     data["mergeCases"] = [list(key) for key in merges]
     data["breatherCases"] = breathers
     data["rewardCases"] = [list(case) for case in REWARD_GRID]
+    mentors, mentor_fixtures = mentor_cases(combat)
+    data["mentorCases"] = [[host, rates] for host, rates in mentors]
 
     # The bundle: the data, the real sources, the driver. In a folder of its own.
     parts = [f"local DATA: any = {to_luau(data)}\n", "local SOURCES = {}\n"]
@@ -2799,6 +2837,26 @@ def main():
     grid("Combat.ShouldMerge", "grid.shouldMerge", data["mergeCases"], lambda tempo, dead: sc.should_merge(tempo, dead, director))
     grid("Combat.BreatherSeconds", "grid.breatherSeconds", [(tempo,) for tempo in breathers],
          lambda tempo: sc.breather_seconds(tempo, director))
+
+    # F6: Combat.MentorBonus case by case, then each of assertions 12 and 13's boss kills paid by
+    # sim_combat.mentor_pay twice, once on its own mentor_bonus and once on the Luau's answers.
+    got = answers.get("grid.mentorBonus")
+    if isinstance(got, dict) and "threw" in got:
+        report.compare("Combat.MentorBonus", "grid.mentorBonus", got, None)
+    else:
+        got = got or []
+        luau_bonus = {}
+        for index, (host, rates) in enumerate(mentors):
+            theirs = got[index] if index < len(got) else None
+            luau_bonus[(host, tuple(rates))] = theirs
+            report.compare("Combat.MentorBonus", f"host {host:g}/s, party [{', '.join(f'{r:g}' for r in rates)}]",
+                           theirs, sc.mentor_bonus(combat, host, rates))
+        for name, (members, tally) in mentor_fixtures.items():
+            replayed = sc.mentor_pay(combat, members, tally,
+                                     bonus_of=lambda _cfg, host, rates: luau_bonus.get((host, tuple(rates))) or 0)
+            report.compare("Combat.MentorBonus through sim_combat.mentor_pay (assertions 12, 13)", name,
+                           {str(user): valor for user, valor in replayed.items()},
+                           {str(user): valor for user, valor in sc.mentor_pay(combat, members, tally).items()})
 
     # The scripted runs: the first tick at which the two sides part, per run.
     extra_state = set()

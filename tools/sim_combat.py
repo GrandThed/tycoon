@@ -1493,11 +1493,14 @@ class Checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}: {detail}")
 
 
-def mentor_pay(combat_cfg, members, tally):
+def mentor_pay(combat_cfg, members, tally, bonus_of=None):
     """WaveService.payMentors (C2, L1b-15) at a boss's kill, pure: `members` [(userId, incomeRate,
     waiting)], `tally` {userId: damage on the boss}. A mentor who is not waiting and whose share of the
     damage reached coop.mentorMinDamageShare is paid Combat.MentorBonus against the rates of the OTHER
-    members whose share reached it too. Returns {userId: Valor} of everyone paid (none when nobody hit)."""
+    members whose share reached it too. Returns {userId: Valor} of everyone paid (none when nobody hit).
+    `bonus_of` stands in for mentor_bonus (L4 W1b fix round F6: check_stage_mirror.py records the calls
+    this makes, then replays them with the real Combat.MentorBonus's answers)."""
+    bonus_of = bonus_of or mentor_bonus
     total = sum(tally.values())
     if total <= 0:
         return {}
@@ -1508,10 +1511,39 @@ def mentor_pay(combat_cfg, members, tally):
             continue
         rates = [other_rate for other, other_rate, _w in members
                  if other != user and tally.get(other, 0) / total >= floor]
-        bonus = mentor_bonus(combat_cfg, rate, rates)
+        bonus = bonus_of(combat_cfg, rate, rates)
         if bonus > 0:
             paid[user] = bonus
     return paid
+
+
+def mentor_fixtures(combat_cfg):
+    """Assertions 12 and 13's boss kills, {name: (members, tally)} for mentor_pay. One list, read by
+    those assertions and by tools/check_stage_mirror.py (F6), which replays every Combat.MentorBonus
+    call these make against the real Luau: a 10:1-rate duo, an equal duo, a mentee exactly at and one
+    stud/s under hostRate x mentorRatio, one mentor carrying two; an idle mentee, one at half the damage
+    floor, a small-share newbie beside three veterans, an idle mentor, a waiting mentor, nobody hit."""
+    coop = combat_cfg["coop"]
+    host = MENTOR_HOST_RATE
+    low = MENTOR_HOST_RATE / MENTOR_RATE_RATIO
+    edge = MENTOR_HOST_RATE * coop["mentorRatio"]
+    floor = coop["mentorMinDamageShare"]
+    even = {1: 60.0, 2: 40.0}
+    duo = [(1, host, False), (2, low, False)]
+    return {
+        "wide": (duo, even),
+        "equal": ([(1, host, False), (2, host, False)], even),
+        "atEdge": ([(1, host, False), (2, edge, False)], even),
+        "under": ([(1, host, False), (2, edge - 1, False)], even),
+        "two": ([(1, host, False), (2, low, False), (3, low, False)], {1: 50.0, 2: 25.0, 3: 25.0}),
+        "idle": (duo, {1: 100.0, 2: 0.0}),
+        "shy": (duo, {1: 100.0 * (1 - floor / 2), 2: 100.0 * floor / 2}),
+        "mixed": ([(1, host, False), (2, host, False), (3, host, False), (4, low, False)],
+                  {1: 32.0, 2: 32.0, 3: 31.0, 4: 5.0}),
+        "idleHost": (duo, {1: 0.0, 2: 100.0}),
+        "waiting": ([(1, host, True), (2, low, False)], even),
+        "nobody": (duo, {}),
+    }
 
 
 def run_checks(armory, combat_cfg, places, game, eras):
@@ -1604,15 +1636,10 @@ def run_checks(armory, combat_cfg, places, game, eras):
     #     in L4 W1b, the only guard on the mentor pay.)
     coop = combat_cfg["coop"]
     valor = coop["mentorValor"]
-    low_rate = MENTOR_HOST_RATE / MENTOR_RATE_RATIO
     edge = MENTOR_HOST_RATE * coop["mentorRatio"]
-    even = {1: 60.0, 2: 40.0}
-    wide = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, low_rate, False)], even)
-    equal = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, MENTOR_HOST_RATE, False)], even)
-    at_edge = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, edge, False)], even)
-    under = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, edge - 1, False)], even)
-    two = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, low_rate, False), (3, low_rate, False)],
-                     {1: 50.0, 2: 25.0, 3: 25.0})
+    pays = {name: mentor_pay(combat_cfg, members, tally)
+            for name, (members, tally) in mentor_fixtures(combat_cfg).items()}
+    wide, equal, at_edge, under, two = (pays[name] for name in ("wide", "equal", "atEdge", "under", "two"))
     ok12 = (wide == {1: valor} and equal == {} and at_edge == {} and under == {1: valor}
             and two == {1: 2 * valor} and valor > 0)
     checks.verdict(ok12, "12 mentor duo      ",
@@ -1625,15 +1652,9 @@ def run_checks(armory, combat_cfg, places, game, eras):
     #     the bonus; an idle high-income member beside a fighting newbie earns nothing; a mentor
     #     waiting in the lobby camp earns nothing; a boss nobody hit pays nobody.
     floor = coop["mentorMinDamageShare"]
-    idle = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, low_rate, False)], {1: 100.0, 2: 0.0})
-    shy = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, low_rate, False)],
-                     {1: 100.0 * (1 - floor / 2), 2: 100.0 * floor / 2})
-    newbie = {1: 32.0, 2: 32.0, 3: 31.0, 4: 5.0}
-    mixed = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, MENTOR_HOST_RATE, False),
-                                    (3, MENTOR_HOST_RATE, False), (4, low_rate, False)], newbie)
-    idle_host = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, low_rate, False)], {1: 0.0, 2: 100.0})
-    waiting = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, True), (2, low_rate, False)], even)
-    nobody = mentor_pay(combat_cfg, [(1, MENTOR_HOST_RATE, False), (2, low_rate, False)], {})
+    idle, shy, mixed, idle_host, waiting, nobody = (
+        pays[name] for name in ("idle", "shy", "mixed", "idleHost", "waiting", "nobody"))
+    newbie = mentor_fixtures(combat_cfg)["mixed"][1]
     newbie_share = newbie[4] / sum(newbie.values())
     ok13 = (idle == {} and shy == {} and mixed == {1: valor, 2: valor, 3: valor} and idle_host == {}
             and waiting == {} and nobody == {} and newbie_share >= floor and floor > 0)

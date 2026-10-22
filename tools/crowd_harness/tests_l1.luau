@@ -2233,7 +2233,19 @@ function L1.realLevelTests(): ()
 			end
 		end
 	end
-	check(table.concat(played, " ") == "forestRoad", `the map's one built level is played here: {table.concat(played, ", ")}`)
+	-- L4 W1b fix round (slice 3 S2): a rule, not today's map. Every level file a node plays was
+	-- resolved, validated and planned above, and none is left out (the Castle's file joins it here).
+	local playedIds: { [string]: boolean } = {}
+	for _, id in played do
+		playedIds[id] = true
+	end
+	local unplayed: { string } = {}
+	for _, file in real.levels do
+		if not playedIds[file.id] then
+			table.insert(unplayed, tostring(file.id))
+		end
+	end
+	check(#played > 0 and #unplayed == 0, `every level file is played by a map node, and was checked here ({#played}: {table.concat(played, ", ")}){real.list(unplayed)}`)
 
 	-- What Play does first in a proving build (ruling 32), and what its panel offers.
 	local debug = L1.combat.debug
@@ -2537,13 +2549,27 @@ function L1.realMapTests(): ()
 		end
 	end
 	check(real.startable("forestRoad", {}) and not real.startable("noSuchLevel", {}) and #nodeless == 0, `RequestStartLevel: forestRoad starts, a level no node names is locked, and every level file is an open node's{real.list(nodeless)}`)
-	local bonus: { string } = {}
+	-- L4 W1b fix round (slice 3 S2): side nodes are in the design (a secret's second exit), so the
+	-- rule is what one must be, not that none ships: it hangs off a main node and its theme is drawn.
+	local kinds: { [string]: string } = {}
 	for _, node in map.nodes do
-		if node.kind == "bonus" then
-			table.insert(bonus, node.id)
+		kinds[node.id] = node.kind
+	end
+	local bonus = 0
+	local astray: { string } = {}
+	for _, node in map.nodes do
+		if node.kind ~= "bonus" then
+			continue
+		end
+		bonus += 1
+		if node.from == nil or kinds[node.from] ~= "level" then
+			table.insert(astray, `{node.id} hangs off {tostring(node.from)}, not a level node`)
+		end
+		if map.themes[node.theme] == nil then
+			table.insert(astray, `{node.id}'s theme {tostring(node.theme)} is no map theme`)
 		end
 	end
-	check(#bonus == 0 and map.themes.bonus == nil, `no side node ships, and neither does its theme{real.list(bonus)}`)
+	check(#astray == 0, `every side node ({bonus} here) hangs off a level node and has a map theme{real.list(astray)}`)
 
 	local ids: { [string]: number } = {}
 	for _, node in map.nodes do

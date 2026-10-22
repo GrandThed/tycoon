@@ -431,6 +431,15 @@ J.try("grid.breatherSeconds", function()
 	end
 	return found
 end)
+-- The L4 W1b fix round's F6: every Combat.MentorBonus call sim_combat's mentor_pay makes on assertions
+-- 12 and 13's boss kills, and the edges of hostRate x mentorRatio, on the shipped Combat.json.
+J.try("grid.mentorBonus", function()
+	local found = {}
+	for index, case in data.mentorCases do
+		found[index] = Combat.MentorBonus(data.combat, case[1], case[2])
+	end
+	return found
+end)
 
 -- The L1c second fix round's F1: how far above its floor a root still triggers a camp --------------------
 for _, case in data.ceilingCases do

@@ -3,11 +3,17 @@
 -- own ring of the dasher's positions has seen the dash. Before L4 a dash request opened its
 -- window by itself, so a client that never moved held 0.25 s of every 0.64 s (39%) for free.
 -- WeaponService.OnDash now only records a claim; each Heartbeat, right after the ring sample,
--- Verdict judges it, and a proven claim opens its window from the request through Open.
+-- Step judges it, and a proven claim opens its window from the request.
+--
+-- F1 (docs/prompts/l4-w1b-fix-round.md): the dash keeps its pre-L4 feel. VitalsService holds a
+-- decision that a pending claim would cover (Pending) until the claim is proven (voided) or
+-- lapses (it lands), so the proof's latency never costs a dodge. What this stops is a dash
+-- claimed with no movement and a dash into a wall, not a modified client that moves its own
+-- root (the game has no movement anti-cheat: such a client can already step out of any shape).
 --
 -- Pure: PositionRing (pure), the Types annotations and numbers; no service, no Instance, no clock
 -- of its own (every time is an argument), so tools/crowd_harness loads it as it stands
--- (tests_l4b.luau) and VitalsService's commit rule can be run against the windows Open keeps.
+-- (tests_l4b.luau) and runs it against the real VitalsService.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -32,6 +38,15 @@ export type Verdict = "proven" | "lapsed" | "pending"
 -- [iframesFrom, iframesUntil) and the one before it, both kept after they lapse (VitalsService
 -- judges an impact a moment after it falls).
 export type Windows = {
+	iframesFrom: number,
+	iframesUntil: number,
+	iframesWasFrom: number,
+	iframesWasUntil: number,
+}
+-- The same clock with the pending claim beside it (WeaponService's Shooter): os.clock() of the
+-- accepted dash request the ring has not proven yet, nil = none.
+export type Claimant = {
+	dashClaimAt: number?,
 	iframesFrom: number,
 	iframesUntil: number,
 	iframesWasFrom: number,
@@ -119,6 +134,46 @@ function DashProof.Open(windows: Windows, from: number, seconds: number): ()
 		windows.iframesWasFrom = from
 		windows.iframesWasUntil = untilClock
 	end
+end
+
+-- One Heartbeat of a claimant's pending claim, everything WeaponService does with it after the
+-- frame's ring sample: judged (Verdict); proven, its window of `seconds` opens from the request
+-- (Open) and the claim is over; lapsed, it is over and nothing opens. Without a rule the claim
+-- is over unproven ("lapsed"). Returns the verdict, nil when there was no claim.
+function DashProof.Step(
+	claimant: Claimant,
+	history: PositionRing.History,
+	now: number,
+	position: Vector3,
+	rule: Rule?,
+	seconds: number
+): Verdict?
+	local claimAt = claimant.dashClaimAt
+	if claimAt == nil then
+		return nil
+	end
+	if rule == nil then
+		claimant.dashClaimAt = nil
+		return "lapsed"
+	end
+	local verdict: Verdict = DashProof.Verdict(history, now, position, claimAt, rule)
+	if verdict == "proven" then
+		claimant.dashClaimAt = nil
+		DashProof.Open(claimant, claimAt, seconds)
+	elseif verdict == "lapsed" then
+		claimant.dashClaimAt = nil
+	end
+	return verdict
+end
+
+-- What a pending claim holds a decision for (F1): the window of `seconds` it opens if it is
+-- proven, [from, untilClock), and the last moment it can still be proven, lapseAt (Verdict's
+-- lapse). 0, 0, 0 = nothing to wait for (no claim, or no rule to prove one by).
+function DashProof.Pending(claimAt: number?, rule: Rule?, seconds: number): (number, number, number)
+	if claimAt == nil or rule == nil then
+		return 0, 0, 0
+	end
+	return claimAt, claimAt + math.max(seconds, 0), claimAt + rule.lapse
 end
 
 return DashProof

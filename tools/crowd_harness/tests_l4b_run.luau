@@ -85,13 +85,15 @@ end
 
 -- The server's half, as ArenaService and WaveService keep it: `floors` and `seq` are the run's
 -- (WaveService.setFloors raises the number with every set), `sent` is ArenaService's
--- play.cellsSent, cleared at Admit and Remove. `send` is ArenaService.sendRunState: Attach with
--- what that member was sent, then the set noted as sent either way. `build` is BuildRunState's
--- floors (Attach with the set's own number: never the cells).
+-- play.cellsSent, cleared at Admit and Remove. `send` is ArenaService.sendRunState: a member
+-- not yet noted for the set gets Attach with what it was sent (its floors only if the cells went)
+-- and the set noted; a noted member never reaches Attach and gets BuildRunState's floors as they
+-- are. `build` is BuildRunState's floors (Attach with the set's own number: never the cells).
+-- `attaches` counts the Attach calls `send` made.
 L4R.Server = {}
 
 function L4R.Server.new(floors: { any }): any
-	return { floors = floors, seq = 1, sent = {} }
+	return { floors = floors, seq = 1, sent = {}, attaches = 0 }
 end
 
 function L4R.Server.setFloors(server: any, floors: { any }): ()
@@ -100,8 +102,16 @@ function L4R.Server.setFloors(server: any, floors: { any }): ()
 end
 
 function L4R.Server.send(server: any, userId: number): ({ any }, boolean)
-	local floors, went = L4R.Floors.Attach(server.floors, server.seq, server.sent[userId])
-	server.sent[userId] = server.seq
+	local floors, went = L4R.Server.build(server), false
+	if server.sent[userId] ~= server.seq then
+		server.attaches += 1
+		local attached, cellsWent =
+			L4R.Floors.Attach(server.floors, server.seq, server.sent[userId])
+		if cellsWent then
+			floors, went = attached, true
+		end
+		server.sent[userId] = server.seq
+	end
 	return floors, went
 end
 
@@ -149,6 +159,21 @@ function L4R.attachTests(): ()
 		steady = steady and not sent and not L4R.anyCells(floors)
 	end
 	check(steady, "nor on any of twenty sends after it")
+	check(server.attaches == 1, "and Attach ran for the first of those 22 sends only")
+
+	-- sendRunState skips Attach for a member noted for the set (`play.cellsSent[userId] ~= seq`).
+	-- That loses nothing only while Attach's own rule is that same test: checked on the real
+	-- module for no note, an older set, this set and a later one.
+	local agrees = true
+	for index = 0, 3 do
+		local noted = if index == 0 then nil else server.seq - 2 + index
+		local _, cellsWent = L4R.Floors.Attach(full, server.seq, noted)
+		agrees = agrees and cellsWent == (noted ~= server.seq)
+	end
+	check(
+		agrees,
+		"Attach sends the cells exactly when the member's note is not the set: sendRunState's skip test"
+	)
 
 	local other, otherWent = L4R.Server.send(server, 2)
 	check(

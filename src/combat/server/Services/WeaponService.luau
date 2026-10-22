@@ -15,6 +15,9 @@
 --   -  a fresh character starts with its air state and position history cleared (resetAir).
 -- L4 W1b (L4B-7): a dash request opens no i-frames by itself. OnDash records a claim, and the
 -- window opens (from the request) only once the position ring has seen the dash (DashProof).
+-- F1 (docs/prompts/l4-w1b-fix-round.md): one Heartbeat runs the frame in one order: the rings
+-- are sampled and the claims judged, then VitalsService decides the enemy hits, holding one a
+-- pending claim would cover until that claim is proven or lapses (dashClaim).
 -- RangeService keeps the bench (dummy sets, respawns, tuning, commands) and adds the range-only
 -- readout fields through the stats provider.
 --
@@ -26,7 +29,7 @@
 -- AbilityService drives abilities through the hook API at the bottom; this file never requires
 -- it, so the dependency runs one way only.
 -- P4: the player's body (health, regen, going down, the commit rule) is VitalsService, which
--- this file starts and hands its i-frame clock to. No attack, draw, dash or slam while down.
+-- this file starts, hands its i-frame clock to and steps. No attack, draw, dash or slam while down.
 --
 -- The server resolves every shape itself. Melee builds its shape at the position its client
 -- claims, pulled back to what lag explains (P3.1); ranged takes the camera ray only after
@@ -164,7 +167,8 @@ type Shooter = {
 	drawWeapon: string,
 	lastDashAt: number,
 	-- L4B-7: os.clock() of the accepted dash request whose motion the ring has not seen yet; nil =
-	-- none. A newer accepted dash replaces it; a proof or a lapse clears it, and so does resetAir.
+	-- none. A newer accepted dash replaces it; a proof or a lapse clears it (DashProof.Step), and so
+	-- do resetAir and a frame with no living root.
 	dashClaimAt: number?,
 	-- The latest i-frame window, [iframesFrom, iframesUntil) on os.clock(). Kept after it
 	-- lapses: an enemy's hit is judged a moment after its impact (VitalsService), and the dash
@@ -1958,11 +1962,9 @@ local function stepProjectiles(config: Types.ProvingGroundsConfig, deltaTime: nu
 	state.projectiles = survivors
 end
 
--- Opens an i-frame window of `seconds` from `from` (a proven dash's request; now for one the
--- server grants), or lengthens the one it meets (DashProof.Open keeps the two windows). The
--- character attribute shows only a window still open now.
-local function openIframes(shooter: Shooter, now: number, from: number, seconds: number): ()
-	DashProof.Open(shooter, from, seconds)
+-- Sets the i-frame character attribute while the latest window is still open now (Studio shows
+-- it; tickIframes clears it): a late proof of a window already over shows nothing.
+local function showIframes(shooter: Shooter, now: number): ()
 	if now >= shooter.iframesUntil then
 		return
 	end
@@ -1973,31 +1975,47 @@ local function openIframes(shooter: Shooter, now: number, from: number, seconds:
 	end
 end
 
--- L4B-7: judges a pending dash claim on this frame's ring sample. Proven: the dash's window
--- opens from the request, so a hit decided after the proof whose impact the request covered is
--- voided as before. Lapsed: nothing opens. Without a rule (ProvingGrounds.json lacks a number
--- it needs) every claim lapses: no i-frames from a dash, one warn.
-local function proveDash(shooter: Shooter, now: number, position: Vector3, claimAt: number): ()
-	local config = Tuning.Get()
+-- The dash proof's rule from the config; nil (warned once) when ProvingGrounds.json lacks a
+-- number it needs: then every claim lapses and a dash earns no i-frames.
+local function dashRule(config: Types.ProvingGroundsConfig): DashProof.Rule?
 	local rule = DashProof.Rule(config.movement, config.shooting)
-	if rule == nil then
-		if not state.warnedDashProof then
-			state.warnedDashProof = true
-			warn(
-				"[WeaponService] ProvingGrounds.json movement lacks dashProofShare / dashProofSeconds"
-					.. " (or a dash number); a dash earns no i-frames"
-			)
-		end
-		shooter.dashClaimAt = nil
-		return
+	if rule == nil and not state.warnedDashProof then
+		state.warnedDashProof = true
+		warn(
+			"[WeaponService] ProvingGrounds.json movement lacks dashProofShare / dashProofSeconds"
+				.. " (or a dash number); a dash earns no i-frames"
+		)
 	end
-	local verdict = DashProof.Verdict(shooter.history, now, position, claimAt, rule)
+	return rule
+end
+
+-- L4B-7: one frame of a pending dash claim, on this frame's ring sample (DashProof.Step).
+-- Proven: the dash's window opens from the request, so a hit whose impact the request covered
+-- is voided, held by VitalsService meanwhile if its moment came first (F1). Lapsed: nothing opens.
+local function proveDash(shooter: Shooter, now: number, position: Vector3): ()
+	local config = Tuning.Get()
+	local verdict = DashProof.Step(
+		shooter,
+		shooter.history,
+		now,
+		position,
+		dashRule(config),
+		config.movement.dashIframes
+	)
 	if verdict == "proven" then
-		shooter.dashClaimAt = nil
-		openIframes(shooter, now, claimAt, config.movement.dashIframes)
-	elseif verdict == "lapsed" then
-		shooter.dashClaimAt = nil
+		showIframes(shooter, now)
 	end
+end
+
+-- F1, VitalsService's dashClaim hook: the window the player's pending claim opens if proven, and
+-- the last moment it can be (DashProof.Pending); 0, 0, 0 = no claim.
+local function pendingDash(player: Player): (number, number, number)
+	local shooter = state.shooters[player]
+	if shooter == nil then
+		return 0, 0, 0
+	end
+	local config = Tuning.Get()
+	return DashProof.Pending(shooter.dashClaimAt, dashRule(config), config.movement.dashIframes)
 end
 
 -- Air tracking for the slam and air swings: the server's own view of how high each character
@@ -2024,9 +2042,8 @@ local function trackAir(now: number, deltaTime: number): ()
 		end
 		local position = root.Position
 		PositionRing.Record(shooter.history, now, position)
-		local claimAt = shooter.dashClaimAt
-		if claimAt ~= nil then
-			proveDash(shooter, now, position, claimAt)
+		if shooter.dashClaimAt ~= nil then
+			proveDash(shooter, now, position)
 		end
 		-- Fix round A-1: the air-swing gate's own sample, the one AirSwing feeds on the client.
 		local footing = footprintFloor(position, root, params)
@@ -2107,7 +2124,10 @@ end
 local function step(deltaTime: number): ()
 	local config = Tuning.Get()
 	local now = os.clock()
+	-- F1: one order every frame. The ring samples and the dash proofs come first, then the enemy
+	-- hits VitalsService decides, so a claim proven now counts in this frame's decisions.
 	trackAir(now, deltaTime)
+	VitalsService.Step(deltaTime)
 	tickIframes(now)
 	stepProjectiles(config, deltaTime)
 	state.statsAccumulator += deltaTime
@@ -2607,9 +2627,10 @@ function WeaponService.OnDraw(player: Player, weapon: string): ()
 	noteHeld(shooter, slot)
 end
 
--- Records the dash's claim (L4B-7). The dash itself moves the client-owned character; its i-frame
--- window, from this request, opens only once the server's ring has seen that move (proveDash,
--- each Heartbeat).
+-- Records the dash's claim (L4B-7) and grants nothing. The dash itself moves the client-owned
+-- character; its i-frame window, from this request, opens only once the server's ring has seen
+-- that move (proveDash, each Heartbeat), and VitalsService holds a hit the claim would cover
+-- until then (F1).
 function WeaponService.OnDash(player: Player, _direction: Vector3): ()
 	local shooter = state.shooters[player]
 	if not state.active or shooter == nil then
@@ -3094,7 +3115,8 @@ function WeaponService.GrantIframes(player: Player, seconds: number): ()
 		return
 	end
 	local now = os.clock()
-	openIframes(shooter, now, now, seconds)
+	DashProof.Open(shooter, now, seconds)
+	showIframes(shooter, now)
 end
 
 -- Fires (on its own thread) when SetFamily puts a different family in a slot.
@@ -3134,7 +3156,8 @@ end
 function WeaponService.Init(): () end
 
 -- After Configure, in both modes: VitalsService takes the i-frame clock, and one Heartbeat steps
--- air tracking, i-frames, projectiles and the 2 Hz readouts.
+-- air tracking and the dash proofs, VitalsService (F1), i-frames, projectiles and the 2 Hz
+-- readouts.
 function WeaponService.Start(): ()
 	if not state.active or state.started then
 		return
@@ -3150,6 +3173,7 @@ function WeaponService.Start(): ()
 	VitalsService.Start({
 		iframeWindow = WeaponService.IframeWindow,
 		grantIframes = WeaponService.GrantIframes,
+		dashClaim = pendingDash,
 	})
 	RunService.Heartbeat:Connect(step)
 end

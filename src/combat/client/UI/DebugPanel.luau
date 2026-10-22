@@ -90,8 +90,10 @@ export type DebugPanelHandle = {
 }
 
 -- Mirrors CombatHud's own stacking so the strip lands in the gap between them: the header
--- block it starts below, and the bottom-left buttons with the Alt and key hints over them it
--- must stay above.
+-- block it starts below, and the bottom-left buttons with what CombatHud stacks over them in
+-- Studio with a keyboard (the Alt hint, the key hint, the perf line) it must stay above. A
+-- button row that ActionRows wraps to two rows stands one row higher still, which this strip
+-- (Studio only) does not reserve.
 local HEADER_BLOCK = Theme.TOP_BAR_HEIGHT
 	+ Theme.COMBAT_WALLET_HEIGHT
 	+ Theme.COMBAT_BOSS_LABEL_HEIGHT
@@ -99,6 +101,8 @@ local HEADER_BLOCK = Theme.TOP_BAR_HEIGHT
 	+ Theme.SCREEN_MARGIN * 3
 local BOTTOM_BLOCK = Theme.PADDING
 	+ (Theme.COMBAT_ALT_HINT_HEIGHT + Theme.ROW_SPACING) * 2
+	+ Theme.COMBAT_PERF_HEIGHT
+	+ Theme.ROW_SPACING
 	+ Theme.ROW_BUTTON_HEIGHT
 	+ Theme.COMBAT_CONTROL_GAP
 local CELL_WIDTH = (
