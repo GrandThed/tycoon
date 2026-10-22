@@ -66,3 +66,12 @@ round a mountain behind the trailhead, built now with the forest (one paste); th
 room this key opens. Designer brief `docs/prompts/l4-w2-mountain.md` (designs on an in-memory layout copy, writes the real
 layout after the lead's `mountain-go.md`, new gate `tools/check_parkour.py`); then the forest is dressed round it and the
 W2 contract gets the `key` reward.
+
+**State 2026-10-22: uploads done, harvest paste pending.** Ben approved the rocks rework, the mountain and the less
+regular walls ("yes, as it is"; he declined climb markers: finding the way up is part of the challenge) and all seven
+raiders. 81 uploads first try (`l4-real-forest` 9ad3cb5: 37 level meshes, 5 level images, 4 forest props, 35 raider
+stages; Assets.json v6 `levels.ForestRoad`, plan hash `23851a6f417491c1`); `harvest.luau` holds 81 records, put on Ben's
+clipboard; he pastes in `tycoon\build\test.rbxl` (Edit mode). After "done": save the clipboard to a file, count 81
+`[HARVEST] {`, then runbook `docs/prompts/l4-w2-asset-run.md` steps 8+ (`raider_frames.py` does not exist yet: it is
+W2's D2 tool; templates do not wait for it). The L3 session `tycoon-87` acked the upload announcement; tell it when the
+harvest is done. W1b (old mission code out, the dash hold) is in its fix round in `tycoon-p5b`.
