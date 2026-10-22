@@ -79,3 +79,12 @@ harvest is done. W1b (old mission code out, the dash hold) is in its fix round i
 scratch first): merged with no SIZE/FRAME/ROTATED line, 41 new templates (617 in all), manifest `ForestRoad ... in game`,
 six place files rebuilt on `l4-real-forest` (148dacd). `raider_frames.py` (W2 D2) still owed before W2 merges. The L3
 session was told the asset tools are free; Assets.json v6 lives only on this branch until it merges.
+
+**State 2026-10-22 (after the weekly limit on the first account; Ben switched accounts and said "continue"):** W1b is
+done and merged into `l4-real-forest` (37ccfe4): three fix rounds (F1 the dash hold; G1 a held hit keeps the knock rules,
+found by the fix-diff review as a Major; H1 a clear waits for a held blow; H2/H3 error containment and gates), QA green
+except the known R8 row (the qa-runner died on the limit after its runs finished: its logs in the scratchpad's `qa-w1b/`
+were read by the lead). **Every fix round needed its own fix-diff review again: round 1's hold introduced the Major.**
+W2's code wave runs on branch `l4-w2` in `tycoon-p5` (kickoff `docs/prompts/l4-w2-kickoff.md`, five Opus owners: luau A,
+ui A scenery + Castle Key UI, ui B raiders, D1 Chief/mood/R8 fair, D2 tools/gates/pins); `tycoon-p5b` is branch
+`l4-verify` (the merged base) for the lead's long gates; `tycoon-p5c` holds the merged `l4-w1b-fix2` (removable).
