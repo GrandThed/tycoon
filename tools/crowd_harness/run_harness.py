@@ -1451,6 +1451,15 @@ UI_CONTROLLER = "src/combat/client/Controllers/CombatUIController.luau"
 APPLY_FLOORS_BODY = re.compile(r"(?ms)^\tlocal function applyFloors\(.*?^\tend$")
 ON_RUN_STATE_BODY = re.compile(r"(?ms)^\tlocal function onRunState\(.*?^\tend$")
 PAY_MENTORS_BODY = re.compile(r"(?ms)^local function payMentors\(.*?^end$")
+# Fix round 3 (docs/prompts/l4-w1b-fix3.md): G2's warn handler (m2) and H2's per-shooter xpcall in
+# WeaponService; H1's hold on a clear field in WaveService (luau-b-3.md).
+STEP_FAILED_BODY = re.compile(r"(?ms)^local function stepFailed\(.*?^end$")
+FIELD_HELD_BODY = re.compile(r"(?ms)^local function fieldHeld\(.*?^end$")
+ADVANCE_BODY = re.compile(r"(?ms)^local function advance\(.*?^end$")
+TICK_BODY = re.compile(r"(?ms)^local function tick\(.*?^end$")
+BOOT_BODY = re.compile(r"(?ms)^function WaveService\.Boot\(.*?^end$")
+ON_DOWN_BODY = re.compile(r"(?ms)^function WaveService\.OnDown\(.*?^end$")
+FRESH_RUN_BODY = re.compile(r"(?ms)^local function freshRun\(.*?^end$")
 L4B_LINES = {
     # L4B-7, WeaponService.
     "dashGrantsNothing": (WEAPON_SERVICE, ON_DASH_BODY, "regex",
@@ -1463,6 +1472,13 @@ L4B_LINES = {
                              "\t\tPositionRing.Record(shooter.history, now, position)\n\t\tif shooter.dashClaimAt ~= nil then\n"
                              "\t\t\tproveDash(shooter, now, position)\n\t\tend\n"),
     "trackNoRootClears": (WEAPON_SERVICE, TRACK_AIR_BODY, "lines", "\t\t\tshooter.dashClaimAt = nil"),
+    # H2 (fix round 3, luau-a-3.md): each shooter's air tracking (trackOne, nested in trackAir) runs
+    # under its own xpcall, the loop holding nothing else.
+    "trackEach": (WEAPON_SERVICE, TRACK_AIR_BODY, "text",
+                  "\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n"),
+    "trackOneDefined": (WEAPON_SERVICE, TRACK_AIR_BODY, "lines",
+                        "\tlocal function trackOne(player: Player, shooter: Shooter): ()"),
+    "trackOneNames": (WEAPON_SERVICE, None, "text", "trackOne"),
     "proveStep": (WEAPON_SERVICE, PROVE_DASH_BODY, "text",
                   "\tlocal verdict = DashProof.Step(\n\t\tshooter,\n\t\tshooter.history,\n\t\tnow,\n\t\tposition,\n"
                   "\t\tdashRule(config),\n\t\tconfig.movement.dashIframes\n\t)\n"),
@@ -1485,6 +1501,11 @@ L4B_LINES = {
     "stepVitals": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\txpcall(VitalsService.Step, stepFailed, deltaTime)"),
     "stepRest": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\txpcall(stepRest, stepFailed, now, deltaTime)"),
     "startConnects": (WEAPON_SERVICE, WEAPON_START_BODY, "lines", "\tRunService.Heartbeat:Connect(step)"),
+    # m2 (fix round 3): G2's handler as one block: keyed by the message, warned once, never silent.
+    "stepFailedBody": (WEAPON_SERVICE, STEP_FAILED_BODY, "text",
+                       "local function stepFailed(problem: any): ()\n\tlocal message = tostring(problem)\n"
+                       "\tif state.stepErrors[message] then\n\t\treturn\n\tend\n\tstate.stepErrors[message] = true\n"
+                       "\twarn(debug.traceback(`[WeaponService] Heartbeat: {message}`, 2))\nend"),
     "vitalsStepCalls": (WEAPON_SERVICE, None, "text", "VitalsService.Step"),
     "heartbeats": (WEAPON_SERVICE, None, "text", "Heartbeat:Connect("),
     "grantOpens": (WEAPON_SERVICE, GRANT_IFRAMES_BODY, "text",
@@ -1550,6 +1571,44 @@ L4B_LINES = {
     "mentorNoBonus": (WAVE_SERVICE, PAY_MENTORS_BODY, "text", "\t\tif bonus <= 0 then\n\t\t\tcontinue\n\t\tend\n"),
     "mentorBonusCalls": (WAVE_SERVICE, None, "text", "Combat.MentorBonus("),
     "bossPaysMentors": (WAVE_SERVICE, None, "lines", "\t\tpayMentors(combatConfig, tally)"),
+    # H1 (fix round 3, luau-b-3.md), WaveService: the field is held while a fighter's blow waits.
+    "h1Body": (WAVE_SERVICE, FIELD_HELD_BODY, "text",
+               "\tlocal waits = false\n\tfor _, member in ArenaService.GetMembers() do\n"
+               "\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then\n"
+               "\t\t\twaits = true\n\t\t\tbreak\n\t\tend\n\tend\n\tif delta == nil then\n"
+               "\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n\tend\n"
+               "\trun.blowWaits = waits\n\tif not waits or not StageFlow.FieldClear(plan, flow, input) then\n"
+               "\t\trun.heldSince = 0\n\t\treturn false\n\tend\n\tif run.heldSince == 0 then\n\t\trun.heldSince = now\n"
+               "\tend\n\tlocal tuning = Tuning.Get()\n\tlocal rule = DashProof.Rule(tuning.movement, tuning.shooting)\n"
+               "\tlocal lapse = if rule ~= nil then rule.lapse else 0\n\treturn now - run.heldSince <= lapse + delta\nend"),
+    "h1Asks": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+               "\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then"),
+    "h1DownKeeps": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+                    "\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)"),
+    "h1Notes": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\trun.blowWaits = waits"),
+    "h1ClearOnly": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+                    "\tif not waits or not StageFlow.FieldClear(plan, flow, input) then"),
+    "h1Resets": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\t\trun.heldSince = 0"),
+    "h1Starts": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\t\trun.heldSince = now"),
+    "h1Rule": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\tlocal rule = DashProof.Rule(tuning.movement, tuning.shooting)"),
+    "h1Lapse": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\tlocal lapse = if rule ~= nil then rule.lapse else 0"),
+    "h1Cap": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\treturn now - run.heldSince <= lapse + delta"),
+    "h1Writes": (WAVE_SERVICE, None, "regex", r"\brun\.(?:blowWaits|heldSince)\s*=(?!=)"),
+    "h1Defs": (WAVE_SERVICE, None, "lines", "local function fieldHeld("),
+    "h1Calls": (WAVE_SERVICE, None, "regex", r"\bfieldHeld\("),
+    "h1AdvanceDelta": (WAVE_SERVICE, None, "lines",
+                       "local function advance(combatConfig: Types.CombatConfig, delta: number?): ()"),
+    "h1AdvanceHolds": (WAVE_SERVICE, ADVANCE_BODY, "lines", "\tif fieldHeld(plan, flow, input, now, delta) then"),
+    "h1AdvanceHoldWrites": (WAVE_SERVICE, ADVANCE_BODY, "lines", "\t\tinput.spawningDone = false"),
+    "h1SpawningWrites": (WAVE_SERVICE, None, "regex", r"\binput\.spawningDone\s*=(?!=)"),
+    "h1AdvanceCalls": (WAVE_SERVICE, None, "regex", r"(?<![\w.])advance\(combatConfig[,)]"),
+    "h1TickDelta": (WAVE_SERVICE, None, "lines", "local function tick(delta: number): ()"),
+    "h1TickAdvance": (WAVE_SERVICE, TICK_BODY, "lines", "\tadvance(combatConfig, delta)"),
+    "h1DownAdvance": (WAVE_SERVICE, ON_DOWN_BODY, "lines", "\t\tadvance(combatConfig)"),
+    "h1BootTick": (WAVE_SERVICE, BOOT_BODY, "lines", "\t\ttick(delta)"),
+    "h1FreshBlowWaits": (WAVE_SERVICE, FRESH_RUN_BODY, "lines", "\t\tblowWaits = false,"),
+    "h1FreshHeldSince": (WAVE_SERVICE, FRESH_RUN_BODY, "lines", "\t\theldSince = 0,"),
+    "h1DashProof": (WAVE_SERVICE, None, "lines", 'local DashProof = require(script.Parent:WaitForChild("DashProof"))'),
 }
 # Two lines that must come in this order inside their function: (key, file, body, first, then).
 L4B_ORDER = {
@@ -1570,6 +1629,11 @@ L4B_ORDER = {
     "bonusGuardThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY, "if bonus <= 0 then", "state.combat.valor += bonus"),
     "mentorFloorThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY,
                            "(tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare", "state.combat.valor += bonus"),
+    # H1 (fix round 3): the hold reads the input advance has built, and comes before StageFlow decides.
+    "h1InputThenHold": (WAVE_SERVICE, ADVANCE_BODY, "runCap = run.runEndsAt > 0 and now >= run.runEndsAt,",
+                        "if fieldHeld(plan, flow, input, now, delta) then"),
+    "h1HoldThenAdvance": (WAVE_SERVICE, ADVANCE_BODY, "input.spawningDone = false",
+                          "local actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)"),
 }
 
 

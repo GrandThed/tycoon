@@ -8249,10 +8249,11 @@ L4B_FIX_MUTATIONS = {
         "local voided = shielded(player, impactAt, limit) or now < vitals.knockUntil",
         "local voided = shielded(player, impactAt, limit)",
     ),
+    # Re-aimed in fix round 3 (H2, luau-a-3.md: settle takes a due entry out before deciding it).
     "l4b f1: settle drops a held entry": (
         VITALS,
-        "\t\telseif decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n",
-        "\t\telse\n\t\t\tdecide(config, entry, now)\n",
+        "\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n",
+        "\t\tif due then\n\t\t\tdecide(config, entry, now)\n",
     ),
     "l4b f1: a held entry judged again at the release": (
         VITALS,
@@ -8475,7 +8476,8 @@ L4B_FIX2_MUTATIONS = {
     'l4b g1: a knock voids what joined the queue after it': (VITALS, 'return other.strike.at <= at and other.queuedAt <= at', 'return other.strike.at <= at'),
     'l4b g1: a waiting decision judged at the release': (VITALS, 'held, position, at = hold.inShape, hold.position, hold.at', 'held, position = hold.inShape, hold.position'),
     'l4b g1: the release asks no window again': (VITALS, '\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n', ''),
-    'l4b g1: the release drops one that still waits': (VITALS, '\t\tif decide(config, entry, now) then\n\t\t\tbreak\n\t\tend\n\t\treleased += 1', '\t\tdecide(config, entry, now)\n\t\treleased += 1'),
+    # Re-aimed in fix round 3 (H2: the release puts a still-waiting entry back on the front).
+    'l4b g1: the release drops one that still waits': (VITALS, '\t\tif decide(config, entry, now) then\n\t\t\ttable.insert(list, 1, entry)\n\t\t\treturn\n\t\tend\n', '\t\tdecide(config, entry, now)\n'),
     'l4b g1: ClearThreats keeps the waiting': (VITALS, '\t\ttable.clear(vitals.waiting)\n', ''),
     'l4b g1: what travels never waits behind': (VITALS, 'and (#vitals.waiting > 0 or awaitsDash(player, impactAt, limit, now))', 'and awaitsDash(player, impactAt, limit, now)'),
     'l4b g1: the knock window only at the first try': (VITALS, '\tif at < vitals.knockUntil then\n\t\tentry.covered = true', '\tif hold == nil and at < vitals.knockUntil then\n\t\tentry.covered = true'),
@@ -8523,6 +8525,52 @@ L4B_FIX2_MUTATIONS = {
 }
 assert not set(L4B_FIX2_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX2_MUTATIONS) & set(MUTATIONS))
 MUTATIONS.update(L4B_FIX2_MUTATIONS)
+
+# The L4 W1b fix round 3 (docs/prompts/l4-w1b-fix3.md): H1 (a stage's clear waits while a fighter's
+# decision waits for a dash claim: VitalsService.HasWaiting, WaveService.fieldHeld), H2 (each entry
+# leaves its list before it is decided; each shooter's air tracking under its own xpcall), luau-engineer
+# A's entries (luau-a-3.md) and B's (luau-b-3.md); and m2 (5-fix2-diff.md): G2's warn handler, the
+# review's three probes. VitalsService's are caught by tests_l4b (g); WeaponService's and WaveService's by
+# source.l4b's pins (trackEach, trackOneDefined, trackOneNames, stepFailedBody, h1*).
+L4B_FIX3_MUTATIONS = {
+    'l4b h2: the release takes an entry out only once it is decided': (VITALS, '\t\ttable.remove(list, 1)\n\t\tif not entry.covered then\n\t\t\t-- Its whole span is past; asked again now, the windows a proof or a released knock\n\t\t\t-- opened from earlier moments count.\n\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n\t\tend\n\t\tif decide(config, entry, now) then\n\t\t\ttable.insert(list, 1, entry)\n\t\t\treturn\n\t\tend\n\t\tentry = list[1]\n', '\t\tif not entry.covered then\n\t\t\t-- Its whole span is past; asked again now, the windows a proof or a released knock\n\t\t\t-- opened from earlier moments count.\n\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n\t\tend\n\t\tif decide(config, entry, now) then\n\t\t\treturn\n\t\tend\n\t\ttable.remove(list, 1)\n\t\tentry = list[1]\n'),
+    'l4b h2: the release puts a held entry back behind the others': (VITALS, '\t\t\ttable.insert(list, 1, entry)\n', '\t\t\ttable.insert(list, entry)\n'),
+    'l4b h2: the queue takes an entry out only once it is decided': (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n\t\tend\n', '\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n\t\tend\n\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n'),
+    "l4b h2: the queue asks a due entry's i-frames before taking it out": (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n', '\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n'),
+    'l4b h2: the queue never takes a due entry out': (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n', '\t\tindex += 1\n'),
+    'l4b h1: HasWaiting(player) never true': (VITALS, '\t\treturn vitals ~= nil and #vitals.waiting > 0\n', '\t\treturn false\n'),
+    'l4b h1: HasWaiting() never true': (VITALS, '\t\tif #vitals.waiting > 0 then\n\t\t\treturn true\n', '\t\tif false then\n\t\t\treturn true\n'),
+    'l4b h1: HasWaiting(player) answers for anyone': (VITALS, '\tif player ~= nil then\n\t\tlocal vitals = vitalsByPlayer[player]\n\t\treturn vitals', '\tif false then\n\t\tlocal vitals = vitalsByPlayer[player]\n\t\treturn vitals'),
+    'l4b h1: HasWaiting reads the queue, not the waiting': (VITALS, '\t\treturn vitals ~= nil and #vitals.waiting > 0\n', '\t\treturn vitals ~= nil and #pending > 0\n'),
+    "l4b h2: one shooter's throw stops the rest": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\ttrackOne(player, shooter)\n\tend\n'),
+    "l4b h2: a shooter's throw ends the loop": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\tif not xpcall(trackOne, stepFailed, player, shooter) then\n\t\t\tbreak\n\t\tend\n\tend\n'),
+    'l4b h2: no shooter is tracked': (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', ''),
+    "l4b h2: a shooter's throw is swallowed": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, function() end, player, shooter)\n\tend\n'),
+    'l4b h2: trackOne holds nothing (the body back in the loop, unprotected)': (WEAPON, '\tlocal function trackOne(player: Player, shooter: Shooter): ()\n', '\tlocal function trackOne(_player: Player, _shooter: Shooter): () end\n\tlocal function trackTwo(player: Player, shooter: Shooter): ()\n'),
+    'l4b m2: every frame warns (the note deleted)': (WEAPON, '\tstate.stepErrors[message] = true\n', ''),
+    'l4b m2: nothing is ever warned (the guard always true)': (WEAPON, '\tif state.stepErrors[message] then\n\t\treturn\n\tend\n', '\tif true then\n\t\treturn\n\tend\n'),
+    'l4b m2: a throw is swallowed (the warn deleted)': (WEAPON, '\twarn(debug.traceback(`[WeaponService] Heartbeat: {message}`, 2))\n', ''),
+    'l4b h1: a waiting blow never found': (WAVE_SERVICE, '\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then\n', '\t\tif false then\n'),
+    "l4b h1: the down's advance forgets the tick's finding": (WAVE_SERVICE, '\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n', '\t\treturn waits and StageFlow.FieldClear(plan, flow, input)\n'),
+    "l4b h1: the down's advance never holds": (WAVE_SERVICE, '\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n', '\t\treturn false\n'),
+    "l4b h1: the tick's finding never noted": (WAVE_SERVICE, '\trun.blowWaits = waits\n', ''),
+    'l4b h1: the deferral never starts over': (WAVE_SERVICE, '\t\trun.heldSince = 0\n', ''),
+    "l4b h1: the deferral's start never noted": (WAVE_SERVICE, '\t\trun.heldSince = now\n', ''),
+    'l4b h1: the deferral never capped': (WAVE_SERVICE, '\treturn now - run.heldSince <= lapse + delta\n', '\treturn true\n'),
+    'l4b h1: the cap a frame short': (WAVE_SERVICE, '\treturn now - run.heldSince <= lapse + delta\n', '\treturn now - run.heldSince <= lapse\n'),
+    'l4b h1: the cap at nothing': (WAVE_SERVICE, '\tlocal lapse = if rule ~= nil then rule.lapse else 0\n', '\tlocal lapse = 0\n'),
+    'l4b h1: a waiting blow holds a field that is not clear': (WAVE_SERVICE, '\tif not waits or not StageFlow.FieldClear(plan, flow, input) then\n', '\tif not waits then\n'),
+    'l4b h1: the hold never asked': (WAVE_SERVICE, '\tif fieldHeld(plan, flow, input, now, delta) then\n', '\tif false then\n'),
+    'l4b h1: the hold changes nothing': (WAVE_SERVICE, '\t\tinput.spawningDone = false\n', ''),
+    'l4b h1: the hold after StageFlow decided': (WAVE_SERVICE, '\tif fieldHeld(plan, flow, input, now, delta) then\n\t\t-- StageFlow.FieldClear reads this first: the field does not read clear.\n\t\tinput.spawningDone = false\n\tend\n\tlocal actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)\n', '\tlocal actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)\n\tif fieldHeld(plan, flow, input, now, delta) then\n\t\t-- StageFlow.FieldClear reads this first: the field does not read clear.\n\t\tinput.spawningDone = false\n\tend\n'),
+    'l4b h1: the tick passes no frame': (WAVE_SERVICE, '\tadvance(combatConfig, delta)\n', '\tadvance(combatConfig)\n'),
+    "l4b h1: the down's advance passes a frame": (WAVE_SERVICE, '\t\tadvance(combatConfig)\n', '\t\tadvance(combatConfig, 0)\n'),
+    'l4b h1: the tick told a frame of nothing': (WAVE_SERVICE, '\t\ttick(delta)\n', '\t\ttick(0)\n'),
+    'l4b h1: a run starts with the deferral spent': (WAVE_SERVICE, '\t\theldSince = 0,\n', '\t\theldSince = 1,\n'),
+    'l4b h1: a run starts with a blow found': (WAVE_SERVICE, '\t\tblowWaits = false,\n', '\t\tblowWaits = true,\n'),
+}
+assert not set(L4B_FIX3_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX3_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4B_FIX3_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

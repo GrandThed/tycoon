@@ -2023,17 +2023,30 @@ local function pendingDash(player: Player): (number, number, number)
 	return DashProof.Pending(shooter.dashClaimAt, dashRule(config), config.movement.dashIframes)
 end
 
+-- G2: the handler for a part of the frame that threw (H2: or one shooter's air tracking). Each
+-- message is warned once, with where it came from: a throw that repeats every frame would
+-- otherwise flood the output.
+local function stepFailed(problem: any): ()
+	local message = tostring(problem)
+	if state.stepErrors[message] then
+		return
+	end
+	state.stepErrors[message] = true
+	warn(debug.traceback(`[WeaponService] Heartbeat: {message}`, 2))
+end
+
 -- Air tracking for the slam and air swings: the server's own view of how high each character
 -- got and how fast it fell. Fall speed is the larger of the replicated velocity and the
 -- position change, so a client that zeroes its reported velocity still shows its real dive.
 -- The same pass samples each root for the claim slack (ruling 7), and judges a pending dash
--- claim on that sample (L4B-7).
+-- claim on that sample (L4B-7). H2 (docs/prompts/l4-w1b-fix3.md): each shooter runs under its
+-- own xpcall, so a body that throws every frame stops no other shooter's samples or proofs.
 local function trackAir(now: number, deltaTime: number): ()
 	if next(state.shooters) == nil then
 		return
 	end
 	local params = worldParams()
-	for player, shooter in state.shooters do
+	local function trackOne(player: Player, shooter: Shooter): ()
 		local _character, root, humanoid = rootOf(player)
 		if root == nil or humanoid == nil then
 			shooter.airborne = false
@@ -2043,7 +2056,7 @@ local function trackAir(now: number, deltaTime: number): ()
 			PositionRing.Clear(shooter.history)
 			-- No body to prove a dash with, and none to shield.
 			shooter.dashClaimAt = nil
-			continue
+			return
 		end
 		local position = root.Position
 		PositionRing.Record(shooter.history, now, position)
@@ -2094,6 +2107,9 @@ local function trackAir(now: number, deltaTime: number): ()
 		end
 		shooter.airborne = airborne
 	end
+	for player, shooter in state.shooters do
+		xpcall(trackOne, stepFailed, player, shooter)
+	end
 end
 
 -- A fresh character starts on the ground with no jump to slam from and no motion behind it: the
@@ -2141,17 +2157,6 @@ local function stepRest(now: number, deltaTime: number): ()
 			sendStats(shooter)
 		end
 	end
-end
-
--- G2: the handler for a part of the frame that threw. Each message is warned once, with where it
--- came from: a throw that repeats every frame would otherwise flood the output.
-local function stepFailed(problem: any): ()
-	local message = tostring(problem)
-	if state.stepErrors[message] then
-		return
-	end
-	state.stepErrors[message] = true
-	warn(debug.traceback(`[WeaponService] Heartbeat: {message}`, 2))
 end
 
 -- F1: one order every frame. The ring samples and the dash proofs come first, then the enemy hits

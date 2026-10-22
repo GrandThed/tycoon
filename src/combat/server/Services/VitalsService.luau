@@ -53,6 +53,10 @@
 -- On release they are decided in the order they fell due, each as of its own moment: the knock
 -- windows (rulings 6 and 18), the down's clock and the regen delay are the ones an unheld
 -- decision taken then would have met and left. Only the effect leaves late.
+--
+-- H1 and H2 (docs/prompts/l4-w1b-fix3.md): HasWaiting tells WaveService that a decision waits, so
+-- a stage's clear waits for it rather than dropping a blow that would have landed with no claim;
+-- and every decision leaves its list before it is decided, so a throw drops that one alone.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -550,48 +554,49 @@ local function judgeTravelling(
 end
 
 -- G1: one player's waiting decisions, first to last, each decided as of its own moment until one
--- still waits for a dash claim: it and those behind it stay. A released knock's window, voids and
--- down are in place before the next is judged, as they would have been at its moment.
+-- still waits for a dash claim: it goes back to the front, and those behind it stay. A released
+-- knock's window, voids and down are in place before the next is judged, as they would have been
+-- at its moment. H2 (docs/prompts/l4-w1b-fix3.md): each is taken out of the list before it is
+-- decided, so a throw while deciding one drops that one alone (WeaponService warns once) and
+-- never decides again the ones before it.
 local function release(config: Types.ProvingGroundsConfig, vitals: Vitals, now: number): ()
 	local list = vitals.waiting
-	local count = #list
-	local released = 0
-	for _, entry in list do
+	local entry = list[1]
+	while entry ~= nil do
+		table.remove(list, 1)
 		if not entry.covered then
 			-- Its whole span is past; asked again now, the windows a proof or a released knock
 			-- opened from earlier moments count.
 			entry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)
 		end
 		if decide(config, entry, now) then
-			break
+			table.insert(list, 1, entry)
+			return
 		end
-		released += 1
-	end
-	if released == 0 then
-		return
-	end
-	table.move(list, released + 1, count, 1)
-	for index = count - released + 1, count do
-		list[index] = nil
+		entry = list[1]
 	end
 end
 
 -- Walks the queue: first each player's waiting decisions (release), then the queue in order:
 -- notes any i-frame that has covered an entry so far, decides the entries whose moment has come
--- and keeps the rest; one that must wait (F1, G1) joins its player's waiting.
+-- and keeps the rest; one that must wait (F1, G1) joins its player's waiting. H2: an entry whose
+-- moment has come leaves the queue before anything about it is asked, so a throw drops that one
+-- alone; the queue stays whole and in order for the next frame, the ones before it decided once.
 local function settle(config: Types.ProvingGroundsConfig, now: number): ()
 	for _, vitals in vitalsByPlayer do
 		if #vitals.waiting > 0 then
 			release(config, vitals, now)
 		end
 	end
-	local count = #pending
-	if count == 0 then
-		return
-	end
-	local kept = 0
-	for index = 1, count do
-		local entry = pending[index]
+	local index = 1
+	local entry = pending[1]
+	while entry ~= nil do
+		local due = now >= entry.decideAt
+		if due then
+			table.remove(pending, index)
+		else
+			index += 1
+		end
 		if not entry.covered then
 			-- Asked every frame, not only at the decision, and of the window before the current
 			-- one as well: a dash that covered the impact may have lapsed and been replaced by
@@ -599,15 +604,10 @@ local function settle(config: Types.ProvingGroundsConfig, now: number): ()
 			entry.covered =
 				shielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))
 		end
-		if now < entry.decideAt then
-			kept += 1
-			pending[kept] = entry
-		elseif decide(config, entry, now) then
+		if due and decide(config, entry, now) then
 			table.insert(entry.vitals.waiting, entry)
 		end
-	end
-	for index = kept + 1, count do
-		pending[index] = nil
+		entry = pending[index]
 	end
 end
 
@@ -1084,6 +1084,23 @@ function VitalsService.SetGod(player: Player, on: boolean): ()
 	if vitals ~= nil then
 		vitals.god = on
 	end
+end
+
+-- H1 (docs/prompts/l4-w1b-fix3.md): has the player (nil = anyone) a decision whose moment has
+-- come and that still waits (G1)? With no dash claim it would have landed already, so a clear that
+-- would drop it (ClearThreats) waits while this is true; it stays true until the claim is proven
+-- or lapses, at most the claim's lapse after the request. A pure query.
+function VitalsService.HasWaiting(player: Player?): boolean
+	if player ~= nil then
+		local vitals = vitalsByPlayer[player]
+		return vitals ~= nil and #vitals.waiting > 0
+	end
+	for _, vitals in vitalsByPlayer do
+		if #vitals.waiting > 0 then
+			return true
+		end
+	end
+	return false
 end
 
 -- RangeStats: (damage taken, downs, god). Damage counts every landed hit in full, the one
