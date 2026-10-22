@@ -88,3 +88,12 @@ were read by the lead). **Every fix round needed its own fix-diff review again: 
 W2's code wave runs on branch `l4-w2` in `tycoon-p5` (kickoff `docs/prompts/l4-w2-kickoff.md`, five Opus owners: luau A,
 ui A scenery + Castle Key UI, ui B raiders, D1 Chief/mood/R8 fair, D2 tools/gates/pins); `tycoon-p5b` is branch
 `l4-verify` (the merged base) for the lead's long gates; `tycoon-p5c` holds the merged `l4-w1b-fix2` (removable).
+
+**W2 code wave built 2026-10-22** (`l4-w2` afdce67 in `tycoon-p5`; five owners; harness 4,412; mirror 16,806 cases):
+LevelDress/LevelScenery (all-or-nothing grey fallback, 70 tree-line walls in `ArenaBarrier`), mood B per client, raider
+models on crowd bodies (`Raiders/Figures`, pure `Raiders/RaiderPose` mirrored by `check_raider_mirror.py`), the crowd kind
+`chief` (sweep arc range 17, damage 30; dies in 80-86 s), the seated head on the server, the Castle Key (UI on SecretFx and
+MapScreen), Studio keys Y/O/X/Z. **R8 judged against the same gear (the pair player): PASS**; against the sword alone Road3
+Hard reads x1.014 (printed, ungated) — the lead's reading of §27.5, recorded in MISSIONS_DESIGN for Ben to overrule. R8 is
+now its own gate `sim_range.py --r8 --check` (~54 min). Four-slice review running; full `mutate.py` (1,914 entries) runs in
+`tycoon-p5b` (detached at afdce67). A second session limit (5 h window) cut D1/D2 once; resumed by SendMessage.
