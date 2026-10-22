@@ -97,3 +97,9 @@ MapScreen), Studio keys Y/O/X/Z. **R8 judged against the same gear (the pair pla
 Hard reads x1.014 (printed, ungated) — the lead's reading of §27.5, recorded in MISSIONS_DESIGN for Ben to overrule. R8 is
 now its own gate `sim_range.py --r8 --check` (~54 min). Four-slice review running; full `mutate.py` (1,914 entries) runs in
 `tycoon-p5b` (detached at afdce67). A second session limit (5 h window) cut D1/D2 once; resumed by SendMessage.
+
+**Long checks (2026-10-22):** Ben asked "what are we even running and why does it take 2 hours?". Explained (`mutate.py`
+1,914 deliberate breaks each re-running the ~4,400-check harness on one core, several hours; R8 thousands of whole
+simulated runs, ~54 min on 8 workers; they compete for CPU). Offered sharding `mutate.py` and running the full passes only
+at QA; **he chose "leave it as it is"** (this also answers the L1b sharding offer). Do not re-offer unless he asks; say
+plainly what is running when a wait is long.
