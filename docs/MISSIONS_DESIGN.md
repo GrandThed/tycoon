@@ -677,3 +677,9 @@ it every spot on every table earns x0.41-0.84 of the fighter's cash a minute ove
 fighter, Road3 and Road2 on Hard would read x1.014 and x1.003 (a gain of about 1%); that table stays printed, ungated.
 After sniping, the fight resumes on the road where the player left it (read literally, "from where he stands", four spots
 that shoot nothing failed on a route quirk). Told to Ben; his word overrides.
+
+**Correction, same day (the W2 review):** as first built, the sniper fought the rest with the sword alone while the fighter
+used both weapons, so the gate mostly measured the weapon gap (the x0.41-0.84 above). The faithful reading, now the gate:
+**both runs use the same gear and differ only by the spot**. It passes on every table, with the tightest spots at x0.987
+(Hard T1/T1, Road3), x0.982 (Hard bow T4, Road3), x0.968 (Normal T1/T1, the cave exit) and x0.943 (Normal bow T4, Road4):
+a margin of 1-6%, guarded by a mutant sized to it.
