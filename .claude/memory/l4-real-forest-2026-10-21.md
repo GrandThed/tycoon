@@ -135,3 +135,10 @@ writes `l4-w3-cash-study.md` (era multiplier anchors, because income spans order
 multiplier per era matches "a few minutes of income" at one point only). Ben picks the anchor by click question, then
 owners build. Scope: city map departs into the level (auto-start), the shared tally end screen, run cash by era, the hub's
 Missions stub / Overdrive / Gear chip deleted, Valor's next ability shown locked.
+**W3 state 2026-10-23 evening:** Ben picked era cash **C** (MISSIONS_DESIGN §30: ×1 / 670 / 34,000 / 1,400,000, capped so
+back-to-back Normal/Hard runs never beat building). Contract `l4-w3-contract.md` (L4W3-1..18; §14 lead rulings, L4W3-17/18
+are M11 merge items: keep `stampDeparture` on every departure, delete M11's `SetPower` line, keep its ClaimPlot early return).
+Five owners built it (`93eb8e9`, harness 4,994; reports `l4-w3-reports/`); a 14:50 session-limit cut was resumed by
+SendMessage with nothing lost. Four-slice Opus review running (`l4-w3-review.md` → `l4-w3-review/`). M11 (session
+`tycoon-b2`, `m11-port` in `tycoon-m11`) runs in parallel: whoever merges second resolves the shared hub files, the
+`simulate_era(pause=None)` hook and the Expedition key → HubMap.
