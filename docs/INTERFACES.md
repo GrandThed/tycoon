@@ -15680,3 +15680,9 @@ once), built on branch `l4-w1b` in the worktree `tycoon-p5b`.
 
 Decisions: `docs/MISSIONS_DESIGN.md` §26, §27. Contract of record: `docs/prompts/l4-w2-contract.md` (rulings L4W2-1 to
 L4W2-15, the lead's amendments in §0), built on branch `l4-w2` after `l4-w1b` merges.
+
+# L4 W3 contracts — the city map, the end screen, run cash by era
+
+Decisions: `docs/MISSIONS_DESIGN.md` §26 (items 5-8), §30 (era cash: option C). Contract of record:
+`docs/prompts/l4-w3-contract.md` (rulings L4W3-1 to L4W3-16, the lead's in §14), built on branch `l4-w3`. Era-cash study:
+`docs/prompts/l4-w3-cash-study.md`. Runs beside M11 (`m11-port`): the shared hub files and the merge rule are in its §10.
