@@ -389,3 +389,9 @@ Done: every line green with its counts named (`mutate_shards` 0 not caught; the 
   the lead's.
 - **L4W3-16. Process.** Every owner is a fresh Opus agent started from this file; reports and relays go to
   `docs/prompts/l4-w3-reports/`; a resumed agent is only for a short follow-up on what it just did.
+- **L4W3-17. Two more items for the M11 merge** (from the M11 session, 2026-10-23; its overlap table is
+  `m11-port`'s `docs/prompts/m11-port-contract.md` §8). (a) Every departure path keeps
+  `ExpeditionService.stampDeparture` (today only in `handOff`, before the bridge branch): M11's Armory unlock reads
+  `combat.stats.expeditions`. (b) M11 shows Gear Power through `SetPower` at its `UIController` ~:1187 behind the Armory
+  key; W3 deletes the chip, so whoever merges second deletes that line too. M11 leaves `sim_economy.py`'s default output
+  byte-identical, so the era-cash study stands.
