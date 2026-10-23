@@ -1460,6 +1460,7 @@ def source_reading(repo: Path) -> dict:
         "l4w2": l4w2_reading(text),
         "l4w3b": l4w3b_reading(text),
         "l4w3fix": l4w3fix_reading(text),
+        "l4w3fix2": l4w3fix2_reading(text),
     }
 
 
@@ -2500,6 +2501,15 @@ L4W3B_LINES.update({
     "mockDifficulty": (RUN_REGISTRY, body_of("RunRegistry.ResolveTicket"), "lines", "\t\t\tdifficulty = difficulty,"),
 })
 
+# Fix round 2's G5 (docs/prompts/l4-w3-fix2.md, the fix-diff review's s1): the start at zero runs under
+# xpcall with the traceback (departPcall re-aimed), and a throw is the unavailable refusal only while the
+# run is still in the lobby, one level deeper (departThrownRefusal re-aimed); the rest of the block is
+# run_harness.py's L4W3FIX2_LINES and the copy check `startCopy`.
+L4W3B_LINES.update({
+    "departPcall": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\tlocal started, trace = xpcall(function()"),
+    "departThrownRefusal": (WAVE_SERVICE, body_of("tickDepart"), "lines", '\t\t\t\t\trefusal = "unavailable"'),
+})
+
 L4W3B_ORDER.update({
     # Re-aimed: the rule decides before the start at zero (now inside the pcall closure).
     "departStepThenStart": (WAVE_SERVICE, body_of("tickDepart"),
@@ -2715,6 +2725,98 @@ def l4w3fix_reading(text) -> dict:
             at = max(found_at, at)
         order[key] = ok
     return {"counts": counts, "order": order, "missing": sorted(k for k, v in bodies.items() if v is None)}
+
+
+# Fix round 2 of the L4 W3 fix round (docs/prompts/l4-w3-fix2.md, G2-G5; the fix-diff review's m2, m3, m4
+# and s1), read as text like L4W3FIX_LINES (comments blanked, in the one function each lives in; None =
+# the whole file): G2 the five lines the review's probes passed (the late set's members and ids, the
+# dungeon's secret rows' reader, the picked branch's seed and Armory close); G3 the one note rule
+# (StageFlow.Notes and MapScreen ask MapRules.Note, neither keeps a cap or a rule of its own); G4 the
+# refused arrival's card titled by ArenaService.SessionName, the session card's own fallback; G5 the
+# start at zero under xpcall with the traceback, refusing only in the lobby. `startCopy`: tickDepart's
+# start block, from its leader to its toast, stands verbatim in tests_l4w3_run.luau (L4W3R.startAtZero
+# runs that copy), so the copy cannot drift. `sessionDefault`: ArenaService's DEFAULT_SESSION_NAME
+# literal (None when not found), which tests_l4w3_pins.luau reads through RunLines.ReadSummary.
+# tests_l4w3_pins.luau holds every count (L4P.FIX2).
+RETURN_SERVICE = "src/combat/server/Services/ReturnService.luau"
+MAP_SCREEN = "src/client/UI/MapScreen.luau"
+STAGE_FLOW = "src/combat/server/Services/StageFlow.luau"
+L4W3FIX2_BODIES = {
+    "lateAtZero": (WAVE_SERVICE, body_of("lateAtZero")),
+    "secretRows": (WAVE_SERVICE, body_of("secretRows")),
+    "tickDepart": (WAVE_SERVICE, body_of("tickDepart")),
+    "uiRunState": (UI_CONTROLLER, ON_RUN_STATE_BODY),
+    "notes": (STAGE_FLOW, body_of("StageFlow.Notes")),
+    "difficultiesOf": (MAP_SCREEN, body_of("difficultiesOf")),
+    "buildSummary": (RETURN_SERVICE, body_of("buildSummary")),
+    "sessionName": (ARENA_SERVICE, body_of("ArenaService.SessionName")),
+}
+# key: (file, body key or None, "lines" | "text" | "regex", the text or pattern).
+L4W3FIX2_LINES = {
+    # G2 (m2 P1, P2, P4, Q1, Q2).
+    "lateMembers": (WAVE_SERVICE, "lateAtZero", "lines", "\tfor _, member in ArenaService.GetMembers() do"),
+    "lateUserId": (WAVE_SERVICE, "lateAtZero", "lines", "\t\t\tuserId = member.userId,"),
+    "secretRowsSites": (WAVE_SERVICE, "secretRows", "lines", "\t\tbuilt,\n\t\tsitesOf,"),
+    "uiPickSeeded": (UI_CONTROLLER, "uiRunState", "lines", "\t\t\t\tst.mapSeeded = true"),
+    "uiPickArmory": (UI_CONTROLLER, "uiRunState", "regex", r"(?m)^\t\t\t\tarmoryScreen\.Close\(\)[ \t]*$"),
+    "uiPickBranch": (UI_CONTROLLER, "uiRunState", "regex",
+                     r"(?m)^\t\t\tif pick ~= nil then\n\t\t\t\tst\.mapSeeded = true\n"
+                     r"\t\t\t\tscreen\.Select\(pick\.node, pick\.difficulty\)\n\t\t\t\tarmoryScreen\.Close\(\)[ \t]*\n\t\t\tend$"),
+    # G3 (m3).
+    "notesAsk": (STAGE_FLOW, "notes", "lines", "\t\tlocal shown = MapRules.Note(scales)"),
+    "notesKeep": (STAGE_FLOW, "notes", "lines", "\t\t\tkept[name] = shown"),
+    "notesOwnCap": (STAGE_FLOW, None, "regex", r"\bNOTE_MAX_LENGTH\b"),
+    "notesOwnRule": (STAGE_FLOW, None, "regex", r"#note\b"),
+    "mapNote": (MAP_SCREEN, "difficultiesOf", "lines", "\t\t\t\tnote = MapRules.Note(def),"),
+    "mapOwnNote": (MAP_SCREEN, None, "regex", r"\bdef\.note\b"),
+    # G4 (m4).
+    "returnTitle": (RETURN_SERVICE, "buildSummary", "lines", "\treturn RunCredit.Empty(ArenaService.SessionName())"),
+    "returnEmpties": (RETURN_SERVICE, None, "text", "RunCredit.Empty("),
+    "sessionFallback": (ARENA_SERVICE, "sessionName", "lines",
+                        "\treturn if expeditions ~= nil then expeditions.name else DEFAULT_SESSION_NAME"),
+    "sessionCards": (ARENA_SERVICE, None, "text", "emptySummary(ArenaService.SessionName())"),
+    "sessionDefaults": (ARENA_SERVICE, None, "regex", r"\bDEFAULT_SESSION_NAME\b"),
+    # G5 (s1).
+    "startTraceback": (WAVE_SERVICE, "tickDepart", "lines", "\t\t\tend, debug.traceback)"),
+    "startNoPcall": (WAVE_SERVICE, "tickDepart", "regex", r"\bpcall\("),
+    "startLobbyOnly": (WAVE_SERVICE, "tickDepart", "text",
+                       "\t\t\t\tif run.phase == \"lobby\" then\n\t\t\t\t\trefusal = \"unavailable\"\n\t\t\t\telse\n"
+                       "\t\t\t\t\trefusal = nil\n\t\t\t\t\twarn(\n"),
+}
+# tickDepart's start at zero, from its leader to its toast (G5): the text L4W3R.startAtZero copies.
+START_BLOCK = re.compile(
+    r"(?ms)^\t\tlocal leader = ArenaService\.GetMember\(ArenaService\.LeaderUserId\(\)\)\n.*?"
+    r"^\t\t\t\trefuseStart\(player, depart\.levelId, refusal\)\n\t\t\tend\n\t\tend\n"
+)
+SESSION_DEFAULT = re.compile(r'(?m)^local DEFAULT_SESSION_NAME = "([^"\n]*)"$')
+
+
+def l4w3fix2_reading(text) -> dict:
+    """L4W3FIX2_LINES counted as l4w3fix_reading counts its lines, plus `startCopy` (how many times
+    tickDepart's START_BLOCK stands in this harness's tests_l4w3_run.luau; 0 when tickDepart has no such
+    block) and `sessionDefault` (ArenaService's DEFAULT_SESSION_NAME, None when not found)."""
+    bodies = {}
+    for key, (rel, pattern) in L4W3FIX2_BODIES.items():
+        found = pattern.search(luau_code(text(rel)))
+        bodies[key] = found.group(0) if found else None
+    counts = {}
+    for key, (rel, body, how, line) in L4W3FIX2_LINES.items():
+        code = luau_code(text(rel)) if body is None else (bodies[body] or "")
+        if how == "lines":
+            counts[key] = whole_lines(code, line)
+        elif how == "regex":
+            counts[key] = len(re.findall(line, code))
+        else:
+            counts[key] = code.count(line)
+    block = START_BLOCK.search(bodies["tickDepart"] or "")
+    copies = luau_code((HERE / "tests_l4w3_run.luau").read_text(encoding="utf-8"))
+    counts["startCopy"] = copies.count(block.group(0)) if block else 0
+    default = SESSION_DEFAULT.search(text(ARENA_SERVICE))
+    return {
+        "counts": counts,
+        "missing": sorted(k for k, v in bodies.items() if v is None),
+        "sessionDefault": default.group(1) if default else None,
+    }
 
 
 def sources(repo: Path) -> dict:

@@ -24,7 +24,7 @@ PATHS = {"HitShapes": "src/shared/HitShapes.luau", "SwingGate": "src/shared/Swin
          "Combat": "src/shared/Combat.luau", "CampBrain": "src/combat/server/Services/CampBrain.luau",
          "StageFlow": "src/combat/server/Services/StageFlow.luau",
          "LevelGeometry": "src/combat/server/Services/LevelGeometry.luau",
-         "Armory": "src/shared/Armory.luau"}
+         "Armory": "src/shared/Armory.luau", "MapRules": "src/shared/MapRules.luau"}
 MUTANTS = [
     ("CrowdRay: the head term dropped", "HitShapes", "local entry = earlier(bodyEntry, headEntry)", "local entry = bodyEntry"),
     ("CrowdRay: the crit padded", "HitShapes",
@@ -341,12 +341,13 @@ MUTANTS = [
      "\t\t* Combat.EraCashMult(rewards, era)\n", "\t\t* Combat.EraCashMult(rewards, 1)\n"),
     # The L4 W3 fix round's F6 and F18: StageFlow.Notes against sim_range.kept_notes / note_problems, and
     # Validate keeping a level whose note is bad (check_stage_mirror's "F6: a bad note is dropped" cases).
-    ("Notes F6: a 25-byte note kept", "StageFlow", "or #note > NOTE_MAX_LENGTH) then",
-     "or #note > NOTE_MAX_LENGTH + 1) then"),
-    ("Notes F6: an empty note kept", "StageFlow", "(type(note) ~= \"string\" or note == \"\" or #note",
-     "(type(note) ~= \"string\" or #note"),
-    ("Notes F6: a good note dropped too", "StageFlow", "\t\telseif note ~= nil then\n\t\t\tkept[name] = note\n",
-     "\t\telseif note ~= nil and false then\n\t\t\tkept[name] = note\n"),
+    # Fix round 2's G3 moved the cap and the rule into MapRules.Note, which StageFlow.Notes asks.
+    ("Notes F6: a 25-byte note kept", "MapRules", "or #note > MapRules.MAX_NOTE_LENGTH then",
+     "or #note > MapRules.MAX_NOTE_LENGTH + 1 then"),
+    ("Notes F6: an empty note kept", "MapRules", "if type(note) ~= \"string\" or note == \"\" or #note",
+     "if type(note) ~= \"string\" or #note"),
+    ("Notes F6: a good note dropped too", "StageFlow", "\t\tif shown ~= nil then\n\t\t\tkept[name] = shown\n",
+     "\t\tif shown ~= nil and false then\n\t\t\tkept[name] = shown\n"),
     ("Validate F6: a bad note refuses the level again", "StageFlow",
      "\tfirstClearProblems(level, weapons, starters, problem)\n",
      "\tfirstClearProblems(level, weapons, starters, problem)\n\tlocal _, droppedNotes = StageFlow.Notes(level)\n"

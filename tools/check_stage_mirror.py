@@ -189,9 +189,10 @@ import sim_range as sr  # noqa: E402
 HARNESS = ROOT / "tools" / "crowd_harness"
 DRIVER = HARNESS / "stage_mirror.luau"
 # Unlocks: StageFlow reads the family id cap from it (the L2 W1 fix round's s2). WorldReact (L2 W3):
-# LevelGeometry cuts deep water into ice cells with it, and it reads Unlocks.
+# LevelGeometry cuts deep water into ice cells with it, and it reads Unlocks. MapRules (the L4 W3 fix
+# round 2's G3): StageFlow.Notes keeps what MapRules.Note keeps.
 MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "Unlocks", "WorldReact",
-           "LevelGeometry", "CampBrain", "StageFlow")  # in load order
+           "LevelGeometry", "CampBrain", "MapRules", "StageFlow")  # in load order
 # L4B-6: the hand-written field, a copy of tools/crowd_harness's L1.fieldLevel on L1W.field (the old
 # Raider Arena as it resolved, the C1 Village mission's crowd block on the Village arena's layout).
 # No shipped level merges or takes the director's breather since the arena went; this one does, so

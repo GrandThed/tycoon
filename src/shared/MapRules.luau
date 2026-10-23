@@ -4,7 +4,8 @@
 -- the same MapState. Moved verbatim from StageFlow (the map section, Stars; rulings 25 and 28 of
 -- "L1 contracts") and SecretFlow (the chest list and the map card's row, L2-11 to L2-15; the key
 -- of L4 W2 §0), so the hub needs no combat-place module. The W3 fix round added the secret rows
--- both places send (SecretRows, F9) and the pick both maps open on (FirstPick, F13).
+-- both places send (SecretRows, F9) and the pick both maps open on (FirstPick, F13); fix round 2 the
+-- note a difficulty shows (Note, G3).
 --
 -- Pure for the same reason they were: tables and numbers only, no service, no Instance, no clock
 -- and no yield, so tools/crowd_harness loads it as it stands and mutate.py mutates it. The Types
@@ -44,6 +45,10 @@ local MapRules = {}
 -- dungeon's RequestStartLevel, the Studio bridge's arrival and the Python mirrors all read these.
 MapRules.MAX_LEVEL_ID_LENGTH = 32
 MapRules.MAX_DIFFICULTY_LENGTH = 12
+-- L4 W3 (§7): the longest a difficulty's `note` may be, the map's line beside it (fix round 2's
+-- G3: the one home of the number, read through Note by StageFlow.Notes and MapScreen; the tools'
+-- twin is sim_range.NOTE_MAX_BYTES, held to it by check_stage_mirror's F6 cases).
+MapRules.MAX_NOTE_LENGTH = 24
 
 local function nodeOf(map: Types.ExpeditionsConfig, id: string?): Types.MapNode?
 	if id == nil then
@@ -233,6 +238,19 @@ function MapRules.FirstPick(difficulties: { string }, state: Types.MapState): (s
 		end
 	end
 	return fallback.id, nil
+end
+
+-- Fix round 2's G3: the note a difficulty shows on the map, the one rule the server's warn and both
+-- maps apply: its `note` when that is a string of 1 to MAX_NOTE_LENGTH bytes, else nil (a missing,
+-- empty, over-long or non-string note is dropped and never shown). `difficulty` = the level file's
+-- table for it, as decoded (anything that is not a table has no note).
+function MapRules.Note(difficulty: Types.LevelDifficulty?): string?
+	local scales: any = difficulty
+	local note: any = if type(scales) == "table" then scales.note else nil
+	if type(note) ~= "string" or note == "" or #note > MapRules.MAX_NOTE_LENGTH then
+		return nil
+	end
+	return note
 end
 
 -- The chests ----------------------------------------------------------------------------------

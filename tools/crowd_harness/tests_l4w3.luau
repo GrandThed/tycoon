@@ -5,7 +5,8 @@
 -- every degrade to 1), and the never-sold upcoming abilities (Unlocks reads `list` only). The W3 fix
 -- round adds F7 (RunLines.ReadSummary, the one reader of a whole run card), F8 (both halves of every
 -- field rule of Read), F9 (MapRules.SecretRows, the one copy of the secret rows) and F13's
--- MapRules.FirstPick (moved from MapScreen). The hub's ExpeditionService, which calls Startable,
+-- MapRules.FirstPick (moved from MapScreen); fix round 2 adds G3 (MapRules.Note, the one note rule
+-- StageFlow.Notes and MapScreen ask). The hub's ExpeditionService, which calls Startable,
 -- SecretRows and SendMap, and StudioBridge, which calls ReadSummary, cannot be loaded here: their
 -- call lines are run_harness.py's text pins. Appended by
 -- run_harness.py after the earlier case files, so every local of those is in scope (check, load,
@@ -331,6 +332,40 @@ function L4W3.shippedTests(): ()
 				== "ok",
 		"the shipped first level is startable at the first difficulty with no stars"
 	)
+end
+
+-- Fix round 2's G3: the one note rule. A difficulty's note is shown only as a string of 1 to
+-- MapRules.MAX_NOTE_LENGTH bytes (bytes, not characters); StageFlow.Notes and MapScreen both ask it.
+function L4W3.noteTests(): ()
+	local Map = L4W3.Map
+	check(Map.MAX_NOTE_LENGTH == 24, "Note: the cap is 24 bytes, its one home MapRules.MAX_NOTE_LENGTH")
+	check(Map.Note({ note = "Castle gear" }) == "Castle gear", "Note: a short note is shown as it is")
+	local full = string.rep("x", 24)
+	check(Map.Note({ note = full }) == full, "Note: 24 bytes is shown")
+	check(Map.Note({ note = string.rep("x", 25) }) == nil, "Note: 25 bytes is dropped")
+	-- "é" is two bytes in UTF-8: twelve of them fill the cap, thirteen (13 characters) do not fit.
+	local twelve = string.rep("é", 12)
+	check(#twelve == 24 and Map.Note({ note = twelve }) == twelve, "Note: 24 bytes of 12 characters is shown")
+	check(Map.Note({ note = string.rep("é", 13) }) == nil, "Note: 26 bytes of 13 characters is dropped (bytes, m3)")
+	for _, bad in { "", 7, true, {}, false } do
+		check(Map.Note({ note = bad }) == nil, `Note: a {type(bad)} note "{tostring(bad)}" is dropped`)
+	end
+	check(Map.Note({ hpScale = 1 }) == nil, "Note: a difficulty with no note has none")
+	check(Map.Note(nil) == nil, "Note: no difficulty has none")
+	for _, odd in { "Castle gear", 3, true } do
+		check(Map.Note(odd :: any) == nil, `Note: a {type(odd)} in place of the difficulty's table has none`)
+	end
+	-- The shipped Forest Road: every difficulty's note is one the map shows (check_levels refuses others).
+	for _, level in FIXTURES.levels do
+		for name, scales in level.difficulties do
+			if type(scales) == "table" and scales.note ~= nil then
+				check(
+					Map.Note(scales) == scales.note,
+					`Note: the shipped {level.id} {name} note "{tostring(scales.note)}" is shown`
+				)
+			end
+		end
+	end
 end
 
 -- RunLines --------------------------------------------------------------------------------------------
@@ -761,6 +796,7 @@ L4W3.group("chests", L4W3.chestTests)
 L4W3.group("secret rows", L4W3.secretRowsTests)
 L4W3.group("first pick", L4W3.firstPickTests)
 L4W3.group("shipped map", L4W3.shippedTests)
+L4W3.group("note", L4W3.noteTests)
 L4W3.group("add", L4W3.addTests)
 L4W3.group("read", L4W3.readTests)
 L4W3.group("summary", L4W3.summaryTests)

@@ -283,9 +283,11 @@ local boot = {
 	-- round's F1: a reserved server serves one departure), the members whose bodies it waits for
 	-- (refilled every lobby tick, no table per tick), and the last StageFlow.DepartBeat broadcast.
 	-- Kept through every run (nothing auto-starts after one); the session's end forgets the
-	-- auto-start (Reset, StageFlow.DepartForget).
+	-- auto-start (Reset, StageFlow.DepartForget), carrying the pair of one that never started to
+	-- the next admit as picked (fix round 2's G1; StageFlow alone writes it).
 	depart = nil :: StageFlow.Depart?,
 	departOpened = false,
+	departCarried = nil :: { levelId: string, difficulty: string }?,
 	departHolders = {} :: { Types.RunMember },
 	departBeat = "",
 	-- L4 W3 (§9, the P lever): the session's pay era for every member, over the eras frozen at their
@@ -2176,18 +2178,28 @@ local function tickDepart(combatConfig: Types.CombatConfig): ()
 	})
 	if action == "start" then
 		-- Whoever leads at zero starts it: a leader who took over during the countdown, by their stars.
-		-- Inside a pcall (s2): a throw is a refusal like any other, its one warn naming the error.
+		-- Inside an xpcall (s2, fix round 2's G5), its one warn carrying the traceback. startLevel is
+		-- not one step: a throw while the run is still in the lobby is a refusal like any other, but
+		-- one after the level went live leaves it live and done, with the warn alone (no toast, no pick
+		-- to force the map open after that run).
 		local leader = ArenaService.GetMember(ArenaService.LeaderUserId())
 		local player = if leader ~= nil then leader.player else nil
 		local refusal: StartRefusal? = "notLeader"
 		local thrown = ""
 		if player ~= nil then
-			local started, problem = pcall(function()
+			local started, trace = xpcall(function()
 				refusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())
-			end)
+			end, debug.traceback)
 			if not started then
-				refusal = "unavailable"
-				thrown = `: {tostring(problem)}`
+				thrown = `: {tostring(trace)}`
+				if run.phase == "lobby" then
+					refusal = "unavailable"
+				else
+					refusal = nil
+					warn(
+						`[WaveService] the auto-start of {depart.levelId} {depart.difficulty} threw after the level went live{thrown}`
+					)
+				end
 			end
 		end
 		if refusal ~= nil then

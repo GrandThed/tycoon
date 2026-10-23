@@ -5905,7 +5905,7 @@ def first_clear(level, difficulty):
     return given
 
 
-NOTE_MAX_BYTES = 24  # StageFlow.NOTE_MAX_LENGTH (L4 W3 section 7): a difficulty's note on the map's line
+NOTE_MAX_BYTES = 24  # MapRules.MAX_NOTE_LENGTH (L4 W3 section 7; fix round 2 G3): a difficulty's note on the map's line
 
 
 def note_dropped(note):
@@ -5942,7 +5942,7 @@ def note_problems(level, problem):
         if note_dropped(note):
             size = f"{len(note.encode('utf-8'))} bytes" if isinstance(note, str) else type(note).__name__
             problem(f"difficulties.{name}.note is {note!r} ({size}), not a string of 1 to {NOTE_MAX_BYTES} bytes: "
-                    f"the game drops it and the map shows no note (F6)")
+                    f"the note is dropped and the map does not show it (F6, MapRules.Note)")
 
 
 def first_clear_problems(level, weapons, starters, problem):

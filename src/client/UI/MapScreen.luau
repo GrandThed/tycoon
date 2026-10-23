@@ -60,7 +60,8 @@
 --
 -- L4 W3 (docs/prompts/l4-w3-contract.md sections 2.4 and 7): the hub mounts it too (UI/HubMap).
 -- `deps.returnText` names the footer button (nil = "Return to your city"; the hub's reads "Party
--- & runs"). A difficulty's `note` (the level file's, at most 24 characters: Brutal's "Castle
+-- & runs"). A difficulty's `note` (the level file's, as MapRules.Note keeps it: a string of 1 to
+-- MapRules.MAX_NOTE_LENGTH bytes, fix round 2's G3, the rule the server warns by; Brutal's "Castle
 -- gear") stands on its button's second line in place of the recommended tier, which is the line
 -- that says what gear the difficulty asks for; "Castle gear" is about 58 design px at 11 px, inside
 -- the 66 px a button has. Selected reads what is picked (the combat place's Studio R key). The
@@ -75,6 +76,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Format = require(sharedFolder:WaitForChild("Format"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
@@ -368,7 +370,7 @@ local function difficultiesOf(map: Types.ExpeditionsConfig, node: Types.MapNode)
 				name = map.difficultyNames[id] or id,
 				tier = def.recommendedTier,
 				rewardMult = def.rewardMult,
-				note = if typeof(def.note) == "string" and def.note ~= "" then def.note else nil,
+				note = MapRules.Note(def),
 			})
 		end
 	end

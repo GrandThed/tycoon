@@ -6,9 +6,12 @@
 -- and before the card; a difficulty's `note` (Validate, StageFlow.Notes). The fix round's cases
 -- (docs/prompts/l4-w3-fix-round.md): once a server (F1, group server), the late arrivals at zero (F2,
 -- late), a kill's line counting kills (F3, kills), P on the mock store only (F4, payLever), the tick's
--- early return (s3, live), a bad note dropped (F6, note). StageFlow, RunCredit, RunLines and Combat
--- are loaded as they stand. WaveService and ArenaService cannot be loaded here: L4W3R.holders,
--- L4W3R.starting, L4W3R.endTail, L4W3R.credit and L4W3R.cardsCredit below are their lines, copied
+-- early return (s3, live), a bad note dropped (F6, note). Fix round 2's (docs/prompts/l4-w3-fix2.md):
+-- a departure whose session ended before it started is picked at the next admit (G1, carry), and the
+-- start at zero's throw refuses only in the lobby, warned with its traceback (G5, thrown). StageFlow,
+-- RunCredit, RunLines and Combat are loaded as they stand. WaveService and ArenaService cannot be
+-- loaded here: L4W3R.holders, L4W3R.starting, L4W3R.startAtZero (verbatim, held by run_harness.py's
+-- START_BLOCK), L4W3R.endTail, L4W3R.credit and L4W3R.cardsCredit below are their lines, copied
 -- line for line, and run_harness.py reads those lines as text so a copy cannot drift. Appended by
 -- run_harness.py after the earlier case files, so every local of those is in scope (check, load,
 -- near, FIXTURES, L1). Everything hangs off the L4W3R table (the 200-local limit), and every group
@@ -759,6 +762,279 @@ L4W3R.group("server", function()
 	)
 end)
 
+-- A departure whose session ended before it started (fix round 2's G1) -------------------------------------
+
+L4W3R.group("carry", function()
+	local Flow = L4W3R.Flow
+	-- The fix-diff review's m1: a party of two departs for Forest Road Hard; member B lands first and is
+	-- admitted (waiting), then leaves during the host's load, so the session ends (Reset).
+	local book = L4W3R.book()
+	Flow.DepartAdmit(book, "forestRoad", "hard", true, nil, 0)
+	check(
+		book.depart ~= nil and book.depart.state == "waiting",
+		"carry: the first member's admit waits for the party"
+	)
+	Flow.DepartForget(book)
+	local carried = book.departCarried
+	check(
+		book.depart == nil
+			and carried ~= nil
+			and carried.levelId == "forestRoad"
+			and carried.difficulty == "hard",
+		"carry: a session that ends while it waits forgets the auto-start and carries its pair (G1)"
+	)
+	-- The host lands next with the same verified ticket: the map is on the party's choice.
+	Flow.DepartAdmit(book, "forestRoad", "hard", true, nil, 40)
+	local picked = book.depart
+	check(
+		picked ~= nil
+			and picked.state == "picked"
+			and picked.levelId == "forestRoad"
+			and picked.difficulty == "hard",
+		"carry: the host who lands next gets Forest Road Hard picked on the map (G1)"
+	)
+	check(book.departCarried == nil, "carry: and the carry is spent")
+	local view = Flow.DepartView(book.depart, 40, true, 30)
+	check(
+		view ~= nil
+			and view.state == "picked"
+			and view.difficulty == "hard"
+			and view.startsIn == nil
+			and view.waitIn == nil,
+		"carry: the wire shows that pick, with no countdown and no wait"
+	)
+	-- A minute of ticks with every fact true and admits on every frame: nothing waits, counts or starts.
+	local starts, live = 0, 0
+	for frame = 40, 100 do
+		Flow.DepartAdmit(book, "forestRoad", "hard", true, nil, frame)
+		if Flow.DepartLive(book.depart) then
+			live += 1
+		end
+		if book.depart ~= nil and Flow.DepartStep(book.depart, L4W3R.input(frame)) == "start" then
+			starts += 1
+		end
+	end
+	check(
+		starts == 0
+			and live == 0
+			and picked ~= nil
+			and book.depart == picked
+			and picked.state == "picked",
+		"carry: nothing waits, counts down or starts from it (never waiting or counting again)"
+	)
+	-- That session ends picked: nothing is carried again, and the next rejoin opens nothing.
+	Flow.DepartForget(book)
+	Flow.DepartAdmit(book, "forestRoad", "hard", true, nil, 200)
+	check(
+		book.depart == nil and book.departCarried == nil,
+		"carry: a session that ends picked carries nothing"
+	)
+
+	-- A countdown the session's end cut is carried too, and the pair is the departure's own, whoever
+	-- lands next (here a stranger with no hint).
+	local counting = L4W3R.book()
+	Flow.DepartAdmit(counting, "forestRoad", "hard", true, nil, 0)
+	Flow.DepartStep(counting.depart, L4W3R.input(1))
+	local wasCounting = counting.depart ~= nil and counting.depart.state == "counting"
+	Flow.DepartForget(counting)
+	Flow.DepartAdmit(counting, "", "", false, nil, 10)
+	check(
+		wasCounting
+			and counting.depart ~= nil
+			and counting.depart.state == "picked"
+			and counting.depart.levelId == "forestRoad"
+			and counting.depart.difficulty == "hard",
+		"carry: a countdown cut by the session's end is picked on the departure's pair at the next admit"
+	)
+
+	-- F1 unchanged: arm, run, Reset, the same verified ticket again: nothing.
+	local ran = L4W3R.book()
+	Flow.DepartAdmit(ran, "forestRoad", "normal", true, nil, 0)
+	Flow.DepartStep(ran.depart, L4W3R.input(1))
+	local started = Flow.DepartStep(ran.depart, L4W3R.input(6)) == "start"
+	Flow.DepartForget(ran)
+	local carriedAfterRun = ran.departCarried
+	Flow.DepartAdmit(ran, "forestRoad", "normal", true, nil, 100)
+	check(
+		started and carriedAfterRun == nil and ran.depart == nil,
+		"carry: after a run (done) nothing is carried and the rejoin opens nothing (F1 unchanged)"
+	)
+	-- The leader's own start (done) and a refused start or a wait that ran out (picked) carry nothing.
+	local asked = L4W3R.book()
+	Flow.DepartAdmit(asked, "forestRoad", "normal", true, nil, 0)
+	Flow.DepartAsked(asked.depart)
+	Flow.DepartForget(asked)
+	Flow.DepartAdmit(asked, "forestRoad", "normal", true, nil, 50)
+	check(asked.depart == nil, "carry: a departure the leader's own start ended carries nothing")
+	local refused = L4W3R.book()
+	Flow.DepartAdmit(refused, "forestRoad", "normal", true, nil, 0)
+	Flow.DepartRefused(refused.depart)
+	Flow.DepartForget(refused)
+	Flow.DepartAdmit(refused, "forestRoad", "normal", true, nil, 50)
+	check(
+		refused.depart == nil,
+		"carry: nor one already picked (a refused start, a wait that ran out)"
+	)
+
+	-- Spent once: the leader's own start ends the carried pick, and a later admit of that session does
+	-- not bring it back.
+	local spent = L4W3R.book()
+	Flow.DepartAdmit(spent, "forestRoad", "hard", true, nil, 0)
+	Flow.DepartForget(spent)
+	Flow.DepartAdmit(spent, "forestRoad", "hard", true, nil, 10)
+	Flow.DepartAsked(spent.depart)
+	Flow.DepartAdmit(spent, "forestRoad", "hard", true, nil, 12)
+	check(
+		spent.depart ~= nil and spent.depart.state == "done",
+		"carry: once spent, a later admit of the same session does not pick it again"
+	)
+
+	-- R while a carry waits: the lever's own wait stands at the next admit.
+	local lever = L4W3R.book()
+	Flow.DepartAdmit(lever, "forestRoad", "hard", true, nil, 0)
+	Flow.DepartForget(lever)
+	Flow.DepartLever(lever, "forestRoad", "normal", 5)
+	Flow.DepartAdmit(lever, "forestRoad", "hard", true, nil, 6)
+	check(
+		lever.depart ~= nil
+			and lever.depart.state == "waiting"
+			and lever.depart.difficulty == "normal"
+			and lever.departCarried == nil,
+		"carry: R drops the carry (its own wait stands at the next admit)"
+	)
+end)
+
+-- WaveService.tickDepart's start at zero, from its leader to its toast, verbatim inside the `do` below
+-- (run_harness.py's START_BLOCK holds this copy to it: startCopy, fix round 2's G5). `throws` = where
+-- startLevel throws ("lobby": before the level goes live, "live": after it; nil = it answers `answer`),
+-- `leaderIn` = whether the leader is a member. Answers the depart's state after it, the warns, the toasts.
+function L4W3R.startAtZero(
+	throws: string?,
+	answer: string?,
+	leaderIn: boolean
+): (string, { string }, { string })
+	type StartRefusal = string
+	local StageFlow = L4W3R.Flow
+	local depart = L4W3R.waiting(0)
+	depart.state = "done"
+	local run = { phase = "lobby" }
+	local warns: { string } = {}
+	local toasts: { string } = {}
+	local function warn(text: string): ()
+		table.insert(warns, text)
+	end
+	local ArenaService = {
+		LeaderUserId = function(): number
+			return 1
+		end,
+		GetMember = function(_userId: number): any
+			return if leaderIn then { player = "leader" } else nil
+		end,
+	}
+	local function lateAtZero(): { [number]: boolean }
+		return {}
+	end
+	local function startLevel(
+		_player: any,
+		_levelId: string,
+		_difficulty: string,
+		_late: any
+	): StartRefusal?
+		if throws == "lobby" then
+			error("thrown in the lobby")
+		end
+		run.phase = "level"
+		if throws == "live" then
+			error("thrown once live")
+		end
+		return answer
+	end
+	local function refuseStart(_player: any, levelId: string, refusal: StartRefusal): ()
+		table.insert(toasts, `{levelId}:{refusal}`)
+	end
+	do
+		local leader = ArenaService.GetMember(ArenaService.LeaderUserId())
+		local player = if leader ~= nil then leader.player else nil
+		local refusal: StartRefusal? = "notLeader"
+		local thrown = ""
+		if player ~= nil then
+			local started, trace = xpcall(function()
+				refusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())
+			end, debug.traceback)
+			if not started then
+				thrown = `: {tostring(trace)}`
+				if run.phase == "lobby" then
+					refusal = "unavailable"
+				else
+					refusal = nil
+					warn(
+						`[WaveService] the auto-start of {depart.levelId} {depart.difficulty} threw after the level went live{thrown}`
+					)
+				end
+			end
+		end
+		if refusal ~= nil then
+			StageFlow.DepartRefused(depart)
+			warn(
+				`[WaveService] the auto-start of {depart.levelId} {depart.difficulty} was refused ({refusal}{thrown}); it stays picked on the map`
+			)
+			if player ~= nil then
+				refuseStart(player, depart.levelId, refusal)
+			end
+		end
+	end
+	return depart.state, warns, toasts
+end
+
+L4W3R.group("thrown", function()
+	local function has(text: string?, part: string): boolean
+		return text ~= nil and string.find(text, part, 1, true) ~= nil
+	end
+	local state, warns, toasts = L4W3R.startAtZero(nil, nil, true)
+	check(
+		state == "done" and #warns == 0 and #toasts == 0,
+		"thrown: a start that goes ahead stays done, warns nothing, toasts nothing"
+	)
+	state, warns, toasts = L4W3R.startAtZero(nil, "busy", true)
+	check(
+		state == "picked"
+			and #warns == 1
+			and has(warns[1], "(busy)")
+			and #toasts == 1
+			and toasts[1] == "forestRoad:busy",
+		"thrown: a refusal is picked, one warn naming it and the leader's toast"
+	)
+	state, warns, toasts = L4W3R.startAtZero("lobby", nil, true)
+	check(
+		state == "picked" and #toasts == 1 and toasts[1] == "forestRoad:unavailable",
+		"thrown: a throw while the run is still in the lobby is the unavailable refusal: picked and toasted (G5)"
+	)
+	check(
+		#warns == 1
+			and has(warns[1], "(unavailable: ")
+			and has(warns[1], "thrown in the lobby")
+			and has(warns[1], "\n"),
+		"thrown: with one warn carrying the error and its traceback (G5: xpcall with debug.traceback)"
+	)
+	state, warns, toasts = L4W3R.startAtZero("live", nil, true)
+	check(
+		state == "done" and #toasts == 0,
+		"thrown: a throw after the level went live leaves it done: no pick, no toast (G5)"
+	)
+	check(
+		#warns == 1
+			and has(warns[1], "threw after the level went live")
+			and has(warns[1], "thrown once live")
+			and has(warns[1], "\n"),
+		"thrown: and only warns, with the error and its traceback (G5)"
+	)
+	state, warns, toasts = L4W3R.startAtZero(nil, nil, false)
+	check(
+		state == "picked" and #warns == 1 and has(warns[1], "(notLeader)") and #toasts == 0,
+		"thrown: with no leader present it is the notLeader refusal: picked, warned, nobody toasted"
+	)
+end)
+
 -- The tick's early return (the review's s3) -------------------------------------------------------------
 
 L4W3R.group("live", function()
@@ -1396,9 +1672,12 @@ L4W3R.PINS = {
 	departLeader = { 1, "whoever leads at zero starts it (LeaderUserId, not the host)" },
 	departNotLeader = { 1, "with no such player the refusal is notLeader" },
 	departPlayerGuard = { 1, "and startLevel runs only for a player" },
-	departPcall = { 1, "inside a pcall (s2)" },
+	departPcall = { 1, "inside an xpcall with the traceback (s2, fix round 2's G5)" },
 	departThrown = { 1, "a throw" },
-	departThrownRefusal = { 1, "is an unavailable refusal" },
+	departThrownRefusal = {
+		1,
+		"is an unavailable refusal while the run is still in the lobby (G5)",
+	},
 	departRefusedIf = { 1, "only a refusal falls back to picked" },
 	departToastGuard = { 1, "and toasts only a player" },
 	departBeatLobby = { 1, "a new beat broadcasts in the lobby" },

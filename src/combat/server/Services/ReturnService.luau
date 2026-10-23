@@ -64,15 +64,15 @@ local function sendUnavailable(player: Player): ()
 end
 
 -- The session's card: everything credited since the admit (L1). A player who was never admitted
--- (a refused arrival pressing Return) still goes home, with a zeroed card under the map's name
--- (RunCredit.Empty, the card every summary starts as), and without creating a summary entry for a
--- non-member.
+-- (a refused arrival pressing Return) still goes home, with a zeroed card under the session card's
+-- own title (RunCredit.Empty, the card every summary starts as, titled by ArenaService.SessionName:
+-- the map's name, or its default without Config/Expeditions, so the hub never drops it; fix round
+-- 2's G4), and without creating a summary entry for a non-member.
 local function buildSummary(player: Player): Types.RunSummary
 	if ArenaService.IsAdmitted(player) then
 		return ArenaService.GetSessionSummary(player.UserId)
 	end
-	local expeditions = Catalog.GetExpeditionsConfig()
-	return RunCredit.Empty(if expeditions ~= nil then expeditions.name else "")
+	return RunCredit.Empty(ArenaService.SessionName())
 end
 
 -- Only ARGUMENT errors throw; a runtime refusal arrives later on TeleportInitFailed.

@@ -476,8 +476,10 @@ local function emptySummary(title: string): Types.RunSummary
 	return RunCredit.Empty(title)
 end
 
--- The session card's title: the map's name.
-local function sessionName(): string
+-- The session card's title: the map's name, or DEFAULT_SESSION_NAME without Config/Expeditions.
+-- Public for fix round 2's G4: ReturnService's zero card takes the same title, so RunLines.ReadSummary
+-- (1 to 48 bytes) never drops a card this place built.
+function ArenaService.SessionName(): string
 	local expeditions = Catalog.GetExpeditionsConfig()
 	return if expeditions ~= nil then expeditions.name else DEFAULT_SESSION_NAME
 end
@@ -495,7 +497,7 @@ end
 local function sessionSummaryFor(userId: number): Types.RunSummary
 	local summary = play.sessionSummaries[userId]
 	if summary == nil then
-		summary = emptySummary(sessionName())
+		summary = emptySummary(ArenaService.SessionName())
 		play.sessionSummaries[userId] = summary
 	end
 	return summary
@@ -1168,7 +1170,7 @@ function ArenaService.Admit(player: Player): ()
 		memberCache = nil
 		local level = play.level
 		play.runSummaries[player.UserId] = emptySummary(if level ~= nil then level.name else "")
-		play.sessionSummaries[player.UserId] = emptySummary(sessionName())
+		play.sessionSummaries[player.UserId] = emptySummary(ArenaService.SessionName())
 		play.admittedAt[player.UserId] = os.clock()
 		characterConnections[player] = {}
 		table.insert(

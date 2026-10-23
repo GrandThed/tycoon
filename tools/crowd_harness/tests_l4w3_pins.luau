@@ -1,7 +1,8 @@
 -- Cases for the L4 W3 fix round's pins (docs/prompts/l4-w3-fix-round.md, "Pins and mutants for everyone's
 -- lists"; the economy-designer's): the conditions the hub server, the dungeon server and both clients put
 -- round their calls into the shared rules (MapRules, RunLines, TallyRules), read as text by run_harness.py
--- (FIXTURES.source.l4w3fix: L4W3FIX_LINES and L4W3FIX_ORDER), because none of those files loads here. A
+-- (FIXTURES.source.l4w3fix: L4W3FIX_LINES and L4W3FIX_ORDER), because none of those files loads here; fix
+-- round 2's (docs/prompts/l4-w3-fix2.md, G2-G5) follow as L4P.FIX2 (FIXTURES.source.l4w3fix2). A
 -- count of 1 is a condition with what it guards, or a call with every argument, standing once in the
 -- function it belongs to; 0 is a spelling that must be gone. A key the reading drops, or one it adds,
 -- fails too. Appended by run_harness.py after the earlier case files, so every local of theirs is in
@@ -134,6 +135,92 @@ do
 	local ok, problem = pcall(L4P.pinTests)
 	if not ok then
 		check(false, `l4w3fix pins threw: {tostring(problem)}`)
+	end
+end
+
+-- Fix round 2 (docs/prompts/l4-w3-fix2.md; the fix-diff review's m2, m3, m4, s1): FIXTURES.source.l4w3fix2,
+-- run_harness.py's L4W3FIX2_LINES, START_BLOCK and SESSION_DEFAULT. G1's rule is StageFlow's, run for real
+-- in tests_l4w3_run.luau (group "carry"); G3's MapRules.Note in tests_l4w3.luau (group "note").
+L4P.FIX2 = {
+	-- G2 (m2): the five lines the review's probes passed.
+	lateMembers = { 1, "the late set reads every member present (ArenaService.GetMembers, G2 P2)" },
+	lateUserId = { 1, "and keys each by its own userId (G2 P1)" },
+	secretRowsSites = { 1, "the dungeon's secret rows read each level's chests through sitesOf (G2 P4)" },
+	uiPickSeeded = { 1, "a picked depart marks the map seeded, so the first MapState keeps it (G2 Q1)" },
+	uiPickArmory = { 1, "and closes the Armory, one sheet at a time (G2 Q2)" },
+	uiPickBranch = { 1, "both inside the pick's branch, seeded before the select" },
+	-- G3 (m3): one note rule.
+	notesAsk = { 1, "StageFlow.Notes keeps what MapRules.Note keeps (G3)" },
+	notesKeep = { 1, "the note it answers" },
+	notesOwnCap = { 0, "StageFlow keeps no note cap of its own (MapRules.MAX_NOTE_LENGTH is the one home)" },
+	notesOwnRule = { 0, "nor a length rule of its own" },
+	mapNote = { 1, "the map shows only what MapRules.Note returns (G3)" },
+	mapOwnNote = { 0, "and reads no note of its own" },
+	-- G4 (m4): the refused arrival's card is titled as the session card.
+	returnTitle = { 1, "ReturnService's zero card is titled by ArenaService.SessionName (G4)" },
+	returnEmpties = { 1, "and is its only empty card" },
+	sessionFallback = { 1, "SessionName is the map's name, else DEFAULT_SESSION_NAME" },
+	sessionCards = { 2, "ArenaService's session cards take it too (admit and first read)" },
+	sessionDefaults = { 2, "DEFAULT_SESSION_NAME is declared once and read once" },
+	-- G5 (s1): the start at zero.
+	startTraceback = { 1, "the start at zero runs under xpcall with debug.traceback (G5)" },
+	startNoPcall = { 0, "and under no plain pcall" },
+	startLobbyOnly = { 1, "a throw refuses only in the lobby; after the level went live it only warns (G5)" },
+	startCopy = { 1, "tickDepart's start block stands verbatim in L4W3R.startAtZero, which runs it (G5)" },
+}
+
+function L4P.fix2Tests(): ()
+	local reading = FIXTURES.source.l4w3fix2
+	if reading == nil then
+		check(false, "l4w3fix2 pins: run_harness.py reads no l4w3fix2 lines")
+		return
+	end
+	check(
+		#reading.missing == 0,
+		`l4w3fix2 pins: every function the lines live in is there ({table.concat(reading.missing, ", ")})`
+	)
+	local unknown = {}
+	for key in reading.counts do
+		if L4P.FIX2[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	table.sort(unknown)
+	check(#unknown == 0, `l4w3fix2 pins: every line read has an expected count ({table.concat(unknown, ", ")})`)
+	local keys = {}
+	for key in L4P.FIX2 do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local expected = L4P.FIX2[key]
+		local count = reading.counts[key]
+		check(count == expected[1], `l4w3fix2 pins: {expected[2]} ({key}: {tostring(count)}, expected {expected[1]})`)
+	end
+	-- G4: the title a card takes with no Config/Expeditions is one RunLines.ReadSummary keeps, so the hub's
+	-- bridge, the city and the dungeon's host never drop a card this place built.
+	local default = reading.sessionDefault
+	local Lines = load("RunLines")
+	local Credit = load("RunCredit")
+	check(type(default) == "string", `l4w3fix2: ArenaService declares DEFAULT_SESSION_NAME ({tostring(default)})`)
+	check(
+		type(default) == "string" and Lines.ReadSummary(Credit.Empty(default)) ~= nil,
+		"l4w3fix2: the zero card titled by that default is a card ReadSummary keeps (G4)"
+	)
+	check(
+		Lines.ReadSummary(Credit.Empty(FIXTURES.expeditions.name)) ~= nil,
+		"l4w3fix2: and so is one titled by the shipped map's name"
+	)
+	check(
+		Lines.ReadSummary(Credit.Empty("")) == nil,
+		"l4w3fix2: an untitled card is dropped (what the zero card was without Config/Expeditions, m4)"
+	)
+end
+
+do
+	local ok, problem = pcall(L4P.fix2Tests)
+	if not ok then
+		check(false, `l4w3fix2 pins threw: {tostring(problem)}`)
 	end
 end
 

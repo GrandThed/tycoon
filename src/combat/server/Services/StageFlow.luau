@@ -19,7 +19,8 @@
 -- an argument) and no yield, so tools/crowd_harness loads it as it stands and mutate.py mutates
 -- it. Of Vector3 it uses only what the harness shim has: new, X/Y/Z, + - * /, Magnitude, Unit.
 -- The Types require is for annotations alone. CampBrain is pure too: Validate asks it where a
--- group's posts stand, so the rule exists once.
+-- group's posts stand, so the rule exists once; so is the shared MapRules, whose Note is the one
+-- rule for a difficulty's note (fix round 2's G3).
 --
 -- State is mutated in place by Advance, Finish and Skip; the caller keeps one per run (Begin).
 
@@ -29,6 +30,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Region = require(sharedFolder:WaitForChild("Region"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
 
@@ -234,7 +236,13 @@ export type Depart = {
 -- Where WaveService keeps the auto-start (its boot): the one Depart, and whether this server has
 -- opened one. The fix round's F1: a reserved server serves one hub departure, so `departOpened` is
 -- set at the server's first admit and nothing clears it (DepartAdmit, DepartForget, DepartLever).
-export type DepartBook = { depart: Depart?, departOpened: boolean }
+-- Fix round 2's G1: `departCarried` = the pair of a departure whose session ended before it
+-- started (still waiting or counting), which the next admit opens as picked; nil = none.
+export type DepartBook = {
+	depart: Depart?,
+	departOpened: boolean,
+	departCarried: { levelId: string, difficulty: string }?,
+}
 -- One member's facts at the auto-start's zero (the fix round's F2, DepartLate).
 export type DepartMember = {
 	userId: number,
@@ -264,8 +272,6 @@ local KIND_CAMP = "camp"
 local WIRE_REACH = 1000
 -- Under this Roblox destroys falling parts before the rescue could see them.
 local LOWEST_KILL_Y = -450
--- L4 W3 (§7): the longest a difficulty's `note` may be, in bytes (the map's line beside it).
-local NOTE_MAX_LENGTH = 24
 -- The numbers a run reads, by where they are kept: Validate names every one that is missing.
 local NEEDED = {
 	rules = {
@@ -1073,11 +1079,12 @@ local function firstClearProblems(
 	end
 end
 
--- L4 W3 (§7): a difficulty's `note` is a string of 1 to NOTE_MAX_LENGTH bytes (the map shows it on
--- the difficulty's line, "Castle gear"). It is display only, so a bad one is dropped and never
--- refuses the level (the fix round's F6; Validate names none, and check_levels refuses shipped data
--- that carries one): the notes kept, by difficulty name, and one warn line per note dropped, in
--- difficulty-name order.
+-- L4 W3 (§7): a difficulty's `note` (the map shows it on the difficulty's line, "Castle gear") is
+-- what MapRules.Note keeps, a string of 1 to MapRules.MAX_NOTE_LENGTH bytes (fix round 2's G3: the
+-- one rule both maps show by). It is display only, so a bad one is dropped and never refuses the
+-- level (the fix round's F6; Validate names none, and check_levels refuses shipped data that carries
+-- one): the notes kept, by difficulty name, and one warn line per note dropped, in difficulty-name
+-- order.
 function StageFlow.Notes(level: Types.LevelConfig): ({ [string]: string }, { string })
 	local kept: { [string]: string } = {}
 	local dropped: { string } = {}
@@ -1093,13 +1100,14 @@ function StageFlow.Notes(level: Types.LevelConfig): ({ [string]: string }, { str
 	for _, name in sorted do
 		local scales: any = difficulties[name]
 		local note: any = if type(scales) == "table" then scales.note else nil
-		if note ~= nil and (type(note) ~= "string" or note == "" or #note > NOTE_MAX_LENGTH) then
+		local shown = MapRules.Note(scales)
+		if shown ~= nil then
+			kept[name] = shown
+		elseif note ~= nil then
 			table.insert(
 				dropped,
-				`{tostring(level.id)}: difficulties.{name}.note is {tostring(note)}, not a string of 1 to {NOTE_MAX_LENGTH} bytes: dropped, the map shows no note`
+				`{tostring(level.id)}: difficulties.{name}.note is {tostring(note)}, not a string of 1 to {MapRules.MAX_NOTE_LENGTH} bytes: dropped, and the map does not show it`
 			)
-		elseif note ~= nil then
-			kept[name] = note
 		end
 	end
 	return kept, dropped
@@ -2967,10 +2975,18 @@ function StageFlow.DepartOpen(
 	}
 end
 
+-- Whether the tick has anything to do (the review's s3): waiting and counting move; picked and done
+-- never do, and their last view is already on the wire.
+function StageFlow.DepartLive(depart: Depart?): boolean
+	return depart ~= nil and (depart.state == "waiting" or depart.state == "counting")
+end
+
 -- An admit (WaveService.OnAdmitted): the server's first opens the auto-start on what the departure
--- named (DepartOpen); every later one opens nothing, in this session or a later one on the same
+-- named (DepartOpen); every later one opens nothing new, in this session or a later one on the same
 -- server (the fix round's F1: a later session here is a failed trip home's rejoin, a late member or
--- a stale run-list join, never a new departure).
+-- a stale run-list join, never a new departure). Fix round 2's G1: the first admit of a session
+-- that follows one whose departure never started (DepartForget carried it) opens that pair as
+-- picked, so the party's choice is on the map and nothing counts down or starts.
 function StageFlow.DepartAdmit(
 	book: DepartBook,
 	levelId: string,
@@ -2980,6 +2996,12 @@ function StageFlow.DepartAdmit(
 	since: number
 ): ()
 	if book.departOpened then
+		local carried = book.departCarried
+		book.departCarried = nil
+		if carried ~= nil then
+			book.depart =
+				StageFlow.DepartOpen(carried.levelId, carried.difficulty, false, nil, since)
+		end
 		return
 	end
 	book.departOpened = true
@@ -2988,14 +3010,20 @@ end
 
 -- The session's end (WaveService.Reset): its auto-start goes, and the server keeps `departOpened`,
 -- so a rejoin after a failed trip home lands in the lobby with nothing counting and nothing picked
--- (the fix round's F1).
+-- (the fix round's F1). Fix round 2's G1: a departure still waiting or counting never started and
+-- was never picked (its first member left before the rest landed), so its pair is carried to the
+-- next admit; after done or picked nothing is.
 function StageFlow.DepartForget(book: DepartBook): ()
+	local depart = book.depart
+	book.departCarried = if depart ~= nil and StageFlow.DepartLive(depart)
+		then { levelId = depart.levelId, difficulty = depart.difficulty }
+		else nil
 	book.depart = nil
 end
 
 -- The R lever (WaveService.FakeDepart): the auto-start waits on the pair from `now`, the members
--- present standing in, whatever this server opened before; it counts as opened. Whether it took
--- (not for a pair with no level).
+-- present standing in, whatever this server opened or carried before; it counts as opened. Whether
+-- it took (not for a pair with no level).
 function StageFlow.DepartLever(
 	book: DepartBook,
 	levelId: string,
@@ -3005,13 +3033,8 @@ function StageFlow.DepartLever(
 	local pair = { levelId = levelId, difficulty = difficulty }
 	book.depart = StageFlow.DepartOpen(levelId, difficulty, true, pair, now)
 	book.departOpened = true
+	book.departCarried = nil
 	return book.depart ~= nil
-end
-
--- Whether the tick has anything to do (the review's s3): waiting and counting move; picked and done
--- never do, and their last view is already on the wire.
-function StageFlow.DepartLive(depart: Depart?): boolean
-	return depart ~= nil and (depart.state == "waiting" or depart.state == "counting")
 end
 
 -- Who the start at zero leaves in the lobby camp as a late arrival (the fix round's F2): every

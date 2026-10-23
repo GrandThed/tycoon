@@ -10040,6 +10040,121 @@ assert not set(L4W3B_FIX_MUTATIONS) & set(MUTATIONS), sorted(set(L4W3B_FIX_MUTAT
 MUTATIONS.update(L4W3B_FIX_MUTATIONS)
 
 
+# Fix round 2 of the L4 W3 fix round (docs/prompts/l4-w3-fix2.md, G1-G5): ReturnService (G4's title) and
+# MapScreen (G3's note) are read as text by run_harness.py's L4W3FIX2_LINES, so every mutant root holds them.
+RETURN_SERVICE = "src/combat/server/Services/ReturnService.luau"
+MAP_SCREEN = "src/client/UI/MapScreen.luau"
+FILES += [RETURN_SERVICE, MAP_SCREEN]
+# The entries the round made stale, re-aimed by key at the new text: G3 moved the note's cap and rule into
+# MapRules.Note (StageFlow.Notes keeps what it answers); G1 gave DepartAdmit, DepartForget and DepartLever
+# the carried pair; G5 put the start at zero under xpcall, its unavailable refusal one level deeper.
+MUTATIONS.update({
+    "l4w3b note: any length": (MAP_RULES, ' or #note > MapRules.MAX_NOTE_LENGTH then', " then"),
+    "l4w3b note: empty passes": (
+        MAP_RULES, 'or note == "" or #note > MapRules.MAX_NOTE_LENGTH', "or #note > MapRules.MAX_NOTE_LENGTH"),
+    "l4w3b note: one byte longer": (MAP_RULES, "MapRules.MAX_NOTE_LENGTH = 24", "MapRules.MAX_NOTE_LENGTH = 25"),
+    "l4w3b-fix F1: an admit opens again": (
+        FLOW,
+        "\tif book.departOpened then\n\t\tlocal carried = book.departCarried\n\t\tbook.departCarried = nil\n"
+        "\t\tif carried ~= nil then\n\t\t\tbook.depart =\n"
+        "\t\t\t\tStageFlow.DepartOpen(carried.levelId, carried.difficulty, false, nil, since)\n"
+        "\t\tend\n\t\treturn\n\tend\n\tbook.departOpened = true\n",
+        "\tbook.departOpened = true\n"),
+    "l4w3b-fix F1: the session's end reopens (DepartForget)": (
+        FLOW, "\t\telse nil\n\tbook.depart = nil\n", "\t\telse nil\n\tbook.depart = nil\n\tbook.departOpened = false\n"),
+    "l4w3b-fix F1: the session's end keeps the auto-start": (FLOW, "\t\telse nil\n\tbook.depart = nil\n", "\t\telse nil\n"),
+    "l4w3b-fix F1: R is not an opening": (
+        FLOW, "\tbook.departOpened = true\n\tbook.departCarried = nil\n\treturn book.depart ~= nil",
+        "\tbook.departCarried = nil\n\treturn book.depart ~= nil"),
+    "l4w3b-fix s2: no pcall": (
+        WAVE_SERVICE,
+        "\t\t\tlocal started, trace = xpcall(function()\n"
+        "\t\t\t\trefusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())\n"
+        "\t\t\tend, debug.traceback)\n",
+        "\t\t\tlocal started, trace = true, nil\n"
+        "\t\t\trefusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())\n"),
+    "l4w3b-fix s2: a throw is no refusal": (WAVE_SERVICE, '\t\t\t\t\trefusal = "unavailable"\n', ""),
+    "l4w3b-fix F6: a good note dropped": (FLOW, "\t\t\tkept[name] = shown\n", ""),
+    "l4w3b-fix F6: a bad note kept": (
+        FLOW, "\t\tif shown ~= nil then\n\t\t\tkept[name] = shown\n", "\t\tif note ~= nil then\n\t\t\tkept[name] = note\n"),
+})
+
+L4W3FIX2_MUTATIONS = {
+    # --- G1: a departure whose session ended before it started is picked at the next admit (tests_l4w3_run
+    # "carry") -------------------------------------------------------------------------------------------
+    "l4w3fix2 G1: nothing carried": (
+        FLOW,
+        "\tbook.departCarried = if depart ~= nil and StageFlow.DepartLive(depart)\n"
+        "\t\tthen { levelId = depart.levelId, difficulty = depart.difficulty }\n\t\telse nil\n",
+        "\tbook.departCarried = nil\n"),
+    "l4w3fix2 G1: a done depart carried too": (
+        FLOW, "if depart ~= nil and StageFlow.DepartLive(depart)\n", "if depart ~= nil\n"),
+    "l4w3fix2 G1: the carry opens waiting": (
+        FLOW, "StageFlow.DepartOpen(carried.levelId, carried.difficulty, false, nil, since)",
+        "StageFlow.DepartOpen(carried.levelId, carried.difficulty, true, nil, since)"),
+    "l4w3fix2 G1: the carry never opened": (
+        FLOW, "\t\t\tbook.depart =\n\t\t\t\tStageFlow.DepartOpen(carried.levelId, carried.difficulty, false, nil, since)\n", ""),
+    "l4w3fix2 G1: the carry kept after its admit": (
+        FLOW, "\t\tlocal carried = book.departCarried\n\t\tbook.departCarried = nil\n",
+        "\t\tlocal carried = book.departCarried\n"),
+    "l4w3fix2 G1: the admit's pair, not the departure's": (
+        FLOW, "DepartOpen(carried.levelId, carried.difficulty, false", "DepartOpen(levelId, difficulty, false"),
+    "l4w3fix2 G1: R leaves the carry": (
+        FLOW, "\tbook.departOpened = true\n\tbook.departCarried = nil\n\treturn book.depart ~= nil",
+        "\tbook.departOpened = true\n\treturn book.depart ~= nil"),
+
+    # --- G2: the five lines the fix-diff review's probes passed (L4W3FIX2_LINES) ----------------------------
+    "l4w3fix2 G2 P1: the late set keyed by 0": (
+        WAVE_SERVICE, "\t\t\tuserId = member.userId,\n\t\t\texpected = ArenaService.IsExpected(member.userId),\n",
+        "\t\t\tuserId = 0,\n\t\t\texpected = ArenaService.IsExpected(member.userId),\n"),
+    "l4w3fix2 G2 P2: the late set reads nobody": (
+        WAVE_SERVICE, "\tlocal facts: { StageFlow.DepartMember } = {}\n\tfor _, member in ArenaService.GetMembers() do\n",
+        "\tlocal facts: { StageFlow.DepartMember } = {}\n\tfor _, member in {} do\n"),
+    "l4w3fix2 G2 P4: the dungeon's rows read no chests": (
+        WAVE_SERVICE, "\t\tbuilt,\n\t\tsitesOf,\n", "\t\tbuilt,\n\t\tfunction(_)\n\t\t\treturn {}\n\t\tend,\n"),
+    "l4w3fix2 G2 Q1: a pick not seeded": (
+        UI_CONTROLLER, "\t\t\t\tst.mapSeeded = true\n\t\t\t\tscreen.Select(pick.node, pick.difficulty)\n",
+        "\t\t\t\tscreen.Select(pick.node, pick.difficulty)\n"),
+    "l4w3fix2 G2 Q2: a pick over the Armory": (
+        UI_CONTROLLER, "\t\t\t\tscreen.Select(pick.node, pick.difficulty)\n\t\t\t\tarmoryScreen.Close() -- one sheet at a time\n",
+        "\t\t\t\tscreen.Select(pick.node, pick.difficulty)\n"),
+
+    # --- G3: one note rule (tests_l4w3 "note", tests_l4w3_run "note", L4W3FIX2_LINES) -------------------------
+    "l4w3fix2 G3: the map keeps its own note rule": (
+        MAP_SCREEN, "\t\t\t\tnote = MapRules.Note(def),\n",
+        '\t\t\t\tnote = if typeof(def.note) == "string" and def.note ~= "" then def.note else nil,\n'),
+    "l4w3fix2 G3: StageFlow keeps every note": (FLOW, "\t\tlocal shown = MapRules.Note(scales)\n", "\t\tlocal shown = note\n"),
+    "l4w3fix2 G3: Note keeps any non-empty value": (
+        MAP_RULES, '\tif type(note) ~= "string" or note == ""', '\tif note == nil or note == ""'),
+    "l4w3fix2 G3: Note reads a non-table": (
+        MAP_RULES, '\tlocal note: any = if type(scales) == "table" then scales.note else nil\n',
+        "\tlocal note: any = scales.note\n"),
+
+    # --- G4: the refused arrival's card is titled as the session card (L4W3FIX2_LINES, sessionDefault) ------
+    "l4w3fix2 G4: the zero card untitled": (
+        RETURN_SERVICE, "\treturn RunCredit.Empty(ArenaService.SessionName())\n", '\treturn RunCredit.Empty("")\n'),
+    "l4w3fix2 G4: the zero card back on its own fallback": (
+        RETURN_SERVICE, "\treturn RunCredit.Empty(ArenaService.SessionName())\n",
+        '\tlocal expeditions = Catalog.GetExpeditionsConfig()\n'
+        '\treturn RunCredit.Empty(if expeditions ~= nil then expeditions.name else "")\n'),
+    "l4w3fix2 G4: SessionName without its default": (
+        ARENA_SERVICE, "\treturn if expeditions ~= nil then expeditions.name else DEFAULT_SESSION_NAME\n",
+        '\treturn if expeditions ~= nil then expeditions.name else ""\n'),
+    "l4w3fix2 G4: an empty default": (
+        ARENA_SERVICE, 'local DEFAULT_SESSION_NAME = "Expeditions"', 'local DEFAULT_SESSION_NAME = ""'),
+
+    # --- G5: the start at zero under xpcall, refusing only in the lobby (startCopy, L4W3FIX2_LINES) ---------
+    "l4w3fix2 G5: a live throw refuses": (
+        WAVE_SERVICE, '\t\t\t\tif run.phase == "lobby" then\n\t\t\t\t\trefusal = "unavailable"\n',
+        '\t\t\t\tif true then\n\t\t\t\t\trefusal = "unavailable"\n'),
+    "l4w3fix2 G5: a live throw keeps notLeader": (
+        WAVE_SERVICE, "\t\t\t\t\trefusal = nil\n\t\t\t\t\twarn(\n", "\t\t\t\t\twarn(\n"),
+    "l4w3fix2 G5: no traceback": (WAVE_SERVICE, "\t\t\tend, debug.traceback)\n", "\t\t\tend, tostring)\n"),
+}
+assert not set(L4W3FIX2_MUTATIONS) & set(MUTATIONS), sorted(set(L4W3FIX2_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W3FIX2_MUTATIONS)
+
+
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
     it printed none: run_harness.py prints one whenever a case ran)."""
