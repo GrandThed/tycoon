@@ -557,8 +557,11 @@ def chief(look: str = "A") -> rk.Body:
     # into the charge or slumping after any blow drove the hammer's head 1.7 to 4.6 studs into the
     # ground; only the slam still buries it, about 1.5 to 1.9, which is the impact. The fix round (K2):
     # the sweep winds the hammer out to his right and sweeps it low across his front, rising to his
-    # left, so every 15-degree sector of the 150-degree wedge is swept (12.4 to 13.0 studs: the sweep's
-    # range is 12.7); `steady` keeps it from jumping at the impact, where the arc's lean flips.
+    # left; `steady` keeps it from jumping at the impact, where the arc's lean flips. Fix round 2 (L1):
+    # the wedge narrowed 150 -> 120 degrees (at 150 the body's turn leaves no pose reaching 12.2 at
+    # his far left), and the sweep ends level and straight out at his left, so every 5-degree sector
+    # is swept (12.25 to 13.11 studs: the range is 12.7) and the hammer never lags the tell's leading
+    # edge by more than 5 degrees (raiderpose.py's sweep gate). The keys are tuned to 120 degrees.
     b.arm = {
         "carry": [0.62, 0.0, 0.0],
         "seat": [1.12, 0.0, 0.05],
@@ -567,7 +570,7 @@ def chief(look: str = "A") -> rk.Body:
             "ring": {"coil": [2.3, 0.0, 0.12], "strike": [0.79, 0.0, 0.0], "follow": [0.47, 0.0, 0.0]},
             "lane": {"coil": [1.1, 0.0, 0.0], "strike": [1.9, 0.0, 0.0], "follow": [1.2, 0.0, 0.0]},
             "summon": {"coil": [2.3, 0.0, 0.25], "strike": [3.2, 0.0, 0.3], "follow": [2.6, 0.0, 0.25]},
-            "arc": {"coil": [-0.12, 0.86, 1.07], "strike": [0.4, -0.3, 1.45], "follow": [-0.19, 1.71, 1.69], "steady": True},
+            "arc": {"coil": [0.17, 0.78, 1.05], "strike": [0.4, -0.3, 1.45], "follow": [-0.23, 1.93, 1.71], "steady": True},
         },
     }
     # The boss's charging core at model size (the lead's note, Ben's verdict 27.4): today's cue is a

@@ -17,6 +17,10 @@
 --  * Box and InBox: the lobby camp's flat box, and whether a point stands in it (the server's
 --    StageFlow.OutOfBox, flat).
 --  * Rgb: an RGB triple 0-255 from a config, or nil.
+--  * Crosshair (docs/prompts/l4-w2-fix2.md L3; the fix-diff review's s2): K9 keeps the shoulder
+--    camera up through a dressed level's summary and ended, so that its boom stops at the
+--    scenery; the crosshair hides there all the same, so none is drawn under the summary card.
+--    RUN_OVER is the one list of those phases, CameraController's as well.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -57,6 +61,9 @@ ScenePlan.GROUP_ORDER =
 	{ "ground", "skin", "camp", "rock", "canopy", "dress", "backdrop" } :: { string }
 -- The Expeditions.json look the grey level gives its walls.
 ScenePlan.WALL_LOOK = "wall"
+-- The run phases (Types.RunPhase) in which the run is over: the summary card, then the wait to
+-- leave. Roblox's camera takes over there unless the level is dressed (K9); no crosshair shows.
+ScenePlan.RUN_OVER = { summary = true, ended = true } :: { [string]: boolean }
 
 local function isList(value: any): boolean
 	return type(value) == "table"
@@ -244,6 +251,13 @@ function ScenePlan.WallColor(looks: any): { number }?
 	end
 	local look = looks[ScenePlan.WALL_LOOK]
 	return if type(look) == "table" then ScenePlan.Rgb(look.color) else nil
+end
+
+-- Whether the crosshair shows. It marks the shoulder camera's aim, so it needs that camera up
+-- (`cameraUp`), and a run that is over has nothing to aim at, even where K9 keeps the camera. The
+-- range bench has no run phase (`range`), as for the camera.
+function ScenePlan.Crosshair(cameraUp: boolean, phase: string, range: boolean): boolean
+	return cameraUp and (range or ScenePlan.RUN_OVER[phase] ~= true)
 end
 
 return ScenePlan

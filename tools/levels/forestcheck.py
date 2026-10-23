@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import struct
 
 import forest as F
 import forest_kit as kit
@@ -75,6 +76,7 @@ def run(build, data_path) -> list[str]:
     out += clearing_rule(build)
     out += climb_rule(build, fresh)
     out += coplanar_rule(build)
+    out += hash_rules()
     out += kit.problems()
     for m in build.meshes:
         out += m.problems()
@@ -91,6 +93,42 @@ def run(build, data_path) -> list[str]:
     for p in fresh["props"]:
         if p.get("effect") == "fire" and (p["x"], p["z"]) not in fires:
             out.append(f"campfire at ({p['x']}, {p['z']}) has no fire effect entry")
+    return out
+
+
+def hash_rules() -> list[str]:
+    """Rule 1's hash on every Python (L5): a corner that is 6e-18 on one Python and 0.0 on the
+    other, or -0.0, packs like 0.0; a corner on a float32 rounding edge (within the other Python's
+    reach at the piece's scale) or on KIT_SNAP's own edge is refused, never packed."""
+    out = []
+    colour = next(iter(kit.fp.ALL_COLOURS))
+
+    def tri(*values):
+        mesh = kit.Mesh("HashProbe")
+        mesh.tris.append(((values[0], 1.0, 2.0), (3.0, values[1], 4.0), (5.0, 6.0, values[2]), colour))
+        return mesh
+
+    def packed(*values):
+        try:
+            return F.kit_geometry(tri(*values))
+        except ValueError:
+            return None
+
+    zero = packed(0.0, 0.0, 0.0)
+    if zero is None:
+        out.append("plan hash: a corner of 0.0 is refused")
+    for label, value in (("a 6e-18 corner (cos(pi/2) x 0.1)", math.cos(math.pi / 2) * 0.1), ("a -0.0 corner", -0.0)):
+        got = packed(value, value, value)
+        if got is None or got != zero:
+            out.append(f"plan hash: {label} does not pack like 0.0, so the hash depends on the Python")
+    # A float32 rounding edge near 0.1 and 5e-16 past it: within the other Python's 2-ulp reach at the
+    # piece's scale (1.8e-15 studs), far outside 16 ulps of 0.1 itself (2.2e-16).
+    below = kit.f32(0.1)
+    above = struct.unpack("<f", struct.pack("<I", struct.unpack("<I", struct.pack("<f", below))[0] + 1))[0]
+    edge = (below + above) / 2
+    for label, value in (("a corner 5e-16 past a float32 rounding edge", edge + 5e-16), ("a corner on KIT_SNAP's edge", F.KIT_SNAP)):
+        if packed(value, 0.0, 0.0) is not None:
+            out.append(f"plan hash: {label} is packed, not refused, so the hash could depend on the Python")
     return out
 
 
@@ -612,6 +650,21 @@ def mutants(build, data_path) -> list[tuple[str, bool, str]]:
     finally:
         if os.path.isfile(tmp):
             os.remove(tmp)
+
+    # rule 1's hash on every Python (L5): no snap at all, -0.0 kept, the guard's slack taken at the
+    # corner's own scale (the fix round's guard), no guard
+    for label, attr, mutant, needle in (
+        ("plan hash: no corner snapped", "KIT_SNAP", 0.0, "6e-18"),
+        ("plan hash: -0.0 packed as itself", "kit_corner", lambda v: v if v == 0.0 else (0.0 if abs(v) < F.KIT_SNAP else v), "-0.0"),
+        ("plan hash: slack at the corner's scale", "kit_slack", lambda v: F.KIT_ULP_SLACK * math.ulp(v), "5e-16 past"),
+        ("plan hash: no guard", "kit_slack", lambda v: 0.0, "KIT_SNAP's edge"),
+    ):
+        orig = getattr(F, attr)
+        setattr(F, attr, mutant)
+        try:
+            expect(label, [x for x in hash_rules() if needle in x])
+        finally:
+            setattr(F, attr, orig)
 
     # rule 3 again: the summit's bogus drop (the generator before F2) through the forest
     build.level.drops.append(Rect(-596.0, -218.0, -110.0, -98.0))

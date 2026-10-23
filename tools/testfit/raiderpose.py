@@ -949,11 +949,18 @@ def posed_extent(model: dict, kind: dict, threat_cfg: dict, consts: Constants, r
 #     there (placeholder_front), the look the game was played with.
 #   * K2, a sweep drawn where it hits (SWEEP_FLOOR_KINDS): every SECTOR_DEGREES of its arc is swept at
 #     a flat reach of at least its range - IMPACT_SLACK. Every arc's sectors are printed; the ruling
-#     names the Camp Chief's hammer, so only that kind fails on them.
+#     names the Camp Chief's hammer, so only that kind fails on them. Fix round 2 (L1): the sectors
+#     are 5 degrees (at 15 a sector "swept" by its last 0.6 degrees hid a 10-degree hole at his left),
+#     and two more rules hold for those kinds, both on the weapon "at range" (its vertices at a flat
+#     reach of range - IMPACT_SLACK or more):
+#       - the span: its angles inside the arc come within one sector of each edge of the wedge;
+#       - the lag: at every sample of the strike its leading end (the angle farthest toward his left,
+#         the way the sweep runs) is never more than one sector behind the ground tell's leading
+#         edge (tell_lead); a sample with nothing at range lags without end.
 IMPACT_SLACK = 0.5
 IMPACT_STEPS = 120
 NO_TELL_SHAPES = ("lunge",)
-SECTOR_DEGREES = 15.0
+SECTOR_DEGREES = 5.0
 SWEEP_FLOOR_KINDS = ("chief",)
 
 
@@ -973,12 +980,21 @@ def arc_angle(x: float, z: float) -> float:
     return math.degrees(math.atan2(x, -z))
 
 
+def tell_lead(half: float, sweep: float) -> float:
+    """An arc's ground tell's leading edge in arc_angle degrees. CrowdRenderer.layTell lays it at
+    yaw - arc / 2 + arc x sweep (a larger yaw turns toward the body's left), so it runs from his
+    right edge (+half at sweep 0) to his left one (-half at sweep 1) on threatPose's own sweep."""
+    return half - 2 * half * sweep
+
+
 def impact_reach(model: dict, kind: dict, threat_cfg: dict, consts: Constants, rig_numbers: dict,
                  pieces: dict[str, list[Vec]], held: list[Vec], kind_id: str = "") -> list[dict]:
     """Per attack of the kind, the weapon rules above: `reach` = the farthest flat reach that counts
     (inside the arc for an arc), `impact` = the flat reach at the impact (u = 0, not enraged),
     `floor` / `head` = placeholder_front for a no-tell shape, `sectors` = an arc's farthest reach per
-    sector (0 = never swept), `ok` = every rule that applies holds."""
+    sector (0 = never swept), `span` = an arc's angles at range inside it (left, right), `lag` / `lagAt`
+    = the most its leading end at range fell behind the tell's leading edge and when, `ok` = every rule
+    that applies holds."""
     hold = model.get("hold")
     hf = hold_frame(hold) if hold else None
     scale = hold["scale"] if hold else 1.0
@@ -996,6 +1012,9 @@ def impact_reach(model: dict, kind: dict, threat_cfg: dict, consts: Constants, r
         half = math.degrees(base.arc) / 2 if shape == "arc" else 180.0
         count = max(int(round(2 * half / SECTOR_DEGREES)), 1) if shape == "arc" else 0
         sectors = [0.0] * count
+        at_range = float(limit) - IMPACT_SLACK
+        span = [math.inf, -math.inf]
+        lag, lag_at = -math.inf, ""
         worst, worst_at, impact = 0.0, "", 0.0
         for enraged in (False, True):
             atk = attack_of(kind, index, threat_cfg, consts, enraged)
@@ -1006,6 +1025,7 @@ def impact_reach(model: dict, kind: dict, threat_cfg: dict, consts: Constants, r
                 pose = Pose(lean=t.lean, twist=t.twist, squash=drawn_squash(t.squash), thrust=t.thrust)
                 pose.arm = arm_channel(model, atk.shape, t, pose, rig_numbers, atk)
                 cf = rig(model, rig_numbers, consts, pose).pieces["arm"]
+                leading = math.inf
                 for v in weapon:
                     w = cf.point(v)
                     d = math.hypot(w[0], w[2])
@@ -1013,21 +1033,32 @@ def impact_reach(model: dict, kind: dict, threat_cfg: dict, consts: Constants, r
                         impact = d
                     if count:
                         angle = arc_angle(w[0], w[2])
+                        if d >= at_range:
+                            leading = min(leading, angle)
                         if abs(angle) > half:
                             continue
                         slot = min(int((angle + half) // SECTOR_DEGREES), count - 1)
                         sectors[slot] = max(sectors[slot], d)
+                        if d >= at_range:
+                            span[0], span[1] = min(span[0], angle), max(span[1], angle)
                     if d > worst:
                         worst, worst_at = d, f"u {u:.2f}{' enraged' if enraged else ''}"
+                if count:
+                    behind = leading - tell_lead(half, t.sweep)
+                    if behind > lag:
+                        lag, lag_at = behind, f"u {u:.2f}{' enraged' if enraged else ''}"
         row = {"index": index, "shape": shape, "reach": worst, "at": worst_at, "limit": float(limit),
-               "impact": impact, "sectors": sectors, "floor": None, "head": None, "swept": None}
+               "impact": impact, "sectors": sectors, "floor": None, "head": None, "swept": None,
+               "half": half, "span": span, "lag": lag, "lagAt": lag_at}
         ok = worst <= float(limit) + IMPACT_SLACK + 1e-9
         if shape in NO_TELL_SHAPES:
             row["floor"], row["head"] = placeholder_front(consts, kind, base)
             ok = ok and impact >= row["floor"] - 1e-9
         if count and kind_id in SWEEP_FLOOR_KINDS:
-            row["swept"] = float(limit) - IMPACT_SLACK
-            ok = ok and min(sectors) >= row["swept"] - 1e-9
+            row["swept"] = at_range
+            ok = (ok and min(sectors) >= at_range - 1e-9
+                  and span[0] <= -half + SECTOR_DEGREES + 1e-9 and span[1] >= half - SECTOR_DEGREES - 1e-9
+                  and lag <= SECTOR_DEGREES + 1e-9)
         row["ok"] = ok
         rows.append(row)
     return rows
@@ -1041,9 +1072,19 @@ def impact_text(row: dict) -> str:
         text += (f", at the impact {row['impact']:.2f} >= the placeholder torso's {row['floor']:.2f} (its tipped "
                  f"head reached {row['head']:.2f})")
     if row["sectors"]:
-        floor = f" >= {row['swept']:g}" if row["swept"] is not None else ""
+        gated = row["swept"] is not None
+        floor = f" >= {row['swept']:g}" if gated else ""
         text += (f", per {SECTOR_DEGREES:g} deg from his left{floor}: "
-                 + " ".join(f"{s:.1f}" for s in row["sectors"]))
+                 + " ".join(f"{s:.2f}" for s in row["sectors"]))
+        edge = row["half"] - SECTOR_DEGREES
+        within = f" (within {SECTOR_DEGREES:g} of -{row['half']:g} and +{row['half']:g}: <= -{edge:g}, >= +{edge:g})"
+        behind = f" <= {SECTOR_DEGREES:g}" if gated else ""
+        spans = (f"spans {row['span'][0]:+.1f}..{row['span'][1]:+.1f}" if row["span"][0] <= row["span"][1]
+                 else "is never inside the arc")
+        lags = (f"behind the tell's leading edge at most {row['lag']:+.1f} deg ({row['lagAt']})" if row["lag"] < math.inf
+                else f"nowhere at {row['lagAt']}, so behind the tell's leading edge without end")
+        text += (f"; at range {row['limit'] - IMPACT_SLACK:g} it {spans}" + (within if gated else "")
+                 + f"; {lags}{behind}")
     return text + ("" if row["ok"] else " FAIL")
 
 

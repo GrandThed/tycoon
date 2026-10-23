@@ -25,7 +25,9 @@
 -- only at parts under 0.25, so in the 10 s summary it would pass through camp C's wall, the
 -- gatehouse and every rock face. There the shoulder camera, whose spherecast stops at them,
 -- stays up; the summary's free cursor is camera.freeCursorPhases', as before. LevelScenery
--- tells it the server's word (SetDressed).
+-- tells it the server's word (SetDressed). The crosshair does not stay with it (fix round 2, L3):
+-- ShowsCrosshair is false in those phases whatever the camera, so no aim mark is drawn under the
+-- summary card (ScenePlan.Crosshair; ScenePlan.RUN_OVER is the one list of those phases).
 --
 -- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts"): this module is the one place the
 -- other controllers ask which combat runs, because it is the lowest-level controller and both
@@ -113,6 +115,7 @@ local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local WallClip = require(sharedFolder:WaitForChild("WallClip"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
+local ScenePlan = require(script.Parent:WaitForChild("ScenePlan"))
 
 local BIND_NAME = "CombatShoulderCamera"
 -- Range-only presentation constants (purely visual, so they live here, not in config).
@@ -130,8 +133,8 @@ local LAG_EPSILON = 0.01
 local PLACED_ATTRIBUTE = "Placed"
 local PLACED_SEQ_ATTRIBUTE = "PlacedSeq"
 -- Phases in which the run is over: the ordinary camera and cursor return for the summary,
--- unless the level is dressed (K9: `levelDressed`).
-local DEFAULT_CAMERA_PHASES: { [string]: boolean } = { summary = true, ended = true }
+-- unless the level is dressed (K9: `levelDressed`). The crosshair's list too (ShowsCrosshair).
+local DEFAULT_CAMERA_PHASES: { [string]: boolean } = ScenePlan.RUN_OVER
 -- Fallbacks used only when Combat.json is missing; the config is the real home of these.
 local FALLBACK_CAMERA: Types.CombatCameraConfig = {
 	shoulderOffset = { 1.75, 0.6, 0 },
@@ -1011,6 +1014,13 @@ end
 
 function CameraController.IsActive(): boolean
 	return active
+end
+
+-- Fix round 2, L3 (the fix-diff review's s2): whether FeedbackController draws the crosshair. Not
+-- IsActive: in a dressed level the shoulder camera stays up through summary and ended (K9), and
+-- the crosshair would sit at the screen's centre under the summary card.
+function CameraController.ShowsCrosshair(): boolean
+	return ScenePlan.Crosshair(active, phase, rangeMode)
 end
 
 -- True when this client booted into the Proving Grounds bench (CombatMode "range": Studio, the

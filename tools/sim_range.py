@@ -11301,8 +11301,8 @@ R8_COMPOSE = False
 R8_RESUME = "road"
 # How the gate's sniper fights on the way to the spot and after it: "pair", sword and bow as the player
 # he is held to, so both runs are alike but the spot (the W2 review's M1, the lead's ruling K6: "against
-# fighting it all with the same gear"). It passes with margins of 1.8-5.8% (Hard T1/T1 Road2 x0.982, Hard
-# bow T4 Road3 x0.982, Normal T1/T1 CaveExit x0.966, Normal bow T4 Road4 x0.942), guarded by
+# fighting it all with the same gear"). It passes with margins of 1.4-5.8% (Hard T1/T1 Road3 x0.986, Hard
+# bow T4 Road3 x0.977, Normal T1/T1 CaveExit x0.965, Normal bow T4 Road4 x0.942), guarded by
 # check_levels_mutants' "K6: R8's sniper paid 3% more over a whole run". "sword" (`--r8-fight sword`), the
 # starter melee alone, was the gate as first built: against the pair player it read x0.41-0.84, a gap
 # that a spot paying up to 1.6x more would have hidden.

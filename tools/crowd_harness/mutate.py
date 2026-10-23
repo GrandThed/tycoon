@@ -8943,6 +8943,105 @@ K7_LATE_MUTATIONS = {
 assert not set(K7_LATE_MUTATIONS) & set(MUTATIONS), sorted(set(K7_LATE_MUTATIONS) & set(MUTATIONS))
 MUTATIONS.update(K7_LATE_MUTATIONS)
 
+# Fix round 2 (docs/prompts/l4-w2-fix2.md; docs/prompts/l4-w2-fix-reports/*-2.md). ScenePlan.Crosshair and
+# RUN_OVER (L3, ui-engineer A's nine), caught by tests_l4w2_scenery.luau's crosshair group.
+CROSSHAIR = "\treturn cameraUp and (range or ScenePlan.RUN_OVER[phase] ~= true)\n"
+RUN_OVER = "ScenePlan.RUN_OVER = { summary = true, ended = true } :: { [string]: boolean }\n"
+FIX2_SCENE_MUTATIONS = {
+    "fix2 scene: the crosshair under the summary (camera alone)": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp\n"),
+    "fix2 scene: the crosshair ignores the phase": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp and (true or ScenePlan.RUN_OVER[phase] ~= true)\n"),
+    "fix2 scene: the bench needs a live phase too": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp and (range and ScenePlan.RUN_OVER[phase] ~= true)\n"),
+    "fix2 scene: the crosshair without the shoulder camera": (SCENE_PLAN, CROSSHAIR, "\treturn true and (range or ScenePlan.RUN_OVER[phase] ~= true)\n"),
+    "fix2 scene: the crosshair only once the run is over": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp and (range or ScenePlan.RUN_OVER[phase] == true)\n"),
+    "fix2 scene: the bench's crosshair turned around": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp and (not range or ScenePlan.RUN_OVER[phase] ~= true)\n"),
+    "fix2 scene: RUN_OVER without ended": (SCENE_PLAN, RUN_OVER, "ScenePlan.RUN_OVER = { summary = true } :: { [string]: boolean }\n"),
+    "fix2 scene: RUN_OVER without the summary": (SCENE_PLAN, RUN_OVER, "ScenePlan.RUN_OVER = { ended = true } :: { [string]: boolean }\n"),
+    "fix2 scene: RUN_OVER holds a wave": (SCENE_PLAN, RUN_OVER, "ScenePlan.RUN_OVER = { summary = true, ended = true, wave = true } :: { [string]: boolean }\n"),
+}
+assert not set(FIX2_SCENE_MUTATIONS) & set(MUTATIONS), sorted(set(FIX2_SCENE_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(FIX2_SCENE_MUTATIONS)
+
+# L4 (the fix-diff review's m1, its eleven probes first), L3's camera and crosshair lines, L2's "!"
+# and L1's sweep gate in raiderpose.py: caught only by run_harness.py's L4W2_LINES pins.
+CAMP_FX = "src/combat/client/Controllers/CampFx.luau"
+RAIDER_POSE_PY = "tools/testfit/raiderpose.py"
+FILES += [CAMP_FX, RAIDER_POSE_PY]
+TAKE_LINE = "\tlocal figure: Figure? = if pool ~= nil then table.remove(pool) else nil\n"
+BUDGET_LINE = "\tlocal budget = math.max(math.floor(Theme.COMBAT_RAIDER_PREWARM_PER_FRAME), 1)\n"
+SKINNED_LINE = '\treturn child:IsA("BasePart") and child:GetAttribute(NAMES.skinned) == true\n'
+WALL_LINE = '\treturn child:IsA("BasePart") and child.CollisionGroup ~= NAMES.defaultGroup\n'
+TEARDOWN_STATE = "\tstate.dress = nil\n\tstate.built = false\n\tstate.failed = false\n"
+LOBBY_KNOWN = "\tlocal known = state.inLobby\n\tif known ~= nil then\n\t\treturn known\n\tend\n"
+SHOWS_LINE = "\treturn ScenePlan.Crosshair(active, phase, rangeMode)\n"
+FEEDBACK_SHOWS = "\t\tCameraController.ShowsCrosshair(),\n"
+WEAR_TAIL = "\tlocal def = kindDef(entity.kind)\n\tif def ~= nil then\n\t\tapplyKind(entity, def)\n\tend\nend\n\nlocal function step("
+SWEEP_GATE = (
+    "            ok = (ok and min(sectors) >= at_range - 1e-9\n"
+    "                  and span[0] <= -half + SECTOR_DEGREES + 1e-9 and span[1] >= half - SECTOR_DEGREES - 1e-9\n"
+    "                  and lag <= SECTOR_DEGREES + 1e-9)\n"
+)
+FIX2_PIN_MUTATIONS = {
+    # The review's m1, in its order.
+    "fix2 pins: no pool ever fills (m1, CrowdRenderer:2672)": (CROWD_RENDERER, "\tlocal built = Figures.Build()\n", "\tlocal built = 0\n"),
+    "fix2 pins: Take builds again (m1, Figures:733)": (FIGURES, TAKE_LINE, "\tlocal figure: Figure? = if pool ~= nil and #pool > 0 then table.remove(pool) else build(look)\n"),
+    "fix2 pins: no split over the cap (m1, Figures:800)": (FIGURES, "\tlocal share = if total > room then room / total else 1\n", "\tlocal share = 1\n"),
+    "fix2 pins: the whole envelope in one frame (m1, Figures:836)": (FIGURES, BUDGET_LINE, "\tlocal budget = math.huge\n"),
+    "fix2 pins: a body that met an empty pool never waits (m1, CrowdRenderer:1013)": (CROWD_RENDERER, "\tentity.wants = if figure == nil then look else nil\n", "\tentity.wants = nil\n"),
+    "fix2 pins: a waiting body only waits (m1, CrowdRenderer:2699)": (CROWD_RENDERER, "\t\t\t\twear(entity, wanted)\n", "\t\t\t\tFigures.Wait(wanted)\n"),
+    "fix2 pins: the lobby fill never starts (m1, CombatUIController:1716)": (UI_CONTROLLER, "\t\tlocal kinds = prewarmCounts(run.prewarm)\n", "\t\tlocal kinds = nil\n"),
+    "fix2 pins: no Skinned part known (m1, LevelScenery:249)": (LEVEL_SCENERY, SKINNED_LINE, "\treturn false\n"),
+    "fix2 pins: no wall known (m1, LevelScenery:253)": (LEVEL_SCENERY, WALL_LINE, "\treturn false\n"),
+    "fix2 pins: one failure greys every later level (m1, LevelScenery:649)": (LEVEL_SCENERY, TEARDOWN_STATE, "\tstate.dress = nil\n\tstate.built = false\n"),
+    "fix2 pins: mood B in the lobby, bodyInLobby false (m1, LevelScenery:476-479)": (LEVEL_SCENERY, LOBBY_KNOWN, "\treturn false\n"),
+    # Their neighbours (the same decisions, one line over).
+    "fix2 pins: Take builds a kind with no pool": (FIGURES, TAKE_LINE, "\tlocal figure: Figure? = if pool ~= nil then table.remove(pool) else build(look)\n"),
+    "fix2 pins: the cap's room unbounded": (FIGURES, "\tlocal room = math.max(math.floor(cap), 0)\n", "\tlocal room = math.huge\n"),
+    "fix2 pins: the share never applied": (FIGURES, "\t\tlocal exact = math.floor(counts[kind]) * share\n", "\t\tlocal exact = math.floor(counts[kind])\n"),
+    "fix2 pins: the waiting bodies built past the budget": (FIGURES, "\t\twhile look ~= nil and made < budget and spare < count do\n", "\t\twhile look ~= nil and spare < count do\n"),
+    "fix2 pins: the goals' rounds past the budget": (FIGURES, "\twhile more and made < budget do\n", "\twhile more do\n"),
+    "fix2 pins: a goal's figure past the budget": (FIGURES, "\t\t\tlocal look = if made < budget and (built[kind] or 0) < goal then lookFor(kind) else nil\n", "\t\t\tlocal look = if (built[kind] or 0) < goal then lookFor(kind) else nil\n"),
+    "fix2 pins: dressFigure takes no figure": (CROWD_RENDERER, "\tlocal figure = if look ~= nil then Figures.Take(look) else nil\n", "\tlocal figure: Figures.Figure? = nil\n"),
+    "fix2 pins: wear swaps before the pool is ready": (CROWD_RENDERER, "\tif not Figures.Ready(wanted.kind) then\n", "\tif false then\n"),
+    "fix2 pins: wear never counts a wait": (CROWD_RENDERER, "\t\tFigures.Wait(wanted)\n\t\treturn\n", "\t\treturn\n"),
+    "fix2 pins: wear never puts the model on": (CROWD_RENDERER, WEAR_TAIL, WEAR_TAIL.replace("\t\tapplyKind(entity, def)\n", "")),
+    "fix2 pins: the step reads no wish": (CROWD_RENDERER, "\t\t\tlocal wanted = entity.wants\n", "\t\t\tlocal wanted: Figures.Look? = nil\n"),
+    "fix2 pins: the counts never handed to the renderer": (UI_CONTROLLER, "\t\t\tCrowdRenderer.Prewarm(kinds)\n", ""),
+    "fix2 pins: the wrong parts painted as walls": (LEVEL_SCENERY, WALL_LINE, WALL_LINE.replace("~=", "==")),
+    "fix2 pins: teardown keeps the dress": (LEVEL_SCENERY, TEARDOWN_STATE, "\tstate.built = false\n\tstate.failed = false\n"),
+    "fix2 pins: teardown keeps the built flag": (LEVEL_SCENERY, TEARDOWN_STATE, "\tstate.dress = nil\n\tstate.failed = false\n"),
+    "fix2 pins: the server's word read as out of the lobby": (LEVEL_SCENERY, "\t\treturn known\n", "\t\treturn false\n"),
+    "fix2 pins: the root never judged": (LEVEL_SCENERY, "\treturn inLobbyAt(root.Position)\n", "\treturn false\n"),
+    "fix2 pins: no root is the lobby": (LEVEL_SCENERY, '\tif root == nil or not root:IsA("BasePart") then\n\t\treturn false\n', '\tif root == nil or not root:IsA("BasePart") then\n\t\treturn true\n'),
+    # L3: the crosshair (ui-engineer A's mutants).
+    "fix2 pins: the crosshair under the summary again": (CAMERA_CONTROLLER, SHOWS_LINE, "\treturn active\n"),
+    "fix2 pins: the crosshair judged in a wave": (CAMERA_CONTROLLER, SHOWS_LINE, '\treturn ScenePlan.Crosshair(active, "wave", rangeMode)\n'),
+    "fix2 pins: the camera's own list of phases": (CAMERA_CONTROLLER, "local DEFAULT_CAMERA_PHASES: { [string]: boolean } = ScenePlan.RUN_OVER\n", "local DEFAULT_CAMERA_PHASES: { [string]: boolean } = {}\n"),
+    "fix2 pins: the camera requires no ScenePlan": (CAMERA_CONTROLLER, 'local ScenePlan = require(script.Parent:WaitForChild("ScenePlan"))\n', ""),
+    "fix2 pins: the crosshair follows the camera alone": (FEEDBACK, FEEDBACK_SHOWS, "\t\tCameraController.IsActive(),\n"),
+    "fix2 pins: the crosshair always shown": (FEEDBACK, FEEDBACK_SHOWS, "\t\ttrue,\n"),
+    # L2: the "!" follows the head (ui-engineer B's mutants and lines).
+    "fix2 pins: a swap drops the mark": (CAMP_FX, "\t\tif age >= lasts or head == nil then\n", "\t\tif age >= lasts or head ~= mark.head then\n"),
+    "fix2 pins: a gone body keeps its mark": (CAMP_FX, "\t\tif age >= lasts or head == nil then\n", "\t\tif age >= lasts then\n"),
+    "fix2 pins: the mark stays on the old part": (CAMP_FX, "\t\t\thang(mark, head)\n", "\t\t\tmark.head = head\n"),
+    "fix2 pins: a new head never hung": (CAMP_FX, "\t\tif head ~= mark.head then\n", "\t\tif false then\n"),
+    "fix2 pins: the head read once at the alert": (CAMP_FX, "\t\tlocal head = CrowdRenderer.GetHead(mark.id)\n", "\t\tlocal head = mark.head\n"),
+    "fix2 pins: the mark hung on nothing": (CAMP_FX, "\tmark.gui.Adornee = head\n", ""),
+    "fix2 pins: hang forgets the part": (CAMP_FX, "\tmark.head = head\n\tmark.gui.Adornee", "\tmark.gui.Adornee"),
+    "fix2 pins: the mark inside the head": (CAMP_FX, "head.Size.Y * 0.5 + Theme.COMBAT_ALERT_STUDS, 0)", "0, 0)"),
+    "fix2 pins: Alert hangs nothing": (CAMP_FX, "\t\thang(shown, head)\n", ""),
+    # L1: raiderpose.py's sweep gate (ui-engineer B's lines and mutants).
+    "fix2 pins: the sweep binned at 15 degrees": (RAIDER_POSE_PY, "SECTOR_DEGREES = 5.0\n", "SECTOR_DEGREES = 15.0\n"),
+    "fix2 pins: the Chief's sweep ungated": (RAIDER_POSE_PY, 'SWEEP_FLOOR_KINDS = ("chief",)\n', "SWEEP_FLOOR_KINDS = ()\n"),
+    "fix2 pins: the tell's leading edge runs backward": (RAIDER_POSE_PY, "    return half - 2 * half * sweep\n", "    return -half + 2 * half * sweep\n"),
+    "fix2 pins: the leading end is the trailing one": (RAIDER_POSE_PY, "                            leading = min(leading, angle)\n", "                            leading = max(-math.inf if leading == math.inf else leading, angle)\n"),
+    "fix2 pins: the lag measured against nothing": (RAIDER_POSE_PY, "                    behind = leading - tell_lead(half, t.sweep)\n", "                    behind = 0.0\n"),
+    "fix2 pins: no sector rule": (RAIDER_POSE_PY, SWEEP_GATE, SWEEP_GATE.replace("ok and min(sectors) >= at_range - 1e-9", "ok")),
+    "fix2 pins: no span rule": (RAIDER_POSE_PY, SWEEP_GATE, SWEEP_GATE.replace("span[0] <= -half + SECTOR_DEGREES + 1e-9 and span[1] >= half - SECTOR_DEGREES - 1e-9", "True")),
+    "fix2 pins: no lag rule": (RAIDER_POSE_PY, SWEEP_GATE, SWEEP_GATE.replace("lag <= SECTOR_DEGREES + 1e-9", "True")),
+}
+assert not set(FIX2_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(FIX2_PIN_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(FIX2_PIN_MUTATIONS)
+
 
 
 def harness(root: Path) -> tuple:

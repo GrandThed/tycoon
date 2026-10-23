@@ -7166,7 +7166,7 @@ Report: `docs/prompts/l4-w2-fix-reports/d1.md`. Measured on Python 3.12.10 64-bi
 | `sim_range.py R8_FIGHT` | "sword": the sniper fought the rest with the starter sword alone | **"pair"**: sword and bow before and after the spot, as the player he is held to | K6 (review M1): with the sword half the gate measured the weapon gap (x0.41-0.84), and a spot paying up to 1.6x more over a whole run would have stayed green. Now both runs differ only by the spot (Ben's "against fighting it all with the same gear", MISSIONS_DESIGN 28's correction) |
 | `sim_range.py R8_PRINTED` | none | **("sword",)**: the sword-fight sniper runs, printed twice, not gated: against the mission player with the sword alone (L3-26's comparison) and against the pair player (the gate as first built) | K6: "print the sword-alone and the old gated tables ungated". `--r8-gate-only` skips them (the same verdict in about half the time; the mutants use it) |
 | `ProvingGrounds.json` the Chief's sweep `range` | 17 | **12.7** | K2 (review m1): the drawn hammer cannot reach 17 across the 150° wedge. With the shoulder 2.96 off the axis, weapon points at most 14.07 from it and the rig's twist capped at ±37.5°, his far left sector can reach at most 12.46 (ui-engineer B). Re-keyed, the hammer sweeps every 15° sector at 12.4-13.0, so a range in [12.53, 12.90] passes both of raiderpose's bounds (reach ≤ range + 0.5 inside the arc, every sector ≥ range − 0.5). 12.7 is the middle |
-| the Chief's sweep `reach` | 14 | **10.5** | K2: a sweep may not start beyond its range. 10.5 keeps the start 2.2 studs inside the wedge, as the other arcs do (armoured and guard 6 of 7.5, the Warlord 9 of 11): from where he starts it, a player has a real step to make. The angle stays 150 |
+| the Chief's sweep `reach` | 14 | **10.5** | K2: a sweep may not start beyond its range. 10.5 keeps the start 2.2 studs inside the wedge, as the other arcs do (armoured and guard 6 of 7.5, the Warlord 9 of 11): from where he starts it, a player has a real step to make. The angle stayed 150 in this round (**120 since fix round 2**, below) |
 | `sim_range.py seat_goal` | a hand copy of CampBrain.Shows' `rest` branch | **`cb_shows(group, moving) == "rest"`** | review m4: the mirror check_stage_mirror already holds to Shows |
 | `sim_range.py step_seats` | its own step, `max(blend, 1e-3)` for no pace | **`hs_seat_step`**, a mirror of HitShapes.SeatStep (no pace: the goal at once) | review m4; `check_stage_mirror.py` compares it on 1,350 rows (`ray.seatStep`). The shipped numbers did not move: with `riseBlendSeconds` 0.5 both rules give the same steps |
 
@@ -7259,3 +7259,38 @@ dropped. The two clock cases now run with `--r8-gate-only` (about 6 minutes each
 1.4, goals -1 to 2, steps of 0, a frame, 0.1, 0.45, a backward one and 10 s, paces of riseBlendSeconds, 0.5, 0.2, 0 and
 -1). Two mirror mutants catch it (SeatStep at twice the pace; with no pace it never moves). The Luau side of the row
 is D2's op in `stage_mirror.luau`.
+
+### Fix round 2 (L1): the sweep narrowed to 120° (2026-10-22)
+
+The lead's ruling on ui-engineer B's fix round 2 (`docs/prompts/l4-w2-fix-reports/ui-b-2.md`): the hammer cannot be drawn
+to the left edge of a 150° wedge, so the Chief's sweep is **`arcDegrees` 120**. `range` 12.7 and `reach` 10.5 stay; the
+arm keys are tuned to 120 (raiderpose: the arc 13.11 of 12.7 inside it, every 5° sector 12.25-13.11 against a floor of
+12.2, spanning -57.5..+60° at 12.2; `posedReach.out` 14.82).
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json` the Chief's sweep `arcDegrees` | 150 | **120** | the drawn hammer reaches the wedge's edges only at 120 (ui B's L1). The Warlord's arc is 180, the plated elite's and the guard's 120 |
+
+**What moved: almost nothing.** `py -3.12 tools/sim_range.py --check`: **CHECK: PASS** (495 lines). Against the 150°
+run, every gated line reads the same to the printed digit (the Chief alone 76.8 / 79.0 / 78.7 s, in a run 71-79 s, every
+clear, the hit shares 22 / 26 / 27%, one preset below 229.7 / 228.3 s), except two lines of the one-preset-below runs:
+the reacting player at Hard 1/1 is paid 25,161 / 23,988 / 21,856 a minute (was 25,161 / 23,702 / 21,859), at Brutal 3/3
+48,667 / 47,980 / 45,499 (was 48,667 / 47,409 / 45,499), still well under the recommended gear's 53,432-111,617. The
+reacting player steps out of the wedge either way, so its width does not change his fight at the recommended gear.
+
+`py -3.12 tools/sim_range.py --r8 --check --r8-gate-only`: **CHECK (R8): PASS** (46 lines, 41 min). No row moved by more
+than 0.005; the pair player's own rate rose 0.5% on Hard T1/T1 and 1.0% on Hard bow T4.
+
+| Table (pair player, cash a minute) | Tightest gated spots, x the pair (seeds out-earning) | Margin |
+|---|---|---|
+| Hard, T1/T1 (30,135) | **Road3 x0.986** (7), Road2 x0.985 (15), CaveMouth x0.975 (12) | 1.4% |
+| Hard, sword T1 / bow T4 (38,099) | **Road3 x0.977** (10), Road2 x0.975 (11), Road4 x0.971 (8) | 2.3% |
+| Normal, T1/T1 (31,667) | **CaveExit x0.965** (6), Road4 x0.957 (3), Road3 x0.951 (2) | 3.5% |
+| Normal, sword T1 / bow T4 (39,194) | **Road4 x0.942** (2), Road3 x0.931, Road2 x0.931 | 5.8% |
+
+The K6 mutant's row (Hard, sword T1 / bow T4, Road3) is now x0.977, so the +3% mutant lands at about x1.006: still
+red, with 0.6% to spare. Should a later change widen that row's margin past 3%, the case goes NOT and is re-sized (or
+moved to the tightest row, Hard T1/T1 Road3 at 1.4%).
+
+Other gates at 120: `raiderpose.py --check` exit 0, every row PASS; `check_levels.py` PASS; `sim_combat.py --check`
+PASS.

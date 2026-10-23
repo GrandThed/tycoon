@@ -3249,10 +3249,11 @@ local function updateCrosshair(): ()
 		local halfFov = math.rad(math.max(camera.FieldOfView, 1) / 2)
 		gapPixels = math.tan(math.rad(bloom)) / math.tan(halfFov) * camera.ViewportSize.Y / 2
 	end
+	-- Hidden behind the summary card even where K9 keeps the shoulder camera up (L3).
 	marker.Update(
 		gapPixels,
 		InputController.IsAiming(),
-		CameraController.IsActive(),
+		CameraController.ShowsCrosshair(),
 		if charges then InputController.GetCharge() or 0 else 0
 	)
 end

@@ -271,9 +271,9 @@
           "lane": {"coil": [1.1, 0.0, 0.0], "strike": [1.9, 0.0, 0.0], "follow": [1.2, 0.0, 0.0]},
           "summon": {"coil": [2.3, 0.0, 0.25], "strike": [3.2, 0.0, 0.3], "follow": [2.6, 0.0, 0.25]},
           "arc": {
-            "coil": [-0.12, 0.86, 1.07],
+            "coil": [0.17, 0.78, 1.05],
             "strike": [0.4, -0.3, 1.45],
-            "follow": [-0.19, 1.71, 1.69],
+            "follow": [-0.23, 1.93, 1.71],
             "steady": true
           }
         }
@@ -297,12 +297,12 @@
       "cue": {"piece": "torso", "point": "core", "size": 1.6, "charged": 2.6},
       "notes": {"headShift": [0.0, 0.11, 0.02], "inHead": 0.82},
       "posedReach": {
-        "out": 14.53,
-        "outRadii": 3.633,
+        "out": 14.82,
+        "outRadii": 3.706,
         "up": 24.13,
         "outPose": "arc windup (arm)",
         "upPose": "ring windup (arm)",
-        "withCue": {"out": 14.53, "up": 24.13}
+        "withCue": {"out": 14.82, "up": 24.13}
       }
     },
     "fodder": {

@@ -3294,29 +3294,47 @@ def stage_geometry(level: Level) -> list:
     return out
 
 
-# How far (in units in the last place) two Pythons' values of one kit corner may differ and still
-# give the same float32: measured 2026-10-22, 666 of 45,567 corners differ between 3.14 32-bit and
-# 3.12 64-bit, by at most 1.8e-15 studs (a math function's last bit), and no float32 moves.
+# Float32 stores a tiny value exactly, so a corner that is 6e-18 on one Python (cos(pi/2) x 0.1:
+# 721 shipped corners are tiny and non-zero) and exactly 0 on the other would pack differently, and
+# so would -0.0 and 0.0: every corner under KIT_SNAP in magnitude packs as 0.0 (L5, 2026-10-22).
+KIT_SNAP = 1e-6
+# How far two Pythons' values of one kit corner may differ, in units in the last place at the
+# piece's scale (max(|v|, 1) studs: a value made by cancellation carries its inputs' error, not an
+# error relative to itself): measured 2026-10-22, 666 of 45,567 corners differ between 3.14 32-bit
+# and 3.12 64-bit, by at most 2 such ulps (1.8e-15 studs).
 KIT_ULP_SLACK = 16
+
+
+def kit_corner(value: float) -> float:
+    """A corner value as the plan hash packs it: under KIT_SNAP in magnitude, or -0.0, it is 0.0."""
+    return 0.0 if abs(value) < KIT_SNAP else value
+
+
+def kit_slack(value: float) -> float:
+    """How far another Python's value of this corner may lie (KIT_ULP_SLACK at the piece's scale)."""
+    return KIT_ULP_SLACK * math.ulp(max(abs(value), 1.0))
 
 
 def kit_geometry(mesh) -> bytes:
     """A kit piece's geometry as the plan hash reads it: each triangle's three corners as float32
-    (what its GLB stores) and its colour, in order. Not the GLB's bytes: its flat normals are
-    computed from the corners, and on a face that should lie on an axis a normal component of 1e-17
-    on one Python is exactly 0 on the other, so a hash of the GLB depended on the Python that ran
-    the build (the shipped 23851a6f417491c1 was 3.14's; 3.12 read b17723bea4a068dc). A corner whose
-    float32 would move within KIT_ULP_SLACK of its float64 is refused, so this stays true."""
+    (what its GLB stores) after kit_corner, and its colour, in order. Not the GLB's bytes: its flat
+    normals are computed from the corners, and on a face that should lie on an axis a normal
+    component of 1e-17 on one Python is exactly 0 on the other, so a hash of the GLB depended on
+    the Python that ran the build (23851a6f417491c1 was 3.14's; 3.12 read b17723bea4a068dc). A
+    corner whose packed float32 would move within kit_slack of it (a float32 rounding edge, or
+    KIT_SNAP's own edge) is refused, so the hash cannot silently depend on the Python again."""
     out = bytearray()
     for a, b, c, colour in mesh.tris:
+        corners = []
         for value in (*a, *b, *c):
-            slack = KIT_ULP_SLACK * math.ulp(value)
-            if kit.f32(value - slack) != kit.f32(value + slack):
+            slack = kit_slack(value)
+            if kit.f32(kit_corner(value - slack)) != kit.f32(kit_corner(value + slack)):
                 raise ValueError(
-                    f"{mesh.name}: the corner value {value!r} lies on a float32 rounding edge, so the plan hash"
-                    " could depend on the Python; nudge the piece's numbers"
+                    f"{mesh.name}: the corner value {value!r} lies on a float32 rounding edge (or KIT_SNAP's), so the"
+                    " plan hash could depend on the Python; nudge the piece's numbers"
                 )
-        out += struct.pack("<9f", *a, *b, *c)
+            corners.append(kit_corner(value))
+        out += struct.pack("<9f", *corners)
         out += bytes(colour)
     return bytes(out)
 

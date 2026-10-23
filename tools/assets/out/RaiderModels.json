@@ -867,9 +867,9 @@
      },
      "arc": {
       "coil": [
-       -0.12,
-       0.86,
-       1.07
+       0.17,
+       0.78,
+       1.05
       ],
       "strike": [
        0.4,
@@ -877,9 +877,9 @@
        1.45
       ],
       "follow": [
-       -0.19,
-       1.71,
-       1.69
+       -0.23,
+       1.93,
+       1.71
       ],
       "steady": true
      }
@@ -948,13 +948,13 @@
     "inHead": 0.82
    },
    "posedReach": {
-    "out": 14.53,
-    "outRadii": 3.633,
+    "out": 14.82,
+    "outRadii": 3.706,
     "up": 24.13,
     "outPose": "arc windup (arm)",
     "upPose": "ring windup (arm)",
     "withCue": {
-     "out": 14.53,
+     "out": 14.82,
      "up": 24.13
     }
    }

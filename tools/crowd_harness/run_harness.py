@@ -1733,6 +1733,39 @@ FIGURES_QUEUE_BODY = body_of("Figures.Queue")
 # the head lowered (InputController's assist, auto-fire and melee reach; the review's slice 3 s1).
 SEATED_AIM_BODY = "\t\t\tlocal body = position + Vector3.new(0, math.max(height * HALF - drop, radius), 0)"
 SEATED_AIM_HEAD = "\t\t\tlocal head = position + Vector3.new(0, height - headRadius - drop, 0)"
+# Fix round 2 (docs/prompts/l4-w2-fix2.md L4: the fix-diff review's m1, the lines that decide): K3's
+# client half (Figures' pools, CrowdRenderer's wait and swap, the lobby fill), LevelScenery's helpers,
+# the crosshair behind the summary (L3), the "!" that follows the head (L2) and raiderpose.py's sweep
+# gate (L1; a Python file, read as it stands: l4w2_reading blanks no comment in it).
+COMBAT_UI = "src/combat/client/Controllers/CombatUIController.luau"
+CAMP_FX = "src/combat/client/Controllers/CampFx.luau"
+RAIDER_POSE_PY = "tools/testfit/raiderpose.py"
+TAKE_BODY = body_of("Figures.Take")
+FIGURES_PREWARM_BODY = body_of("Figures.Prewarm")
+FIGURES_BUILD_BODY = body_of("Figures.Build")
+DRESS_FIGURE_BODY = body_of("dressFigure")
+WEAR_BODY = body_of("wear")
+RENDER_STEP_BODY = body_of("step")
+BOOT_MISSION_BODY = body_of("bootMission")
+IS_SKINNED_BODY = body_of("isSkinned")
+IS_WALL_BODY = body_of("isWall")
+TEARDOWN_BODY = body_of("teardown")
+BODY_IN_LOBBY_BODY = body_of("bodyInLobby")
+SHOWS_CROSSHAIR_BODY = body_of("CameraController.ShowsCrosshair")
+UPDATE_CROSSHAIR_BODY = body_of("updateCrosshair")
+HANG_BODY = body_of("hang")
+CAMP_STEP_BODY = body_of("step")
+CAMP_ALERT_BODY = body_of("CampFx.Alert")
+
+
+def py_body_of(name: str) -> re.Pattern:
+    """A module-level Python function's whole text: `def <name>(` up to the next line that starts
+    with neither a blank nor a space (the next top-level statement)."""
+    return re.compile(r"(?ms)^def " + re.escape(name) + r"\(.*?(?=^\S|\Z)")
+
+
+TELL_LEAD_BODY = py_body_of("tell_lead")
+IMPACT_REACH_BODY = py_body_of("impact_reach")
 L4W2_LINES = {
     # LevelService: construct lays what LevelDress.Lay answered (its pieces, hidden names, looks).
     "constructLooks": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\tlocal looks = laid.looks"),
@@ -1933,6 +1966,80 @@ L4W2_LINES = {
     "figuresAnchor": (FIGURES, FIGURES_LAY_BODY, "lines", "\tframes[count] = root * frameOf(rigOut.anchor)"),
     "figuresLean": (FIGURES, FIGURES_QUEUE_BODY, "lines",
                     "\tpose.lean, pose.leanSide = RaiderPose.Lean(yaw, lean.X, lean.Z)"),
+    # Fix round 2 (L4, m1): K3's client half. Take only takes; Prewarm splits the cap; Build keeps to
+    # the per-frame budget in all three of its loops.
+    "takeTakes": (FIGURES, TAKE_BODY, "lines",
+                  "\tlocal figure: Figure? = if pool ~= nil then table.remove(pool) else nil"),
+    "takeBuilds": (FIGURES, TAKE_BODY, "regex", r"\bbuild\("),
+    "prewarmRoom": (FIGURES, FIGURES_PREWARM_BODY, "lines", "\tlocal room = math.max(math.floor(cap), 0)"),
+    "prewarmShare": (FIGURES, FIGURES_PREWARM_BODY, "lines", "\tlocal share = if total > room then room / total else 1"),
+    "prewarmExact": (FIGURES, FIGURES_PREWARM_BODY, "lines", "\t\tlocal exact = math.floor(counts[kind]) * share"),
+    "buildBudget": (FIGURES, FIGURES_BUILD_BODY, "lines",
+                    "\tlocal budget = math.max(math.floor(Theme.COMBAT_RAIDER_PREWARM_PER_FRAME), 1)"),
+    "buildWaitBudget": (FIGURES, FIGURES_BUILD_BODY, "lines",
+                        "\t\twhile look ~= nil and made < budget and spare < count do"),
+    "buildRoundBudget": (FIGURES, FIGURES_BUILD_BODY, "lines", "\twhile more and made < budget do"),
+    "buildGoalBudget": (FIGURES, FIGURES_BUILD_BODY, "lines",
+                        "\t\t\tlocal look = if made < budget and (built[kind] or 0) < goal then lookFor(kind) else nil"),
+    # CrowdRenderer: a body that met an empty pool waits for its model, and wears it once one is built;
+    # the pools fill on every step.
+    "dressTakes": (CROWD_RENDERER, DRESS_FIGURE_BODY, "lines",
+                   "\tlocal figure = if look ~= nil then Figures.Take(look) else nil"),
+    "dressWants": (CROWD_RENDERER, DRESS_FIGURE_BODY, "lines", "\tentity.wants = if figure == nil then look else nil"),
+    "wearReady": (CROWD_RENDERER, WEAR_BODY, "lines", "\tif not Figures.Ready(wanted.kind) then"),
+    "wearWaits": (CROWD_RENDERER, WEAR_BODY, "lines", "\t\tFigures.Wait(wanted)"),
+    "wearDresses": (CROWD_RENDERER, WEAR_BODY, "lines", "\t\tapplyKind(entity, def)"),
+    "stepBuilds": (CROWD_RENDERER, RENDER_STEP_BODY, "lines", "\tlocal built = Figures.Build()"),
+    "stepWants": (CROWD_RENDERER, RENDER_STEP_BODY, "lines", "\t\t\tlocal wanted = entity.wants"),
+    "stepWears": (CROWD_RENDERER, RENDER_STEP_BODY, "lines", "\t\t\t\twear(entity, wanted)"),
+    # CombatUIController: every RunState's prewarm counts go to the renderer (the lobby fill's start).
+    "uiPrewarmCounts": (COMBAT_UI, BOOT_MISSION_BODY, "lines", "\t\tlocal kinds = prewarmCounts(run.prewarm)"),
+    "uiPrewarmHands": (COMBAT_UI, BOOT_MISSION_BODY, "lines", "\t\t\tCrowdRenderer.Prewarm(kinds)"),
+    # LevelScenery's helpers: the Skinned and wall tests, teardown's state, where the body is.
+    "isSkinnedRule": (LEVEL_SCENERY, IS_SKINNED_BODY, "lines",
+                      '\treturn child:IsA("BasePart") and child:GetAttribute(NAMES.skinned) == true'),
+    "isWallRule": (LEVEL_SCENERY, IS_WALL_BODY, "lines",
+                   "\treturn child:IsA(\"BasePart\") and child.CollisionGroup ~= NAMES.defaultGroup"),
+    "teardownState": (LEVEL_SCENERY, TEARDOWN_BODY, "lines",
+                      "\tstate.dress = nil\n\tstate.built = false\n\tstate.failed = false"),
+    "teardownFailedWrites": (LEVEL_SCENERY, TEARDOWN_BODY, "regex", r"\bstate\.failed\s*=(?!=)"),
+    "lobbyKnown": (LEVEL_SCENERY, BODY_IN_LOBBY_BODY, "lines",
+                   "\tlocal known = state.inLobby\n\tif known ~= nil then\n\t\treturn known\n\tend"),
+    "lobbyRoot": (LEVEL_SCENERY, BODY_IN_LOBBY_BODY, "lines",
+                  "\tlocal character = Players.LocalPlayer.Character\n"
+                  "\tlocal root = if character ~= nil then character:FindFirstChild(NAMES.root) else nil\n"
+                  "\tif root == nil or not root:IsA(\"BasePart\") then\n\t\treturn false\n\tend"),
+    "lobbyJudged": (LEVEL_SCENERY, BODY_IN_LOBBY_BODY, "lines", "\treturn inLobbyAt(root.Position)"),
+    "lobbyAnswers": (LEVEL_SCENERY, BODY_IN_LOBBY_BODY, "regex", r"\breturn\b"),
+    # L3: the crosshair hides behind the summary (ScenePlan.Crosshair, one list of phases).
+    "cameraScenePlan": (CAMERA_CONTROLLER, None, "lines", 'local ScenePlan = require(script.Parent:WaitForChild("ScenePlan"))'),
+    "cameraRunOver": (CAMERA_CONTROLLER, None, "lines",
+                      "local DEFAULT_CAMERA_PHASES: { [string]: boolean } = ScenePlan.RUN_OVER"),
+    "cameraCrosshair": (CAMERA_CONTROLLER, SHOWS_CROSSHAIR_BODY, "lines",
+                        "\treturn ScenePlan.Crosshair(active, phase, rangeMode)"),
+    "feedbackCrosshair": (FEEDBACK, UPDATE_CROSSHAIR_BODY, "lines", "\t\tCameraController.ShowsCrosshair(),"),
+    "feedbackNoActive": (FEEDBACK, None, "regex", r"\bCameraController\.IsActive\("),
+    # L2: the camp's "!" follows the body's head part; a body gone (nil head) ends it.
+    "campHead": (CAMP_FX, CAMP_STEP_BODY, "lines", "\t\tlocal head = CrowdRenderer.GetHead(mark.id)"),
+    "campEnds": (CAMP_FX, CAMP_STEP_BODY, "lines", "\t\tif age >= lasts or head == nil then"),
+    "campRehangs": (CAMP_FX, CAMP_STEP_BODY, "lines", "\t\tif head ~= mark.head then\n\t\t\thang(mark, head)\n\t\tend"),
+    "hangHead": (CAMP_FX, HANG_BODY, "lines", "\tmark.head = head"),
+    "hangAdornee": (CAMP_FX, HANG_BODY, "lines", "\tmark.gui.Adornee = head"),
+    "hangOffset": (CAMP_FX, HANG_BODY, "lines",
+                   "\tmark.gui.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 0.5 + Theme.COMBAT_ALERT_STUDS, 0)"),
+    "alertHangs": (CAMP_FX, CAMP_ALERT_BODY, "lines", "\t\thang(shown, head)"),
+    # L1: raiderpose.py's sweep gate (5-degree sectors, the span's ends, the lag behind the tell).
+    "sweepSectors": (RAIDER_POSE_PY, None, "lines", "SECTOR_DEGREES = 5.0"),
+    "sweepKinds": (RAIDER_POSE_PY, None, "lines", 'SWEEP_FLOOR_KINDS = ("chief",)'),
+    "sweepTell": (RAIDER_POSE_PY, TELL_LEAD_BODY, "lines", "    return half - 2 * half * sweep"),
+    "sweepLeading": (RAIDER_POSE_PY, IMPACT_REACH_BODY, "lines",
+                     "                        if d >= at_range:\n                            leading = min(leading, angle)"),
+    "sweepBehind": (RAIDER_POSE_PY, IMPACT_REACH_BODY, "lines",
+                    "                    behind = leading - tell_lead(half, t.sweep)"),
+    "sweepGate": (RAIDER_POSE_PY, IMPACT_REACH_BODY, "lines",
+                  "            ok = (ok and min(sectors) >= at_range - 1e-9\n"
+                  "                  and span[0] <= -half + SECTOR_DEGREES + 1e-9 and span[1] >= half - SECTOR_DEGREES - 1e-9\n"
+                  "                  and lag <= SECTOR_DEGREES + 1e-9)"),
 }
 L4W2_ORDER = {
     "wallThenArmed": (LEVEL_SERVICE, CONSTRUCT_BODY, "elseif isWall then", "part.CanCollide = true"),
@@ -1966,13 +2073,15 @@ L4W2_ORDER = {
 
 
 def l4w2_reading(text) -> dict:
-    """L4W2_LINES and L4W2_ORDER, read as l4b_reading reads L4B's."""
+    """L4W2_LINES and L4W2_ORDER, read as l4b_reading reads L4B's. A Python file (raiderpose.py's
+    sweep gate) is read as it stands: luau_code's comment rule is Luau's. A function looked for and
+    not found is named with its file (two files each have a `step`)."""
     counts, found = {}, {}
     for key, (rel, pattern, how, line) in L4W2_LINES.items():
-        code = luau_code(text(rel))
+        code = text(rel) if rel.endswith(".py") else luau_code(text(rel))
         if pattern is not None:
             body = pattern.search(code)
-            found[pattern.pattern] = body is not None
+            found[f"{rel}: {pattern.pattern}"] = body is not None
             code = body.group(0) if body else ""
         if how == "lines":
             counts[key] = whole_lines(code, line)

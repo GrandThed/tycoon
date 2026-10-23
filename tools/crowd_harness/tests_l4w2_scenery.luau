@@ -3,7 +3,8 @@
 -- on a client (Decide: nothing decided before the place has loaded, a nil answer never kept, every
 -- refusal named), the build's order (Jobs), the local writes of each view (Show: a client that
 -- cannot dress shows every hidden Part and every invisible wall), mood B's rule (Mood: never in the
--- lobby camp), the lobby camp's box (Box, InBox), the colours read from config (Rgb, WallColor);
+-- lobby camp), the lobby camp's box (Box, InBox), the colours read from config (Rgb, WallColor),
+-- the crosshair's rule (Crosshair: none once the run is over, fix round 2's L3);
 -- then on the files as they ship (the forest's dress and its uploaded hash, the lobby and the
 -- forest's layouts, Combat.json's boxMargin, Expeditions.json's wall look and moods), and against
 -- the server's own reading (LevelDress.Accept refuses every file whose lists the client cannot
@@ -420,6 +421,57 @@ function L4S.colorTests(): ()
 	)
 end
 
+-- Crosshair ---------------------------------------------------------------------------------------
+
+-- Fix round 2, L3 (the fix-diff review's s2): K9 keeps the shoulder camera up through a dressed
+-- level's summary and ended, and the crosshair hides there all the same. Every Types.RunPhase.
+function L4S.crosshairTests(): ()
+	local Plan = L4S.Plan
+	local fighting = { "lobby", "travel", "gate", "wave", "breather", "boss" }
+	local over = { "summary", "ended" }
+	local count = 0
+	for phase, value in Plan.RUN_OVER do
+		check(
+			value == true and table.find(over, phase) ~= nil,
+			`RUN_OVER: "{phase}" is a run that is over`
+		)
+		count += 1
+	end
+	check(count == #over, "RUN_OVER: the summary and ended, nothing else")
+	local shows = true
+	local downHides = true
+	for _, phase in fighting do
+		shows = shows and Plan.Crosshair(true, phase, false)
+		downHides = downHides and not Plan.Crosshair(false, phase, false)
+	end
+	check(shows, "Crosshair: shown in every phase before the run is over while the camera is up")
+	check(downHides, "Crosshair: never without the shoulder camera")
+	for _, phase in over do
+		check(
+			not Plan.Crosshair(true, phase, false),
+			`Crosshair: none in {phase} though the dressed level keeps the camera up (K9)`
+		)
+		check(
+			not Plan.Crosshair(false, phase, false),
+			`Crosshair: none in {phase} with the camera down`
+		)
+		check(
+			Plan.Crosshair(true, phase, true) and not Plan.Crosshair(false, phase, true),
+			`Crosshair: the range bench has no run phase ({phase}): the camera alone decides`
+		)
+	end
+	-- What the summary leaves on screen is the card, clicked with a free cursor.
+	local free = {}
+	for _, phase in FIXTURES.combat.camera.freeCursorPhases do
+		free[phase] = true
+	end
+	local freed = true
+	for _, phase in over do
+		freed = freed and free[phase] == true
+	end
+	check(freed, "shipped: every phase without a crosshair frees the cursor (Combat.json camera)")
+end
+
 -- Against the server ------------------------------------------------------------------------------
 
 -- K7, the review's "the server and the client degrade the same way": every file whose lists the
@@ -566,6 +618,7 @@ L4S.group("show", L4S.showTests)
 L4S.group("mood", L4S.moodTests)
 L4S.group("box", L4S.boxTests)
 L4S.group("color", L4S.colorTests)
+L4S.group("crosshair", L4S.crosshairTests)
 L4S.group("server", L4S.serverTests)
 L4S.group("shipped", L4S.shippedTests)
 

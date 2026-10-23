@@ -1193,16 +1193,18 @@ SIM_CASES = (
      ("--r8", "--check", "--r8-table", "normal", "--r8-spot", "Road2", "--r8-gate-only"),
      "Normal at gear 1/1 (the proving gear): the sniper from Road2 earns no more cash"),
     # The W2 fix round's K6: the gate is the faithful reading (the sniper fights with sword and bow before and
-    # after the spot, as the pair player he is held to), whose tightest rows pass by 1.8% (Road2 and Road3 on Hard).
+    # after the spot, as the pair player he is held to), whose tightest rows pass by 1.4-2.3% (Road3 on Hard).
     # A spot whose whole run pays a few percent more must turn red: the sniper's whole-run cash raised 3% on
-    # the row Ben's ruling named (Hard, sword T1 / bow T4, Road3: x0.982 to about x1.011). Sized to the
-    # margin: should a later change widen that row's margin past 3%, this case goes NOT; re-size it to the
-    # new margin, never drop it. Only the gate's runs (--r8-gate-only), in order: 60 Hard runs, about 7 minutes.
+    # the tightest row (Hard, sword T1 / bow T1, Road3: x0.986 to about x1.016). Fix round 2 (L1, the Chief's
+    # sweep at 120 degrees) left the row Ben's ruling named (Hard, bow T4, Road3: x0.977) red by only 0.6%,
+    # so the case moved here (the lead's ruling). Sized to the margin: should a later change widen that row's
+    # margin past 3%, this case goes NOT; re-size it to the new margin, never drop it. Only the gate's runs
+    # (--r8-gate-only), in order: 60 Hard runs, about 7 minutes.
     ("K6: R8's sniper paid 3% more over a whole run (the faithful gate's margin is 1-6%)",
      ('    return run["wallet"]["cash"] / minutes, run["wallet"]["materials"] / minutes\n',
       '    return run["wallet"]["cash"] * 1.03 / minutes, run["wallet"]["materials"] / minutes\n'),
-     ("--r8", "--check", "--r8-table", "hard-bow", "--r8-spot", "Road3", "--r8-gate-only"),
-     "Hard at gear 1/4 (only the bow upgraded, L3-26): the sniper from Road3 earns no more cash"),
+     ("--r8", "--check", "--r8-table", "hard", "--r8-spot", "Road3", "--r8-gate-only"),
+     "Hard at gear 1/1 (the proving gear): the sniper from Road3 earns no more cash"),
     # The L3 W1 fix round, R2: every strike at the striking family's own tier, the bar from the held
     # pair, the Flamethrower's pair rated like with like. About fifteen minutes each.
     ("R2: every family's scale from its slot's gear again (the pre-fix rule)",
