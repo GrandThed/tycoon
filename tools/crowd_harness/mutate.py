@@ -11,6 +11,8 @@ Usage: py tools/crowd_harness/mutate.py <repo root> <luau.exe> [filter] [from:to
 (`filter` = only the mutations whose label holds that text; "" = all of them; "files:<a>,<b>" =
 only the mutations of the files whose repo path ends with one of those names, the run a fix round
 owes for the files it changed.)"""
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -8975,6 +8977,11 @@ def copy(root: Path) -> None:
         shutil.copyfile(here / name, target)
 
 
+# mutate_shards.py asks how long the list is before it splits it into "from:to" slices.
+if os.environ.get("MUTATE_COUNT") == "1":
+    print(f"MUTATIONS: {len(MUTATIONS)} entries")
+    sys.exit(0)
+
 # An optional fifth argument "from:to" runs that slice of the list (a long run in two halves).
 span = sys.argv[4] if len(sys.argv) > 4 else ""
 chosen = list(MUTATIONS.items())
@@ -9014,7 +9021,12 @@ if stale:
 
 # The unmutated bundle first. A harness that does not pass as it stands (or says nothing at all:
 # no interpreter, a bundle that does not compile) would make every mutation look caught.
-root = here / "mutant"
+# Each shard of mutate_shards.py works in its own copy (MUTATE_ROOT), so they can run at once.
+root_name = os.environ.get("MUTATE_ROOT", "mutant")
+if not re.fullmatch(r"mutant[\w-]*", root_name):
+    print(f"MUTATIONS: MUTATE_ROOT {root_name!r} is not a mutant folder name")
+    sys.exit(2)
+root = here / root_name
 copy(root)
 fails, verdict = harness(root)
 if not verdict.startswith("HARNESS: PASS (") or fails:

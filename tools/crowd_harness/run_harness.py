@@ -88,6 +88,7 @@ Usage: py tools/crowd_harness/run_harness.py [repo root] [luau.exe]
 Importing this file runs nothing: `sources`, `wrap`, `fixtures`, `to_luau` and `prelude` are
 there for another tool that wants the same modules under the same wrapper."""
 import json
+import os
 import re
 import subprocess
 import sys
@@ -2237,7 +2238,12 @@ def main(argv: list) -> int:
         )
         print(f"HARNESS: REFUSED (another checkout's harness, {HERE})")
         return 2
-    path = HERE / "bundle.luau"
+    # mutate_shards.py runs several harnesses at once from this folder: each names its own bundle.
+    name = os.environ.get("HARNESS_BUNDLE", "bundle.luau")
+    if not re.fullmatch(r"bundle[\w-]*\.luau", name):
+        print(f"run_harness: HARNESS_BUNDLE {name!r} is not a bundle file name", file=sys.stderr)
+        return 2
+    path = HERE / name
     path.write_text(bundle(repo), encoding="utf-8")
     try:
         result = subprocess.run([luau, str(path)], capture_output=True, text=True, timeout=TIMEOUT_SECONDS)
