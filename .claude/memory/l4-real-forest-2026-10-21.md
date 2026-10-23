@@ -110,3 +110,14 @@ This supersedes his earlier "leave it as it is". Lesson: give a computed ETA fro
 **Sharded run measured (2026-10-23 00:11):** `tools/crowd_harness/mutate_shards.py` (on `l4-w2` 88eeae5), 10 shards on the
 12-core machine: **2,068 run, 0 not caught in 2 h 15 min** (single core was ~13 h). Each shard sets `MUTATE_ROOT` and
 `HARNESS_BUNDLE`; logs in `tools/crowd_harness/mutant_logs/`. Use it for every full run from now on.
+
+**W2 merged to `main` 2026-10-23 (merge 33315f2, place files 106165a; `l4-real-forest` moved to `l4-w2`'s tip).** Reviews:
+four slices 0/2/14, fix round K1-K10 (the lunge drawn to 3.9 by a body slide in the strike; the Chief's sweep re-keyed, then
+range 12.7 and **120°** because the hammer cannot reach the left edge of 150°; pools filled in the lobby; all-or-nothing
+dress on both sides; mood B only in the level; the summary camera; the faithful R8 with both runs in the same gear, tightest
+x0.986), fix-diff 0/0/3, fix round 2 L1-L5 (5° sweep sectors, the "!" re-hung, no crosshair under the summary, pins, plan hash
+`5792c659ca2e772e` identical under both Pythons), lead-read. QA on 3205405: every gate green (harness 4,713; sharded mutate
+2,129 / 0 in 1 h 49 min; check_levels_mutants 283 ok; R8 and `--check` by D1 on the same inputs). **Waiting on Ben's Studio
+look**: PLAYTEST "L4 W2 — the real forest in the game" (24 key-only steps; step 1 = no `[LevelService] the level is grey` in
+Output, which also proves MeshId reads the templates). `main` was 63 ahead of origin right after (check `git status -sb`).
+Next after his look: W3 (city map, end screen, era cash) and W4 (publish readiness), on his word.
