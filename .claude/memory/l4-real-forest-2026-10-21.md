@@ -76,7 +76,7 @@ clipboard; he pastes in `tycoon\build\test.rbxl` (Edit mode). After "done": save
 W2's D2 tool; templates do not wait for it). The L3 session `tycoon-87` acked the upload announcement; tell it when the
 harvest is done. W1b (old mission code out, the dash hold) is in its fix round in `tycoon-p5b`.
 **Harvest done 2026-10-22 00:43** (Ben pasted the Output into the chat; his clipboard also held it: 81 records, saved to
-scratch first): merged with no SIZE/FRAME/ROTATED line, 41 new templates (617 in all), manifest `ForestRoad ... in game`,
+scratch first): merged with no SIZE/FRAME/ROTATED line, 48 new templates (617 in all), manifest `ForestRoad ... in game`,
 six place files rebuilt on `l4-real-forest` (148dacd). `raider_frames.py` (W2 D2) still owed before W2 merges. The L3
 session was told the asset tools are free; Assets.json v6 lives only on this branch until it merges.
 
