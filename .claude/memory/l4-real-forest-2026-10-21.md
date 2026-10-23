@@ -121,3 +121,10 @@ x0.986), fix-diff 0/0/3, fix round 2 L1-L5 (5° sweep sectors, the "!" re-hung, 
 look**: PLAYTEST "L4 W2 — the real forest in the game" (24 key-only steps; step 1 = no `[LevelService] the level is grey` in
 Output, which also proves MeshId reads the templates). `main` was 63 ahead of origin right after (check `git status -sb`).
 Next after his look: W3 (city map, end screen, era cash) and W4 (publish readiness), on his word.
+
+**W2 signed off 2026-10-23 on Ben's "everything feels right"** (MISSIONS_DESIGN §29): Studio's log showed two sessions on the
+rebuilt `proving.rbxl`, the level dressed, 86 → 53 raiders, no script error; asked with two click questions he said the
+forest and raiders were textured, all fine (the log's first-load "content representation is being generated" on the new
+images had resolved), and that he saw the forest, the raiders, the Chief and the climb. The five checklist questions read as
+"about right". Next: W3 (city map, end screen, era cash) and W4 (publish readiness), only on his word. Lesson: check Studio's
+log for asset load failures after any new upload, and ask what he saw before recording a look.
