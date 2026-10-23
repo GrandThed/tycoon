@@ -718,3 +718,9 @@ Multipliers per kill by the player's own city era: **Village 1, Boomtown 670, Me
 (the first clear after an Advance is worth 4.3 / 3.0 / 2.3 / 1.7 minutes; a brand-new save keeps today's pay). Cash only;
 Legacy and Founder's still apply on top. Risk: back-to-back Brutal runs would beat building by 1-3%; re-checked when T5
 (Castle gear) exists.
+
+**Correction (2026-10-23, the W3 review):** the option C preview Ben chose on said "No way of running beats building". What
+holds, and what the simulator gates, is narrower: **back-to-back runs on Normal or Hard never finish an era sooner than
+building**. A player who runs a few times right after an Advance and then builds does finish slightly sooner (Boomtown 1 run
+2.4%, Metropolis 8 runs 1.4%, Orbital 12 runs 0.5%; Village 6.8% at today's pay), with any multiplier of at least 1, because
+the wallet is empty after an Advance; option A would read 2.5% / 2.1% and B far more. Told to Ben; his pick stands.

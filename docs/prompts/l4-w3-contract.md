@@ -370,7 +370,8 @@ Done: every line green with its counts named (`mutate_shards` 0 not caught; the 
    the sharded run.
 6. **The card's height:** a party's first full run can reach 12 lines; the rows scroll, the totals never do. If Ben finds
    scrolling worse than grouping, the fallback is one "Camp bonuses" row (a client change only).
-7. **A bridge test plays on Ben's real save** (API access on), as since C1; R and P never write the profile.
+7. **A bridge test plays on Ben's real save** (API access on), as since C1; R never writes the profile, and P is refused
+   on the real store (fix round F4): pay at an overridden era would land in the real save.
 8. **Publish freeze:** both places publish together at W4 (the ticket shape changed on both sides).
 
 ## 14. Lead's rulings on the draft (2026-10-23)
