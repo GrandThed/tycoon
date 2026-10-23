@@ -128,3 +128,10 @@ forest and raiders were textured, all fine (the log's first-load "content repres
 images had resolved), and that he saw the forest, the raiders, the Chief and the climb. The five checklist questions read as
 "about right". Next: W3 (city map, end screen, era cash) and W4 (publish readiness), only on his word. Lesson: check Studio's
 log for asset load failures after any new upload, and ask what he saw before recording a look.
+
+**W3 started 2026-10-23 on Ben's "start L4 wave 3"** (branch `l4-w3` in `tycoon-p5`, cut from `main` dce50da; brief
+`docs/prompts/l4-w3-brief.md`, 3692822): Part A an Opus drafter writes `l4-w3-contract.md`; Part B the economy-designer
+writes `l4-w3-cash-study.md` (era multiplier anchors, because income spans orders of magnitude inside an era, so one
+multiplier per era matches "a few minutes of income" at one point only). Ben picks the anchor by click question, then
+owners build. Scope: city map departs into the level (auto-start), the shared tally end screen, run cash by era, the hub's
+Missions stub / Overdrive / Gear chip deleted, Valor's next ability shown locked.
