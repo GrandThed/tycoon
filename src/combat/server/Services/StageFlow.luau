@@ -9,8 +9,10 @@
 -- is a stage, and every other camp of the layout is open and inhabited. This module decides
 -- everything that is a rule: which stage is next, when the boss room triggers, when its gates
 -- close, when a camp is clear, when a checkpoint is reached, what ends the run, where a body that
--- must be moved goes, what a Studio skip does, which map node is open and who earns a star.
--- WaveService only executes the actions returned here.
+-- must be moved goes, what a Studio skip does and who earns a star. L4 W3
+-- (docs/prompts/l4-w3-contract.md §2.1, §3, §7): the map's rules moved to the shared MapRules (the
+-- hub's Depart asks them too); the auto-start's rule is here (DepartStep); a difficulty may carry
+-- a `note`. WaveService only executes the actions returned here.
 --
 -- Pure on purpose (the lesson of the P5 reviews: the run's rules were "checked by reading only"):
 -- tables, numbers and Vector3 values; no service, no Instance, no clock of its own (every time is
@@ -213,8 +215,35 @@ export type Action = {
 	-- as cleared on the summary, but pays no clear bonus and counts no wave in anyone's stats.
 	skipped: boolean?,
 }
--- levelId -> difficulty -> cleared
-export type Stars = { [string]: { [string]: boolean } }
+-- L4 W3 (§3): what the auto-start is doing. `waiting` for the departed party, `counting` down to the
+-- start, `picked` (the level is only selected on the map: the lobby fallback), `done` (started, or
+-- ended by the leader's own start). The wire's RunDepart is a view of it (DepartView).
+export type DepartState = "waiting" | "counting" | "picked" | "done"
+export type Depart = {
+	levelId: string,
+	difficulty: string,
+	state: DepartState,
+	-- os.clock() the countdown ends; 0 before it starts.
+	startsAt: number,
+	-- os.clock() the wait for the party began: the session's first arrival, or the R lever's press.
+	waitFrom: number,
+	-- The members present stand in for the ticket's expected list and its host (a proving boot, the
+	-- R lever): nobody else is coming.
+	standIn: boolean,
+}
+-- One tick's facts, gathered by WaveService.
+export type DepartInput = {
+	now: number,
+	-- Every userId of the ticket's expected list admitted at least once (ArenaService.ExpectedIn).
+	expectedIn: boolean,
+	-- The session's host is in the roster (ArenaService.HostIn).
+	hostIn: boolean,
+	-- Every expected member present stands in a body (VitalsService.AllHaveBodies).
+	bodies: boolean,
+	-- coop.lobbyWaitSeconds and levels.departCountdownSeconds.
+	waitSeconds: number,
+	countdownSeconds: number,
+}
 
 local KIND_TRAVEL = "travel"
 local KIND_CAMP = "camp"
@@ -223,6 +252,8 @@ local KIND_CAMP = "camp"
 local WIRE_REACH = 1000
 -- Under this Roblox destroys falling parts before the rescue could see them.
 local LOWEST_KILL_Y = -450
+-- L4 W3 (§7): the longest a difficulty's `note` may be, in bytes (the map's line beside it).
+local NOTE_MAX_LENGTH = 24
 -- The numbers a run reads, by where they are kept: Validate names every one that is missing.
 local NEEDED = {
 	rules = {
@@ -1030,6 +1061,29 @@ local function firstClearProblems(
 	end
 end
 
+-- L4 W3 (§7): each difficulty's `note`, when given, is a string of 1 to NOTE_MAX_LENGTH bytes (the
+-- map shows it on the difficulty's line, "Castle gear"). In difficulty-name order.
+local function noteProblems(level: Types.LevelConfig, problem: (string) -> ()): ()
+	local difficulties: any = level.difficulties
+	if type(difficulties) ~= "table" then
+		return
+	end
+	local sorted: { string } = {}
+	for name in difficulties do
+		table.insert(sorted, tostring(name))
+	end
+	table.sort(sorted)
+	for _, name in sorted do
+		local scales: any = difficulties[name]
+		local note: any = if type(scales) == "table" then scales.note else nil
+		if note ~= nil and (type(note) ~= "string" or note == "" or #note > NOTE_MAX_LENGTH) then
+			problem(
+				`difficulties.{name}.note is {tostring(note)}, not a string of 1 to {NOTE_MAX_LENGTH} bytes`
+			)
+		end
+	end
+end
+
 -- L2-34, L2-36: the layout's reactive blocks and shortcuts. A block's `react` is "fire" or "ice";
 -- a fire block collides (a block nothing stops would be burnt by a stream that passes through
 -- it), an ice block (L2-52, deep water) does not and opens nothing, and two ice blocks' footprints
@@ -1752,6 +1806,7 @@ function StageFlow.Validate(
 	regionProblems(level, layout, camps, kinds, ranks, rules, problem)
 	secretProblems(level, layout, problem)
 	firstClearProblems(level, weapons, starters, problem)
+	noteProblems(level, problem)
 	reactProblems(layout, problem)
 	return problems
 end
@@ -2858,132 +2913,154 @@ function StageFlow.BossPoint(zone: Zone, at: { number }): Vector3
 	return Vector3.new(zone.rect.x + (at[1] or 0), zone.floorY, zone.rect.z + (at[2] or 0))
 end
 
--- The map ------------------------------------------------------------------------------------
+-- The auto-start (L4 W3, docs/prompts/l4-w3-contract.md §3, L4W3-4 and L4W3-12) -----------------
 
-local function nodeOf(map: Types.ExpeditionsConfig, id: string?): Types.MapNode?
-	if id == nil then
+-- A number of seconds: finite and above 0, else 0 (a Combat.json without the key starts at once).
+local function seconds(value: any): number
+	return if isFinite(value) and value > 0 then value else 0
+end
+
+-- At the session's first admit: a verified hub departure waits for its party; a hint the ticket
+-- did not verify (no ticket, a mismatch, an old shape) is only picked on the map; no hint ("") is
+-- nothing. A proving boot with debug.provingAutoStart (`proving`: its level and difficulty) waits on
+-- that pair with the members present standing in, whatever the hint said (L4W3-12). `since` = when
+-- the wait began (the first arrival; the R lever's press).
+function StageFlow.DepartOpen(
+	levelId: string,
+	difficulty: string,
+	verified: boolean,
+	proving: { levelId: string, difficulty: string }?,
+	since: number
+): Depart?
+	local standIn = proving ~= nil
+	local level = if proving ~= nil then proving.levelId else levelId
+	if level == "" then
 		return nil
 	end
-	for _, node in map.nodes do
-		if node.id == id then
-			return node
+	return {
+		levelId = level,
+		difficulty = if proving ~= nil then proving.difficulty else difficulty,
+		state = if standIn or verified then "waiting" else "picked",
+		startsAt = 0,
+		waitFrom = since,
+		standIn = standIn,
+	}
+end
+
+-- The R lever's value: "<levelId>:<difficulty>" (the map's selection), anything else the fallback
+-- pair (debug.provingLevel / provingDifficulty). Whether the pair can be played is the start's to say.
+function StageFlow.DepartPair(
+	value: any,
+	fallbackLevel: string,
+	fallbackDifficulty: string
+): (string, string)
+	if type(value) == "string" then
+		local levelId, difficulty = string.match(value, "^([^:]+):([^:]+)$")
+		if levelId ~= nil and difficulty ~= nil then
+			return levelId, difficulty
 		end
+	end
+	return fallbackLevel, fallbackDifficulty
+end
+
+-- Once a frame in the lobby. waiting -> counting once the party is in (every expected member
+-- admitted once, the host present, every expected member present standing in a body; with
+-- `standIn`, the bodies alone); -> picked once the wait has lasted coop.lobbyWaitSeconds without
+-- that. counting -> done at its end, and the answer is "start": the caller starts the level once
+-- and, on a refusal, calls DepartRefused. picked and done never move here. nil = nothing to do.
+function StageFlow.DepartStep(depart: Depart, input: DepartInput): "start"?
+	if depart.state == "waiting" then
+		local partyIn = (depart.standIn or (input.expectedIn and input.hostIn)) and input.bodies
+		if partyIn then
+			depart.state = "counting"
+			depart.startsAt = input.now + seconds(input.countdownSeconds)
+		elseif input.now - depart.waitFrom >= seconds(input.waitSeconds) then
+			depart.state = "picked"
+		end
+		return nil
+	end
+	if depart.state == "counting" and input.now >= depart.startsAt then
+		depart.state = "done"
+		return "start"
 	end
 	return nil
 end
 
-local function hasStar(stars: Stars, levelId: string?): boolean
-	local own = if levelId ~= nil then stars[levelId] else nil
-	return own ~= nil and next(own) ~= nil
-end
-
-local function starCount(stars: Stars): number
-	local count = 0
-	for _, difficulties in stars do
-		for _ in difficulties do
-			count += 1
-		end
-	end
-	return count
-end
-
--- One node for one player (rulings 25 and 28). Whether it is open is the LEADER's doing; the
--- stars shown are the player's own. "notBuilt" wins over every other reason. nil for no such
--- node. L2-15: `secrets` = the player's own secret rows by level id (SecretFlow.MapRow); the
--- node's level's row rides on its state whether it is open or not (nil = none).
-function StageFlow.NodeState(
-	map: Types.ExpeditionsConfig,
-	built: { [string]: boolean },
-	leader: Stars,
-	own: Stars,
-	nodeId: string,
-	secrets: { [string]: { Types.MapSecretState } }?
-): Types.MapNodeState?
-	local node = nodeOf(map, nodeId)
-	if node == nil then
-		return nil
-	end
-	local levelId = node.level
-	local stars: { string } = {}
-	local earned = if levelId ~= nil then own[levelId] else nil
-	if earned ~= nil then
-		for _, difficulty in map.difficulties do
-			if earned[difficulty] then
-				table.insert(stars, difficulty)
-			end
-		end
-	end
-	local state: Types.MapNodeState = {
-		id = node.id,
-		open = false,
-		reason = nil,
-		needs = nil,
-		stars = stars,
-		secrets = if secrets ~= nil and levelId ~= nil then secrets[levelId] else nil,
-	}
-	if levelId == nil or built[levelId] ~= true then
-		state.reason = "notBuilt"
-		return state
-	end
-	local requires = node.requires
-	local needsNode = if requires ~= nil then requires.node else nil
-	if needsNode ~= nil then
-		local required = nodeOf(map, needsNode)
-		if not hasStar(leader, if required ~= nil then required.level else nil) then
-			state.reason = "needsNode"
-			state.needs = if required ~= nil then required.name else needsNode
-			return state
-		end
-	end
-	local needsStars = if requires ~= nil then requires.stars else nil
-	if needsStars ~= nil and starCount(leader) < needsStars then
-		state.reason = "needsStars"
-		state.needs = tostring(needsStars)
-		return state
-	end
-	state.open = true
-	return state
-end
-
--- Every node, in the config's order, for one player (`secrets`: their rows by level id).
-function StageFlow.MapState(
-	map: Types.ExpeditionsConfig,
-	built: { [string]: boolean },
-	leader: Stars,
-	own: Stars,
-	leaderUserId: number,
-	secrets: { [string]: { Types.MapSecretState } }?
-): Types.MapState
-	local nodes: { Types.MapNodeState } = {}
-	for _, node in map.nodes do
-		local state = StageFlow.NodeState(map, built, leader, own, node.id, secrets)
-		if state ~= nil then
-			table.insert(nodes, state)
-		end
-	end
-	return { kind = "map", leaderUserId = leaderUserId, nodes = nodes }
-end
-
--- The star of one difficulty of one level, for the run that was just cleared at it. True when
--- it is new.
-function StageFlow.Award(stars: Stars, levelId: string, difficulty: string): boolean
-	local own = stars[levelId]
-	if own == nil then
-		own = {}
-		stars[levelId] = own
-	end
-	if own[difficulty] then
+-- The leader asked a start themselves (RequestStartLevel, any level, accepted or not): the
+-- auto-start is over, whatever it was doing, so nothing starts behind them and a picked level does
+-- not outlive their run. True when it changed anything.
+function StageFlow.DepartAsked(depart: Depart?): boolean
+	if depart == nil or depart.state == "done" then
 		return false
 	end
-	own[difficulty] = true
+	depart.state = "done"
 	return true
+end
+
+-- The start at zero was refused (a body still spawning, a new leader whose stars do not open the
+-- node, a level that cannot be built): the level is only picked on the map. No retry.
+function StageFlow.DepartRefused(depart: Depart): ()
+	depart.state = "picked"
+end
+
+-- RunState.depart: nil when there is none, once done, and outside the lobby. While counting,
+-- `startsIn`; while waiting, `waitIn` (what is left of the wait for the party): whole seconds,
+-- rounded up, never under 0, so the client shows them as they are.
+function StageFlow.DepartView(
+	depart: Depart?,
+	now: number,
+	inLobby: boolean,
+	waitSeconds: number
+): Types.RunDepart?
+	if depart == nil or not inLobby then
+		return nil
+	end
+	local state = depart.state
+	local view: Types.RunDepart
+	if state == "waiting" then
+		view = {
+			levelId = depart.levelId,
+			difficulty = depart.difficulty,
+			state = "waiting",
+			startsIn = nil,
+			waitIn = math.max(math.ceil(depart.waitFrom + seconds(waitSeconds) - now), 0),
+		}
+	elseif state == "counting" then
+		view = {
+			levelId = depart.levelId,
+			difficulty = depart.difficulty,
+			state = "counting",
+			startsIn = math.max(math.ceil(depart.startsAt - now), 0),
+			waitIn = nil,
+		}
+	elseif state == "picked" then
+		view = {
+			levelId = depart.levelId,
+			difficulty = depart.difficulty,
+			state = "picked",
+			startsIn = nil,
+			waitIn = nil,
+		}
+	else
+		return nil
+	end
+	return view
+end
+
+-- What the wire's depart is now, as one string: it changes with the state and with each whole
+-- second it counts, which is when WaveService broadcasts at once. "" for none.
+function StageFlow.DepartBeat(view: Types.RunDepart?): string
+	if view == nil then
+		return ""
+	end
+	return `{view.state}:{view.levelId}:{view.difficulty}:{view.startsIn or -1}:{view.waitIn or -1}`
 end
 
 -- L3-17: what the first clear of `difficulty` gives besides its star, as a fresh table (the level
 -- file is never handed out to be written): a family id that is a non-empty string, and a Valor that
 -- is a whole number above 0. A key of any other kind is left out (Validate names it before the
 -- level is played), and nil when nothing is left, or the difficulty has no `firstClear`. The
--- caller asks only when StageFlow.Award said the star is new.
+-- caller asks only when MapRules.Award said the star is new.
 function StageFlow.FirstClear(level: Types.LevelConfig, difficulty: string): Types.LevelFirstClear?
 	local difficulties: any = level.difficulties
 	local scales: any = if type(difficulties) == "table" then difficulties[difficulty] else nil

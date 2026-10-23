@@ -11,8 +11,11 @@ What it answers:
   * L3 W1 (docs/prompts/l3-w1-contract.md): the ladder of 20 every weapon family climbs (each
     tier's multiplier, health, band, price and trophy, every family's window), and how many Forest
     Road runs and minutes take both starters from T1 to T4 (assertions 1 and 2);
-  * what a Normal clear of Forest Road pays, against the Village era's remaining slot cost (4: "combat
-    must not replace the tycoon"; W3 reworks it for MISSIONS_DESIGN 26.8's era multiplier);
+  * what a Normal clear of Forest Road pays at each era's cash multiplier (Combat.json
+    rewards.eraCashMult, L4 W3: MISSIONS_DESIGN 26.8 and 30), against each era's remaining slot cost (4:
+    "combat must not replace the tycoon"), against the greedy city run back to back (24: never faster
+    than building) and in minutes of the era's income at its first clear (25: a few minutes at the
+    start);
   * the pure co-op and offline rules (5, 6, 12, 13, 22) and the level gates, pay and population
     (20, 21, 23). The fights themselves are measured by `tools/sim_range.py`, which this file imports.
 
@@ -25,7 +28,7 @@ of the kept assertions are unchanged.
 
 Usage:
   py tools/sim_combat.py                  # the ladder, Forest Road's pay and the helpers' spot checks
-  py tools/sim_combat.py --check          # the eleven assertions; exit 1 on any
+  py tools/sim_combat.py --check          # the thirteen assertions; exit 1 on any
 """
 
 from __future__ import annotations
@@ -49,6 +52,16 @@ import sim_economy as se  # noqa: E402
 
 # Tool-only constants; nothing in the game reads them. Assertion 4's ceiling, from the contract.
 RUN_CASH_CAP_FRACTION = 0.25
+# L4 W3 (docs/prompts/l4-w3-contract.md section 5; the cash study's (c) at M = 3, Ben's pick): run cash
+# is multiplied by the member's city era (Combat.json rewards.eraCashMult). Assertion 4's second line:
+# the first clear after an Advance is at most this share of what the era still owes when it lands.
+FIRST_CLEAR_CAP_FRACTION = 0.02
+# Assertion 25 ("a few minutes at the start"): that first clear is worth this many minutes of the
+# era's income at the second it lands.
+FIRST_CLEAR_MINUTES = (1.0, 6.0)
+# Assertion 24 ("never faster than building") runs these difficulties back to back. Brutal needs
+# Castle gear (T5) and a T4 Brutal clear is unmeasured (contract risk 3): re-run it with Brutal then.
+NEVER_FASTER_DIFFICULTIES = ("normal", "hard")
 # Assertion 5's fixture: a 10:1 damage duo must leave the veteran >= 75 %.
 VETERAN_SHARE_FLOOR = 0.75
 # Assertions 12 and 13 (C2 "Balance", rewritten pure in L4 W1b): fixture income rates, not game values.
@@ -83,7 +96,6 @@ LEGACY_GEAR_COSTS = [(material, amount) for material in ("Timber", "Steel", "Cir
                      for amount in (10, 60, 180)]
 LADDER_MAX_HP = {1: 155, 3: 230, 5: 380}
 LADDER_RANGE_HP = 130
-LADDER_POWER_T1 = 64  # today's 2/2 value, so the hub's Village tile (60) still reads ready
 LADDER_BANDS = 5
 LADDER_BAND_SIZE = 4
 LADDER_BAND_LEVELS = ("forestRoad", "castle", "underworld", "planet", "dream")
@@ -241,7 +253,9 @@ def tier_of(cfg, combat, family):
 
 
 def held_tiers(cfg, combat, melee, ranged):
-    """Armory.HeldTiers -- the held families' tiers in the slot-shaped record."""
+    """The held families' tiers in the slot-shaped record: TierOf of each, what WeaponService.gearOf
+    builds with no Studio override. (Its Luau twin, Armory.HeldTiers, went in L4 W3 with Gear Power, its
+    last reader; sim_range.py still reads this helper.)"""
     return {"melee": tier_of(cfg, combat, melee), "ranged": tier_of(cfg, combat, ranged)}
 
 
@@ -293,16 +307,6 @@ def range_hp(cfg):
     ladder = _ladder(cfg)
     value = ladder.get("rangeHp") if ladder is not None else None
     return value if _finite(value) and value > 0 else cfg["baseHp"]
-
-
-def gear_power(cfg, tiers, ascension):
-    """Armory.GearPower (L3-6) -- round((DamageScale(tm) + DamageScale(tr), attacks) x
-    power.tierWeight + MaxHp x power.hpWeight); a tierWeight that is not a number weighs 0."""
-    weight = cfg["power"].get("tierWeight")
-    weight = weight if _finite(weight) else 0
-    damage = damage_scale(cfg, tiers["melee"], ascension["melee"], False) + damage_scale(
-        cfg, tiers["ranged"], ascension["ranged"], False)
-    return luau_round(damage * weight + max_hp(cfg, tiers, ascension) * cfg["power"]["hpWeight"])
 
 
 def band_of(cfg, tier):
@@ -477,8 +481,9 @@ def problems(cfg, families):
     rangeHp above 0; bandSize a whole number above 0 with bandSize x #bands = LadderSize; every band
     a level and a material; one cost per position, each at least 0; a starDifficulty; starAlso absent
     or a list of non-empty strings), every family
-    a window 1 <= start <= top <= LadderSize, no window for a family that is not one, the legacy
-    list, and a numeric power.tierWeight. Assertion 1 holds the shipped values to L3-1..L3-4 on top."""
+    a window 1 <= start <= top <= LadderSize, no window for a family that is not one, and the legacy
+    list (L4 W3 took the power.tierWeight line with Gear Power). Assertion 1 holds the shipped values to
+    L3-1..L3-4 on top."""
     out = []
 
     def problem(text):
@@ -571,8 +576,6 @@ def problems(cfg, families):
             if not isinstance(entry, dict) or not isinstance(entry.get("material"), str) or entry["material"] == "" \
                     or not _finite(entry.get("amount")) or entry["amount"] < 0:
                 problem(f"legacy.gearCosts[{index}] is not a material and an amount of at least 0")
-    if not _finite(cfg["power"].get("tierWeight")):
-        problem("power.tierWeight is not a number: Gear Power weighs the tiers at 0")
     return out
 
 
@@ -654,12 +657,27 @@ def touch_highest_era(state):
     state["combat"]["highestEra"] = max(state["combat"]["highestEra"], state["era"])
 
 
-def combat_cash_mult(state, game_config, shop_config):
-    """Combat.CombatCashMult -- LegacyMult x PerkIncomeMult; no pass, no
-    Premium, no neighbours (combat cash is not an income stream)."""
+def era_cash_mult(rewards, era):
+    """Combat.EraCashMult (L4W3-7) -- Combat.json rewards.eraCashMult's entry for the member's city
+    era, in Config/Eras order; an era past the list takes the last. 1 when the block, the list or
+    that entry is missing or malformed (an entry must be a finite number of at least 1)."""
+    mults = rewards.get("eraCashMult") if isinstance(rewards, dict) else None
+    if not isinstance(mults, list) or not mults or not _finite(era):
+        return 1
+    entry = mults[min(max(math.floor(era), 1), len(mults)) - 1]
+    if not _finite(entry) or entry < 1:
+        return 1
+    return entry
+
+
+def combat_cash_mult(state, game_config, shop_config, rewards=None, era=1):
+    """Combat.CombatCashMult -- LegacyMult x PerkIncomeMult x EraCashMult(rewards, era); no pass, no
+    Premium, no neighbours (combat cash is not an income stream). L4 W3: the era factor lives here
+    and never in level_pay, so every level's base pay (assertions 1, 2, 5, 6, 12, 13, 20, 21, 23
+    and sim_range.py) stays as it was."""
     return se.legacy_mult(state["legacy"], game_config) * se.perk_income_mult(
         shop_config, state["legacyShop"]
-    )
+    ) * era_cash_mult(rewards, era)
 
 
 def contribution_shares(damage_by_user, floor):
@@ -874,6 +892,7 @@ class Curve:
         self.slot_order = result.slot_order
         self.offset = offset
         self.legacy_in = legacy_in
+        self.legacy_gained = result.legacy_gained
         self.total_slot_cost = se.era_slot_cost_total(era)
         self.cost_by_id = {slot["id"]: slot["baseCost"] for slot in era["slots"]}
 
@@ -907,17 +926,41 @@ class Curve:
         )
 
 
-def greedy_curves(game, eras):
-    """The default `sim_economy` playthrough: greedy, free, legacy carried."""
+def greedy_curves(game, eras, legacy=0, rebirth_count=0):
+    """The default `sim_economy` playthrough: greedy, free, legacy carried. `legacy` and
+    `rebirth_count` start a later lap (assertion 22 reads lap 2's Orbital LegacyMult)."""
     curves = []
-    legacy = 0
     offset = 0
     for era in eras:
-        result = se.simulate_era(era, game, legacy, "greedy", None, True)
+        result = se.simulate_era(era, game, legacy, "greedy", None, True, rebirth_count)
         curves.append(Curve(era, result, offset, legacy))
         offset += result.seconds
         legacy += result.legacy_gained
     return curves
+
+
+def run_pause(run_seconds, clear_cash):
+    """sim_economy.simulate_era's pause hook (L4 W3, assertion 24): Forest Road back to back from the
+    era's first second. The player buys, then leaves; for the run's seconds he buys nothing while
+    the city earns on (offline.expeditionEfficiency 1.0); the clear's cash lands as he returns, he
+    buys and leaves again. A copy of the cash study's runner.py ("nonstop"), as a hook."""
+    trip = {"back": 0, "runs": 0}
+
+    def pause(second):
+        if second < trip["back"]:
+            return True, 0
+        landed = clear_cash if trip["runs"] > 0 else 0
+        trip["runs"] += 1
+        trip["back"] = second + run_seconds
+        return False, landed
+
+    return pause, trip
+
+
+def era_state(curve):
+    """A free player's state at the start of `curve`'s era (legacy carried in, an empty shop)."""
+    return {"era": curve.index, "rebirthCount": 0, "legacy": curve.legacy_in,
+            "legacyShop": se.empty_shop_state(), "combat": new_combat_profile()}
 
 
 # --------------------------------------------------------------------------
@@ -935,7 +978,7 @@ def print_ladder(armory, curves):
     proving = _load(CONFIG_DIR / "ProvingGrounds.json")
     ladder = armory.get("ladder") or {}
     print("Armory ladder (L3) -- one ladder of 20 for every weapon family; the tier belongs to the family")
-    print(f"  {'tier':>4} {'x range':>10} {'hp melee':>8} {'hp ranged':>9} {'MaxHp t/t':>9} {'power t/t':>9} "
+    print(f"  {'tier':>4} {'x range':>10} {'hp melee':>8} {'hp ranged':>9} {'MaxHp t/t':>9} "
           f"{'band':>4} {'level':<11} {'material':<9} {'cost':>5}  trophy")
     for tier in range(1, ladder_size(armory) + 1):
         band, position = band_of(armory, tier)
@@ -946,11 +989,9 @@ def print_ladder(armory, curves):
                   if position == ladder.get("bandSize") else "")
         print(f"  {tier:>4} {multiplier(armory, tier):>10,.4f} {weapon_hp(armory, 'melee', tier, 0):>8,.0f} "
               f"{weapon_hp(armory, 'ranged', tier, 0):>9,.0f} {max_hp(armory, both, NO_ASCENSION):>9,.0f} "
-              f"{gear_power(armory, both, NO_ASCENSION):>9,} {band:>4} {entry['levelId']:<11} {material:<9} "
+              f"{band:>4} {entry['levelId']:<11} {material:<9} "
               f"{cost if tier > 1 else '-':>5}  {trophy}")
-    print(f"  the range's own body: {range_hp(armory):g} (scale 1 there); Gear Power at T1/T1 "
-          f"{gear_power(armory, {'melee': 1, 'ranged': 1}, NO_ASCENSION)} (tierWeight "
-          f"{armory['power'].get('tierWeight')}, hpWeight {armory['power']['hpWeight']})")
+    print(f"  the range's own body: {range_hp(armory):g} (scale 1 there)")
     print("  windows (start-top), in shelf order (by start, melee before ranged, then name):")
     weapons = proving["weapons"]
     order = sorted(weapons, key=lambda f: ((window(armory, f) or (99, 99))[0], weapons[f]["slot"] != "melee",
@@ -1013,10 +1054,11 @@ def print_helpers(armory, combat_cfg, game, shop):
     for level in range(1, len(armory["ascension"]["levels"]) + 1):
         cost = ascension_cost(armory, level)
         materials = " + ".join(f"{amount} {name}" for name, amount in cost["materials"].items())
-        power = gear_power(armory, top, {"melee": level, "ranged": level})
+        hits = damage_scale(armory, top["melee"], level, False)
         print(
-            f"  Ascension {level}: {materials}, {cost['valor']} Valor -> top-tier power "
-            f"{power} (x{power / gear_power(armory, top, NO_ASCENSION):.2f})"
+            f"  Ascension {level}: {materials}, {cost['valor']} Valor -> top-tier hits "
+            f"x{hits:,.2f} (x{hits / damage_scale(armory, top['melee'], 0, False):.2f}), MaxHp "
+            f"{max_hp(armory, top, {'melee': level, 'ranged': level}):,.0f}"
         )
     state = {
         "era": 1,
@@ -1025,12 +1067,15 @@ def print_helpers(armory, combat_cfg, game, shop):
         "legacyShop": se.empty_shop_state(),
         "combat": new_combat_profile(),
     }
-    print(f"  CombatCashMult at legacy 0 -> x{combat_cash_mult(state, game, shop):.2f}")
+    rewards = combat_cfg.get("rewards")
+    print(f"  CombatCashMult at legacy 0, era 1 -> x{combat_cash_mult(state, game, shop, rewards, 1):,.2f}")
     state["legacy"] = 261
     print(
-        f"  CombatCashMult at legacy 261 (era 3 entry) -> "
-        f"x{combat_cash_mult(state, game, shop):.2f}"
+        f"  CombatCashMult at legacy 261, era 3 (the Metropolis entry) -> x{se.legacy_mult(261, game):.2f} x "
+        f"{era_cash_mult(rewards, 3):,} = x{combat_cash_mult(state, game, shop, rewards, 3):,.0f}"
     )
+    print(f"  EraCashMult by era 1..5 -> {[era_cash_mult(rewards, era) for era in range(1, 6)]}; with no "
+          f"rewards block -> {era_cash_mult(None, 4)}")
     built = {"forestRoad": True}
     combat = state["combat"]
     combat["materials"]["Timber"] = 99
@@ -1286,9 +1331,6 @@ def ladder_problems(armory, proving):
             found.append(f"MaxHp at T{tier}/T{tier} is {got:g}, not {want_hp}")
     if range_hp(armory) != LADDER_RANGE_HP:
         found.append(f"RangeHp is {range_hp(armory):g}, not {LADDER_RANGE_HP}")
-    power = gear_power(armory, {"melee": 1, "ranged": 1}, NO_ASCENSION)
-    if power != LADDER_POWER_T1:
-        found.append(f"Gear Power at T1/T1 is {power}, not {LADDER_POWER_T1} (power.tierWeight)")
     bands = ladder.get("bands") or []
     if len(bands) != LADDER_BANDS or ladder.get("bandSize") != LADDER_BAND_SIZE:
         found.append(f"the ladder is not {LADDER_BANDS} bands of {LADDER_BAND_SIZE}")
@@ -1325,8 +1367,7 @@ def ladder_note(armory, proving):
             f"MaxHp T1 {max_hp(armory, {'melee': 1, 'ranged': 1}, NO_ASCENSION):g}, T3 "
             f"{max_hp(armory, {'melee': 3, 'ranged': 3}, NO_ASCENSION):g}, T5 "
             f"{max_hp(armory, {'melee': 5, 'ranged': 5}, NO_ASCENSION):g}, T20 "
-            f"{max_hp(armory, {'melee': 20, 'ranged': 20}, NO_ASCENSION):,.0f}; RangeHp {range_hp(armory):g}; power T1/T1 "
-            f"{gear_power(armory, {'melee': 1, 'ranged': 1}, NO_ASCENSION)}; Forest T2/T3/T4 "
+            f"{max_hp(armory, {'melee': 20, 'ranged': 20}, NO_ASCENSION):,.0f}; RangeHp {range_hp(armory):g}; Forest T2/T3/T4 "
             f"{'/'.join(str(tier_cost(armory, t)[1]) for t in (2, 3, 4))} {tier_cost(armory, 2)[0]}, T4 needs the "
             f"{' or '.join([armory['ladder']['starDifficulty']] + list(armory['ladder'].get('starAlso') or []))} star; "
             f"{len(armory['windows'])} windows as L3-3; the v8 refund of a 3/3 "
@@ -1546,11 +1587,27 @@ def mentor_fixtures(combat_cfg):
     }
 
 
-def run_checks(armory, combat_cfg, places, game, eras):
+def forest_clears(report, ranks, combat_cfg, proving_cfg):
+    """{difficulty: (cash, seconds)} for assertions 4, 24 and 25: what a whole Forest Road clear pays in
+    cash before any multiplier (level_pay, summons included) and its mean measured clear, rounded to
+    a whole second (Normal at the proving gear, Hard at its recommendedTier's preset)."""
+    summons = forest_summons(proving_cfg, report)
+    out = {}
+    for difficulty in NEVER_FASTER_DIFFICULTIES:
+        row = report["difficulties"].get(difficulty) or {}
+        clears = [r["at"] for r in row.get("runs") or [] if r["end"] == "cleared"]
+        cash = level_pay(report["level"], difficulty, ranks, combat_cfg, summons[difficulty])[0]["cash"]
+        out[difficulty] = (cash, round(sum(clears) / len(clears)) if clears else None)
+    return out
+
+
+def run_checks(armory, combat_cfg, places, game, eras, shop=None):
     checks = Checks()
-    print("sim_combat --check (docs/INTERFACES.md C0 + C2 + L1 + L1b contracts and L3, eleven assertions; 3, 7-11 and "
-          "14-19 retired with the C1 missions in L4 W1b)")
+    print("sim_combat --check (docs/INTERFACES.md C0 + C2 + L1 + L1b contracts, L3 and L4 W3, thirteen assertions; "
+          "3, 7-11 and 14-19 retired with the C1 missions in L4 W1b)")
     curves = greedy_curves(game, eras)
+    shop = shop if shop is not None else se.load_legacy_shop_config()
+    rewards = combat_cfg.get("rewards")
 
     # The level reports, measured once by sim_range (assertions 2, 4 and 21 read them).
     import sim_range as sr
@@ -1566,7 +1623,7 @@ def run_checks(armory, combat_cfg, places, game, eras):
     # 1. L3-1..L3-4 and L3-29: the ladder as Armory.Problems reads it (nothing for the shipped
     #    families), and the shipped numbers held to the contract: 20 tiers rising 1.5 x 1.65^(t-1),
     #    HP T1-T11 = the old slot tiers 2-12 (LADDER_HP_T1_T11, literal since L4 W1b deleted the
-    #    slots), MaxHp 155 / 230 / 380 at T1 / T3 / T5, RangeHp 130, Gear Power 64 at T1/T1, five bands
+    #    slots), MaxHp 155 / 230 / 380 at T1 / T3 / T5, RangeHp 130 (Gear Power went in L4 W3), five bands
     #    of four (the first Forest Road's Timber), costs by position (T2 / T3 / T4 = 100 / 250 / 500),
     #    the Hard star the trophy, L3-3's windows for every family, and `legacy` equal to the twelve
     #    prices it freezes (LEGACY_GEAR_COSTS). (Was "1 unlock ladder": the city's income gates no tier
@@ -1585,26 +1642,37 @@ def run_checks(armory, combat_cfg, places, game, eras):
     good, text = climb_verdict(climb, level_reports["forestRoad"], armory)
     checks.verdict(good, "2 forest climb     ", text)
 
-    # 4. What a Normal clear of Forest Road pays (sim_range's measured runs, summons included) is at
-    #    most RUN_CASH_CAP_FRACTION of what the Village era's greedy player still owes its slots at the
-    #    era's middle (reference_second). L4 W1b re-pointed it from the C1 missions' runs; W3 reworks it
-    #    for MISSIONS_DESIGN 26.8's era multiplier.
+    # 4. What a Normal clear of Forest Road pays (sim_range's measured runs, summons included) times
+    #    Combat.CombatCashMult (the lap's LegacyMult x the era's rewards.eraCashMult, L4 W3) is at most
+    #    RUN_CASH_CAP_FRACTION of what each era's greedy player still owes its slots at the era's
+    #    middle (reference_second); and the first clear after an Advance (it lands one mean measured
+    #    Normal clear into the era) is at most FIRST_CLEAR_CAP_FRACTION of what the era still owes
+    #    when it lands. L4 W1b re-pointed it from the C1 missions' runs; W3 took it to every era for
+    #    MISSIONS_DESIGN 26.8's era multiplier (the cash study's (c) at M = 3, Ben's pick).
     details = []
     ok4 = True
-    village = next((c for c in curves if c.index == 1), None)
     report = level_reports.get("forestRoad")
-    if village is None or report is None:
+    forest_pay = forest_clears(report, ranks, combat_cfg, proving_cfg) if report is not None else {}
+    normal_cash, first_second = forest_pay.get("normal", (None, None))
+    if len(curves) != len(eras) or report is None or first_second is None:
         ok4 = False
-        details.append("no Village curve or no Forest Road level")
+        details.append("no greedy curve for every era, no Forest Road level or no cleared Normal run")
     else:
-        level = report["level"]
-        pay = level_pay(level, "normal", ranks, combat_cfg, forest_summons(proving_cfg, report)["normal"])[0]
-        second = reference_second(village)
-        remaining = village.remaining_slot_cost(second)
-        ratio = pay["cash"] / remaining if remaining > 0 else float("inf")
-        ok4 = ratio <= RUN_CASH_CAP_FRACTION
-        details.append(f"forestRoad Normal {pay['cash']:,.0f} cash = {100 * ratio:.2f}% of {remaining:,.0f} the "
-                       f"Village era still owes at {se.fmt_time(second)} (needs <= {RUN_CASH_CAP_FRACTION:.0%})")
+        for curve in curves:
+            mult = combat_cash_mult(era_state(curve), game, shop, rewards, curve.index)
+            clear = normal_cash * mult
+            middle = reference_second(curve)
+            owed_mid = curve.remaining_slot_cost(middle)
+            owed_first = curve.remaining_slot_cost(first_second)
+            mid_ratio = clear / owed_mid if owed_mid > 0 else math.inf
+            first_ratio = clear / owed_first if owed_first > 0 else math.inf
+            ok4 = ok4 and mid_ratio <= RUN_CASH_CAP_FRACTION and first_ratio <= FIRST_CLEAR_CAP_FRACTION
+            details.append(f"{curve.era['name']} x{mult:,.2f} (x{se.legacy_mult(curve.legacy_in, game):.2f} x "
+                           f"{era_cash_mult(rewards, curve.index):,}): {se.fmt_cash(clear)} = {100 * mid_ratio:.2f}% "
+                           f"of {se.fmt_cash(owed_mid)} still owed at {se.fmt_time(middle)}, the first clear "
+                           f"{100 * first_ratio:.2f}% of {se.fmt_cash(owed_first)} at {se.fmt_time(first_second)}")
+        details.append(f"forestRoad Normal {normal_cash:,.0f} cash before the multiplier (needs <= "
+                       f"{RUN_CASH_CAP_FRACTION:.0%} at the middle, <= {FIRST_CLEAR_CAP_FRACTION:.0%} at the first clear)")
     checks.verdict(ok4, "4 cash vs era cost ", "; ".join(details))
 
     # 5. ContributionShares, 10:1 duo, veteran >= 75 %.
@@ -1800,14 +1868,23 @@ def run_checks(armory, combat_cfg, places, game, eras):
     #     carry stays in [0, 1). The contract's cases by hand: solo equals each pool exactly; two
     #     members at 0.9 and 0.1 over ten 1-Timber kills are paid 9 and 1; a cash multiplier of
     #     1.5; a member absent from the shares keeps their carry; a bad share pays nothing.
+    #     L4 W3: the fuzz's cash multipliers reach era scale, every CombatCashMult the first two laps meet
+    #     (each era's LegacyMult x its eraCashMult; lap 2's Orbital Colony x16.19 x 1,400,000, about
+    #     x2.3e7), beside the small ones. At those sizes a double's last place is worth more than 1e-6,
+    #     so the exact sum is math.fsum of the same products and the allowance adds one unit in the
+    #     last place of each credit's (product + carry), the most its rounding can move a whole unit.
     problems = []
+    lap_two = greedy_curves(game, eras, curves[-1].legacy_in + curves[-1].legacy_gained, 1) if curves else []
+    era_scale = sorted({combat_cash_mult(era_state(curve), game, shop, rewards, curve.index)
+                        for curve in curves + lap_two})
+    choices = (1, 1, 1.5, 2, 1.25) + tuple(era_scale)
     rng = __import__("random").Random(CARRY_FUZZ_SEED)
     for _run in range(CARRY_FUZZ_RUNS):
         members = list(range(1, rng.randint(1, 4) + 1))
-        mults = {u: rng.choice((1, 1, 1.5, 2, 1.25)) for u in members}
+        mults = {u: rng.choice(choices) for u in members}
         carry = {}
         paid = {u: {"cash": 0, "materials": 0, "valor": 0} for u in members}
-        exact = {u: {"cash": 0.0, "materials": 0.0, "valor": 0.0} for u in members}
+        terms = {u: {"cash": [], "materials": [], "valor": []} for u in members}
         for _kill in range(CARRY_FUZZ_KILLS):
             pool = {"cash": rng.choice((0, 100, 500, 700, 1200, 2000, 29000)) * rng.choice((1, 2, 4)),
                     "materials": rng.choice((0, 1, 2, 4, 6, 70)), "valor": rng.choice((0, 0, 0, 10, 40))}
@@ -1817,15 +1894,18 @@ def run_checks(armory, combat_cfg, places, game, eras):
             for u, money in split_carry(pool, shares, carry, mults).items():
                 for key in paid[u]:
                     paid[u][key] += money[key]
-                    exact[u][key] += pool[key] * shares[u] * (mults[u] if key == "cash" else 1)
+                    terms[u][key].append(pool[key] * shares[u] * (mults[u] if key == "cash" else 1))
             for u, held in carry.items():
                 for key, value in held.items():
                     if not 0 <= value < 1:
                         problems.append(f"carry {key} {value} of member {u} is not in [0, 1)")
         for u in members:
             for key in paid[u]:
-                if paid[u][key] > exact[u][key] + 1e-6 or paid[u][key] < exact[u][key] - 1 - 1e-6:
-                    problems.append(f"member {u} was paid {paid[u][key]} {key} against an exact {exact[u][key]:.4f}")
+                exact = math.fsum(terms[u][key])
+                slack = 1e-6 + sum(math.ulp(term + 1) for term in terms[u][key])
+                if paid[u][key] > exact + slack or paid[u][key] < exact - 1 - slack:
+                    problems.append(f"member {u} (x{mults[u]:,.2f}) was paid {paid[u][key]:,} {key} against an "
+                                    f"exact {exact:,.4f}")
     carry = {}
     solo = [split_carry({"cash": c, "materials": m, "valor": v}, {7: 1.0}, carry)[7]
             for c, m, v in ((100, 0, 0), (2000, 6, 0), (29000, 70, 10))]
@@ -1852,9 +1932,10 @@ def run_checks(armory, combat_cfg, places, game, eras):
     if bad or carry[4] != {"cash": 0.5, "materials": 0, "valor": 0} or len(carry) != 1:
         problems.append(f"a bad share paid {bad} or touched a carry: {carry}")
     checks.verdict(not problems, "22 split carry     ", "; ".join(problems[:4]) if problems else
-                   f"{CARRY_FUZZ_RUNS} fuzzed runs of {CARRY_FUZZ_KILLS} kills (1-4 members, cash x1-x2): never over the "
-                   f"exact shares, never a unit under, every carry in [0, 1); solo exact, 0.9/0.1 pays 9 and 1, x1.5, an "
-                   f"absent member's carry kept, a bad share pays nothing")
+                   f"{CARRY_FUZZ_RUNS} fuzzed runs of {CARRY_FUZZ_KILLS} kills (1-4 members, cash x1-x2 and at era scale "
+                   f"x{era_scale[0]:,.2f} .. x{era_scale[-1]:,.0f}): never over the exact shares, never a unit under, "
+                   f"every carry in [0, 1); solo exact, 0.9/0.1 pays 9 and 1, x1.5, an absent member's carry kept, a bad "
+                   f"share pays nothing")
 
     # 23. L1b-W2-5: the population of every difficulty of every level with residents, worked by
     #     hand from the files (residents and every tent's stock by minDifficulty, never countMult;
@@ -1912,11 +1993,74 @@ def run_checks(armory, combat_cfg, places, game, eras):
     checks.verdict(not problems and bool(notes), "23 population      ",
                    "; ".join(problems[:4]) if problems else " | ".join(notes) + f" (crowd.maxAlive {crowd_max})")
 
+    # 24. L4 W3, "never faster than building" (the cash study's constraint 2): Forest Road run back to
+    #     back on each of NEVER_FASTER_DIFFICULTIES, from each era's first second, never finishes the
+    #     era before the greedy city. The runner buys only between runs (sim_economy.simulate_era's
+    #     pause hook, run_pause: the city earns on during a run, offline.expeditionEfficiency 1.0) and
+    #     each clear pays its cash x Combat.CombatCashMult at the era's entry (forest_clears' measured
+    #     mean clear long). Brutal is left out until T5 exists (contract risk 3).
+    problems = []
+    notes = []
+    efficiency = combat_cfg["offline"]["expeditionEfficiency"]
+    if efficiency != 1:
+        problems.append(f"offline.expeditionEfficiency is {efficiency:g}: run_pause models a city earning at 1.0")
+    for curve in curves if report is not None else []:
+        mult = combat_cash_mult(era_state(curve), game, shop, rewards, curve.index)
+        row = []
+        for difficulty in NEVER_FASTER_DIFFICULTIES:
+            cash, seconds = forest_pay.get(difficulty, (None, None))
+            if seconds is None:
+                problems.append(f"no cleared {difficulty} run of Forest Road to time")
+                continue
+            pause, trip = run_pause(seconds, cash * mult)
+            lap = se.simulate_era(curve.era, game, curve.legacy_in, "greedy", pause=pause)
+            if lap.seconds < curve.seconds:
+                problems.append(f"{curve.era['name']}: {difficulty} back to back finishes in {se.fmt_time(lap.seconds)}, "
+                                f"before the city's {se.fmt_time(curve.seconds)}")
+            row.append(f"{difficulty} {100 * (lap.seconds - curve.seconds) / curve.seconds:+.1f}% "
+                       f"({trip['runs']} runs of {seconds} s)")
+        notes.append(f"{curve.era['name']} x{mult:,.2f}: " + ", ".join(row))
+    checks.verdict(not problems and bool(notes), "24 never faster    ",
+                   "; ".join(problems[:4]) if problems else
+                   "; ".join(notes) + f" against the greedy city (needs >= +0.0%; Brutal waits for T5)")
+
+    # 25. L4 W3, "a few minutes at the start": rewards.eraCashMult holds one finite number of at least 1
+    #     per era of Config/Eras, Village's exactly 1 (a new save keeps today's pay); with no rewards block
+    #     every era pays x1 (degrade, never an error); and the first clear after each Advance (Village's
+    #     is a new save's first) is worth FIRST_CLEAR_MINUTES of that era's income at the second it lands.
+    problems = []
+    notes = []
+    listed = rewards.get("eraCashMult") if isinstance(rewards, dict) else None
+    if not isinstance(listed, list) or len(listed) != len(eras):
+        problems.append(f"rewards.eraCashMult is {listed!r}, not one number per era ({len(eras)})")
+    else:
+        bad = [f"{era['name']} {entry!r}" for era, entry in zip(eras, listed) if not _finite(entry) or entry < 1]
+        if bad:
+            problems.append("an entry that is not a finite number of at least 1: " + ", ".join(bad))
+        if not (_finite(listed[0]) and listed[0] == 1):
+            problems.append(f"Village's entry is {listed[0]!r}, not exactly 1")
+    absent = [era_cash_mult(None, curve.index) for curve in curves] + [era_cash_mult({}, curve.index) for curve in curves]
+    if any(value != 1 for value in absent):
+        problems.append(f"with no rewards block the eras pay {absent}, not x1")
+    lo, hi = FIRST_CLEAR_MINUTES
+    for curve in curves if first_second is not None else []:
+        clear = normal_cash * combat_cash_mult(era_state(curve), game, shop, rewards, curve.index)
+        minutes = clear / (60 * curve.ips[first_second]) if curve.ips[first_second] > 0 else math.inf
+        if not lo <= minutes <= hi:
+            problems.append(f"{curve.era['name']}'s first clear is {minutes:.2f} minutes of its income")
+        notes.append(f"{curve.era['name']} {se.fmt_cash(clear)} = {minutes:.1f} min of {se.fmt_cash(curve.ips[first_second])}/s")
+    if first_second is None:
+        problems.append("no cleared Normal run to time the first clear")
+    checks.verdict(not problems, "25 a few minutes   ",
+                   "; ".join(problems[:4]) if problems else
+                   f"rewards.eraCashMult {listed} (Village 1; none -> x1); the first clear at "
+                   f"{se.fmt_time(first_second)} into each era: " + ", ".join(notes) + f" (needs {lo:g}-{hi:g} min)")
+
     print()
     print(
         "CHECK: "
         + (
-            "PASS -- all eleven assertions hold"
+            "PASS -- all thirteen assertions hold"
             if checks.failed == 0
             else f"FAIL -- {checks.failed} assertion(s)"
         )
@@ -1933,7 +2077,7 @@ def run_checks(armory, combat_cfg, places, game, eras):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--check", action="store_true", help="run the eleven assertions")
+    parser.add_argument("--check", action="store_true", help="run the thirteen assertions")
     args = parser.parse_args()
 
     armory = load_armory_config()
@@ -1948,7 +2092,7 @@ def main():
         sys.exit(0)
 
     if args.check:
-        sys.exit(1 if run_checks(armory, combat_cfg, places, game, eras) else 0)
+        sys.exit(1 if run_checks(armory, combat_cfg, places, game, eras, shop) else 0)
 
     print("Era City Tycoon combat sim -- the Armory ladder, the levels' pay and the shared helpers")
     print("greedy income curve from sim_economy (default playthrough, legacy carried)")

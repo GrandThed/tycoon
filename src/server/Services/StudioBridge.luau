@@ -10,7 +10,7 @@
 -- The one exception is ParseReturnData, a pure validator the hub also runs on live teleport data.
 --
 -- The record is a HINT, never an entitlement, exactly like teleport data: the combat place
--- re-checks the mission against the loaded profile, and every field is type-checked on read.
+-- arms its start only from a verified ticket, and every field is type-checked on read.
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -20,6 +20,8 @@ local RunService = game:GetService("RunService")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
+local RunLines = require(sharedFolder:WaitForChild("RunLines"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 
 -- Infrastructure retry policy, like DataService's: three attempts, 1 s / 2 s / 4 s backoff.
@@ -32,9 +34,10 @@ local KEY_PREFIX = "p_"
 -- that the player does not wonder whether the button worked.
 local KICK_DELAY_SECONDS = 1
 
+-- L4 W3 (L4W3-3): the level and difficulty departed into, as teleport data carries them.
 export type TeleportHint = {
-	missionId: string,
-	overdrive: boolean,
+	levelId: string,
+	difficulty: string,
 	hostUserId: number,
 	accessCode: string?,
 }
@@ -183,15 +186,16 @@ end
 
 -- Validated exactly like a live TeleportData summary: the transport differs, the trust does not.
 -- The fields a newer combat build adds (bestWave/died at C1, mentorValor/damageShare at C2) are
--- read leniently, so an older place build only costs the line it does not send.
+-- read leniently, so an older place build only costs the line it does not send. L4 W3 (L4W3-5):
+-- `title` is required (a summary without one is an older shape and reads as none); `lines` go
+-- through RunLines.Read, so a bad line costs that row only.
 local function readSummary(value: any): Types.RunSummary?
 	if typeof(value) ~= "table" then
 		return nil
 	end
 	local raw = value :: any
 	if
-		typeof(raw.missionId) ~= "string"
-		or typeof(raw.overdrive) ~= "boolean"
+		typeof(raw.title) ~= "string"
 		or typeof(raw.wavesCleared) ~= "number"
 		or typeof(raw.cash) ~= "number"
 		or typeof(raw.valor) ~= "number"
@@ -208,8 +212,7 @@ local function readSummary(value: any): Types.RunSummary?
 		end
 	end
 	local summary: Types.RunSummary = {
-		missionId = raw.missionId,
-		overdrive = raw.overdrive,
+		title = raw.title,
 		wavesCleared = raw.wavesCleared,
 		cash = raw.cash,
 		materials = materials,
@@ -220,6 +223,7 @@ local function readSummary(value: any): Types.RunSummary?
 		died = raw.died == true,
 		mentorValor = numberOr(raw.mentorValor, 0),
 		damageShare = numberOr(raw.damageShare, 0),
+		lines = RunLines.Read(raw.lines),
 	}
 	return summary
 end
@@ -311,8 +315,8 @@ function StudioBridge.WriteDeparture(player: Player, hint: TeleportHint, kind: H
 	end
 	return writeRecord(player, `departure SetAsync {player.UserId}`, {
 		kind = kind,
-		missionId = hint.missionId,
-		overdrive = hint.overdrive,
+		levelId = hint.levelId,
+		difficulty = hint.difficulty,
 		hostUserId = hint.hostUserId,
 		accessCode = hint.accessCode,
 		stamp = os.time(),
@@ -344,16 +348,19 @@ function StudioBridge.ReadArrival(player: Player): TeleportHint?
 	end
 	removeRecord(player)
 	if
-		typeof(record.missionId) ~= "string"
-		or record.missionId == ""
+		typeof(record.levelId) ~= "string"
+		or record.levelId == ""
+		or #record.levelId > MapRules.MAX_LEVEL_ID_LENGTH
+		or typeof(record.difficulty) ~= "string"
+		or #record.difficulty > MapRules.MAX_DIFFICULTY_LENGTH
 		or not isUserId(record.hostUserId)
 	then
 		warn(`[StudioBridge] malformed handoff for {player.Name}; falling back to the attributes`)
 		return nil
 	end
 	return {
-		missionId = record.missionId,
-		overdrive = record.overdrive == true,
+		levelId = record.levelId,
+		difficulty = record.difficulty,
 		hostUserId = record.hostUserId,
 		accessCode = if typeof(record.accessCode) == "string" then record.accessCode else nil,
 	}

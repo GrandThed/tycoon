@@ -50,6 +50,12 @@
 -- the lobby's empty one) gets a new floorsSeq, and ArenaService sends its cells to each member
 -- once (L4B-8). Fix round 3's H1 (docs/prompts/l4-w1b-fix3.md): while a fighter's decision waits
 -- for a dash claim the field is never clear (fieldHeld), so a clear never erases a held blow.
+-- L4 W3 (docs/prompts/l4-w3-contract.md): the map's rules are the shared MapRules' (the hub's Depart
+-- asks the same Startable, §2.1). A verified hub departure starts its level by itself once its party
+-- is in, after a countdown (§3, StageFlow.DepartStep's rule; never after a run, L4W3-4); a proving
+-- boot with debug.provingAutoStart does the same on its pair (L4W3-12). Every credit names its source
+-- (RunCredit's keys), so the cards carry lines (§4.1); the run's last wallet goes out after its last
+-- credit and before the card; run cash is paid at each member's own city era (§5, RunCredit.PayEra).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -60,6 +66,7 @@ local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
@@ -78,6 +85,7 @@ local CampBrain = require(script.Parent:WaitForChild("CampBrain"))
 local SecretFlow = require(script.Parent:WaitForChild("SecretFlow"))
 local UnlockService = require(script.Parent:WaitForChild("UnlockService"))
 local DashProof = require(script.Parent:WaitForChild("DashProof"))
+local RunCredit = require(script.Parent:WaitForChild("RunCredit"))
 
 -- Degrade value: without Combat.json the place never leaves the lobby, but the broadcast loop
 -- still needs a legal period.
@@ -249,13 +257,11 @@ local boot = {
 	loop = nil :: RBXScriptConnection?,
 	-- Ruling 25: the stars of this session, by userId, for a member without a loaded profile (L3-9:
 	-- everyone else's are in their profile). Kept when a member leaves and comes back.
-	stars = {} :: { [number]: StageFlow.Stars },
+	stars = {} :: { [number]: MapRules.Stars },
 	-- The leader the last MapState was computed for: a change sends a new one to everybody.
 	mapLeader = 0,
-	-- os.clock() of the last return to the lobby (the start cooldown), and of the moment the
-	-- lobby first held a human since then (the proving auto-start); 0 = not yet.
+	-- os.clock() of the last return to the lobby (the start cooldown); 0 = not yet.
 	returnedAt = 0,
-	lobbySince = 0,
 	-- A return to the lobby is deferred out of the tick: this keeps it to one.
 	returning = false,
 	-- The lobby camp's kill height, read once (its layout is a file).
@@ -272,6 +278,17 @@ local boot = {
 	-- none could be made it is tried again once per floor set (lobbyKindsSeq: the last one tried).
 	lobbyKinds = nil :: { [string]: number }?,
 	lobbyKindsSeq = -1,
+	-- L4 W3 (§3): the session's auto-start (StageFlow.Depart; nil = none), whether the session's
+	-- first admit has opened it, the members whose bodies it waits for (refilled every lobby tick,
+	-- no table per tick), and the last StageFlow.DepartBeat broadcast. Kept through every run
+	-- (nothing auto-starts after one) and cleared only with the session (Reset).
+	depart = nil :: StageFlow.Depart?,
+	departOpened = false,
+	departHolders = {} :: { Types.RunMember },
+	departBeat = "",
+	-- L4 W3 (§9, the P lever): the session's pay era for every member, over the eras frozen at their
+	-- admits (RunCredit.PayEra); nil = none. Studio only, never saved, gone with the session.
+	cashEra = nil :: number?,
 }
 
 local WaveService = {}
@@ -287,6 +304,12 @@ local function stateHz(): number
 		return DEFAULT_STATE_HZ
 	end
 	return hz
+end
+
+-- coop.lobbyWaitSeconds, the auto-start's wait for the party (0 without Combat.json).
+local function lobbyWaitSeconds(): number
+	local combatConfig = config()
+	return if combatConfig ~= nil then combatConfig.coop.lobbyWaitSeconds else 0
 end
 
 local function isLive(phase: Types.RunPhase): boolean
@@ -375,6 +398,8 @@ local function pushRunFields(): ()
 		-- K3: in the lobby, the bodies of whichever run the leader may start, so the clients fill
 		-- their model pools before it (sent with a floor set's first RunState, as in a run).
 		prewarm = if phase == "lobby" then boot.lobbyKinds else run.prewarm,
+		-- L4 W3 (§3): the auto-start as the clients show it; nil once done and outside the lobby.
+		depart = StageFlow.DepartView(boot.depart, now, phase == "lobby", lobbyWaitSeconds()),
 	})
 end
 
@@ -478,7 +503,7 @@ end
 -- Armory's band-top gate all read: a member's profile `combat.stars` (made when nil), so a star
 -- outlives the session; a member without a loaded profile (and leader 0, nobody) keeps this
 -- session's.
-local function starsOf(userId: number): StageFlow.Stars
+local function starsOf(userId: number): MapRules.Stars
 	local member = ArenaService.GetMember(userId)
 	local player = if member ~= nil then member.player else nil
 	local profile = if player ~= nil then DataService.GetState(player) else nil
@@ -493,13 +518,10 @@ local function starsOf(userId: number): StageFlow.Stars
 	return stars
 end
 
--- Ruling 28: a node is built when a level file with its `level` id exists.
+-- Ruling 28: a node is built when a level file with its `level` id exists (MapRules.Built, the
+-- hub's rule too).
 local function builtLevels(): { [string]: boolean }
-	local built: { [string]: boolean } = {}
-	for _, id in Catalog.GetLevelIds() do
-		built[id] = true
-	end
-	return built
+	return MapRules.Built(Catalog.GetLevelIds())
 end
 
 -- The place of every difficulty in Expeditions.json (the order is the rank).
@@ -522,7 +544,7 @@ local function sitesOf(levelId: string): { SecretFlow.Site }
 		local file = Catalog.GetLevelFile(levelId)
 		local layout = if file ~= nil then Catalog.GetLevelLayout(file.layout) else nil
 		if file ~= nil and layout ~= nil then
-			sites = SecretFlow.Sites(layout, file)
+			sites = MapRules.Sites(layout, file)
 		end
 	end)
 	if not read then
@@ -543,7 +565,8 @@ local function secretRows(
 	for levelId in built do
 		local sites = sitesOf(levelId)
 		if #sites > 0 then
-			rows[levelId] = SecretFlow.MapRow(sites, if opened ~= nil then opened[levelId] else nil)
+			rows[levelId] =
+				MapRules.SecretRow(sites, if opened ~= nil then opened[levelId] else nil)
 		end
 	end
 	return rows
@@ -575,7 +598,7 @@ local function sendMapState(only: Player?): ()
 			RemoteService.FireClient(
 				player,
 				"MapState",
-				StageFlow.MapState(
+				MapRules.MapState(
 					map,
 					built,
 					leaderStars,
@@ -802,8 +825,15 @@ end
 -- (Combat.ContributionShares) and paid in whole units with each member's carry
 -- (Combat.SplitCarry, each member's CombatCashMult inside it), written into the profile and both
 -- summaries; each wallet it changed is marked dirty (L1b-16). `killer` (0 = none) is credited
--- the kill. Never yields: it runs inside the strike that killed the body.
-local function credit(pool: Combat.RewardPool, tally: { [number]: number }, killer: number): ()
+-- the kill. Never yields: it runs inside the strike that killed the body. L4 W3: `key` names the
+-- reward's source on both cards (§4.1), and each member's cash is paid at their own city era,
+-- frozen at their admit (§5, L4W3-7; cash only, SplitCarry's rule).
+local function credit(
+	pool: Combat.RewardPool,
+	tally: { [number]: number },
+	killer: number,
+	key: Types.RunLineKey
+): ()
 	local level = run.level
 	local combatConfig = config()
 	if level == nil or combatConfig == nil then
@@ -811,15 +841,17 @@ local function credit(pool: Combat.RewardPool, tally: { [number]: number }, kill
 	end
 	local gameConfig = Catalog.GetGameConfig()
 	local shopConfig = Catalog.GetLegacyShopConfig()
+	local rewards = combatConfig.rewards
 	local states: { [number]: Types.PlayerState } = {}
 	local mults: { [number]: number } = {}
 	for userId in tally do
 		local member = ArenaService.GetMember(userId)
 		local player = if member ~= nil then member.player else nil
 		local state = if player ~= nil then DataService.GetState(player) else nil
-		if state ~= nil then
+		if member ~= nil and state ~= nil then
 			states[userId] = state
-			mults[userId] = Combat.CombatCashMult(state, gameConfig, shopConfig)
+			local era = RunCredit.PayEra(member.cashEra, boot.cashEra)
+			mults[userId] = Combat.CombatCashMult(state, gameConfig, shopConfig, rewards, era)
 		end
 	end
 	local shares = Combat.ContributionShares(tally, combatConfig.coop.contributionFloor)
@@ -842,6 +874,7 @@ local function credit(pool: Combat.RewardPool, tally: { [number]: number }, kill
 		killCounted = killCounted or kills > 0
 		ArenaService.CreditSummary(
 			userId,
+			key,
 			share.cash,
 			material,
 			share.materials,
@@ -861,7 +894,7 @@ local function credit(pool: Combat.RewardPool, tally: { [number]: number }, kill
 		if not killCounted then
 			-- The killing blow's owner took no share (a profile that loaded late): the card still
 			-- counts the kill.
-			ArenaService.CreditSummary(killer, 0, material, 0, 0, 1)
+			ArenaService.CreditSummary(killer, key, 0, material, 0, 0, 1)
 		end
 	end
 end
@@ -901,7 +934,8 @@ local function campCleared(zone: StageFlow.Zone, skipped: boolean, stock: { [str
 	local cash, materials =
 		Combat.ClearBonus(stock, level.crowd.rewards, scales.rewardMult, bonus.share)
 	if cash > 0 or materials > 0 then
-		credit({ cash = cash, materials = materials, valor = 0, kills = 0 }, evenTally(), 0)
+		local key = RunCredit.CampKey(zone.id, zone.name)
+		credit({ cash = cash, materials = materials, valor = 0, kills = 0 }, evenTally(), 0, key)
 	end
 end
 
@@ -971,13 +1005,20 @@ local function onCrowdKilled(id: number, byUserId: number, info: CrowdService.Cr
 	table.insert(run.killStamps, os.clock())
 	local cash, materials = Combat.KillReward(level.crowd.rewards, info.kind, scales.rewardMult)
 	local valor = 0
-	if info.boss and id == run.bossId then
+	-- The run's boss is the body whose death pays the boss's Valor; every other body is a raider
+	-- on the cards (RunCredit.KillKey).
+	local boss = info.boss and id == run.bossId
+	local key = RunCredit.KillKey(boss, info.kind, run.bossName)
+	if boss then
 		run.bossId = 0
 		valor = run.bossValor
-		payMentors(combatConfig, tally)
 		RunFx.Push({ kind = "bossDown", name = run.bossName or info.kind, valor = run.bossValor })
 	end
-	credit({ cash = cash, materials = materials, valor = valor, kills = 1 }, tally, byUserId)
+	credit({ cash = cash, materials = materials, valor = valor, kills = 1 }, tally, byUserId, key)
+	if boss then
+		-- After the boss's own credit, so a card shows the boss's line before the mentor's.
+		payMentors(combatConfig, tally)
+	end
 end
 
 -- L1b-16: each wallet a credit changed goes out at most once every levels.walletSendSeconds
@@ -1291,10 +1332,12 @@ local function fallenReason(): (string?, { number })
 end
 
 -- Ruling 20: every run ends in a summary. Nothing is dropped and nothing more is paid (L1b-15:
--- every kill was paid as it fell; the carry, under 1 of each, goes with the run); every wallet a
--- credit changed is sent now (L1b-16); the field is cleared; a lost run marks its fallen; a
--- cleared one gives the star of its difficulty to every human StageFlow says earned it (those
--- fighting before the last boundary). The level stays built while the card is up.
+-- every kill was paid as it fell; the carry, under 1 of each, goes with the run); the field is
+-- cleared; a lost run marks its fallen; a cleared one gives the star of its difficulty to every
+-- human StageFlow says earned it (those fighting before the last boundary). The level stays built
+-- while the card is up. L4 W3 (§4.1): every wallet a credit changed (L1b-16) is sent after the
+-- run's last credit, the first clear's included, and before the card, so the card's wallet line
+-- rolls to the final number.
 function WaveService.EndRun(asked: string): ()
 	local plan = run.plan
 	local flow = run.flow
@@ -1306,7 +1349,6 @@ function WaveService.EndRun(asked: string): ()
 	-- the one StageFlow ended the run for.
 	StageFlow.Finish(plan, flow, asked)
 	local reason = flow.ended or asked
-	sendWallets(os.clock(), true)
 	if reason == "down" or reason == "wipe" then
 		local _lost, fallen = fallenReason()
 		for _, userId in fallen do
@@ -1320,13 +1362,16 @@ function WaveService.EndRun(asked: string): ()
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
 		local star = StageFlow.EarnsStar(flow, member.userId)
-			and StageFlow.Award(starsOf(member.userId), plan.levelId, plan.difficulty)
+			and MapRules.Award(starsOf(member.userId), plan.levelId, plan.difficulty)
 		-- L3-17: a new star gives its difficulty's first-clear reward to a member with a profile
-		-- (GrantFirstClear answers nil without one); its Valor is on the card before it goes out.
+		-- (GrantFirstClear answers nil without one); its Valor is on the card before it goes out,
+		-- on its own line (L4 W3), and its wallet goes out with the others below.
 		local reward = if star then StageFlow.FirstClear(level, plan.difficulty) else nil
 		local given = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil
-		if given ~= nil and given.valor > 0 then
-			ArenaService.CreditSummary(member.userId, 0, "", 0, given.valor, 0)
+		if given ~= nil then
+			local key = RunCredit.FirstClearKey(plan.levelId, plan.difficulty)
+			ArenaService.CreditSummary(member.userId, key, 0, "", 0, given.valor, 0)
+			run.walletDirty[member.userId] = true
 		end
 		results[member.userId] = {
 			levelId = level.id,
@@ -1345,6 +1390,8 @@ function WaveService.EndRun(asked: string): ()
 	local combatConfig = config()
 	run.returnAt = os.clock()
 		+ (if combatConfig ~= nil then combatConfig.coop.returnGroupSeconds else 0)
+	-- After the run's last credit (the first clears above) and before the card (§4.1).
+	sendWallets(os.clock(), true)
 	pushRunFields()
 	ArenaService.BroadcastSummary()
 	print(`[WaveService] run ended ({reason}): {level.id} {plan.difficulty}, stage {flow.stage}`)
@@ -1380,7 +1427,7 @@ local function backToLobby(): ()
 	ArenaService.SetLevel(nil)
 	VitalsService.SetMission(missionRules(1, 0))
 	boot.returnedAt = os.clock()
-	boot.lobbySince = 0
+	-- L4W3-4: the auto-start is left as it is (done, or picked): nothing starts after a run.
 	broadcast()
 	sendMapState(nil)
 	-- Joinable again (ruling 6).
@@ -1896,18 +1943,21 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	if map == nil then
 		return "unavailable"
 	end
-	-- The level's node must be open for the leader (ruling 28).
-	local leaderStars = starsOf(member.userId)
-	local open = false
-	for _, node in map.nodes do
-		if node.level == levelId then
-			local state = StageFlow.NodeState(map, builtLevels(), leaderStars, leaderStars, node.id)
-			open = state ~= nil and state.open
-			break
-		end
-	end
-	if not open then
+	-- The level's node must be open for the leader (ruling 28) and the difficulty one the map and
+	-- the level file both have: MapRules.Startable, the hub's Depart's rule too (L4W3-1).
+	local file = Catalog.GetLevelFile(levelId)
+	local verdict = MapRules.Startable(
+		map,
+		builtLevels(),
+		starsOf(member.userId),
+		levelId,
+		difficulty,
+		if file ~= nil then file.difficulties else nil
+	)
+	if verdict == "locked" then
 		return "locked"
+	elseif verdict ~= "ok" then
+		return "unavailable"
 	end
 	local level, layout = resolveLevel(levelId, difficulty, combatConfig, map)
 	if level == nil or layout == nil then
@@ -2005,7 +2055,7 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	-- crowd's next step announces a resident).
 	run.prewarm = plan.kinds
 	-- The chests of the layout as it is built.
-	run.secretSites = SecretFlow.Sites(layout, level)
+	run.secretSites = MapRules.Sites(layout, level)
 	run.shortcuts = SecretFlow.Shortcuts(layout)
 	ArenaService.SetLevel({
 		id = level.id,
@@ -2039,9 +2089,13 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 end
 
 -- RequestStartLevel (ruling 7): the leader picks what is played. The remote's own thread. A
--- refusal is answered with an ActionResult; a start needs no answer, the RunState is one.
+-- refusal is answered with an ActionResult; a start needs no answer, the RunState is one. L4 W3
+-- (§3): the leader's own ask, started or not, ends the auto-start (StageFlow.DepartAsked).
 function WaveService.OnStartLevel(player: Player, levelId: string, difficulty: string): ()
 	local refusal = startLevel(player, levelId, difficulty)
+	if refusal ~= "notLeader" and StageFlow.DepartAsked(boot.depart) and run.phase == "lobby" then
+		broadcast()
+	end
 	if refusal ~= nil then
 		refuseStart(player, levelId, refusal)
 	end
@@ -2049,32 +2103,59 @@ end
 
 -- The tick ------------------------------------------------------------------------------------
 
--- Ruling 32: with debug.provingAutoStart the server starts debug.provingLevel by itself,
--- provingStartDelay after the lobby holds a human, and again after every return.
-local function tickAutoStart(combatConfig: Types.CombatConfig): ()
-	local debugConfig = combatConfig.debug
-	if not boot.proving or not debugConfig.provingAutoStart then
+-- L4 W3 (§3, L4W3-4): the auto-start's tick, in the lobby. StageFlow.DepartStep decides; this
+-- gathers its facts, starts the level once at zero (a refusal leaves it picked on the map, with the
+-- leader's toast and a warn, and is never retried) and broadcasts at once on every change of what
+-- the wire shows (its state, each whole second it counts). The bodies it waits for are the expected
+-- members present (with `standIn`, everyone present): an arrival from the run list never holds it.
+-- Nothing here re-arms it after a run (backToLobby leaves it alone).
+local function tickDepart(combatConfig: Types.CombatConfig): ()
+	local depart = boot.depart
+	if depart == nil then
 		return
 	end
-	local leader = ArenaService.GetMember(ArenaService.LeaderUserId())
-	local player = if leader ~= nil then leader.player else nil
-	if player == nil then
-		boot.lobbySince = 0
-		return
+	local holders = boot.departHolders
+	table.clear(holders)
+	for _, member in ArenaService.GetMembers() do
+		if depart.standIn or ArenaService.IsExpected(member.userId) then
+			table.insert(holders, member)
+		end
 	end
 	local now = os.clock()
-	if boot.lobbySince == 0 then
-		boot.lobbySince = now
+	local action = StageFlow.DepartStep(depart, {
+		now = now,
+		expectedIn = ArenaService.ExpectedIn(),
+		hostIn = ArenaService.HostIn(),
+		bodies = VitalsService.AllHaveBodies(holders),
+		waitSeconds = combatConfig.coop.lobbyWaitSeconds,
+		countdownSeconds = combatConfig.levels.departCountdownSeconds,
+	})
+	if action == "start" then
+		-- Whoever leads at zero starts it: a leader who took over during the countdown, by their stars.
+		local leader = ArenaService.GetMember(ArenaService.LeaderUserId())
+		local player = if leader ~= nil then leader.player else nil
+		local refusal: StartRefusal? = if player ~= nil
+			then startLevel(player, depart.levelId, depart.difficulty)
+			else "notLeader"
+		if refusal ~= nil then
+			StageFlow.DepartRefused(depart)
+			warn(
+				`[WaveService] the auto-start of {depart.levelId} {depart.difficulty} was refused ({refusal}); it stays picked on the map`
+			)
+			if player ~= nil then
+				refuseStart(player, depart.levelId, refusal)
+			end
+		end
 	end
-	if now - boot.lobbySince < debugConfig.provingStartDelay then
-		return
-	end
-	-- A refusal (a body still spawning, a level that cannot be built) waits the delay again
-	-- rather than asking every frame, and is not sent to the client as a toast.
-	boot.lobbySince = now
-	local refusal = startLevel(player, debugConfig.provingLevel, debugConfig.provingDifficulty)
-	if refusal ~= nil then
-		warn(`[WaveService] proving auto-start of {debugConfig.provingLevel} refused: {refusal}`)
+	local view =
+		StageFlow.DepartView(depart, now, run.phase == "lobby", combatConfig.coop.lobbyWaitSeconds)
+	local beat = StageFlow.DepartBeat(view)
+	if beat ~= boot.departBeat then
+		boot.departBeat = beat
+		-- A start broadcast its own RunState already.
+		if run.phase == "lobby" then
+			broadcast()
+		end
 	end
 end
 
@@ -2112,7 +2193,22 @@ local function announceSecret(
 		RemoteService.FireClient(player, "CombatFx", { fx })
 		return
 	end
-	ArenaService.CreditSummary(userId, 0, material, opening.materials, opening.valor, 0)
+	ArenaService.CreditSummary(
+		userId,
+		RunCredit.ChestKey(site.id, site.name),
+		0,
+		material,
+		opening.materials,
+		opening.valor,
+		0
+	)
+	local key = opening.key
+	if key ~= nil then
+		-- L4 W3 (§4.1): the key a chest gave is a line of its own, paying nothing.
+		local map = Catalog.GetExpeditionsConfig()
+		local keyLine = RunCredit.KeyKey(key, if map ~= nil then map.keys else nil)
+		ArenaService.CreditSummary(userId, keyLine, 0, "", 0, 0, 0)
+	end
 	run.walletDirty[userId] = true
 	RunFx.Push(fx)
 	sendMapState(player)
@@ -2219,7 +2315,7 @@ local function tick(delta: number): ()
 	CrowdService.DrainGroupEvents(onGroupEvent)
 	local phase = run.phase
 	if phase == "lobby" then
-		tickAutoStart(combatConfig)
+		tickDepart(combatConfig)
 		if run.phase == "lobby" and ArenaService.LeaderUserId() ~= boot.mapLeader then
 			sendMapState(nil)
 		end
@@ -2296,9 +2392,36 @@ function WaveService.OnAbandon(player: Player): ()
 	end
 end
 
+-- L4 W3 (§3): at the session's first admit the auto-start opens on what the departure named
+-- (ArenaService.Pick: verified waits, a hint alone is picked, no hint is nothing), or, in a proving
+-- boot with debug.provingAutoStart, on its pair with the members present standing in (L4W3-12).
+local function openDepart(): ()
+	if boot.departOpened then
+		return
+	end
+	boot.departOpened = true
+	local combatConfig = config()
+	local debugConfig = if combatConfig ~= nil then combatConfig.debug else nil
+	-- Studio only twice over (CombatMode says proving only in Studio, and it is asked again here):
+	-- on a live server only a verified hub departure starts anything by itself.
+	local proving = if boot.proving
+			and RunService:IsStudio()
+			and debugConfig ~= nil
+			and debugConfig.provingAutoStart
+		then { levelId = debugConfig.provingLevel, difficulty = debugConfig.provingDifficulty }
+		else nil
+	local levelId, difficulty, verified = ArenaService.Pick()
+	local since = ArenaService.FirstArrivalAt()
+	if since <= 0 then
+		since = os.clock()
+	end
+	boot.depart = StageFlow.DepartOpen(levelId, difficulty, verified, proving, since)
+end
+
 -- Every member gets the map (their own stars, the leader's open nodes): an arrival may have
--- changed who leads.
+-- changed who leads. The session's first arrival opens its auto-start.
 function WaveService.OnAdmitted(_player: Player): ()
+	openDepart()
 	sendMapState(nil)
 end
 
@@ -2433,7 +2556,7 @@ function WaveService.GrantStars(
 		if level == nil then
 			continue
 		end
-		if not StageFlow.Award(stars, levelId, difficulty) then
+		if not MapRules.Award(stars, levelId, difficulty) then
 			continue
 		end
 		new += 1
@@ -2461,6 +2584,37 @@ function WaveService.ForgetStars(player: Player?): ()
 	sendMapState(nil)
 end
 
+-- The `fakeDepart` lever (§9, the R key, through DebugService): in the lobby, the auto-start
+-- waits on `levelId` at `difficulty` with the members present standing in for the expected list,
+-- then the real tick runs it (its countdown, its start, a refusal's fallback). Whether it took: not
+-- outside the lobby, outside Studio, or for a pair with no level.
+function WaveService.FakeDepart(levelId: string, difficulty: string): boolean
+	if not RunService:IsStudio() or not boot.mission or run.phase ~= "lobby" then
+		return false
+	end
+	local pair = { levelId = levelId, difficulty = difficulty }
+	boot.depart = StageFlow.DepartOpen(levelId, difficulty, true, pair, os.clock())
+	boot.departOpened = true
+	return boot.depart ~= nil
+end
+
+-- The `cashEra` lever (§9, the P key, through DebugService): the session's pay era steps to the
+-- next (1 -> ... -> the last -> 1) for every member, over the eras frozen at their admits. Nothing
+-- is saved and the session's end forgets it; the first press steps from the leader's frozen era.
+-- The era it pays at now and its multiplier (Combat.EraCashMult). Studio only, as every lever.
+function WaveService.NextCashEra(): (number, number)
+	local combatConfig = config()
+	local rewards = if combatConfig ~= nil then combatConfig.rewards else nil
+	local leader = ArenaService.GetMember(ArenaService.LeaderUserId())
+	local current = boot.cashEra or (if leader ~= nil then leader.cashEra else 1)
+	if not RunService:IsStudio() or not boot.mission then
+		return current, Combat.EraCashMult(rewards, current)
+	end
+	local era = RunCredit.NextPayEra(current, Catalog.GetEraCount())
+	boot.cashEra = era
+	return era, Combat.EraCashMult(rewards, era)
+end
+
 -- The `killAll` lever: every living body, on every floor, dies and is paid as any kill is
 -- (L1b-15), credited to nobody: an even split unless somebody had hurt it.
 function WaveService.KillAll(): ()
@@ -2473,7 +2627,12 @@ function WaveService.Reset(): ()
 	run = freshRun()
 	setFloors({})
 	boot.returning = false
-	boot.lobbySince = 0
+	-- The session's auto-start and pay era go with it (L4 W3).
+	boot.depart = nil
+	boot.departOpened = false
+	boot.departBeat = ""
+	table.clear(boot.departHolders)
+	boot.cashEra = nil
 	CrowdService.Clear()
 	VitalsService.ClearThreats()
 	WeaponService.AbandonProjectiles()

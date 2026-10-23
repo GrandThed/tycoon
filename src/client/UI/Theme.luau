@@ -72,15 +72,6 @@ local Theme = {
 	TOP_INCOME_WIDTH = 84,
 	TOP_LEGACY_WIDTH = 120,
 	TOP_LEGACY_MIN_TEXT = 9,
-	-- C0: Gear Power ("⚔ 480") rides between income and Legacy on the same line, so the
-	-- 204 px text column is re-split while it is visible. Without an Armory config the
-	-- power label is hidden and the other two keep their pre-C0 widths, which makes a
-	-- build with Expeditions switched off pixel-identical to M9.
-	TOP_POWER_WIDTH = 54,
-	TOP_POWER_GAP = 4,
-	TOP_INCOME_WIDTH_POWER = 56,
-	TOP_LEGACY_WIDTH_POWER = 84,
-	TOP_POWER_MIN_TEXT = 9,
 
 	-- M3 bottom bar: Build / Legacy / Shop (hidden until M4) / Settings, centered.
 	BOTTOM_BAR_BUTTON_WIDTH = 78,
@@ -194,18 +185,18 @@ local Theme = {
 	-- the hub's debug strip).
 	ARMORY_CHIP_MIN_TEXT = 8,
 
-	-- C0 Expedition panel: mission tiles with the same silhouette, an Overdrive toggle above
-	-- them and the "Active runs" list below. The list is refreshed by a RequestRunList intent
-	-- on open and on this interval while the panel stays open (never when it is closed).
+	-- C0 Expedition panel (Party & runs since L4 W3): the run list's rows. The list is refreshed
+	-- by a RequestRunList intent on open and on this interval while the panel stays open (never
+	-- when it is closed).
 	EXPEDITION_META_Y = 30,
-	EXPEDITION_POWER_Y = 46,
-	EXPEDITION_TILE_PAD_BOTTOM = 10,
 	EXPEDITION_RUNS_REFRESH_SECONDS = 10,
 	EXPEDITION_RUN_ROW_HEIGHT = 56,
-	-- Readiness colouring of "Recommended ⚔ N — you ⚔ M": green at or above the recommended
-	-- power, amber within this fraction of it, red below.
-	POWER_READY_RATIO = 1,
-	POWER_RISKY_RATIO = 0.7,
+	-- L4 W3 (docs/prompts/l4-w3-contract.md section 2.4): the hub's map (UI/HubMap) and Party &
+	-- runs. A Depart (RequestExpedition) or a Join (RequestJoinRun) is in flight until its
+	-- ActionResult lands; the server always answers one, except when the rate limiter drops the
+	-- intent silently, so the lock also lifts after this long rather than stranding the button.
+	-- Longer than the dungeon's MAP_DEPART_TIMEOUT_SECONDS: the hub reserves a server first.
+	EXPEDITION_DEPART_TIMEOUT_SECONDS = 8,
 
 	-- C2 hub party (ExpeditionPanel party strip + PartyInviteToast). Member, pending-invite
 	-- and picker rows are one line tall with a 48 px action button (48 x MIN_SCALE = 44
@@ -321,7 +312,6 @@ local Theme = {
 	COMBAT_PARTY_ROW_HEIGHT = 34,
 	COMBAT_PARTY_BAR_HEIGHT = 6,
 	COMBAT_PARTY_NAME_HEIGHT = 16,
-	COMBAT_SUMMARY_WIDTH = 320,
 
 	-- C2 combat client (src/combat/client, ui-engineer A): co-op party rows and the waiting
 	-- banner. Presentation only; every co-op number arrives in RunState.
@@ -1160,9 +1150,6 @@ local Theme = {
 	-- The run layer (CombatHud): the first press of Abandon asks for a second one within this
 	-- long.
 	COMBAT_ABANDON_CONFIRM_SECONDS = 3,
-	-- The summary card's lines sit closer than a dialog's: with two buttons and a party's two
-	-- extra lines it must still fit 329 design px of height (640x360 under a 58 px top bar).
-	COMBAT_SUMMARY_LINE_GAP = 6,
 	-- The bottom-left buttons: Map, and a two-line button (Return to your city / Abandon).
 	COMBAT_MAP_BUTTON_WIDTH = 72,
 	COMBAT_RUN_BUTTON_WIDTH = 104,

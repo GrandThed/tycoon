@@ -141,6 +141,19 @@
 -- through RunFloors.Merge, which keeps the cells it was sent until the seq moves on. Fix round F4:
 -- the cells are one-shot (the server has noted them as sent), so `onRunState` applies the floors
 -- first, before anything that could throw, or one error would lose them for the whole run.
+--
+-- L4 W3 (docs/prompts/l4-w3-contract.md §3 "Client", §4.2, §9), in `bootMission`:
+--  * The end of a run is the shared tally card (UI/RunTally), hosted by UI/TallyHost: rows that
+--    count up, coins into the wallet, Timber into a pile. Every Snapshot's wallet goes to it, so
+--    the roll ends on the server's numbers.
+--  * The auto-start: RunState.depart (UI/DepartLine) is the HUD's notice line while it waits for
+--    the party or counts down; the map does not open by itself over it, and a map already open
+--    closes when the wait or the count begins (also after R). `picked` (a refused or unverified
+--    start) opens the map on that level and difficulty, once per arrival.
+--  * Studio keys: R departs again on the map's selection (lever `fakeDepart`, "<levelId>:
+--    <difficulty>", else the config's proving pair), P steps the pay era (lever `cashEra`, "next";
+--    the server's notice names it). Neither key is bound anywhere else in a mission boot; the
+--    range's P (its panel) is in the other boot, which never binds these keys.
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -164,7 +177,8 @@ local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
 local Theme = require(uiFolder:WaitForChild("Theme"))
 local CombatHud = require(uiFolder:WaitForChild("CombatHud"))
-local SummaryCard = require(uiFolder:WaitForChild("SummaryCard"))
+local TallyHost = require(uiFolder:WaitForChild("TallyHost"))
+local DepartLine = require(uiFolder:WaitForChild("DepartLine"))
 local Toast = require(uiFolder:WaitForChild("Toast"))
 local LoadScreen = require(uiFolder:WaitForChild("LoadScreen"))
 local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
@@ -212,7 +226,11 @@ local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: any } } = {
 	[Enum.KeyCode.U] = { lever = "grantStar", value = Unlocks.ALL_STARS },
 	[Enum.KeyCode.L] = { lever = "resetArmory", value = true },
 	[Enum.KeyCode.Z] = { lever = "dressFail", value = true },
+	-- L4 W3 (§9): P steps every member's pay era, 1 -> 4 -> 1, for the session.
+	[Enum.KeyCode.P] = { lever = "cashEra", value = "next" },
 }
+-- L4 W3 (§9): R departs again on the map's selection, the real countdown and start included.
+local DEPART_KEY = { key = Enum.KeyCode.R, lever = "fakeDepart" }
 local AIR_JUMP_KEY = Enum.KeyCode.J
 -- L4 W2: X switches every crowd body between its model and the placeholder, on this client only
 -- (CrowdRenderer.ToggleModels). Y and O are LevelScenery's own (the forest, grey and walls; the
@@ -230,6 +248,7 @@ local DEBUG_HINT = "N next camp · B boss · G gear · J double jump · F flamet
 	.. " Valor · T +"
 	.. Format.Cash(Theme.COMBAT_DEBUG_GRANT_TIMBER)
 	.. " Timber · U ★ Hard · L reset Armory · Y scenery · O light · X models · Z grey level"
+	.. " · R depart · P pay era"
 -- L2-10: the Armory's key (ArmoryScreen.KEY, the hub's too), in the lobby, and what the first
 -- refused air jump says.
 local HOLD_ARMORY = "armory"
@@ -1049,6 +1068,10 @@ local function bootMission(): ()
 		families = {} :: { [string]: any },
 		-- L3: the last Snapshot's whole `combat`, which the strip's tiers are read from.
 		combat = nil :: Types.CombatProfile?,
+		-- L4 W3: the auto-start was waiting or counting at the last RunState; the "<levelId>:
+		-- <difficulty>" a `picked` already opened the map on (once per arrival).
+		departHolding = false,
+		departPicked = "",
 	}
 	local mapName = if expeditions ~= nil then expeditions.name else DEFAULT_MAP_NAME
 
@@ -1389,7 +1412,7 @@ local function bootMission(): ()
 		runButtons = not proving,
 		keyHint = if studio then DEBUG_HINT else nil,
 	})
-	local summaryCard = SummaryCard.new(screenGui, {
+	local summaryCard = TallyHost.new(screenGui, {
 		onBack = abandon,
 		onReturn = leave,
 		canReturn = not proving,
@@ -1494,6 +1517,7 @@ local function bootMission(): ()
 			armoryScreen.SetState(combat :: Types.CombatProfile)
 			paintStripTiers()
 		end
+		summaryCard.SetWallet(wallet.cash, st.combat)
 		if debugPanel ~= nil then
 			debugPanel.SetFireFamily(ownsElementFamily("fire"))
 			debugPanel.SetIceFamily(ownsElementFamily("ice"))
@@ -1524,35 +1548,17 @@ local function bootMission(): ()
 		end
 	end
 
-	-- The first MapState of a session picks what the map opens on: the first open node, in
-	-- config order, that has no star, at its lowest difficulty; failing that the first open
-	-- node with a difficulty still to clear, at the lowest such. Later the selection is the
-	-- player's.
+	-- The first MapState of a session picks what the map opens on (MapScreen.FirstPick, the city's
+	-- rule too). Later the selection is the player's, or a `picked` depart's.
 	local function seedMap(state: Types.MapState): ()
 		local screen = mapScreen
 		if screen == nil or expeditions == nil or st.mapSeeded then
 			return
 		end
-		local fallback: Types.MapNodeState? = nil
-		for _, node in state.nodes do
-			if typeof(node) == "table" and node.open == true and typeof(node.stars) == "table" then
-				if #node.stars == 0 then
-					st.mapSeeded = true
-					screen.Select(node.id, nil)
-					return
-				end
-				fallback = fallback or node
-			end
-		end
-		if fallback ~= nil then
+		local nodeId, difficulty = MapScreen.FirstPick(expeditions.difficulties, state)
+		if nodeId ~= nil then
 			st.mapSeeded = true
-			for _, difficulty in expeditions.difficulties do
-				if table.find(fallback.stars, difficulty) == nil then
-					screen.Select(fallback.id, difficulty)
-					return
-				end
-			end
-			screen.Select(fallback.id, nil)
+			screen.Select(nodeId, difficulty)
 		end
 	end
 
@@ -1734,6 +1740,12 @@ local function bootMission(): ()
 		end
 		CameraController.SetPhase(phase)
 		hud.SetRunState(run)
+		-- L4 W3 (§3): the auto-start, read only in the lobby (the server sends none elsewhere).
+		local depart = if phase == "lobby" then DepartLine.Read(run.depart) else nil
+		hud.SetDepart(if depart ~= nil then DepartLine.Text(depart, expeditions) else nil)
+		local holding = depart ~= nil and (depart.state == "waiting" or depart.state == "counting")
+		local startedHolding = holding and not st.departHolding
+		st.departHolding = holding
 		if debugPanel ~= nil then
 			debugPanel.SetWave(run.wave)
 		end
@@ -1772,10 +1784,30 @@ local function bootMission(): ()
 						then combatConfig.levels.startCooldownSeconds
 						else 0
 				)
-				screen.Open()
+				-- The auto-start has the screen while it waits or counts: no map over its line.
+				if not holding then
+					screen.Open()
+				end
 			elseif phase ~= "lobby" and screen.IsOpen() then
 				freeDepart()
 				screen.Close()
+			end
+			-- The wait or the count began (it can come a RunState after the lobby, or after R
+			-- with the map open): the line must be seen. The leader may open the map again.
+			if startedHolding and screen.IsOpen() then
+				screen.Close()
+			end
+			-- A start that was refused or never verified: the map on that level, once per arrival.
+			if depart ~= nil and depart.state == "picked" then
+				local pick = depart.levelId .. ":" .. depart.difficulty
+				local node = DepartLine.NodeOf(expeditions, depart.levelId)
+				if pick ~= st.departPicked and node ~= nil then
+					st.departPicked = pick
+					st.mapSeeded = true
+					screen.Select(node.id, depart.difficulty)
+					armoryScreen.Close() -- one sheet at a time
+					screen.Open()
+				end
 			end
 		end
 
@@ -1795,7 +1827,6 @@ local function bootMission(): ()
 				partySize = #run.party,
 				returnIn = if typeof(returnIn) == "number" then returnIn else nil,
 				canBack = members <= 1 or run.leaderUserId == userId,
-				waves = run.waves,
 				difficultyName = difficultyName,
 				mapName = mapName,
 			})
@@ -1900,7 +1931,7 @@ local function bootMission(): ()
 			size,
 			bottomObstacles(viewport, inset, vitals, barLeft, barTop, barBottom)
 		)
-		summaryCard.SetScale(scale)
+		summaryCard.SetLayout(scale, size)
 		loadScreen.SetScale(scale)
 		toast.SetLayout(scale, size.X > size.Y, 0)
 		if debugPanel ~= nil then
@@ -1919,6 +1950,20 @@ local function bootMission(): ()
 		placeBanner(scale, size, viewport, inset, edges, bossBottom)
 		st.vitalsLayout = vitals
 		applyVitalsLayout()
+	end
+
+	-- L4 W3 (§9): what R departs on: the map's selection, else the config's proving pair.
+	local function departPick(): string
+		local screen = mapScreen
+		local levelId: string?, difficulty = nil, ""
+		if screen ~= nil then
+			levelId, difficulty = screen.Selected()
+		end
+		if (levelId == nil or levelId == "" or difficulty == "") and combatConfig ~= nil then
+			levelId = combatConfig.debug.provingLevel
+			difficulty = combatConfig.debug.provingDifficulty
+		end
+		return (levelId or "") .. ":" .. difficulty
 	end
 
 	-- M opens and closes the map in the lobby. Backspace is Abandon, pressed twice (the HUD
@@ -1966,6 +2011,12 @@ local function bootMission(): ()
 		if input.KeyCode == AIR_JUMP_KEY then
 			if debounced() then
 				remote:FireServer(airJumpLever(), Unlocks.AIR_JUMP)
+			end
+			return
+		end
+		if input.KeyCode == DEPART_KEY.key then
+			if debounced() then
+				remote:FireServer(DEPART_KEY.lever, departPick())
 			end
 			return
 		end

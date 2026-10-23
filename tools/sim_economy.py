@@ -554,6 +554,7 @@ def simulate_era(
     shop=None,
     shop_state=None,
     city=None,
+    pause=None,
 ):
     """paid = {"pass": x, "premium": y}; None keeps the free-player defaults.
     rebirth_count feeds LegacyGain exactly as the server passes state.rebirthCount.
@@ -561,7 +562,10 @@ def simulate_era(
     state; None means an empty shop (every helper returns its default).
     city is the CityDressing config; when given, result.tier_times records the
     first second each growth tier is reached (the server republishes the tier
-    after every buy and level-up, so checking per purchase is exact)."""
+    after every buy and level-up, so checking per purchase is exact).
+    pause (L4 W3, sim_combat's "never faster than building") is called as pause(t) once per
+    second before buying and answers (skip, cash): cash lands first, then skip True means
+    no purchase that second (the player is away on an expedition). None changes nothing."""
     if shop is None:
         shop = {"version": 1, "perks": []}
     if shop_state is None:
@@ -616,8 +620,12 @@ def simulate_era(
                 result.tier_times[index] = t
 
     while True:
+        skip = False
+        if pause is not None:
+            skip, landed = pause(t)
+            cash += landed
         # Buy the cheapest affordable purchase, repeatedly, before the next tick.
-        while True:
+        while not skip:
             best_cost, best_kind, best_id = None, None, None
             for slot_id in frontier:
                 cost = by_id[slot_id]["baseCost"]

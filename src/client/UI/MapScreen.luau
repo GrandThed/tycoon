@@ -57,6 +57,14 @@
 -- ladder of 20, and the Armory shows them as "T3", so a difficulty's recommended tier reads the
 -- same way here (Hard's "T3" read "tier 4+" on the old slot ladder). Hard's x2.5 is data: the
 -- rewards line already reads it from the level file.
+--
+-- L4 W3 (docs/prompts/l4-w3-contract.md sections 2.4 and 7): the hub mounts it too (UI/HubMap).
+-- `deps.returnText` names the footer button (nil = "Return to your city"; the hub's reads "Party
+-- & runs"). A difficulty's `note` (the level file's, at most 24 characters: Brutal's "Castle
+-- gear") stands on its button's second line in place of the recommended tier, which is the line
+-- that says what gear the difficulty asks for; "Castle gear" is about 58 design px at 11 px, inside
+-- the 66 px a button has. Selected reads what is picked (the combat place's Studio R key), and
+-- FirstPick is the pick a first MapState opens on, so both hosts open the map the same way.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextService = game:GetService("TextService")
@@ -76,6 +84,8 @@ export type Deps = {
 	onOpenChanged: (open: boolean) -> (),
 	-- "Return to your city"; nil = no button.
 	onReturn: (() -> ())?,
+	-- The footer button's words; nil = "Return to your city".
+	returnText: string?,
 	-- The line naming the keys the host bound to Step and Confirm; nil = no line.
 	keyHint: string?,
 }
@@ -85,6 +95,9 @@ export type MapScreenHandle = {
 	SetParty: (party: { Types.PartyMember }, localUserId: number, leaderUserId: number) -> (),
 	-- Selects a node, and a difficulty of it when one is named and the node offers it.
 	Select: (nodeId: string, difficulty: string?) -> (),
+	-- The selected node's level and difficulty (nil, "" when nothing or a node without a level
+	-- is selected).
+	Selected: () -> (string?, string),
 	-- dx: the node before (-1) or after (+1) in config order. dy: an easier (-1) or a harder
 	-- (+1) difficulty of the selected node. Both stop at the ends.
 	Step: (dx: number, dy: number) -> (),
@@ -104,8 +117,9 @@ export type MapScreenHandle = {
 	Destroy: () -> (),
 }
 
--- One difficulty a level offers, as the card shows it.
-type Difficulty = { id: string, name: string, tier: number, rewardMult: number }
+-- One difficulty a level offers, as the card shows it. `note` = the level file's word for its
+-- gear (nil = none): it reads in place of the tier.
+type Difficulty = { id: string, name: string, tier: number, rewardMult: number, note: string? }
 
 -- One secret on the card (MapSecretState), as checked off the network. L4 W2: `keyId` = the level
 -- key it gives (MapSecretState.key), nil for none.
@@ -208,6 +222,31 @@ local SECRET_KEY_GLYPH_GAP = 1
 local SPREAD_EPSILON = 0.25
 
 local MapScreen = {}
+
+-- The pick a session's first MapState opens the map on: the first open node, in config order,
+-- that has no star, at its lowest difficulty (nil); failing that the first open node with a
+-- difficulty still to clear, at the lowest such, else at its first. nil = no node is open.
+-- `difficulties` = the map's, easiest first.
+function MapScreen.FirstPick(difficulties: { string }, state: Types.MapState): (string?, string?)
+	local fallback: Types.MapNodeState? = nil
+	for _, node in state.nodes do
+		if typeof(node) == "table" and node.open == true and typeof(node.stars) == "table" then
+			if #node.stars == 0 then
+				return node.id, nil
+			end
+			fallback = fallback or node
+		end
+	end
+	if fallback == nil then
+		return nil, nil
+	end
+	for _, difficulty in difficulties do
+		if table.find(fallback.stars, difficulty) == nil then
+			return fallback.id, difficulty
+		end
+	end
+	return fallback.id, nil
+end
 
 -- Pushes two overlapping footprints apart along the shorter way. A fixed one never moves, one
 -- that yields (a bonus node) moves alone against one that does not, and two equals share it.
@@ -353,6 +392,7 @@ local function difficultiesOf(map: Types.ExpeditionsConfig, node: Types.MapNode)
 				name = map.difficultyNames[id] or id,
 				tier = def.recommendedTier,
 				rewardMult = def.rewardMult,
+				note = if typeof(def.note) == "string" and def.note ~= "" then def.note else nil,
 			})
 		end
 	end
@@ -743,6 +783,7 @@ local function difficultyButton(parent: Instance, order: number, count: number):
 	tier.Font = Theme.FONT
 	tier.LayoutOrder = 2
 	tier.Size = UDim2.new(1, 0, 0, Theme.MAP_DIFFICULTY_SUB_TEXT + 2)
+	tier.TextTruncate = Enum.TextTruncate.AtEnd
 	local mult = label("Rewards", Theme.MAP_DIFFICULTY_SUB_TEXT, Theme.MAP_COLOR_GOLD, button)
 	mult.LayoutOrder = 3
 	mult.Size = UDim2.new(1, 0, 0, Theme.MAP_DIFFICULTY_SUB_TEXT + 2)
@@ -889,7 +930,7 @@ local function buildCard(parent: Instance, difficultyCount: number, deps: Deps):
 	local back: TextButton? = nil
 	if deps.onReturn ~= nil then
 		local button = cardButton(frame, "Return", 9, Theme.MAP_RETURN_HEIGHT)
-		button.Text = RETURN_TEXT
+		button.Text = deps.returnText or RETURN_TEXT
 		button.AutoButtonColor = true
 		back = button
 	end
@@ -1181,7 +1222,7 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 					picked = entry
 				end
 				item.name.Text = entry.name
-				item.tier.Text = TIER_PREFIX .. Format.Cash(entry.tier)
+				item.tier.Text = entry.note or (TIER_PREFIX .. Format.Cash(entry.tier))
 				item.mult.Text = "×" .. Format.Rate(entry.rewardMult)
 				item.stroke.Transparency = if chosen then 0 else 1
 				item.button.BackgroundColor3 = if chosen
@@ -1457,6 +1498,10 @@ function MapScreen.new(parent: Instance, map: Types.ExpeditionsConfig, deps: Dep
 					return
 				end
 			end
+		end,
+		Selected = function(): (string?, string)
+			local current = selectedView()
+			return if current ~= nil then current.node.level else nil, view.difficulty
 		end,
 		Step = function(dx: number, dy: number)
 			if dx ~= 0 then

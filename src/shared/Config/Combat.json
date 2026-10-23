@@ -41,13 +41,8 @@
 		"reformSeconds": 60,
 		"publicByDefault": true
 	},
-	"overdrive": {
-		"requiresRebirth": 1,
-		"countMult": 1.5,
-		"hpMult": 3.0,
-		"damageMult": 2.0,
-		"spawnRateMult": 1.5,
-		"rewardMult": 4.0
+	"rewards": {
+		"eraCashMult": [1, 670, 34000, 1400000]
 	},
 	"registry": {
 		"mapName": "ActiveRuns",
@@ -83,8 +78,7 @@
 		"provingBoots": "mission",
 		"provingLevel": "forestRoad",
 		"provingDifficulty": "normal",
-		"provingAutoStart": false,
-		"provingStartDelay": 3,
+		"provingAutoStart": true,
 		"provingGear": { "melee": 1, "ranged": 1 },
 		"gearPresets": [
 			{ "name": "T1", "melee": 1, "ranged": 1 },
@@ -100,6 +94,8 @@
 		"grantStarAttribute": "DebugGrantStar",
 		"resetArmoryAttribute": "DebugResetArmory",
 		"dressFailAttribute": "DebugDressFail",
+		"fakeDepartAttribute": "DebugFakeDepart",
+		"cashEraAttribute": "DebugCashEra",
 		"perfLogSeconds": 10,
 		"perfAttribute": "CrowdPerfMs"
 	},
@@ -119,6 +115,7 @@
 		"checkpointSize": [2, 10, 2],
 		"checkpointReach": 8,
 		"walletSendSeconds": 1,
+		"departCountdownSeconds": 5,
 		"fireMarkerSize": [3, 1, 3],
 		"regionLockMargin": 8,
 		"doorSpare": 0.5,

@@ -1,38 +1,25 @@
 --!strict
 -- L2 W1 (docs/prompts/l2-w1-contract.md, L2-11 to L2-15): the rules of a level's secrets as
--- chests. Which chests a level has, when a standing root opens one, what opening it means for a
--- player (known, locked, nothing, pay), what a pay writes into the profile (Open) and the map
--- card's row. A sibling of StageFlow, pure for the same reason: tables, numbers and Vector3 values
--- only, no service, no Instance, no clock, so tools/crowd_harness loads it as it stands and
--- mutate.py mutates it. WaveService tests the roots and UnlockService hands Open the profile and
--- the key; both only execute what is decided here.
+-- chests. When a standing root opens one, what opening it means for a player (known, locked,
+-- nothing, pay) and what a pay writes into the profile (Open); since L4 W3 which chests a level has
+-- and the map card's row are MapRules' (Sites, SecretRow). A sibling of StageFlow, pure for the
+-- same reason: tables, numbers and Vector3 values only, no service, no Instance, no clock, so
+-- tools/crowd_harness loads it as it stands and mutate.py mutates it. WaveService tests the roots
+-- and UnlockService hands Open the profile and the key; both only execute what is decided here.
 --
 -- No secret pays without its key: Decide asks for the key before it looks at the reward, and the
 -- key (Unlocks.HasKey) fails closed for anything W1 does not sell.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(sharedFolder:WaitForChild("Types"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
 
--- What a chest pays: whole numbers, flat (no rewardMult, any difficulty); family = a weapon
--- family the player now holds. L4 W2 (docs/prompts/l4-w2-contract.md §0): key = a level key id the
--- chest gives ("castle"). Nothing writes it: the opened secret is the key (Unlocks.HasLevelKey).
-export type Reward = { valor: number, materials: number, family: string?, key: string? }
--- One chest: the layout's `Secret_<id>` block and the level file's entry. x, z = its centre on
--- the flat and sx, sz its footprint's sizes (the fix round's s1: the trigger is measured to the
--- footprint, so a big chest opens from beside it); floorY = the block's bottom (where a player
--- stands to reach it); reward nil = the entry names it and pays nothing (W1's cache and shrine).
-export type Site = {
-	id: string,
-	needs: string,
-	x: number,
-	z: number,
-	sx: number,
-	sz: number,
-	floorY: number,
-	name: string,
-	reward: Reward?,
-}
+-- L4 W3 (docs/prompts/l4-w3-contract.md §2.1): a chest and its reward are the shared MapRules'
+-- (the hub's map rows read them too); the names stay here for this module's callers.
+export type Reward = MapRules.Reward
+export type Site = MapRules.Site
 export type Verdict = "known" | "locked" | "nothing" | "pay"
 -- What UnlockService.OpenSecret did: the verdict, and on "pay" what it credited (else 0 / nil),
 -- and the key it gave (L4 W2).
@@ -54,90 +41,11 @@ export type Shortcut = {
 	sy: number,
 	sz: number,
 }
--- The level file's (or the resolved level's) secrets block; LevelFile and LevelConfig both fit.
-type SecretsHolder = { secrets: { [string]: Types.LevelSecretConfig }? }
 
 local SecretFlow = {}
 
 local function finite(value: any): boolean
 	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
-end
-
-local function whole(value: any): number
-	return if finite(value) and value >= 0 and value % 1 == 0 then value else 0
-end
-
--- The entry's reward, or nil when it is not a reward entry (none of valor, materials, family,
--- key: L4 W2, so a key-only chest still pays). A malformed number pays 0: Validate refuses such a
--- level before it is ever played, so this is only the net.
-local function rewardOf(entry: Types.LevelSecretConfig?): Reward?
-	if
-		entry == nil
-		or (
-			entry.valor == nil
-			and entry.materials == nil
-			and entry.family == nil
-			and entry.key == nil
-		)
-	then
-		return nil
-	end
-	local family = entry.family
-	local key = entry.key
-	return {
-		valor = whole(entry.valor),
-		materials = whole(entry.materials),
-		family = if type(family) == "string" and family ~= "" then family else nil,
-		key = if type(key) == "string" and key ~= "" then key else nil,
-	}
-end
-
--- Every chest of a level, in the layout's order. A layout secret whose numbers are missing is
--- skipped (it can never be reached, so it is never shown as reachable either).
-function SecretFlow.Sites(layout: Types.LevelLayout, levelFile: SecretsHolder?): { Site }
-	local sites: { Site } = {}
-	local list: any = layout.secrets
-	if type(list) ~= "table" then
-		return sites
-	end
-	local entries = if levelFile ~= nil then levelFile.secrets else nil
-	for _, secret: any in list do
-		if
-			type(secret) ~= "table"
-			or type(secret.id) ~= "string"
-			or type(secret.needs) ~= "string"
-			or not (
-				finite(secret.x)
-				and finite(secret.y)
-				and finite(secret.z)
-				and finite(secret.sx)
-				and finite(secret.sy)
-				and finite(secret.sz)
-				and secret.sx >= 0
-				and secret.sz >= 0
-			)
-		then
-			continue
-		end
-		local entry = if entries ~= nil then entries[secret.id] else nil
-		local name = if entry ~= nil
-				and type(entry.name) == "string"
-				and entry.name ~= ""
-			then entry.name
-			else secret.id
-		table.insert(sites, {
-			id = secret.id,
-			needs = secret.needs,
-			x = secret.x,
-			z = secret.z,
-			sx = secret.sx,
-			sz = secret.sz,
-			floorY = secret.y - secret.sy / 2,
-			name = name,
-			reward = rewardOf(entry),
-		})
-	end
-	return sites
 end
 
 -- True when a root opens the chest: within levels.secretReach on the flat of its footprint, the
@@ -338,23 +246,6 @@ function SecretFlow.FoundShortcuts(
 		end
 	end
 	return open
-end
-
--- The map card's row for one player: every chest of the level in order, found from their own
--- profile's `combat.secrets[levelId]`. L4 W2: a chest that gives a key names it (the key glyph).
-function SecretFlow.MapRow(sites: { Site }, found: { [string]: boolean }?): { Types.MapSecretState }
-	local row: { Types.MapSecretState } = {}
-	for _, site in sites do
-		local reward = site.reward
-		table.insert(row, {
-			id = site.id,
-			name = site.name,
-			needs = site.needs,
-			found = found ~= nil and found[site.id] == true,
-			key = if reward ~= nil then reward.key else nil,
-		})
-	end
-	return row
 end
 
 return SecretFlow

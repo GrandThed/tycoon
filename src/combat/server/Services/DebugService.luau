@@ -48,6 +48,13 @@
 -- L4 W2 (docs/prompts/l4-w2-contract.md §8, the Z key): `dressFail` makes the next level that is
 -- built refuse its dress through the real fallback (LevelService.FailNextDress), so the grey level
 -- and its one warn are seen without removing an asset (memory: playtest-repro-methods).
+--
+-- L4 W3 (docs/prompts/l4-w3-contract.md §9): `fakeDepart` (the R key; value "<levelId>:<difficulty>",
+-- the map's selection, else the proving pair) makes the lobby's auto-start wait on that pair with
+-- the members present standing in for the party, and the real tick runs it, so the countdown is seen
+-- again after a run without a hub departure; `cashEra` "next" (the P key) steps the session's pay
+-- era for everyone (WaveService.NextCashEra), so an era's run cash is seen on a fresh profile.
+-- Neither writes the profile.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -57,6 +64,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local Format = require(sharedFolder:WaitForChild("Format"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
@@ -70,6 +78,7 @@ local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
 local UnlockService = require(script.Parent:WaitForChild("UnlockService"))
 local LevelService = require(script.Parent:WaitForChild("LevelService"))
 local RunFx = require(script.Parent:WaitForChild("RunFx"))
+local StageFlow = require(script.Parent:WaitForChild("StageFlow"))
 
 local TICK_INTERVAL_SECONDS = 1
 
@@ -386,6 +395,31 @@ local function resetArmory(player: Player?): ()
 	RunFx.Push({ kind = "notice", text = "Armory reset: tiers, loadout and stars" })
 end
 
+-- L4 W3 (§9, the R key): the lobby's auto-start on `value`'s pair (StageFlow.DepartPair: the map's
+-- selection, else debug.provingLevel / provingDifficulty), for the whole session. The countdown line
+-- is its answer; outside the lobby a notice says why nothing happened.
+local function fakeDepart(value: any): ()
+	local combatConfig = Catalog.GetCombatConfig()
+	if combatConfig == nil then
+		return
+	end
+	local debugConfig = combatConfig.debug
+	local levelId, difficulty =
+		StageFlow.DepartPair(value, debugConfig.provingLevel, debugConfig.provingDifficulty)
+	if not WaveService.FakeDepart(levelId, difficulty) then
+		RunFx.Push({ kind = "notice", text = "Depart works in the lobby only" })
+	end
+end
+
+-- L4 W3 (§9, the P key): the session's pay era steps to the next, and the party is told which and
+-- at what multiplier ("Pay as Boomtown (×670)").
+local function nextCashEra(): ()
+	local era, mult = WaveService.NextCashEra()
+	local def = Catalog.GetEraConfig(era)
+	local name = if def ~= nil then def.displayName else `era {era}`
+	RunFx.Push({ kind = "notice", text = `Pay as {name} (×{Format.Cash(mult)})` })
+end
+
 -- Spelled out so the literal types survive: a singleton union returned across modules reaches
 -- the caller as plain `string` under the old solver.
 local function refusalReason(verdict: string): ("full" | "over" | "locked")?
@@ -465,6 +499,10 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 	elseif lever == "dressFail" then
 		LevelService.FailNextDress()
 		RunFx.Push({ kind = "notice", text = "The next level is built grey (its dress refused)" })
+	elseif lever == "fakeDepart" then
+		fakeDepart(value)
+	elseif lever == "cashEra" and value == "next" then
+		nextCashEra()
 	else
 		warn(`[DebugService] unknown or mistyped lever "{lever}"`)
 	end
@@ -572,6 +610,18 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 	local dressFailAttribute = debugConfig.dressFailAttribute
 	if dressFailAttribute ~= nil and consumeNumber(dressFailAttribute) ~= nil then
 		applyLever(nil, "dressFail", true)
+	end
+	-- L4 W3: the R and P keys' levers. A Combat.json without the keys leaves them off.
+	local fakeDepartAttribute = debugConfig.fakeDepartAttribute
+	local departSpec = if fakeDepartAttribute ~= nil
+		then consumeString(fakeDepartAttribute)
+		else nil
+	if departSpec ~= nil then
+		applyLever(nil, "fakeDepart", departSpec)
+	end
+	local cashEraAttribute = debugConfig.cashEraAttribute
+	if cashEraAttribute ~= nil and consumeNumber(cashEraAttribute) ~= nil then
+		applyLever(nil, "cashEra", "next")
 	end
 
 	-- States, read but never reset. God mode is applied when the attribute changes (and to

@@ -1489,7 +1489,7 @@ function L4W.keyFlowTests(): ()
 		return
 	end
 	local layout = FIXTURES.layouts[file.layout]
-	local sites = Secrets.Sites(layout, file)
+	local sites = L1.Map.Sites(layout, file)
 	local mountain, lookout = nil, nil
 	for _, site in sites do
 		if site.id == "mountain" then
@@ -1547,7 +1547,7 @@ function L4W.keyFlowTests(): ()
 		not Unlocks.HasLevelKey(reset, "castle", FIXTURES.levels),
 		"l4w2 key: a secret recorded false does not hold it"
 	)
-	local found = Secrets.MapRow(sites, { mountain = true })
+	local found = L1.Map.SecretRow(sites, { mountain = true })
 	local row, other = nil, nil
 	for _, entry in found do
 		if entry.id == "mountain" then
@@ -1563,7 +1563,7 @@ function L4W.keyFlowTests(): ()
 	-- A key-only chest still pays (L4 W2: `key` is a reward field).
 	local keyOnly = { secrets = { mountain = { name = "Summit", key = "castle" } } }
 	local only = nil
-	for _, site in Secrets.Sites(layout, keyOnly) do
+	for _, site in L1.Map.Sites(layout, keyOnly) do
 		if site.id == "mountain" then
 			only = site
 		end

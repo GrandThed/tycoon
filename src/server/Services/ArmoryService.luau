@@ -47,8 +47,8 @@ table.freeze(REASONS)
 
 local isStudio = RunService:IsStudio()
 local leverAccumulator = 0
--- DebugFakeParty is sticky like DebugBots (a count to play under, not an event), so it applies
--- to every player whenever the typed value changes.
+-- DebugFakeParty is sticky (a count to play under, not an event), so it applies to every player
+-- whenever the typed value changes.
 local appliedFakeParty: number? = nil
 -- L3-13: the level ids this build has a level file for, read once at Init (a band whose level is
 -- not here cannot be bought: notBuilt).

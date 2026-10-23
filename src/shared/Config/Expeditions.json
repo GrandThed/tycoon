@@ -7,6 +7,9 @@
 	"abilities": {
 		"list": [
 			{ "id": "doubleJump", "name": "Double Jump", "text": "A second jump in the air.", "price": { "valor": 10 }, "order": 1 }
+		],
+		"upcoming": [
+			{ "id": "glide", "name": "Glide", "text": "Float down from any height.", "with": "castle" }
 		]
 	},
 	"found": {

@@ -107,9 +107,6 @@ export type Snapshot = {
 	-- what the server prices cash packs with, so the shop previews grants against THIS and
 	-- never reconstructs it client-side. Always present on a snapshot.
 	persistedIncomePerSecond: number,
-	-- C0: server-computed Armory.GearPower (0 when Armory.json is absent), so the Power readout
-	-- never re-derives it from the profile.
-	gearPower: number,
 	-- M2: present only on the first snapshot after an offline grant (elapsed >= 60 s).
 	welcomeBack: WelcomeBack?,
 }
@@ -126,9 +123,8 @@ export type Delta = {
 	-- M6: the whole shop state whenever the legacyShop dirty flag flushes (a copy, never aliased).
 	legacyShop: LegacyShopState?,
 	-- C0: the whole combat profile whenever the combat dirty flag flushes (a deep copy, never
-	-- aliased), with the recomputed Gear Power alongside it.
+	-- aliased).
 	combat: CombatProfile?,
-	gearPower: number?,
 }
 
 -- M5: sent on StateChanged while a player has no loaded state (safe mode), so the client can
@@ -1072,11 +1068,9 @@ export type ArmoryLegacyCost = { material: string, amount: number }
 export type ArmoryLegacy = { gearCosts: { ArmoryLegacyCost } }
 -- L3: `ladder`, `windows` and `legacy` are optional so a build without them degrades instead of
 -- erroring (every family fights at T1 and nothing is upgraded; Armory.Problems warns at Init).
--- power.tierWeight weighs the held families' multipliers in Gear Power (L3-6).
 export type ArmoryConfig = {
 	version: number,
 	baseHp: number,
-	power: { hpWeight: number, tierWeight: number? },
 	ascension: AscensionConfig,
 	ladder: ArmoryLadder?,
 	-- Keyed by weapon family id (ProvingGrounds.json `weapons`).
@@ -1140,14 +1134,6 @@ export type CombatCoopConfig = {
 	-- Default of the Expedition panel's "Open to public" toggle.
 	publicByDefault: boolean,
 }
-export type CombatOverdriveConfig = {
-	requiresRebirth: number,
-	countMult: number,
-	hpMult: number,
-	damageMult: number,
-	spawnRateMult: number,
-	rewardMult: number,
-}
 -- C2: listCacheSeconds = one registry read per hub server per window, shared by every viewer;
 -- listMax = rows sent per RunList; friendChecksPerCall = IsFriendsWithAsync fan-out cap.
 export type CombatRegistryConfig = {
@@ -1202,14 +1188,14 @@ export type CombatDebugConfig = {
 	fakeInviteAttribute: string,
 	-- P5 wave 1: what `proving.rbxl` boots into.
 	provingBoots: string, -- "mission" | "range"
-	-- L1: what the map opens on in a proving build, and whether the server starts it by itself.
+	-- L1: what the map opens on in a proving build, and whether the server starts it by itself
+	-- (L4 W3, L4W3-12: once per session, through the depart countdown, never after a run).
 	provingLevel: string,
 	provingDifficulty: string,
 	provingAutoStart: boolean,
 	-- L1 ruling 33, L3-15: the ladder tiers the G key steps through on both slots (T1, T3, T5), a
 	-- Studio-only session override that a successful upgrade or resetArmory clears.
 	gearPresets: { { name: string, melee: number, ranged: number } },
-	provingStartDelay: number,
 	-- L3-11: read only by the simulators, as a first run's gear. A proving build plays the
 	-- profile's tiers like every other build (a fresh mock profile is T1/T1).
 	provingGear: { melee: number, ranged: number, ascension: { melee: number, ranged: number }? }?,
@@ -1235,6 +1221,11 @@ export type CombatDebugConfig = {
 	-- L4 W2 (docs/prompts/l4-w2-contract.md §8, the Z key): a number attribute > 0 (consumed): the
 	-- next level is built grey through the real fallback (LevelService.FailNextDress). nil = off.
 	dressFailAttribute: string?,
+	-- L4 W3 (docs/prompts/l4-w3-contract.md §9), each consumed, nil = off. fakeDepart: a string
+	-- "<levelId>:<difficulty>", the R key's depart in the lobby; cashEra: a number > 0, the P key's
+	-- step of the session's pay era.
+	fakeDepartAttribute: string?,
+	cashEraAttribute: string?,
 }
 -- Client presentation tunables (CombatFxController).
 export type CombatFeedbackConfig = {
@@ -1248,7 +1239,8 @@ export type CombatConfig = {
 	remotes: CombatRemotesConfig,
 	director: CombatDirectorConfig,
 	coop: CombatCoopConfig,
-	overdrive: CombatOverdriveConfig,
+	-- L4 W3 (L4W3-7): run cash by the member's city era. nil = x1 everywhere.
+	rewards: CombatRewardsConfig?,
 	registry: CombatRegistryConfig,
 	animations: CombatAnimationsConfig,
 	feedback: CombatFeedbackConfig,
@@ -1259,20 +1251,6 @@ export type CombatConfig = {
 	levels: CombatLevelsConfig,
 	-- L1b: how a camp's resident groups rest, wake, chase and go home (CampBrain).
 	camps: CampRulesConfig,
-}
-
--- Missions/1_Village.json, resolved by numeric prefix like era configs: the hub's stub until W3
--- (L4B-1), what Depart's check and the Expedition tile read. `id` is the hub ticket's key.
-export type MissionConfig = {
-	version: number,
-	id: string,
-	era: number,
-	eraName: string,
-	name: string,
-	material: string,
-	waves: number,
-	recommendedPower: number,
-	targetMinutes: number,
 }
 
 -- The range's arena (Shared/Layouts/Arenas/ProvingGrounds), whose shapes a level's camps reuse.
@@ -1351,10 +1329,14 @@ export type RunMember = {
 	-- C2: see PartyMember.waiting. incomeRate = profile incomeAtSave at admit.
 	waiting: boolean,
 	incomeRate: number,
+	-- L4 W3 (L4W3-7): the member's own profile `era` at the admit, frozen for the visit; the era
+	-- Combat.EraCashMult pays their run cash by (a party mixes eras).
+	cashEra: number,
 }
+-- L4 W3 (L4W3-5): `title` = the level's name for a run, the map's for a session; `lines` = what it
+-- paid by source (RunLines), display only: the totals stay the truth.
 export type RunSummary = {
-	missionId: string,
-	overdrive: boolean,
+	title: string,
 	wavesCleared: number,
 	bestWave: number,
 	died: boolean,
@@ -1366,6 +1348,7 @@ export type RunSummary = {
 	-- C2: Valor from MentorBonus (already included in `valor`), and the raw run damage share.
 	mentorValor: number,
 	damageShare: number,
+	lines: { RunLine },
 }
 export type RunState = {
 	kind: "run",
@@ -1417,6 +1400,9 @@ export type RunState = {
 	prewarm: { [string]: number }?,
 	leaderUserId: number,
 	result: RunResult?,
+	-- L4 W3 (docs/prompts/l4-w3-contract.md §3): the departure the session's first arrival brought,
+	-- while it waits, counts down or stands picked; nil once it started and outside the lobby.
+	depart: RunDepart?,
 }
 
 -- Presentation events, batched per Heartbeat frame into one list per client. Damage numbers,
@@ -1464,13 +1450,13 @@ export type CombatFx =
 -- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub never sends
 -- an ActiveRun to a client (it sends RunListEntry), so a client can never teleport itself into a
 -- reserved server. C2: `public` comes from the RunTicket; memberIds = humans in the run now.
+-- L4 W3 (L4W3-3): the level and difficulty the ticket verified.
 export type ActiveRun = {
 	hostUserId: number,
 	hostName: string,
-	missionId: string,
-	era: number,
+	levelId: string,
+	difficulty: string,
 	wave: number,
-	overdrive: boolean,
 	partySize: number,
 	accessCode: string,
 	public: boolean,
@@ -1482,11 +1468,12 @@ export type ActiveRun = {
 -- expected = the departing party's userIds, host included. privateServerId = ReserveServer's
 -- second return ("studio" in bridge mode): the combat server honours a ticket only when it equals
 -- game.PrivateServerId, so a client-forged teleport into a public server can never claim one.
+-- L4 W3 (L4W3-3): levelId and difficulty = what the leader departed into (MapRules.Startable).
 export type RunTicket = {
 	accessCode: string,
 	privateServerId: string,
-	missionId: string,
-	overdrive: boolean,
+	levelId: string,
+	difficulty: string,
 	public: boolean,
 	expected: { number },
 }
@@ -1498,9 +1485,9 @@ export type RunRelation = "server" | "friend" | "public"
 export type RunListEntry = {
 	hostUserId: number,
 	hostName: string,
-	missionId: string,
+	levelId: string,
+	difficulty: string,
 	wave: number,
-	overdrive: boolean,
 	partySize: number,
 	relation: RunRelation,
 }
@@ -2403,7 +2390,7 @@ export type CombatFxArea = {
 -- P5 wave 1 (docs/INTERFACES.md "P5 contracts")
 export type CombatMode = "range" | "mission"
 -- A tier (or Ascension level) per weapon slot: WeaponService.GearOf returns two of them. L3-6:
--- the tiers are the held families' (Armory.HeldTiers), the Ascension levels the slots'.
+-- the tiers are the held families' (Armory.StrikeTier), the Ascension levels the slots'.
 export type SlotTiers = { melee: number, ranged: number }
 
 -- A camp wave's groups (P5's mission `crowd` shapes, kept by name for the levels). Counts are
@@ -2434,6 +2421,8 @@ export type LevelDifficulty = {
 	rewardMult: number,
 	recommendedTier: number,
 	firstClear: LevelFirstClear?,
+	-- L4 W3 (§7): a short line the map shows beside the difficulty ("Castle gear"); nil = none.
+	note: string?,
 }
 -- MissionCrowdBoss.at is { x, z } from the camp's centre. A camp's waves are MissionCrowdWave.
 export type LevelCrowdConfig = {
@@ -2690,8 +2679,9 @@ export type ExpeditionsConfig = {
 	looks: { [string]: LevelLook },
 	-- size = a secret sign's block, { x, y, z } studs (nil = no sign is built).
 	sign: { textColor: { number }, pixelsPerStud: number, size: { number }? },
-	-- L2-6: what the lobby's Abilities panel sells (nil = nothing)
-	abilities: { list: { UnlockAbilityDef } }?,
+	-- L2-6: what the lobby's Abilities panel sells (nil = nothing). L4 W3 (§7): `upcoming` = what
+	-- Valor will buy later, shown locked and never sold (Unlocks reads `list` only).
+	abilities: { list: { UnlockAbilityDef }, upcoming: { UnlockUpcomingDef }? }?,
 	-- L2-51: families "built now, found later": family id -> the map node where it will be found
 	-- and the Armory's hint. Nothing on the server reads it (the family stays locked until a
 	-- Studio lever, a secret or a first clear writes it); the Armory lists a family it names.
@@ -2745,6 +2735,8 @@ export type CombatLevelsConfig = {
 	checkpointReach: number,
 	-- L1b-16: the least time between two wallet sends to one member during a run.
 	walletSendSeconds: number,
+	-- L4 W3 (§3): seconds from the whole departed party standing in the lobby camp to the start.
+	departCountdownSeconds: number,
 	-- A fire spot's marker block, { x, y, z } studs (nil = no marker is built).
 	fireMarkerSize: { number }?,
 	-- L1b-W4-16: studs a region keeps beyond its camps' longest reach from every locking floor
@@ -3002,5 +2994,42 @@ export type LevelRegion = { id: string, y: number, camps: { string }, cells: { L
 -- Config/Levels/<n>_<Name>.json.
 -- L1b-W4-28: a tent sends only while killed / residents - busySeconds / seconds >= lead.
 export type LevelTentPace = { seconds: number, lead: number }
+
+-- L4 W3 (docs/prompts/l4-w3-contract.md) ---------------------------------------------------------
+
+-- §4.1, L4W3-5: one row of the end screen, a source of what a run paid (RunLines.Add merges the
+-- credits of one kind + id). `count` = kills for raiders and a boss, else the times it paid;
+-- `material` = the level's material ("" for none), `materials` its amount. Written flat (the
+-- contract's RunLineKey & amounts) because the old solver checks table literals against an
+-- intersection part by part.
+export type RunLineKind = "raiders" | "camp" | "boss" | "chest" | "key" | "firstClear" | "mentor"
+export type RunLineKey = { kind: RunLineKind, id: string, name: string }
+export type RunLine = {
+	kind: RunLineKind,
+	id: string,
+	name: string,
+	count: number,
+	cash: number,
+	material: string,
+	materials: number,
+	valor: number,
+}
+-- §3: RunState.depart. waiting = for the departed party (waitIn = seconds left of
+-- coop.lobbyWaitSeconds); counting = startsIn seconds to the start; picked = the level stands
+-- picked on the map, nothing starts by itself.
+export type RunDepartState = "waiting" | "counting" | "picked"
+export type RunDepart = {
+	levelId: string,
+	difficulty: string,
+	state: RunDepartState,
+	startsIn: number?,
+	waitIn: number?,
+}
+-- §5, L4W3-7: Combat.json `rewards`. eraCashMult = one factor per city era in Config/Eras order,
+-- each finite and >= 1 (Combat.EraCashMult).
+export type CombatRewardsConfig = { eraCashMult: { number } }
+-- §7: Expeditions.json `abilities.upcoming`: an ability Valor will buy later. `with` names the map
+-- node it comes with. Never sold.
+export type UnlockUpcomingDef = { id: string, name: string, text: string, with: string }
 
 return {}

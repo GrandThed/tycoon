@@ -29,6 +29,8 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
+local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local PartyService = require(script.Parent:WaitForChild("PartyService"))
@@ -54,7 +56,6 @@ local STUDIO_ACCESS_CODE = "studio"
 -- lever). They live in this module rather than in the MemoryStore registry because nothing
 -- outside this server may ever see them, and a run nobody hosts must never be advertised live.
 local FAKE_ACCESS_CODE = "fake"
-local FAKE_MISSION_ID = "village"
 -- The join list shows a handful of runs; more fakes would only push the real ones off it.
 local MAX_FAKE_RUNS = 8
 local BRIDGE_DEPART_MESSAGE = "Handoff saved — Stop Play, then open build/combat.rbxl"
@@ -84,8 +85,8 @@ type Reason =
 type Departure = { action: Action, slotId: string }
 type Handoff = {
 	departure: Departure,
-	missionId: string,
-	overdrive: boolean,
+	levelId: string,
+	difficulty: string,
 	hostUserId: number,
 	accessCode: string,
 	kind: StudioBridge.HandoffKind,
@@ -112,6 +113,9 @@ local fakeRunsExpireAt = 0
 local listCache: ListCache? = nil
 local listFetching = false
 local listWaiters: { thread } = {}
+-- L4 W3: each built level's chests (MapRules.Sites), read once per level for the server's life:
+-- the files cannot change under a running server.
+local sitesByLevel: { [string]: { MapRules.Site } } = {}
 
 local function sendResult(
 	player: Player,
@@ -206,7 +210,7 @@ end
 -- A registry value is written by another server, so every field the join path compares is
 -- type-checked before it is used; anything malformed reads as "no such run". public/memberIds
 -- are C2 fields, read leniently (private, nobody) so an older combat build cannot hide its runs
--- from friends.
+-- from friends. L4 W3 (L4W3-3): an entry of the old shape (no levelId) reads as none.
 local function asActiveRun(value: any): Types.ActiveRun?
 	if typeof(value) ~= "table" then
 		return nil
@@ -215,10 +219,9 @@ local function asActiveRun(value: any): Types.ActiveRun?
 	if
 		typeof(run.hostUserId) ~= "number"
 		or typeof(run.hostName) ~= "string"
-		or typeof(run.missionId) ~= "string"
-		or typeof(run.era) ~= "number"
+		or typeof(run.levelId) ~= "string"
+		or typeof(run.difficulty) ~= "string"
 		or typeof(run.wave) ~= "number"
-		or typeof(run.overdrive) ~= "boolean"
 		or typeof(run.partySize) ~= "number"
 		or typeof(run.accessCode) ~= "string"
 		or run.accessCode == ""
@@ -236,10 +239,9 @@ local function asActiveRun(value: any): Types.ActiveRun?
 	return {
 		hostUserId = run.hostUserId,
 		hostName = run.hostName,
-		missionId = run.missionId,
-		era = run.era,
+		levelId = run.levelId,
+		difficulty = run.difficulty,
 		wave = run.wave,
-		overdrive = run.overdrive,
 		partySize = run.partySize,
 		accessCode = run.accessCode,
 		public = run.public == true,
@@ -479,8 +481,8 @@ local function handOff(group: { Player }, handoff: Handoff): ()
 
 	if StudioBridge.IsActive() then
 		local hint: StudioBridge.TeleportHint = {
-			missionId = handoff.missionId,
-			overdrive = handoff.overdrive,
+			levelId = handoff.levelId,
+			difficulty = handoff.difficulty,
 			hostUserId = handoff.hostUserId,
 			accessCode = handoff.accessCode,
 		}
@@ -550,12 +552,12 @@ local function handOff(group: { Player }, handoff: Handoff): ()
 	local options = Instance.new("TeleportOptions")
 	options.ReservedServerAccessCode = handoff.accessCode
 	options:SetTeleportData({
-		missionId = handoff.missionId,
-		overdrive = handoff.overdrive,
+		levelId = handoff.levelId,
+		difficulty = handoff.difficulty,
 		hostUserId = handoff.hostUserId,
 	})
 	-- ONE call for the whole party, so the platform lands them in the same server together.
-	local teleported = callWithRetry(`TeleportAsync {handoff.missionId}`, function(): boolean
+	local teleported = callWithRetry(`TeleportAsync {handoff.levelId}`, function(): boolean
 		TeleportService:TeleportAsync(places.combatPlaceId, travellers, options)
 		return true
 	end)
@@ -578,7 +580,7 @@ end
 -- since the client has no copy for them.
 local function departingGroup(
 	leader: Player,
-	missionId: string,
+	levelId: string,
 	coop: Types.CombatCoopConfig
 ): ({ Player }, boolean)
 	local group: { Player } = { leader }
@@ -610,7 +612,7 @@ local function departingGroup(
 			-- An already-departing member is mid-teleport on their own run; only the ones who
 			-- simply could not come are told.
 			if member ~= nil and departing[member] == nil then
-				sendResult(member, "expedition", missionId, false, "busy")
+				sendResult(member, "expedition", levelId, false, "busy")
 			end
 			continue
 		end
@@ -637,13 +639,36 @@ local function keepPartyMembers(leader: Player, group: { Player }): { Player }
 	return kept
 end
 
+-- A built level's chests as its files have them, cached (L2-15's rows, L4W3-2). A file that
+-- cannot be read costs the level its row, never the map: the pcall holds no yield.
+local function sitesOf(levelId: string): { MapRules.Site }
+	local cached = sitesByLevel[levelId]
+	if cached ~= nil then
+		return cached
+	end
+	local sites: { MapRules.Site } = {}
+	local read = pcall(function()
+		local file = Catalog.GetLevelFile(levelId)
+		local layout = if file ~= nil then Catalog.GetLevelLayout(file.layout) else nil
+		if file ~= nil and layout ~= nil then
+			sites = MapRules.Sites(layout, file)
+		end
+	end)
+	if not read then
+		warn(`[ExpeditionService] level {levelId}: its secrets could not be read`)
+	end
+	sitesByLevel[levelId] = sites
+	return sites
+end
+
 local ExpeditionService = {}
 
--- RequestExpedition. Yields (reservation + ticket + teleport), so it runs on its own thread.
+-- RequestExpedition (L4 W3: a level and a difficulty from the hub's map). Yields (reservation +
+-- ticket + teleport), so it runs on its own thread.
 function ExpeditionService.Depart(
 	player: Player,
-	missionId: string,
-	overdrive: boolean,
+	levelId: string,
+	difficulty: string,
 	public: boolean
 ): ()
 	if departing[player] ~= nil then
@@ -661,36 +686,56 @@ function ExpeditionService.Depart(
 	local combatConfig = Catalog.GetCombatConfig()
 	if combatConfig == nil then
 		-- No Combat.json: the whole feature is hidden, so this is a stale or forged intent.
-		sendResult(player, "expedition", missionId, false, "unavailable")
+		sendResult(player, "expedition", levelId, false, "unavailable")
 		return
 	end
 	if not PartyService.IsLeader(player) then
-		sendResult(player, "expedition", missionId, false, "notLeader")
+		sendResult(player, "expedition", levelId, false, "notLeader")
 		return
 	end
-	-- Host-gated (C2 ruling 4): the LEADER's unlocks decide; guests are never checked here, and
-	-- the combat place trusts the ticket below, never the teleport data, for that.
-	local mission = Catalog.GetMissionById(missionId)
-	if mission == nil or not Combat.MissionUnlocked(state, mission, overdrive, combatConfig) then
-		sendResult(player, "expedition", missionId, false, "locked")
+	-- Host-gated (C2 ruling 4): the LEADER's stars decide, by the rule the dungeon's start asks
+	-- too (L4W3-1); guests are never checked here, and the combat place trusts the ticket below,
+	-- never the teleport data, for that.
+	local map = Catalog.GetExpeditionsConfig()
+	if map == nil then
+		sendResult(player, "expedition", levelId, false, "unavailable")
+		return
+	end
+	local file = Catalog.GetLevelFile(levelId)
+	local verdict = MapRules.Startable(
+		map,
+		MapRules.Built(Catalog.GetLevelIds()),
+		Unlocks.StarsOf(state.combat),
+		levelId,
+		difficulty,
+		if file ~= nil then file.difficulties else nil
+	)
+	if verdict ~= "ok" then
+		sendResult(
+			player,
+			"expedition",
+			levelId,
+			false,
+			if verdict == "locked" then "locked" else "unavailable"
+		)
 		return
 	end
 	local places = Catalog.GetPlacesConfig()
 	if places.combatPlaceId == 0 or hooks == nil then
-		sendResult(player, "expedition", missionId, false, "unavailable")
+		sendResult(player, "expedition", levelId, false, "unavailable")
 		return
 	end
 
 	-- Nothing above yields, so the checks and the claims below cannot interleave.
-	local departure: Departure = { action = "expedition", slotId = missionId }
-	local group, leftBehind = departingGroup(player, missionId, combatConfig.coop)
+	local departure: Departure = { action = "expedition", slotId = levelId }
+	local group, leftBehind = departingGroup(player, levelId, combatConfig.coop)
 	for _, member in group do
 		departing[member] = departure
 	end
 	if leftBehind then
 		-- The client reads `busy` on "expedition" as "some members were left behind"; the
 		-- departure itself carries on and answers ok on its own.
-		sendResult(player, "expedition", missionId, false, "busy")
+		sendResult(player, "expedition", levelId, false, "busy")
 	end
 
 	local bridged = StudioBridge.IsActive()
@@ -722,8 +767,8 @@ function ExpeditionService.Depart(
 	local ticket: Types.RunTicket = {
 		accessCode = accessCode,
 		privateServerId = privateServerId,
-		missionId = missionId,
-		overdrive = overdrive,
+		levelId = levelId,
+		difficulty = difficulty,
 		public = public,
 		expected = expected,
 	}
@@ -739,8 +784,8 @@ function ExpeditionService.Depart(
 	-- which only makes the lobby wait lobbyWaitSeconds for them.
 	handOff(keepPartyMembers(player, members), {
 		departure = departure,
-		missionId = missionId,
-		overdrive = overdrive,
+		levelId = levelId,
+		difficulty = difficulty,
 		hostUserId = player.UserId,
 		accessCode = accessCode,
 		kind = "depart",
@@ -806,12 +851,59 @@ function ExpeditionService.Join(player: Player, hostUserId: number): ()
 	PartyService.Leave(player)
 	handOff({ player }, {
 		departure = departure,
-		missionId = entry.missionId,
-		overdrive = entry.overdrive,
+		levelId = entry.levelId,
+		difficulty = entry.difficulty,
 		hostUserId = entry.hostUserId,
 		accessCode = entry.accessCode,
 		kind = "join",
 	})
+end
+
+-- RequestMapState (L4W3-2): the hub's map, pulled by the client when it opens it, on each party
+-- change while it is open and after a refused Depart, so PartyService needs no push. Which nodes
+-- are open is the hub party leader's doing (the player when solo; a Studio fake leader, or one
+-- without a loaded profile, has no stars); the stars and secret rows shown are the player's own.
+-- To that player only. Never yields.
+function ExpeditionService.SendMap(player: Player): ()
+	local state = DataService.GetState(player)
+	local map = Catalog.GetExpeditionsConfig()
+	if state == nil or map == nil then
+		return
+	end
+	local party = PartyService.Get(player)
+	local leaderUserId = if party ~= nil then party.leaderUserId else player.UserId
+	local leaderStars: MapRules.Stars = {}
+	if leaderUserId == player.UserId then
+		leaderStars = Unlocks.StarsOf(state.combat)
+	else
+		local leader = Players:GetPlayerByUserId(leaderUserId)
+		local leaderState = if leader ~= nil then DataService.GetState(leader) else nil
+		if leaderState ~= nil then
+			leaderStars = Unlocks.StarsOf(leaderState.combat)
+		end
+	end
+	local built = MapRules.Built(Catalog.GetLevelIds())
+	local opened = state.combat.secrets
+	local rows: { [string]: { Types.MapSecretState } } = {}
+	for levelId in built do
+		local sites = sitesOf(levelId)
+		if #sites > 0 then
+			rows[levelId] =
+				MapRules.SecretRow(sites, if opened ~= nil then opened[levelId] else nil)
+		end
+	end
+	RemoteService.FireClient(
+		player,
+		"MapState",
+		MapRules.MapState(
+			map,
+			built,
+			leaderStars,
+			Unlocks.StarsOf(state.combat),
+			leaderUserId,
+			rows
+		)
+	)
 end
 
 -- RequestRunList. Yields (MemoryStore + friend checks), so it runs on the remote's own thread.
@@ -862,9 +954,9 @@ function ExpeditionService.SendRunList(player: Player): ()
 			entry = {
 				hostUserId = run.hostUserId,
 				hostName = run.hostName,
-				missionId = run.missionId,
+				levelId = run.levelId,
+				difficulty = run.difficulty,
 				wave = run.wave,
-				overdrive = run.overdrive,
 				partySize = run.partySize,
 				relation = relation,
 			},
@@ -900,7 +992,8 @@ function ExpeditionService.PublishFakeRuns(count: number): ()
 		return
 	end
 	local wanted = math.clamp(math.floor(count), 0, MAX_FAKE_RUNS)
-	local mission = Catalog.GetMissionById(FAKE_MISSION_ID)
+	-- The proving build's own pick, so a fake row names a level and difficulty the map knows.
+	local debug = combatConfig.debug
 	fakeRuns = {}
 	fakeRunsExpireAt = os.clock() + combatConfig.registry.ttlSeconds
 	for index = 1, wanted do
@@ -910,10 +1003,9 @@ function ExpeditionService.PublishFakeRuns(count: number): ()
 		table.insert(fakeRuns, {
 			hostUserId = -index,
 			hostName = `Fake {index}`,
-			missionId = FAKE_MISSION_ID,
-			era = if mission ~= nil then mission.era else 1,
+			levelId = debug.provingLevel,
+			difficulty = debug.provingDifficulty,
 			wave = index,
-			overdrive = false,
 			partySize = 1,
 			accessCode = FAKE_ACCESS_CODE,
 			public = index % 2 == 1,

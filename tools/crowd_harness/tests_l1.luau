@@ -16,6 +16,9 @@ print("L1: the run (StageFlow)")
 
 local L1: any = {
 	Flow = load("StageFlow"),
+	-- L4 W3: the map's rules (NodeState, MapState, Award, Sites, SecretRow) moved out of StageFlow
+	-- and SecretFlow so the hub's Depart and the dungeon's start ask one module.
+	Map = load("MapRules"),
 	Combat = load("Combat"),
 	Geo = load("LevelGeometry"),
 	combat = FIXTURES.combat,
@@ -806,7 +809,7 @@ function L1.mapTests(): ()
 	local built = { forestRoad = true, outpost = true, keep = true, vault = true }
 	local none = {}
 	local function node(leader: any, own: any, id: string): any
-		return Flow.NodeState(map, built, leader, own, id)
+		return L1.Map.NodeState(map, built, leader, own, id)
 	end
 	local road = node(none, none, "forestRoad")
 	check(road.open == true and road.reason == nil and #road.stars == 0 and road.id == "forestRoad", "a built node that asks for nothing is open")
@@ -826,11 +829,11 @@ function L1.mapTests(): ()
 	check(node(none, none, "nowhere") == nil, "(no such node: nil)")
 
 	local stars = {}
-	check(Flow.Award(stars, "forestRoad", "hard") == true and stars.forestRoad.hard == true, "Award gives the star of the difficulty that was played")
-	check(Flow.Award(stars, "forestRoad", "hard") == false, "and says it is new only once")
+	check(L1.Map.Award(stars, "forestRoad", "hard") == true and stars.forestRoad.hard == true, "Award gives the star of the difficulty that was played")
+	check(L1.Map.Award(stars, "forestRoad", "hard") == false, "and says it is new only once")
 	check(stars.forestRoad.normal == nil and stars.forestRoad.brutal == nil and next(stars, "forestRoad") == nil, "no other difficulty and no other level gets one")
 
-	local state = Flow.MapState(map, built, starred, { outpost = { normal = true } }, 42)
+	local state = L1.Map.MapState(map, built, starred, { outpost = { normal = true } }, 42)
 	local ids = {}
 	for _, entry in state.nodes do
 		table.insert(ids, entry.id)
@@ -1665,7 +1668,7 @@ function L1.real.startable(levelId: string, leaderStars: any): boolean
 	local map = L1.real.map
 	for _, node in map.nodes do
 		if node.level == levelId then
-			local state = L1.Flow.NodeState(map, L1.real.built(), leaderStars, leaderStars, node.id)
+			local state = L1.Map.NodeState(map, L1.real.built(), leaderStars, leaderStars, node.id)
 			return state ~= nil and state.open
 		end
 	end
@@ -2179,7 +2182,7 @@ function L1.realLevelTests(): ()
 	local built = real.built()
 	-- Catalog reads a level file or a mission only when it is named <n>_<Name>, and keeps one
 	-- file per id; check_levels.py reads every *.json in those folders.
-	check(#FIXTURES.unread == 0, `every file of Config/Levels and Config/Missions is named <n>_<Name>, the only ones Catalog reads{real.list(FIXTURES.unread)}`)
+	check(#FIXTURES.unread == 0, `every file of Config/Levels is named <n>_<Name>, the only ones Catalog reads{real.list(FIXTURES.unread)}`)
 	local owned: { [string]: boolean } = {}
 	local twice: { string } = {}
 	for _, file in real.levels do
@@ -2261,11 +2264,10 @@ function L1.realLevelTests(): ()
 	-- Every number a level's start, its run, the session and the builder read from Combat.json.
 	-- A missing one is arithmetic on nil in the remote's thread or in the tick, not a refusal.
 	local needs = {
-		levels = { "gateSeconds", "triggerBelow", "triggerHeight", "closeInset", "closeGraceSeconds", "crowdCeiling", "floorThickness", "startSpacing", "startCooldownSeconds", "fenceThickness", "boxMargin", "maxParts", "checkpointReach", "walletSendSeconds" },
+		levels = { "gateSeconds", "triggerBelow", "triggerHeight", "closeInset", "closeGraceSeconds", "crowdCeiling", "floorThickness", "startSpacing", "startCooldownSeconds", "fenceThickness", "boxMargin", "maxParts", "checkpointReach", "walletSendSeconds", "departCountdownSeconds" },
 		director = { "windowSeconds", "tempoWarmupSeconds", "eliteTempo", "runCapSeconds" },
 		coop = { "maxParty", "joinUntilWave", "contributionFloor", "countPerExtraPlayer", "bossHpPerExtraPlayer", "mentorMinDamageShare", "mentorValor", "lobbyWaitSeconds", "returnGroupSeconds" },
 		remotes = { "combatStateHz" },
-		debug = { "provingStartDelay" },
 	}
 	local missing: { string } = {}
 	for block, keys in needs do
@@ -2451,8 +2453,8 @@ function L1.realRunTests(): ()
 			check(run.held, `{tag}: a moment before a countdown or a breather is over, nothing happens`)
 			check(#run.unsafe == 0 and run.safe > camps * 3, `{tag}: the safe point is asked {run.safe} times (the start, each countdown, each wave, each breather, each cleared camp) and is always inside the level's bounds, above its kill height, on solid ground, inside nothing, and no place the rescue takes a body from{real.list(run.unsafe)}`)
 			local stars = {}
-			local isNew = Flow.Award(stars, plan.levelId, plan.difficulty)
-			local shown = Flow.NodeState(real.map, built, stars, stars, node.id)
+			local isNew = L1.Map.Award(stars, plan.levelId, plan.difficulty)
+			local shown = L1.Map.NodeState(real.map, built, stars, stars, node.id)
 			check(isNew and shown ~= nil and table.find(shown.stars, difficulty) ~= nil, `{tag}: clearing it puts the {difficulty} star on its node, {node.id}`)
 			local first = level.stages[1]
 			local early = table.concat(run.early, ", ")
@@ -2518,7 +2520,7 @@ function L1.realMapTests(): ()
 	print(" the real files: the map (Expeditions.json) as a leader with no star sees it")
 	local real = L1.real
 	local map = real.map
-	local state = L1.Flow.MapState(map, real.built(), {}, {}, 7)
+	local state = L1.Map.MapState(map, real.built(), {}, {}, 7)
 	check(state.kind == "map" and state.leaderUserId == 7 and #state.nodes == #map.nodes, `every one of the {#map.nodes} nodes is on the map`)
 	local byId = {}
 	for _, node in state.nodes do
@@ -2605,7 +2607,7 @@ function L1.realMapTests(): ()
 
 	-- A star on Forest Road changes nothing a file does not back: the nodes behind it stay
 	-- "notBuilt" (it wins over every other reason) until their level files exist.
-	local starred = L1.Flow.MapState(map, real.built(), { forestRoad = { normal = true } }, { forestRoad = { normal = true } }, 7)
+	local starred = L1.Map.MapState(map, real.built(), { forestRoad = { normal = true } }, { forestRoad = { normal = true } }, 7)
 	local still = 0
 	local shown = false
 	for _, node in starred.nodes do

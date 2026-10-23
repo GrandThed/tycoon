@@ -42,10 +42,6 @@ local cachedFabrics: { [string]: Types.FabricData } = {}
 local cachedArmoryConfig: Types.ArmoryConfig? = nil
 local cachedCombatConfig: Types.CombatConfig? = nil
 local cachedPlacesConfig: Types.PlacesConfig? = nil
--- Mission configs are cached under both keys they are looked up by (era index and mission id),
--- so neither lookup rescans the folder once it has resolved.
-local cachedMissionsByEra: { [number]: Types.MissionConfig } = {}
-local cachedMissionsById: { [string]: Types.MissionConfig } = {}
 
 local Catalog = {}
 
@@ -311,54 +307,6 @@ function Catalog.GetPlacesConfig(): Types.PlacesConfig
 	return cached :: Types.PlacesConfig
 end
 
--- Mission modules are named "<eraIndex>_<EraName>" under Config/Missions, resolved by numeric
--- prefix exactly like era configs. nil = that era has no expedition yet (C0 ships Village only).
-function Catalog.GetMissionConfig(eraIndex: number): Types.MissionConfig?
-	local cached = cachedMissionsByEra[eraIndex]
-	if cached ~= nil then
-		return cached
-	end
-	local missionsFolder = configFolder:FindFirstChild("Missions")
-	if missionsFolder == nil then
-		return nil
-	end
-	local prefix = tostring(eraIndex) .. "_"
-	for _, child in missionsFolder:GetChildren() do
-		if child:IsA("ModuleScript") and string.sub(child.Name, 1, #prefix) == prefix then
-			local mission = require(child) :: Types.MissionConfig
-			cachedMissionsByEra[eraIndex] = mission
-			cachedMissionsById[mission.id] = mission
-			return mission
-		end
-	end
-	return nil
-end
-
--- Mission ids ("village") are what the client sends and the run registry stores, so they are
--- resolved by scanning the folder rather than by module name. Scans only until the id is found;
--- a miss rescans next call, since the folder may still be replicating on the client.
-function Catalog.GetMissionById(id: string): Types.MissionConfig?
-	local cached = cachedMissionsById[id]
-	if cached ~= nil then
-		return cached
-	end
-	local missionsFolder = configFolder:FindFirstChild("Missions")
-	if missionsFolder == nil then
-		return nil
-	end
-	for _, child in missionsFolder:GetChildren() do
-		if child:IsA("ModuleScript") and string.match(child.Name, "^%d+_") ~= nil then
-			local mission = require(child) :: Types.MissionConfig
-			cachedMissionsByEra[mission.era] = mission
-			cachedMissionsById[mission.id] = mission
-			if mission.id == id then
-				return mission
-			end
-		end
-	end
-	return nil
-end
-
 -- Era config modules are named "<eraIndex>_<Name>" (e.g. "1_Village"); resolve by prefix.
 function Catalog.GetEraConfig(eraIndex: number): Types.EraConfig?
 	local cached = cachedEraConfigs[eraIndex]
@@ -482,8 +430,8 @@ function Catalog.GetExpeditionsConfig(): Types.ExpeditionsConfig?
 	return config
 end
 
--- Level modules are named "<n>_<Name>" under Config/Levels and found by their `id`, the way
--- missions are: the id is what the client sends and the map names.
+-- Level modules are named "<n>_<Name>" under Config/Levels and found by their `id`, not by the
+-- module name: the id is what the client sends and the map names.
 local function scanLevelFiles(): ()
 	local folder = configFolder:FindFirstChild("Levels")
 	if folder == nil then

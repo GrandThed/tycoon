@@ -82,6 +82,12 @@
 -- rolls instead of jumping once a window. Studio only, as the server's part; the server's part
 -- still needs its attribute, the client's need only a second of samples. Same place, same label:
 -- it is wider (Theme.COMBAT_PERF_WIDTH), still a label over the bottom-left stack.
+--
+-- L4 W3 (docs/prompts/l4-w3-contract.md §3 "Client"): in the lobby the notice line is the depart
+-- line (SetDepart): "Waiting for your party · 25" or "Forest Road · Normal starts in 5", held for
+-- as long as the host says, wider than a checkpoint's (the header's width) and in the medium
+-- size, because it says when the level starts. It shows only in the lobby; a checkpoint in a
+-- live phase takes the line back at its own size.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -149,6 +155,8 @@ export type CombatHudHandle = {
 	SetRunState: (run: Types.RunState) -> (),
 	-- L1b: a short line under the wallet ("Checkpoint") for `seconds`; a newer one replaces it.
 	ShowNotice: (text: string, seconds: number) -> (),
+	-- L4 W3: the lobby's depart line in the same place, until it is set to nil.
+	SetDepart: (text: string?) -> (),
 	SetWallet: (cash: number, material: string, amount: number, valor: number) -> (),
 	-- `obstacles` (fix round c1): what the bottom-left buttons keep clear of, in this HUD's px;
 	-- nil = nothing (one row).
@@ -231,11 +239,15 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	-- the notice line goes; `abandonUntil` is until when a second press of Abandon confirms.
 	-- Fix round: `mayAbandon` = the local player may end this run now (ruling 21), whether or
 	-- not the button is on screen; `armed` = what the host was last told (onAbandonArmed).
+	-- L4 W3: `depart` = the depart line the host set (nil = none); `departShown` = the notice line
+	-- is showing it now.
 	local objective = {
 		run = nil :: Types.RunState?,
 		gateAt = nil :: number?,
 		breatherAt = nil :: number?,
 		noticeUntil = 0,
+		depart = nil :: string?,
+		departShown = false,
 		abandonUntil = 0,
 		mayAbandon = false,
 		armed = false,
@@ -448,6 +460,29 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		Text = "",
 		Parent = noticeFrame,
 	}) :: TextLabel
+	-- The line at a checkpoint's look, or the depart line's (wider, larger, the countdown colour).
+	local function noticeLook(depart: boolean): ()
+		objective.departShown = depart
+		noticeFrame.Size = UDim2.fromOffset(
+			if depart then Theme.TOP_BAR_WIDTH else Theme.COMBAT_CHECKPOINT_NOTICE_WIDTH,
+			Theme.COMBAT_CHECKPOINT_NOTICE_HEIGHT
+		)
+		noticeLabel.TextSize = if depart then Theme.TEXT_MEDIUM else Theme.TEXT_SMALL
+		noticeLabel.TextColor3 = if depart then Theme.COLOR_ACCENT_ALT else Theme.COLOR_ACCENT
+	end
+	-- The depart line shows in the lobby while the host has one; anywhere else it is off.
+	local function paintDepart(): ()
+		local run = objective.run
+		local line = objective.depart
+		if line ~= nil and run ~= nil and run.phase == "lobby" then
+			noticeLook(true)
+			noticeLabel.Text = line
+			noticeFrame.Visible = true
+		elseif objective.departShown then
+			noticeLook(false)
+			noticeFrame.Visible = false
+		end
+	end
 
 	-- Party list: one row per member with the HP the server published for them.
 	local partyFrame = Create("Frame", {
@@ -1056,6 +1091,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			objective.noticeUntil = 0
 			noticeFrame.Visible = false
 		end
+		paintDepart()
 		paintPerf()
 	end
 
@@ -1080,7 +1116,11 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			if run ~= nil and (run.phase == "gate" or run.phase == "breather") then
 				waveLabel.Text = objectiveText()
 			end
-			if noticeFrame.Visible and os.clock() >= objective.noticeUntil then
+			if
+				noticeFrame.Visible
+				and not objective.departShown
+				and os.clock() >= objective.noticeUntil
+			then
 				noticeFrame.Visible = false
 			end
 			if objective.abandonUntil > 0 and os.clock() >= objective.abandonUntil then
@@ -1146,9 +1186,14 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			if run ~= nil and not LIVE_PHASES[run.phase] then
 				return -- a late event after the run ended (see setRunState)
 			end
+			noticeLook(false)
 			noticeLabel.Text = text
 			objective.noticeUntil = os.clock() + math.max(seconds, 0)
 			noticeFrame.Visible = seconds > 0
+		end,
+		SetDepart = function(text: string?)
+			objective.depart = text
+			paintDepart()
 		end,
 		SetWallet = function(cash: number, material: string, amount: number, valor: number)
 			cashChip.Text = "$" .. Format.Cash(cash)

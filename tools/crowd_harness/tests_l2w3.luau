@@ -864,7 +864,7 @@ function W3.realTests(): ()
 	-- The shrine pays behind ice; the Frost Hammer is found later.
 	local S, U = W3.Secret, W3.Unlocks
 	local shrine = nil
-	for _, site in S.Sites(layout, file) do
+	for _, site in L1.Map.Sites(layout, file) do
 		if site.id == "shrine" then
 			shrine = site
 		end

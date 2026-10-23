@@ -209,7 +209,6 @@ local UI3: any = {
 UI3.armory = {
 	version = 1,
 	baseHp = 100,
-	power = { hpWeight = 0.1, tierWeight = 11 },
 	ladder = UI3.ladder,
 	windows = UI3.windows,
 }

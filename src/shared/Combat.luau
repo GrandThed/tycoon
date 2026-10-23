@@ -42,18 +42,6 @@ type MissionCrowdGroup = {
 type MissionCrowdBoss = { kind: string, at: { number }, valor: number }
 type MissionCrowdWave = { groups: { MissionCrowdGroup }, boss: MissionCrowdBoss? }
 type MissionCrowdReward = { cash: number, materials: number }
--- Missions/1_Village.json, the hub's stub until W3 (L4B-1): what Depart and the tile read.
-type MissionConfig = {
-	version: number,
-	id: string,
-	era: number,
-	eraName: string,
-	name: string,
-	material: string,
-	waves: number,
-	recommendedPower: number,
-	targetMinutes: number,
-}
 
 type CombatCoopConfig = {
 	maxParty: number,
@@ -72,14 +60,8 @@ type CombatCoopConfig = {
 	reformSeconds: number,
 	publicByDefault: boolean,
 }
-type CombatOverdriveConfig = {
-	requiresRebirth: number,
-	countMult: number,
-	hpMult: number,
-	damageMult: number,
-	spawnRateMult: number,
-	rewardMult: number,
-}
+-- L4 W3 (L4W3-7): Combat.json `rewards`.
+type CombatRewardsConfig = { eraCashMult: { number } }
 type CombatDirectorConfig = {
 	windowSeconds: number,
 	tempoMin: number,
@@ -91,8 +73,8 @@ type CombatDirectorConfig = {
 	breatherMaxSeconds: number,
 	runCapSeconds: number,
 }
--- The two Combat.json blocks these functions read; callers pass the whole Types.CombatConfig.
-type CombatRules = { coop: CombatCoopConfig, overdrive: CombatOverdriveConfig }
+-- The Combat.json block these functions read; callers pass the whole Types.CombatConfig.
+type CombatRules = { coop: CombatCoopConfig }
 
 -- Exact structural copies of the Economy.luau parameter types, so the values forwarded to
 -- Economy.LegacyMult / Economy.PerkIncomeMult typecheck without a cast.
@@ -140,7 +122,7 @@ type GameConfig = {
 }
 
 -- The slices of PlayerState these functions read; callers pass the whole state.
-type CombatOwner = { era: number, rebirthCount: number, combat: CombatProfile }
+type CombatOwner = { era: number, combat: CombatProfile }
 type CashOwner = { legacy: number, legacyShop: LegacyShopState }
 
 -- One kill's unsplit reward (L1b-15: a kill is split and paid as it falls).
@@ -189,44 +171,41 @@ function Combat.TouchHighestEra(state: CombatOwner): ()
 	end
 end
 
--- A mission stays visible but locked until the city has reached its era; Overdrive is the
--- Rebirth difficulty spike, so it needs the configured lap count on top.
-function Combat.MissionUnlocked(
-	state: CombatOwner,
-	mission: MissionConfig,
-	overdrive: boolean,
-	combatCfg: CombatRules
-): boolean
-	if mission.era > state.combat.highestEra then
-		return false
+-- L4 W3 (L4W3-7, Ben's pick: docs/prompts/l4-w3-cash-study.md (c) at M = 3): a city era's run
+-- cash factor, `rewards.eraCashMult[era]`. An era past the list takes the last entry and one under
+-- 1 the first. No block, a list that is not a table (an empty one has no entry), an era that is
+-- not a finite number or an entry that is not a finite number of at least 1 all read 1: a config
+-- fault degrades to today's pay, never to an error or to a run that pays nothing.
+function Combat.EraCashMult(rewards: CombatRewardsConfig?, era: number): number
+	local list: any = if rewards ~= nil then rewards.eraCashMult else nil
+	if type(list) ~= "table" then
+		return NEUTRAL_MULT
 	end
-	if overdrive and state.rebirthCount < combatCfg.overdrive.requiresRebirth then
-		return false
+	if type(era) ~= "number" or era ~= era or era == math.huge or era == -math.huge then
+		return NEUTRAL_MULT
 	end
-	return true
-end
-
--- What the Expedition tile compares the player's Gear Power against. Overdrive multiplies enemy
--- HP, so the bar the player has to clear moves with it.
-function Combat.RecommendedPower(
-	mission: MissionConfig,
-	overdrive: boolean,
-	combatCfg: CombatRules
-): number
-	return mission.recommendedPower
-		* (if overdrive then combatCfg.overdrive.hpMult else NEUTRAL_MULT)
+	local entry: any = list[math.min(math.max(math.floor(era), 1), #list)]
+	if type(entry) ~= "number" or entry ~= entry or entry == math.huge or entry < 1 then
+		return NEUTRAL_MULT
+	end
+	return entry
 end
 
 -- Combat cash carries the PERMANENT city multipliers only (Legacy and Founder's Blessing).
 -- Deliberately not the passes, Premium or the neighbors bonus: those are the city's idle
--- economy, and paying them on kills would price expeditions against the wrong curve.
+-- economy, and paying them on kills would price expeditions against the wrong curve. L4 W3: times
+-- the member's own era factor (EraCashMult), so a clear stays a few minutes of the new era's
+-- income right after each Advance; Legacy and Founder's stay on top of it.
 function Combat.CombatCashMult(
 	state: CashOwner,
 	gameConfig: GameConfig,
-	shopConfig: LegacyShopConfig
+	shopConfig: LegacyShopConfig,
+	rewards: CombatRewardsConfig?,
+	era: number
 ): number
 	return Economy.LegacyMult(state.legacy, gameConfig)
 		* Economy.PerkIncomeMult(shopConfig, state.legacyShop)
+		* Combat.EraCashMult(rewards, era)
 end
 
 -- Damage-share split with a floor, so a low-power friend still earns: every participant gets

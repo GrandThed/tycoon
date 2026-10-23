@@ -9,7 +9,6 @@ local RunService = game:GetService("RunService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
-local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
@@ -86,24 +85,6 @@ local function getDirtyRecord(player: Player): DirtyRecord
 		dirtyRecords[player] = record
 	end
 	return record
-end
-
--- Gear Power is server-computed so the HUD never re-derives it: 0 without Armory.json, which is
--- also how the client knows to hide the readout. L3-14, R7: the saved pair's Power by the one pure
--- rule the dungeon place's Snapshot reads too (Armory.SavedPower); the frozen slot `gear` would
--- never move. Without ProvingGrounds.json no family is known, so both slots read T1.
-local function computeGearPower(state: Types.PlayerState): number
-	local armoryConfig = Catalog.GetArmoryConfig()
-	if armoryConfig == nil then
-		return 0
-	end
-	local provingConfig = Catalog.GetProvingGroundsConfig()
-	return Armory.SavedPower(
-		armoryConfig,
-		state.combat,
-		if provingConfig ~= nil then provingConfig.weapons else nil,
-		if provingConfig ~= nil then provingConfig.loadout else { melee = "", ranged = "" }
-	)
 end
 
 -- Passes and Premium are account properties, not session state, so they multiply the live,
@@ -295,10 +276,8 @@ local function flushDeltas(): ()
 				{ spent = state.legacyShop.spent, perks = table.clone(state.legacyShop.perks) }
 		end
 		if record.combat then
-			-- Whole profile by contract (C0), deep-copied with every field (R7), and the Power
-			-- readout alongside it so the two can never disagree on the client.
+			-- Whole profile by contract (C0), deep-copied with every field (R7).
 			delta.combat = ProfileCopy.Combat(state.combat)
-			delta.gearPower = computeGearPower(state)
 		end
 		record.cash = false
 		record.income = false
@@ -343,7 +322,6 @@ function EconomyService.SendSnapshot(player: Player): ()
 		state = state,
 		incomePerSecond = computeReportedIncomePerSecond(player, state),
 		persistedIncomePerSecond = livePersistedRate(player),
-		gearPower = computeGearPower(state),
 		welcomeBack = welcomeBack,
 	}
 	player:SetAttribute("Cash", state.cash)

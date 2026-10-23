@@ -14,6 +14,12 @@
 -- "Bought in the dungeon's lobby" and nothing is a button. Rows are 68 design px, Buy is 48
 -- (44 physical at MIN_SCALE); the page is at most ARMORY_SCREEN_ABILITY_MAX_WIDTH wide, centred,
 -- and scrolls when the screen cannot hold it.
+--
+-- L4 W3 (docs/prompts/l4-w3-contract.md section 7): below the offers, each of `abilities.upcoming`
+-- (Glide) is a locked row with no button: its name and text, and "With the Castle" (the map
+-- node its `with` names, in RunTally.WithText's words so the report card's "next:" line and this
+-- row agree) where a Buy would stand, so Valor has a purpose on screen before the next level
+-- exists. Never sold (Unlocks.Sellable reads `list` only), in both places alike.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -24,6 +30,7 @@ local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
+local RunTally = require(script.Parent:WaitForChild("RunTally"))
 
 export type Deps = {
 	-- Sends RequestBuyAbility(abilityId); false = it could not be sent. nil = read-only (the hub).
@@ -34,8 +41,16 @@ export type Deps = {
 	bind: (button: GuiButton, handler: () -> ()) -> () -> (),
 }
 
--- One ability the tab offers, read from the config and checked (it is a JSON file).
-export type Offer = { id: string, name: string, text: string, price: number, order: number }
+-- One ability the tab offers, read from the config and checked (it is a JSON file). `with` = an
+-- upcoming ability's words ("With the Castle"): a locked row, never bought; nil = on sale.
+export type Offer = {
+	id: string,
+	name: string,
+	text: string,
+	price: number,
+	order: number,
+	with: string?,
+}
 
 export type Page = {
 	frame: ScrollingFrame,
@@ -53,10 +68,12 @@ export type Page = {
 	Destroy: () -> (),
 }
 
+-- `button` on a row on sale; `note` (its words where the Buy would be) on an upcoming row.
 type Row = {
 	offer: Offer,
 	frame: Frame,
-	button: TextButton,
+	button: TextButton?,
+	note: TextLabel?,
 	unbind: () -> (),
 }
 
@@ -74,10 +91,19 @@ local REFUSAL_FALLBACK = "Try again"
 
 local ArmoryAbilityPage = {}
 
+-- L4 W3: an upcoming ability's words from its `with` node: RunTally's ("with the Castle"),
+-- starting a row with a capital.
+local function withText(nodeId: string): string
+	local words = RunTally.WithText(nodeId)
+	return string.upper(string.sub(words, 1, 1)) .. string.sub(words, 2)
+end
+
 -- The offers of Config/Expeditions.json `abilities.list`, by `order` (then id): exactly the
 -- entries the server sells (Unlocks.Sellable, the rule UnlockService.Init and Unlocks.Find read,
 -- caps and a repeated id included), so the tab never offers what cannot be bought. The server
--- warns about the entries left out; the tab stays quiet.
+-- warns about the entries left out; the tab stays quiet. L4 W3: then `abilities.upcoming` in
+-- config order, each with its `with` words (locked rows; an entry missing a string field, or
+-- with the id of one on sale, is left out).
 function ArmoryAbilityPage.Offers(expeditions: Types.ExpeditionsConfig?): { Offer }
 	local offers: { Offer } = {}
 	local sellable = Unlocks.Sellable(expeditions)
@@ -96,6 +122,35 @@ function ArmoryAbilityPage.Offers(expeditions: Types.ExpeditionsConfig?): { Offe
 		end
 		return a.id < b.id
 	end)
+	local abilities = if expeditions ~= nil then expeditions.abilities else nil
+	local upcoming = if abilities ~= nil then abilities.upcoming else nil
+	if expeditions == nil or typeof(upcoming) ~= "table" then
+		return offers
+	end
+	local taken: { [string]: boolean } = {}
+	for _, offer in offers do
+		taken[offer.id] = true
+	end
+	for _, def in upcoming do
+		if
+			typeof(def) == "table"
+			and typeof(def.id) == "string"
+			and typeof(def.name) == "string"
+			and typeof(def.text) == "string"
+			and typeof(def.with) == "string"
+			and not taken[def.id]
+		then
+			taken[def.id] = true
+			table.insert(offers, {
+				id = def.id,
+				name = def.name,
+				text = def.text,
+				price = 0,
+				order = #offers + 1,
+				with = withText(def.with),
+			})
+		end
+	end
 	return offers
 end
 
@@ -172,7 +227,15 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 
 	local function paintRow(row: Row): ()
 		local offer = row.offer
+		local note = row.note
+		if note ~= nil then
+			note.Text = if owns(offer.id) then OWNED_TEXT else offer.with or ""
+			note.TextColor3 = if owns(offer.id) then Theme.COLOR_ACCENT else Theme.MAP_COLOR_DIM
+		end
 		local button = row.button
+		if button == nil then
+			return
+		end
 		local short = offer.price - view.valor
 		local live = false
 		if owns(offer.id) then
@@ -216,6 +279,7 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 		local onBuy = deps.onBuy
 		if
 			onBuy == nil
+			or offer.with ~= nil
 			or not deps.isLive()
 			or view.pending ~= nil
 			or owns(offer.id)
@@ -247,7 +311,10 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 		for _, offer in offerList do
 			table.insert(
 				parts,
-				table.concat({ offer.id, offer.name, offer.text, tostring(offer.price) }, "|")
+				table.concat(
+					{ offer.id, offer.name, offer.text, tostring(offer.price), offer.with or "" },
+					"|"
+				)
 			)
 		end
 		return table.concat(parts, ",")
@@ -277,7 +344,10 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 				Active = false,
 				LayoutOrder = index,
 				Size = rowSize(Theme.ARMORY_SCREEN_ABILITY_ROW_HEIGHT),
-				BackgroundColor3 = Theme.MAP_COLOR_PANEL_LIGHT,
+				-- An upcoming row sits a shade darker: it cannot be bought yet.
+				BackgroundColor3 = if offer.with ~= nil
+					then Theme.MAP_COLOR_PANEL
+					else Theme.MAP_COLOR_PANEL_LIGHT,
 				BorderSizePixel = 0,
 				ZIndex = Theme.ZINDEX_CARD,
 				Parent = list,
@@ -299,6 +369,25 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 			text.TextTruncate = Enum.TextTruncate.AtEnd
 			text.TextYAlignment = Enum.TextYAlignment.Top
 			text.Text = offer.text
+			local row: Row = {
+				offer = offer,
+				frame = frame,
+				button = nil,
+				note = nil,
+				unbind = function() end,
+			}
+			table.insert(rows, row)
+			if offer.with ~= nil then
+				-- L4 W3: upcoming, so no price and no button: its words stand where Buy would.
+				local note = label("With", Theme.TEXT_SMALL, Theme.MAP_COLOR_DIM, frame)
+				note.AnchorPoint = Vector2.new(1, 0.5)
+				note.Position = UDim2.new(1, -padding, 0.5, 0)
+				note.Size = UDim2.fromOffset(buttonWidth, Theme.ARMORY_SCREEN_BUTTON_HEIGHT)
+				note.TextXAlignment = Enum.TextXAlignment.Right
+				note.TextWrapped = true
+				row.note = note
+				continue
+			end
 			local price = label("Price", Theme.TEXT_SMALL, Theme.MAP_COLOR_GOLD, frame)
 			price.Position = UDim2.fromOffset(padding, 4 + nameHeight + lineHeight * 2)
 			price.Size = UDim2.new(1, textWidth, 0, lineHeight)
@@ -318,12 +407,10 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 				Parent = frame,
 			}) :: TextButton
 			rounded(button, Theme.ROW_CORNER_RADIUS)
-			local row: Row =
-				{ offer = offer, frame = frame, button = button, unbind = function() end }
+			row.button = button
 			row.unbind = deps.bind(button, function()
 				buy(row)
 			end)
-			table.insert(rows, row)
 		end
 		if #offerList == 0 then
 			local empty = label("Empty", Theme.TEXT_SMALL, Theme.MAP_COLOR_DIM, list)
@@ -392,8 +479,9 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 		end,
 		FirstSelection = function(): GuiObject?
 			for _, row in rows do
-				if row.button.Active then
-					return row.button
+				local button = row.button
+				if button ~= nil and button.Active then
+					return button
 				end
 			end
 			return nil
@@ -404,7 +492,7 @@ function ArmoryAbilityPage.new(parent: Instance, offers: { Offer }, deps: Deps):
 			end
 			for _, row in rows do
 				local offer = row.offer
-				if not owns(offer.id) and view.valor >= offer.price then
+				if offer.with == nil and not owns(offer.id) and view.valor >= offer.price then
 					return true
 				end
 			end

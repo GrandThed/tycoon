@@ -219,9 +219,9 @@ end
 -- L3-10: the held families a profile has saved, as both places read them. Each slot takes the
 -- saved family when it is a family of `weapons`, fills that slot and is owned (a starter of
 -- `fallback`, or one the profile's families hold); otherwise fallback[slot], the slot's starter:
--- Armory.HeldFamily, which Armory.SavedPower reads too. variants keeps the saved styles whose family
--- and key both exist, so an unknown style falls back to the family's default. Fresh tables: the
--- profile's own are never handed out.
+-- Armory.HeldFamily. variants keeps the saved styles whose family and key both exist, so an
+-- unknown style falls back to the family's default. Fresh tables: the profile's own are never
+-- handed out.
 function Unlocks.LoadoutOf(
 	combat: Types.CombatProfile?,
 	weapons: { [string]: Types.RangeWeaponDef }?,

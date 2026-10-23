@@ -37,7 +37,8 @@
 			"countMult": 1.35,
 			"rewardMult": 4,
 			"recommendedTier": 5,
-			"firstClear": { "valor": 25 }
+			"firstClear": { "valor": 25 },
+			"note": "Castle gear"
 		}
 	},
 	"crowd": {
