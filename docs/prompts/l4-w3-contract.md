@@ -395,3 +395,7 @@ Done: every line green with its counts named (`mutate_shards` 0 not caught; the 
   `combat.stats.expeditions`. (b) M11 shows Gear Power through `SetPower` at its `UIController` ~:1187 behind the Armory
   key; W3 deletes the chip, so whoever merges second deletes that line too. M11 leaves `sim_economy.py`'s default output
   byte-identical, so the era-cash study stands.
+- **L4W3-18. A third M11 merge item** (M11 fix round 1, `m11-port` 4c5a22d / 10d59bf): the hub join in
+  `src/server/Main.server.luau` returns early when `PlotService.ClaimPlot` finds no plot (the 7th player is kicked) before
+  Evaluate, SendSnapshot and `handleReturn`; whoever merges second keeps that early return in front of W3's join wiring.
+  `HubRemotes.RequestFeatureSeen` now uses `isShortName` (no clash with W3's two validators).
