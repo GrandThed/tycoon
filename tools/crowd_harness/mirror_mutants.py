@@ -39,6 +39,11 @@ MUTANTS = [
     ("SeatDrop: not eased", "HitShapes", "\treturn height * restDrop * u * u * (3 - 2 * u)\n",
      "\treturn height * restDrop * u\n"),
     ("SeatDrop: not clamped", "HitShapes", "\tlocal u = math.min(math.max(seat, 0), 1)\n", "\tlocal u = seat\n"),
+    # The W2 review's m4: SeatStep held to sim_range.hs_seat_step (check_stage_mirror's ray.seatStep, D1's).
+    ("SeatStep: at twice the pace", "HitShapes", "\tlocal step = math.max(dt, 0) / blendSeconds\n",
+     "\tlocal step = 2 * math.max(dt, 0) / blendSeconds\n"),
+    ("SeatStep: with no pace never moves", "HitShapes", "\t\treturn target\n\tend\n\tlocal step",
+     "\t\treturn seat\n\tend\n\tlocal step"),
     ("CrowdRay: ignores its drop", "HitShapes", "\tlocal lower = drop or 0\n", "\tlocal lower = 0\n"),
     ("CrowdRay: the capsule's top not lowered", "HitShapes",
      "local top = math.max(height - 2 * headRadius, height / 2 + radius) - lower",

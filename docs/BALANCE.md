@@ -7022,6 +7022,9 @@ Contract `docs/prompts/l4-w2-contract.md` sections 2.4, 4, 5, 6 and 8 (rulings L
 MISSIONS_DESIGN 26.4, 27.2, 27.5 and 28. Report: `docs/prompts/l4-w2-code-reports/d1.md`. Measured on Python 3.12.10
 64-bit (the gate's).
 
+**Superseded in part by the fix round below** (the next section): the Chief's sweep is range 12.7, reach 10.5 (not 17
+and 14), and R8's gate holds a sniper who fights with sword and bow (not the sword alone) to the pair player.
+
 ### L4 W2: what changed, and why
 
 | Key | Was | Now | Why |
@@ -7150,3 +7153,109 @@ Both were proved red against the pair gate under that harness's in-memory copy, 
 The contract's "drops the fight half" taken literally, the run ending where today's course ends, cannot go red on this
 data. That run is the walk to the camp plus the course, and it pays less than the pair player on every row. So the
 mutant drops the fight half from the clock and keeps its pay.
+
+## L4 W2 fix round: the faithful R8, the Chief's sweep where it is drawn, the seat's mirror (2026-10-22)
+
+The lead's rulings K6 and K2 (`docs/prompts/l4-w2-fix-round.md`) on the W2 review's findings (slice 4: M1, m1, m4).
+Report: `docs/prompts/l4-w2-fix-reports/d1.md`. Measured on Python 3.12.10 64-bit (the gate's).
+
+### What changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `sim_range.py R8_FIGHT` | "sword": the sniper fought the rest with the starter sword alone | **"pair"**: sword and bow before and after the spot, as the player he is held to | K6 (review M1): with the sword half the gate measured the weapon gap (x0.41-0.84), and a spot paying up to 1.6x more over a whole run would have stayed green. Now both runs differ only by the spot (Ben's "against fighting it all with the same gear", MISSIONS_DESIGN 28's correction) |
+| `sim_range.py R8_PRINTED` | none | **("sword",)**: the sword-fight sniper runs, printed twice, not gated: against the mission player with the sword alone (L3-26's comparison) and against the pair player (the gate as first built) | K6: "print the sword-alone and the old gated tables ungated". `--r8-gate-only` skips them (the same verdict in about half the time; the mutants use it) |
+| `ProvingGrounds.json` the Chief's sweep `range` | 17 | **12.7** | K2 (review m1): the drawn hammer cannot reach 17 across the 150° wedge. With the shoulder 2.96 off the axis, weapon points at most 14.07 from it and the rig's twist capped at ±37.5°, his far left sector can reach at most 12.46 (ui-engineer B). Re-keyed, the hammer sweeps every 15° sector at 12.4-13.0, so a range in [12.53, 12.90] passes both of raiderpose's bounds (reach ≤ range + 0.5 inside the arc, every sector ≥ range − 0.5). 12.7 is the middle |
+| the Chief's sweep `reach` | 14 | **10.5** | K2: a sweep may not start beyond its range. 10.5 keeps the start 2.2 studs inside the wedge, as the other arcs do (armoured and guard 6 of 7.5, the Warlord 9 of 11): from where he starts it, a player has a real step to make. The angle stays 150 |
+| `sim_range.py seat_goal` | a hand copy of CampBrain.Shows' `rest` branch | **`cb_shows(group, moving) == "rest"`** | review m4: the mirror check_stage_mirror already holds to Shows |
+| `sim_range.py step_seats` | its own step, `max(blend, 1e-3)` for no pace | **`hs_seat_step`**, a mirror of HitShapes.SeatStep (no pace: the goal at once) | review m4; `check_stage_mirror.py` compares it on 1,350 rows (`ray.seatStep`). The shipped numbers did not move: with `riseBlendSeconds` 0.5 both rules give the same steps |
+
+### The Chief's sweep at 12.7: what moved
+
+`py -3.12 tools/sim_range.py --check`: **CHECK: PASS** (495 lines, the same set). Every line that moved concerns the
+Chief's fight; the hit shares did not move (the damage is unchanged).
+
+| Band | range 17, reach 14 | **range 12.7, reach 10.5** | (range 12.7, reach 12.7: measured, not taken) |
+|---|---|---|---|
+| alone in his camp, the reacting Broadsword, Normal T1 (64-90 s) | 80.4 s | **76.8 s** (76.5-77.0) | 76.8 s |
+| alone, Hard T3 / Brutal T5 (64-100 s) | 86.0 / 85.2 s | **79.0 / 78.7 s** | 78.8 / 78.2 s |
+| the Chief in the run, Normal, seeds 11 / 23 / 37 (64-90 s) | 79.5 / 79.2 / 81.1 s | **72.0 / 71.3 / 72.8 s** | 73.8 / 74.3 / 77.5 s |
+| the Chief in the run, Hard (64-100 s) | 83.7 / 81.6 / 84.6 s | **79.4 / 74.5 / 75.3 s** | 79.0 / 77.1 / 80.5 s |
+| the Chief in the run, Brutal (64-100 s) | 83.7 / 82.8 / 83.8 s | **79.0 / 74.1 / 75.3 s** | 79.0 / 76.7 / 80.1 s |
+| hits of the boss on the reacting player | 0 | **0** | 0 |
+| fodder his call raises, alone, Normal / Hard / Brutal | 48 / 60 / 60 | **48 / 48 / 48** (a shorter fight, one call fewer) | |
+| the worst hit; the sweep's share (25% / 30% / 30%) | the charge 23.2 / 27.8 / 28.2%; the sweep 22 / 26 / 27% | **the same** | the same |
+| Normal first clear, walking included (4.5-5.75 min) | 5.28 / 4.74 / 5.10 min | **5.15 / 4.61 / 4.96 min** | 5.18 / 4.66 / 5.04 min |
+| the clear's Timber a minute, Normal (37.8-46.2) | 40.0 / 44.5 / 41.4 | **41.0 / 45.8 / 42.5** | 40.7 / 45.3 / 41.9 |
+| the human's reaction, the first run (L2-20, 4-5.75 min) | 4.28 / 4.30 min, ... | **4.17 / 4.19 min, ...**, no down | 4.25 min, ... |
+| Hard / Brutal mean clear, within 5% of 5.21 / 5.19 min (L3-29) | 5.25 (+0.7%) / 5.25 (+1.2%) | **5.13 (−1.5%) / 5.13 (−1.2%)** | 5.18 (−0.7%) / 5.17 (−0.4%) |
+| one preset below, the Chief alone (not killed in 135 / 180 s) | not killed in 240 s | **229.7 / 228.3 s** | 233.7 / 228.1 s |
+| the Flamethrower pair's Chief against the Longbow pair's (≥ x0.9) | 46.9 against 48.4 s | **45.7 against 45.1 s** (x1.01) | |
+
+**Why the fight is shorter.** The smaller wedge is the cause, not the reach: with the reach at the range the fight
+is 0-4.7 s longer than the taken row, still well under the old one. A 12.7-stud wedge has 0.56 of a 17-stud one's area,
+so the reacting player steps out of it sooner and swings sooner; he still takes no hit. The fight stays inside every band, but Ben's "about right"
+length for a boss was the Colossus's 80 s, and the Chief is now 72-79 s in a run. Margins that grew thin: Normal's first
+clear on seed 23 (4.61 against a floor of 4.5 min), the human's first run (4.17 against 4.0) and seed 23's Timber a
+minute (45.8 against a ceiling of 46.2). If Ben finds the Chief short, his HP (4,700) is the lever, not the sweep:
+the sweep's range is now fixed by what the hammer draws.
+
+Other gates on the final config: `raiderpose.py --check` PASS on every row (the Chief's arc 13.03 inside the wedge
+against 12.7, each sector 12.4-13.0 against a floor of 12.2); `check_levels.py` PASS (the Chief is in the locked camp C,
+outside the open camps' reach rules); `sim_combat.py --check` PASS.
+
+**Not changed, by the lead's ruling:** the plated elite's axe is drawn 3.9-5.0 against its 7.5-stud, 120° wedge, with
+its left two sectors never swept. It is left for Ben's Studio look.
+
+### R8, the faithful gate (K6)
+
+`py -3.12 tools/sim_range.py --r8 --check`: **CHECK (R8): PASS** (46 gated lines), on the final config (the Chief's
+sweep at 12.7). It took 69 min 33 s with 8 workers, the printed sword runs included; `--r8-gate-only` runs the gate's
+alone. Ratios are the whole run's mean cash a minute over the pair player's, seeds 1-30.
+
+**The sniper's whole run is the pair player's run but for the spot:** the pair's course to where he would engage the
+spot's camp, R8's course from the spot (the bow alone, as before), back on the road, then the pair's fight to the
+level's end.
+
+| Table (pair player, cash a minute) | Gated: the tightest spots, x the pair (seeds out-earning) | The rest | Margin |
+|---|---|---|---|
+| Hard, T1/T1 (29,983) | **Road2 x0.982** (14), Road3 x0.981 (7), CaveMouth x0.972 (12) | x0.503-0.960 (Road4 x0.654: 11 downs; CaveExit with Breath: 30 downs) | 1.8% |
+| Hard, sword T1 / bow T4 (37,719) | **Road3 x0.982** (10), Road2 x0.975 (10), Road4 x0.975 (8) | x0.902-0.942 | 1.8% |
+| Normal, T1/T1 (31,681) | **CaveExit x0.966** (7), Road4 x0.957 (3), Road3 x0.952 (3) | x0.539-0.949 | 3.4% |
+| Normal, sword T1 / bow T4 (39,194) | **Road4 x0.942** (2), Road2 x0.931, Road3 x0.931 | x0.816-0.902 | 5.8% |
+
+The spots that shoot nothing read x0.82-0.96: the walk to the spot and back. The review measured the same reading at
+range 17 (Hard T1/T1 Road3 x0.987, Hard bow T4 Road3 x0.982, Normal CaveExit x0.968, Normal bow Road4 x0.943); of the
+twelve rows it listed, the shorter sweep moved none by more than 0.006.
+
+**Printed, not gated: the sniper who fights with the sword alone.**
+
+| Table | x the sword alone (L3-26's comparison) | x the pair (the gate as first built) |
+|---|---|---|
+| Hard, sword T1 / bow T4 | **Road3 x1.013 (19 seeds), Road2 x1.005 (15)**, the rest x0.936-0.987 | x0.599-0.649 |
+| Hard, T1/T1 | x0.507-0.993 | x0.408-0.801 |
+| Normal, T1/T1 | x0.559-0.974 | x0.480-0.836 |
+| Normal, sword T1 / bow T4 | x0.861-0.964 | x0.598-0.669 |
+
+Road3 and Road2 on Hard with the bow at T4 still out-earn a player who leaves his T4 bow unused by about 1%; that is
+the comparison Ben's ruling replaced ("against fighting it all with the same gear"), kept in view.
+
+### The mutants (`check_levels_mutants.py` SIM_CASES, D2's file)
+
+| Case | The `sim_range.py` line swapped | Runs | Goes red |
+|---|---|---|---|
+| **K6, sized to the margin:** the sniper's whole-run cash 3% more | `r8_rate`: `run["wallet"]["cash"] * 1.03 / minutes` | `--r8 --check --r8-table hard-bow --r8-spot Road3 --r8-gate-only` | Hard, sword T1 / bow T4, Road3: x0.982 becomes about x1.011. Proved red at range 17 (11 min 54 s) and on the final config |
+| the whole pay over the sniper's own minutes | `minutes = run["ownMinutes"] or math.inf` | `... --r8-table normal --r8-spot Road3 --r8-gate-only` | red against the faithful gate |
+| the fight half dropped from the clock (its pay kept) | `minutes = (run["fightFrom"] or run["at"]) / 60` | `... --r8-table normal --r8-spot Road2 --r8-gate-only` | red against the faithful gate |
+
+The K6 case is a tripwire for the margin: a spot whose whole run pays 3% more on the row Ben's ruling named goes red.
+If a later change widens that row's margin past 3%, the case goes NOT and is re-sized to the new margin, never
+dropped. The two clock cases now run with `--r8-gate-only` (about 6 minutes each instead of 11).
+
+### The seat's mirror (review m4)
+
+`seat_goal` now asks the mirrored `cb_shows` (check_stage_mirror holds it to CampBrain.Shows); `step_seats` calls
+`hs_seat_step`, held to HitShapes.SeatStep by `check_stage_mirror.py`'s `ray.seatStep` (1,350 rows: seats -0.25 to
+1.4, goals -1 to 2, steps of 0, a frame, 0.1, 0.45, a backward one and 10 s, paces of riseBlendSeconds, 0.5, 0.2, 0 and
+-1). Two mirror mutants catch it (SeatStep at twice the pace; with no pace it never moves). The Luau side of the row
+is D2's op in `stage_mirror.luau`.

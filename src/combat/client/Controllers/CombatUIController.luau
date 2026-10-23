@@ -1710,8 +1710,9 @@ local function bootMission(): ()
 			st.prewarmed = run.maxAlive
 			CrowdRenderer.Prewarm(run.maxAlive)
 		end
-		-- L4 W2: the plan's bodies by kind, for each kind's model pool (once per floors' set; the
-		-- renderer caps the total at crowd.maxAlive).
+		-- L4 W2: the plan's bodies by kind, for each kind's model pool, in whatever phase a RunState
+		-- carries them (fix round K3: the lobby camp's too, so the pools fill before a run). The
+		-- renderer splits crowd.maxAlive among the kinds and builds a few figures a frame.
 		local kinds = prewarmCounts(run.prewarm)
 		if kinds ~= nil then
 			CrowdRenderer.Prewarm(kinds)

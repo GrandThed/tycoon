@@ -911,6 +911,9 @@ for _, case in data.rayCases do
 			elseif case.op == "seatDrop" then
 				-- L4 W2 (contract 5): rows { height, seat, restDrop }.
 				found[index] = Shapes.SeatDrop(row[1], row[2], row[3])
+			elseif case.op == "seatStep" then
+				-- L4 W2 (the review's m4): rows { seat, goal, dt, blendSeconds }.
+				found[index] = Shapes.SeatStep(row[1], row[2], row[3], row[4])
 			else
 				found[index] = Shapes.FlatToRect(row[1], row[2], row[3], row[4], row[5], row[6])
 			end

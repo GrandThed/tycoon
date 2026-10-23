@@ -45,7 +45,8 @@ fix round's d3 (an air jump back on in the planner turns the one-jump gate red),
 (Hard's clock), its fix round's R2 and its second's F6 (the fire sniper's cast judged per spot: an
 unlisted spot that never casts, a listed one that does), and L4 W2's L4W2-13 (R8 over whole runs against
 the pair player, --r8: a run rated over the sniper's own minutes, the fight half dropped from the clock;
-L3-26's case went with the old R8 gate); about fifteen minutes each since L3, about eight each for L4W2-13.
+L3-26's case went with the old R8 gate), and its fix round's K6 (the faithful R8 gate's margin: the sniper's
+whole-run cash raised 3%); about fifteen minutes each since L3, about six or seven each for the R8 cases.
 
 Usage:
   py tools/check_levels_mutants.py                       # every case; exit 1 when one is not as expected
@@ -450,9 +451,9 @@ CASES = (
      {}, MARGIN, True),
     ("margin: sightMargin 2, on L1c's 1-stud wall (+1.57)",
      lambda d: (l1c_wall(d), camp(d).__setitem__("sightMargin", 2)), {}, MARGIN, True),
-    ("margin: ambushE's inner fodder 3.5 off the north wall (+0.75, seen from nowhere), on the shipped wall",
+    ("margin: ambushE's inner fodder 3.5 off the north wall (eye -1.61 since the fodder model reaches 3.86; +0.75 before it), on the shipped wall",
      lambda d: shift_east(d, 3.5), {}, MARGIN, True),
-    ("margin: sightMargin 4.5, over the shipped wall's +2.93 (+4.09 before L4 W2's models)",
+    ("margin: sightMargin 4.5, over the shipped wall's +1.73 (+2.93 with the first fodder model, +4.09 before L4 W2's models)",
      lambda d: camp(d).__setitem__("sightMargin", 4.5), {}, MARGIN, True),
     ("margin: sightMargin missing", lambda d: camp(d).pop("sightMargin"), {}, MARGIN, True),
     ("margin control: sightMargin 1.5 with ambushE's inner fodder 0.05 off the wall",
@@ -989,11 +990,21 @@ CASES += (("L4 W2 control: the shipped climb", None, {}, "the mountain climb: no
 # wall top unclimbable (is_tall takes `barrier`), each shown red, and the unclimbable rule's reach.
 CASES += (
     # L4 W2 (contract 7): camp C's sight gate reads each model kind's posed reach (Config/RaiderModels.json).
-    ("L4 W2: the fodder model's posed reach 5.5 studs out (the shipped +2.93 falls under sightMargin)",
+    ("L4 W2: the fodder model's posed reach 5.5 studs out (the shipped +1.73 falls under sightMargin)",
      lambda d: d["ctx"]["raiders"]["fodder"]["posedReach"].__setitem__("out", 5.5), {}, MARGIN, True),
     ("L4 W2 control: the same reach on a fodder model built for another height (it does not count: the placeholder)",
      lambda d: (d["ctx"]["raiders"]["fodder"]["posedReach"].__setitem__("out", 5.5),
                 d["ctx"]["raiders"]["fodder"].__setitem__("height", 5.5)), {}, MARGIN, False),
+    # The fix round's K10 (the review's slice 4 m3): a post shared by two kinds keeps the one drawn widest. A
+    # slinger on Hard at ambushE's first post, a fodder's on Normal: its orb draws it 4.51 out against the
+    # fodder's 3.86, the tightest eye falls to about +1.08; the pre-fix rule kept the fodder (radius 1.3 over
+    # the slinger's 1.2) and passed it.
+    ("K10: a slinger on Hard at ambushE's first post (a fodder's on Normal)",
+     lambda d: residents(d, "ambushE")["units"].insert(0, {"kind": "slinger", "count": 1, "minDifficulty": "hard"}),
+     {}, MARGIN, True),
+    ("K10 control: the same slinger under the pre-fix rule (the widest radius's kind kept: green)",
+     lambda d: residents(d, "ambushE")["units"].insert(0, {"kind": "slinger", "count": 1, "minDifficulty": "hard"}),
+     {"DRAWN_POSTS": False}, MARGIN, False),
     ("L4W2-14: a wall across the lookout's double-jump gap (x -458..-434, z -26..-8)",
      lambda d: add_wall(d, "TreeLineGap", -458, -434, -26, -8, 80), {}, WALL_OWNER, True),
     ("L4W2-14 control: the shipped walls, the gap open", None, {}, WALL_OWNER, False),
@@ -1157,19 +1168,21 @@ SIM_CASES = (
      ("can_jump = self.jump is None and (self.lift is None or t >= self.lift[1])", "can_jump = True"),
      ("--check", "--levels-only", "--level", "forest"), ONE_JUMP),
     # L3-29: Hard at T3 keeps the clock it had at 4/4. With the old clock pinned 10% higher the
-    # measured mean (about 313 s) lies outside the 5% band and the gate goes red.
+    # measured mean (about 308 s since the Chief's sweep is 12.7, L4 W2 fix round K2) lies outside the 5%
+    # band and the gate goes red.
     ("L3-29: Hard's old clock pinned at 345 s (the measured mean 10% under it)",
      ('L3_CLOCK_SECONDS = {"hard": 312.8, "brutal": 311.5}', 'L3_CLOCK_SECONDS = {"hard": 345.0, "brutal": 311.5}'),
      ("--check", "--levels-only", "--level", "forest"), "the reacting player's mean clear is within"),
     # L3-26's case ("R8's band at half the mission's pay") is retired with the old r8_gate it swapped a line
     # of: L4 W2 (L4W2-13) judges R8 over whole runs (--r8), and the two cases below hold that gate.
     # L4 W2 (L4W2-13): R8 judged over whole runs against the pair player (--r8). Each runs one table and one
-    # spot; under this harness the runs stay in order (sim_range.r8_poolable), about 8 minutes each (D1's final
-    # cases, d1.md "To D2").
+    # spot; under this harness the runs stay in order (sim_range.r8_poolable). Since the fix round (K6) the gate
+    # is the faithful one, and --r8-gate-only skips the printed sword runs: about 6 minutes each (D1's cases,
+    # fix-reports/d1.md "To D2").
     ("L4W2-13: R8 rates a whole run over the sniper's own minutes only",
      ('    minutes = run["at"] / 60 if run["at"] else math.inf\n',
       '    minutes = run["ownMinutes"] or math.inf\n'),
-     ("--r8", "--check", "--r8-table", "normal", "--r8-spot", "Road3"),
+     ("--r8", "--check", "--r8-table", "normal", "--r8-spot", "Road3", "--r8-gate-only"),
      "Normal at gear 1/1 (the proving gear): the sniper from Road3 earns no more cash"),
     # "Drops the fight half" taken literally cannot go red (the run would end where today's course ends, and
     # on every row that pays less than the mission): the fight half's minutes are dropped from the clock,
@@ -1177,8 +1190,19 @@ SIM_CASES = (
     ("L4W2-13: R8 drops the fight half from the clock (its pay kept)",
      ('    minutes = run["at"] / 60 if run["at"] else math.inf\n',
       '    minutes = (run["fightFrom"] or run["at"]) / 60\n'),
-     ("--r8", "--check", "--r8-table", "normal", "--r8-spot", "Road2"),
+     ("--r8", "--check", "--r8-table", "normal", "--r8-spot", "Road2", "--r8-gate-only"),
      "Normal at gear 1/1 (the proving gear): the sniper from Road2 earns no more cash"),
+    # The W2 fix round's K6: the gate is the faithful reading (the sniper fights with sword and bow before and
+    # after the spot, as the pair player he is held to), whose tightest rows pass by 1.8% (Road2 and Road3 on Hard).
+    # A spot whose whole run pays a few percent more must turn red: the sniper's whole-run cash raised 3% on
+    # the row Ben's ruling named (Hard, sword T1 / bow T4, Road3: x0.982 to about x1.011). Sized to the
+    # margin: should a later change widen that row's margin past 3%, this case goes NOT; re-size it to the
+    # new margin, never drop it. Only the gate's runs (--r8-gate-only), in order: 60 Hard runs, about 7 minutes.
+    ("K6: R8's sniper paid 3% more over a whole run (the faithful gate's margin is 1-6%)",
+     ('    return run["wallet"]["cash"] / minutes, run["wallet"]["materials"] / minutes\n',
+      '    return run["wallet"]["cash"] * 1.03 / minutes, run["wallet"]["materials"] / minutes\n'),
+     ("--r8", "--check", "--r8-table", "hard-bow", "--r8-spot", "Road3", "--r8-gate-only"),
+     "Hard at gear 1/4 (only the bow upgraded, L3-26): the sniper from Road3 earns no more cash"),
     # The L3 W1 fix round, R2: every strike at the striking family's own tier, the bar from the held
     # pair, the Flamethrower's pair rated like with like. About fifteen minutes each.
     ("R2: every family's scale from its slot's gear again (the pre-fix rule)",

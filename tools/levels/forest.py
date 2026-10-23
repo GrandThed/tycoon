@@ -3294,17 +3294,44 @@ def stage_geometry(level: Level) -> list:
     return out
 
 
+# How far (in units in the last place) two Pythons' values of one kit corner may differ and still
+# give the same float32: measured 2026-10-22, 666 of 45,567 corners differ between 3.14 32-bit and
+# 3.12 64-bit, by at most 1.8e-15 studs (a math function's last bit), and no float32 moves.
+KIT_ULP_SLACK = 16
+
+
+def kit_geometry(mesh) -> bytes:
+    """A kit piece's geometry as the plan hash reads it: each triangle's three corners as float32
+    (what its GLB stores) and its colour, in order. Not the GLB's bytes: its flat normals are
+    computed from the corners, and on a face that should lie on an axis a normal component of 1e-17
+    on one Python is exactly 0 on the other, so a hash of the GLB depended on the Python that ran
+    the build (the shipped 23851a6f417491c1 was 3.14's; 3.12 read b17723bea4a068dc). A corner whose
+    float32 would move within KIT_ULP_SLACK of its float64 is refused, so this stays true."""
+    out = bytearray()
+    for a, b, c, colour in mesh.tris:
+        for value in (*a, *b, *c):
+            slack = KIT_ULP_SLACK * math.ulp(value)
+            if kit.f32(value - slack) != kit.f32(value + slack):
+                raise ValueError(
+                    f"{mesh.name}: the corner value {value!r} lies on a float32 rounding edge, so the plan hash"
+                    " could depend on the Python; nudge the piece's numbers"
+                )
+        out += struct.pack("<9f", *a, *b, *c)
+        out += bytes(colour)
+    return bytes(out)
+
+
 def plan_hash(level: Level) -> str:
     """What the bake depends on: the layout as written, the fence thickness, the stages' geometry
-    (stage_geometry), this generator's version and art numbers, and the kit's geometry. Any change
-    is a re-bake and a paste."""
+    (stage_geometry), this generator's version and art numbers, and the kit's geometry
+    (kit_geometry: the same on every Python). Any change is a re-bake and a paste."""
     h = hashlib.sha256()
     h.update(json.dumps(level.layout, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     h.update(json.dumps({"fence": level.fence_default, "stages": stage_geometry(level)}, sort_keys=True).encode("utf-8"))
     h.update(json.dumps({"v": GENERATOR_VERSION, "art": ART, "props": PROP_PIECES, "tex": TEXTURES}, sort_keys=True).encode("utf-8"))
     for name in sorted(kit.PIECES):
         h.update(name.encode("utf-8"))
-        h.update(kit.glb_bytes(kit.build(name)))
+        h.update(kit_geometry(kit.build(name)))
     return h.hexdigest()[:16]
 
 

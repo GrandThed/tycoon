@@ -179,13 +179,15 @@ def fodder() -> rk.Body:
     # The weapon arm's keyed poses (pitch, yaw, roll about the shoulder, in the torso's frame;
     # raiderpose.arm_channel blends them). The torso leans about the neck, which swings a hanging arm
     # the other way, so a key is the pitch wanted in the world plus the lean of its moment: the
-    # lunge's coil ends leaning back 0.45, its blow lands leaning forward 0.5.
+    # lunge's coil ends leaning back 0.45, its blow lands leaning forward 0.5. The L4 W2 fix round (K1):
+    # the strike's pitch 0.85 -> 1.1 brings the club up toward level at the blow; with the strike
+    # window's slide (rig.slideShare) it reaches 3.86 at the impact, past the placeholder's 3.44.
     b.arm = {
         "carry": [0.0, 0.0, 0.0],
         "seat": [0.67, 0.0, -0.08],
         "slump": [0.18, 0.0, 0.05],
         "shapes": {
-            "lunge": {"coil": [1.85, 0.25, 0.25], "strike": [0.85, -0.15, -0.1], "follow": [0.1, -0.1, 0.0]},
+            "lunge": {"coil": [1.85, 0.25, 0.25], "strike": [1.1, -0.15, -0.1], "follow": [0.1, -0.1, 0.0]},
         },
     }
     b.budget = BUDGETS["fodder"]
@@ -553,7 +555,10 @@ def chief(look: str = "A") -> rk.Body:
     # L4 W2 (measured on every vertex over every pose, raiderpose.posed_extent): the charge's coil
     # (0.25 -> 1.1) and strike (1.7 -> 1.9) and the slump (0.75 -> 0.9) were lifted, because leaning
     # into the charge or slumping after any blow drove the hammer's head 1.7 to 4.6 studs into the
-    # ground; only the slam still buries it, about 1.5 to 1.9, which is the impact.
+    # ground; only the slam still buries it, about 1.5 to 1.9, which is the impact. The fix round (K2):
+    # the sweep winds the hammer out to his right and sweeps it low across his front, rising to his
+    # left, so every 15-degree sector of the 150-degree wedge is swept (12.4 to 13.0 studs: the sweep's
+    # range is 12.7); `steady` keeps it from jumping at the impact, where the arc's lean flips.
     b.arm = {
         "carry": [0.62, 0.0, 0.0],
         "seat": [1.12, 0.0, 0.05],
@@ -562,7 +567,7 @@ def chief(look: str = "A") -> rk.Body:
             "ring": {"coil": [2.3, 0.0, 0.12], "strike": [0.79, 0.0, 0.0], "follow": [0.47, 0.0, 0.0]},
             "lane": {"coil": [1.1, 0.0, 0.0], "strike": [1.9, 0.0, 0.0], "follow": [1.2, 0.0, 0.0]},
             "summon": {"coil": [2.3, 0.0, 0.25], "strike": [3.2, 0.0, 0.3], "follow": [2.6, 0.0, 0.25]},
-            "arc": {"coil": [0.1, -0.9, 1.45], "strike": [0.4, -0.3, 1.45], "follow": [0.3, 1.1, 1.35]},
+            "arc": {"coil": [-0.12, 0.86, 1.07], "strike": [0.4, -0.3, 1.45], "follow": [-0.19, 1.71, 1.69], "steady": True},
         },
     }
     # The boss's charging core at model size (the lead's note, Ben's verdict 27.4): today's cue is a

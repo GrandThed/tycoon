@@ -1298,13 +1298,15 @@ def wire(value):
     return value
 
 
-def ray_cases(data, expected, kinds, rest_drop):
+def ray_cases(data, expected, kinds, rest_drop, rise_blend):
     """HitShapes.CrowdRay, RayUpright and FlatToRect (L1b-W2-15, -16, -24) on grids: every kind,
     origins round it, aims at its shins, its body, its head's base, centre and top and past them,
     beside the capsule, at several widths and pads; RayUpright with low == high against Ray on
     seeded rays; FlatToRect on a rectangle's inside, edges, corners and beyond. L4 W2 (L4W2-11):
     HitShapes.SeatDrop on a grid of seats, and CrowdRay with a seated body's drop (half and fully
-    seated at crowd.restDrop), aimed at the lowered head and capsule top and at the standing head."""
+    seated at crowd.restDrop), aimed at the lowered head and capsule top and at the standing head;
+    HitShapes.SeatStep (the W2 review's m4) on a grid of seats, goals, steps and paces, crowd's
+    riseBlendSeconds among them."""
     import random
 
     rows, mine = [], []
@@ -1333,6 +1335,13 @@ def ray_cases(data, expected, kinds, rest_drop):
     case = "ray.seatDrop"
     data["rayCases"].append({"id": case, "op": "seatDrop", "rows": rows})
     expected[case] = ("HitShapes.SeatDrop", f"{len(rows)} seats", [sr.hs_seat_drop(*row) for row in rows])
+    # SeatStep: goals outside 0..1 (it clamps the goal, not the seat), a step of 0, a backward step and
+    # one past the goal, and paces of 0 and under 0 (the guard: the goal at once).
+    rows = [[seat, goal, dt, blend] for seat in SEAT_GRID for goal in (0.0, 1.0, 0.5, -1.0, 2.0)
+            for dt in (0.0, 1 / 30, 0.1, 0.45, -0.1, 10.0) for blend in (rise_blend, 0.5, 0.2, 0.0, -1.0)]
+    case = "ray.seatStep"
+    data["rayCases"].append({"id": case, "op": "seatStep", "rows": rows})
+    expected[case] = ("HitShapes.SeatStep", f"{len(rows)} steps", [sr.hs_seat_step(*row) for row in rows])
     rows, mine = [], []
     for name, kind in sorted(kinds.items()):
         r, h, hr = kind["radius"], kind["height"], kind["headRadius"]
@@ -2754,7 +2763,8 @@ def main():
     grid_camp_cases(data, expected, combat["camps"])
     wave2_camp_cases(data, expected, combat["camps"], shipped_plans[:2])
     split_cases(data, expected)
-    ray_cases(data, expected, crowd_kinds, cfg["crowd"].get("restDrop") or 0.0)
+    ray_cases(data, expected, crowd_kinds, cfg["crowd"].get("restDrop") or 0.0,
+              cfg["crowd"].get("riseBlendSeconds") or 0.0)
     swing_cases(data, expected)
     tent_owes_cases(data, expected)
     combat_cases(data, expected, files, raw_layouts, rules, ranks, crowd_kinds)

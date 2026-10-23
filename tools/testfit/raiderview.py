@@ -621,9 +621,11 @@ def strip_or_front(args) -> int:
         png = os.path.join(raw, f"{args.model}_{fr.name}.png")
         v.render(png)
         drawn = r.pieces["head"].point(head_mesh_centre)
-        off = rp.v_len(rp.v_sub(drawn, r.anchor)) / hr
+        # The rule as raiderpose --check judges it: a lunge's strike-window slide is waived (K1).
+        off = rp.head_rule_offset(r, fr.pose, head_mesh_centre, hr)
         inside = body.intrusions(r.anchor)
-        notes = [f"head {off:.2f} hr off the scored head" + ("" if off <= 0.5 else "  (RULE BROKEN)")]
+        notes = [f"head {off:.2f} hr off the scored head" + (f" (its {r.slide:.2f} slide waived)" if r.slide > 0 else "")
+                 + ("" if off <= 0.5 else "  (RULE BROKEN)")]
         t = fr.threat
         if t.glow:
             notes.append("blow: neon")
@@ -648,7 +650,7 @@ def strip_or_front(args) -> int:
         f"kind {kind_id} ({kind.get('name', kind_id)}): height {model['height']}, radius {model['radius']}, head radius "
         f"{model['headRadius']}; {note}; cloth {tuple(kind['color'])} from ProvingGrounds.json, skin {tuple(model['skin'])}",
         "posed by raiderpose.py (CrowdRenderer's maths + the model rig); cyan circle = the scored head, yellow cross = the drawn head"
-        + ("" if args.front else "; seated: the scored head lowered by the seat (planned server fix)"),
+        + ("" if args.front else "; seated: the scored head lowered by the seat (HitShapes.SeatDrop, as the server judges it)"),
     ]
     if kind_id in kind_notes:
         lines.append(f"{kind_id}: {kind_notes[kind_id]}")

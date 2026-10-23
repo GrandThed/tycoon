@@ -54,6 +54,8 @@ TOLERANCE = 1e-6
 PIECE_KEYS = ("head", "torso", "arm", "legL", "legR")
 # Rig's extra headings and lean variants: the sweep's poses all face yaw 0.
 YAWS = (0.0, 0.9, -2.3)
+# Lean's flat lean vectors (x, z), K4.
+LEANS = ((0.0, 0.0), (0.3, -0.2), (-0.5, 0.1), (0.07, 0.4), (1.0, 0.0), (0.0, -1.0))
 
 # (label, old text, new text). Each must turn the mirror red.
 MUTANTS = (
@@ -75,6 +77,18 @@ MUTANTS = (
     ("Rig: the leading foot never steps", "local step = pose.thrust * rig.stepShare", "local step = 0"),
     ("Paint: the skin takes the full tint", "setLerp(o.skin, skinBase, threat.tintColor, threat.tint * 0.5)",
      "setLerp(o.skin, skinBase, threat.tintColor, threat.tint)"),
+    # The L4 W2 fix round (ui-engineer B's K1 and K4): the strike window's slide, the anchor, the lean split.
+    ("Rig: the strike window's slide gone", "local slide = math.max(pose.thrust, 0) * rig.slideShare", "local slide = 0"),
+    ("Rig: the trailing foot slides with the body", 'if lead == "legR" then step else -slide,',
+     'if lead == "legR" then step else 0,'),
+    ("Rig: the slide runs backward", "local sx, sz = -sinYaw * slide, -cosYaw * slide",
+     "local sx, sz = sinYaw * slide, cosYaw * slide"),
+    ("Rig: the coil slides back too", "local slide = math.max(pose.thrust, 0) * rig.slideShare",
+     "local slide = pose.thrust * rig.slideShare"),
+    ("Lean: along and across swapped", "return leanX * -s + leanZ * -c, leanX * c + leanZ * -s",
+     "return leanX * c + leanZ * -s, leanX * -s + leanZ * -c"),
+    ("Rig: the anchor rides the drop", "write(o.anchor, 0, o.anchorY, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)",
+     "write(o.anchor, 0, o.anchorY - drop, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)"),
 )
 
 
@@ -125,14 +139,16 @@ def cframe_numbers(cf: rp.CFrame) -> list:
 
 
 RIG_FIELDS = tuple(f"{piece}[{i}]" for piece in PIECE_KEYS for i in range(1, 13)) + (
-    "anchorY", "headX", "headY", "headZ", "headOffset", "drop", "footL", "footR")
+    "anchorY", "headX", "headY", "headZ", "headOffset", "drop", "footL", "footR", "slide") + tuple(
+    f"anchor[{i}]" for i in range(1, 13))
 
 
 def rig_values(r: rp.Rigged) -> list:
     out = []
     for piece in PIECE_KEYS:
         out += cframe_numbers(r.pieces[piece])
-    return out + [r.anchor[1], *r.head_world, r.head_offset, r.drop, r.foot_float["legL"], r.foot_float["legR"]]
+    return out + [r.anchor[1], *r.head_world, r.head_offset, r.drop, r.foot_float["legL"], r.foot_float["legR"],
+                  r.slide, *cframe_numbers(r.anchor_frame())]
 
 
 PAINT_FIELDS = ("cloth.r", "cloth.g", "cloth.b", "clothNeon", "clothLeg.r", "clothLeg.g", "clothLeg.b", "clothLegNeon",
@@ -158,13 +174,19 @@ def build_cases(consts: rp.Constants, kinds: dict, threat_cfg: dict, models: dic
     """(cases for the Luau, what raiderpose.py answers for each, counts by function)."""
     rig_numbers = models["rig"]
     cases, expected = [], []
-    counts = {"rig": 0, "threat": 0, "arm": 0, "walk": 0, "paint": 0}
+    counts = {"rig": 0, "threat": 0, "arm": 0, "walk": 0, "paint": 0, "lean": 0}
 
     def add(case, values, fields, label):
         cases.append(case)
         expected.append((label, fields, values))
         counts[case["f"]] += 1
 
+    # Lean (K4): the flat lean vector split along the facing and across it, at every heading the rig
+    # cases use and a few more.
+    for yaw in YAWS + (math.pi / 2, -math.pi, 3.4):
+        for x, z in LEANS:
+            add({"f": "lean", "yaw": yaw, "x": x, "z": z}, list(rp.lean_parts(yaw, x, z)), ("along", "across"),
+                f"Lean yaw {yaw:g} ({x:g}, {z:g})")
     # Threat: every attack of every crowd kind (models and placeholders alike).
     for kind_id in sorted(kinds):
         kind = kinds[kind_id]
@@ -332,10 +354,16 @@ for i, c in CASES do
 					table.insert(values, o[piece][k])
 				end
 			end
-			for _, v in { o.anchorY, o.headX, o.headY, o.headZ, o.headOffset, o.drop, o.footL, o.footR } do
+			for _, v in { o.anchorY, o.headX, o.headY, o.headZ, o.headOffset, o.drop, o.footL, o.footR, o.slide } do
 				table.insert(values, v)
 			end
+			for k = 1, 12 do
+				table.insert(values, o.anchor[k])
+			end
 			emit(i, values)
+		elseif c.f == "lean" then
+			local a, b = RaiderPose.Lean(c.yaw, c.x, c.z)
+			emit(i, { a, b })
 		elseif c.f == "arm" then
 			local pitch, yaw, roll = RaiderPose.Arm(MODELS[c.kind], c.shape, c.threat, c.pose, RIG, c.attack)
 			emit(i, { pitch, yaw, roll })

@@ -83,6 +83,7 @@ REACH_SLACK = 0.01  # posedReach.outRadii against out / radius (the generator ro
 BOX_SLACK = 0.01  # a harvested MeshPart's placed box against the piece's bounds (Assets.json keeps 4 places)
 SIDECAR_SLACK = 0.002  # a sidecar's bounds against the config's (both rounded to 3 places)
 UNIT_SLACK = 0.01  # hold.right / hold.up: unit length and square to each other
+HEAD_SLACK = 0.01  # K5: points.head against the scored head, and headMeshCentre against points.head (Figures' HEAD_EPSILON)
 
 
 def log(msg: str) -> None:
@@ -202,6 +203,21 @@ def entry_problems(kind_id: str, entry: object, kinds: dict, weapons: tuple[str,
             problems.append(f"{tag}: no `{name}` point (the rig poses from it)")
     for name in sorted(points):
         problems += vector_problems(f"{tag}: point {name}", points[name])
+    # K5 (the L4 W2 fix round; the review's slice 3 m2): the anchor and the drawn head stand on the head
+    # point, so it is the server's crit head, (0, height - headRadius, 0) in the body frame (HitShapes),
+    # and the head mesh is centred on it; Figures.lookOf refuses the kind otherwise (a placeholder).
+    head = finite_vector(points.get("head"))
+    height, head_radius = entry.get("height"), entry.get("headRadius")
+    if head is not None and is_number(height) and is_number(head_radius):
+        scored = (0.0, height - head_radius, 0.0)
+        if any(abs(head[i] - scored[i]) > HEAD_SLACK for i in range(3)):
+            problems.append(f"{tag}: point head {head} is not the scored head (0, {scored[1]:g}, 0) within {HEAD_SLACK} "
+                            f"(a headshot at the drawn head would pass the server's crit sphere)")
+        if "headMeshCentre" in entry:
+            centre = finite_vector(entry.get("headMeshCentre"))
+            if centre is None or any(abs(centre[i] - head[i]) > HEAD_SLACK for i in range(3)):
+                problems.append(f"{tag}: headMeshCentre {entry.get('headMeshCentre')!r} is not the head point {head} "
+                                f"within {HEAD_SLACK} (the head mesh would be drawn off the scored head)")
     # The rig's per-kind numbers.
     leg = entry.get("legLength")
     if not is_number(leg) or leg <= 0:

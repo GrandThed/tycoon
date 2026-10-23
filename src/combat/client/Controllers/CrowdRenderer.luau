@@ -7,7 +7,8 @@
 -- * Bodies are pooled placeholder figures (legs, torso, a bright head = the crit point, a visor
 --   that shows facing and glows on wind-up). A spawn never creates an Instance in steady state:
 --   the pool is pre-warmed over a few frames, to the bench's crowd.maxAlive in the range and to
---   the mission's own in a mission (Prewarm).
+--   the mission's own in a mission (Prewarm). The raiders' models fill their own pools the same
+--   way (Raiders/Figures, L4 W2).
 -- * One Heartbeat loop and one BulkMoveTo for every moved part. A body whose pose did not change
 --   this frame is skipped, so an idle crowd costs almost nothing. The loop allocates no tables.
 -- * Positions are drawn ~1 snapshot behind the newest packet, timed by the server clock each
@@ -100,10 +101,13 @@
 --   below, and the X key in Studio switches every live body between the two (ToggleModels).
 --   The pose of an attack is Raiders/RaiderPose.Threat, the one pure function the placeholder
 --   and the models both draw from (tools/check_raider_mirror.py holds it to raiderpose.py);
---   the phase clock, the tint and the ground tell stay here. A model takes the lunge's thrust as
---   a step of its leading foot and its arm's reach, never as a slide of the whole body, and the
---   reactions that follow a landed hit (knockback, launch, the fling, a rise) move it whole on
---   its rest pose. This module's frame time goes to DrawClock (Studio's "Draw N ms").
+--   the phase clock, the tint and the ground tell stay here. A model takes the lunge's thrust in
+--   its rig (a step of its leading foot, its arm's reach and, in the strike window only, a slide
+--   of the body: fix round K1), and the reactions that follow a landed hit (knockback, launch,
+--   the fling, a rise) move it whole on its rest pose. This module's frame time goes to
+--   DrawClock (Studio's "Draw N ms"). Fix round K3: a model is never built in a remote's
+--   handler; a body whose kind has no figure ready wears the placeholder until Figures.Build
+--   (a few a frame, toward RunState.prewarm's plan, in the lobby camp before a run too) makes one.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -211,11 +215,13 @@ type Entity = {
 
 	-- model = what is drawn: the placeholder `body` (legs, torso, head, visor), or the model of
 	-- `figure` (L4 W2). anchor = the part at the scored head: the placeholder's head or the
-	-- figure's invisible `Head`.
+	-- figure's invisible `Head`. wants = the model the body waits for while it wears the
+	-- placeholder because its kind's pool was empty (fix round K3); the step swaps it in.
 	model: Model,
 	body: Model,
 	anchor: BasePart,
 	figure: Figures.Figure?,
+	wants: Figures.Look?,
 	legs: BasePart,
 	torso: BasePart,
 	head: BasePart,
@@ -476,6 +482,7 @@ local poseConsts = Figures.Configure({
 	VISOR_COLOR = VISOR_COLOR,
 	VISOR_HOT_COLOR = VISOR_HOT_COLOR,
 	FLASH_COLOR = FLASH_COLOR,
+	SETTLE_EPSILON = SETTLE_EPSILON,
 })
 local threatIn: RaiderPose.ThreatIn = {
 	shape = "",
@@ -647,6 +654,7 @@ local function newEntity(): Entity?
 		body = model,
 		anchor = head,
 		figure = nil,
+		wants = nil,
 		legs = legs,
 		torso = torso,
 		head = head,
@@ -993,13 +1001,17 @@ end
 
 -- L4 W2: puts on the model of `look` (nil = the placeholder), keeping whether the body is drawn.
 -- Its cues and its bar ride the model, so they come off here and applyKind puts them on again.
+-- K3: with no figure of its kind built yet the body wears the placeholder and waits (`wants`).
 local function dressFigure(entity: Entity, look: Figures.Look?): ()
 	local current = entity.figure
-	if current == nil and look == nil then
-		return
-	end
 	if current ~= nil and look ~= nil and current.look.kind == look.kind then
 		current.look = look
+		entity.wants = nil
+		return
+	end
+	local figure = if look ~= nil then Figures.Take(look) else nil
+	entity.wants = if figure == nil then look else nil
+	if current == nil and figure == nil then
 		return
 	end
 	local drawn = entity.model.Parent
@@ -1009,7 +1021,6 @@ local function dressFigure(entity: Entity, look: Figures.Look?): ()
 		entity.figure = nil
 		Figures.Give(current)
 	end
-	local figure = if look ~= nil then Figures.Take(look) else nil
 	entity.figure = figure
 	entity.model = if figure ~= nil then figure.model else entity.body
 	entity.anchor = if figure ~= nil then figure.anchor else entity.head
@@ -1198,6 +1209,7 @@ local function release(entity: Entity): ()
 		entity.model = entity.body
 		entity.anchor = entity.head
 	end
+	entity.wants = nil
 	table.insert(pool, entity)
 end
 
@@ -2384,7 +2396,8 @@ local function stepAlive(
 			-- The attack's own clock is the easing: smoothing on top would show the blow late.
 			entity.lean = leanTo
 		end
-		-- A model steps its leading foot and reaches with its arm instead (Figures.Pose).
+		-- A model takes the thrust in its rig (RaiderPose.Rig: the leading foot's step, the arm's
+		-- reach and the strike window's slide), never as this whole-figure offset.
 		thrust = thrustNow
 		if entity.figure == nil then
 			offset = facing * thrust
@@ -2638,12 +2651,31 @@ local function stepVanish(entity: Entity, now: number): ()
 	)
 end
 
-local function step(dt: number): ()
-	burstsThisStep = 0
-	if #active == 0 then
+-- K3: a living body that wears the placeholder while it waits for its model puts the model on
+-- once one is built (the cues and the bar again with it, as the X key's re-dress), or counts as
+-- waiting for one this frame.
+local function wear(entity: Entity, wanted: Figures.Look): ()
+	if not Figures.Ready(wanted.kind) then
+		Figures.Wait(wanted)
 		return
 	end
+	local def = kindDef(entity.kind)
+	if def ~= nil then
+		applyKind(entity, def)
+	end
+end
+
+local function step(dt: number): ()
+	burstsThisStep = 0
 	local now = os.clock()
+	-- K3: the model pools fill a few figures a frame, also in the lobby camp with nobody drawn.
+	local built = Figures.Build()
+	if #active == 0 then
+		if built > 0 then
+			DrawClock.Add(os.clock() - now)
+		end
+		return
+	end
 	Figures.BeginFrame()
 	local serverNow = Workspace:GetServerTimeNow()
 	local renderTime = serverNow - (lagEstimate or 0) - interval * INTERP_SNAPSHOTS
@@ -2662,6 +2694,10 @@ local function step(dt: number): ()
 			continue
 		end
 		if entity.phase == "alive" then
+			local wanted = entity.wants
+			if wanted ~= nil then
+				wear(entity, wanted)
+			end
 			stepAlive(entity, now, serverNow, renderTime, yawAlpha, leanAlpha, dt)
 		elseif entity.phase == "dying" then
 			stepDying(entity, now)
@@ -2850,7 +2886,9 @@ end
 -- hands over once the first RunState names the mission. Never past the bench's own cap, which
 -- is the most the server will ever field; a body past the pool is still built on demand.
 -- L4 W2: handed RunState.prewarm (the plan's bodies by kind), the model pools are filled too,
--- each kind to its count and all of them together to the same cap.
+-- each kind toward its count and all of them together to the same cap (fix round K3: split in
+-- proportion over it). That fill is Figures.Build's, a few figures a frame from the next step on,
+-- in the lobby camp as well as in a run.
 function CrowdRenderer.Prewarm(counts: number | { [string]: number }): ()
 	if not started or destroyed then
 		return
@@ -2863,7 +2901,7 @@ function CrowdRenderer.Prewarm(counts: number | { [string]: number }): ()
 		end
 		return
 	end
-	task.spawn(Figures.Prewarm, counts, cap)
+	Figures.Prewarm(counts, cap)
 end
 
 -- L4 W2, the X key in Studio: every kind's model, or every body the placeholder; the living

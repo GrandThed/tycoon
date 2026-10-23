@@ -123,6 +123,7 @@ Usage:
   py tools/sim_range.py --levels-only   # only the level sections (with --check: their bands)
   py tools/sim_range.py --levels-only --level forest   # only Forest Road
   py tools/sim_range.py --r8 --check   # R8 judged fairly (L4W2-13): whole sniper runs, its own gate
+  py tools/sim_range.py --r8 --check --r8-gate-only   # the same verdict, without the printed sword tables
 """
 
 from __future__ import annotations
@@ -637,6 +638,20 @@ def hs_seat_drop(height, seat, rest_drop):
     if not (finite(rest_drop) and rest_drop >= 0 and finite(height) and height > 0) or seat != seat:
         return 0.0
     return height * rest_drop * hs_smoothstep(seat)
+
+
+def hs_seat_step(seat, goal, dt, blend_seconds):
+    """HitShapes.SeatStep (L4W2-11): one step of a seat toward its goal (clamped to 0..1) at 1 /
+    blendSeconds a second both ways, never past it. A pace that is not a finite number above 0 (a
+    config without crowd.riseBlendSeconds) or a NaN seat: the goal at once. Held to the Luau by
+    tools/check_stage_mirror.py (ray.seatStep)."""
+    target = min(max(goal, 0.0), 1.0)
+    if not (finite(blend_seconds) and blend_seconds > 0) or seat != seat:
+        return target
+    step = max(dt, 0.0) / blend_seconds
+    if target > seat:
+        return min(seat + step, target)
+    return max(seat - step, target)
 
 
 def hs_flat_to_rect(x, z, cx, cz, hx, hz):
@@ -2473,16 +2488,12 @@ class ThreatRun:
         then lowers the head the next place() draws and the capsule CrowdRay tests."""
         crowd = self.cfg["crowd"]
         rest_drop = crowd.get("restDrop") or 0.0
-        blend = max(crowd.get("riseBlendSeconds") or 0.0, 1e-3)
+        blend = crowd.get("riseBlendSeconds")
         for e in self.fighters:
             if not e.alive:
                 continue
             goal = self.seat_goal(e)
-            if e.dormant:
-                e.seat = goal
-            elif e.seat != goal:
-                step = dt / blend
-                e.seat = min(e.seat + step, goal) if goal > e.seat else max(e.seat - step, goal)
+            e.seat = goal if e.dormant else hs_seat_step(e.seat, goal, dt, blend)
             e.drop = hs_seat_drop(e.height, e.seat, rest_drop)
             if e.dormant:
                 e.place()
@@ -8099,14 +8110,13 @@ class LevelRun(ThreatRun):
         return cb_stands_down(group, b.kind.get("brain") != "keepAway") and b.state not in ("windup", "attack")
 
     def seat_goal(self, e):
-        """L4W2-11: a resident sits while CampBrain.Shows says `rest`: its group held or at rest, its
-        brain asking for no walk this step, and a fire group (a guard, a patrol and a tent's group
-        stand)."""
+        """L4W2-11: a resident sits while CampBrain.Shows (cb_shows, the mirror check_stage_mirror holds
+        to it) says `rest` for its group and its brain's walk this step: held or at rest, not walking,
+        a fire group (a guard, a patrol and a tent's group stand). The wire's airborne and stagger
+        states are not modelled: a hit or a launch wakes the group first, and Shows answers `rise`."""
         if e.resident is None:
             return 0.0
-        group = self.groups[e.resident["group"] - 1]
-        resting = group["held"] or group["state"] == "rest"
-        return 1.0 if resting and not e.moving and group["def"]["posture"] == "fire" else 0.0
+        return 1.0 if cb_shows(self.groups[e.resident["group"] - 1], e.moving) == "rest" else 0.0
 
     def may_target(self, e):
         """L1b-W4-21: a resident in fight goes only for a player its group knows; one that is not
@@ -11266,9 +11276,12 @@ def check_scenes(cfg, row, tag, expect):
 # player, sword and bow, each swing with the one that reaches (the lead's ruling on Ben's words,
 # 2026-10-22), at the same gear, difficulty and seeds R8_SEEDS. A spot fails when its mean cash a
 # minute or its mean Timber a minute is above his; the seeds whose run out-earns his are named, and
-# every hit from the spot must land. The same runs against the mission player with the sword alone
-# are printed beside it, not gated (L3-26's comparison, which reads Road2 and Road3 on Hard with the
-# bow at T4 about 1% over). Scope: the four tables (Normal and SNIPER_HARD, at the proving gear and
+# every hit from the spot must land. Since the W2 fix round (K6) the sniper fights with that same
+# pair before and after the spot, so the two runs differ only by the spot. The runs of a sniper who
+# fights with the sword alone (R8_PRINTED) are printed beside the gate, not gated, twice: against the
+# mission player with the sword alone (L3-26's comparison, which reads Road2 and Road3 on Hard with
+# the bow at T4 about 1% over) and against the pair player (the gate as first built, which mostly
+# measured the weapon gap). Scope: the four tables (Normal and SNIPER_HARD, at the proving gear and
 # with only the bow at SNIPER_BOW_TIER), every listed spot, the frozen layout's and, at the proving
 # gear, the open tunnel's with the fire family's courses (L2-37, d-m4).
 # The gate simulates every whole run to its end (the lead's ruling). `--r8-compose` is a quicker look
@@ -11286,10 +11299,17 @@ R8_COMPOSE = False
 # all 30 seeds), because the straight crossing puts him at camp B's far end, where the mission player on
 # Hard at T1 clears it with fewer leashes than from its entry: the fight's starting place, not the spot.
 R8_RESUME = "road"
-# How the sniper fights the rest: "sword", with the starter melee alone (the gate, as ruled and measured
-# on 2026-10-22), or "pair" (`--r8-fight pair`), sword and bow as the player he is held to: the stricter
-# reading of "then fight the rest", every part of both runs alike but the spot.
-R8_FIGHT = "sword"
+# How the gate's sniper fights on the way to the spot and after it: "pair", sword and bow as the player
+# he is held to, so both runs are alike but the spot (the W2 review's M1, the lead's ruling K6: "against
+# fighting it all with the same gear"). It passes with margins of 1.8-5.8% (Hard T1/T1 Road2 x0.982, Hard
+# bow T4 Road3 x0.982, Normal T1/T1 CaveExit x0.966, Normal bow T4 Road4 x0.942), guarded by
+# check_levels_mutants' "K6: R8's sniper paid 3% more over a whole run". "sword" (`--r8-fight sword`), the
+# starter melee alone, was the gate as first built: against the pair player it read x0.41-0.84, a gap
+# that a spot paying up to 1.6x more would have hidden.
+R8_FIGHT = "pair"
+# The other ways of fighting run beside the gate and printed, not gated (the lead's K6); `--r8-gate-only`
+# runs the gate's alone (about half the time; the verdict is the same).
+R8_PRINTED = ("sword",)
 R8_TABLES = ("normal", "normal-bow", "hard", "hard-bow")
 THREAT_POLICIES["sniperFight"] = dict(THREAT_POLICIES["mission"],
                                       label="the mission, R8's course from the spot, then the mission (L4W2-13)")
@@ -11422,9 +11442,11 @@ def r8_courses(report, cfg, with_cut):
 
 
 def r8_report(cfg, config_path, jobs, tables=R8_TABLES, spot_filter=None, seeds=R8_SEEDS, compose=R8_COMPOSE,
-              resume=R8_RESUME, fight=R8_FIGHT):
-    """R8 over whole runs, every table: the mission player's runs and the pair player's first (each
-    seed's clear of every camp is where a composed sniper run stops), then every course on every seed."""
+              resume=R8_RESUME, fight=R8_FIGHT, printed=R8_PRINTED):
+    """R8 over whole runs, every table: the players' runs first (the pair player, the gate's, and the
+    mission player with the sword alone when a sniper who fights so is run; each seed's clear of every
+    camp is where a composed sniper run stops), then every course on every seed, for the gate's way of
+    fighting (`fight`) and for each printed one (`printed`)."""
     ctx = level_context()
     combat_cfg = ctx["combat"]
     level = resolve_level(ctx["files"][FOREST_LEVEL], combat_cfg["director"]["runCapSeconds"])
@@ -11449,36 +11471,43 @@ def r8_report(cfg, config_path, jobs, tables=R8_TABLES, spot_filter=None, seeds=
         courses = [c for c in r8_courses(report, cfg, not bow) if spot_filter is None or c[0] == spot_filter]
         names = ctx["expeditions"]["difficultyNames"]
         where = ("only the bow upgraded, L3-26" if bow else "the proving gear")
-        plan.append({"name": name, "difficulty": difficulty, "gear": gear, "courses": courses,
+        plan.append({"name": name, "difficulty": difficulty, "gear": gear, "courses": courses, "runs": {},
                      "tag": f"forest, {names.get(difficulty, difficulty)} at gear {gear[0]}/{gear[1]} ({where})"})
-    # The pair player (the gate's) and the mission player with the sword alone (printed).
-    players = (None, "pair")
+    fights = (fight,) + tuple(way for way in printed if way != fight)
+    # The pair player (the gate's), and the mission player with the sword alone when a sniper fights so
+    # (printed): table["pairs"], table["missions"].
+    players = ("pair",) + ((None,) if "sword" in fights else ())
     missions = r8_map([(config_path, t["difficulty"], t["gear"], seed, who) for who in players for t in plan
                        for seed in seeds], jobs)
-    for index, table in enumerate(plan):
-        table["missions"] = missions[index * len(seeds):(index + 1) * len(seeds)]
-        rest = missions[len(plan) * len(seeds):]
-        table["pairs"] = rest[index * len(seeds):(index + 1) * len(seeds)]
+    block = len(plan) * len(seeds)
+    for k, who in enumerate(players):
+        for index, table in enumerate(plan):
+            at = k * block + index * len(seeds)
+            table["pairs" if who == "pair" else "missions"] = missions[at:at + len(seeds)]
     tasks = []
-    for table in plan:
-        # A composed run ends as the player who fights as he does.
-        like = table["pairs"] if fight == "pair" else table["missions"]
-        for key, where, spot, flame in table["courses"]:
-            for seed, mission in zip(seeds, like):
-                stop = (spot["camp"] if compose and spot["camp"] in (mission.get("walletAt") or {})
-                        else None)
-                tasks.append((config_path, table["difficulty"], table["gear"], seed,
-                              {"spot": spot, "layout": where, "breath": flame, "stopZone": stop,
-                               "resume": resume, "fight": fight}))
+    for way in fights:
+        for table in plan:
+            # A composed run ends as the player who fights as he does.
+            like = table["pairs"] if way == "pair" else table["missions"]
+            for key, where, spot, flame in table["courses"]:
+                for seed, mission in zip(seeds, like):
+                    stop = (spot["camp"] if compose and spot["camp"] in (mission.get("walletAt") or {})
+                            else None)
+                    tasks.append((config_path, table["difficulty"], table["gear"], seed,
+                                  {"spot": spot, "layout": where, "breath": flame, "stopZone": stop,
+                                   "resume": resume, "fight": way}))
     done = iter(r8_map(tasks, jobs))
-    for table in plan:
-        table["runs"] = {}
-        like = table["pairs"] if fight == "pair" else table["missions"]
-        for key, _where, spot, _flame in table["courses"]:
-            courses = [next(done) for _ in seeds]
-            table["runs"][key] = {"camp": spot["camp"], "courses": courses,
-                                  "whole": [r8_whole(c, m, spot["camp"], compose) for c, m in zip(courses, like)]}
-    return {"tables": plan, "seeds": seeds, "compose": compose, "jobs": jobs, "resume": resume, "fight": fight}
+    for way in fights:
+        for table in plan:
+            like = table["pairs"] if way == "pair" else table["missions"]
+            table["runs"][way] = {}
+            for key, _where, spot, _flame in table["courses"]:
+                courses = [next(done) for _ in seeds]
+                table["runs"][way][key] = {"camp": spot["camp"], "courses": courses,
+                                           "whole": [r8_whole(c, m, spot["camp"], compose)
+                                                     for c, m in zip(courses, like)]}
+    return {"tables": plan, "seeds": seeds, "compose": compose, "jobs": jobs, "resume": resume, "fight": fight,
+            "fights": fights}
 
 
 def r8_rows(runs, against, seeds):
@@ -11492,36 +11521,51 @@ def r8_rows(runs, against, seeds):
             mean_of([m[0] for m in theirs]), mean_of([m[1] for m in theirs]), out)
 
 
+def r8_fought(way):
+    """How a sniper run of this way of fighting fights before and after the spot, in words."""
+    return "sword and bow" if way == "pair" else "the sword alone"
+
+
 def print_r8(report):
     seeds = report["seeds"]
     print()
     where = ("from the road where he turned off it" if report["resume"] == "road" else "from where he stands")
-    how = "sword and bow" if report["fight"] == "pair" else "the sword alone"
     composed = " (composed: after his camp, his own kind of player's run on that seed)" if report["compose"] else ""
+    others = [way for way in report["fights"] if way != report["fight"]]
     print(f"R8 JUDGED FAIRLY (L4W2-13; Forest Road; seeds {seeds[0]}-{seeds[-1]}; a whole run: the mission to the "
-          f"spot's camp, R8's straight course from the spot, then the mission {where} with {how} to the level's "
-          f"end{composed}; cash / Timber a minute, the mean over the seeds. GATED against {R8_PAIR_LABEL}; "
-          f"printed, not gated, against the mission player with the sword alone)")
+          f"spot's camp, R8's straight course from the spot, then the mission {where} to the level's end{composed}; "
+          f"cash / Timber a minute, the mean over the seeds. GATED: the sniper who fights with "
+          f"{r8_fought(report['fight'])} before and after the spot, against {R8_PAIR_LABEL}"
+          + "".join(f"; printed, not gated: the sniper who fights with {r8_fought(way)}, against the mission player "
+                    f"with the sword alone (L3-26's comparison) and against {R8_PAIR_LABEL} (the gate as first built)"
+                    for way in others) + ")")
     for table in report["tables"]:
         pair = [pay_rate(m) for m in table["pairs"]]
-        mine = [pay_rate(m) for m in table["missions"]]
+        mine = [pay_rate(m) for m in table.get("missions") or []]
         print(f"  {table['tag']}: {R8_PAIR_LABEL} {mean_of([m[0] for m in pair]):,.0f} / "
-              f"{mean_of([m[1] for m in pair]):.1f} a minute; the sword alone {mean_of([m[0] for m in mine]):,.0f} / "
-              f"{mean_of([m[1] for m in mine]):.1f}; the pair "
-              + ", ".join(f"{end} {sum(1 for x in table['pairs'] if x['end'] == end)}"
-                          for end in sorted({x['end'] for x in table["pairs"]})))
-        for key, runs in table["runs"].items():
-            cash, timber, pair_cash, _pair_timber, out = r8_rows(runs, table["pairs"], seeds)
-            _c, _t, sword_cash, _st, sword_out = r8_rows(runs, table["missions"], seeds)
-            burst = [r8_burst(c) for c in runs["courses"]]
-            sniped = sum(1 for c in runs["courses"] if c["sniped"])
-            print(f"    {key:<34} {cash:>8,.0f} / {timber:5.1f} (x{cash / pair_cash:.3f} the pair's, out-earning seeds "
-                  f"{len(out)}; ungated: x{cash / sword_cash:.3f} the sword alone's, out-earning seeds "
-                  f"{len(sword_out)}); the burst (ungated) mean {mean_of([b[0] for b in burst]):,.0f} / "
-                  f"{mean_of([b[1] for b in burst]):.1f}, best {max(b[0] for b in burst):,.0f}; "
-                  f"kills in his run{' (to its stop: composed)' if report['compose'] else ''} "
-                  f"{mean_of([c['kills'] for c in runs['courses']]):.1f}; "
-                  f"sniped {sniped}/{len(seeds)}; downs {sum(c['downs'] for c in runs['courses'])}")
+              f"{mean_of([m[1] for m in pair]):.1f} a minute"
+              + (f"; the sword alone {mean_of([m[0] for m in mine]):,.0f} / {mean_of([m[1] for m in mine]):.1f}"
+                 if mine else "")
+              + "; the pair " + ", ".join(f"{end} {sum(1 for x in table['pairs'] if x['end'] == end)}"
+                                          for end in sorted({x['end'] for x in table["pairs"]})))
+        for way in report["fights"]:
+            gated = way == report["fight"]
+            print(f"    {'GATED' if gated else 'printed, not gated'}: the sniper who fights with {r8_fought(way)}")
+            for key, runs in table["runs"][way].items():
+                cash, timber, pair_cash, _pair_timber, out = r8_rows(runs, table["pairs"], seeds)
+                against = f"x{cash / pair_cash:.3f} the pair's, out-earning seeds {len(out)}"
+                if not gated and table.get("missions"):
+                    _c, _t, sword_cash, _st, sword_out = r8_rows(runs, table["missions"], seeds)
+                    against = (f"x{cash / sword_cash:.3f} the sword alone's, out-earning seeds {len(sword_out)}; "
+                               + against)
+                burst = [r8_burst(c) for c in runs["courses"]]
+                sniped = sum(1 for c in runs["courses"] if c["sniped"])
+                print(f"      {key:<34} {cash:>8,.0f} / {timber:5.1f} ({against}); the burst (ungated) mean "
+                      f"{mean_of([b[0] for b in burst]):,.0f} / {mean_of([b[1] for b in burst]):.1f}, best "
+                      f"{max(b[0] for b in burst):,.0f}; kills in his run"
+                      f"{' (to its stop: composed)' if report['compose'] else ''} "
+                      f"{mean_of([c['kills'] for c in runs['courses']]):.1f}; "
+                      f"sniped {sniped}/{len(seeds)}; downs {sum(c['downs'] for c in runs['courses'])}")
 
 
 def r8_check(report, expect):
@@ -11531,7 +11575,7 @@ def r8_check(report, expect):
     mission's own run), and every hit from the spot lands."""
     seeds = report["seeds"]
     for table in report["tables"]:
-        for key, runs in table["runs"].items():
+        for key, runs in table["runs"][report["fight"]].items():
             cash, timber, theirs_cash, theirs_timber, out = r8_rows(runs, table["pairs"], seeds)
             blocked = [f"seed {seed} {c['ownEvaded']}" for seed, c in zip(seeds, runs["courses"]) if c["ownEvaded"]]
             missed = [str(seed) for seed, c in zip(seeds, runs["courses"])
@@ -11648,8 +11692,8 @@ def main():
     parser.add_argument("--level", choices=("forest",), default=None,
                         help="with --levels-only: only that level")
     parser.add_argument("--r8", action="store_true",
-                        help="only R8 judged fairly (L4W2-13): whole sniper runs against the mission player, every "
-                             "table, seeds R8_SEEDS; with --check its gate")
+                        help="only R8 judged fairly (L4W2-13): whole sniper runs against the pair player at the same "
+                             "gear, every table, seeds R8_SEEDS; with --check its gate")
     parser.add_argument("--jobs", type=int, default=max(1, min(8, (os.cpu_count() or 2) - 4)),
                         help="with --r8: worker processes (1 = in order)")
     parser.add_argument("--r8-table", dest="r8_table", choices=R8_TABLES, default=None,
@@ -11663,7 +11707,10 @@ def main():
     parser.add_argument("--r8-resume", dest="r8_resume", choices=("spot", "road"), default=R8_RESUME,
                         help="with --r8: where the fight half begins (R8_RESUME)")
     parser.add_argument("--r8-fight", dest="r8_fight", choices=("sword", "pair"), default=R8_FIGHT,
-                        help="with --r8: how the sniper fights the rest (R8_FIGHT)")
+                        help="with --r8: how the gate's sniper fights before and after the spot (R8_FIGHT)")
+    parser.add_argument("--r8-gate-only", dest="r8_gate_only", action="store_true",
+                        help="with --r8: only the gate's runs, without the printed ways of fighting (R8_PRINTED): "
+                             "the same verdict in about half the time")
     args = parser.parse_args()
     cfg = load_config(args.config)
     if args.bow:
@@ -11674,7 +11721,7 @@ def main():
         r8 = r8_report(cfg, str(Path(args.config).resolve()), args.jobs,
                        tables=(args.r8_table,) if args.r8_table else R8_TABLES, spot_filter=args.r8_spot,
                        seeds=seeds, compose=R8_COMPOSE or args.r8_compose, resume=args.r8_resume,
-                       fight=args.r8_fight)
+                       fight=args.r8_fight, printed=() if args.r8_gate_only else R8_PRINTED)
         print_r8(r8)
         if args.check:
             failures = []

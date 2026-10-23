@@ -12,7 +12,10 @@
 --                          placeholder figure and the models draw from these same numbers.
 --   Rig     [rig]          the five rigid pieces of a model body for one pose: the head stays on
 --                          the scored head (moving only up and down by the clamped drop), every
---                          lean bends the body below the neck, the legs aim back at the floor.
+--                          lean bends the body below the neck, the legs aim back at the floor;
+--                          a lunge's strike window slides the whole body (fix round K1), and
+--                          the invisible anchor's transform (the scored head, never slid).
+--   Lean    [lean_parts]   a flat lean vector split along the body's facing and across it.
 --   Arm     [arm_channel]  the weapon arm's pitch, yaw and roll: keyed poses blended the short way
 --                          round on Threat's clocks, the throw path, the whirl, the steady aim.
 --   Walk    [walk_step]    one frame of the walk cycle (phase and amplitude). raiderpose.py's
@@ -77,6 +80,7 @@ export type RigNumbers = {
 	walkFullShare: number,
 	walkNearStuds: number,
 	stepShare: number,
+	slideShare: number,
 	seatLean: number,
 	seatSplay: number,
 	airTuck: number,
@@ -173,15 +177,19 @@ export type ThreatOut = {
 	slump: number,
 }
 
--- Rig's answer: each piece's transform (body frame to world, 12 numbers), the scored head's
--- centre height (anchorY; its x and z are 0), where the head is drawn, how far it is from the
--- anchor, the clamped drop and how far each foot floats.
+-- Rig's answer: each piece's transform (body frame to world, 12 numbers), the anchor's (the
+-- invisible part at the scored head: its centre, unturned and never slid) and that centre's
+-- height (anchorY; its x and z are 0), where the head is drawn, how far it is from the anchor (a
+-- lunge's slide included), the clamped drop, how far each foot floats and how far the whole body
+-- slid along its facing (K1).
 export type RigOut = {
 	head: { number },
 	torso: { number },
 	arm: { number },
 	legL: { number },
 	legR: { number },
+	anchor: { number },
+	slide: number,
 	anchorY: number,
 	headX: number,
 	headY: number,
@@ -454,6 +462,12 @@ local function place(
 	)
 end
 
+-- cf_at((x, 0, z)) * piece: the piece moved on the flat, unturned.
+local function shift(into: { number }, x: number, z: number): ()
+	into[1] += x
+	into[3] += z
+end
+
 -- a_lerp: one angle blended the shortest way round (its difference wrapped into [-pi, pi) first).
 local function angleLerp(a: number, b: number, t: number): number
 	return a + ((b - a + math.pi) % TWO_PI - math.pi) * t
@@ -501,6 +515,8 @@ function RaiderPose.NewRigOut(): RigOut
 		arm = table.create(12, 0),
 		legL = table.create(12, 0),
 		legR = table.create(12, 0),
+		anchor = table.create(12, 0),
+		slide = 0,
 		anchorY = 0,
 		headX = 0,
 		headY = 0,
@@ -852,6 +868,11 @@ function RaiderPose.Rig(
 	local drop = clamp(wanted, -keep, keep)
 	o.drop = drop
 	o.anchorY = headC[2] - seatDrop
+	write(o.anchor, 0, o.anchorY, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+	-- K1: a lunge's strike window slides the whole body by its forward thrust (its coil, which
+	-- draws back, stays put); the anchor stays on the scored head, which the server never moves.
+	local slide = math.max(pose.thrust, 0) * rig.slideShare
+	o.slide = slide
 
 	-- The head, about its own centre.
 	local headX, headY, headZ = headC[1], headC[2] - seatDrop - drop, headC[3]
@@ -879,12 +900,11 @@ function RaiderPose.Rig(
 		t22
 	)
 	place(o.head, headX, headY, headZ, h00, h01, h02, h10, h11, h12, h20, h21, h22, headC)
-	o.headX, o.headY, o.headZ = headX, headY, headZ
-	local dy = headY - o.anchorY
-	o.headOffset = math.sqrt(headX * headX + dy * dy + headZ * headZ)
 
 	placeUpper(o, model, pose, lx, lz, seatDrop + drop)
 
+	-- The leading foot steps with the thrust; the trailing one stays where it stood while the body
+	-- slides (its spot lies `slide` behind in the body's frame).
 	local lead = model.leadLeg or "legL"
 	local step = pose.thrust * rig.stepShare
 	o.footL = placeLeg(
@@ -892,7 +912,7 @@ function RaiderPose.Rig(
 		o.torso,
 		hipL,
 		1,
-		if lead == "legL" then step else 0,
+		if lead == "legL" then step else -slide,
 		model,
 		rig,
 		pose,
@@ -904,14 +924,38 @@ function RaiderPose.Rig(
 		o.torso,
 		hipR,
 		-1,
-		if lead == "legR" then step else 0,
+		if lead == "legR" then step else -slide,
 		model,
 		rig,
 		pose,
 		swing,
 		seat
 	)
+	if slide > 0 then
+		-- Along the facing, (-sin yaw, 0, -cos yaw).
+		local sx, sz = -sinYaw * slide, -cosYaw * slide
+		shift(o.head, sx, sz)
+		shift(o.torso, sx, sz)
+		shift(o.arm, sx, sz)
+		shift(o.legL, sx, sz)
+		shift(o.legR, sx, sz)
+		headX += sx
+		headZ += sz
+	end
+	o.headX, o.headY, o.headZ = headX, headY, headZ
+	local dy = headY - o.anchorY
+	o.headOffset = math.sqrt(headX * headX + dy * dy + headZ * headZ)
 	return o
+end
+
+-- --- Lean [lean_parts] ------------------------------------------------------------------------------
+
+-- A flat lean vector (CrowdRenderer keeps one per body, flinches included) split along the body's
+-- facing (+ forward) and across it (+ toward its right): Pose's lean and leanSide. The facing and
+-- the right are (-sin yaw, 0, -cos yaw) and (cos yaw, 0, -sin yaw), the basis Rig rebuilds it from.
+function RaiderPose.Lean(yaw: number, leanX: number, leanZ: number): (number, number)
+	local s, c = math.sin(yaw), math.cos(yaw)
+	return leanX * -s + leanZ * -c, leanX * c + leanZ * -s
 end
 
 -- --- Arm [arm_channel] -----------------------------------------------------------------------------

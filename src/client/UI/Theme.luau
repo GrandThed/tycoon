@@ -1211,11 +1211,15 @@ local Theme = {
 	-- amplitude eases toward its goal at this rate a second and snaps to it inside SETTLE (so an
 	-- idle crowd stops being redrawn); on a low-end device it stops past NEAR_LOW studs from the
 	-- camera (RaiderModels.json rig.walkNearStuds elsewhere). Models are built into their pools
-	-- this many a frame (each is about a dozen MeshParts).
+	-- this many a frame (each is about a dozen MeshParts), in the lobby camp before a run too.
 	COMBAT_RAIDER_WALK_EASE_RATE = 8,
 	COMBAT_RAIDER_WALK_SETTLE = 0.01,
 	COMBAT_RAIDER_WALK_NEAR_LOW = 60,
 	COMBAT_RAIDER_PREWARM_PER_FRAME = 4,
+	-- The stage of a weapon template that is drawn (L3 W2: one look for every tier); the others
+	-- are dropped from the clone. A raider's carried weapon (the Chief's Warhammer) is drawn the
+	-- same way a player's held one is.
+	COMBAT_WEAPON_SHOWN_STAGE = "Stage0",
 	-- The plated elite's planks while plated (raiders.md section 3: today's shell was Metal; Wood
 	-- is the Studio alternative to try). Its colour is COMBAT_RANGE_PLATE_COLOR, the bar's.
 	COMBAT_RAIDER_PLATE_MATERIAL = Enum.Material.SmoothPlastic,

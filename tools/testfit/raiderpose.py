@@ -28,8 +28,13 @@ Two layers, kept apart on purpose:
        two-angle aim, no knees), plus the walk swing; seated they lie forward;
      * the twist (an arc's coil and sweep, the call's shake, the reel's sway) turns the upper body
        and arm; the legs keep the heading;
-     * the lunge's thrust never moves the head: the leading foot steps forward with it and the arm's
-       strike pose carries the reach;
+     * the lunge's thrust: the leading foot steps forward with it and the arm's strike pose carries
+       the reach; and (L4 W2 fix round, K1: the arm alone reaches 2.27 of the placeholder's 3.44)
+       the whole body slides forward by `slideShare` of the thrust while the thrust is forward,
+       which is the strike window (late in the windup's snap, through the blow, back to 0 by its
+       recover), as the placeholder slid; the trailing foot stays where it stood. The head rule is
+       waived for that slide alone: the head keeps its rule against the slid body, and the anchor
+       (the scored head, which the server never moves) stays put;
      * squash (the slam, the spent slump, a boss's breath) is the same clamped drop; rigid pieces
        never scale;
      * reactions that follow a landed hit (knockback, launch, the death fling and topple, a summoned
@@ -98,7 +103,7 @@ THEME_NAMES = (
 )
 RENDERER_NAMES = (
     "STAGGER_LEAN", "WINDUP_LEAN", "AIRBORNE_LEAN", "AIRBORNE_TUCK", "HEAD_TINT", "HEAD_TINT_SHARE",
-    "LEG_SHADE", "LEG_SHADE_SHARE", "VISOR_COLOR", "VISOR_HOT_COLOR", "FLASH_COLOR",
+    "LEG_SHADE", "LEG_SHADE_SHARE", "VISOR_COLOR", "VISOR_HOT_COLOR", "FLASH_COLOR", "TORSO_DEPTH",
 )
 # ProvingGrounds.json crowd keys (L4 W2, contract 5: the server steps the seat too, so the drop and
 # the rise are config, no longer Theme numbers): read by their config names.
@@ -533,6 +538,7 @@ RIG_DEFAULTS = {
     "walkFullShare": 0.5,  # the stride is full at this share of the kind's speed
     "walkNearStuds": 140,  # past this distance from the camera the walk cycle stops (a cost guard)
     "stepShare": 0.4,  # share of the lunge's thrust the leading foot steps forward (as far as it reaches)
+    "slideShare": 0.6,  # share of the lunge's forward thrust the whole body slides (K1: the strike window only)
     "seatLean": 0.12,  # radians a seated body leans forward
     "seatSplay": 0.14,  # radians each seated leg turns outward
     "airTuck": 0.5,  # radians the legs swing forward while airborne
@@ -563,10 +569,23 @@ class Rigged:
 
     pieces: dict[str, CFrame] = field(default_factory=dict)
     head_world: Vec = (0.0, 0.0, 0.0)
-    anchor: Vec = (0.0, 0.0, 0.0)  # the scored head's centre
-    head_offset: float = 0.0  # studs
+    anchor: Vec = (0.0, 0.0, 0.0)  # the scored head's centre (never slid: the server's head stays)
+    head_offset: float = 0.0  # studs, from the anchor (the slide included)
     drop: float = 0.0
     foot_float: dict[str, float] = field(default_factory=dict)
+    slide: float = 0.0  # studs the whole body slid along its facing (K1: a lunge's strike window)
+
+    def anchor_frame(self) -> CFrame:
+        """The invisible anchor part's transform (RaiderPose.Rig's `anchor`): at the scored head, unturned."""
+        return cf_at(self.anchor)
+
+
+def lean_parts(yaw: float, lean_x: float, lean_z: float) -> tuple[float, float]:
+    """RaiderPose.Lean: a flat lean vector (CrowdRenderer keeps one per body) split along the body's
+    facing (+ forward) and across it (+ toward its right): the Pose's lean and lean_side. The facing
+    and the right are look_of(yaw) and (cos yaw, 0, -sin yaw), the basis rig() rebuilds it from."""
+    s, c = math.sin(yaw), math.cos(yaw)
+    return lean_x * -s + lean_z * -c, lean_x * c + lean_z * -s
 
 
 def rig(model: dict, rig_numbers: dict, consts: Constants, pose: Pose, *, seated_hit_shapes: bool = True) -> Rigged:
@@ -604,7 +623,9 @@ def rig(model: dict, rig_numbers: dict, consts: Constants, pose: Pose, *, seated
 
     anchor_y = head_c[1] - (seat_drop if seated_hit_shapes else 0.0)
     anchor = (0.0, anchor_y, 0.0)
-    out = Rigged(anchor=anchor, drop=drop)
+    # K1: the strike window's slide, a lunge's forward thrust only (0 in its coil, which draws back).
+    slide = max(pose.thrust, 0.0) * k["slideShare"]
+    out = Rigged(anchor=anchor, drop=drop, slide=slide)
 
     upper_yaw = pose.yaw + pose.twist
     r_lean = lean_rotation(lean_vec)
@@ -626,9 +647,9 @@ def rig(model: dict, rig_numbers: dict, consts: Constants, pose: Pose, *, seated
         hip_world = torso.point(hip)
         local = legs_frame.inverse().rotate(hip_world)  # the hip in the legs' own frame
         sign = 1.0 if name == "legL" else -1.0
-        step = 0.0
-        if name == model.get("leadLeg", "legL"):
-            step = pose.thrust * k["stepShare"]
+        # The leading foot steps with the lunge's thrust; the trailing one stays where it stood
+        # while the body slides (its spot lies `slide` behind in the body's frame).
+        step = pose.thrust * k["stepShare"] if name == model.get("leadLeg", "legL") else -slide
         target = (hip[0], 0.0, hip[2] - step)  # the floor spot under the rest hip (+ the lunge's step)
         # A foot the leg cannot reach slides toward the spot under the hip until it can: feet stay on
         # the floor and slide under a bending body instead of hanging in the air.
@@ -652,6 +673,12 @@ def rig(model: dict, rig_numbers: dict, consts: Constants, pose: Pose, *, seated
             gamma = lerp(gamma, -sign * k["seatSplay"], seat)
         r_leg = legs_frame * euler_yxz(beta, 0.0, gamma)
         out.pieces[name] = cf_at(hip_world) * r_leg * cf_at(v_mul(hip, -1.0))
+    if slide > 0:
+        shift = v_mul(facing, slide)
+        for name in PIECES:
+            out.pieces[name] = cf_at(shift) * out.pieces[name]
+        out.head_world = v_add(out.head_world, shift)
+        out.head_offset = v_len(v_sub(out.head_world, anchor))
     return out
 
 
@@ -910,19 +937,48 @@ def posed_extent(model: dict, kind: dict, threat_cfg: dict, consts: Constants, r
     return out
 
 
-# --check's weapon rule (L4 W2 contract 3.4, risk 4): at an attack's impact the drawn weapon reaches
-# on the flat no farther than the attack itself (its `range`, or its `reach` when it has none) plus
-# this: a hammer drawn 17 studs out against a 16-stud sweep reads as a hit that never lands.
+# --check's weapon rules at an attack's blow (L4 W2 contract 3.4, risk 4; fix round K1, K2). The
+# weapon is the arm piece and the held model (the Chief's hammer), on the body where the rig puts it
+# (a lunge's slide included), sampled IMPACT_STEPS times over the strike, enraged or not.
+#   * Never too far: over the strike the weapon reaches on the flat no farther than the attack itself
+#     (its `range`, or its `reach` when it has none) + IMPACT_SLACK. For an arc only what lies inside
+#     the arc counts: a hammer behind the shoulder is not the sweep.
+#   * K1, never short where nothing else tells: an attack the client draws no tell for on the floor
+#     (NO_TELL_SHAPES: CrowdRenderer's wedge is an arc's, ThreatFx draws lanes, lines, slams and
+#     calls, shots and lobs fly) reaches on the flat at its impact at least the placeholder's front
+#     there (placeholder_front), the look the game was played with.
+#   * K2, a sweep drawn where it hits (SWEEP_FLOOR_KINDS): every SECTOR_DEGREES of its arc is swept at
+#     a flat reach of at least its range - IMPACT_SLACK. Every arc's sectors are printed; the ruling
+#     names the Camp Chief's hammer, so only that kind fails on them.
 IMPACT_SLACK = 0.5
+IMPACT_STEPS = 120
+NO_TELL_SHAPES = ("lunge",)
+SECTOR_DEGREES = 15.0
+SWEEP_FLOOR_KINDS = ("chief",)
+
+
+def placeholder_front(consts: Constants, kind: dict, attack: Attack) -> tuple[float, float]:
+    """(the placeholder torso's front face at the attack's impact, its head's front there): the
+    figure CrowdRenderer draws for a kind with no model slides by the blow's thrust and tips forward
+    by its lean, pivoting at its feet. The gate's floor is the first, upright (the review's measure
+    the ruling quotes); the second, its head carried forward by that tip, is printed beside it."""
+    t = threat_pose(consts, kind, attack, "attack", 0.0)
+    face = t.thrust + kind["radius"] * consts.TORSO_DEPTH / 2
+    head = t.thrust + (kind["height"] - kind["headRadius"]) * math.sin(t.lean) + kind["headRadius"]
+    return face, head
+
+
+def arc_angle(x: float, z: float) -> float:
+    """Degrees from the body's facing (-Z at yaw 0), + toward its right (+X)."""
+    return math.degrees(math.atan2(x, -z))
 
 
 def impact_reach(model: dict, kind: dict, threat_cfg: dict, consts: Constants, rig_numbers: dict,
-                 pieces: dict[str, list[Vec]], held: list[Vec]) -> list[dict]:
-    """Per attack of the kind: the drawn weapon's flattest reach (studs from the body's axis) over the
-    blow, the strike phase from its impact (u = 0) to its end, enraged or not (a boss's enrage scales
-    only the clocks), against the attack's own reach. The weapon is the arm piece and the held model
-    (the Chief's hammer); the body stands where the rig puts it (a model's thrust moves the leading
-    foot and the arm's keys, never the root)."""
+                 pieces: dict[str, list[Vec]], held: list[Vec], kind_id: str = "") -> list[dict]:
+    """Per attack of the kind, the weapon rules above: `reach` = the farthest flat reach that counts
+    (inside the arc for an arc), `impact` = the flat reach at the impact (u = 0, not enraged),
+    `floor` / `head` = placeholder_front for a no-tell shape, `sectors` = an arc's farthest reach per
+    sector (0 = never swept), `ok` = every rule that applies holds."""
     hold = model.get("hold")
     hf = hold_frame(hold) if hold else None
     scale = hold["scale"] if hold else 1.0
@@ -935,11 +991,17 @@ def impact_reach(model: dict, kind: dict, threat_cfg: dict, consts: Constants, r
         limit = raw.get("range", raw.get("reach"))
         if not isinstance(limit, (int, float)):
             continue
-        worst, worst_at = 0.0, ""
+        shape = raw.get("shape", "")
+        base = attack_of(kind, index, threat_cfg, consts)
+        half = math.degrees(base.arc) / 2 if shape == "arc" else 180.0
+        count = max(int(round(2 * half / SECTOR_DEGREES)), 1) if shape == "arc" else 0
+        sectors = [0.0] * count
+        worst, worst_at, impact = 0.0, "", 0.0
         for enraged in (False, True):
             atk = attack_of(kind, index, threat_cfg, consts, enraged)
-            for step in range(0, 11):
-                age = atk.strike * step / 10
+            for step in range(0, IMPACT_STEPS + 1):
+                u = step / IMPACT_STEPS
+                age = atk.strike * u
                 t = threat_pose(consts, kind, atk, "attack", age, enraged=enraged, server_now=age * 7.3)
                 pose = Pose(lean=t.lean, twist=t.twist, squash=drawn_squash(t.squash), thrust=t.thrust)
                 pose.arm = arm_channel(model, atk.shape, t, pose, rig_numbers, atk)
@@ -947,11 +1009,42 @@ def impact_reach(model: dict, kind: dict, threat_cfg: dict, consts: Constants, r
                 for v in weapon:
                     w = cf.point(v)
                     d = math.hypot(w[0], w[2])
+                    if step == 0 and not enraged and d > impact:
+                        impact = d
+                    if count:
+                        angle = arc_angle(w[0], w[2])
+                        if abs(angle) > half:
+                            continue
+                        slot = min(int((angle + half) // SECTOR_DEGREES), count - 1)
+                        sectors[slot] = max(sectors[slot], d)
                     if d > worst:
-                        worst, worst_at = d, f"u {step / 10:.1f}{' enraged' if enraged else ''}"
-        rows.append({"index": index, "shape": raw.get("shape", ""), "reach": worst, "at": worst_at,
-                     "limit": float(limit), "ok": worst <= float(limit) + IMPACT_SLACK + 1e-9})
+                        worst, worst_at = d, f"u {u:.2f}{' enraged' if enraged else ''}"
+        row = {"index": index, "shape": shape, "reach": worst, "at": worst_at, "limit": float(limit),
+               "impact": impact, "sectors": sectors, "floor": None, "head": None, "swept": None}
+        ok = worst <= float(limit) + IMPACT_SLACK + 1e-9
+        if shape in NO_TELL_SHAPES:
+            row["floor"], row["head"] = placeholder_front(consts, kind, base)
+            ok = ok and impact >= row["floor"] - 1e-9
+        if count and kind_id in SWEEP_FLOOR_KINDS:
+            row["swept"] = float(limit) - IMPACT_SLACK
+            ok = ok and min(sectors) >= row["swept"] - 1e-9
+        row["ok"] = ok
+        rows.append(row)
     return rows
+
+
+def impact_text(row: dict) -> str:
+    """One attack's weapon rules for --check's line."""
+    text = f"{row['shape']} {row['reach']:.2f} of {row['limit']:g} ({row['at']}"
+    text += ", inside the arc)" if row["sectors"] else ")"
+    if row["floor"] is not None:
+        text += (f", at the impact {row['impact']:.2f} >= the placeholder torso's {row['floor']:.2f} (its tipped "
+                 f"head reached {row['head']:.2f})")
+    if row["sectors"]:
+        floor = f" >= {row['swept']:g}" if row["swept"] is not None else ""
+        text += (f", per {SECTOR_DEGREES:g} deg from his left{floor}: "
+                 + " ".join(f"{s:.1f}" for s in row["sectors"]))
+    return text + ("" if row["ok"] else " FAIL")
 
 
 def reach_record(extent: dict, radius: float) -> dict:
@@ -1053,9 +1146,12 @@ def frames_for(kind_id: str, kinds: dict, threat_cfg: dict, consts: Constants, m
     make("spent", "spent", at("recover", spent_age))
     for index, raw in enumerate(kind["attacks"], start=1):
         if raw.get("shape") == "arc" and index != 1:
+            # The sweep through its wedge (K2): from his right, across his front, to his left.
             arc = attack_of(kind, index, threat_cfg, consts)
             make("sweepWindup", "sweep windup", at("windup", arc.windup * consts.COMBAT_RANGE_TELL_COIL_SHARE, arc), arc)
-            make("sweepSwing", "sweep swing", at("attack", arc.strike * 0.3, arc), arc)
+            make("sweepStart", "sweep: his right", at("attack", arc.strike * 0.1, arc), arc)
+            make("sweepSwing", "sweep: his front", at("attack", arc.strike * 0.3, arc), arc)
+            make("sweepEnd", "sweep: his left", at("attack", arc.strike * 0.6, arc), arc)
             break
     if kind.get("boss") and (kind.get("enrage") or {}).get("at", 0) > 0:
         make("enraged", "enraged (rest)", idle, enraged=True)
@@ -1112,6 +1208,15 @@ def sweep_poses(kind: dict, threat_cfg: dict, consts: Constants, model: dict, ri
                         yield f"{atk.shape} {phase}", pose, t, atk.shape
 
 
+def head_rule_offset(r: Rigged, pose: Pose, mesh_centre: Vec, head_radius: float) -> float:
+    """The head rule's measure, in head radii: the drawn head's centre (the head piece carrying
+    `mesh_centre`) from the scored head, the anchor. K1: a lunge's slide is waived, so the anchor is
+    carried with the body by it (the slide is 0 out of the strike window)."""
+    drawn = r.pieces["head"].point(mesh_centre)
+    waived = v_add(r.anchor, v_mul(look_of(pose.yaw), r.slide))
+    return v_len(v_sub(drawn, waived)) / head_radius
+
+
 def check(models: dict, kinds: dict, threat_cfg: dict, consts: Constants, *, extent: bool = True) -> int:
     """The head rule over every sampled pose; with `extent` also, from every vertex of the
     generator's GLBs: the posed reach against the config's `posedReach` (a stale config fails) and
@@ -1134,8 +1239,7 @@ def check(models: dict, kinds: dict, threat_cfg: dict, consts: Constants, *, ext
         count = 0
         for name, pose, _, _ in sweep_poses(kind, threat_cfg, consts, model, rig_numbers):
             r = rig(model, rig_numbers, consts, pose)
-            drawn = r.pieces["head"].point(mesh_off)
-            off = v_len(v_sub(drawn, r.anchor)) / hr
+            off = head_rule_offset(r, pose, mesh_off, hr)
             count += 1
             if off > worst:
                 worst, worst_name = off, name
@@ -1167,11 +1271,11 @@ def check(models: dict, kinds: dict, threat_cfg: dict, consts: Constants, *, ext
               f"{rec['up']} up ({rec['upPose']}), lowest point {ext['down']:.2f} ({ext['downPose']})"
               + (f"; with its lit piece {rec['withCue']['out']} out, {rec['withCue']['up']} up" if rec.get("withCue") else "")
               + (f"; STALE config posedReach {stored or 'missing'}: re-run the generator" if stale else "; config posedReach matches"))
-        rows = impact_reach(model, kind, threat_cfg, consts, rig_numbers, pieces, held)
+        rows = impact_reach(model, kind, threat_cfg, consts, rig_numbers, pieces, held, kind_id)
         bad = [r for r in rows if not r["ok"]]
         failures += 1 if bad else 0
         print(f"[raiderpose] {kind_id}:   weapon at impact {'FAIL' if bad else 'PASS'} (within reach + {IMPACT_SLACK:g}): "
-              + "; ".join(f"{r['shape']} {r['reach']:.2f} of {r['limit']:g} ({r['at']}){'' if r['ok'] else ' OVER'}" for r in rows))
+              + "; ".join(impact_text(r) for r in rows))
     return 1 if failures else 0
 
 

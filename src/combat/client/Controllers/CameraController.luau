@@ -20,7 +20,12 @@
 --
 -- The default camera comes back whenever the character is dead or missing and in the
 -- summary / ended phases, so a down player watches their own ragdoll and the summary card
--- has the ordinary cursor.
+-- has the ordinary cursor. Not in those phases in a dressed level (L4 W2 fix round K9): the
+-- pieces its scenery draws over are Transparency 1, and Roblox's own camera (Poppercam) stops
+-- only at parts under 0.25, so in the 10 s summary it would pass through camp C's wall, the
+-- gatehouse and every rock face. There the shoulder camera, whose spherecast stops at them,
+-- stays up; the summary's free cursor is camera.freeCursorPhases', as before. LevelScenery
+-- tells it the server's word (SetDressed).
 --
 -- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts"): this module is the one place the
 -- other controllers ask which combat runs, because it is the lowest-level controller and both
@@ -124,7 +129,8 @@ local LAG_EPSILON = 0.01
 -- where it put the feet, and a count that rises by one with every move.
 local PLACED_ATTRIBUTE = "Placed"
 local PLACED_SEQ_ATTRIBUTE = "PlacedSeq"
--- Phases in which the run is over: the ordinary camera and cursor return for the summary.
+-- Phases in which the run is over: the ordinary camera and cursor return for the summary,
+-- unless the level is dressed (K9: `levelDressed`).
 local DEFAULT_CAMERA_PHASES: { [string]: boolean } = { summary = true, ended = true }
 -- Fallbacks used only when Combat.json is missing; the config is the real home of these.
 local FALLBACK_CAMERA: Types.CombatCameraConfig = {
@@ -147,6 +153,8 @@ local freePhases: { [string]: boolean } = {}
 local shoulderOffset = Vector3.zero
 
 local phase = "lobby"
+-- K9: Workspace.Level carries the server's `Dress` (LevelScenery.evaluate says so).
+local levelDressed = false
 local active = false
 -- Both decided once in Init and never change: the range bench, and the range's combat.
 local rangeMode = false
@@ -692,7 +700,9 @@ local function update(deltaTime: number): ()
 	end
 	local camera = currentCamera()
 	local rig = localRig()
-	local phaseEndsCamera = not rangeMode and DEFAULT_CAMERA_PHASES[phase] == true
+	local phaseEndsCamera = not rangeMode
+		and DEFAULT_CAMERA_PHASES[phase] == true
+		and not levelDressed
 	if camera == nil or rig == nil or phaseEndsCamera then
 		deactivate()
 		return
@@ -968,6 +978,13 @@ function CameraController.SetPhase(nextPhase: string): ()
 		end
 	end
 	phase = nextPhase
+end
+
+-- K9 (docs/prompts/l4-w2-fix-round.md; review slice 1 m3): whether Workspace.Level carries the
+-- server's `Dress`. While it does, the summary and ended phases keep the shoulder camera (see the
+-- header); LevelScenery calls this on every change of the server's word and on Detach.
+function CameraController.SetDressed(dressed: boolean): ()
+	levelDressed = dressed
 end
 
 -- L1 fix round, item 1. Abandon asks twice, and a player who freed the cursor with Alt to click

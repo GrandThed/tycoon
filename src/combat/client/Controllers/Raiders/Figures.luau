@@ -9,10 +9,15 @@
 --   MeshPart the entry names. Anything less is today's placeholder figure (L4W2-8), with one
 --   warning for a kind the config names; kinds it does not name (the guard, the Warlord, the
 --   Colossus, the range's dummies) are placeholders by design and say nothing.
--- * One pool per kind (Prewarm fills it from RunState.prewarm; an empty pool builds on demand).
+-- * One pool per kind, filled a few figures a frame (Build, fix round K3): toward Prewarm's goals
+--   (RunState.prewarm, the plan's bodies by kind, in the lobby camp before a run as well as in
+--   it; over the cap each kind keeps its share), and first for the bodies drawn as placeholders
+--   because their kind's pool was empty (Wait). Take never builds: a body whose figure is not
+--   built yet wears the placeholder and CrowdRenderer swaps it once one is ready.
 --   A figure is the template's clone: five pieces whose MeshParts keep their rest frames relative
 --   to Base, an invisible ball `Head` at the scored head (what GetHead, PlateBar and CampFx's "!"
---   hang on), the Chief's Warhammer and, through Cues, the kind's lit piece.
+--   hang on), the Chief's Warhammer and, through Cues, the kind's lit piece. A kind whose head
+--   point is not the server's crit head (K5) is a placeholder.
 -- * Every frame a body moves, RaiderPose.Rig turns the pose into five transforms and Queue writes
 --   every MeshPart, the anchor, the lit piece and the hammer into CrowdRenderer's one BulkMoveTo.
 --   Pose (the walk cycle and the arm) runs first and says whether anything moved, so an idle
@@ -34,6 +39,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local WeaponLook = require(sharedFolder:WaitForChild("WeaponLook"))
 
 local Theme = require(script.Parent.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local RaiderPose = require(script.Parent:WaitForChild("RaiderPose"))
@@ -54,6 +60,7 @@ local RIG_KEYS = {
 	"walkFullShare",
 	"walkNearStuds",
 	"stepShare",
+	"slideShare",
 	"seatLean",
 	"seatSplay",
 	"airTuck",
@@ -67,16 +74,17 @@ local ROLES: { [string]: boolean } =
 local PAINTED_ROLES = { "cloth", "clothLeg", "skin", "glow" }
 local TEMPLATE_BASE = "Base"
 local ANCHOR_NAME = "Head"
--- The hammer is the L3 template's first stage, as HeldWeapons shows it.
-local HELD_STAGE = "Stage0"
--- What counts as moved (CrowdRenderer's SETTLE_EPSILON): a smaller change is not redrawn.
-local SETTLE = 0.002
 local SIZE_EPSILON = 1e-6
+-- K5: how far the config's head point may lie from the server's crit head, (0, height -
+-- headRadius, 0), in studs.
+local HEAD_EPSILON = 0.01
 local WHITE = Color3.new(1, 1, 1)
 
+-- grip = the weapon's grip point in its template's frame (WeaponModels.json), which lands on
+-- `frame`.
 type LookPart = { name: string, role: string, rest: CFrame }
 type LookPiece = { name: string, stage: string, parts: { LookPart } }
-type LookHold = { template: Model, frame: CFrame, scale: number, piece: string }
+type LookHold = { template: Model, frame: CFrame, scale: number, piece: string, grip: Vector3 }
 
 -- One kind's validated model, shared by every figure of the kind. `entry` is the config entry
 -- itself (RaiderPose reads it); color and speed follow the kind's def at every Look call.
@@ -127,8 +135,10 @@ export type Figure = {
 
 local enabled = true
 local destroyed = false
--- Built by Configure; restDrop follows Tuning (Retune).
+-- Built by Configure; restDrop follows Tuning (Retune). settle = what counts as moved
+-- (CrowdRenderer's SETTLE_EPSILON, handed in by Configure): a smaller change is not redrawn.
 local consts: RaiderPose.Consts? = nil
+local settle = 0
 -- kind -> its look; plain = kinds checked and drawn as placeholders (both until Retune).
 local looks: { [string]: Look } = {}
 local plain: { [string]: boolean } = {}
@@ -136,6 +146,10 @@ local warned: { [string]: boolean } = {}
 local pools: { [string]: { Figure } } = {}
 local built: { [string]: number } = {}
 local everyFigure: { Figure } = {}
+-- K3: per kind, how many figures Prewarm's last plan asks for (drawn and spare), and how many
+-- bodies wait as placeholders for one this frame (Wait; Build reads and clears it).
+local goals: { [string]: number } = {}
+local waiting: { [string]: number } = {}
 -- Per frame (BeginFrame): where the camera is and how far from it a body walks.
 local frameState = { camera = Vector3.zero, near = 0 }
 -- Scratch, reused by every body: one frame of one body is finished before the next starts.
@@ -302,8 +316,24 @@ local function pieceOf(template: Model, base: BasePart, raw: any): (LookPiece?, 
 	return { name = name, stage = stageName, parts = parts }, nil
 end
 
--- The carried weapon (the Chief's Warhammer): its template and where it sits on its piece. A
--- missing template draws the body without it.
+-- The grip of the weapon model `model` (WeaponModels.json, the entry whose model it is), or nil.
+local function gripOf(model: any): Vector3?
+	local config = Catalog.GetWeaponModelsConfig()
+	if config == nil or typeof(model) ~= "string" then
+		return nil
+	end
+	for family, entry in config.families do
+		if typeof(entry) == "table" and entry.model == model then
+			local def = WeaponLook.Def(config, family)
+			return if def ~= nil then WeaponLook.Point(def, "grip") else nil
+		end
+	end
+	return nil
+end
+
+-- The carried weapon (the Chief's Warhammer): its template, where it sits on its piece, and its
+-- grip from WeaponModels.json (not its Base: a grip off the origin still lands in the hand). A
+-- missing template or entry draws the body without it.
 local function holdOf(kind: string, raw: any): LookHold?
 	if raw == nil then
 		return nil
@@ -329,11 +359,20 @@ local function holdOf(kind: string, raw: any): LookHold?
 		)
 		return nil
 	end
+	local grip = gripOf(raw.model)
+	if grip == nil then
+		warnOnce(
+			`hold:{kind}`,
+			`WeaponModels.json has no usable entry for {raw.model}: {kind} is drawn without it`
+		)
+		return nil
+	end
 	return {
 		template = template,
 		frame = CFrame.fromMatrix(vectorOf(raw.grip), vectorOf(raw.right), vectorOf(raw.up)),
 		scale = raw.scale,
 		piece = raw.piece,
+		grip = grip,
 	}
 end
 
@@ -379,6 +418,18 @@ local function lookOf(kind: string, def: Types.CrowdKindDef, config: any): (Look
 		if not isTriple(entry.points[name]) then
 			return nil, `its point {name} is not three numbers`
 		end
+	end
+	-- K5: the anchor and the drawn head stand on the head point, so it must be the server's crit
+	-- head (HitShapes: the sphere at the feet + height - headRadius), or headshots miss what shows.
+	local head = entry.points.head
+	local scored = def.height - def.headRadius
+	if
+		math.abs(head[1]) > HEAD_EPSILON
+		or math.abs(head[2] - scored) > HEAD_EPSILON
+		or math.abs(head[3]) > HEAD_EPSILON
+	then
+		return nil,
+			`its head point ({head[1]}, {head[2]}, {head[3]}) is not the scored head (0, {scored}, 0)`
 	end
 	local armWhy = armProblem(entry.arm)
 	if armWhy ~= nil then
@@ -451,8 +502,8 @@ local function seal(part: BasePart): ()
 	part.CastShadow = false
 end
 
--- The carried weapon's clone, scaled once about its grip; its parts and their frames relative
--- to the grip go into the figure.
+-- The carried weapon's clone, scaled once about its Base (the template's pivot); its parts and
+-- their frames relative to its grip (WeaponModels.json's point, scaled with it) go into the figure.
 local function addHold(figure: Figure, hold: LookHold): ()
 	local weapon = hold.template:Clone()
 	local base = weapon:FindFirstChild(TEMPLATE_BASE) :: BasePart
@@ -460,7 +511,7 @@ local function addHold(figure: Figure, hold: LookHold): ()
 	for _, child in weapon:GetChildren() do
 		if
 			child:IsA("Model")
-			and child.Name ~= HELD_STAGE
+			and child.Name ~= Theme.COMBAT_WEAPON_SHOWN_STAGE
 			and string.match(child.Name, "^Stage%d+$")
 		then
 			child:Destroy()
@@ -469,11 +520,12 @@ local function addHold(figure: Figure, hold: LookHold): ()
 	if hold.scale ~= 1 then
 		weapon:ScaleTo(hold.scale)
 	end
+	local grip = base.CFrame * CFrame.new(hold.grip * hold.scale)
 	for _, part in weapon:GetDescendants() do
 		if part:IsA("BasePart") and part ~= base then
 			seal(part)
 			table.insert(figure.hammer, part)
-			table.insert(figure.hammerOffsets, base.CFrame:ToObjectSpace(part.CFrame))
+			table.insert(figure.hammerOffsets, grip:ToObjectSpace(part.CFrame))
 			table.insert(figure.shown, part)
 		end
 	end
@@ -569,15 +621,18 @@ local function build(look: Look): Figure
 end
 
 -- Theme's numbers and CrowdRenderer's figure colours (by the names raiderpose.py reads), as
--- RaiderPose takes them. Called once by CrowdRenderer as it loads; the table is shared from then
--- on, and restDrop is filled by the first Retune (CrowdRenderer.Start).
+-- RaiderPose takes them, and CrowdRenderer's SETTLE_EPSILON (what counts as moved). Called once by
+-- CrowdRenderer as it loads; the table is shared from then on, and restDrop is filled by the
+-- first Retune (CrowdRenderer.Start).
 function Figures.Configure(renderer: {
 	LEG_SHADE: Color3,
 	LEG_SHADE_SHARE: number,
 	VISOR_COLOR: Color3,
 	VISOR_HOT_COLOR: Color3,
 	FLASH_COLOR: Color3,
+	SETTLE_EPSILON: number,
 }): RaiderPose.Consts
+	settle = renderer.SETTLE_EPSILON
 	local made: RaiderPose.Consts = {
 		COMBAT_RANGE_TELL_COLOR = rgbOf(Theme.COMBAT_RANGE_TELL_COLOR),
 		COMBAT_RANGE_TELL_SPENT_COLOR = rgbOf(Theme.COMBAT_RANGE_TELL_SPENT_COLOR),
@@ -671,13 +726,27 @@ function Figures.Look(kind: string, def: Types.CrowdKindDef): Look?
 	return look
 end
 
--- A body for `look`: a pooled one of its kind, else a fresh clone. Unparented.
-function Figures.Take(look: Look): Figure
+-- A body for `look`: a pooled one of its kind, unparented, or nil when none is built yet (K3: it
+-- never builds here, where a spawn batch of a hundred bodies would build them all in one frame).
+function Figures.Take(look: Look): Figure?
 	local pool = pools[look.kind]
-	local pooled: Figure? = if pool ~= nil then table.remove(pool) else nil
-	local figure = if pooled ~= nil then pooled else build(look)
-	figure.look = look
+	local figure: Figure? = if pool ~= nil then table.remove(pool) else nil
+	if figure ~= nil then
+		figure.look = look
+	end
 	return figure
+end
+
+-- Whether Take would answer a figure of `kind` now.
+function Figures.Ready(kind: string): boolean
+	local pool = pools[kind]
+	return pool ~= nil and #pool > 0
+end
+
+-- K3: one body of `look`'s kind is drawn as a placeholder this frame for want of a figure: the
+-- next Build builds for it first.
+function Figures.Wait(look: Look): ()
+	waiting[look.kind] = (waiting[look.kind] or 0) + 1
 end
 
 -- Back into its kind's pool, unparented and plain: the next Take repaints it.
@@ -701,37 +770,95 @@ function Figures.Give(figure: Figure): ()
 	end
 end
 
--- Builds bodies into the pools a few a frame until each kind of `counts` has its count (drawn
--- and spare), at most `cap` in all. Yields.
-function Figures.Prewarm(counts: { [string]: number }, cap: number): ()
+-- The look of `kind` as its def stands now, or nil (a placeholder kind, models off).
+local function lookFor(kind: string): Look?
 	local crowd = Tuning.Get().crowd
-	if crowd == nil or crowd.kinds == nil then
+	local def = if crowd ~= nil and crowd.kinds ~= nil then crowd.kinds[kind] else nil
+	return if def ~= nil then Figures.Look(kind, def) else nil
+end
+
+-- K3: the goal each kind's pool is filled toward (Build does the work, a few figures a frame):
+-- `counts` are the plan's bodies by kind (RunState.prewarm, in the lobby camp before a run and in
+-- it). Only kinds drawn as models count, and together they keep to `cap`: over it every kind gets
+-- its share of the cap, rounded down, and the largest remainders take what is left (then the
+-- larger count, then the name), so no kind is cut first for its name. The last plan's goals
+-- stand; a figure already built is never undone.
+function Figures.Prewarm(counts: { [string]: number }, cap: number): ()
+	local kinds: { string } = {}
+	local total = 0
+	for kind, count in counts do
+		if isNumber(count) and count >= 1 and lookFor(kind) ~= nil then
+			table.insert(kinds, kind)
+			total += math.floor(count)
+		end
+	end
+	table.clear(goals)
+	if total == 0 then
 		return
 	end
-	local kinds: { string } = {}
-	for kind in counts do
-		table.insert(kinds, kind)
-	end
-	table.sort(kinds)
-	local left = cap
-	local made = 0
-	local perFrame = math.max(math.floor(Theme.COMBAT_RAIDER_PREWARM_PER_FRAME), 1)
+	local room = math.max(math.floor(cap), 0)
+	local share = if total > room then room / total else 1
+	local left = math.min(total, room)
+	local rest: { [string]: number } = {}
 	for _, kind in kinds do
-		local def = crowd.kinds[kind]
-		local look = if def ~= nil then Figures.Look(kind, def) else nil
-		local count = counts[kind]
-		if look ~= nil and isNumber(count) then
-			local want = math.min(math.floor(count), left)
-			left -= math.max(want, 0)
-			while not destroyed and enabled and (built[kind] or 0) < want do
+		local exact = math.floor(counts[kind]) * share
+		goals[kind] = math.floor(exact)
+		rest[kind] = exact - goals[kind]
+		left -= goals[kind]
+	end
+	table.sort(kinds, function(a: string, b: string): boolean
+		if rest[a] ~= rest[b] then
+			return rest[a] > rest[b]
+		end
+		if counts[a] ~= counts[b] then
+			return counts[a] > counts[b]
+		end
+		return a < b
+	end)
+	for _, kind in kinds do
+		if left <= 0 then
+			break
+		end
+		goals[kind] += 1
+		left -= 1
+	end
+end
+
+-- K3: once a frame (CrowdRenderer's step, with or without bodies drawn), builds up to
+-- COMBAT_RAIDER_PREWARM_PER_FRAME figures into the pools: first one for each body that waited
+-- as a placeholder last frame beyond its kind's spares, then toward the goals, one figure a
+-- kind a round so every kind fills at the same pace. Answers how many it built.
+function Figures.Build(): number
+	if destroyed or not enabled or consts == nil then
+		table.clear(waiting)
+		return 0
+	end
+	local budget = math.max(math.floor(Theme.COMBAT_RAIDER_PREWARM_PER_FRAME), 1)
+	local made = 0
+	for kind, count in waiting do
+		local look = lookFor(kind)
+		local pool = pools[kind]
+		local spare = if pool ~= nil then #pool else 0
+		while look ~= nil and made < budget and spare < count do
+			Figures.Give(build(look))
+			spare += 1
+			made += 1
+		end
+	end
+	table.clear(waiting)
+	local more = true
+	while more and made < budget do
+		more = false
+		for kind, goal in goals do
+			local look = if made < budget and (built[kind] or 0) < goal then lookFor(kind) else nil
+			if look ~= nil then
 				Figures.Give(build(look))
 				made += 1
-				if made % perFrame == 0 then
-					task.wait()
-				end
+				more = true
 			end
 		end
 	end
+	return made
 end
 
 -- Once a frame before the bodies: where the camera is, and how far from it a body walks.
@@ -745,13 +872,6 @@ function Figures.BeginFrame(): ()
 	frameState.near = if Theme.lowEndDevice
 		then math.min(near, Theme.COMBAT_RAIDER_WALK_NEAR_LOW)
 		else near
-end
-
--- The flat lean along the body's facing (+ forward) and across it (+ toward its right): the two
--- numbers RaiderPose leans with, taken from the lean vector CrowdRenderer keeps.
-local function leanParts(yaw: number, lean: Vector3): (number, number)
-	local s, c = math.sin(yaw), math.cos(yaw)
-	return lean.X * -s + lean.Z * -c, lean.X * c + lean.Z * -s
 end
 
 -- One frame of the walk cycle and the arm, before CrowdRenderer decides whether the body is
@@ -797,7 +917,8 @@ function Figures.Pose(
 		made
 	)
 	local pose = scratchPose
-	pose.lean = leanParts(yaw, lean)
+	-- K4: the lean vector split along the facing and across it (RaiderPose.Lean, mirrored).
+	pose.lean = RaiderPose.Lean(yaw, lean.X, lean.Z)
 	pose.seat = seat
 	pose.walkPhase = phase
 	pose.walkAmp = amp
@@ -813,10 +934,10 @@ function Figures.Pose(
 	-- The phase moves nothing while the amplitude is 0 (a body too far to walk, or standing).
 	local moved = (amp > 0 and phase ~= figure.walkPhase)
 		or amp ~= figure.walkAmp
-		or math.abs(pitch - figure.armPitch) > SETTLE
-		or math.abs(turn - figure.armYaw) > SETTLE
-		or math.abs(roll - figure.armRoll) > SETTLE
-		or math.abs(thrust - figure.thrust) > SETTLE
+		or math.abs(pitch - figure.armPitch) > settle
+		or math.abs(turn - figure.armYaw) > settle
+		or math.abs(roll - figure.armRoll) > settle
+		or math.abs(thrust - figure.thrust) > settle
 	figure.walkPhase, figure.walkAmp = phase, amp
 	if moved then
 		figure.armPitch, figure.armYaw, figure.armRoll = pitch, turn, roll
@@ -825,8 +946,14 @@ function Figures.Pose(
 	return moved
 end
 
+-- One of RaiderPose.Rig's transforms (12 numbers, CFrame.new's order).
+local function frameOf(t: { number }): CFrame
+	return CFrame.new(t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10], t[11], t[12])
+end
+
 -- Every posed piece under `root` (the body's feet, and a launch's tumble) into the move queue:
--- the MeshParts, the anchor at the scored head, the lit piece and the carried weapon.
+-- the MeshParts, the anchor at the scored head, the lit piece and the carried weapon. The anchor
+-- is Rig's transform as the pieces are (K4: the mirror holds every number laid here).
 local function lay(
 	figure: Figure,
 	root: CFrame,
@@ -837,9 +964,7 @@ local function lay(
 ): number
 	local look = figure.look
 	for index, name in PIECE_NAMES do
-		local t = rigPieces[index]
-		local world = root
-			* CFrame.new(t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10], t[11], t[12])
+		local world = root * frameOf(rigPieces[index])
 		posed[name] = world
 		local rests = look.pieces[index].parts
 		for slot, part in figure.parts[index] do
@@ -850,7 +975,7 @@ local function lay(
 	end
 	count += 1
 	parts[count] = figure.anchor
-	frames[count] = root * CFrame.new(0, rigOut.anchorY, 0)
+	frames[count] = root * frameOf(rigOut.anchor)
 	if cues ~= nil then
 		count = Cues.QueueRig(cues, posed, parts, frames, count)
 	end
@@ -891,7 +1016,7 @@ function Figures.Queue(
 	end
 	local pose = scratchPose
 	pose.yaw = yaw
-	pose.lean, pose.leanSide = leanParts(yaw, lean)
+	pose.lean, pose.leanSide = RaiderPose.Lean(yaw, lean.X, lean.Z)
 	pose.twist = twist
 	pose.squash = squash
 	pose.thrust = figure.thrust
@@ -1059,6 +1184,8 @@ function Figures.Destroy(): ()
 	table.clear(everyFigure)
 	table.clear(pools)
 	table.clear(built)
+	table.clear(goals)
+	table.clear(waiting)
 	table.clear(looks)
 	table.clear(plain)
 	table.clear(posed)

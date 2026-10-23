@@ -272,6 +272,9 @@ EDGE_IN = 0.01
 SIGHT_ZONES = True
 EXEMPT_CAMERAS = False
 FLOOR_WALLS = True
+# The L4 W2 fix round's K10: a walled camp's post keeps the kind drawn widest there over every
+# difficulty (walled_bodies). False keeps the kind of the widest radius, the rule before the fix.
+DRAWN_POSTS = True
 # The L1c second fix round's F1 and F3: a walled camp triggers up to its fence's top
 # (sim_range.trigger_ceiling, StageFlow.Ceiling). False judges it at levels.triggerHeight, the
 # first fix round's rule, for the mutant driver.
@@ -3336,9 +3339,11 @@ def reachable_solids(layout, solids, move, ability, skip, tall, grace=False):
 
 
 def walled_bodies(level, layout, ctx, cid, factor=None):
-    """Every resident post of a camp at every difficulty: ({(x, z): (radius, label, kind)}, the plated
-    residents, the tallest body of the camp, its boss included). With `factor` (body_reach) the
-    tallest is the drawn one (drawn_body: a model kind's posed reach up, L4 W2)."""
+    """Every resident post of a camp at every difficulty: ({(x, z): (reach, label, kind)}, the plated
+    residents, the tallest body of the camp, its boss included). With `factor` (body_reach) a post
+    keeps the kind drawn widest there over every difficulty (drawn_body's out: a model kind's posed
+    reach, L4 W2; the fix round's K10: not the kind of the widest radius, whose model may be drawn
+    narrower than another kind's), and the tallest is the drawn one; without it, the widest radius."""
     kinds, ranks = ctx["kinds"], ctx["ranks"]
     bodies, plated, tallest = {}, [], 0.0
     for difficulty in level["difficulties"]:
@@ -3350,8 +3355,9 @@ def walled_bodies(level, layout, ctx, cid, factor=None):
                 body = kinds.get(kind) or {}
                 key = (round(post["at"][0], 3), round(post["at"][2], 3))
                 radius = body.get("radius") or ctx["widest"]
-                if radius >= bodies.get(key, (0.0, ""))[0]:
-                    bodies[key] = (radius, f"{difficulty} {defn['id']} {kind}", kind)
+                reach = drawn_body(ctx, kind, factor)[0] if factor is not None and DRAWN_POSTS else radius
+                if reach >= bodies.get(key, (0.0, ""))[0]:
+                    bodies[key] = (reach, f"{difficulty} {defn['id']} {kind}", kind)
                 tallest = max(tallest, body.get("height") or 0,
                               drawn_body(ctx, kind, factor)[1] if factor is not None else 0)
                 if (body.get("plate") or 0) > 0:

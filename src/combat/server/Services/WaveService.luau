@@ -268,6 +268,10 @@ local boot = {
 	-- L4B-8: which floor set run.floors is, raised by setFloors alone, for the life of the server
 	-- (a rejoin after a failed trip home must never meet a number it already holds cells for).
 	floorsSeq = 0,
+	-- K3 (the lobby fill): the lobby's RunState.prewarm (refreshLobbyKinds), kept once made; while
+	-- none could be made it is tried again once per floor set (lobbyKindsSeq: the last one tried).
+	lobbyKinds = nil :: { [string]: number }?,
+	lobbyKindsSeq = -1,
 }
 
 local WaveService = {}
@@ -368,7 +372,9 @@ local function pushRunFields(): ()
 		floors = run.floors,
 		floorsSeq = boot.floorsSeq,
 		maxAlive = run.maxAlive,
-		prewarm = run.prewarm,
+		-- K3: in the lobby, the bodies of whichever run the leader may start, so the clients fill
+		-- their model pools before it (sent with a floor set's first RunState, as in a run).
+		prewarm = if phase == "lobby" then boot.lobbyKinds else run.prewarm,
 	})
 end
 
@@ -1692,6 +1698,50 @@ local function resolveLevel(
 	return level, layout
 end
 
+-- K3 (the lobby fill): boot.lobbyKinds, the most bodies of each kind a run started from the lobby
+-- may field: every built level's plan at every difficulty (Forest Road's three today), read and
+-- planned as startLevel does and merged by StageFlow.MostKinds. Made once (the files are static);
+-- while none could be made (a file that does not read, the weapons not up yet) it is tried again
+-- once per floor set, so a broken file warns once per lobby, never per broadcast. Never yields.
+local function refreshLobbyKinds(): ()
+	if boot.lobbyKinds ~= nil or boot.lobbyKindsSeq == boot.floorsSeq then
+		return
+	end
+	boot.lobbyKindsSeq = boot.floorsSeq
+	local combatConfig = config()
+	local map = Catalog.GetExpeditionsConfig()
+	if combatConfig == nil or map == nil then
+		return
+	end
+	local rules = combatConfig.levels
+	local ranks = difficultyRanks(map)
+	local found: { { [string]: number } } = {}
+	for levelId in builtLevels() do
+		for _, difficulty in map.difficulties do
+			local level, layout = resolveLevel(levelId, difficulty, combatConfig, map)
+			if level == nil or layout == nil then
+				continue
+			end
+			local planned, plan = pcall(function(): StageFlow.Plan?
+				local made = StageFlow.Plan(
+					level,
+					layout,
+					difficulty,
+					rules,
+					LevelGeometry.Bounds(layout, rules.floorThickness),
+					ranks,
+					Tuning.Get().crowd.kinds
+				)
+				return made
+			end)
+			if planned and plan ~= nil then
+				table.insert(found, plan.kinds)
+			end
+		end
+	end
+	boot.lobbyKinds = StageFlow.MostKinds(found)
+end
+
 -- L1b "Flow" → "Start" step 5: every resident group of the plan joins the crowd in its order,
 -- and its members are placed on the posts CampBrain gives it, kinds in the order of its units.
 -- A refused spawn is warned once per run and not retried: the population gate makes it a bug.
@@ -2468,12 +2518,14 @@ function WaveService.Boot(): ()
 	if not boot.mission or boot.loop ~= nil then
 		return
 	end
+	refreshLobbyKinds()
 	boot.loop = RunService.Heartbeat:Connect(function(delta: number)
 		tick(delta)
 		boot.broadcastAccumulator += delta
 		local period = 1 / stateHz()
 		if boot.broadcastAccumulator >= period then
 			boot.broadcastAccumulator = 0
+			refreshLobbyKinds()
 			broadcast()
 		end
 	end)

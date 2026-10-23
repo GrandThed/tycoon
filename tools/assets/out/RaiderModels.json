@@ -12,6 +12,7 @@
   "walkFullShare": 0.5,
   "walkNearStuds": 140,
   "stepShare": 0.4,
+  "slideShare": 0.6,
   "seatLean": 0.12,
   "seatSplay": 0.14,
   "airTuck": 0.5,
@@ -866,9 +867,9 @@
      },
      "arc": {
       "coil": [
-       0.1,
-       -0.9,
-       1.45
+       -0.12,
+       0.86,
+       1.07
       ],
       "strike": [
        0.4,
@@ -876,10 +877,11 @@
        1.45
       ],
       "follow": [
-       0.3,
-       1.1,
-       1.35
-      ]
+       -0.19,
+       1.71,
+       1.69
+      ],
+      "steady": true
      }
     }
    },
@@ -946,13 +948,13 @@
     "inHead": 0.82
    },
    "posedReach": {
-    "out": 17.1,
-    "outRadii": 4.274,
+    "out": 14.53,
+    "outRadii": 3.633,
     "up": 24.13,
-    "outPose": "arc attack (arm)",
+    "outPose": "arc windup (arm)",
     "upPose": "ring windup (arm)",
     "withCue": {
-     "out": 17.1,
+     "out": 14.53,
      "up": 24.13
     }
    }
@@ -1179,7 +1181,7 @@
        0.25
       ],
       "strike": [
-       0.85,
+       1.1,
        -0.15,
        -0.1
       ],
@@ -1223,11 +1225,11 @@
      -0.01,
      0.073
     ],
-    "inHead": 0.793
+    "inHead": 0.758
    },
    "posedReach": {
-    "out": 2.66,
-    "outRadii": 2.044,
+    "out": 3.86,
+    "outRadii": 2.967,
     "up": 5.58,
     "outPose": "lunge windup (arm)",
     "upPose": "lunge windup (arm)"

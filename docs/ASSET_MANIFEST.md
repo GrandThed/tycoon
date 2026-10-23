@@ -564,7 +564,7 @@ A mesh has a template once it and the image it wears are harvested. The game dra
 
 | Level | Plan hash | Meshes | Triangles | Images uploaded | Images harvested | Meshes uploaded | Meshes harvested | Templates | Status |
 |-------|-----------|--------|-----------|-----------------|------------------|-----------------|------------------|-----------|--------|
-| ForestRoad | `23851a6f417491c1` | 37 | 159046 | 5/5 | 5/5 | 37/37 | 37/37 | 37/37 | in game |
+| ForestRoad | `fedec49c14f3eafd` | 37 | 159046 | 5/5 | 5/5 | 37/37 | 37/37 | 37/37 | in game |
 
 ## Totals
 

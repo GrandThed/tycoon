@@ -145,6 +145,9 @@ SOURCES = {
     "RunFloors": "src/shared/RunFloors.luau",
     # L4 W2: the server's all-or-nothing reading of a level's dress (tests_l4w2.luau).
     "LevelDress": "src/combat/server/Services/LevelDress.luau",
+    # The L4 W2 fix round's K7 and K8: what the client's LevelScenery decides, pure
+    # (tests_l4w2_scenery.luau).
+    "ScenePlan": "src/combat/client/Controllers/ScenePlan.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -186,6 +189,9 @@ TESTS = [
     "tests_l4b_run.luau",
     # L4 W2: LevelDress, StageFlow.Plan's kinds, the seat, the Castle Key (luau-engineer A's).
     "tests_l4w2.luau",
+    # The L4 W2 fix round: the scenery's decisions on the client (ScenePlan; ui-engineer A's). Last:
+    # it ends with the verdict line.
+    "tests_l4w2_scenery.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -1670,69 +1676,133 @@ def l4b_reading(text) -> dict:
     return {"counts": counts, "order": order, "missing": sorted(p for p, ok in found.items() if not ok)}
 
 
-# L4 W2 (docs/prompts/l4-w2-contract.md 2.2, 3.2, 5, 8 and section 0; luau-a.md "For D2" 4): the lines
-# that carry out LevelDress.Accept's answer (LevelService), lower a seated head in every hit
-# (WeaponService), send the pools' counts (WaveService, ArenaService), carry the chest's key
-# (WaveService) and pull the Z lever (DebugService), read as text: none of those services loads
-# here. The rules themselves are tests_l4w2.luau's (LevelDress, HitShapes, StageFlow, SecretFlow).
-# Counted on the code (comments blanked) of the function each lives in, as L4B_LINES;
-# tests_l3_w2.luau holds every count to its expected value (L4BP.W2).
+# L4 W2 (docs/prompts/l4-w2-contract.md 2.2, 3.2, 5, 8 and section 0; luau-a.md "For D2" 4) and its
+# fix round (docs/prompts/l4-w2-fix-round.md K3, K7, K8, K9): the lines that lay LevelDress's answer
+# (LevelService), lower a seated head in every hit (WeaponService; the client's aim in
+# InputController and CrowdRenderer), send the pools' counts (WaveService, ArenaService), carry the
+# chest's key (WaveService), pull the Z lever (DebugService), and act on ScenePlan's answers on the
+# client (LevelScenery, CameraController; Figures' head and anchor), read as text: none of those
+# files loads here. The rules themselves are tests_l4w2.luau's and tests_l4w2_scenery.luau's
+# (LevelDress, ScenePlan, HitShapes, StageFlow, SecretFlow). K7: the line that DECIDES whether a
+# call runs is pinned whole with its indentation, not only the call. Counted on the code (comments
+# blanked) of the function each lives in, as L4B_LINES; tests_l3_w2.luau holds every count to its
+# expected value (L4BP.W2).
+LEVEL_SCENERY = "src/combat/client/Controllers/LevelScenery.luau"
+CAMERA_CONTROLLER = "src/combat/client/Controllers/CameraController.luau"
+CROWD_RENDERER = "src/combat/client/Controllers/CrowdRenderer.luau"
+FIGURES = "src/combat/client/Controllers/Raiders/Figures.luau"
 CONSTRUCT_BODY = body_of("construct")
+PLACE_BODY = body_of("place")
+RAISE_BODY = body_of("raise")
+TEMPLATES_OF_BODY = body_of("templatesOf")
 DRESS_OF_BODY = body_of("dressOf")
 LEVEL_BUILD_BODY = body_of("LevelService.Build")
 LEVEL_CLEAR_BODY = body_of("LevelService.Clear")
 GATHER_BODY = body_of("gather")
 RAY_CANDIDATES_BODY = body_of("rayCandidates")
 START_LEVEL_BODY = body_of("startLevel")
+REFRESH_LOBBY_KINDS_BODY = body_of("refreshLobbyKinds")
 ANNOUNCE_SECRET_BODY = body_of("announceSecret")
 APPLY_LEVER_BODY = body_of("applyLever")
+SCENERY_SEAL_BODY = body_of("seal")
+SHOW_CHILD_BODY = body_of("showChild")
+APPLY_VIEW_BODY = body_of("applyView")
+SCENERY_FAIL_BODY = body_of("fail")
+SCENERY_BUILD_BODY = body_of("build")
+BUILD_STEPS_BODY = body_of("buildSteps")
+SCENERY_START_BODY = body_of("start")
+AWAIT_LOADED_BODY = body_of("awaitLoaded")
+# evaluate is declared ahead (awaitLoaded calls it) and assigned: `evaluate = function(): ()`.
+EVALUATE_BODY = re.compile(r"(?ms)^evaluate = function\(.*?^end$")
+CHILD_ADDED_BODY = body_of("onLevelChildAdded")
+SYNC_MOOD_BODY = body_of("syncMood")
+ON_PLACED_BODY = body_of("onPlaced")
+IN_LOBBY_AT_BODY = body_of("inLobbyAt")
+SCENERY_STARTS_BODY = body_of("LevelScenery.Start")
+SCENERY_DETACH_BODY = body_of("LevelScenery.Detach")
+CAMERA_UPDATE_BODY = body_of("update")
+SET_DRESSED_BODY = body_of("CameraController.SetDressed")
+ENEMY_IN_SIGHTS_BODY = body_of("enemyInSights")
+ENEMY_IN_REACH_BODY = body_of("enemyInReach")
+FOR_EACH_BODY = body_of("CrowdRenderer.ForEach")
+LOOK_OF_BODY = body_of("lookOf")
+FIGURES_LAY_BODY = body_of("lay")
+FIGURES_QUEUE_BODY = body_of("Figures.Queue")
+# A seated body's spheres in the client's aim: the body sphere lowered but never under its foot,
+# the head lowered (InputController's assist, auto-fire and melee reach; the review's slice 3 s1).
+SEATED_AIM_BODY = "\t\t\tlocal body = position + Vector3.new(0, math.max(height * HALF - drop, radius), 0)"
+SEATED_AIM_HEAD = "\t\t\tlocal head = position + Vector3.new(0, height - headRadius - drop, 0)"
 L4W2_LINES = {
-    # LevelService: construct builds what Accept answered.
-    "constructHidden": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines",
-                        "\tlocal hidden: { [string]: boolean }? = if dressed ~= nil then dressed.hidden else nil"),
+    # LevelService: construct lays what LevelDress.Lay answered (its pieces, hidden names, looks).
+    "constructLooks": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\tlocal looks = laid.looks"),
+    "constructHidden": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\tlocal hidden = laid.hidden"),
+    "constructPieces": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\tfor _, piece in laid.pieces do"),
+    # It leaves a piece out only when the groups were refused: the dress walls are built like any piece.
+    "constructSkips": (LEVEL_SERVICE, CONSTRUCT_BODY, "regex", r"\b(?:continue|break|return)\b"),
     "constructWallRole": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tlocal isWall = piece.role == LevelDress.WALL_ROLE"),
     "constructNoGroupNoWall": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tif (isBarrier or isWall) and not walls then"),
     "constructWallBranch": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\telseif isWall then"),
     "constructGroups": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER"),
     "constructArmed": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart.CanCollide = true"),
-    "constructSkinnedIf": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tif hidden ~= nil and hidden[piece.name] then"),
+    # The review's slice 1 m1 (`:448`): the dress wall's whole look, unseen and armed.
+    "constructWallLook": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines",
+                          "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER\n\t\t\tpart.Transparency = 1\n"
+                          "\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = true"),
+    "constructSkinnedIf": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tif hidden[piece.name] then"),
     "constructSkinned": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)"),
     "constructSkinnedWrites": (LEVEL_SERVICE, CONSTRUCT_BODY, "text",
                                "\t\t\tpart.Transparency = 1\n\t\t\tpart.CastShadow = false\n"
                                "\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)\n\t\tend\n\t\tpart.Parent = folder\n"),
     "constructCollides": (LEVEL_SERVICE, CONSTRUCT_BODY, "regex", r"\bpart\.CanCollide\s*=(?!=)"),
-    # dressOf: Accept asked with the uploaded hash (the Z lever's wrong one once), the templates,
-    # the names a found shortcut left out, the groups, maxParts and the layout's own name.
-    "dressUploaded": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\tlocal hash = uploadedHash(layoutName)"),
-    "dressFailSpent": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\t\tstate.failNextDress = false"),
-    "dressFailHash": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\t\thash = CONST.FAILED_HASH"),
+    # place and raise (the lobby) build a laid answer; the lobby's base looks.
+    "placeConstruct": (LEVEL_SERVICE, PLACE_BODY, "lines",
+                       "\tlocal ok, camps = pcall(construct, folder, laid, expeditions, made, cells)"),
+    "raiseBase": (LEVEL_SERVICE, RAISE_BODY, "lines", "\tlocal base = if expeditions ~= nil then expeditions.looks else nil"),
+    "raiseLaid": (LEVEL_SERVICE, RAISE_BODY, "lines",
+                  "\treturn place(folder, LevelDress.Lay(pieces, base, nil), expeditions, reactive, ice)"),
+    # templatesOf: each Model's MeshParts' MeshIds (LevelDress.Present judges them; slice 1 s2).
+    "templatesIds": (LEVEL_SERVICE, TEMPLATES_OF_BODY, "lines", "\t\t\t\tlocal meshIds: { string } = {}"),
+    "templatesMeshPart": (LEVEL_SERVICE, TEMPLATES_OF_BODY, "lines", '\t\t\t\t\tif part:IsA("MeshPart") then'),
+    "templatesMeshId": (LEVEL_SERVICE, TEMPLATES_OF_BODY, "lines", "\t\t\t\t\t\ttable.insert(meshIds, part.MeshId)"),
+    "templatesFound": (LEVEL_SERVICE, TEMPLATES_OF_BODY, "lines", "\t\t\t\tfound[child.Name] = meshIds"),
+    # dressOf only gathers: the lever read and spent, everything handed to LevelDress.Decide.
+    "dressFailRead": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\tlocal failLever = state.failNextDress"),
+    "dressFailSpent": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\tstate.failNextDress = false"),
+    "dressFailWrites": (LEVEL_SERVICE, DRESS_OF_BODY, "regex", r"\bstate\.failNextDress\s*=(?!=)"),
     "dressAccept": (LEVEL_SERVICE, DRESS_OF_BODY, "text",
-                    "LevelDress.Accept(\n\t\tCatalog.GetLevelDress(layoutName),\n\t\thash,\n\t\ttemplatesOf(layoutName),\n"
-                    "\t\tpieces,\n\t\tLevelDress.LeftOut(layout, open),\n\t\tBarrierGroups.Ensure(),\n\t\tmaxParts,\n"
-                    "\t\tlayoutName\n\t)"),
+                    "LevelDress.Decide({\n\t\tdress = Catalog.GetLevelDress(layoutName),\n"
+                    "\t\tuploadedHash = uploadedHash(layoutName),\n\t\tfailLever = failLever,\n"
+                    "\t\ttemplates = templatesOf(layoutName),\n\t\tlayout = layout,\n\t\tpieces = pieces,\n"
+                    "\t\tfound = open,\n\t\tgroupsOk = BarrierGroups.Ensure(),\n\t\tmaxParts = maxParts,\n"
+                    "\t\tlayoutName = layoutName,\n\t})"),
+    "dressRefused": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\tif accepted == nil then"),
     "dressGreyWarns": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\t\twarn(`[LevelService] the level is grey: {reason}`)"),
-    # Build: the dress asked after the pieces, the walls appended, the looks laid, Dress and
-    # DressHash set last; both cleared first.
+    "dressAnswers": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\treturn accepted"),
+    # Build: both words cleared, the dress asked of a named level only, the answer laid and placed,
+    # its looks kept, and the word written last, the hash before the name (K7, slice 2 s2).
     "buildNilDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)"),
     "buildNilHash": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)"),
+    "buildAcceptedNil": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tlocal accepted: LevelDress.Accepted? = nil"),
+    "buildNamed": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tif layoutName ~= nil then"),
     "buildDressOf": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
-                     "\t\taccepted, planHash = dressOf(layout, layoutName, pieces, open, rules.maxParts)"),
-    "buildOverlay": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
-                     "\t\t\tlooks = LevelDress.Overlay(expeditions.looks, accepted.looks),"),
-    "buildWalls": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
-                   "\t\ttable.move(accepted.walls, 1, #accepted.walls, #built + 1, built)"),
+                     "\t\taccepted = dressOf(layout, layoutName, pieces, open, rules.maxParts)"),
+    "buildAcceptedWrites": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "regex", r"\baccepted\s*=(?!=)"),
+    "buildLay": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tlocal laid = LevelDress.Lay(pieces, expeditions.looks, accepted)"),
     "buildPlace": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
-                   "\tlocal camps, problem = place(folder, built, expeditions, reactive, ice, dressed)"),
-    "buildLooks": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
-                   "\tstate.looks = if dressed ~= nil then dressed.looks else expeditions.looks"),
-    "buildDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)"),
+                   "\tlocal camps, problem = place(folder, laid, expeditions, reactive, ice)"),
+    "buildLooks": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tstate.looks = laid.looks"),
+    "buildWord": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tlocal word = laid.word"),
+    "buildWorded": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tif word ~= nil then"),
     "buildDressHash": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
-                       "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, planHash)"),
+                       "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)"),
+    "buildDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)"),
     "buildDressWrites": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "regex", r"SetAttribute\(CONST\.DRESS(?:_HASH)?_ATTRIBUTE,"),
     # Clear: both words gone before any Part.
     "clearNilDress": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)"),
     "clearNilHash": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)"),
-    # WeaponService (contract 5): every candidate's head lowered by its seat, the drop handed on.
+    # WeaponService (contract 5): every candidate's head lowered by its seat on crowd.restDrop (the
+    # review's slice 1 m1 / slice 4 P4: the input, not only the call), the drop handed on.
+    "gatherRestDrop": (WEAPON_SERVICE, GATHER_BODY, "lines", "\tlocal restDrop = config.crowd.restDrop"),
     "gatherDrop": (WEAPON_SERVICE, GATHER_BODY, "lines",
                    "\t\tlocal drop = HitShapes.SeatDrop(def.height, enemy.seat, restDrop)"),
     "gatherHead": (WEAPON_SERVICE, GATHER_BODY, "lines",
@@ -1747,7 +1817,29 @@ L4W2_LINES = {
     "startBuild": (WAVE_SERVICE, START_LEVEL_BODY, "text",
                    "LevelService.Build(\n\t\t\tlayout,\n\t\t\tmap,\n\t\t\trules,\n"
                    "\t\t\tUnlockService.FoundShortcuts(player, levelId),\n\t\t\tlevel.layout\n\t\t)"),
-    "pushPrewarm": (WAVE_SERVICE, PUSH_RUN_FIELDS_BODY, "text", "prewarm = run.prewarm,"),
+    # K3: the lobby's RunState carries every built level's plan, at every difficulty, merged.
+    "pushPrewarm": (WAVE_SERVICE, PUSH_RUN_FIELDS_BODY, "lines",
+                    '\t\tprewarm = if phase == "lobby" then boot.lobbyKinds else run.prewarm,'),
+    "lobbyOnce": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines",
+                  "\tif boot.lobbyKinds ~= nil or boot.lobbyKindsSeq == boot.floorsSeq then"),
+    "lobbySeq": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\tboot.lobbyKindsSeq = boot.floorsSeq"),
+    "lobbyLevels": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\tfor levelId in builtLevels() do"),
+    "lobbyDifficulties": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\t\tfor _, difficulty in map.difficulties do"),
+    "lobbyResolve": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines",
+                     "\t\t\tlocal level, layout = resolveLevel(levelId, difficulty, combatConfig, map)"),
+    "lobbyPlan": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "text",
+                  "StageFlow.Plan(\n\t\t\t\t\tlevel,\n\t\t\t\t\tlayout,\n\t\t\t\t\tdifficulty,\n\t\t\t\t\trules,\n"
+                  "\t\t\t\t\tLevelGeometry.Bounds(layout, rules.floorThickness),\n\t\t\t\t\tranks,\n"
+                  "\t\t\t\t\tTuning.Get().crowd.kinds\n\t\t\t\t)"),
+    "lobbyBounds": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines",
+                    "\t\t\t\t\tLevelGeometry.Bounds(layout, rules.floorThickness),"),
+    "lobbyKindsTuned": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\t\t\t\t\tTuning.Get().crowd.kinds"),
+    "lobbyKeeps": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\t\t\t\ttable.insert(found, plan.kinds)"),
+    "lobbyMerged": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\tboot.lobbyKinds = StageFlow.MostKinds(found)"),
+    "bootLobbyKinds": (WAVE_SERVICE, BOOT_BODY, "lines",
+                       "\trefreshLobbyKinds()\n\tboot.loop = RunService.Heartbeat:Connect(function(delta: number)"),
+    "tickLobbyKinds": (WAVE_SERVICE, BOOT_BODY, "lines", "\t\t\trefreshLobbyKinds()\n\t\t\tbroadcast()"),
+    "bootLobbyCalls": (WAVE_SERVICE, BOOT_BODY, "regex", r"\brefreshLobbyKinds\(\)"),
     "announceKey": (WAVE_SERVICE, ANNOUNCE_SECRET_BODY, "text", "key = opening.key,"),
     # ArenaService (3.2): the counts only with a member's first RunState of a floor set.
     "sendPrewarm": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent.prewarm = runFields.prewarm"),
@@ -1755,26 +1847,120 @@ L4W2_LINES = {
     # DebugService (8): the Z lever.
     "leverDressFail": (DEBUG_SERVICE, APPLY_LEVER_BODY, "text",
                        'elseif lever == "dressFail" then\n\t\tLevelService.FailNextDress()'),
+    # LevelScenery (K7, ui-engineer A): nothing of the scenery collides, queries or touches; a
+    # failed client warns, tears down, marks itself failed and shows the grey view (every Skinned
+    # Part shown, every wall drawn in the grey look); the whole build under one pcall.
+    "sealAnchored": (LEVEL_SCENERY, SCENERY_SEAL_BODY, "lines", "\t\tpart.Anchored = true"),
+    "sealCollide": (LEVEL_SCENERY, SCENERY_SEAL_BODY, "lines", "\t\tpart.CanCollide = false"),
+    "sealQuery": (LEVEL_SCENERY, SCENERY_SEAL_BODY, "lines", "\t\tpart.CanQuery = false"),
+    "sealTouch": (LEVEL_SCENERY, SCENERY_SEAL_BODY, "lines", "\t\tpart.CanTouch = false"),
+    "failPath": (LEVEL_SCENERY, SCENERY_FAIL_BODY, "lines",
+                 "\twarnOnce(`the level is grey on this client: {reason}`)\n\tteardown()\n\tstate.failed = true\n\tapplyView()"),
+    "showSkinned": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines", "\tif show.skinned and isSkinned(child) then"),
+    "showSkinnedPaint": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines", "\t\tpaint(child :: BasePart, 0, nil)"),
+    "showWalls": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines", '\tif show.walls ~= "none" and isWall(child) then'),
+    "showWallColor": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines",
+                      '\t\tlocal color = if show.walls == "debug" then Theme.COMBAT_SCENERY_WALL_COLOR else greyColor'),
+    "showWallPaint": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines",
+                      "\t\tpaint(child :: BasePart, Theme.COMBAT_SCENERY_WALL_TRANSPARENCY, color)"),
+    "viewShow": (LEVEL_SCENERY, APPLY_VIEW_BODY, "lines",
+                 "\tlocal show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)"),
+    "viewFolder": (LEVEL_SCENERY, APPLY_VIEW_BODY, "lines", "\t\tfolder.Parent = if show.folder then Workspace else nil"),
+    "viewChild": (LEVEL_SCENERY, APPLY_VIEW_BODY, "lines", "\t\tshowChild(show, child, greyColor)"),
+    "addedShow": (LEVEL_SCENERY, CHILD_ADDED_BODY, "lines",
+                  "\tlocal show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)"),
+    "addedChild": (LEVEL_SCENERY, CHILD_ADDED_BODY, "lines",
+                   '\tshowChild(show, child, if show.walls == "grey" then greyWallColor() else nil)'),
+    "buildPcall": (LEVEL_SCENERY, SCENERY_BUILD_BODY, "lines",
+                   "\tlocal ok, problem = pcall(function()\n\t\tbuildSteps(generation, dress, folder)\n\tend)"),
+    "buildFails": (LEVEL_SCENERY, SCENERY_BUILD_BODY, "lines", "\tif not ok and generation == state.generation then"),
+    "buildFailCall": (LEVEL_SCENERY, SCENERY_BUILD_BODY, "lines", "\t\tfail(`the build stopped ({tostring(problem)})`)"),
+    "startFails": (LEVEL_SCENERY, SCENERY_START_BODY, "lines",
+                   "\t\tfail(`the scenery could not start ({tostring(problem)})`)"),
+    "startSpawns": (LEVEL_SCENERY, SCENERY_START_BODY, "lines", "\ttask.spawn(build, state.generation, dress, folder)"),
+    "sceneryBareSteps": (LEVEL_SCENERY, None, "regex", r"task\.spawn\(\s*buildSteps"),
+    # The word's decision (K7: ScenePlan.Decide, after game.Loaded, a nil answer never kept; K9).
+    "evalKey": (LEVEL_SCENERY, EVALUATE_BODY, "lines", "\tlocal key = ScenePlan.Key(name, hash)"),
+    "evalSame": (LEVEL_SCENERY, EVALUATE_BODY, "lines", "\tif key == state.builtKey then"),
+    "evalDressed": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\tCameraController.SetDressed(typeof(name) == "string")'),
+    "evalDecide": (LEVEL_SCENERY, EVALUATE_BODY, "lines",
+                   "\tlocal decision = ScenePlan.Decide(name, hash, game:IsLoaded(), Catalog.GetLevelDress)"),
+    "evalKeep": (LEVEL_SCENERY, EVALUATE_BODY, "lines", "\tstate.builtKey = if decision.keep then key else nil"),
+    "evalBuild": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\tif decision.action == "build" and dress ~= nil then'),
+    "evalFail": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\telseif decision.action == "fail" then'),
+    "evalFailCall": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\t\tfail(decision.reason or "the dress cannot be drawn")'),
+    "evalWait": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\t\tif decision.action == "wait" then\n\t\t\tawaitLoaded()'),
+    "awaitIf": (LEVEL_SCENERY, AWAIT_LOADED_BODY, "lines",
+                "\t\tif not game:IsLoaded() then\n\t\t\tgame.Loaded:Wait()\n\t\tend"),
+    "awaitEval": (LEVEL_SCENERY, AWAIT_LOADED_BODY, "lines", "\t\tevaluate()"),
+    "stepsJobs": (LEVEL_SCENERY, BUILD_STEPS_BODY, "lines", "\tfor _, job in ScenePlan.Jobs(dress, Theme.lowEndDevice) do"),
+    # A build a newer word outlived stops at its next frame (the review's slice 2 s1).
+    "stepsGeneration": (LEVEL_SCENERY, BUILD_STEPS_BODY, "lines",
+                        "\t\t\tif generation ~= state.generation then\n\t\t\t\treturn\n\t\t\tend"),
+    # K8: mood B only while the body is in the level.
+    "moodRule": (LEVEL_SCENERY, SYNC_MOOD_BODY, "lines",
+                 "\t\tand ScenePlan.Mood(dress ~= nil, state.failed, state.moodWanted, bodyInLobby())"),
+    "placedLobby": (LEVEL_SCENERY, ON_PLACED_BODY, "lines", "\tstate.inLobby = inLobbyAt(position)"),
+    "lobbyBox": (LEVEL_SCENERY, IN_LOBBY_AT_BODY, "lines",
+                 "\treturn ScenePlan.InBox(ScenePlan.Box(feet), point.X, point.Z, boxMargin())"),
+    "startPlaced": (LEVEL_SCENERY, SCENERY_STARTS_BODY, "lines", "\tCameraController.OnPlaced(onPlaced)"),
+    "detachDressed": (LEVEL_SCENERY, SCENERY_DETACH_BODY, "lines", "\tCameraController.SetDressed(false)"),
+    # K9: in a dressed level the summary and ended phases keep the shoulder camera.
+    "cameraEnds": (CAMERA_CONTROLLER, CAMERA_UPDATE_BODY, "lines",
+                   "\tlocal phaseEndsCamera = not rangeMode\n\t\tand DEFAULT_CAMERA_PHASES[phase] == true\n"
+                   "\t\tand not levelDressed"),
+    "cameraDressed": (CAMERA_CONTROLLER, SET_DRESSED_BODY, "lines", "\tlevelDressed = dressed"),
+    "cameraDressedWrites": (CAMERA_CONTROLLER, None, "regex", r"(?<![\w.])levelDressed\s*=(?!=)"),
+    # The client's aim reads the seat as the server does (L4W2-11; the review's slice 3 m3, s1).
+    "sightsRayDrop": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "text", "\t\t\t\theadRadius,\n\t\t\t\tdrop\n\t\t\t)"),
+    "sightsRefusedBody": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "lines",
+                          "\t\t\t\t\t\t\tthen math.max(height * HALF - drop, radius)"),
+    "sightsRefusedHead": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "lines", "\t\t\t\t\t\t\telse height - headRadius - drop"),
+    "sightsBody": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "lines", SEATED_AIM_BODY),
+    "sightsHead": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "lines", SEATED_AIM_HEAD),
+    "reachBody": (INPUT_CONTROLLER, ENEMY_IN_REACH_BODY, "lines", SEATED_AIM_BODY),
+    "reachHead": (INPUT_CONTROLLER, ENEMY_IN_REACH_BODY, "lines", SEATED_AIM_HEAD),
+    "forEachDrop": (CROWD_RENDERER, FOR_EACH_BODY, "lines",
+                    "\t\t\t\tHitShapes.SeatDrop(entity.height, entity.seat, poseConsts.restDrop)"),
+    # Figures (K4, K5): the drawn head stands on the scored head; the anchor laid by Rig; the lean split.
+    "figuresHead": (FIGURES, LOOK_OF_BODY, "lines", "\tlocal head = entry.points.head"),
+    "figuresScored": (FIGURES, LOOK_OF_BODY, "lines", "\tlocal scored = def.height - def.headRadius"),
+    "figuresHeadTest": (FIGURES, LOOK_OF_BODY, "lines",
+                        "\t\tmath.abs(head[1]) > HEAD_EPSILON\n\t\tor math.abs(head[2] - scored) > HEAD_EPSILON\n"
+                        "\t\tor math.abs(head[3]) > HEAD_EPSILON"),
+    "figuresEpsilon": (FIGURES, None, "lines", "local HEAD_EPSILON = 0.01"),
+    "figuresAnchor": (FIGURES, FIGURES_LAY_BODY, "lines", "\tframes[count] = root * frameOf(rigOut.anchor)"),
+    "figuresLean": (FIGURES, FIGURES_QUEUE_BODY, "lines",
+                    "\tpose.lean, pose.leanSide = RaiderPose.Lean(yaw, lean.X, lean.Z)"),
 }
 L4W2_ORDER = {
     "wallThenArmed": (LEVEL_SERVICE, CONSTRUCT_BODY, "elseif isWall then", "part.CanCollide = true"),
-    "hiddenThenSkinned": (LEVEL_SERVICE, CONSTRUCT_BODY, "if hidden ~= nil and hidden[piece.name] then",
+    "hiddenThenSkinned": (LEVEL_SERVICE, CONSTRUCT_BODY, "if hidden[piece.name] then",
                           "part:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)"),
-    "failThenAccept": (LEVEL_SERVICE, DRESS_OF_BODY, "hash = CONST.FAILED_HASH", "LevelDress.Accept("),
+    "failReadThenSpent": (LEVEL_SERVICE, DRESS_OF_BODY, "local failLever = state.failNextDress", "state.failNextDress = false"),
+    "failSpentThenDecide": (LEVEL_SERVICE, DRESS_OF_BODY, "state.failNextDress = false", "LevelDress.Decide("),
     "nilThenPieces": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)",
                       "local pieces, refused = piecesOf("),
-    "piecesThenDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local pieces, refused = piecesOf(",
-                        "accepted, planHash = dressOf("),
+    "piecesThenDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local pieces, refused = piecesOf(", "accepted = dressOf("),
+    "layThenPlace": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local laid = LevelDress.Lay(", "local camps, problem = place("),
     "placeThenBuilt": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local camps, problem = place(", "state.built = true"),
-    "builtThenDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "state.built = true",
-                       "folder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)"),
-    "dressThenHash": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "folder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)",
-                      "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, planHash)"),
+    "builtThenWord": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "state.built = true",
+                      "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)"),
+    # K7 (slice 2 s2): the hash before the name, so a client that reads the name finds the hash.
+    "hashThenDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)",
+                      "folder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)"),
     "clearNilThenParts": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)",
                           "folder:ClearAllChildren()"),
+    "gatherRestThenDrop": (WEAPON_SERVICE, GATHER_BODY, "local restDrop = config.crowd.restDrop",
+                           "local drop = HitShapes.SeatDrop("),
     "gatherDropThenHead": (WEAPON_SERVICE, GATHER_BODY, "local drop = HitShapes.SeatDrop(",
                            "local head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)"),
     "cellsWentThenPrewarm": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "if cellsWent then", "sent.prewarm = runFields.prewarm"),
+    "lobbyKindsThenBroadcast": (WAVE_SERVICE, BOOT_BODY, "refreshLobbyKinds()", "broadcast()"),
+    "evalDressedThenDecide": (LEVEL_SCENERY, EVALUATE_BODY, 'CameraController.SetDressed(typeof(name) == "string")',
+                              "local decision = ScenePlan.Decide("),
+    "evalKeepThenTeardown": (LEVEL_SCENERY, EVALUATE_BODY, "state.builtKey = if decision.keep then key else nil",
+                             "teardown()"),
 }
 
 

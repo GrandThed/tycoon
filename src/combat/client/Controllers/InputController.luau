@@ -601,7 +601,9 @@ end
 
 -- CrowdRenderer reports the ground point; the body sphere is centred at height/2 and the
 -- head sphere sits at the top (INTERFACES P1 decision 1). L4 W2 (contract 5): a seated body's
--- head and capsule top sit `drop` lower (HitShapes.SeatDrop), as the server judges them.
+-- head and capsule top sit `drop` lower (HitShapes.SeatDrop), as the server judges them, and
+-- (fix round, slice 3 s1) its body sphere sinks with them, no lower than the sphere at its feet:
+-- seated, the server's capsule is that foot sphere (HitShapes.CrowdRay).
 -- R13: the trigger is a takeable body in the assist cone, but the shot flies the crosshair line
 -- itself and pierces, so it is held while a refused body lies on that line within the shot's hits
 -- (HitShapes.CrowdRay, the server's ray shape; CampAim.ShotSpares). A refused body gets the lag
@@ -659,7 +661,7 @@ local function enemyInSights(
 					for sphere = 1, 2 do
 						local r = if sphere == 1 then radius else headRadius
 						local lift = if sphere == 1
-							then height * HALF
+							then math.max(height * HALF - drop, radius)
 							else height - headRadius - drop
 						local offset = position + Vector3.new(0, lift, 0) - origin
 						local along = offset:Dot(look)
@@ -676,7 +678,7 @@ local function enemyInSights(
 			if found then
 				return
 			end
-			local body = position + Vector3.new(0, height * HALF, 0)
+			local body = position + Vector3.new(0, math.max(height * HALF - drop, radius), 0)
 			local head = position + Vector3.new(0, height - headRadius - drop, 0)
 			found = sphereInSights(origin, look, range, limit, body, radius + lagPad)
 				or sphereInSights(origin, look, range, limit, head, headRadius + lagPad)
@@ -756,7 +758,7 @@ local function enemyInReach(
 			if taken and found then
 				return
 			end
-			local body = position + Vector3.new(0, height * HALF, 0)
+			local body = position + Vector3.new(0, math.max(height * HALF - drop, radius), 0)
 			local head = position + Vector3.new(0, height - headRadius - drop, 0)
 			local inside = inMeleeShape(
 				variant,

@@ -12,26 +12,76 @@
 -- Pure: tables, strings and numbers; no Instance, no service, no clock, so tools/crowd_harness
 -- loads it as it stands. LevelService gathers what is on the server (the uploaded hash, the
 -- templates found, the groups' state) and only executes the answer.
+--
+-- The L4 W2 fix round (K7): the whole decision is here and tested. Decide is the one call a build
+-- makes (the Z lever's hash, the names a found shortcut left out, which templates hold a mesh, and
+-- Accept behind a pcall: a dress that throws is a refusal, so the level is grey with one warn,
+-- never a Build that throws). Its answer carries Workspace.Level's word (`word`: the layout and
+-- the plan hash together), so "dressed with no hash" cannot be written. Lay turns the answer, or
+-- no answer, into what is built: the grey level is `pieces` as they are, nothing hidden, the base
+-- looks and no word.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
 local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 
+type Looks = { [string]: Types.LevelLook }
+
+-- What Workspace.Level carries while the level is dressed: `Dress` = layout, `DressHash` =
+-- planHash (the uploaded hash Accept held the file to). One table, so neither is set alone.
+export type Word = { layout: string, planHash: string }
+
 -- What a dressed level adds to the grey one. `walls`: one Piece per dress barrier, in the file's
 -- order, role WALL_ROLE, no camp, no look, collide true. `hidden`: the names of the pieces a mesh
 -- draws over (hide.blocks' blocks, hide.camps' roles of each camp). `looks`: the dress's own looks,
--- to be laid over Expeditions.json's (Overlay) for the level's Parts.
+-- to be laid over Expeditions.json's (Overlay) for the level's Parts. `word`: what the clients are
+-- told once every Part stands.
 export type Accepted = {
 	walls: { LevelGeometry.Piece },
 	hidden: { [string]: boolean },
-	looks: { [string]: Types.LevelLook },
+	looks: Looks,
+	word: Word,
+}
+
+-- What a build hands Decide, gathered on the server and judged here. `templates`: each Model under
+-- ReplicatedStorage.Assets.Levels.<layoutName> by name, with the MeshId of every MeshPart it holds
+-- (Present says which hold a mesh). `found`: the shortcut ids the leader has found (LeftOut turns
+-- them into the block names left out of the build). `failLever`: the Z lever, spent by this build.
+export type Ask = {
+	dress: Types.LevelDress?,
+	uploadedHash: string?,
+	failLever: boolean,
+	templates: { [string]: { string } },
+	layout: Types.LevelLayout,
+	pieces: { LevelGeometry.Piece },
+	found: { [string]: boolean }?,
+	groupsOk: boolean,
+	maxParts: number,
+	layoutName: string,
+}
+
+-- What a build constructs (Lay). `pieces`: the layout's, then the dress's walls. `hidden`: the
+-- pieces a mesh draws over (empty when grey). `looks`: the looks the Parts take. `word`: nil when
+-- grey.
+export type Laid = {
+	pieces: { LevelGeometry.Piece },
+	hidden: { [string]: boolean },
+	looks: Looks?,
+	word: Word?,
 }
 
 -- Structural: the role a dress wall's piece has (LevelService builds it as an invisible wall that
 -- holds from the build), and the frame a dress must be written in (world studs, the level's own).
 local WALL_ROLE = "treeline"
 local LEVEL_FRAME = "level"
+-- What the Z lever hands Accept as the uploaded hash: never a real one (a plan hash is hex).
+local FAILED_HASH = "(the dressFail lever)"
+-- A MeshId that names no asset: empty, or the id gen_templates.py writes for one never uploaded.
+local NO_MESH: { [string]: boolean } = {
+	[""] = true,
+	["rbxassetid://0"] = true,
+}
 -- L4W2-5: the camp roles a dress may draw over (LevelGeometry's floor, fence, obstacle, fire
 -- marker and tent marker). A gate, a checkpoint or a camp's own wall is shown or recoloured by
 -- the run itself (LevelService.SetCamp), so it is never hidden.
@@ -46,10 +96,47 @@ local HIDEABLE: { [string]: boolean } = {
 local LevelDress = {}
 
 LevelDress.WALL_ROLE = WALL_ROLE
+LevelDress.FAILED_HASH = FAILED_HASH
 
 -- NaN fails the first comparison.
 local function finite(value: any): boolean
 	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
+-- Why a `props` entry cannot be placed as LevelScenery places it (nil = it can): a template's
+-- name, a finite place and turn, a scale above 0, and `with` absent or a Part's name.
+local function propProblem(entry: any): string?
+	if type(entry) ~= "table" then
+		return "is not a table"
+	end
+	if type(entry.piece) ~= "string" or entry.piece == "" then
+		return "names no piece"
+	end
+	if not (finite(entry.x) and finite(entry.y) and finite(entry.z) and finite(entry.yaw)) then
+		return "has a place or a turn that is not a number"
+	end
+	if not finite(entry.scale) or entry.scale <= 0 then
+		return "has a scale that is not above 0"
+	end
+	local with = entry.with
+	if with ~= nil and (type(with) ~= "string" or with == "") then
+		return "stands with something that is not a Part's name"
+	end
+	return nil
+end
+
+-- Why an `effects` entry cannot be drawn (nil = it can): a kind and a finite place.
+local function effectProblem(entry: any): string?
+	if type(entry) ~= "table" then
+		return "is not a table"
+	end
+	if type(entry.kind) ~= "string" or entry.kind == "" then
+		return "has no kind"
+	end
+	if not (finite(entry.x) and finite(entry.y) and finite(entry.z)) then
+		return "has a place that is not a number"
+	end
+	return nil
 end
 
 local function shown(value: any): string
@@ -165,7 +252,29 @@ function LevelDress.Accept(
 			return nil, `mesh {index} has no name`
 		end
 		if haveMeshes[name] ~= true then
-			return nil, `the mesh "{name}" has no template`
+			return nil, `the mesh "{name}" has no template with a mesh`
+		end
+	end
+	-- K7: what the client places and draws is held here too, so a file it could not read is grey
+	-- on the server and on every client alike.
+	local props: any = file.props
+	if type(props) ~= "table" then
+		return nil, "its props are not a list"
+	end
+	for index, entry: any in props do
+		local problem = propProblem(entry)
+		if problem ~= nil then
+			return nil, `prop {index} {problem}`
+		end
+	end
+	local effects: any = file.effects
+	if type(effects) ~= "table" then
+		return nil, "its effects are not a list"
+	end
+	for index, entry: any in effects do
+		local problem = effectProblem(entry)
+		if problem ~= nil then
+			return nil, `effect {index} {problem}`
 		end
 	end
 
@@ -290,8 +399,69 @@ function LevelDress.Accept(
 		walls = walls,
 		hidden = hidden,
 		looks = if type(looks) == "table" then looks else {},
+		word = { layout = layout, planHash = uploadedHash },
 	},
 		nil
+end
+
+-- The templates a mesh may be drawn from: the names whose Model holds at least one MeshPart with a
+-- MeshId that names an asset. A Model left with no mesh (a broken harvest, an id never uploaded)
+-- is no template, so its pieces are never hidden with nothing drawn over them.
+function LevelDress.Present(templates: { [string]: { string } }): { [string]: boolean }
+	local present: { [string]: boolean } = {}
+	for name, meshIds in templates do
+		for _, meshId: any in meshIds do
+			if type(meshId) == "string" and NO_MESH[meshId] ~= true then
+				present[name] = true
+				break
+			end
+		end
+	end
+	return present
+end
+
+-- The build's one decision (K7): the dress Accept takes, judged on what the server holds, or nil
+-- and why. The Z lever hands Accept FAILED_HASH for the uploaded hash, so its grey level comes
+-- through the real refusal. Behind a pcall: a file Accept throws on is refused like any other,
+-- naming the error.
+function LevelDress.Decide(ask: Ask): (Accepted?, string?)
+	local ok, accepted, reason = pcall(function(): (Accepted?, string?)
+		return LevelDress.Accept(
+			ask.dress,
+			if ask.failLever then FAILED_HASH else ask.uploadedHash,
+			LevelDress.Present(ask.templates),
+			ask.pieces,
+			LevelDress.LeftOut(ask.layout, ask.found),
+			ask.groupsOk,
+			ask.maxParts,
+			ask.layoutName
+		)
+	end)
+	if not ok then
+		return nil, `the dress could not be read ({tostring(accepted)})`
+	end
+	if accepted == nil then
+		return nil, reason or "the dress was refused"
+	end
+	return accepted, nil
+end
+
+-- What a build constructs from Decide's answer. Grey (`accepted` nil) is the level as it was
+-- before dressing existed: `pieces` itself, nothing hidden, `base`'s looks and no word. Dressed:
+-- a new list of `pieces` then the walls (`pieces` is never changed), the pieces a mesh draws over,
+-- `base` with the dress's looks laid over it, and the word.
+function LevelDress.Lay(pieces: { LevelGeometry.Piece }, base: Looks?, accepted: Accepted?): Laid
+	if accepted == nil then
+		return { pieces = pieces, hidden = {}, looks = base, word = nil }
+	end
+	local built = table.clone(pieces)
+	table.move(accepted.walls, 1, #accepted.walls, #built + 1, built)
+	return {
+		pieces = built,
+		hidden = accepted.hidden,
+		looks = LevelDress.Overlay(base, accepted.looks),
+		word = accepted.word,
+	}
 end
 
 return LevelDress

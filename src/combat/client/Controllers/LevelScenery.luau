@@ -1,17 +1,20 @@
 --!strict
 -- The dressed level on the client (docs/prompts/l4-w2-contract.md, sections 2.3, 2.4 and 8;
--- rulings L4W2-2, -3, -6, -7, -15). The M9 pattern: client-side, walk-through, no remote.
+-- rulings L4W2-2, -3, -6, -7, -15; the fix round's K7, K8 and K9). The M9 pattern: client-side,
+-- walk-through, no remote. What it decides is ScenePlan's (pure, tested in the harness); this
+-- module reads the world, hands the readings in and acts on the answers.
 --
--- The server decides "dressed", all or nothing (LevelDress.Accept), before it hides anything: it
--- builds the level's Parts as always, makes every piece the scenery covers invisible (attribute
--- `Skinned`, collision and query unchanged), and LAST sets `Workspace.Level`'s attributes `Dress`
--- (the layout's name) and `DressHash` (its plan hash). Clear sets both to nil first. This module
--- builds the scenery only on that word, and only when its own copy of the dress file
--- (Catalog.GetLevelDress) carries the same plan hash:
---  * Into `Workspace.LevelScenery`, Theme.COMBAT_SCENERY_CLONES_PER_FRAME clones a frame: first the
---    mesh groups that cover hidden collision (ground, skin, camp, rock) so the floor is under the
---    player's feet soonest, then canopy, dress and backdrop, then the props, then the fires. A
---    generation counter stops a build the level outlived (a Clear or a new run mid-build).
+-- The server decides "dressed", all or nothing (LevelDress), before it hides anything: it builds
+-- the level's Parts as always, makes every piece the scenery covers invisible (attribute
+-- `Skinned`, collision and query unchanged), arms the dress's invisible walls, and LAST sets
+-- `Workspace.Level`'s attributes `DressHash` (the plan hash) and `Dress` (the layout's name).
+-- Clear sets both to nil first. This module reads the two together (ScenePlan.Decide), never
+-- before the place has loaded (the dress files and the templates replicate with it), and builds
+-- only when its own copy of the dress file carries the same plan hash:
+--  * Into `Workspace.LevelScenery`, Theme.COMBAT_SCENERY_CLONES_PER_FRAME clones a frame, in
+--    ScenePlan.Jobs' order: the mesh groups that cover hidden collision first, then canopy, dress
+--    and backdrop, then the props, then the fires. A generation counter stops a build the level
+--    outlived (a Clear or a new run mid-build).
 --  * A mesh is a clone of `ReplicatedStorage.Assets.Levels.<layout>.<name>` parented with no
 --    move: the template already holds the world shape (the pipeline's level_template_xml). Every
 --    BasePart is anchored and nothing of it collides, queries or touches (Landscape.placeClone's
@@ -24,25 +27,38 @@
 --  * A fire (`effects`, kind "fire") is an invisible anchored Part with a ParticleEmitter and a
 --    PointLight. Neither on a low-end device (L4W2-15: never on reducedMotion, which is every
 --    touch device); the Campfire prop's modelled flames stay.
---  * If any mesh cannot be cloned (missing template, a refused hash, an error): one warn, the
---    folder is destroyed and every `Skinned` Part is shown locally (Transparency 0), so no
---    collision is ever left invisible; the mood goes back too. The level then reads as grey.
+--  * The fail path (K7): a mesh that cannot be cloned, a refused word (a missing file, another
+--    hash or frame, Dress without DressHash), or a throw anywhere in the build's thread or as it
+--    starts (all of it runs under one pcall): one warn, the folder is destroyed, the mood goes
+--    back, and this client shows the grey level: every `Skinned` Part shown locally, and every
+--    invisible wall drawn in the grey level's wall look (Expeditions.json looks.wall, at
+--    Theme.COMBAT_SCENERY_WALL_TRANSPARENCY), so no wall fences a player who cannot see it. A
+--    Part that arrives later is shown the same way.
 --
--- Mood B (2.4, L4W2-7): while a level is dressed, `Expeditions.json moods.<levelId>` is applied
--- to Lighting and an Atmosphere, on this client only. Every Lighting or Atmosphere property it
--- writes is recorded first, and whether it made the Atmosphere; Clear (or O) puts back exactly
--- those properties and destroys only an Atmosphere it made.
+-- Mood B (2.4, L4W2-7, K8): while a level is dressed here and the local body is not in the lobby
+-- camp (a member waiting there during a run keeps the lobby's light), `Expeditions.json
+-- moods.<levelId>` is applied to Lighting and an Atmosphere, on this client only. Where the body
+-- is comes from the server's word that it placed it (CameraController.OnPlaced: `Placed`), else
+-- the root as it stands; the lobby camp's box is Workspace.Lobby's Parts grown by Combat.json
+-- levels.boxMargin, the server's own box for the same question. Every Lighting or Atmosphere
+-- property written is recorded first, and whether it made the Atmosphere; restoring puts back
+-- exactly those properties and destroys only an Atmosphere it made.
 --
--- Studio only (8): Y cycles forest -> grey (the scenery hidden, the Skinned Parts shown) -> walls
--- (the forest, every invisible wall of the level drawn red) -> forest; O switches mood B and the
--- default light. Both are local and stay as chosen for the session, also across runs; the host
--- hands a toast (SetToastHandler) that says what each press did.
+-- K9: the server's word goes to CameraController.SetDressed, so the shoulder camera (whose
+-- spherecast stops at the hidden Parts) stays up through the summary in a dressed level, where
+-- Roblox's own camera would pass through every hidden rock.
 --
--- What it writes on the server's Parts (the Skinned Parts' transparency, a wall's colour) is
--- local and recorded, and put back on every change of view; a Part the server destroyed is
--- skipped. Nothing here yields on the Heartbeat: the build runs in its own thread.
+-- Studio only (8): Y cycles forest -> grey (the scenery hidden: what a client that fails sees)
+-- -> walls (the forest, every invisible wall of the level drawn red) -> forest; O switches mood B
+-- and the default light. Both are local and stay as chosen for the session, also across runs;
+-- the host hands a toast (SetToastHandler) that says what each press did.
+--
+-- What it writes on the server's Parts (a Part's transparency, a wall's colour) is local and
+-- recorded, and put back on every change of view; a Part the server destroyed is skipped.
+-- Nothing here yields on the Heartbeat: the build runs in its own thread.
 
 local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -54,25 +70,18 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Theme = require(uiFolder:WaitForChild("Theme"))
+local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local DrawClock = require(script.Parent:WaitForChild("DrawClock"))
-
-type View = "forest" | "grey" | "walls"
+local ScenePlan = require(script.Parent:WaitForChild("ScenePlan"))
 
 -- A local write on one of the server's Parts, as it stood before (put back by restorePainted).
 type Painted = { transparency: number, color: Color3, material: Enum.Material }
-
--- One step of a build, in the order it runs.
-type Job = {
-	kind: "mesh" | "prop" | "fire",
-	mesh: Types.LevelDressMesh?,
-	prop: Types.LevelDressProp?,
-	effect: Types.LevelDressEffect?,
-}
 
 -- Names the server and the pipeline own. The client trees cannot require the server's modules,
 -- so they are repeated here (as SecretFx's LEVEL_FOLDER and ReactFx's HEAT_ATTRIBUTE are).
 local NAMES = {
 	level = "Level", -- LevelService.LEVEL_FOLDER
+	lobby = "Lobby", -- LevelService.LOBBY_FOLDER: the lobby camp's Parts
 	dress = "Dress", -- LevelService.Build's last two attributes on Workspace.Level
 	dressHash = "DressHash",
 	skinned = "Skinned", -- every piece the scenery covers (LevelService.construct)
@@ -81,18 +90,13 @@ local NAMES = {
 	levels = "Levels",
 	props = "Props",
 	base = "Base", -- a prop template's invisible bottom-centre anchor (gen_templates)
-	frame = "level", -- the only dress frame the game reads: world studs
-	fire = "fire", -- the only effect kind
+	root = "HumanoidRootPart",
 	-- The engine's own collision group. In Workspace.Level the only other group a Part is ever put
 	-- in is BarrierGroups.BARRIER (camp C's barrier and the dress's tree lines), so a Part out of
 	-- this one is an invisible wall. Reading the group, not a name, also shows a wall that was
 	-- built without its group (it would then stop rays): the walls view misses it.
 	defaultGroup = "Default",
 }
-
--- The mesh groups in build order: what covers hidden collision first. A group not listed comes
--- after these (its meshes are still built).
-local GROUP_ORDER: { string } = { "ground", "skin", "camp", "rock", "canopy", "dress", "backdrop" }
 
 local KEYS = {
 	scenery = Enum.KeyCode.Y,
@@ -101,15 +105,17 @@ local KEYS = {
 
 local TEXT = {
 	forest = "Scenery: forest",
-	grey = "Scenery: grey (the collision blocks)",
+	grey = "Scenery: grey (blocks shown, walls drawn: what a failed client sees)",
 	walls = "Scenery: forest + invisible walls in red",
 	moodOn = "Light: the level's mood",
+	moodLobby = "Light: the level's mood (in the level; the lobby keeps its light)",
 	moodOff = "Light: default",
 	noMood = "Light: this level has no mood",
 	notDressed = "This level is not dressed",
 }
 
-local NEXT_VIEW: { [View]: View } = { forest = "grey", grey = "walls", walls = "forest" }
+local NEXT_VIEW: { [ScenePlan.View]: ScenePlan.View } =
+	{ forest = "grey", grey = "walls", walls = "forest" }
 
 local LevelScenery = {}
 
@@ -118,17 +124,21 @@ local state = {
 	level = nil :: Folder?,
 	-- Bumped on every change of the server's word; a build thread stops when it is not its own.
 	generation = 0,
-	-- The (Dress, DressHash) pair last acted on, "" for none.
-	builtKey = "",
+	-- The key (ScenePlan.Key) of the word last acted on and kept; nil = read the next one anew.
+	builtKey = nil :: string?,
+	-- A thread is waiting for the place to load, to read the word again.
+	awaitingLoad = false,
 	-- The dress being shown; nil = grey (not dressed, or the client could not dress it).
 	dress = nil :: Types.LevelDress?,
 	folder = nil :: Folder?,
 	-- Every step of the build has run (a `with` prop's block arriving earlier waits for it).
 	built = false,
-	-- The server dressed the level but this client could not: the Skinned Parts are shown.
+	-- The server dressed the level but this client could not: the grey level is shown.
 	failed = false,
+	-- K8: whether the server last placed the local body in the lobby camp (nil = no word yet).
+	inLobby = nil :: boolean?,
 	-- Studio levers (Y, O), kept for the session.
-	view = "forest" :: View,
+	view = "forest" :: ScenePlan.View,
 	moodWanted = true,
 	-- Props with `with`: the specs by the name they wait on, and the clones standing for each.
 	withSpecs = {} :: { [string]: { Types.LevelDressProp } },
@@ -136,10 +146,11 @@ local state = {
 	-- What the prop clones come from while dressed (nil = the set is missing).
 	propSet = nil :: Instance?,
 	painted = {} :: { [BasePart]: Painted },
-	-- Mood B: the Lighting and Atmosphere properties written, as they were before; the Atmosphere
-	-- written to, and whether this module made it.
+	-- Mood B: the level it is applied for, the Lighting and Atmosphere properties written, as
+	-- they were before; the Atmosphere written to, and whether this module made it.
 	mood = {
 		applied = false,
+		levelId = nil :: string?,
 		lighting = {} :: { [string]: any },
 		atmosphere = nil :: Atmosphere?,
 		atmosphereSaved = {} :: { [string]: any },
@@ -182,17 +193,8 @@ end
 
 -- An RGB triple 0-255 as a Color3, nil when it is not one.
 local function colorOf(value: any): Color3?
-	if typeof(value) ~= "table" or #value ~= 3 then
-		return nil
-	end
-	local r, g, b = finite(value[1]), finite(value[2]), finite(value[3])
-	if r == nil or g == nil or b == nil then
-		return nil
-	end
-	if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255 then
-		return nil
-	end
-	return Color3.fromRGB(r, g, b)
+	local rgb = ScenePlan.Rgb(value)
+	return if rgb ~= nil then Color3.fromRGB(rgb[1], rgb[2], rgb[3]) else nil
 end
 
 -- Every BasePart anchored, and nothing of the scenery collides, queries or touches.
@@ -251,20 +253,21 @@ local function isWall(child: Instance): boolean
 	return child:IsA("BasePart") and child.CollisionGroup ~= NAMES.defaultGroup
 end
 
--- Shown as the grey level shows them: only what the server hid for the scenery.
-local function showSkinned(child: Instance): ()
-	if isSkinned(child) then
-		paint(child :: BasePart, 0, nil)
-	end
+-- The grey level's wall look (Expeditions.json looks.wall); nil = the wall keeps its own colour.
+local function greyWallColor(): Color3?
+	local expeditions = Catalog.GetExpeditionsConfig()
+	local rgb = ScenePlan.WallColor(if expeditions ~= nil then expeditions.looks else nil)
+	return if rgb ~= nil then Color3.fromRGB(rgb[1], rgb[2], rgb[3]) else nil
 end
 
-local function showWall(child: Instance): ()
-	if isWall(child) then
-		paint(
-			child :: BasePart,
-			Theme.COMBAT_SCENERY_WALL_TRANSPARENCY,
-			Theme.COMBAT_SCENERY_WALL_COLOR
-		)
+-- One child of Workspace.Level as `show` wants it; `greyColor` is the grey walls' colour.
+local function showChild(show: ScenePlan.Show, child: Instance, greyColor: Color3?): ()
+	if show.skinned and isSkinned(child) then
+		paint(child :: BasePart, 0, nil)
+	end
+	if show.walls ~= "none" and isWall(child) then
+		local color = if show.walls == "debug" then Theme.COMBAT_SCENERY_WALL_COLOR else greyColor
+		paint(child :: BasePart, Theme.COMBAT_SCENERY_WALL_TRANSPARENCY, color)
 	end
 end
 
@@ -272,27 +275,20 @@ end
 local function applyView(): ()
 	restorePainted()
 	local level = state.level
-	local folder = state.folder
 	if level == nil then
 		return
 	end
-	if state.failed then
-		for _, child in level:GetChildren() do
-			showSkinned(child)
-		end
+	local show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)
+	local folder = state.folder
+	if folder ~= nil then
+		folder.Parent = if show.folder then Workspace else nil
+	end
+	if not show.skinned and show.walls == "none" then
 		return
 	end
-	if state.dress == nil or folder == nil then
-		return -- not dressed: the level is the grey one as built, nothing hidden
-	end
-	local view = state.view
-	folder.Parent = if view == "grey" then nil else Workspace
+	local greyColor = if show.walls == "grey" then greyWallColor() else nil
 	for _, child in level:GetChildren() do
-		if view == "grey" then
-			showSkinned(child)
-		elseif view == "walls" then
-			showWall(child)
-		end
+		showChild(show, child, greyColor)
 	end
 end
 
@@ -376,6 +372,7 @@ local function restoreMood(): ()
 		return
 	end
 	mood.applied = false
+	mood.levelId = nil
 	for property, value in mood.lighting do
 		(Lighting :: any)[property] = value
 	end
@@ -395,15 +392,20 @@ local function restoreMood(): ()
 	table.clear(mood.atmosphereSaved)
 end
 
--- true when the level has a mood to apply.
-local function applyMood(levelId: string): boolean
+-- The level's mood on (a level without one: the default light). Already on for that level: left
+-- as it is (a placement asks again often).
+local function applyMood(levelId: string): ()
+	local mood = state.mood
+	if mood.applied and mood.levelId == levelId then
+		return
+	end
 	restoreMood()
 	local config = moodOf(levelId)
 	if typeof(config) ~= "table" then
-		return false
+		return
 	end
-	local mood = state.mood
 	mood.applied = true
+	mood.levelId = levelId
 	local path = `Expeditions.json moods.{levelId}`
 	if typeof(config.lighting) == "table" then
 		writeBlock(
@@ -432,13 +434,64 @@ local function applyMood(levelId: string): boolean
 		)
 		atmosphere.Parent = Lighting
 	end
-	return true
 end
 
--- Mood B as the lever wants it, while dressed; the default light otherwise.
+-- A Part's flat footprint in the world, turned or not.
+local function footprintOf(part: BasePart): ScenePlan.Footprint
+	local frame = part.CFrame
+	local size = part.Size
+	local right, up, look = frame.RightVector, frame.UpVector, frame.LookVector
+	return {
+		x = frame.Position.X,
+		z = frame.Position.Z,
+		hx = (math.abs(right.X) * size.X + math.abs(up.X) * size.Y + math.abs(look.X) * size.Z) / 2,
+		hz = (math.abs(right.Z) * size.X + math.abs(up.Z) * size.Y + math.abs(look.Z) * size.Z) / 2,
+	}
+end
+
+-- Combat.json levels.boxMargin: how far round the lobby camp's Parts still counts as in it.
+local function boxMargin(): number
+	local combat = Catalog.GetCombatConfig()
+	local levels: any = if combat ~= nil then combat.levels else nil
+	return if typeof(levels) == "table" then finite(levels.boxMargin) or 0 else 0
+end
+
+-- Whether `point` stands in the lobby camp (no lobby: nowhere is).
+local function inLobbyAt(point: Vector3): boolean
+	local lobby = Workspace:FindFirstChild(NAMES.lobby)
+	if lobby == nil then
+		return false
+	end
+	local feet: { ScenePlan.Footprint } = {}
+	for _, descendant in lobby:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			table.insert(feet, footprintOf(descendant))
+		end
+	end
+	return ScenePlan.InBox(ScenePlan.Box(feet), point.X, point.Z, boxMargin())
+end
+
+-- K8: where the local body is, by the server's last word, else by its root as it stands.
+local function bodyInLobby(): boolean
+	local known = state.inLobby
+	if known ~= nil then
+		return known
+	end
+	local character = Players.LocalPlayer.Character
+	local root = if character ~= nil then character:FindFirstChild(NAMES.root) else nil
+	if root == nil or not root:IsA("BasePart") then
+		return false
+	end
+	return inLobbyAt(root.Position)
+end
+
+-- Mood B as the lever, the dress and the body want it; the default light otherwise.
 local function syncMood(): ()
 	local dress = state.dress
-	if dress ~= nil and not state.failed and state.moodWanted then
+	if
+		dress ~= nil
+		and ScenePlan.Mood(dress ~= nil, state.failed, state.moodWanted, bodyInLobby())
+	then
 		applyMood(dress.level)
 	else
 		restoreMood()
@@ -601,7 +654,7 @@ local function teardown(): ()
 	restoreMood()
 end
 
--- The server dressed the level and this client cannot: no collision may stay invisible.
+-- The server dressed the level and this client cannot: it shows the grey level, walls drawn.
 local function fail(reason: string): ()
 	warnOnce(`the level is grey on this client: {reason}`)
 	teardown()
@@ -609,45 +662,8 @@ local function fail(reason: string): ()
 	applyView()
 end
 
--- The steps of a build, in order (2.3): the meshes by group, the props, the fires.
-local function jobsOf(dress: Types.LevelDress): { Job }
-	local jobs: { Job } = {}
-	local rank: { [string]: number } = {}
-	for index, group in GROUP_ORDER do
-		rank[group] = index
-	end
-	local meshes = table.clone(dress.meshes)
-	-- Stable: the dress's own order inside a group.
-	local position: { [Types.LevelDressMesh]: number } = {}
-	for index, mesh in meshes do
-		position[mesh] = index
-	end
-	table.sort(meshes, function(a: Types.LevelDressMesh, b: Types.LevelDressMesh): boolean
-		local ra = rank[a.group] or #GROUP_ORDER + 1
-		local rb = rank[b.group] or #GROUP_ORDER + 1
-		if ra ~= rb then
-			return ra < rb
-		end
-		return position[a] < position[b]
-	end)
-	for _, mesh in meshes do
-		table.insert(jobs, { kind = "mesh", mesh = mesh })
-	end
-	for _, prop in dress.props do
-		table.insert(jobs, { kind = "prop", prop = prop })
-	end
-	if not Theme.lowEndDevice then
-		for _, effect in dress.effects do
-			if effect.kind == NAMES.fire then
-				table.insert(jobs, { kind = "fire", effect = effect })
-			end
-		end
-	end
-	return jobs
-end
-
 -- One step; false and why when a mesh could not be built (the whole scenery then goes).
-local function runJob(job: Job, templates: Instance, folder: Folder): (boolean, string?)
+local function runJob(job: ScenePlan.Job, templates: Instance, folder: Folder): (boolean, string?)
 	local mesh = job.mesh
 	if mesh ~= nil then
 		local template = templates:FindFirstChild(mesh.name)
@@ -693,14 +709,8 @@ local function runJob(job: Job, templates: Instance, folder: Folder): (boolean, 
 	return true, nil
 end
 
--- The build's own thread. Stops at the first step of a generation it no longer is.
-local function build(generation: number, dress: Types.LevelDress, folder: Folder): ()
-	if not game:IsLoaded() then
-		game.Loaded:Wait() -- the templates are replicated with the place
-	end
-	if generation ~= state.generation then
-		return
-	end
+-- The build's steps. Stops at the first step of a generation it no longer is.
+local function buildSteps(generation: number, dress: Types.LevelDress, folder: Folder): ()
 	local templates = childNamed(
 		childNamed(ReplicatedStorage:FindFirstChild(NAMES.assets), NAMES.levels),
 		dress.layout
@@ -713,7 +723,7 @@ local function build(generation: number, dress: Types.LevelDress, folder: Folder
 	local perFrame = math.max(1, math.floor(Theme.COMBAT_SCENERY_CLONES_PER_FRAME))
 	local done = 0
 	local started = os.clock()
-	for _, job in jobsOf(dress) do
+	for _, job in ScenePlan.Jobs(dress, Theme.lowEndDevice) do
 		local ok, problem = runJob(job, templates, folder)
 		if not ok then
 			DrawClock.Add(os.clock() - started)
@@ -738,61 +748,92 @@ local function build(generation: number, dress: Types.LevelDress, folder: Folder
 	DrawClock.Add(os.clock() - started)
 end
 
--- The server's word changed (or was first read): clear, and build when it says dressed.
-local function evaluate(): ()
+-- The build's own thread, all of it under one pcall (K7): a throw anywhere in it (an entry the
+-- build cannot read, a fire, a prop's `with`) shows the grey level and warns, as a missing mesh
+-- does. A throw in a build the level outlived is that build's alone.
+local function build(generation: number, dress: Types.LevelDress, folder: Folder): ()
+	local ok, problem = pcall(function()
+		buildSteps(generation, dress, folder)
+	end)
+	if not ok and generation == state.generation then
+		fail(`the build stopped ({tostring(problem)})`)
+	end
+end
+
+-- Shows `dress`: the folder, the light, then the build's thread. A throw before the thread starts
+-- shows the grey level too (K7).
+local function start(dress: Types.LevelDress): ()
+	local folder = Instance.new("Folder")
+	folder.Name = NAMES.scenery
+	state.folder = folder
+	state.dress = dress
+	local ok, problem = pcall(function()
+		syncMood()
+		applyView() -- parents the folder unless the view is grey
+	end)
+	if not ok then
+		fail(`the scenery could not start ({tostring(problem)})`)
+		return
+	end
+	task.spawn(build, state.generation, dress, folder)
+end
+
+local evaluate: () -> ()
+
+-- K7 (the review's m3): nothing is decided before the place has loaded, so the word is read again
+-- once it has (one waiter at a time; it reads whatever level stands then).
+local function awaitLoaded(): ()
+	if state.awaitingLoad then
+		return
+	end
+	state.awaitingLoad = true
+	task.spawn(function()
+		if not game:IsLoaded() then
+			game.Loaded:Wait()
+		end
+		state.awaitingLoad = false
+		evaluate()
+	end)
+end
+
+-- The server's word changed (or was first read): clear, and act on ScenePlan.Decide's answer. An
+-- answer that is not kept (the place still loading, a nil read) is asked again next time.
+evaluate = function(): ()
 	local level = state.level
 	if level == nil then
 		return
 	end
 	local name = level:GetAttribute(NAMES.dress)
 	local hash = level:GetAttribute(NAMES.dressHash)
-	local key = if typeof(name) == "string" then `{name}\0{tostring(hash)}` else ""
+	local key = ScenePlan.Key(name, hash)
 	if key == state.builtKey then
 		return
 	end
-	state.builtKey = key
+	-- K9: the server's word, whatever this client makes of it (its hidden Parts stand).
+	CameraController.SetDressed(typeof(name) == "string")
+	local decision = ScenePlan.Decide(name, hash, game:IsLoaded(), Catalog.GetLevelDress)
+	state.builtKey = if decision.keep then key else nil
 	state.generation += 1
 	teardown()
-	if typeof(name) ~= "string" then
-		applyView()
-		return -- not dressed: the level as built, nothing hidden
+	local dress = decision.dress
+	if decision.action == "build" and dress ~= nil then
+		start(dress)
+	elseif decision.action == "fail" then
+		fail(decision.reason or "the dress cannot be drawn")
+	else
+		if decision.action == "wait" then
+			awaitLoaded()
+		end
+		applyView() -- not dressed, or not yet: the level as built
 	end
-	if typeof(hash) ~= "string" then
-		-- Build sets the hash right after the name; if it never comes, nothing stays invisible.
-		fail(`Workspace.Level has Dress "{name}" but no DressHash`)
-		return
-	end
-	local dress = Catalog.GetLevelDress(name)
-	if dress == nil then
-		fail(`Config/LevelDress/{name} is missing`)
-		return
-	end
-	if dress.planHash ~= hash then
-		fail(`Config/LevelDress/{name} has plan hash {dress.planHash}, the server dressed {hash}`)
-		return
-	end
-	if dress.frame ~= NAMES.frame then
-		fail(`Config/LevelDress/{name} has frame "{dress.frame}", not "{NAMES.frame}"`)
-		return
-	end
-	local folder = Instance.new("Folder")
-	folder.Name = NAMES.scenery
-	state.folder = folder
-	state.dress = dress
-	syncMood()
-	applyView() -- parents the folder unless the view is grey
-	task.spawn(build, state.generation, dress, folder)
 end
 
 local function onLevelChildAdded(child: Instance): ()
 	if state.built and state.withSpecs[child.Name] ~= nil then
 		raiseWith(child.Name)
 	end
-	if state.failed or (state.dress ~= nil and state.view == "grey") then
-		showSkinned(child)
-	elseif state.dress ~= nil and state.view == "walls" then
-		showWall(child)
-	end
+	local show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)
+	showChild(show, child, if show.walls == "grey" then greyWallColor() else nil)
 end
 
 local function onLevelChildRemoved(child: Instance): ()
@@ -801,6 +842,22 @@ local function onLevelChildRemoved(child: Instance): ()
 	end
 	if child:IsA("BasePart") then
 		state.painted[child] = nil
+	end
+end
+
+-- K8: the server placed the local body (or the camera picked a new one up) at `position`; the
+-- mood follows it into and out of the lobby camp. Called from the camera's render step: a mood
+-- that cannot be written must never stop the camera's frame.
+local function onPlaced(position: Vector3, _signalled: boolean, _far: boolean): ()
+	state.inLobby = inLobbyAt(position)
+	if state.dress == nil then
+		return
+	end
+	local ok, problem = pcall(function()
+		syncMood()
+	end)
+	if not ok then
+		warnOnce(`the level's light could not follow the body ({tostring(problem)})`)
 	end
 end
 
@@ -860,7 +917,12 @@ local function toggleMood(): ()
 	end
 	state.moodWanted = not state.moodWanted
 	syncMood()
-	say(if state.moodWanted then TEXT.moodOn else TEXT.moodOff)
+	say(
+		if not state.moodWanted
+			then TEXT.moodOff
+			elseif bodyInLobby() then TEXT.moodLobby
+			else TEXT.moodOn
+	)
 end
 
 local function onKey(input: InputObject, processed: boolean): ()
@@ -884,6 +946,7 @@ function LevelScenery.Start(): ()
 	if RunService:IsStudio() then
 		table.insert(state.connections, UserInputService.InputBegan:Connect(onKey))
 	end
+	CameraController.OnPlaced(onPlaced)
 	local level = Workspace:FindFirstChild(NAMES.level)
 	if level ~= nil then
 		attachLevel(level)
@@ -910,9 +973,10 @@ function LevelScenery.Detach(): ()
 	end
 	table.clear(state.levelConnections)
 	state.generation += 1
-	state.builtKey = ""
+	state.builtKey = nil
 	teardown()
 	state.level = nil
+	CameraController.SetDressed(false)
 end
 
 function LevelScenery.Destroy(): ()

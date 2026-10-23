@@ -8676,21 +8676,23 @@ L4W2_PIN_MUTATIONS = {
         "\t\t\tpart.Transparency = 1\n\t\t\tpart.CastShadow = false\n\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE",
         "\t\t\tpart.CastShadow = false\n\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE",
     ),
+    # Re-aimed in the fix round (K7): the walls are appended in LevelDress.Lay now (tests_l4w2.luau).
     "l4w2 pins: no wall appended": (
-        LEVEL_SERVICE, "\t\ttable.move(accepted.walls, 1, #accepted.walls, #built + 1, built)\n", ""),
+        LEVEL_DRESS, "\ttable.move(accepted.walls, 1, #accepted.walls, #built + 1, built)\n", ""),
     "l4w2 pins: the dress's looks not laid": (
-        LEVEL_SERVICE, "\t\t\tlooks = LevelDress.Overlay(expeditions.looks, accepted.looks),\n",
-        "\t\t\tlooks = expeditions.looks,\n"),
-    "l4w2 pins: Dress never set": (LEVEL_SERVICE, "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, layoutName)\n", ""),
+        LEVEL_DRESS, "\t\tlooks = LevelDress.Overlay(base, accepted.looks),\n", "\t\tlooks = base,\n"),
+    "l4w2 pins: Dress never set": (LEVEL_SERVICE, "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)\n", ""),
     "l4w2 pins: Clear leaves the words": (
         LEVEL_SERVICE,
         "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)\n\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)\n"
         "\t\tfolder:ClearAllChildren()",
         "\t\tfolder:ClearAllChildren()",
     ),
-    "l4w2 pins: the Z lever's hash never wrong": (LEVEL_SERVICE, "\t\thash = CONST.FAILED_HASH\n", ""),
+    # Re-aimed (K7): the lever's hash is LevelDress.Decide's (tests_l4w2.luau).
+    "l4w2 pins: the Z lever's hash never wrong": (
+        LEVEL_DRESS, "\t\t\tif ask.failLever then FAILED_HASH else ask.uploadedHash,\n", "\t\t\task.uploadedHash,\n"),
     "l4w2 pins: the shortcut's left-out names not given": (
-        LEVEL_SERVICE, "\t\tLevelDress.LeftOut(layout, open),\n", "\t\t{},\n"),
+        LEVEL_DRESS, "\t\t\tLevelDress.LeftOut(ask.layout, ask.found),\n", "\t\t\t{},\n"),
     "l4w2 pins: a seated head not lowered in gather": (
         WEAPON, "local head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)",
         "local head = enemy.position + Vector3.new(0, def.height - def.headRadius, 0)"),
@@ -8708,6 +8710,237 @@ L4W2_PIN_MUTATIONS = {
 }
 assert not set(L4W2_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(L4W2_PIN_MUTATIONS) & set(MUTATIONS))
 MUTATIONS.update(L4W2_PIN_MUTATIONS)
+
+# The L4 W2 fix round (docs/prompts/l4-w2-fix-round.md; docs/prompts/l4-w2-fix-reports/): the files the
+# new pins read (run_harness.py L4W2_LINES) and ScenePlan, which the bundle loads.
+SCENE_PLAN = "src/combat/client/Controllers/ScenePlan.luau"
+LEVEL_SCENERY = "src/combat/client/Controllers/LevelScenery.luau"
+CAMERA_CONTROLLER = "src/combat/client/Controllers/CameraController.luau"
+CROWD_RENDERER = "src/combat/client/Controllers/CrowdRenderer.luau"
+FIGURES = "src/combat/client/Controllers/Raiders/Figures.luau"
+FILES += [SCENE_PLAN, LEVEL_SCENERY, CAMERA_CONTROLLER, CROWD_RENDERER, FIGURES]
+
+# K7 (luau-engineer A, fix-reports/luau-a.md): LevelDress.Decide, Present, Lay and Accept's new
+# refusals, caught by tests_l4w2.luau. Four of A's 39 are the re-aimed "l4w2 pins" entries above
+# ("no wall appended", "the dress's looks not laid", "the Z lever's hash never wrong", "the
+# shortcut's left-out names not given") and are not repeated here.
+K7_A_MUTATIONS = {
+    # Accept: props and effects have the client's shape (slice 2 m1).
+    "k7 dress: props need not be a list": (LEVEL_DRESS, '\tif type(props) ~= "table" then\n', "\tif false then\n"),
+    "k7 dress: a bad prop is taken": (LEVEL_DRESS, "\t\t\treturn nil, `prop {index} {problem}`\n", "\t\t\tcontinue\n"),
+    "k7 dress: a prop that is no table is taken": (LEVEL_DRESS, '\tif type(entry) ~= "table" then\n\t\treturn "is not a table"\n\tend\n\tif type(entry.piece)', '\tif false then\n\t\treturn "is not a table"\n\tend\n\tif type(entry.piece)'),
+    "k7 dress: a prop's empty piece is taken": (LEVEL_DRESS, 'if type(entry.piece) ~= "string" or entry.piece == "" then', 'if type(entry.piece) ~= "string" then'),
+    "k7 dress: a prop with no piece is taken": (LEVEL_DRESS, 'if type(entry.piece) ~= "string" or entry.piece == "" then', 'if entry.piece == "" then'),
+    "k7 dress: a prop's turn is not checked": (LEVEL_DRESS, "finite(entry.z) and finite(entry.yaw)) then", "finite(entry.z)) then"),
+    "k7 dress: a prop's place is not checked": (LEVEL_DRESS, "\tif not (finite(entry.x) and finite(entry.y) and finite(entry.z) and finite(entry.yaw)) then\n", "\tif not finite(entry.yaw) then\n"),
+    "k7 dress: a prop of scale 0 is taken": (LEVEL_DRESS, "\tif not finite(entry.scale) or entry.scale <= 0 then\n", "\tif not finite(entry.scale) or entry.scale < 0 then\n"),
+    "k7 dress: a prop of any finite scale is taken": (LEVEL_DRESS, "\tif not finite(entry.scale) or entry.scale <= 0 then\n", "\tif not finite(entry.scale) then\n"),
+    "k7 dress: a prop of no scale is taken": (LEVEL_DRESS, "\tif not finite(entry.scale) or entry.scale <= 0 then\n", '\tif type(entry.scale) == "number" and entry.scale <= 0 then\n'),
+    "k7 dress: a prop's empty with is taken": (LEVEL_DRESS, 'if with ~= nil and (type(with) ~= "string" or with == "") then', 'if with ~= nil and type(with) ~= "string" then'),
+    "k7 dress: a prop's with is not checked": (LEVEL_DRESS, 'if with ~= nil and (type(with) ~= "string" or with == "") then', "if false then"),
+    "k7 dress: effects need not be a list": (LEVEL_DRESS, '\tif type(effects) ~= "table" then\n', "\tif false then\n"),
+    "k7 dress: a bad effect is taken": (LEVEL_DRESS, "\t\t\treturn nil, `effect {index} {problem}`\n", "\t\t\tcontinue\n"),
+    "k7 dress: an effect that is no table is taken": (LEVEL_DRESS, '\tif type(entry) ~= "table" then\n\t\treturn "is not a table"\n\tend\n\tif type(entry.kind)', '\tif false then\n\t\treturn "is not a table"\n\tend\n\tif type(entry.kind)'),
+    "k7 dress: an effect's empty kind is taken": (LEVEL_DRESS, 'if type(entry.kind) ~= "string" or entry.kind == "" then', 'if type(entry.kind) ~= "string" then'),
+    "k7 dress: an effect with no kind is taken": (LEVEL_DRESS, 'if type(entry.kind) ~= "string" or entry.kind == "" then', 'if entry.kind == "" then'),
+    "k7 dress: an effect's place is not checked": (LEVEL_DRESS, '\tif not (finite(entry.x) and finite(entry.y) and finite(entry.z)) then\n\t\treturn "has a place', '\tif not finite(entry.x) then\n\t\treturn "has a place'),
+    # Accept's word (the answer carries the hash).
+    "k7 dress: the word's hash dropped": (LEVEL_DRESS, "\t\tword = { layout = layout, planHash = uploadedHash },\n", '\t\tword = { layout = layout, planHash = "" },\n'),
+    "k7 dress: the word names another layout": (LEVEL_DRESS, "\t\tword = { layout = layout, planHash = uploadedHash },\n", '\t\tword = { layout = "", planHash = uploadedHash },\n'),
+    # Present (slice 1 s2).
+    "k7 dress: an empty MeshId is a mesh": (LEVEL_DRESS, 'if type(meshId) == "string" and NO_MESH[meshId] ~= true then', 'if type(meshId) == "string" then'),
+    "k7 dress: the never-uploaded id is a mesh": (LEVEL_DRESS, '\t["rbxassetid://0"] = true,\n', ""),
+    "k7 dress: no template is present": (LEVEL_DRESS, "\t\t\t\tpresent[name] = true\n", "\t\t\t\tpresent[name] = nil\n"),
+    "k7 dress: a Model with no MeshPart is present": (LEVEL_DRESS, "\tfor name, meshIds in templates do\n\t\tfor _, meshId: any in meshIds do\n", "\tfor name, meshIds in templates do\n\t\tpresent[name] = true\n\t\tfor _, meshId: any in meshIds do\n"),
+    # Decide (slice 1 m2: the pcall; the lever; the inputs).
+    "k7 decide: a throw is no refusal": (LEVEL_DRESS, "\tif not ok then\n\t\treturn nil, `the dress could not be read", "\tif false then\n\t\treturn nil, `the dress could not be read"),
+    "k7 decide: the lever's hash is the uploaded one": (LEVEL_DRESS, 'local FAILED_HASH = "(the dressFail lever)"\n', 'local FAILED_HASH = "plan-1"\n'),
+    "k7 decide: every Model is a template": (LEVEL_DRESS, "\t\t\tLevelDress.Present(ask.templates),\n", "\t\t\t(function(): any\n\t\t\t\tlocal all = {}\n\t\t\t\tfor name in ask.templates do\n\t\t\t\t\tall[name] = true\n\t\t\t\tend\n\t\t\t\treturn all\n\t\t\tend)(),\n"),
+    "k7 decide: the groups not asked": (LEVEL_DRESS, "\t\t\task.groupsOk,\n", "\t\t\ttrue,\n"),
+    "k7 decide: maxParts not asked": (LEVEL_DRESS, "\t\t\task.maxParts,\n", "\t\t\tmath.huge,\n"),
+    "k7 decide: a refusal names nothing": (LEVEL_DRESS, '\t\treturn nil, reason or "the dress was refused"\n', '\t\treturn nil, "the dress was refused"\n'),
+    # Lay.
+    "k7 lay: the walls written into the layout's pieces": (LEVEL_DRESS, "\tlocal built = table.clone(pieces)\n", "\tlocal built = pieces\n"),
+    "k7 lay: nothing hidden": (LEVEL_DRESS, "\t\thidden = accepted.hidden,\n", "\t\thidden = {},\n"),
+    "k7 lay: no word": (LEVEL_DRESS, "\t\tword = accepted.word,\n", "\t\tword = nil,\n"),
+    "k7 lay: grey takes no base looks": (LEVEL_DRESS, "\t\treturn { pieces = pieces, hidden = {}, looks = base, word = nil }\n", "\t\treturn { pieces = pieces, hidden = {}, looks = nil, word = nil }\n"),
+    "k7 lay: grey is dressed with nothing": (LEVEL_DRESS, "\tif accepted == nil then\n\t\treturn { pieces = pieces", '\tif accepted == nil then\n\t\taccepted = { walls = {}, hidden = {}, looks = {}, word = { layout = "", planHash = "" } }\n\tend\n\tif false then\n\t\treturn { pieces = pieces'),
+}
+assert not set(K7_A_MUTATIONS) & set(MUTATIONS), sorted(set(K7_A_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_A_MUTATIONS)
+
+# K7 on LevelService (luau-engineer A's, plus D2's for the further lines pinned): caught only by
+# run_harness.py's L4W2_LINES / L4W2_ORDER pins. "Dress never set" is the re-aimed "l4w2 pins"
+# entry above.
+K7_PIN_MUTATIONS = {
+    # Build (slice 4 P3, P1; slice 2 s2).
+    "k7 pins: no level is dressed": (LEVEL_SERVICE, "\tif layoutName ~= nil then\n\t\taccepted = dressOf(", "\tif false then\n\t\taccepted = dressOf("),
+    "k7 pins: the dress asked of no level": (LEVEL_SERVICE, "\t\taccepted = dressOf(layout, layoutName, pieces, open, rules.maxParts)\n", ""),
+    "k7 pins: the answer not laid": (LEVEL_SERVICE, "\tlocal laid = LevelDress.Lay(pieces, expeditions.looks, accepted)\n", "\tlocal laid = LevelDress.Lay(pieces, expeditions.looks, nil)\n"),
+    "k7 pins: built from the grey pieces": (LEVEL_SERVICE, "\tlocal camps, problem = place(folder, laid, expeditions, reactive, ice)\n", "\tlocal camps, problem = place(folder, LevelDress.Lay(pieces, expeditions.looks, nil), expeditions, reactive, ice)\n"),
+    "k7 pins: SetCamp's looks not the laid ones": (LEVEL_SERVICE, "\tstate.looks = laid.looks\n", "\tstate.looks = expeditions.looks\n"),
+    "k7 pins: the word not taken from the answer": (LEVEL_SERVICE, "\tlocal word = laid.word\n", "\tlocal word: any = nil\n"),
+    "k7 pins: hidden, but the word never set": (LEVEL_SERVICE, "\tif word ~= nil then\n", "\tif false then\n"),
+    "k7 pins: DressHash never set": (LEVEL_SERVICE, "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)\n", ""),
+    "k7 pins: Dress before DressHash": (LEVEL_SERVICE, "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)\n\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)\n", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)\n\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)\n"),
+    # construct (slice 1 m1's looks probe; the hidden branch; the wall's look).
+    "k7 pins: construct builds in the base looks": (LEVEL_SERVICE, "\tlocal looks = laid.looks\n", "\tlocal looks = if expeditions ~= nil then expeditions.looks else nil\n"),
+    "k7 pins: construct reads no hidden names": (LEVEL_SERVICE, "\tlocal hidden = laid.hidden\n", "\tlocal hidden = {}\n"),
+    "k7 pins: construct builds the grey pieces": (LEVEL_SERVICE, "\tfor _, piece in laid.pieces do\n", "\tfor _, piece in laid.pieces do\n\t\tif piece.role == LevelDress.WALL_ROLE then\n\t\t\tcontinue\n\t\tend\n"),
+    "k7 pins: no hidden piece is hidden": (LEVEL_SERVICE, "\t\tif hidden[piece.name] then\n", "\t\tif false then\n"),
+    "k7 pins: the dress wall drawn": (LEVEL_SERVICE, "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER\n\t\t\tpart.Transparency = 1\n\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = true\n", "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER\n\t\t\tpart.Transparency = 0\n\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = true\n"),
+    "k7 pins: place builds the grey pieces": (LEVEL_SERVICE, "\tlocal ok, camps = pcall(construct, folder, laid, expeditions, made, cells)\n", "\tlocal ok, camps = pcall(construct, folder, LevelDress.Lay(laid.pieces, laid.looks, nil), expeditions, made, cells)\n"),
+    "k7 pins: the lobby built with no looks": (LEVEL_SERVICE, "\treturn place(folder, LevelDress.Lay(pieces, base, nil), expeditions, reactive, ice)\n", "\treturn place(folder, LevelDress.Lay(pieces, nil, nil), expeditions, reactive, ice)\n"),
+    "k7 pins: the lobby's base looks dropped": (LEVEL_SERVICE, "\tlocal base = if expeditions ~= nil then expeditions.looks else nil\n", "\tlocal base: any = nil\n"),
+    # dressOf (slice 4 P2, P6; the gathered ask).
+    "k7 pins: the lever latched on": (LEVEL_SERVICE, "\tlocal failLever = state.failNextDress\n", "\tlocal failLever = true\n"),
+    "k7 pins: the lever never spent": (LEVEL_SERVICE, "\tlocal failLever = state.failNextDress\n\tstate.failNextDress = false\n", "\tlocal failLever = state.failNextDress\n"),
+    "k7 pins: the lever not handed on": (LEVEL_SERVICE, "\t\tfailLever = failLever,\n", "\t\tfailLever = false,\n"),
+    "k7 pins: the uploaded hash not asked": (LEVEL_SERVICE, "\t\tuploadedHash = uploadedHash(layoutName),\n", "\t\tuploadedHash = nil,\n"),
+    "k7 pins: the dress file not read": (LEVEL_SERVICE, "\t\tdress = Catalog.GetLevelDress(layoutName),\n", "\t\tdress = nil,\n"),
+    "k7 pins: the templates not gathered": (LEVEL_SERVICE, "\t\ttemplates = templatesOf(layoutName),\n", "\t\ttemplates = {},\n"),
+    "k7 pins: the found shortcuts not handed on": (LEVEL_SERVICE, "\t\tfound = open,\n", "\t\tfound = nil,\n"),
+    "k7 pins: the groups never asked": (LEVEL_SERVICE, "\t\tgroupsOk = BarrierGroups.Ensure(),\n", "\t\tgroupsOk = true,\n"),
+    "k7 pins: maxParts not handed on": (LEVEL_SERVICE, "\t\tmaxParts = maxParts,\n", "\t\tmaxParts = math.huge,\n"),
+    "k7 pins: a refusal not known": (LEVEL_SERVICE, "\tif accepted == nil then\n\t\twarn(", "\tif false then\n\t\twarn("),
+    "k7 pins: the grey level not warned": (LEVEL_SERVICE, "\t\twarn(`[LevelService] the level is grey: {reason}`)\n", ""),
+    "k7 pins: dressOf answers nothing": (LEVEL_SERVICE, "\treturn accepted\nend\n", "\treturn nil\nend\n"),
+    # templatesOf (slice 1 s2): a Model counts by its MeshParts' MeshIds, not its name.
+    "k7 pins: a template counted by its name": (LEVEL_SERVICE, "\t\t\t\t\t\ttable.insert(meshIds, part.MeshId)\n", '\t\t\t\t\t\ttable.insert(meshIds, "rbxassetid://1")\n'),
+    "k7 pins: a template with no MeshPart counted": (LEVEL_SERVICE, "\t\t\t\tlocal meshIds: { string } = {}\n", '\t\t\t\tlocal meshIds: { string } = { "rbxassetid://1" }\n'),
+    "k7 pins: any part's id read": (LEVEL_SERVICE, '\t\t\t\t\tif part:IsA("MeshPart") then\n', '\t\t\t\t\tif part:IsA("BasePart") then\n'),
+    "k7 pins: a template's ids not kept": (LEVEL_SERVICE, "\t\t\t\tfound[child.Name] = meshIds\n", '\t\t\t\tfound[child.Name] = { "rbxassetid://1" }\n'),
+    # WeaponService gather's input (slice 1 m1, slice 4 P4: :828).
+    "k7 pins: gather's restDrop not read": (WEAPON, "\tlocal restDrop = config.crowd.restDrop\n", "\tlocal restDrop = 0\n"),
+}
+assert not set(K7_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(K7_PIN_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_PIN_MUTATIONS)
+
+# K3 (luau-engineer A's follow-up): the lobby's prewarm. StageFlow.MostKinds is caught by
+# tests_l4w2.luau ("lobby kinds"); WaveService's lines by the pins.
+K3_A_MUTATIONS = {
+    "k3 lobby: MostKinds sums the plans": (FLOW, "\t\t\tif count > (most[kind] or 0) then\n\t\t\t\tmost[kind] = count\n", "\t\t\tif count > 0 then\n\t\t\t\tmost[kind] = (most[kind] or 0) + count\n"),
+    "k3 lobby: MostKinds keeps the last plan's count": (FLOW, "\t\t\tif count > (most[kind] or 0) then\n", "\t\t\tif count > 0 then\n"),
+    "k3 lobby: MostKinds sends an empty table": (FLOW, "\treturn if any then most else nil\n", "\treturn most\n"),
+    "k3 lobby: MostKinds sends nothing": (FLOW, "\treturn if any then most else nil\n", "\treturn nil\n"),
+    "k3 lobby: MostKinds writes into a plan's kinds": (FLOW, "\tlocal most: { [string]: number } = {}\n\tlocal any = false\n", "\tlocal most: { [string]: number } = kinds[1] or {}\n\tlocal any = false\n"),
+}
+K3_PIN_MUTATIONS = {
+    "k3 pins: the lobby sends no prewarm": (WAVE_SERVICE, '\t\tprewarm = if phase == "lobby" then boot.lobbyKinds else run.prewarm,\n', "\t\tprewarm = run.prewarm,\n"),
+    "k3 pins: the lobby kinds not made at boot": (WAVE_SERVICE, "\trefreshLobbyKinds()\n\tboot.loop = ", "\tboot.loop = "),
+    "k3 pins: the lobby kinds never tried again": (WAVE_SERVICE, "\t\t\trefreshLobbyKinds()\n\t\t\tbroadcast()\n", "\t\t\tbroadcast()\n"),
+    "k3 pins: the lobby kinds made on every broadcast": (WAVE_SERVICE, "\tif boot.lobbyKinds ~= nil or boot.lobbyKindsSeq == boot.floorsSeq then\n", "\tif false then\n"),
+    "k3 pins: a failed try retried every broadcast": (WAVE_SERVICE, "\tboot.lobbyKindsSeq = boot.floorsSeq\n", ""),
+    "k3 pins: one difficulty planned": (WAVE_SERVICE, "\t\tfor _, difficulty in map.difficulties do\n\t\t\tlocal level, layout = resolveLevel(", "\t\tfor _, difficulty in { map.difficulties[1] } do\n\t\t\tlocal level, layout = resolveLevel("),
+    "k3 pins: no plan kept": (WAVE_SERVICE, "\t\t\t\ttable.insert(found, plan.kinds)\n", ""),
+    "k3 pins: the plans not merged": (WAVE_SERVICE, "\tboot.lobbyKinds = StageFlow.MostKinds(found)\n", "\tboot.lobbyKinds = found[1]\n"),
+}
+for extra in (K3_A_MUTATIONS, K3_PIN_MUTATIONS):
+    assert not set(extra) & set(MUTATIONS), sorted(set(extra) & set(MUTATIONS))
+    MUTATIONS.update(extra)
+
+# K7, K8 (ui-engineer A, fix-reports/ui-a.md): ScenePlan's rules, caught by tests_l4w2_scenery.luau.
+K7_SCENE_MUTATIONS = {
+    "k7 scene: decided before the place has loaded": (SCENE_PLAN, "\tif not loaded then\n", "\tif false then\n"),
+    "k7 scene: the missing file's answer kept": (SCENE_PLAN, "return { action = \"fail\", keep = false, reason = `Config/LevelDress/{dress} is missing` }", "return { action = \"fail\", keep = true, reason = `Config/LevelDress/{dress} is missing` }"),
+    "k7 scene: Dress without DressHash builds": (SCENE_PLAN, '\tif type(hash) ~= "string" then\n', "\tif false then\n"),
+    "k7 scene: a failed client draws no wall": (SCENE_PLAN, '\tif failed then\n\t\treturn { folder = false, skinned = true, walls = "grey" }\n', '\tif failed then\n\t\treturn { folder = false, skinned = true, walls = "none" }\n'),
+    "k7 scene: the grey view draws no wall": (SCENE_PLAN, '\tif view == "grey" then\n\t\treturn { folder = false, skinned = true, walls = "grey" }\n', '\tif view == "grey" then\n\t\treturn { folder = false, skinned = true, walls = "none" }\n'),
+    "k8 scene: mood B in the lobby camp": (SCENE_PLAN, "\treturn dressed and not failed and wanted and not inLobby\n", "\treturn dressed and not failed and wanted\n"),
+    "k7 scene: fires on a low-end device": (SCENE_PLAN, "\tif not lowEnd then\n", "\tif true then\n"),
+    "k8 scene: the box's west margin dropped": (SCENE_PLAN, "\treturn x >= box.minX - margin\n", "\treturn x >= box.minX\n"),
+    "k8 scene: the box's east margin dropped": (SCENE_PLAN, "\t\tand x <= box.maxX + margin\n", "\t\tand x <= box.maxX\n"),
+    "k8 scene: the box's south margin dropped": (SCENE_PLAN, "\t\tand z >= box.minZ - margin\n", "\t\tand z >= box.minZ\n"),
+    "k8 scene: the box's north margin dropped": (SCENE_PLAN, "\t\tand z <= box.maxZ + margin\n", "\t\tand z <= box.maxZ\n"),
+    "k7 scene: another plan hash builds": (SCENE_PLAN, "\tif read.planHash ~= hash then\n", "\tif false then\n"),
+    "k7 scene: a missing list builds": (SCENE_PLAN, "\t\tif not isList(read[field]) then\n", "\t\tif false then\n"),
+    "k7 scene: another frame builds": (SCENE_PLAN, "\tif read.frame ~= ScenePlan.FRAME then\n", "\tif false then\n"),
+    "k7 scene: the key ignores the hash": (SCENE_PLAN, 'then `{dress}\\0{tostring(hash)}` else ""', 'then `{dress}` else ""'),
+    "k7 scene: Rgb takes any number": (SCENE_PLAN, "channel ~= channel or channel < 0 or channel > 255 then", "channel ~= channel then"),
+    "k7 scene: the groups built backward": (SCENE_PLAN, "\t\t\treturn ra < rb\n", "\t\t\treturn ra > rb\n"),
+    "k7 scene: the none answer not kept": (SCENE_PLAN, '\t\treturn { action = "none", keep = true }\n', '\t\treturn { action = "none", keep = false }\n'),
+}
+assert not set(K7_SCENE_MUTATIONS) & set(MUTATIONS), sorted(set(K7_SCENE_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_SCENE_MUTATIONS)
+
+# K7, K8, K9 on the client (ui-engineer A) and the seat in the client's aim (ui-engineer B, the review's
+# slice 3 m3, s1), K4, K5 (Figures): caught only by run_harness.py's L4W2_LINES / L4W2_ORDER pins.
+SEAL = "\t\tpart.Anchored = true\n\t\tpart.CanCollide = false\n\t\tpart.CanQuery = false\n\t\tpart.CanTouch = false\n"
+FAIL_PATH = "\tteardown()\n\tstate.failed = true\n\tapplyView()\n"
+SIGHTS_TAKEN = "\t\t\tif found then\n\t\t\t\treturn\n\t\t\tend\n"
+REACH_TAKEN = "\t\t\tif taken and found then\n\t\t\t\treturn\n\t\t\tend\n"
+AIM_BODY_LINE = "\t\t\tlocal body = position + Vector3.new(0, math.max(height * HALF - drop, radius), 0)\n"
+AIM_HEAD_LINE = "\t\t\tlocal head = position + Vector3.new(0, height - headRadius - drop, 0)\n"
+K7_CLIENT_PIN_MUTATIONS = {
+    "k7 client pins: a scenery part not anchored": (LEVEL_SCENERY, SEAL, SEAL.replace("Anchored = true", "Anchored = false")),
+    "k7 client pins: a scenery part collides": (LEVEL_SCENERY, SEAL, SEAL.replace("CanCollide = false", "CanCollide = true")),
+    "k7 client pins: a scenery part stops rays": (LEVEL_SCENERY, SEAL, SEAL.replace("CanQuery = false", "CanQuery = true")),
+    "k7 client pins: a scenery part touches": (LEVEL_SCENERY, SEAL, SEAL.replace("CanTouch = false", "CanTouch = true")),
+    "k7 client pins: a failed client not marked": (LEVEL_SCENERY, FAIL_PATH, "\tteardown()\n\tapplyView()\n"),
+    "k7 client pins: a failed client marked as not failed": (LEVEL_SCENERY, FAIL_PATH, FAIL_PATH.replace("failed = true", "failed = false")),
+    "k7 client pins: a failed client shows nothing": (LEVEL_SCENERY, FAIL_PATH, "\tteardown()\n\tstate.failed = true\n"),
+    "k7 client pins: a hidden part shown invisible": (LEVEL_SCENERY, "paint(child :: BasePart, 0, nil)", "paint(child :: BasePart, 1, nil)"),
+    "k7 client pins: no wall drawn": (LEVEL_SCENERY, '\tif show.walls ~= "none" and isWall(child) then\n', "\tif false and isWall(child) then\n"),
+    "k7 client pins: the view forgets the failure": (LEVEL_SCENERY, "\tlocal show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)\n\tlocal folder = state.folder\n", "\tlocal show = ScenePlan.Show(state.dress ~= nil, false, state.view)\n\tlocal folder = state.folder\n"),
+    "k7 client pins: a later child forgets the failure": (LEVEL_SCENERY, "\tlocal show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)\n\tshowChild(show, child", "\tlocal show = ScenePlan.Show(state.dress ~= nil, false, state.view)\n\tshowChild(show, child"),
+    "k7 client pins: the view shows no child": (LEVEL_SCENERY, "\t\tshowChild(show, child, greyColor)\n", ""),
+    "k7 client pins: a later child not shown": (LEVEL_SCENERY, '\tshowChild(show, child, if show.walls == "grey" then greyWallColor() else nil)\n', ""),
+    "k7 client pins: a build's throw ignored": (LEVEL_SCENERY, "\tif not ok and generation == state.generation then\n", "\tif false then\n"),
+    "k7 client pins: the build not under its pcall": (LEVEL_SCENERY, "\tlocal ok, problem = pcall(function()\n\t\tbuildSteps(generation, dress, folder)\n\tend)\n", "\tbuildSteps(generation, dress, folder)\n\tlocal ok, problem = true, nil\n"),
+    "k7 client pins: the thread skips the pcall": (LEVEL_SCENERY, "\ttask.spawn(build, state.generation, dress, folder)\n", "\ttask.spawn(buildSteps, state.generation, dress, folder)\n"),
+    "k7 client pins: a start's throw not failed": (LEVEL_SCENERY, "\t\tfail(`the scenery could not start ({tostring(problem)})`)\n", ""),
+    "k7 client pins: decided before the place loaded": (LEVEL_SCENERY, "game:IsLoaded(), Catalog.GetLevelDress)", "true, Catalog.GetLevelDress)"),
+    "k7 client pins: a nil answer kept": (LEVEL_SCENERY, "\tstate.builtKey = if decision.keep then key else nil\n", "\tstate.builtKey = if decision.keep then key else key\n"),
+    "k7 client pins: a word read once whatever it was": (LEVEL_SCENERY, "\tif key == state.builtKey then\n", "\tif false then\n"),
+    "k7 client pins: a fail answer not failed": (LEVEL_SCENERY, '\t\tfail(decision.reason or "the dress cannot be drawn")\n', "\t\tapplyView()\n"),
+    "k7 client pins: the place never awaited": (LEVEL_SCENERY, "\t\t\tawaitLoaded()\n", ""),
+    "k7 client pins: the wait does not wait": (LEVEL_SCENERY, "\t\tif not game:IsLoaded() then\n\t\t\tgame.Loaded:Wait()\n", "\t\tif false then\n\t\t\tgame.Loaded:Wait()\n"),
+    "k7 client pins: the word not read again after loading": (LEVEL_SCENERY, "\t\tevaluate()\n", ""),
+    "k7 client pins: fires on a low-end device": (LEVEL_SCENERY, "ScenePlan.Jobs(dress, Theme.lowEndDevice)", "ScenePlan.Jobs(dress, false)"),
+    "k9 client pins: the camera never told": (LEVEL_SCENERY, '\tCameraController.SetDressed(typeof(name) == "string")\n', "\tCameraController.SetDressed(false)\n"),
+    "k9 client pins: a detached level still dressed": (LEVEL_SCENERY, "\tCameraController.SetDressed(false)\n", ""),
+    "k8 client pins: mood B in the lobby": (LEVEL_SCENERY, "state.moodWanted, bodyInLobby())", "state.moodWanted, false)"),
+    "k8 client pins: the lobby box with no margin": (LEVEL_SCENERY, "point.Z, boxMargin())", "point.Z, 0)"),
+    "k8 client pins: no placement heard": (LEVEL_SCENERY, "\tCameraController.OnPlaced(onPlaced)\n", ""),
+    "k8 client pins: a placement never in the lobby": (LEVEL_SCENERY, "\tstate.inLobby = inLobbyAt(position)\n", "\tstate.inLobby = false\n"),
+    "k9 client pins: the summary drops the camera in a dressed level": (CAMERA_CONTROLLER, "\t\tand DEFAULT_CAMERA_PHASES[phase] == true\n\t\tand not levelDressed\n", "\t\tand DEFAULT_CAMERA_PHASES[phase] == true\n"),
+    "k9 client pins: SetDressed writes nothing": (CAMERA_CONTROLLER, "\tlevelDressed = dressed\n", "\tlevelDressed = false\n"),
+    # The seat in the client's aim (ui-engineer B's lines and mutants).
+    "l4w2 aim: a refused body's sphere not lowered": (INPUT, "then math.max(height * HALF - drop, radius)", "then math.max(height * HALF, radius)"),
+    "l4w2 aim: a refused body's sphere under its foot": (INPUT, "then math.max(height * HALF - drop, radius)", "then height * HALF - drop"),
+    "l4w2 aim: a refused head standing": (INPUT, "else height - headRadius - drop", "else height - headRadius"),
+    "l4w2 aim: the assist's body sphere not lowered": (INPUT, SIGHTS_TAKEN + AIM_BODY_LINE, SIGHTS_TAKEN + AIM_BODY_LINE.replace("height * HALF - drop", "height * HALF")),
+    "l4w2 aim: the assist's body sphere under its foot": (INPUT, SIGHTS_TAKEN + AIM_BODY_LINE, SIGHTS_TAKEN + AIM_BODY_LINE.replace("math.max(height * HALF - drop, radius)", "height * HALF - drop")),
+    "l4w2 aim: the assist's head standing": (INPUT, AIM_HEAD_LINE + "\t\t\tfound = sphereInSights(", AIM_HEAD_LINE.replace(" - drop, 0)", ", 0)") + "\t\t\tfound = sphereInSights("),
+    "l4w2 aim: the melee reach's body sphere not lowered": (INPUT, REACH_TAKEN + AIM_BODY_LINE, REACH_TAKEN + AIM_BODY_LINE.replace("height * HALF - drop", "height * HALF")),
+    "l4w2 aim: the melee reach's head standing": (INPUT, AIM_HEAD_LINE + "\t\t\tlocal inside = inMeleeShape(", AIM_HEAD_LINE.replace(" - drop, 0)", ", 0)") + "\t\t\tlocal inside = inMeleeShape("),
+    "l4w2 aim: the assist's CrowdRay not told the drop": (INPUT, "\t\t\t\theadRadius,\n\t\t\t\tdrop\n\t\t\t)", "\t\t\t\theadRadius,\n\t\t\t\t0\n\t\t\t)"),
+    "l4w2 aim: ForEach hands no drop": (CROWD_RENDERER, "\t\t\t\tHitShapes.SeatDrop(entity.height, entity.seat, poseConsts.restDrop)\n", "\t\t\t\t0\n"),
+    # Figures (K4, K5).
+    "k5 figures: a head off the axis taken (x)": (FIGURES, "\t\tmath.abs(head[1]) > HEAD_EPSILON\n", "\t\tfalse\n"),
+    "k5 figures: a head off the scored height taken": (FIGURES, "\t\tor math.abs(head[2] - scored) > HEAD_EPSILON\n", "\t\tor false\n"),
+    "k5 figures: a head off the axis taken (z)": (FIGURES, "\t\tor math.abs(head[3]) > HEAD_EPSILON\n", "\t\tor false\n"),
+    "k5 figures: the scored head at the top": (FIGURES, "\tlocal scored = def.height - def.headRadius\n", "\tlocal scored = def.height\n"),
+    "k5 figures: a stud off is near enough": (FIGURES, "local HEAD_EPSILON = 0.01\n", "local HEAD_EPSILON = 1\n"),
+    "k4 figures: the anchor not on the body": (FIGURES, "\tframes[count] = root * frameOf(rigOut.anchor)\n", "\tframes[count] = frameOf(rigOut.anchor)\n"),
+    "k4 figures: the lean's halves swapped": (FIGURES, "\tpose.lean, pose.leanSide = RaiderPose.Lean(yaw, lean.X, lean.Z)\n", "\tpose.leanSide, pose.lean = RaiderPose.Lean(yaw, lean.X, lean.Z)\n"),
+}
+assert not set(K7_CLIENT_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(K7_CLIENT_PIN_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_CLIENT_PIN_MUTATIONS)
+
+# The review's slice 1 m2: Accept's three guards that no case reached (tests_l4w2.luau's shapes group
+# now does), and slice 2 s1's generation check in the scenery's build (a pin).
+K7_LATE_MUTATIONS = {
+    "k7 dress: hide.blocks need not be a list": (LEVEL_DRESS, '\tif type(hideBlocks) ~= "table" then\n', "\tif false then\n"),
+    "k7 dress: hide.camps need not be a table": (LEVEL_DRESS, '\tif type(hideCamps) ~= "table" then\n', "\tif false then\n"),
+    "k7 dress: a camp's roles need not be a list": (LEVEL_DRESS, '\t\tif type(list) ~= "table" then\n', "\t\tif false then\n"),
+    "k7 client pins: an outlived build goes on": (
+        LEVEL_SCENERY, "\t\t\tif generation ~= state.generation then\n\t\t\t\treturn\n\t\t\tend\n\t\t\tstarted = os.clock()",
+        "\t\t\tif false then\n\t\t\t\treturn\n\t\t\tend\n\t\t\tstarted = os.clock()"),
+}
+assert not set(K7_LATE_MUTATIONS) & set(MUTATIONS), sorted(set(K7_LATE_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_LATE_MUTATIONS)
+
 
 
 def harness(root: Path) -> tuple:

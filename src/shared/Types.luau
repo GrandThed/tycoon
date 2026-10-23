@@ -2614,8 +2614,10 @@ export type LevelLayout = {
 -- tools/levels/forest.py. The game reads only the fields below; the file's others (`units`,
 -- `triangles`, `palette*`, `textures`, `bakedPieces`, `propPieces`, a prop's tags but `with`,
 -- `hide.keep`) are the tools'. `frame` must be "level" (world studs). The server accepts a dress
--- all or nothing (LevelDress.Accept) before it hides anything; the client draws it only on the
--- server's word (Workspace.Level's `Dress` and `DressHash`).
+-- all or nothing (LevelDress.Decide) before it hides anything; the client draws it only on the
+-- server's word (Workspace.Level's `Dress` and `DressHash`). The fix round's K7: every list below
+-- must be there and be a list, even an empty one (a level with no fire writes `"effects": []`),
+-- and every entry must have its shape; anything else is refused and the level is grey.
 export type LevelDress = {
 	version: number,
 	level: string,

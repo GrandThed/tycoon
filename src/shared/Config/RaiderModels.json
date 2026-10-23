@@ -12,6 +12,7 @@
     "walkFullShare": 0.5,
     "walkNearStuds": 140,
     "stepShare": 0.4,
+    "slideShare": 0.6,
     "seatLean": 0.12,
     "seatSplay": 0.14,
     "airTuck": 0.5,
@@ -269,7 +270,12 @@
           "ring": {"coil": [2.3, 0.0, 0.12], "strike": [0.79, 0.0, 0.0], "follow": [0.47, 0.0, 0.0]},
           "lane": {"coil": [1.1, 0.0, 0.0], "strike": [1.9, 0.0, 0.0], "follow": [1.2, 0.0, 0.0]},
           "summon": {"coil": [2.3, 0.0, 0.25], "strike": [3.2, 0.0, 0.3], "follow": [2.6, 0.0, 0.25]},
-          "arc": {"coil": [0.1, -0.9, 1.45], "strike": [0.4, -0.3, 1.45], "follow": [0.3, 1.1, 1.35]}
+          "arc": {
+            "coil": [-0.12, 0.86, 1.07],
+            "strike": [0.4, -0.3, 1.45],
+            "follow": [-0.19, 1.71, 1.69],
+            "steady": true
+          }
         }
       },
       "headMeshCentre": [0.0, 12.4, 0.0],
@@ -291,12 +297,12 @@
       "cue": {"piece": "torso", "point": "core", "size": 1.6, "charged": 2.6},
       "notes": {"headShift": [0.0, 0.11, 0.02], "inHead": 0.82},
       "posedReach": {
-        "out": 17.1,
-        "outRadii": 4.274,
+        "out": 14.53,
+        "outRadii": 3.633,
         "up": 24.13,
-        "outPose": "arc attack (arm)",
+        "outPose": "arc windup (arm)",
         "upPose": "ring windup (arm)",
-        "withCue": {"out": 17.1, "up": 24.13}
+        "withCue": {"out": 14.53, "up": 24.13}
       }
     },
     "fodder": {
@@ -367,7 +373,7 @@
         "seat": [0.67, 0.0, -0.08],
         "slump": [0.18, 0.0, 0.05],
         "shapes": {
-          "lunge": {"coil": [1.85, 0.25, 0.25], "strike": [0.85, -0.15, -0.1], "follow": [0.1, -0.1, 0.0]}
+          "lunge": {"coil": [1.85, 0.25, 0.25], "strike": [1.1, -0.15, -0.1], "follow": [0.1, -0.1, 0.0]}
         }
       },
       "headMeshCentre": [0.0, 4.3, 0.0],
@@ -376,10 +382,10 @@
       "reachRadii": 1.425,
       "triangles": 792,
       "meshParts": 11,
-      "notes": {"headShift": [0.0, -0.01, 0.073], "inHead": 0.793},
+      "notes": {"headShift": [0.0, -0.01, 0.073], "inHead": 0.758},
       "posedReach": {
-        "out": 2.66,
-        "outRadii": 2.044,
+        "out": 3.86,
+        "outRadii": 2.967,
         "up": 5.58,
         "outPose": "lunge windup (arm)",
         "upPose": "lunge windup (arm)"

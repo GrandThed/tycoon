@@ -1787,6 +1787,24 @@ function StageFlow.Ceiling(camp: Types.LevelCamp, triggerHeight: number): number
 	return triggerHeight
 end
 
+-- The L4 W2 fix round's K3 (the lobby fill): the most bodies of each kind any one of `kinds`
+-- fields, where each entry is one plan's `kinds` (WaveService hands in every built level's plan at
+-- every difficulty, so the lobby's RunState.prewarm covers whichever run the leader starts). A new
+-- table; nil when no entry fields a body.
+function StageFlow.MostKinds(kinds: { { [string]: number } }): { [string]: number }?
+	local most: { [string]: number } = {}
+	local any = false
+	for _, counts in kinds do
+		for kind, count in counts do
+			if count > (most[kind] or 0) then
+				most[kind] = count
+				any = true
+			end
+		end
+	end
+	return if any then most else nil
+end
+
 -- The level as the run walks it, at one difficulty: a zone for every camp of the layout (its
 -- floor index is its place in `layout.camps`), the stages, every resident group, every tent and
 -- the population. `ranks` (the place of every difficulty in Expeditions.json) decides which

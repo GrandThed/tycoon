@@ -142,8 +142,19 @@ function L4W.dress(): any
 		planHash = L4W.HASH,
 		frame = "level",
 		meshes = { { name = "Ground", group = "ground" }, { name = "Trees", group = "canopy" } },
-		props = {},
-		effects = {},
+		props = {
+			{ piece = "Campfire", x = -5, y = 8, z = 95, yaw = 30, scale = 1 },
+			{
+				piece = "Bramble",
+				x = -20,
+				y = 8,
+				z = 50,
+				yaw = -12.5,
+				scale = 1.3,
+				with = "Bramble",
+			},
+		},
+		effects = { { kind = "fire", x = -5, y = 8.6, z = 95 } },
 		barriers = { { name = "TreeLine1", x = 30, y = 20, z = 50, sx = 4, sy = 40, sz = 60 } },
 		hide = {
 			blocks = { "Road1", "Wall1" },
@@ -276,6 +287,12 @@ function L4W.acceptTests(): ()
 	check(
 		accepted.looks.water ~= nil and accepted.looks.water.transparency == 0.3,
 		"l4w2 dress: the dress's looks come back to be laid over"
+	)
+	check(
+		type(accepted.word) == "table"
+			and accepted.word.layout == L4W.LAYOUT
+			and accepted.word.planHash == L4W.HASH,
+		"l4w2 dress: the answer carries the word, the layout asked for and the uploaded hash (K7)"
 	)
 	local _, tight = L4W.accept({ pieces = pieces, max = #pieces })
 	local fits = L4W.accept({ pieces = pieces, max = #pieces + 1 })
@@ -416,6 +433,335 @@ function L4W.refusalTests(): ()
 end
 L4W.group("refusals", L4W.refusalTests)
 
+-- K7 (slice 1 m2, slice 2 m1): every shape LevelService, LevelScenery or Accept itself iterates is
+-- refused when it is not one, never thrown on.
+function L4W.shapeTests(): ()
+	print(" LevelDress.Accept: every malformed shape is a refusal (K7)")
+	L4W.refused("hide.blocks that is no list", {
+		dress = L4W.edited(function(dress)
+			dress.hide.blocks = 5
+		end),
+	}, "hide.blocks is not a list")
+	L4W.refused("hide.blocks holding a number", {
+		dress = L4W.edited(function(dress)
+			table.insert(dress.hide.blocks, 7)
+		end),
+	}, "not a block's name")
+	L4W.refused("hide.camps that is no table", {
+		dress = L4W.edited(function(dress)
+			dress.hide.camps = "x"
+		end),
+	}, "hide.camps is not a table")
+	L4W.refused("a camp's role list that is no list", {
+		dress = L4W.edited(function(dress)
+			dress.hide.camps.A = 5
+		end),
+	}, "hide.camps.A is not a list of roles")
+	L4W.refused("a hide.camps key that is no camp id", {
+		dress = L4W.edited(function(dress)
+			dress.hide.camps[1] = { "floor" }
+		end),
+	}, "not a camp id")
+	L4W.refused("no props", {
+		dress = L4W.edited(function(dress)
+			dress.props = nil
+		end),
+	}, "props are not a list")
+	L4W.refused("props that are no list", {
+		dress = L4W.edited(function(dress)
+			dress.props = "trees"
+		end),
+	}, "props are not a list")
+	for _, case in
+		{
+			{ "a prop that is no table", nil, 4, "prop 2 is not a table" },
+			{ "a prop naming no piece", "piece", nil, "prop 2 names no piece" },
+			{ "a prop naming an empty piece", "piece", "", "prop 2 names no piece" },
+			{ "a prop at NaN", "x", 0 / 0, "prop 2 has a place or a turn" },
+			{ "a prop with no height", "y", nil, "prop 2 has a place or a turn" },
+			{ "a prop at infinity", "z", -math.huge, "prop 2 has a place or a turn" },
+			{ "a prop with no turn", "yaw", nil, "prop 2 has a place or a turn" },
+			{ "a prop of scale 0", "scale", 0, "prop 2 has a scale" },
+			{ "a prop of a negative scale", "scale", -1, "prop 2 has a scale" },
+			{ "a prop with no scale", "scale", nil, "prop 2 has a scale" },
+			{ "a prop of a NaN scale", "scale", 0 / 0, "prop 2 has a scale" },
+			{ "a prop with an empty with", "with", "", "prop 2 stands with something" },
+			{ "a prop with a number for with", "with", 3, "prop 2 stands with something" },
+		}
+	do
+		L4W.refused(case[1], {
+			dress = L4W.edited(function(dress)
+				if case[2] == nil then
+					dress.props[2] = case[3]
+				else
+					dress.props[2][case[2]] = case[3]
+				end
+			end),
+		}, case[4])
+	end
+	L4W.refused("no effects", {
+		dress = L4W.edited(function(dress)
+			dress.effects = nil
+		end),
+	}, "effects are not a list")
+	L4W.refused("effects that are no list", {
+		dress = L4W.edited(function(dress)
+			dress.effects = true
+		end),
+	}, "effects are not a list")
+	for _, case in
+		{
+			{ "an effect that is no table", nil, "fire", "effect 1 is not a table" },
+			{ "an effect with no kind", "kind", nil, "effect 1 has no kind" },
+			{ "an effect of an empty kind", "kind", "", "effect 1 has no kind" },
+			{ "an effect at NaN", "y", 0 / 0, "effect 1 has a place" },
+			{ "an effect with no x", "x", nil, "effect 1 has a place" },
+			{ "an effect at infinity", "z", math.huge, "effect 1 has a place" },
+		}
+	do
+		L4W.refused(case[1], {
+			dress = L4W.edited(function(dress)
+				if case[2] == nil then
+					dress.effects[1] = case[3]
+				else
+					dress.effects[1][case[2]] = case[3]
+				end
+			end),
+		}, case[4])
+	end
+	local quiet, quietWhy = L4W.accept({
+		dress = L4W.edited(function(dress)
+			dress.props = {}
+			dress.effects = {}
+		end),
+	})
+	check(
+		quiet ~= nil,
+		`l4w2 dress: empty props and effects are lists, and accepted ({tostring(quietWhy)})`
+	)
+	local other, otherWhy = L4W.accept({
+		dress = L4W.edited(function(dress)
+			dress.effects[1].kind = "smoke"
+			dress.props[1].with = nil
+		end),
+	})
+	check(
+		other ~= nil,
+		`l4w2 dress: an effect of another kind and a prop with no with are sound ({tostring(
+			otherWhy
+		)})`
+	)
+end
+L4W.group("shapes", L4W.shapeTests)
+
+-- K7: the Ask Decide judges, as LevelService.dressOf gathers it; `over` replaces any field by name
+-- (false stands for nil).
+function L4W.ask(over: any?): any
+	local ask: any = {
+		dress = L4W.dress(),
+		uploadedHash = L4W.HASH,
+		failLever = false,
+		templates = { Ground = { "rbxassetid://11" }, Trees = { "rbxassetid://12" } },
+		layout = L4W.layout(),
+		pieces = L4W.pieces(),
+		found = nil,
+		groupsOk = true,
+		maxParts = 600,
+		layoutName = L4W.LAYOUT,
+	}
+	for key, value in over or {} do
+		ask[key] = if value == false
+				and key ~= "failLever"
+				and key ~= "groupsOk"
+			then nil
+			else value
+	end
+	return ask
+end
+
+function L4W.decideTests(): ()
+	local Dress = L4W.Dress
+	print(" LevelDress.Decide, Present, Lay: the build's one decision (K7)")
+	local accepted, reason = Dress.Decide(L4W.ask())
+	check(
+		accepted ~= nil and reason == nil,
+		`l4w2 decide: the fixture is dressed ({tostring(reason)})`
+	)
+	if accepted == nil then
+		return
+	end
+	check(
+		accepted.word.layout == L4W.LAYOUT and accepted.word.planHash == L4W.HASH,
+		"l4w2 decide: the answer carries the word (Dress = the layout, DressHash = the uploaded hash)"
+	)
+	local direct = L4W.accept()
+	local same = direct ~= nil and #direct.walls == #accepted.walls
+	if direct ~= nil then
+		for name in direct.hidden do
+			same = same and accepted.hidden[name] == true
+		end
+		for name in accepted.hidden do
+			same = same and direct.hidden[name] == true
+		end
+	end
+	check(same, "l4w2 decide: and is Accept's answer, the same walls and hidden pieces")
+
+	-- The Z lever.
+	local levered, leverWhy = Dress.Decide(L4W.ask({ failLever = true }))
+	check(
+		levered == nil and L4W.has(leverWhy, "plan hash") and L4W.has(leverWhy, Dress.FAILED_HASH),
+		`l4w2 decide: the Z lever hands Accept its own hash, refused as another plan's ({tostring(
+			leverWhy
+		)})`
+	)
+	check(
+		type(Dress.FAILED_HASH) == "string"
+			and Dress.FAILED_HASH ~= L4W.HASH
+			and string.match(Dress.FAILED_HASH, "^%x+$") == nil,
+		"l4w2 decide: the lever's hash can never be an uploaded one (a plan hash is hex)"
+	)
+	local _, noUpload = Dress.Decide(L4W.ask({ uploadedHash = false }))
+	check(
+		L4W.has(noUpload, "no meshes are uploaded"),
+		`l4w2 decide: no uploaded hash is refused ({tostring(noUpload)})`
+	)
+
+	-- Templates: present only with a mesh.
+	for _, case in
+		{
+			{ "a template holding no MeshPart", {} },
+			{ "a template whose MeshId is empty", { "" } },
+			{ "a template whose MeshId is the never-uploaded 0", { "rbxassetid://0" } },
+		}
+	do
+		local _, why = Dress.Decide(L4W.ask({
+			templates = { Ground = { "rbxassetid://11" }, Trees = case[2] },
+		}))
+		check(
+			L4W.has(why, 'the mesh "Trees" has no template'),
+			`l4w2 decide: {case[1]} is no template ({tostring(why)})`
+		)
+	end
+	local _, missing = Dress.Decide(L4W.ask({ templates = { Ground = { "rbxassetid://11" } } }))
+	check(
+		L4W.has(missing, 'the mesh "Trees" has no template'),
+		`l4w2 decide: a mesh with no Model is refused ({tostring(missing)})`
+	)
+	local mixed, mixedWhy = Dress.Decide(L4W.ask({
+		templates = { Ground = { "rbxassetid://11" }, Trees = { "", "rbxassetid://12" } },
+	}))
+	check(mixed ~= nil, `l4w2 decide: one MeshPart with a mesh is enough ({tostring(mixedWhy)})`)
+	local present = Dress.Present({
+		A = { "rbxassetid://5" },
+		B = {},
+		C = { "" },
+		D = { "rbxassetid://0" },
+		E = { "", "rbxassetid://7" },
+		F = { 5 :: any },
+	})
+	check(
+		L4W.stock(present) == "A true, E true",
+		`l4w2 decide: Present names the Models holding a mesh ({L4W.stock(present)})`
+	)
+
+	-- A throw is a refusal (slice 1 m2): a piece with no name, a dress that errors when read.
+	local thrown, thrownWhy = Dress.Decide(L4W.ask({ pieces = { { role = "block" } } }))
+	check(
+		thrown == nil and L4W.has(thrownWhy, "could not be read"),
+		`l4w2 decide: Accept throwing is a refusal, not a throw ({tostring(thrownWhy)})`
+	)
+	local cursed = setmetatable({}, {
+		__index = function(): any
+			error("cursed dress")
+		end,
+	})
+	local _, cursedWhy = Dress.Decide(L4W.ask({ dress = cursed }))
+	check(
+		L4W.has(cursedWhy, "could not be read") and L4W.has(cursedWhy, "cursed dress"),
+		`l4w2 decide: and names the error ({tostring(cursedWhy)})`
+	)
+
+	-- The found shortcuts become the names left out (L2-36).
+	local named = L4W.edited(function(dress)
+		table.insert(dress.hide.blocks, "Bramble")
+	end)
+	local withCave = L4W.pieces({ cave = true })
+	local left, leftWhy =
+		Dress.Decide(L4W.ask({ dress = named, pieces = withCave, found = { cave = true } }))
+	check(
+		left ~= nil and left.hidden.Bramble == nil,
+		`l4w2 decide: a found shortcut leaves its block's name out ({tostring(leftWhy)})`
+	)
+	local _, notFound = Dress.Decide(L4W.ask({ dress = named, pieces = withCave }))
+	check(
+		L4W.has(notFound, "no block of the level"),
+		`l4w2 decide: with nothing found the same name is refused ({tostring(notFound)})`
+	)
+
+	-- The rest of the ask reaches Accept.
+	local _, noGroups = Dress.Decide(L4W.ask({ groupsOk = false }))
+	check(L4W.has(noGroups, "collision groups"), "l4w2 decide: the groups are asked")
+	local _, tooMany = Dress.Decide(L4W.ask({ maxParts = 3 }))
+	check(L4W.has(tooMany, "over levels.maxParts"), "l4w2 decide: maxParts is asked")
+	local _, otherName = Dress.Decide(L4W.ask({ layoutName = "Other" }))
+	check(L4W.has(otherName, "is for the layout"), "l4w2 decide: the layout's own name is asked")
+	local _, noDress = Dress.Decide(L4W.ask({ dress = false }))
+	check(L4W.has(noDress, "no dress file"), "l4w2 decide: no dress file is refused")
+end
+L4W.group("decide", L4W.decideTests)
+
+function L4W.layTests(): ()
+	local Dress = L4W.Dress
+	print(" LevelDress.Lay: what is built")
+	local pieces = L4W.pieces()
+	local count = #pieces
+	local base = {
+		water = { material = "Glass", color = { 1, 2, 3 } },
+		ground = { material = "Grass", color = { 4, 5, 6 } },
+	}
+	local grey = Dress.Lay(pieces, base, nil)
+	check(
+		grey.pieces == pieces
+			and next(grey.hidden) == nil
+			and grey.looks == base
+			and grey.word == nil,
+		"l4w2 lay: grey is the pieces themselves, nothing hidden, the base looks and no word"
+	)
+	check(Dress.Lay(pieces, nil, nil).looks == nil, "l4w2 lay: grey with no base has no looks")
+	local accepted = Dress.Decide(L4W.ask({ pieces = pieces }))
+	if accepted == nil then
+		check(false, "l4w2 lay: the fixture is dressed")
+		return
+	end
+	local laid = Dress.Lay(pieces, base, accepted)
+	local walls = accepted.walls
+	local order = #laid.pieces == count + #walls and #walls >= 1
+	for index = 1, count do
+		order = order and laid.pieces[index] == pieces[index]
+	end
+	for index, wall in walls do
+		order = order and laid.pieces[count + index] == wall
+	end
+	check(order, "l4w2 lay: dressed, the pieces then the walls, in order")
+	check(
+		laid.pieces ~= pieces and #pieces == count,
+		"l4w2 lay: in a new list (the layout's pieces are not changed)"
+	)
+	check(laid.hidden == accepted.hidden, "l4w2 lay: the pieces a mesh draws over are hidden")
+	check(
+		laid.looks ~= nil
+			and laid.looks.water == accepted.looks.water
+			and laid.looks.ground == base.ground
+			and base.water.material == "Glass",
+		"l4w2 lay: the dress's looks laid over the base, the base unchanged"
+	)
+	check(
+		laid.word ~= nil and laid.word.layout == L4W.LAYOUT and laid.word.planHash == L4W.HASH,
+		"l4w2 lay: and the word to set"
+	)
+end
+L4W.group("lay", L4W.layTests)
+
 function L4W.helperTests(): ()
 	local Dress = L4W.Dress
 	print(" LevelDress.LeftOut, Overlay")
@@ -475,8 +821,10 @@ function L4W.shippedTests(): ()
 	local rules = FIXTURES.combat.levels
 	local sizes = Geo.SizesOf(FIXTURES.expeditions, rules)
 	local have = {}
-	for _, mesh in dress.meshes do
+	local templates = {}
+	for index, mesh in dress.meshes do
 		have[mesh.name] = true
+		templates[mesh.name] = { `rbxassetid://{index}` }
 	end
 	for _, open in { {}, { cave = true } } do
 		local pieces = Geo.Pieces(layout, sizes, rules.maxParts, open)
@@ -513,6 +861,32 @@ function L4W.shippedTests(): ()
 		check(
 			hiddenRight,
 			`l4w2 shipped: nothing hidden is a gate, a checkpoint, a wall, a secret, a sign, ice or a reactive block ({label})`
+		)
+		-- K7: as LevelService.dressOf asks it (the found shortcut's id, every template with a mesh).
+		local decided, decidedWhy = Dress.Decide({
+			dress = dress,
+			uploadedHash = hash,
+			failLever = false,
+			templates = templates,
+			layout = layout,
+			pieces = pieces,
+			found = open,
+			groupsOk = true,
+			maxParts = rules.maxParts,
+			layoutName = name,
+		})
+		local laid = if decided ~= nil
+			then Dress.Lay(pieces, FIXTURES.expeditions.looks, decided)
+			else nil
+		check(
+			laid ~= nil
+				and laid.word ~= nil
+				and laid.word.layout == name
+				and laid.word.planHash == hash
+				and #laid.pieces == #pieces + #dress.barriers,
+			`l4w2 shipped: Decide dresses it and Lay builds the pieces and the walls, word "{name}" ({label}, {tostring(
+				decidedWhy
+			)})`
 		)
 	end
 	check(
@@ -740,6 +1114,77 @@ function L4W.shippedKindsTests(): ()
 	end
 end
 L4W.group("shipped kinds", L4W.shippedKindsTests)
+
+-- K3 (the lobby fill): the lobby's RunState.prewarm is StageFlow.MostKinds over every built level's
+-- plan at every difficulty (WaveService.refreshLobbyKinds; its loop is run_harness.py's pins).
+function L4W.lobbyKindsTests(): ()
+	local Flow, Geo = L4W.Flow, L4W.Geo
+	print(" StageFlow.MostKinds: the lobby's prewarm (K3)")
+	local a = { fodder = 3, brute = 1 }
+	local b = { fodder = 2, slinger = 4 }
+	local most = Flow.MostKinds({ a, b, {} })
+	check(
+		L4W.stock(most) == "brute 1, fodder 3, slinger 4",
+		`l4w2 lobby: each kind's most over the plans, every kind kept ({L4W.stock(most)})`
+	)
+	check(
+		most ~= a
+			and most ~= b
+			and L4W.stock(a) == "brute 1, fodder 3"
+			and L4W.stock(b) == "fodder 2, slinger 4",
+		"l4w2 lobby: a new table, the plans' own kinds unchanged"
+	)
+	check(
+		L4W.stock(Flow.MostKinds({ b, a })) == "brute 1, fodder 3, slinger 4",
+		"l4w2 lobby: whatever the order of the plans"
+	)
+	check(
+		Flow.MostKinds({}) == nil and Flow.MostKinds({ {}, { fodder = 0 } }) == nil,
+		"l4w2 lobby: no plan, or none fielding a body, sends nothing"
+	)
+	-- The shipped levels, every difficulty, planned as WaveService plans them.
+	local rules = FIXTURES.combat.levels
+	local ranks = {}
+	for index, name in FIXTURES.expeditions.difficulties do
+		ranks[name] = index
+	end
+	local crowdKinds = FIXTURES.proving.crowd.kinds
+	local found, want, plans = {}, {}, 0
+	for _, file in FIXTURES.levels do
+		local layout = FIXTURES.layouts[file.layout]
+		local level = Flow.Resolve(file, FIXTURES.combat.director.runCapSeconds)
+		if layout == nil or level == nil then
+			continue
+		end
+		local bounds = Geo.Bounds(layout, rules.floorThickness)
+		for _, difficulty in FIXTURES.expeditions.difficulties do
+			if level.difficulties[difficulty] == nil then
+				continue
+			end
+			local plan = Flow.Plan(level, layout, difficulty, rules, bounds, ranks, crowdKinds)
+			if plan ~= nil then
+				plans += 1
+				table.insert(found, plan.kinds)
+				for kind, count in plan.kinds do
+					want[kind] = math.max(want[kind] or 0, count)
+				end
+			end
+		end
+	end
+	local lobby = Flow.MostKinds(found)
+	check(
+		plans >= 3 and lobby ~= nil and L4W.stock(lobby) == L4W.stock(want),
+		`l4w2 lobby: the shipped lobby prewarms {L4W.stock(lobby)} ({plans} plans)`
+	)
+	local covers = lobby ~= nil
+	for _, kinds in found do
+		for kind, count in kinds do
+			covers = covers and lobby ~= nil and (lobby[kind] or 0) >= count
+		end
+	end
+	check(covers, "l4w2 lobby: at least every plan's own count of every kind")
+end
+L4W.group("lobby kinds", L4W.lobbyKindsTests)
 
 -- The seat -------------------------------------------------------------------------------------------
 
