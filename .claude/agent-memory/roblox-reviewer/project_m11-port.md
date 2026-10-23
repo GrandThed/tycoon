@@ -1,6 +1,6 @@
 ---
 name: m11-port
-description: M11 port review (feature unlocks + 6-plot hub ported onto main as profile v9, 2026-10-23) - slice S 0C/0M/4m/3s; blanket-rename into the other place's same-named module, order-vs-features silent hide, plotless overflow at 6 plots, FeatureService unharnessed; verified facts and the scratch harness recipe
+description: M11 port review (feature unlocks + 6-plot hub ported onto main as profile v9, 2026-10-23) - slice S 0C/0M/4m/3s; fix diff 0C/0M/2m/3s (kick on a bool that also means no-state; pinned read, unpinned write); blanket-rename into the other place's same-named module, order-vs-features silent hide, plotless overflow at 6 plots, FeatureService unharnessed; verified facts and the scratch harness recipe
 metadata:
   type: project
 ---
@@ -36,5 +36,27 @@ The findings are in `docs/prompts/m11-port-review/S.md`. Slice C (the client) is
 - Run `run_harness.py <tree> <main>/tools/bin/luau.exe`. It takes about 45 s and reports PASS 4,749 at 938cb39.
 - For luau-lsp, write sourcemaps to scratch (`rojo sourcemap ... -o <scratch>`) and run it from the repo root. That works
   without touching the worktree's sourcemap.json.
+
+**Fix diff (fix round 1, 4c5a22d, 2026-10-23): 0C/0M/2m/3s** in `docs/prompts/m11-port-review/fix-diff.md`.
+- **A fix that acts on a boolean that conflates two failures.** F4 made Main kick when `ClaimPlot` returns false, but false
+  also means "state nil". That happens after a session steal mid-join, or when Depart is re-tapped during a failed-teleport
+  rejoin, which releases the profile under the join's pass-refresh yield. Before F4 both were silent no-ops. Probe: for any
+  new action on a helper's result, list every branch that returns that value.
+- **A pinned read with an unpinned write.** Income now gates on the `PlotIndex` attribute. The pins held `hasPlot`'s read
+  but not ClaimPlot's `SetAttribute`, so deleting the write (nobody earns) passed the harness. With string-coupled
+  state, pin both ends.
+- **Order pins that test "after the guards" but not "before the next block".** The invite hook could move below the
+  busy/full returns, against INTERFACES M11 "whether or not the join succeeds".
+- **A mutant caught only by a throw.** The harness has no `workspace` global, so a dropped `isStudio` gate on the Workspace
+  levers "fails" only because the bundle stops.
+- **Recipe:**
+  - Review-only mutants go in a second `git archive` copy, with the driver in `scratch\drv\probe.py`.
+  - Write files back with `write_bytes`, because Python `write_text` on Windows turns LF into CRLF and stylua then flags
+    every touched file. Reading via `read_text` normalises, so harness verdicts were still valid.
+  - Stale check over the whole `mutate.py` list without running it: exec the source up to
+    "# The unmutated bundle first." (2,182 entries, 0 stale).
+  - `rojo sourcemap` fails inside an archive copy (Packages are gitignored), so run it from the worktree with
+    `-o <scratch>`.
+  - A filtered 40-entry mutate run takes about 15 min, and its log is empty until exit (buffered).
 
 See [[review-workflow]], [[l3-armory]], [[l2-secrets]].
