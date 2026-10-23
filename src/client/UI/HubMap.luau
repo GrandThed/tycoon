@@ -23,7 +23,13 @@
 --    not it was processed, and the menu opening closes the map too (as ArmoryScreen does).
 --
 -- The MapScreen is built on the first open, from Config/Expeditions as Catalog reads it then: the
--- Config folder may still be replicating when the HUD boots. No sound (L4 W3: none for the map).
+-- Config folder may still be replicating when the HUD boots. Without it the key answers with a
+-- toast (the fix round's F16), never a dead tap. No sound (L4 W3: none for the map).
+--
+-- The fix round's F11: Roblox's touch controls step aside while the map is open (UI/TouchHold;
+-- the hub's HUD and the TouchGui share DisplayOrder 0, so the jump button could take a tap on
+-- Depart). On open the host's onOpenChanged runs first, so the Armory's own R9 toggle has given
+-- back the controls before this hold puts their value aside; on close the hold goes first.
 
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -34,9 +40,11 @@ local UserInputService = game:GetService("UserInputService")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
 
 local Theme = require(script.Parent:WaitForChild("Theme"))
 local MapScreen = require(script.Parent:WaitForChild("MapScreen"))
+local TouchHold = require(script.Parent:WaitForChild("TouchHold"))
 
 export type Deps = {
 	-- ReplicatedStorage.Remotes: RequestMapState, RequestExpedition and MapState are looked up
@@ -46,7 +54,10 @@ export type Deps = {
 	isPublic: () -> boolean,
 	-- The footer button: the map closes and Party & runs opens.
 	onPartyAndRuns: () -> (),
+	-- Opening: the host closes its other sheets here (the Armory first), before the touch hold.
 	onOpenChanged: (open: boolean) -> (),
+	-- An error toast (F16: the key pressed without Config/Expeditions).
+	toast: (text: string) -> (),
 }
 
 export type Handle = {
@@ -67,6 +78,9 @@ export type Handle = {
 }
 
 local RETURN_TEXT = "Party & runs"
+local UNAVAILABLE_TEXT = "Expeditions are unavailable"
+-- This host's reason in UI/TouchHold's count.
+local TOUCH_HOLD = "hubMap"
 local KEY_HINT = "← → level · ↑ ↓ difficulty · Enter depart"
 local KEY_ACTION = "HubMapKeys"
 -- The keys bound while the map is open. A step is (dx, dy): dx the node before or after in
@@ -230,7 +244,7 @@ function HubMap.new(parent: Instance, deps: Deps): Handle
 		screen.SetState(state)
 		local map = Catalog.GetExpeditionsConfig()
 		if not view.seeded and map ~= nil then
-			local nodeId, difficulty = MapScreen.FirstPick(map.difficulties, state)
+			local nodeId, difficulty = MapRules.FirstPick(map.difficulties, state)
 			if nodeId ~= nil then
 				view.seeded = true
 				screen.Select(nodeId, difficulty)
@@ -322,10 +336,14 @@ function HubMap.new(parent: Instance, deps: Deps): Handle
 		view.open = open
 		bindKeys(open)
 		if open then
+			deps.onOpenChanged(true)
+			TouchHold.Hold(TOUCH_HOLD)
 			connectMapEvent()
 			requestState()
+		else
+			TouchHold.Release(TOUCH_HOLD)
+			deps.onOpenChanged(false)
 		end
-		deps.onOpenChanged(open)
 	end
 
 	-- The screen, built on first need; nil while Config/Expeditions is not here (warned once).
@@ -375,6 +393,8 @@ function HubMap.new(parent: Instance, deps: Deps): Handle
 		local screen = ensureScreen()
 		if screen ~= nil then
 			screen.Open()
+		else
+			deps.toast(UNAVAILABLE_TEXT)
 		end
 	end
 
@@ -427,6 +447,8 @@ function HubMap.new(parent: Instance, deps: Deps): Handle
 		Destroy = function()
 			view.departToken += 1
 			bindKeys(false)
+			-- MapScreen.Destroy reports no close, so an open map gives the controls back here.
+			TouchHold.Release(TOUCH_HOLD)
 			for _, connection in connections do
 				connection:Disconnect()
 			end

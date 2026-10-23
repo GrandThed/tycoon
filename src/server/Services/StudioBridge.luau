@@ -177,57 +177,6 @@ local function readRecord(player: Player): any?
 	return record
 end
 
-local function numberOr(value: any, fallback: number): number
-	if typeof(value) == "number" and value == value then
-		return value
-	end
-	return fallback
-end
-
--- Validated exactly like a live TeleportData summary: the transport differs, the trust does not.
--- The fields a newer combat build adds (bestWave/died at C1, mentorValor/damageShare at C2) are
--- read leniently, so an older place build only costs the line it does not send. L4 W3 (L4W3-5):
--- `title` is required (a summary without one is an older shape and reads as none); `lines` go
--- through RunLines.Read, so a bad line costs that row only.
-local function readSummary(value: any): Types.RunSummary?
-	if typeof(value) ~= "table" then
-		return nil
-	end
-	local raw = value :: any
-	if
-		typeof(raw.title) ~= "string"
-		or typeof(raw.wavesCleared) ~= "number"
-		or typeof(raw.cash) ~= "number"
-		or typeof(raw.valor) ~= "number"
-		or typeof(raw.kills) ~= "number"
-		or typeof(raw.seconds) ~= "number"
-		or typeof(raw.materials) ~= "table"
-	then
-		return nil
-	end
-	local materials: { [string]: number } = {}
-	for material, amount in raw.materials :: { [string]: any } do
-		if typeof(material) == "string" and typeof(amount) == "number" then
-			materials[material] = amount
-		end
-	end
-	local summary: Types.RunSummary = {
-		title = raw.title,
-		wavesCleared = raw.wavesCleared,
-		cash = raw.cash,
-		materials = materials,
-		valor = raw.valor,
-		kills = raw.kills,
-		seconds = raw.seconds,
-		bestWave = numberOr(raw.bestWave, 0),
-		died = raw.died == true,
-		mentorValor = numberOr(raw.mentorValor, 0),
-		damageShare = numberOr(raw.damageShare, 0),
-		lines = RunLines.Read(raw.lines),
-	}
-	return summary
-end
-
 local function maxParty(): number
 	local combatConfig = Catalog.GetCombatConfig()
 	return if combatConfig ~= nil then combatConfig.coop.maxParty else 1
@@ -252,7 +201,10 @@ local function readPartyHint(value: any): Types.PartyHint?
 end
 
 -- A summary for a player the ReturnData names is copied only when its key is a userId string;
--- anything past a full party's worth of keys is ignored rather than walked.
+-- anything past a full party's worth of keys is ignored rather than walked. Each card is read by
+-- RunLines.ReadSummary (the fix round's F7), the one rule the hub client reads it by too, so live
+-- TeleportData and the Studio record are trusted alike: a forged or oversized card is dropped
+-- whole, a bad line costs that row only, and a card without a `title` is an older shape (none).
 local function readSummaries(value: any): { [string]: Types.RunSummary }?
 	if typeof(value) ~= "table" then
 		return nil
@@ -264,7 +216,7 @@ local function readSummaries(value: any): { [string]: Types.RunSummary }?
 			break
 		end
 		if typeof(key) == "string" and isLiveUserId(tonumber(key)) then
-			local summary = readSummary(entry)
+			local summary = RunLines.ReadSummary(entry)
 			if summary ~= nil then
 				summaries[key] = summary
 				count += 1

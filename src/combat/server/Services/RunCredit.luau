@@ -5,9 +5,11 @@
 -- stands. ArenaService keeps the cards and calls Credit and Mentor; WaveService names each credit's
 -- source with the keys below and reads PayEra at the one cash choke point.
 --
--- The totals are the truth (L4W3-5); `lines` are display, merged by source (RunLines.Add). Every
--- credit adds 1 to its line's count: for raiders and a boss that is one body whose reward this
--- member shared (their own kills in a solo run), for the other kinds one event.
+-- The totals are the truth (L4W3-5); `lines` are display, merged by source (RunLines.Add). A kill's
+-- line (raiders, the boss) counts the member's kills, so in a party "Raiders ×n" agrees with the
+-- card's kill count (a share without the killing blow adds its pay and no count: the fix round's
+-- F3); every other kind counts one per credit, an event (a camp, a chest, a key, a first clear, the
+-- mentor bonus).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -15,8 +17,10 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local RunLines = require(sharedFolder:WaitForChild("RunLines"))
 
--- What one credit adds to its line's count.
+-- What one credit of an event adds to its line's count.
 local CREDIT_COUNT = 1
+-- The kinds whose line counts the credit's kills instead (F3).
+local KILL_KINDS: { [string]: boolean } = { raiders = true, boss = true }
 -- The pay era of a member whose profile names no usable era: the first (Village, x1).
 local FIRST_ERA = 1
 
@@ -42,7 +46,8 @@ function RunCredit.Empty(title: string): Types.RunSummary
 end
 
 -- One credit on one card: its totals as before L4 W3, and the line of `key` (RunLines.Add). Nothing
--- is negative here (every caller pays whole units of at least 0); `kills` counts on the totals only.
+-- is negative here (every caller pays whole units of at least 0); `kills` counts on the totals, and
+-- on the line of a kill's key (F3).
 function RunCredit.Credit(
 	summary: Types.RunSummary,
 	key: Types.RunLineKey,
@@ -58,7 +63,8 @@ function RunCredit.Credit(
 	if materials > 0 and material ~= "" then
 		summary.materials[material] = (summary.materials[material] or 0) + materials
 	end
-	RunLines.Add(summary.lines, key, CREDIT_COUNT, cash, material, materials, valor)
+	local count = if KILL_KINDS[key.kind] then kills else CREDIT_COUNT
+	RunLines.Add(summary.lines, key, count, cash, material, materials, valor)
 end
 
 -- The Mentor bonus is part of `valor` AND shown on its own, so the total, mentorValor and the
@@ -135,6 +141,22 @@ end
 -- a visit's pay never moves under it).
 function RunCredit.PayEra(cashEra: number, override: number?): number
 	return override or cashEra
+end
+
+-- Why the P lever may not step the pay era (the fix round's F4), nil when it may. Every credit after
+-- it pays the loaded profiles at that era, so it acts only on ProfileStore's in-memory mock (Studio
+-- with API access off): "realStore" when the profiles are the real store, whose saves it would
+-- write; "nobody" while no member is admitted, since only a loaded profile proves the store has
+-- settled (DataService.IsMockMode also reads true before ProfileStore knows, and an override set
+-- then would outlive that window). Studio itself is the caller's check.
+function RunCredit.PayLeverRefusal(mock: boolean, admitted: boolean): string?
+	if not mock then
+		return "realStore"
+	end
+	if not admitted then
+		return "nobody"
+	end
+	return nil
 end
 
 -- The P lever's next era after `current`: 1 -> 2 -> ... -> `eraCount` -> 1 (with no eras known,

@@ -4,11 +4,11 @@
 -- boss, each chest, the key, the first clear, the mentor bonus), merged as the credits come in.
 -- The lines are display only: the totals stay the truth, and nothing reads a line to pay.
 --
--- Add is the server's (ArenaService.CreditSummary, CreditMentor); Read is every receiver's (the
--- Studio bridge's and the hub's ReturnData, the hub client's ExpeditionSummary), because a summary
--- crosses teleport data, which a client can forge. Pure: no service, no Instance, no clock, so
--- tools/crowd_harness tests the very functions both places run. The Types require is for
--- annotations alone.
+-- Add is the server's (ArenaService.CreditSummary, CreditMentor); ReadSummary, and Read inside it,
+-- is every receiver's (the Studio bridge's and the hub's ReturnData, the hub client's
+-- ExpeditionSummary), because a summary crosses teleport data, which a client can forge. Pure: no
+-- service, no Instance, no clock, so tools/crowd_harness tests the very functions both places run.
+-- The Types require is for annotations alone.
 
 local Types = require(script.Parent:WaitForChild("Types"))
 
@@ -141,6 +141,75 @@ function RunLines.Read(value: any): { Types.RunLine }
 		})
 	end
 	return lines
+end
+
+-- A summary's totals and counts: a total is finite and at least 0, a count is also whole.
+local function total(value: any): boolean
+	return finite(value) and value >= 0
+end
+
+local function count(value: any): boolean
+	return total(value) and value % 1 == 0
+end
+
+-- The fix round's F7: one reader of a whole run card for every receiver (the Studio bridge's and
+-- the hub's ReturnData, the hub client's ExpeditionSummary), because the card crosses teleport data,
+-- which a client can forge. nil drops the whole card: it is presentation only (the rewards are
+-- already in the profile), so a forged or oversized one is never shown half-drawn. A field a newer
+-- combat build added (bestWave at C1, mentorValor and damageShare at C2) takes its default only when
+-- it is ABSENT; present and malformed is forged. Only a bad line costs just that line (Read).
+function RunLines.ReadSummary(value: any): Types.RunSummary?
+	if type(value) ~= "table" then
+		return nil
+	end
+	local raw: any = value
+	local title = raw.title
+	if type(title) ~= "string" or #title < 1 or #title > MAX_TEXT then
+		return nil
+	end
+	if
+		not count(raw.wavesCleared)
+		or not count(raw.kills)
+		or not total(raw.cash)
+		or not total(raw.valor)
+		or not total(raw.seconds)
+		or (raw.bestWave ~= nil and not count(raw.bestWave))
+		or (raw.mentorValor ~= nil and not total(raw.mentorValor))
+		or (raw.damageShare ~= nil and not total(raw.damageShare))
+		or type(raw.materials) ~= "table"
+	then
+		return nil
+	end
+	-- At most MAX kinds of material (four era materials today), each named within MAX_TEXT.
+	local materials: { [string]: number } = {}
+	local kinds = 0
+	for name: any, quantity: any in raw.materials do
+		kinds += 1
+		if
+			kinds > MAX
+			or type(name) ~= "string"
+			or #name < 1
+			or #name > MAX_TEXT
+			or not total(quantity)
+		then
+			return nil
+		end
+		materials[name] = quantity
+	end
+	return {
+		title = title,
+		wavesCleared = raw.wavesCleared,
+		bestWave = if raw.bestWave ~= nil then raw.bestWave else raw.wavesCleared,
+		died = raw.died == true,
+		cash = raw.cash,
+		materials = materials,
+		valor = raw.valor,
+		kills = raw.kills,
+		seconds = raw.seconds,
+		mentorValor = if raw.mentorValor ~= nil then raw.mentorValor else 0,
+		damageShare = if raw.damageShare ~= nil then raw.damageShare else 0,
+		lines = RunLines.Read(raw.lines),
+	}
 end
 
 return RunLines

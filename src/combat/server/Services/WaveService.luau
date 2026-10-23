@@ -278,10 +278,12 @@ local boot = {
 	-- none could be made it is tried again once per floor set (lobbyKindsSeq: the last one tried).
 	lobbyKinds = nil :: { [string]: number }?,
 	lobbyKindsSeq = -1,
-	-- L4 W3 (§3): the session's auto-start (StageFlow.Depart; nil = none), whether the session's
-	-- first admit has opened it, the members whose bodies it waits for (refilled every lobby tick,
-	-- no table per tick), and the last StageFlow.DepartBeat broadcast. Kept through every run
-	-- (nothing auto-starts after one) and cleared only with the session (Reset).
+	-- L4 W3 (§3): the session's auto-start (StageFlow.Depart; nil = none), whether this server has
+	-- opened one (StageFlow.DepartBook: set at the server's first admit and never cleared, the fix
+	-- round's F1: a reserved server serves one departure), the members whose bodies it waits for
+	-- (refilled every lobby tick, no table per tick), and the last StageFlow.DepartBeat broadcast.
+	-- Kept through every run (nothing auto-starts after one); the session's end forgets the
+	-- auto-start (Reset, StageFlow.DepartForget).
 	depart = nil :: StageFlow.Depart?,
 	departOpened = false,
 	departHolders = {} :: { Types.RunMember },
@@ -289,6 +291,8 @@ local boot = {
 	-- L4 W3 (§9, the P lever): the session's pay era for every member, over the eras frozen at their
 	-- admits (RunCredit.PayEra); nil = none. Studio only, never saved, gone with the session.
 	cashEra = nil :: number?,
+	-- The fix round's F6: the levels whose dropped difficulty notes were warned (once a server).
+	warnedNotes = {} :: { [string]: boolean },
 }
 
 local WaveService = {}
@@ -554,22 +558,18 @@ local function sitesOf(levelId: string): { SecretFlow.Site }
 	return sites
 end
 
--- L2-15: the receiver's own secret rows, by level id, from their profile's `combat.secrets`.
+-- L2-15: the receiver's own secret rows, by level id, from their profile's `combat.secrets`
+-- (MapRules.SecretRows, the hub's SendMap reads the same, the fix round's F9).
 local function secretRows(
 	player: Player,
 	built: { [string]: boolean }
 ): { [string]: { Types.MapSecretState } }
 	local profile = DataService.GetState(player)
-	local opened = if profile ~= nil then profile.combat.secrets else nil
-	local rows: { [string]: { Types.MapSecretState } } = {}
-	for levelId in built do
-		local sites = sitesOf(levelId)
-		if #sites > 0 then
-			rows[levelId] =
-				MapRules.SecretRow(sites, if opened ~= nil then opened[levelId] else nil)
-		end
-	end
-	return rows
+	return MapRules.SecretRows(
+		built,
+		sitesOf,
+		if profile ~= nil then profile.combat.secrets else nil
+	)
 end
 
 -- Rulings 25 and 28: each member gets their own stars; which nodes are open is the leader's
@@ -982,8 +982,9 @@ end
 -- L1b-15: a kill is paid the moment it falls, in every live phase, its kind's fixed reward x the
 -- difficulty's rewardMult (and the boss's Valor), split by that body's own damage book kept to
 -- the humans of the session (nobody's damage, a Studio lever's kill: an even split among the
--- fighting humans). The boss pays the Mentor bonus first, from its own book. Runs inside the
--- strike that killed it (CrowdService's callbacks are synchronous threads): it must not yield.
+-- fighting humans). After its own credit, the boss pays the Mentor bonus from its own book. Runs
+-- inside the strike that killed it (CrowdService's callbacks are synchronous threads): it must not
+-- yield.
 local function onCrowdKilled(id: number, byUserId: number, info: CrowdService.CrowdKillInfo): ()
 	local level = run.level
 	local scales = run.scales
@@ -1722,6 +1723,12 @@ local function readLevel(
 	for _, problem in problems do
 		warn(`[WaveService] {problem}`)
 	end
+	-- F6: a bad note is display only: dropped with one warn a server, never a refusal.
+	local _, dropped = StageFlow.Notes(level)
+	if #dropped > 0 and not boot.warnedNotes[levelId] then
+		boot.warnedNotes[levelId] = true
+		warn(`[WaveService] {table.concat(dropped, "; ")}`)
+	end
 	if #problems > 0 or level.difficulties[difficulty] == nil then
 		return nil, nil
 	end
@@ -1924,8 +1931,15 @@ local function tickTents(): ()
 end
 
 -- Starts `levelId` at `difficulty` for the leader `player`, or says why not: the contract's
--- checks, in its order. Nothing yields from the first check to the last line.
-local function startLevel(player: Player, levelId: string, difficulty: string): StartRefusal?
+-- checks, in its order. Nothing yields from the first check to the last line. `late` (the
+-- auto-start's zero only, StageFlow.DepartLate; nil for the leader's own start) = the members who
+-- need no body: they stay in the lobby camp, waiting, and their body is placed when it stands.
+local function startLevel(
+	player: Player,
+	levelId: string,
+	difficulty: string,
+	late: { [number]: boolean }?
+): StartRefusal?
 	local combatConfig = config()
 	local member = ArenaService.GetMemberFor(player)
 	if not boot.mission or member == nil or member.userId ~= ArenaService.LeaderUserId() then
@@ -1964,7 +1978,16 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 		return "unavailable"
 	end
 	local members = ArenaService.GetMembers()
-	if not ArenaService.PartyIn() or not VitalsService.AllHaveBodies(members) then
+	local starting = members
+	if late ~= nil and next(late) ~= nil then
+		starting = {}
+		for _, other in members do
+			if not late[other.userId] then
+				table.insert(starting, other)
+			end
+		end
+	end
+	if not ArenaService.PartyIn() or not VitalsService.AllHaveBodies(starting) then
 		-- A character still spawning has no body, and a run reads "no body" as fallen.
 		return "busy"
 	end
@@ -2069,9 +2092,15 @@ local function startLevel(player: Player, levelId: string, difficulty: string): 
 	VitalsService.SetMission(missionRules(scales.damageScale, level.crowd.regenShare))
 	placeResidents(plan)
 	placeTents(plan)
-	-- Every member starts on their feet, at full health, with the gear's bar, at the trailhead.
+	-- Every member starts on their feet, at full health, with the gear's bar, at the trailhead; a
+	-- late arrival (F2) waits in the lobby camp, and the placer puts their body where an arrival's
+	-- goes once it stands (ruling 18: into the level outside a fight, the lobby camp in one).
 	local index = 0
 	for _, other in members do
+		if late ~= nil and late[other.userId] then
+			other.waiting = true
+			continue
+		end
 		local otherPlayer = other.player
 		index += 1
 		other.waiting = false
@@ -2103,15 +2132,30 @@ end
 
 -- The tick ------------------------------------------------------------------------------------
 
+-- The fix round's F2: the auto-start's late arrivals at zero (StageFlow.DepartLate), from every
+-- member present: in the ticket's expected list or not, standing in a body or not.
+local function lateAtZero(): { [number]: boolean }
+	local facts: { StageFlow.DepartMember } = {}
+	for _, member in ArenaService.GetMembers() do
+		table.insert(facts, {
+			userId = member.userId,
+			expected = ArenaService.IsExpected(member.userId),
+			body = VitalsService.AllHaveBodies({ member }),
+		})
+	end
+	return StageFlow.DepartLate(facts)
+end
+
 -- L4 W3 (§3, L4W3-4): the auto-start's tick, in the lobby. StageFlow.DepartStep decides; this
 -- gathers its facts, starts the level once at zero (a refusal leaves it picked on the map, with the
 -- leader's toast and a warn, and is never retried) and broadcasts at once on every change of what
 -- the wire shows (its state, each whole second it counts). The bodies it waits for are the expected
--- members present (with `standIn`, everyone present): an arrival from the run list never holds it.
--- Nothing here re-arms it after a run (backToLobby leaves it alone).
+-- members present (with `standIn`, everyone present): an arrival from the run list never holds it,
+-- and at zero one still spawning stays in the lobby camp (F2). Nothing here re-arms it after a run
+-- (backToLobby leaves it alone), and once it is picked or done there is nothing to do (s3).
 local function tickDepart(combatConfig: Types.CombatConfig): ()
 	local depart = boot.depart
-	if depart == nil then
+	if depart == nil or not StageFlow.DepartLive(depart) then
 		return
 	end
 	local holders = boot.departHolders
@@ -2132,15 +2176,24 @@ local function tickDepart(combatConfig: Types.CombatConfig): ()
 	})
 	if action == "start" then
 		-- Whoever leads at zero starts it: a leader who took over during the countdown, by their stars.
+		-- Inside a pcall (s2): a throw is a refusal like any other, its one warn naming the error.
 		local leader = ArenaService.GetMember(ArenaService.LeaderUserId())
 		local player = if leader ~= nil then leader.player else nil
-		local refusal: StartRefusal? = if player ~= nil
-			then startLevel(player, depart.levelId, depart.difficulty)
-			else "notLeader"
+		local refusal: StartRefusal? = "notLeader"
+		local thrown = ""
+		if player ~= nil then
+			local started, problem = pcall(function()
+				refusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())
+			end)
+			if not started then
+				refusal = "unavailable"
+				thrown = `: {tostring(problem)}`
+			end
+		end
 		if refusal ~= nil then
 			StageFlow.DepartRefused(depart)
 			warn(
-				`[WaveService] the auto-start of {depart.levelId} {depart.difficulty} was refused ({refusal}); it stays picked on the map`
+				`[WaveService] the auto-start of {depart.levelId} {depart.difficulty} was refused ({refusal}{thrown}); it stays picked on the map`
 			)
 			if player ~= nil then
 				refuseStart(player, depart.levelId, refusal)
@@ -2392,14 +2445,11 @@ function WaveService.OnAbandon(player: Player): ()
 	end
 end
 
--- L4 W3 (§3): at the session's first admit the auto-start opens on what the departure named
+-- L4 W3 (§3): at the server's first admit the auto-start opens on what the departure named
 -- (ArenaService.Pick: verified waits, a hint alone is picked, no hint is nothing), or, in a proving
 -- boot with debug.provingAutoStart, on its pair with the members present standing in (L4W3-12).
+-- Never again on this server (StageFlow.DepartAdmit, the fix round's F1).
 local function openDepart(): ()
-	if boot.departOpened then
-		return
-	end
-	boot.departOpened = true
 	local combatConfig = config()
 	local debugConfig = if combatConfig ~= nil then combatConfig.debug else nil
 	-- Studio only twice over (CombatMode says proving only in Studio, and it is asked again here):
@@ -2415,11 +2465,11 @@ local function openDepart(): ()
 	if since <= 0 then
 		since = os.clock()
 	end
-	boot.depart = StageFlow.DepartOpen(levelId, difficulty, verified, proving, since)
+	StageFlow.DepartAdmit(boot, levelId, difficulty, verified, proving, since)
 end
 
 -- Every member gets the map (their own stars, the leader's open nodes): an arrival may have
--- changed who leads. The session's first arrival opens its auto-start.
+-- changed who leads. The server's first arrival opens its auto-start (once a server, F1).
 function WaveService.OnAdmitted(_player: Player): ()
 	openDepart()
 	sendMapState(nil)
@@ -2587,32 +2637,35 @@ end
 -- The `fakeDepart` lever (§9, the R key, through DebugService): in the lobby, the auto-start
 -- waits on `levelId` at `difficulty` with the members present standing in for the expected list,
 -- then the real tick runs it (its countdown, its start, a refusal's fallback). Whether it took: not
--- outside the lobby, outside Studio, or for a pair with no level.
+-- outside the lobby, outside Studio, or for a pair with no level (StageFlow.DepartLever).
 function WaveService.FakeDepart(levelId: string, difficulty: string): boolean
 	if not RunService:IsStudio() or not boot.mission or run.phase ~= "lobby" then
 		return false
 	end
-	local pair = { levelId = levelId, difficulty = difficulty }
-	boot.depart = StageFlow.DepartOpen(levelId, difficulty, true, pair, os.clock())
-	boot.departOpened = true
-	return boot.depart ~= nil
+	return StageFlow.DepartLever(boot, levelId, difficulty, os.clock())
 end
 
 -- The `cashEra` lever (§9, the P key, through DebugService): the session's pay era steps to the
 -- next (1 -> ... -> the last -> 1) for every member, over the eras frozen at their admits. Nothing
 -- is saved and the session's end forgets it; the first press steps from the leader's frozen era.
--- The era it pays at now and its multiplier (Combat.EraCashMult). Studio only, as every lever.
-function WaveService.NextCashEra(): (number, number)
+-- The era it pays at now, its multiplier (Combat.EraCashMult), and why it did not step (nil = it
+-- did): "studio" outside Studio or a mission, else RunCredit.PayLeverRefusal's (the fix round's F4:
+-- every later credit pays into the loaded profiles, so never while they are the real store).
+function WaveService.NextCashEra(): (number, number, string?)
 	local combatConfig = config()
 	local rewards = if combatConfig ~= nil then combatConfig.rewards else nil
 	local leader = ArenaService.GetMember(ArenaService.LeaderUserId())
 	local current = boot.cashEra or (if leader ~= nil then leader.cashEra else 1)
 	if not RunService:IsStudio() or not boot.mission then
-		return current, Combat.EraCashMult(rewards, current)
+		return current, Combat.EraCashMult(rewards, current), "studio"
+	end
+	local refusal = RunCredit.PayLeverRefusal(DataService.IsMockMode(), leader ~= nil)
+	if refusal ~= nil then
+		return current, Combat.EraCashMult(rewards, current), refusal
 	end
 	local era = RunCredit.NextPayEra(current, Catalog.GetEraCount())
 	boot.cashEra = era
-	return era, Combat.EraCashMult(rewards, era)
+	return era, Combat.EraCashMult(rewards, era), nil
 end
 
 -- The `killAll` lever: every living body, on every floor, dies and is paid as any kill is
@@ -2627,9 +2680,9 @@ function WaveService.Reset(): ()
 	run = freshRun()
 	setFloors({})
 	boot.returning = false
-	-- The session's auto-start and pay era go with it (L4 W3).
-	boot.depart = nil
-	boot.departOpened = false
+	-- The session's auto-start and pay era go with it (L4 W3); this server never opens another
+	-- auto-start (F1: DepartForget keeps departOpened, a reserved server serves one departure).
+	StageFlow.DepartForget(boot)
 	boot.departBeat = ""
 	table.clear(boot.departHolders)
 	boot.cashEra = nil

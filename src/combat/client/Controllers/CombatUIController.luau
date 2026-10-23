@@ -146,10 +146,13 @@
 --  * The end of a run is the shared tally card (UI/RunTally), hosted by UI/TallyHost: rows that
 --    count up, coins into the wallet, Timber into a pile. Every Snapshot's wallet goes to it, so
 --    the roll ends on the server's numbers.
---  * The auto-start: RunState.depart (UI/DepartLine) is the HUD's notice line while it waits for
---    the party or counts down; the map does not open by itself over it, and a map already open
---    closes when the wait or the count begins (also after R). `picked` (a refused or unverified
---    start) opens the map on that level and difficulty, once per arrival.
+--  * The auto-start: RunState.depart is the HUD's notice line while it waits for the party or
+--    counts down; the map does not open by itself over it, and a map already open closes when the
+--    wait or the count begins (also after R). `picked` (a refused or unverified start) opens the
+--    map on that level and difficulty, once per arrival. The fix round's F13: what each RunState
+--    does to the line and the map is the pure TallyRules.Depart (the harness runs it); this file
+--    keeps its memory and carries out its answer. A result is a card's by TallyRules.IsRunResult
+--    (F15: its level id is a string, which the card's show key reads).
 --  * Studio keys: R departs again on the map's selection (lever `fakeDepart`, "<levelId>:
 --    <difficulty>", else the config's proving pair), P steps the pay era (lever `cashEra`, "next";
 --    the server's notice names it). Neither key is bound anywhere else in a mission boot; the
@@ -172,13 +175,14 @@ local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local RunFloors = require(sharedFolder:WaitForChild("RunFloors"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 local Format = require(sharedFolder:WaitForChild("Format"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
 local Theme = require(uiFolder:WaitForChild("Theme"))
 local CombatHud = require(uiFolder:WaitForChild("CombatHud"))
 local TallyHost = require(uiFolder:WaitForChild("TallyHost"))
-local DepartLine = require(uiFolder:WaitForChild("DepartLine"))
+local TallyRules = require(uiFolder:WaitForChild("TallyRules"))
 local Toast = require(uiFolder:WaitForChild("Toast"))
 local LoadScreen = require(uiFolder:WaitForChild("LoadScreen"))
 local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
@@ -370,17 +374,6 @@ local function isRunState(payload: any): boolean
 		and typeof(payload.waves) == "number"
 		and typeof(payload.tempo) == "number"
 		and typeof(payload.party) == "table"
-end
-
--- L1: a RunState's `result`, for the summary card; nil and anything malformed show no card.
-local function isRunResult(payload: any): boolean
-	return typeof(payload) == "table"
-		and typeof(payload.levelName) == "string"
-		and typeof(payload.difficulty) == "string"
-		and typeof(payload.reason) == "string"
-		and typeof(payload.campsCleared) == "number"
-		and typeof(payload.camps) == "number"
-		and typeof(payload.star) == "boolean"
 end
 
 -- L1: the crowd kinds a level rewards, which are the kinds it can field: what the Studio
@@ -1068,10 +1061,9 @@ local function bootMission(): ()
 		families = {} :: { [string]: any },
 		-- L3: the last Snapshot's whole `combat`, which the strip's tiers are read from.
 		combat = nil :: Types.CombatProfile?,
-		-- L4 W3: the auto-start was waiting or counting at the last RunState; the "<levelId>:
-		-- <difficulty>" a `picked` already opened the map on (once per arrival).
-		departHolding = false,
-		departPicked = "",
+		-- L4 W3: what TallyRules.Depart keeps between RunStates (the auto-start held the screen;
+		-- the "<levelId>:<difficulty>" a `picked` already opened the map on, once per arrival).
+		depart = { holding = false, picked = "" } :: TallyRules.DepartMemory,
 	}
 	local mapName = if expeditions ~= nil then expeditions.name else DEFAULT_MAP_NAME
 
@@ -1548,14 +1540,14 @@ local function bootMission(): ()
 		end
 	end
 
-	-- The first MapState of a session picks what the map opens on (MapScreen.FirstPick, the city's
+	-- The first MapState of a session picks what the map opens on (MapRules.FirstPick, the city's
 	-- rule too). Later the selection is the player's, or a `picked` depart's.
 	local function seedMap(state: Types.MapState): ()
 		local screen = mapScreen
 		if screen == nil or expeditions == nil or st.mapSeeded then
 			return
 		end
-		local nodeId, difficulty = MapScreen.FirstPick(expeditions.difficulties, state)
+		local nodeId, difficulty = MapRules.FirstPick(expeditions.difficulties, state)
 		if nodeId ~= nil then
 			st.mapSeeded = true
 			screen.Select(nodeId, difficulty)
@@ -1741,11 +1733,9 @@ local function bootMission(): ()
 		CameraController.SetPhase(phase)
 		hud.SetRunState(run)
 		-- L4 W3 (§3): the auto-start, read only in the lobby (the server sends none elsewhere).
-		local depart = if phase == "lobby" then DepartLine.Read(run.depart) else nil
-		hud.SetDepart(if depart ~= nil then DepartLine.Text(depart, expeditions) else nil)
-		local holding = depart ~= nil and (depart.state == "waiting" or depart.state == "counting")
-		local startedHolding = holding and not st.departHolding
-		st.departHolding = holding
+		local departStep = TallyRules.Depart(run.depart, phase, last, expeditions, st.depart)
+		st.depart = departStep.memory
+		hud.SetDepart(departStep.line)
 		if debugPanel ~= nil then
 			debugPanel.SetWave(run.wave)
 		end
@@ -1773,7 +1763,8 @@ local function bootMission(): ()
 		-- The map opens whenever the phase becomes `lobby` (the first RunState and every
 		-- return) and closes when the phase leaves it. On a return the server refuses a start
 		-- for its own cooldown: the map holds a Depart pressed inside it and sends it when it
-		-- ends, so the press is never lost and never refused.
+		-- ends, so the press is never lost and never refused. TallyRules.Depart says when the
+		-- auto-start keeps it shut, closes it, or opens it on a `picked` level.
 		local screen = mapScreen
 		if screen ~= nil then
 			screen.SetParty(run.party, userId, run.leaderUserId)
@@ -1784,30 +1775,21 @@ local function bootMission(): ()
 						then combatConfig.levels.startCooldownSeconds
 						else 0
 				)
-				-- The auto-start has the screen while it waits or counts: no map over its line.
-				if not holding then
-					screen.Open()
-				end
 			elseif phase ~= "lobby" and screen.IsOpen() then
 				freeDepart()
 				screen.Close()
 			end
-			-- The wait or the count began (it can come a RunState after the lobby, or after R
-			-- with the map open): the line must be seen. The leader may open the map again.
-			if startedHolding and screen.IsOpen() then
+			if departStep.close and screen.IsOpen() then
 				screen.Close()
 			end
-			-- A start that was refused or never verified: the map on that level, once per arrival.
-			if depart ~= nil and depart.state == "picked" then
-				local pick = depart.levelId .. ":" .. depart.difficulty
-				local node = DepartLine.NodeOf(expeditions, depart.levelId)
-				if pick ~= st.departPicked and node ~= nil then
-					st.departPicked = pick
-					st.mapSeeded = true
-					screen.Select(node.id, depart.difficulty)
-					armoryScreen.Close() -- one sheet at a time
-					screen.Open()
-				end
+			local pick = departStep.select
+			if pick ~= nil then
+				st.mapSeeded = true
+				screen.Select(pick.node, pick.difficulty)
+				armoryScreen.Close() -- one sheet at a time
+			end
+			if departStep.open then
+				screen.Open()
 			end
 		end
 
@@ -1818,7 +1800,11 @@ local function bootMission(): ()
 		local result = run.result
 		-- Only where a card belongs: a result still riding on a lobby RunState must not keep
 		-- the map shut.
-		if isRunResult(result) and result ~= nil and (over or result.reason == LEAVE_REASON) then
+		if
+			TallyRules.IsRunResult(result)
+			and result ~= nil
+			and (over or result.reason == LEAVE_REASON)
+		then
 			local returnIn = run.returnIn
 			if screen ~= nil then
 				screen.Close()

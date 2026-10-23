@@ -3,7 +3,8 @@
 -- read. The hub's Depart and the dungeon's RequestStartLevel ask the same Startable, and both send
 -- the same MapState. Moved verbatim from StageFlow (the map section, Stars; rulings 25 and 28 of
 -- "L1 contracts") and SecretFlow (the chest list and the map card's row, L2-11 to L2-15; the key
--- of L4 W2 §0), so the hub needs no combat-place module.
+-- of L4 W2 §0), so the hub needs no combat-place module. The W3 fix round added the secret rows
+-- both places send (SecretRows, F9) and the pick both maps open on (FirstPick, F13).
 --
 -- Pure for the same reason they were: tables and numbers only, no service, no Instance, no clock
 -- and no yield, so tools/crowd_harness loads it as it stands and mutate.py mutates it. The Types
@@ -208,6 +209,32 @@ function MapRules.Startable(
 	return "ok"
 end
 
+-- The pick a session's first MapState opens the map on: the first open node, in config order,
+-- that has no star, at its lowest difficulty (nil); failing that the first open node with a
+-- difficulty still to clear, at the lowest such, else at its first. nil = no node is open.
+-- `difficulties` = the map's, easiest first. The fix round's F13: moved verbatim from MapScreen,
+-- so the city's map and the dungeon's open on the same pick by one rule the harness runs.
+function MapRules.FirstPick(difficulties: { string }, state: Types.MapState): (string?, string?)
+	local fallback: Types.MapNodeState? = nil
+	for _, node in state.nodes do
+		if typeof(node) == "table" and node.open == true and typeof(node.stars) == "table" then
+			if #node.stars == 0 then
+				return node.id, nil
+			end
+			fallback = fallback or node
+		end
+	end
+	if fallback == nil then
+		return nil, nil
+	end
+	for _, difficulty in difficulties do
+		if table.find(fallback.stars, difficulty) == nil then
+			return fallback.id, difficulty
+		end
+	end
+	return fallback.id, nil
+end
+
 -- The chests ----------------------------------------------------------------------------------
 
 local function finite(value: any): boolean
@@ -309,6 +336,27 @@ function MapRules.SecretRow(
 		})
 	end
 	return row
+end
+
+-- The fix round's F9: every built level's row for one player, by level id, the one copy the hub's
+-- SendMap and the dungeon's map both send. `sitesOf` is the caller's cached reader (Sites of the
+-- level's files, behind its own pcall and warn, because only the caller reads Catalog); it must
+-- not throw or yield. `opened` = the player's profile `combat.secrets`. A level with no chests
+-- carries no row.
+function MapRules.SecretRows(
+	built: { [string]: boolean },
+	sitesOf: (levelId: string) -> { Site },
+	opened: { [string]: { [string]: boolean } }?
+): { [string]: { Types.MapSecretState } }
+	local rows: { [string]: { Types.MapSecretState } } = {}
+	for levelId in built do
+		local sites = sitesOf(levelId)
+		if #sites > 0 then
+			rows[levelId] =
+				MapRules.SecretRow(sites, if opened ~= nil then opened[levelId] else nil)
+		end
+	end
+	return rows
 end
 
 return MapRules

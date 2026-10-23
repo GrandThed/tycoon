@@ -32,7 +32,10 @@
 -- drag and wheel on a clipped strip moved in design px, not a ScrollingFrame, so the follow and
 -- the tap-or-drag test do not depend on how a canvas position reads under a UIScale.
 --
--- Every presentation constant and every word the card owns is in LOOK below.
+-- Every presentation constant is in LOOK below. The rules (the rows' words, the totals, the
+-- wallet, Valor's purpose, how many icons fly) are the pure UI/TallyRules (the L4 W3 fix round's
+-- F13), so the harness runs them; RunTally.Rows, Totals, Owned, Wallet, NextAbility and WithText
+-- hand them the Expeditions config, for the city's host.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -43,11 +46,11 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
-local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
 local Motion = require(script.Parent:WaitForChild("Motion"))
+local TallyRules = require(script.Parent:WaitForChild("TallyRules"))
 
 local LOOK = {
 	-- Sizes, in design px of the 375 x 667 canvas (the host's scale stretches them).
@@ -106,6 +109,10 @@ local LOOK = {
 	logGap = 1,
 	pileColumns = 2,
 	diamondSize = 11,
+	-- Valor's badge is a glyph, never a turned Frame: the rows clip, and Roblox does not clip a
+	-- rotated descendant (the fix round's F14). Its box is the turned square's diagonal.
+	diamondGlyph = "◆",
+	diamondBox = math.sqrt(2),
 	arc = 46, -- how high a flight bows over the straight line
 	sway = 16, -- and how far to the side, alternating
 	spin = 70, -- a log's turn at launch, in degrees, unwinding as it lands
@@ -128,11 +135,9 @@ local LOOK = {
 	pulseGrow = 0.25,
 	flightGrow = 0.3,
 	scrollRate = 10, -- per second, how fast the rows follow the counting row
-	-- How many icons fly, by device (Theme.lowEndDevice, never reducedMotion).
-	coins = 14,
-	coinsLowEnd = 5,
-	logs = 8,
-	logsLowEnd = 4,
+	-- How many icons fly, by device (TallyRules.Flights reads Theme.lowEndDevice, never
+	-- reducedMotion). `logs` is also how many places the pile has.
+	flights = { coins = 14, coinsLowEnd = 5, logs = 8, logsLowEnd = 4 },
 	-- Colours.
 	rowColor = Theme.COLOR_ROW,
 	rowTransparency = 0.3,
@@ -151,41 +156,20 @@ local LOOK = {
 	coinInk = Color3.fromRGB(96, 60, 8),
 	logColor = Color3.fromRGB(150, 98, 54),
 	logEnd = Color3.fromRGB(222, 178, 120),
-	-- Words the card owns; the hosts own the title, the subtitle, the note and the buttons.
+	-- Words the card paints; the rows' and the next line's are TallyRules', and the hosts own the
+	-- title, the subtitle, the note and the buttons.
 	star = "★",
 	cash = "$",
 	plus = "+",
-	raiders = "Raiders",
-	times = " ×",
-	camp = "Camp",
-	campSuffix = " bonus",
-	boss = "The boss",
-	chest = "A chest",
-	key = "A key",
-	keySuffix = " found",
-	firstClear = "First ",
-	firstClearSuffix = " clear",
-	mentor = "Mentor bonus",
 	empty = "Nothing earned this time",
-	valorWord = " Valor",
-	next = "next: ",
-	nextSep = " · ",
-	withThe = "with the ",
-	with = "with ",
+	valorWord = TallyRules.WORDS.valor,
 }
 
--- One display row (RunTally.Rows builds them from RunSummary.lines, so both hosts agree).
-export type Row = {
-	kind: string,
-	label: string,
-	cash: number,
-	material: string,
-	materials: number,
-	valor: number,
-}
-export type Totals = { cash: number, material: string, materials: number, valor: number }
+-- One display row (TallyRules.Rows builds them from RunSummary.lines, so both hosts agree).
+export type Row = TallyRules.Row
+export type Totals = TallyRules.Totals
 -- What the player owns now; `materials` is the amount of Totals.material.
-export type Wallet = { cash: number, materials: number, valor: number }
+export type Wallet = TallyRules.Wallet
 export type Button = { id: string, text: string, accent: boolean? }
 export type View = {
 	kicker: string,
@@ -224,7 +208,7 @@ type RowUi = {
 	material: TextLabel,
 	valor: TextLabel,
 	logIcon: Frame,
-	diamond: Frame,
+	diamond: TextLabel,
 	row: Row,
 	settled: boolean,
 }
@@ -278,130 +262,22 @@ local function plusText(value: number, prefix: string): string
 	return LOOK.plus .. prefix .. Format.Cash(value)
 end
 
-local function nodeName(nodeId: string): string
-	local config = Catalog.GetExpeditionsConfig()
-	if config ~= nil then
-		for _, node in config.nodes do
-			if node.id == nodeId then
-				return node.name
-			end
-		end
-	end
-	return nodeId
-end
-
--- "with the Castle": the words for an ability or a weapon that comes with a later map node. A
--- name that already starts with an article keeps its own ("with another Planet", "with the Dream").
+-- The rules with the Expeditions config handed in (the city's host calls these; the combat host
+-- calls TallyRules itself).
 function RunTally.WithText(nodeId: string): string
-	local name = nodeName(nodeId)
-	local first, rest = string.match(name, "^(%a+) (.+)$")
-	if first == "The" and rest ~= nil then
-		return LOOK.withThe .. rest
-	end
-	if (first == "A" or first == "An" or first == "Another") and rest ~= nil then
-		return LOOK.with .. string.lower(first) .. " " .. rest
-	end
-	return LOOK.withThe .. name
+	return TallyRules.WithText(Catalog.GetExpeditionsConfig(), nodeId)
 end
 
--- The row words for each kind of line. A name the server sends empty takes the card's word.
 function RunTally.Rows(lines: { Types.RunLine }?): { Row }
-	local rows: { Row } = {}
-	if lines == nil then
-		return rows
-	end
-	local config = Catalog.GetExpeditionsConfig()
-	for _, line in lines do
-		local kind = line.kind
-		local name = line.name
-		local label: string
-		if kind == "raiders" then
-			label = (if name ~= "" then name else LOOK.raiders)
-				.. (if line.count > 0 then LOOK.times .. Format.Cash(line.count) else "")
-		elseif kind == "camp" then
-			label = (if name ~= "" then name else LOOK.camp) .. LOOK.campSuffix
-		elseif kind == "boss" then
-			label = if name ~= "" then name else LOOK.boss
-		elseif kind == "chest" then
-			label = if name ~= "" then name else LOOK.chest
-		elseif kind == "key" then
-			label = (if name ~= "" then name else LOOK.key) .. LOOK.keySuffix
-		elseif kind == "firstClear" then
-			-- The id is "<levelId>:<difficulty>"; the difficulty's display name is the map's.
-			local difficulty = string.match(line.id, ":([^:]+)$") or ""
-			local word = if config ~= nil then config.difficultyNames[difficulty] else nil
-			label = LOOK.firstClear .. (word or difficulty) .. LOOK.firstClearSuffix
-		elseif kind == "mentor" then
-			label = LOOK.mentor
-		else
-			label = if name ~= "" then name else kind
-		end
-		table.insert(rows, {
-			kind = kind,
-			label = label,
-			cash = line.cash,
-			material = line.material,
-			materials = line.materials,
-			valor = line.valor,
-		})
-	end
-	return rows
+	return TallyRules.Rows(lines, Catalog.GetExpeditionsConfig())
 end
 
--- The summary's totals, with its main material: the largest amount, ties by name (the table came
--- over the network, so its order is undefined and the same run must read the same twice).
-function RunTally.Totals(summary: Types.RunSummary): Totals
-	local material, amount = "", 0
-	for name, value in summary.materials do
-		if
-			typeof(name) == "string"
-			and typeof(value) == "number"
-			and value > 0
-			and (value > amount or (value == amount and name < material))
-		then
-			material, amount = name, value
-		end
-	end
-	return { cash = summary.cash, material = material, materials = amount, valor = summary.valor }
-end
+RunTally.Totals = TallyRules.Totals
+RunTally.Owned = TallyRules.Owned
+RunTally.Wallet = TallyRules.Wallet
 
--- What a profile's material map holds of `material` (0 for anything that is not a count).
-function RunTally.Owned(materials: { [string]: any }?, material: string): number
-	if materials == nil or material == "" then
-		return 0
-	end
-	local value = materials[material]
-	return if typeof(value) == "number" and value > 0 then value else 0
-end
-
--- Valor's purpose on the card (contract §7): the first ability on sale the player does not own
--- ("next: Double Jump · 10 Valor"; what Unlocks.Sellable sells, by `order`), else the first coming
--- one ("next: Glide · with the Castle"), else nil (no Expeditions config, or everything is owned).
 function RunTally.NextAbility(owned: { [string]: boolean }?): string?
-	local config = Catalog.GetExpeditionsConfig()
-	local best: Types.UnlockAbilityDef? = nil
-	for _, def in (Unlocks.Sellable(config)) do
-		if not Unlocks.Owns(owned, def.id) and (best == nil or def.order < best.order) then
-			best = def
-		end
-	end
-	if best ~= nil then
-		return LOOK.next
-			.. best.name
-			.. LOOK.nextSep
-			.. Format.Cash(best.price.valor)
-			.. LOOK.valorWord
-	end
-	local abilities = if config ~= nil then config.abilities else nil
-	local upcoming = if abilities ~= nil then abilities.upcoming else nil
-	if upcoming ~= nil then
-		for _, def in upcoming do
-			if not Unlocks.Owns(owned, def.id) then
-				return LOOK.next .. def.name .. LOOK.nextSep .. RunTally.WithText(def.with)
-			end
-		end
-	end
-	return nil
+	return TallyRules.NextAbility(Catalog.GetExpeditionsConfig(), owned)
 end
 
 -- Every layer of the card sits on the card tier, so it orders the same under either ZIndex rule.
@@ -498,19 +374,22 @@ local function newLog(parent: Instance, width: number, height: number, layer: nu
 	return log
 end
 
--- Valor's badge: a turned square.
-local function newDiamond(parent: Instance, size: number, layer: number): Frame
-	return Create("Frame", {
+-- Valor's badge: a diamond glyph in the box a square of `size` turned on its point would fill.
+local function newDiamond(parent: Instance, size: number, layer: number): TextLabel
+	local box = size * LOOK.diamondBox
+	return Create("TextLabel", {
 		Name = "Valor",
 		Active = false,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(size, size),
-		Rotation = 45,
-		BackgroundColor3 = LOOK.valorColor,
-		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(box, box),
+		BackgroundTransparency = 1,
+		Font = Theme.FONT_BOLD,
+		TextScaled = true,
+		TextColor3 = LOOK.valorColor,
+		Text = LOOK.diamondGlyph,
 		ZIndex = z(layer),
 		Parent = parent,
-	}) :: Frame
+	}) :: TextLabel
 end
 
 -- A level key drawn from Frames (the map's way, so it reads the same in every font): a ring for
@@ -802,7 +681,7 @@ function RunTally.new(parent: Instance, deps: Deps): Handle
 	local pileScale = Create("UIScale", { Parent = totals.pile }) :: UIScale
 	local diamondScale = Create("UIScale", { Parent = totals.diamond }) :: UIScale
 	local pileLogs: { Frame } = {}
-	for index = 1, LOOK.logs do
+	for index = 1, LOOK.flights.logs do
 		local column = (index - 1) % LOOK.pileColumns
 		local level = math.floor((index - 1) / LOOK.pileColumns)
 		local log = newLog(totals.pile, LOOK.logWidth, LOOK.logHeight, 2)
@@ -1395,18 +1274,14 @@ function RunTally.new(parent: Instance, deps: Deps): Handle
 			return first, last, wanted
 		end
 
-		local low = Theme.lowEndDevice
+		local coinCount, logCount =
+			TallyRules.Flights(Theme.lowEndDevice, view.totals, LOOK.flights)
 		-- Each count rolls from its first icon's landing to its last's; with no icon, after the rows.
-		local coinFirst, coinLast, coins =
-			launch(true, if low then LOOK.coinsLowEnd else LOOK.coins, 0)
+		local coinFirst, coinLast, coins = launch(true, coinCount, 0)
 		live.walletAt = if coins > 0
 			then { coinFirst, coinLast }
 			else { flights, flights + seconds(LOOK.valorSeconds) }
-		local logs = 0
-		if view.totals.material ~= "" and view.totals.materials > 0 then
-			logs = math.min(if low then LOOK.logsLowEnd else LOOK.logs, LOOK.logs)
-		end
-		local logFirst, logLast, made = launch(false, logs, seconds(LOOK.logDelaySeconds))
+		local logFirst, logLast, made = launch(false, logCount, seconds(LOOK.logDelaySeconds))
 		live.logCount = made
 		live.materialAt = if made > 0
 			then { logFirst, logLast }

@@ -2,8 +2,12 @@
 -- MapRules (Built, every answer of Startable and its order, the caps against the shipped files, and
 -- the moved map and chest rules on a fixture), RunLines (Add's merge, order, cap, net and clip; every
 -- drop rule of Read), Combat.EraCashMult and CombatCashMult (Ben's pick on the shipped Combat.json,
--- every degrade to 1), and the never-sold upcoming abilities (Unlocks reads `list` only). The hub's
--- ExpeditionService, which calls Startable and SendMap, cannot be loaded here. Appended by
+-- every degrade to 1), and the never-sold upcoming abilities (Unlocks reads `list` only). The W3 fix
+-- round adds F7 (RunLines.ReadSummary, the one reader of a whole run card), F8 (both halves of every
+-- field rule of Read), F9 (MapRules.SecretRows, the one copy of the secret rows) and F13's
+-- MapRules.FirstPick (moved from MapScreen). The hub's ExpeditionService, which calls Startable,
+-- SecretRows and SendMap, and StudioBridge, which calls ReadSummary, cannot be loaded here: their
+-- call lines are run_harness.py's text pins. Appended by
 -- run_harness.py after the earlier case files, so every local of those is in scope (check, load,
 -- FIXTURES). Everything hangs off the L4W3 table (the 200-local limit), and every group runs behind
 -- L4W3.group, so a group that throws fails one check and the bundle goes on.
@@ -192,6 +196,102 @@ function L4W3.chestTests(): ()
 	check(#Map.SecretRow(sites, nil)[1].name > 0, "SecretRow: no secrets found yet reads every chest unfound")
 end
 
+-- F9: SecretRows is SendMap's and WaveService's row assembly, through the caller's cached reader.
+function L4W3.secretRowsTests(): ()
+	local Map = L4W3.Map
+	local forest = {
+		{ id = "lookout", needs = "doubleJump", x = 0, z = 0, sx = 1, sz = 1, floorY = 0, name = "The Lookout" },
+		{
+			id = "summit",
+			needs = "doubleJump",
+			x = 0,
+			z = 0,
+			sx = 1,
+			sz = 1,
+			floorY = 0,
+			name = "Summit",
+			reward = { valor = 0, materials = 0, key = "castle" },
+		},
+	}
+	local asked: { [string]: number } = {}
+	local function sitesOf(levelId: string): any
+		asked[levelId] = (asked[levelId] or 0) + 1
+		return if levelId == "forestRoad" then forest else {}
+	end
+	local built = { forestRoad = true, castle = true }
+	local rows = Map.SecretRows(built, sitesOf, { forestRoad = { summit = true }, castle = { gate = true } })
+	local row = rows.forestRoad
+	check(
+		row ~= nil and #row == 2 and row[1].found == false and row[2].found == true and row[2].key == "castle",
+		"SecretRows: a level's row is SecretRow of its sites against the player's own opened chests"
+	)
+	check(rows.castle == nil, "SecretRows: a built level with no chests carries no row (nil, not {})")
+	local keys = 0
+	for _ in rows do
+		keys += 1
+	end
+	check(keys == 1, `SecretRows: only levels with chests have rows ({keys})`)
+	check(
+		asked.forestRoad == 1 and asked.castle == 1 and asked.arena == nil,
+		"SecretRows: the caller's reader is asked once for each built level, and for nothing else"
+	)
+	local fresh = Map.SecretRows(built, sitesOf, nil)
+	check(
+		fresh.forestRoad ~= nil and fresh.forestRoad[1].found == false and fresh.forestRoad[2].found == false,
+		"SecretRows: nothing opened yet reads every chest unfound"
+	)
+	local other = Map.SecretRows(built, sitesOf, { castle = { lookout = true } })
+	check(
+		other.forestRoad ~= nil and other.forestRoad[1].found == false,
+		"SecretRows: a chest opened in another level is not this level's"
+	)
+	check(next(Map.SecretRows({}, sitesOf, nil)) == nil, "SecretRows: nothing built, no rows")
+end
+
+-- F13: FirstPick, moved verbatim from MapScreen (both hosts open the map on it).
+function L4W3.pickNode(id: string, open: any, stars: any): any
+	return { id = id, open = open, stars = stars }
+end
+
+function L4W3.firstPick(nodes: { any }): (string?, string?)
+	return L4W3.Map.FirstPick({ "normal", "hard", "brutal" }, { kind = "map", leaderUserId = 1, nodes = nodes })
+end
+
+function L4W3.firstPickTests(): ()
+	local node = L4W3.pickNode
+	local id, difficulty = L4W3.firstPick({ node("forest", true, {}), node("castle", true, {}) })
+	check(id == "forest" and difficulty == nil, "FirstPick: the first open node with no star, at no difficulty")
+	id, difficulty = L4W3.firstPick({ node("forest", true, { "normal" }), node("castle", true, {}) })
+	check(
+		id == "castle" and difficulty == nil,
+		`FirstPick: a later starless node beats an earlier starred one ({tostring(id)})`
+	)
+	id, difficulty = L4W3.firstPick({ node("closed", false, {}), node("forest", true, { "normal" }) })
+	check(id == "forest" and difficulty == "hard", "FirstPick: a closed node is never picked; else the lowest uncleared")
+	id, difficulty = L4W3.firstPick({ node("forest", true, { "hard" }), node("castle", true, { "normal" }) })
+	check(
+		id == "forest" and difficulty == "normal",
+		`FirstPick: the first open node, at its lowest difficulty without a star ({tostring(difficulty)})`
+	)
+	id, difficulty = L4W3.firstPick({ node("forest", true, { "brutal", "normal", "hard" }) })
+	check(id == "forest" and difficulty == nil, "FirstPick: every difficulty cleared reads the node at none")
+	id, difficulty = L4W3.firstPick({ node("a", false, {}), node("b", false, { "normal" }) })
+	check(id == nil and difficulty == nil, "FirstPick: no open node, no pick")
+	id, difficulty = L4W3.firstPick({})
+	check(id == nil and difficulty == nil, "FirstPick: no node at all, no pick")
+	id, difficulty =
+		L4W3.firstPick({ "junk", node("broken", true, "none"), node("half", "yes", {}), node("forest", true, {}) })
+	check(
+		id == "forest" and difficulty == nil,
+		"FirstPick: a node that is not a table, or has no star list or a true open flag, is skipped"
+	)
+	-- A star list that is a string has a length: "" would read as starless, "none" as the fallback.
+	id, difficulty = L4W3.firstPick({ node("blank", true, ""), node("forest", true, {}) })
+	check(id == "forest" and difficulty == nil, "FirstPick: a string star list never reads as starless")
+	id, difficulty = L4W3.firstPick({ node("broken", true, "none"), node("forest", true, { "normal" }) })
+	check(id == "forest" and difficulty == "hard", "FirstPick: a string star list is never the fallback")
+end
+
 function L4W3.shippedTests(): ()
 	local Map = L4W3.Map
 	local expeditions = FIXTURES.expeditions
@@ -208,6 +308,16 @@ function L4W3.shippedTests(): ()
 		end
 	end
 	check(idsFit, "every shipped level id fits RequestExpedition's cap")
+	-- F7: a card's title is its level's name (a run) or the map's (the session), and ReadSummary drops
+	-- a card whose title is not 1 to MAX_TEXT bytes, so no shipped name may fall outside that.
+	local function titleFits(name: any): boolean
+		return type(name) == "string" and #name > 0 and #name <= L4W3.Lines.MAX_TEXT
+	end
+	local titlesFit = titleFits(expeditions.name)
+	for _, level in FIXTURES.levels do
+		titlesFit = titlesFit and titleFits(level.name)
+	end
+	check(titlesFit, "every shipped level name and the map's name fit ReadSummary's title (1 to 48 bytes)")
 	check(linesFit, "every first-clear line id (level:difficulty) fits RunLines.MAX_TEXT")
 	-- The shipped map: Forest Road at Normal is startable on a fresh save, as the hub's Depart asks.
 	local ids = {}
@@ -302,21 +412,33 @@ function L4W3.readTests(): ()
 	check(#read == 1 and read[1].cash == 200 and read[1].name == "Pickets", "Read: a good line is kept")
 	read[1].cash = 1
 	check(good.cash == 200, "Read: a kept line is a copy, never the sender's table")
+	-- F8: both halves of every field rule, one check each: the kind, each text's type and its
+	-- 48-byte cap, and each amount's finiteness and its sign.
 	local bad = {
-		L4W3.line({ kind = "loot" }),
-		L4W3.line({ kind = 3 }),
-		L4W3.line({ id = string.rep("i", 49) }),
-		L4W3.line({ name = false }),
-		L4W3.line({ material = 5 }),
-		L4W3.line({ count = -1 }),
-		L4W3.line({ cash = 0 / 0 }),
-		L4W3.line({ materials = math.huge }),
-		L4W3.line({ valor = "9" }),
+		{ "kind not one of the seven", L4W3.line({ kind = "loot" }) },
+		{ "kind not a string", L4W3.line({ kind = 3 }) },
+		{ "id over 48 bytes", L4W3.line({ id = string.rep("i", 49) }) },
+		{ "name not a string", L4W3.line({ name = false }) },
+		{ "name over 48 bytes", L4W3.line({ name = string.rep("n", 49) }) },
+		{ "material not a string", L4W3.line({ material = 5 }) },
+		{ "material over 48 bytes", L4W3.line({ material = string.rep("m", 49) }) },
+		{ "count negative", L4W3.line({ count = -1 }) },
+		{ "count +inf", L4W3.line({ count = math.huge }) },
+		{ "cash NaN", L4W3.line({ cash = 0 / 0 }) },
+		{ "cash negative", L4W3.line({ cash = -1 }) },
+		{ "materials +inf", L4W3.line({ materials = math.huge }) },
+		{ "materials negative", L4W3.line({ materials = -1 }) },
+		{ "valor not a number", L4W3.line({ valor = "9" }) },
+		{ "valor negative", L4W3.line({ valor = -1 }) },
 	}
 	local missing = L4W3.line()
 	missing.id = nil
-	table.insert(bad, missing)
-	check(#Lines.Read(bad) == 0, `Read: every bad field drops its line ({#Lines.Read(bad)} kept of {#bad})`)
+	table.insert(bad, { "id missing", missing })
+	for _, case in bad do
+		check(#Lines.Read({ case[2] }) == 0, `Read: a line with its {case[1]} is dropped`)
+	end
+	local edge = L4W3.line({ id = string.rep("i", 48), name = string.rep("n", 48), material = string.rep("m", 48) })
+	check(#Lines.Read({ edge }) == 1, "Read: texts of exactly 48 bytes are kept")
 	check(
 		#Lines.Read({ L4W3.line({ name = "", material = "", count = 0, cash = 0, materials = 0, valor = 0 }) }) == 1,
 		"Read: empty names and zero amounts are lines"
@@ -340,6 +462,168 @@ function L4W3.readTests(): ()
 		table.insert(all, L4W3.line({ kind = kind, id = kind }))
 	end
 	check(#Lines.Read(all) == 7, "Read: all seven kinds are lines")
+end
+
+-- F7: a whole card as the combat place sends it (RunCredit.Empty's fields, a run's numbers).
+function L4W3.summary(overrides: any?): any
+	local summary: any = {
+		title = "Forest Road",
+		wavesCleared = 3,
+		bestWave = 3,
+		died = false,
+		cash = 1250,
+		materials = { Timber = 40 },
+		valor = 12,
+		kills = 57,
+		seconds = 301,
+		mentorValor = 2,
+		damageShare = 0.5,
+		lines = { L4W3.line() },
+	}
+	for key, value in overrides or {} do
+		summary[key] = value
+	end
+	return summary
+end
+
+function L4W3.summaryTests(): ()
+	local Lines = L4W3.Lines
+	local sent = L4W3.summary()
+	local read = Lines.ReadSummary(sent)
+	check(
+		read ~= nil
+			and read.title == "Forest Road"
+			and read.wavesCleared == 3
+			and read.bestWave == 3
+			and read.cash == 1250
+			and read.valor == 12
+			and read.kills == 57
+			and read.seconds == 301
+			and read.mentorValor == 2
+			and read.damageShare == 0.5
+			and read.died == false
+			and read.materials.Timber == 40
+			and #read.lines == 1,
+		"ReadSummary: a sound card is read field for field"
+	)
+	-- The hub server reads a card, forwards it, and its client reads it again.
+	local again = if read ~= nil then Lines.ReadSummary(read) else nil
+	local same = again ~= nil and read ~= nil
+	if again ~= nil and read ~= nil then
+		for key, value in read do
+			same = same and (type(value) == "table" or again[key] == value)
+		end
+		same = same and again.materials.Timber == 40 and #again.lines == 1 and again.lines[1].cash == 200
+	end
+	check(same, "ReadSummary: a card it answered reads again unchanged (the server's read, then the client's)")
+	if read ~= nil then
+		read.materials.Timber = 1
+		read.lines[1].cash = 1
+	end
+	check(
+		sent.materials.Timber == 40 and sent.lines[1].cash == 200,
+		"ReadSummary: the materials and lines it answers are fresh copies"
+	)
+	check(
+		Lines.ReadSummary(nil) == nil and Lines.ReadSummary("card") == nil and Lines.ReadSummary(5) == nil,
+		"ReadSummary: not a table reads as none"
+	)
+	local died = Lines.ReadSummary(L4W3.summary({ died = true }))
+	check(died ~= nil and died.died == true, "ReadSummary: died true is kept")
+	local odd = Lines.ReadSummary(L4W3.summary({ died = "yes" }))
+	check(odd ~= nil and odd.died == false, "ReadSummary: died that is not true reads false")
+	-- An older combat build omits bestWave (C1), mentorValor and damageShare (C2), and lines (W3).
+	local old = L4W3.summary()
+	old.bestWave = nil
+	old.mentorValor = nil
+	old.damageShare = nil
+	old.died = nil
+	old.lines = nil
+	local lenient = Lines.ReadSummary(old)
+	check(
+		lenient ~= nil
+			and lenient.bestWave == 3
+			and lenient.mentorValor == 0
+			and lenient.damageShare == 0
+			and lenient.died == false
+			and #lenient.lines == 0,
+		"ReadSummary: an absent optional field takes its default (bestWave = wavesCleared, 0, false, no lines)"
+	)
+	check(
+		Lines.ReadSummary(L4W3.summary({ title = string.rep("t", 48) })) ~= nil,
+		"ReadSummary: a title of exactly 48 bytes is kept"
+	)
+	local mixed = Lines.ReadSummary(L4W3.summary({ lines = { L4W3.line({ cash = -5 }), L4W3.line({ id = "B" }) } }))
+	check(
+		mixed ~= nil and #mixed.lines == 1 and mixed.lines[1].id == "B",
+		"ReadSummary: a bad line costs that row only, through Read"
+	)
+	local cap = {}
+	for index = 1, 16 do
+		cap[`m{index}`] = index
+	end
+	check(Lines.ReadSummary(L4W3.summary({ materials = cap })) ~= nil, "ReadSummary: 16 kinds of material are kept")
+	check(Lines.ReadSummary(L4W3.summary({ materials = {} })) ~= nil, "ReadSummary: no materials is a card")
+	-- Any failure drops the whole card: one check per rule and half.
+	local over = table.clone(cap)
+	over.m17 = 17
+	local nan, inf = 0 / 0, math.huge
+	local dropped: { { any } } = {
+		{ "title missing", { title = false } },
+		{ "title not a string", { title = 7 } },
+		{ "title empty", { title = "" } },
+		{ "title of 49 bytes", { title = string.rep("t", 49) } },
+		{ "wavesCleared NaN", { wavesCleared = nan } },
+		{ "wavesCleared negative", { wavesCleared = -1 } },
+		{ "wavesCleared fractional", { wavesCleared = 2.5 } },
+		{ "wavesCleared a string", { wavesCleared = "3" } },
+		{ "kills +inf", { kills = inf } },
+		{ "kills negative", { kills = -1 } },
+		{ "kills fractional", { kills = 0.5 } },
+		{ "cash NaN", { cash = nan } },
+		{ "cash +inf", { cash = inf } },
+		{ "cash -inf", { cash = -inf } },
+		{ "cash negative", { cash = -1 } },
+		{ "valor NaN", { valor = nan } },
+		{ "valor negative", { valor = -1 } },
+		{ "valor +inf", { valor = inf } },
+		{ "seconds +inf", { seconds = inf } },
+		{ "seconds negative", { seconds = -1 } },
+		{ "bestWave negative", { bestWave = -1 } },
+		{ "bestWave fractional", { bestWave = 1.5 } },
+		{ "bestWave NaN", { bestWave = nan } },
+		{ "mentorValor negative", { mentorValor = -1 } },
+		{ "mentorValor +inf", { mentorValor = inf } },
+		{ "damageShare NaN", { damageShare = nan } },
+		{ "damageShare negative", { damageShare = -0.5 } },
+		{ "materials not a table", { materials = 40 } },
+		{ "a material amount NaN", { materials = { Timber = nan } } },
+		{ "a material amount negative", { materials = { Timber = -1 } } },
+		{ "a material amount +inf", { materials = { Timber = inf } } },
+		{ "a material amount a string", { materials = { Timber = "40" } } },
+		{ "a material keyed by a number", { materials = { [1] = 40 } } },
+		{ "a material named by an empty string", { materials = { [""] = 40 } } },
+		{ "a material named in 49 bytes", { materials = { [string.rep("m", 49)] = 40 } } },
+		{ "17 kinds of material", { materials = over } },
+	}
+	for _, case in dropped do
+		check(Lines.ReadSummary(L4W3.summary(case[2])) == nil, `ReadSummary: a card with {case[1]} is dropped`)
+	end
+	for _, field in { "title", "wavesCleared", "kills", "cash", "valor", "seconds", "materials" } do
+		local without = L4W3.summary()
+		without[field] = nil
+		check(Lines.ReadSummary(without) == nil, `ReadSummary: a card without {field} is dropped`)
+	end
+	-- What the combat place builds always passes: RunCredit's empty card and one credit on it.
+	local Credit = load("RunCredit")
+	local card = Credit.Empty("Forest Road")
+	check(Lines.ReadSummary(card) ~= nil, "ReadSummary: the combat place's empty card passes")
+	Credit.Credit(card, { kind = "camp", id = "A", name = "Pickets" }, 200, "Timber", 5, 1, 0)
+	local credited = Lines.ReadSummary(card)
+	check(
+		credited ~= nil and credited.cash == 200 and credited.materials.Timber == 5 and #credited.lines == 1,
+		"ReadSummary: and so does a credited one"
+	)
 end
 
 -- Run cash by era -------------------------------------------------------------------------------------
@@ -464,16 +748,22 @@ function L4W3.upcomingTests(): ()
 		named = named and nodes[def.with] == true
 	end
 	check(neverSold, "no shipped upcoming ability can be bought")
-	check(named, "every shipped upcoming ability names a map node")
+	check(
+		named and upcoming ~= nil and #upcoming >= 1,
+		"every shipped upcoming ability names a map node, and there is at least one (Glide, the card's next line)"
+	)
 end
 
 L4W3.group("built", L4W3.builtTests)
 L4W3.group("startable", L4W3.startableTests)
 L4W3.group("map state", L4W3.mapStateTests)
 L4W3.group("chests", L4W3.chestTests)
+L4W3.group("secret rows", L4W3.secretRowsTests)
+L4W3.group("first pick", L4W3.firstPickTests)
 L4W3.group("shipped map", L4W3.shippedTests)
 L4W3.group("add", L4W3.addTests)
 L4W3.group("read", L4W3.readTests)
+L4W3.group("summary", L4W3.summaryTests)
 L4W3.group("era", L4W3.eraTests)
 L4W3.group("cash mult", L4W3.cashMultTests)
 L4W3.group("upcoming", L4W3.upcomingTests)

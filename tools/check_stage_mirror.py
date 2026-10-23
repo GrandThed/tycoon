@@ -273,6 +273,8 @@ ARMORY_MIRRORS = {"LadderSize": "ladder_size", "Window": "window", "TierOf": "ti
                   "SetTier": "set_tier", "BuiltBands": "built_bands", "StarHeld": "star_held"}
 NEEDED["Armory"] = tuple(ARMORY_MIRRORS)
 NEEDED["StageFlow"] += ("FirstClear",)
+# The L4 W3 fix round's F6: the notes a level keeps and drops (Validate names none).
+NEEDED["StageFlow"] += ("Notes",)
 # The L3 W1 fix round 2's F4: the Armory functions deliberately left without a mirror, and why (the
 # simulators need only their parts; tools/crowd_harness tests_l3.luau tests each). Listed in a note,
 # never compared; one that is no longer in the Luau fails the run, so the list cannot go stale.
@@ -2344,6 +2346,25 @@ L3_REFUSALS = (
 )
 
 
+# The L4 W3 fix round's F6 and F18: a difficulty's `note` is display only. A bad one is dropped (one
+# warn) and the level stays playable: Validate accepts each copy on both sides, StageFlow.Notes keeps
+# exactly sim_range.kept_notes and drops as many as sim_range.note_problems names. (label, the notes
+# set on a copy of the shipped level file, the number the Python must drop: a case that drops none
+# where one is broken would prove nothing about a rule removed from both.)
+NOTE_CASES = (
+    ("as shipped", {}, 0),
+    ("a note of 24 bytes", {"brutal": "n" * 24}, 0),
+    ("a note of 25 bytes", {"brutal": "n" * 25}, 1),
+    ("an empty note", {"brutal": ""}, 1),
+    ("a note that is a number", {"brutal": 5}, 1),
+    ("a note that is true", {"brutal": True}, 1),
+    ("a note that is a table", {"brutal": {"text": "Castle gear"}}, 1),
+    ("a kept note beside a dropped one", {"normal": "Start here", "hard": "h" * 30}, 1),
+)
+NOTE_DIFFICULTIES = ("normal", "hard", "brutal")
+NOTE_KIND = "F6: a bad note is dropped, the level kept (StageFlow.Notes, Validate)"
+
+
 def armory_python(op, cfg, row, families):
     """sim_combat's answer to one row, in the shape the Luau driver prints ("none" for a nil)."""
     combats = ARMORY_COMBATS
@@ -2440,7 +2461,6 @@ def armory_cases(data, expected, report, proving):
         "maxHp": [[tm, tr, am, ar] for tm in (1, 3, 5, 12, 20) for tr in (1, 3, 5, 12, 20) for am in (0, 1)
                   for ar in (0, 2)],
         "rangeHp": [[]],
-
         "bandOf": [[tier] for tier in ARMORY_TIERS],
         "nextTier": [[c, family] for c in combats for family in asked],
         "tierCost": [[tier] for tier in ARMORY_TIERS],
@@ -2546,12 +2566,16 @@ def main():
     rules, director = combat["levels"], combat["director"]
     crowd_kinds, crowd_max = cfg["crowd"]["kinds"], cfg["crowd"]["maxAlive"]
     files = sr.load_level_files() + [copy.deepcopy(FIELD_LEVEL)]
+    shipped_count = len(files) - 1  # every file but the field's test level
+    noted = set()  # the shipped levels NOTE_CASES ran on
     raw_layouts = {path.stem: sr.load_config(path) for path in sorted(sr.LEVEL_LAYOUT_DIR.glob("*.json"))}
     raw_layouts[FIELD_LEVEL["layout"]] = copy.deepcopy(FIELD_LAYOUT)
     plan_difficulties = list(expeditions["difficulties"]) + ["nope"]
     parties = range(1, combat["coop"]["maxParty"] + 1)
     # L3-17: the families a first clear may give, and the starters it may not (Unlocks.Starters).
-    vet = {"weapons": cfg["weapons"], "starters": starters_of(cfg)}
+    # notes=False (the L4 W3 fix round's F6): Validate drops a bad note and keeps the level, so its
+    # list and verdict are compared without sim_range's note lines; NOTE_CASES hold the drop itself.
+    vet = {"weapons": cfg["weapons"], "starters": starters_of(cfg), "notes": False}
 
     def resolved(file):
         return sr.resolve_level(file, director["runCapSeconds"])
@@ -2571,7 +2595,7 @@ def main():
             "combatCases": [], "reserveCases": [], "tentOwesCases": [], "regionCases": [], "fieldedCases": [],
             "ceilingCases": [], "fenceCases": [], "iceCases": [], "armoryConfigs": [], "armoryCases": [],
             "armoryCombats": [dict(combat_) for combat_ in ARMORY_COMBATS], "armoryBuilt": [list(b) for b in ARMORY_BUILT],
-            "firstClearCases": [], "eraCashCases": [], "gameConfig": sc.se.load_game_config(),
+            "firstClearCases": [], "eraCashCases": [], "noteCases": [], "gameConfig": sc.se.load_game_config(),
             "legacyShopConfig": sc.se.load_legacy_shop_config()}
     # The L1c second fix round's F1: StageFlow.Ceiling against sim_range.trigger_ceiling, on every
     # shipped camp and on the edges: a low fence, one at triggerHeight, an open camp's tall one,
@@ -2810,6 +2834,28 @@ def main():
                         must_refuse.add(case)
                     else:
                         must_accept.add(case)
+        # The L4 W3 fix round's F6: each bad note dropped, the level kept (NOTE_CASES).
+        if number <= shipped_count and all(d in (file.get("difficulties") or {}) for d in NOTE_DIFFICULTIES):
+            for label, notes, drops in NOTE_CASES:
+                changed = copy.deepcopy(file)
+                for difficulty, note in notes.items():
+                    changed["difficulties"][difficulty]["note"] = copy.deepcopy(note)
+                case = f"note.{number}.{len(data['noteCases'])}"
+                data["noteCases"].append({"id": case, "file": changed})
+                level_changed = resolved(changed)
+                dropped = []
+                if level_changed is not None:
+                    sr.note_problems(level_changed, dropped.append)
+                if len(dropped) != drops:
+                    report.differ(NOTE_KIND, f"{name}, {label}: the Python drops {len(dropped)} notes, not {drops}")
+                expected[case] = (NOTE_KIND, f"{name}, {label}", None if level_changed is None else {
+                    "refused": bool(sr.level_problems(level_changed, layout, rules, crowd_kinds, ranks, crowd_max,
+                                                      **vet)),
+                    "kept": sorted([key, note] for key, note in sr.kept_notes(level_changed).items()),
+                    "dropped": len(dropped)})
+                noted.add(name)
+    if not noted:
+        report.differ(NOTE_KIND, f"no shipped level file has {', '.join(NOTE_DIFFICULTIES)} to break a note on")
     for target in sorted({key[0] for key in bursts}):
         for count in (0, -1):
             bursts[(target, count, 1.0)] = None

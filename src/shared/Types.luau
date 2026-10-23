@@ -179,12 +179,15 @@ export type ActionResult = {
 	ok: boolean,
 	-- C0 adds `unavailable`: place id 0, Studio, a teleport that failed after its retries, or a
 	-- run that is full or gone. insufficientFunds = materials/Valor short; locked = the
-	-- Ascension cap, or a mission era above highestEra.
+	-- Ascension cap.
 	-- C2 (slotId = the other player's userId as a string for "party"): full = party or run at
 	-- maxParty; over = run past joinUntilWave or ended; busy = invitee already in a party or
 	-- departing; expired = invite timed out or withdrawn; notLeader = only the leader may do that.
 	-- L1 "startLevel" (slotId = the level id): notLeader, busy (not the lobby, the cooldown, the
 	-- party not in, a body missing), locked (the node is not open), unavailable (no such level).
+	-- L4 W3 "expedition" (slotId = the level id): locked (MapRules.Startable: no node names the
+	-- level, or it is not open for the hub party leader), unavailable (the difficulty, no map),
+	-- notLeader, busy (members left behind; the departure carries on).
 	-- L2-9 "buyAbility" (slotId = the ability id): unavailable (no profile loaded), invalid (no
 	-- such ability, or its entry is malformed), owned, busy (fighting in a live run),
 	-- insufficientFunds (Valor short).
@@ -973,8 +976,8 @@ export type CityDressingConfig = {
 }
 
 -- C0 combat ("Expeditions", docs/INTERFACES.md "C0 contracts"). Armory.json / Combat.json /
--- Places.json / Missions/*.json mirrors; field names follow the JSON keys exactly. Asset ids and
--- place ids of 0 mean "not yet" and never error.
+-- Places.json mirrors; field names follow the JSON keys exactly. Asset ids and place ids of 0 mean
+-- "not yet" and never error.
 
 -- The two permanent weapon slots. Also the ActionResult.slotId of ascend.
 export type WeaponSlot = "melee" | "ranged"
@@ -988,8 +991,9 @@ export type SavedLoadout = { melee: string?, ranged: string?, variants: { [strin
 
 -- Profile schema v5. materials is keyed by material name ("Timber") and never negative; gear and
 -- ascension hold a tier / Ascension level per slot (0 = starter / none); highestEra survives
--- Rebirth and gates mission tiles; expeditionSince/expeditionSeconds are the away-time split the
--- offline grant reads (both zeroed by ApplyOfflineGrant).
+-- Rebirth and, since L4 W3 took the mission tiles away, is a saved record that gates nothing;
+-- expeditionSince/expeditionSeconds are the away-time split the offline grant reads (both zeroed by
+-- ApplyOfflineGrant).
 -- L3-7 (schema v8): `gear` is FROZEN, kept for the live places' code and never written or read by
 -- new code: a tier belongs to a family now (`tiers`). `ascension` still multiplies whatever family
 -- sits in its slot.

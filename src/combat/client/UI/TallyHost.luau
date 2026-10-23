@@ -16,8 +16,10 @@
 --
 -- RunState comes four times a second during the summary, so the card is shown again only when
 -- what it shows changed (`key`); between broadcasts the countdown ticks here. The summary arrives
--- from the network: every field is checked and the rows go through RunLines.Read. No sound (the
--- combat place's ids stay 0, and the card's buttons click silently like the Armory's).
+-- from the network: it is read by RunLines.ReadSummary, the one reader the city and its server use
+-- too (the L4 W3 fix round's F7), and a summary it refuses shows no rows and no totals. The rows,
+-- the totals, the wallet and Valor's purpose are UI/TallyRules' (F13). No sound (the combat
+-- place's ids stay 0, and the card's buttons click silently like the Armory's).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -31,6 +33,7 @@ local RunLines = require(sharedFolder:WaitForChild("RunLines"))
 
 local Theme = require(script.Parent:WaitForChild("Theme"))
 local RunTally = require(script.Parent:WaitForChild("RunTally"))
+local TallyRules = require(script.Parent:WaitForChild("TallyRules"))
 
 export type Deps = {
 	-- "Back to camp": RequestAbandon during the summary.
@@ -97,49 +100,6 @@ local PERCENT = 100
 
 local TallyHost = {}
 
-local function finite(value: any): boolean
-	return typeof(value) == "number" and value == value and math.abs(value) < math.huge
-end
-
-local function amount(value: any): number
-	return if finite(value) and value > 0 then value else 0
-end
-
--- The summary off the network: nil unless the totals are numbers and the materials a table; the
--- rows through RunLines.Read (a bad row is dropped, a missing list is none).
-local function readSummary(raw: any): Types.RunSummary?
-	if
-		typeof(raw) ~= "table"
-		or not finite(raw.cash)
-		or not finite(raw.valor)
-		or not finite(raw.kills)
-		or not finite(raw.seconds)
-		or typeof(raw.materials) ~= "table"
-	then
-		return nil
-	end
-	local materials: { [string]: number } = {}
-	for name, value in raw.materials do
-		if typeof(name) == "string" and amount(value) > 0 then
-			materials[name] = value
-		end
-	end
-	return {
-		title = if typeof(raw.title) == "string" then raw.title else "",
-		wavesCleared = amount(raw.wavesCleared),
-		bestWave = amount(raw.bestWave),
-		died = raw.died == true,
-		cash = amount(raw.cash),
-		materials = materials,
-		valor = amount(raw.valor),
-		kills = amount(raw.kills),
-		seconds = amount(raw.seconds),
-		mentorValor = amount(raw.mentorValor),
-		damageShare = if finite(raw.damageShare) then math.clamp(raw.damageShare, 0, 1) else 0,
-		lines = RunLines.Read(raw.lines),
-	}
-end
-
 -- L3-17: what a first clear gave beyond its row, from the network: a weapon family is the one
 -- thing a row cannot say ("Warhammer is yours: equip it in the Armory (K)"). Its Valor is the
 -- row "First Brutal clear" already. A family the config does not name shows its id.
@@ -182,7 +142,7 @@ local function subtitleOf(
 			table.insert(
 				parts,
 				WORDS.share
-					.. Format.Cash(math.round(summary.damageShare * PERCENT))
+					.. Format.Cash(math.round(math.min(summary.damageShare, 1) * PERCENT))
 					.. WORDS.percent
 			)
 		end
@@ -216,15 +176,7 @@ function TallyHost.new(parent: Instance, deps: Deps): Handle
 	})
 
 	local function wallet(): RunTally.Wallet
-		local combat = state.combat
-		return {
-			cash = state.cash,
-			materials = RunTally.Owned(
-				if combat ~= nil then combat.materials else nil,
-				state.material
-			),
-			valor = if combat ~= nil then amount(combat.valor) else 0,
-		}
+		return TallyRules.Wallet(state.cash, state.combat, state.material)
 	end
 
 	local function paintCountdown(): ()
@@ -242,7 +194,7 @@ function TallyHost.new(parent: Instance, deps: Deps): Handle
 	end
 
 	local function show(raw: any, result: Types.RunResult, info: ShowInfo): ()
-		local summary = readSummary(raw)
+		local summary = RunLines.ReadSummary(raw)
 		local leaving = result.reason == WORDS.leave
 		local canBack = not leaving and info.canBack
 		local canReturn = not leaving and deps.canReturn
@@ -274,8 +226,9 @@ function TallyHost.new(parent: Instance, deps: Deps): Handle
 			return
 		end
 		state.key = key
+		local expeditions = Catalog.GetExpeditionsConfig()
 		local totals: RunTally.Totals = if summary ~= nil
-			then RunTally.Totals(summary)
+			then TallyRules.Totals(summary)
 			else { cash = 0, material = "", materials = 0, valor = 0 }
 		state.material = totals.material
 		local buttons: { RunTally.Button } = {}
@@ -292,7 +245,7 @@ function TallyHost.new(parent: Instance, deps: Deps): Handle
 		tally.Show({
 			kicker = if leaving then WORDS.homeKicker else WORDS.runKicker,
 			title = if leaving
-				then (if summary ~= nil and summary.title ~= "" then summary.title else info.mapName)
+				then (if summary ~= nil then summary.title else info.mapName)
 				elseif info.difficultyName ~= "" then result.levelName
 					.. WORDS.sep
 					.. info.difficultyName
@@ -301,11 +254,14 @@ function TallyHost.new(parent: Instance, deps: Deps): Handle
 				then WORDS.homeSubtitle
 				else subtitleOf(summary, result, info.partySize),
 			star = not leaving and result.star,
-			lines = RunTally.Rows(if summary ~= nil then summary.lines else nil),
+			lines = TallyRules.Rows(if summary ~= nil then summary.lines else nil, expeditions),
 			totals = totals,
 			wallet = wallet(),
 			note = if leaving then nil else familyNote(result, deps.armoryKey),
-			nextAbility = RunTally.NextAbility(if combat ~= nil then combat.abilities else nil),
+			nextAbility = TallyRules.NextAbility(
+				expeditions,
+				if combat ~= nil then combat.abilities else nil
+			),
 			buttons = buttons,
 		})
 	end

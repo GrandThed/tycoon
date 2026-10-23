@@ -54,7 +54,9 @@
 -- the members present standing in for the party, and the real tick runs it, so the countdown is seen
 -- again after a run without a hub departure; `cashEra` "next" (the P key) steps the session's pay
 -- era for everyone (WaveService.NextCashEra), so an era's run cash is seen on a fresh profile.
--- Neither writes the profile.
+-- R never writes the profile. P writes nothing itself, but every credit after it pays the loaded
+-- profiles at that era, so it is refused with a notice unless they are ProfileStore's mock (Studio
+-- with API access off; the fix round's F4): pay at an overridden era never lands in a real save.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -412,9 +414,16 @@ local function fakeDepart(value: any): ()
 end
 
 -- L4 W3 (§9, the P key): the session's pay era steps to the next, and the party is told which and
--- at what multiplier ("Pay as Boomtown (×670)").
+-- at what multiplier ("Pay as Boomtown (×670)"). With API access on (the real store, F4) it does
+-- not step, and the notice says why; with nobody admitted yet it does nothing.
 local function nextCashEra(): ()
-	local era, mult = WaveService.NextCashEra()
+	local era, mult, refusal = WaveService.NextCashEra()
+	if refusal == "realStore" then
+		RunFx.Push({ kind = "notice", text = "P needs Studio API access off" })
+		return
+	elseif refusal ~= nil then
+		return
+	end
 	local def = Catalog.GetEraConfig(era)
 	local name = if def ~= nil then def.displayName else `era {era}`
 	RunFx.Push({ kind = "notice", text = `Pay as {name} (×{Format.Cash(mult)})` })

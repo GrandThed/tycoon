@@ -64,6 +64,18 @@ FILES = [
 # whole into the mutant root. A mutation undoes a rule, never the data.
 FILES += ["src/shared/Config/Expeditions.json", "src/shared/Config/ProvingGrounds.json"]
 FILES += [MAP_RULES, RUN_LINES, RUN_CREDIT, HUB_EXPEDITION]
+# The L4 W3 fix round: run_harness.py SOURCES TouchHold (F11) and TallyRules (F13), and the files its
+# L4W3FIX_LINES read as text (the hub's bridge and remotes, the tally card and its dungeon host), and
+# RunRegistry, whose ticket lines luau-engineer B's fix-round pins read.
+TOUCH_HOLD = "src/client/UI/TouchHold.luau"
+TALLY_RULES = "src/client/UI/TallyRules.luau"
+STUDIO_BRIDGE = "src/server/Services/StudioBridge.luau"
+HUB_REMOTES = "src/server/Services/HubRemotes.luau"
+RUN_TALLY = "src/client/UI/RunTally.luau"
+TALLY_HOST = "src/combat/client/UI/TallyHost.luau"
+RUN_REGISTRY = "src/combat/server/Services/RunRegistry.luau"
+HUB_MAP = "src/client/UI/HubMap.luau"
+FILES += [TOUCH_HOLD, TALLY_RULES, STUDIO_BRIDGE, HUB_REMOTES, RUN_TALLY, TALLY_HOST, RUN_REGISTRY, HUB_MAP]
 for folder, pattern in (
     ("src/shared/Config/Levels", "*.json"),
     ("src/shared/Layouts/Levels", "*.json"),
@@ -6738,11 +6750,12 @@ L3_FIX2_MUTATIONS = {
         "\tlocal valor = 0\n\tfor _, target in targets do\n",
         "\tlocal valor = 0\n\tif #targets > 0 then\n\t\treturn\n\tend\n\tfor _, target in targets do\n",
     ),
-    # In Main's sendSnapshot.
+    # In Main's sendSnapshot. Every loaded profile carries `combat`, so the mutant's return is taken
+    # at run time (the L4 W3 review's s4: the dungeon's incomePerSecond is always 0).
     "l3fix2 F1: the dungeon's Snapshot returns before it is sent": (
         MAIN_SERVER,
         '\t\twelcomeBack = nil,\n\t}\n\tRemoteService.FireClient(player, "StateChanged", snapshot)\n',
-        '\t\twelcomeBack = nil,\n\t}\n\tif snapshot.incomePerSecond > 0 then\n\t\treturn\n\tend\n\tRemoteService.FireClient(player, "StateChanged", snapshot)\n',
+        '\t\twelcomeBack = nil,\n\t}\n\tif state.combat ~= nil then\n\t\treturn\n\tend\n\tRemoteService.FireClient(player, "StateChanged", snapshot)\n',
     ),
     # In DataService's attemptLoad.
     "l3fix2 F1: a load migrates only a profile with no version": (
@@ -9313,6 +9326,718 @@ STAMP_MUTATIONS = {
 }
 assert not set(STAMP_MUTATIONS) & set(MUTATIONS), sorted(set(STAMP_MUTATIONS) & set(MUTATIONS))
 MUTATIONS.update(STAMP_MUTATIONS)
+
+
+# The L4 W3 fix round (the review's slice 1 m1; luau-engineer A's lines, fix report 5.4): the hub's seven
+# probes, the reviewer's own breaks re-aimed at the fixed text, and F9's rows. Caught by tests_l4w3_pins.luau
+# (run_harness.py L4W3FIX_LINES departStars, departVerdict, sendMapLeader, sendMapArgs, bridgeReads,
+# arrivalCaps, expeditionArgs).
+L4W3FIX_HUB_MUTATIONS = {
+    "l4w3fix hub: Depart tickets an unavailable difficulty": (
+        HUB_EXPEDITION,
+        '\tif verdict ~= "ok" then\n\t\tsendResult(',
+        '\tif verdict == "locked" then\n\t\tsendResult(',
+    ),
+    "l4w3fix hub: Depart reads no stars": (
+        HUB_EXPEDITION,
+        "\t\tUnlocks.StarsOf(state.combat),\n\t\tlevelId,\n\t\tdifficulty,\n",
+        "\t\t{},\n\t\tlevelId,\n\t\tdifficulty,\n",
+    ),
+    "l4w3fix hub: Depart passes every difficulty": (
+        HUB_EXPEDITION,
+        "\t\tif file ~= nil then file.difficulties else nil\n\t)\n",
+        "\t\tif file ~= nil then { normal = {}, hard = {}, brutal = {} } else nil\n\t)\n",
+    ),
+    "l4w3fix hub: SendMap opens nodes by the player's own stars": (
+        HUB_EXPEDITION,
+        "\t\t\tleaderStars = Unlocks.StarsOf(leaderState.combat)\n",
+        "\t\t\tleaderStars = Unlocks.StarsOf(state.combat)\n",
+    ),
+    "l4w3fix hub: the bridge forwards a card unread": (
+        STUDIO_BRIDGE,
+        "\t\t\tlocal summary = RunLines.ReadSummary(entry)\n",
+        "\t\t\tlocal summary = entry\n",
+    ),
+    "l4w3fix hub: ReadArrival drops the level id cap": (
+        STUDIO_BRIDGE,
+        "\t\tor #record.levelId > MapRules.MAX_LEVEL_ID_LENGTH\n",
+        "",
+    ),
+    "l4w3fix hub: ReadArrival drops the difficulty cap": (
+        STUDIO_BRIDGE,
+        "\t\tor #record.difficulty > MapRules.MAX_DIFFICULTY_LENGTH\n",
+        "",
+    ),
+    "l4w3fix hub: RequestExpedition's difficulty uncapped": (
+        HUB_REMOTES,
+        "\t\t\t\t\tand isShortName(args[2], MapRules.MAX_DIFFICULTY_LENGTH)\n",
+        '\t\t\t\t\tand typeof(args[2]) == "string"\n',
+    ),
+    "l4w3fix F9: SendMap sends no secret rows": (
+        HUB_EXPEDITION,
+        "MapRules.SecretRows(built, sitesOf, state.combat.secrets)",
+        "MapRules.SecretRows(built, sitesOf, nil)",
+    ),
+    "l4w3fix hub: Depart lets a guest depart": (
+        HUB_EXPEDITION,
+        '\tif not PartyService.IsLeader(player) then\n\t\tsendResult(player, "expedition", levelId, false, "notLeader")\n',
+        '\tif false then\n\t\tsendResult(player, "expedition", levelId, false, "notLeader")\n',
+    ),
+}
+assert not set(L4W3FIX_HUB_MUTATIONS) & set(MUTATIONS), sorted(set(L4W3FIX_HUB_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W3FIX_HUB_MUTATIONS)
+
+
+# The L4 W3 fix round, luau-engineer A's pure rules (fix report 5.4, scratch probes_a.py label for label):
+# F7's RunLines.ReadSummary, F8's both halves of every Read field rule (the review's slice 1 m2 probes),
+# F9's MapRules.SecretRows and F13's MapRules.FirstPick. Caught by tests_l4w3.luau's cases.
+L4W3FIX_A_MUTATIONS = {
+    "l4w3fix A F7 ReadSummary: title cap dropped": (
+        RUN_LINES,
+        "#title < 1 or #title > MAX_TEXT then",
+        "#title < 1 then",
+    ),
+    "l4w3fix A F7 ReadSummary: empty title kept": (
+        RUN_LINES,
+        "#title < 1 or #title > MAX_TEXT then",
+        "#title > MAX_TEXT then",
+    ),
+    "l4w3fix A F7 ReadSummary: title type unchecked": (
+        RUN_LINES,
+        'if type(title) ~= "string" or #title < 1',
+        'if type(title) == "number" or #title < 1',
+    ),
+    "l4w3fix A F7 ReadSummary: a count need not be whole": (
+        RUN_LINES,
+        "return total(value) and value % 1 == 0",
+        "return total(value)",
+    ),
+    "l4w3fix A F7 ReadSummary: a total need not be finite": (
+        RUN_LINES,
+        "local function total(value: any): boolean\n\treturn finite(value) and value >= 0",
+        'local function total(value: any): boolean\n\treturn type(value) == "number" and value >= 0',
+    ),
+    "l4w3fix A F7 ReadSummary: a total may be negative": (
+        RUN_LINES,
+        "local function total(value: any): boolean\n\treturn finite(value) and value >= 0",
+        "local function total(value: any): boolean\n\treturn finite(value)",
+    ),
+    "l4w3fix A F7 ReadSummary: wavesCleared unchecked": (
+        RUN_LINES,
+        "\t\tnot count(raw.wavesCleared)\n\t\tor not count(raw.kills)",
+        "\t\tnot count(raw.kills)",
+    ),
+    "l4w3fix A F7 ReadSummary: wavesCleared a total, not a count": (
+        RUN_LINES,
+        "not count(raw.wavesCleared)",
+        "not total(raw.wavesCleared)",
+    ),
+    "l4w3fix A F7 ReadSummary: kills unchecked": (
+        RUN_LINES,
+        "\t\tor not count(raw.kills)\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: kills a total, not a count": (
+        RUN_LINES,
+        "or not count(raw.kills)",
+        "or not total(raw.kills)",
+    ),
+    "l4w3fix A F7 ReadSummary: cash unchecked": (
+        RUN_LINES,
+        "\t\tor not total(raw.cash)\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: valor unchecked": (
+        RUN_LINES,
+        "\t\tor not total(raw.valor)\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: seconds unchecked": (
+        RUN_LINES,
+        "\t\tor not total(raw.seconds)\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: bestWave unchecked": (
+        RUN_LINES,
+        "\t\tor (raw.bestWave ~= nil and not count(raw.bestWave))\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: bestWave a total": (
+        RUN_LINES,
+        "not count(raw.bestWave)",
+        "not total(raw.bestWave)",
+    ),
+    "l4w3fix A F7 ReadSummary: bestWave required": (
+        RUN_LINES,
+        "(raw.bestWave ~= nil and not count(raw.bestWave))",
+        "not count(raw.bestWave)",
+    ),
+    "l4w3fix A F7 ReadSummary: mentorValor unchecked": (
+        RUN_LINES,
+        "\t\tor (raw.mentorValor ~= nil and not total(raw.mentorValor))\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: damageShare unchecked": (
+        RUN_LINES,
+        "\t\tor (raw.damageShare ~= nil and not total(raw.damageShare))\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: materials not required": (
+        RUN_LINES,
+        '\t\tor type(raw.materials) ~= "table"\n',
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: materials kinds uncapped": (
+        RUN_LINES,
+        "\t\t\tkinds > MAX\n\t\t\tor type(name)",
+        "\t\t\tkinds > MAX + 1\n\t\t\tor type(name)",
+    ),
+    "l4w3fix A F7 ReadSummary: a material key need not be a string": (
+        RUN_LINES,
+        '\t\t\tor type(name) ~= "string"\n',
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: an empty material key kept": (
+        RUN_LINES,
+        "\t\t\tor #name < 1\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: a material key uncapped": (
+        RUN_LINES,
+        "\t\t\tor #name > MAX_TEXT\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: a material amount unchecked": (
+        RUN_LINES,
+        "\t\t\tor not total(quantity)\n",
+        "",
+    ),
+    "l4w3fix A F7 ReadSummary: lines unread": (
+        RUN_LINES,
+        "\t\tlines = RunLines.Read(raw.lines),\n\t}\nend",
+        "\t\tlines = raw.lines,\n\t}\nend",
+    ),
+    "l4w3fix A F7 ReadSummary: bestWave defaults to 0": (
+        RUN_LINES,
+        "then raw.bestWave else raw.wavesCleared",
+        "then raw.bestWave else 0",
+    ),
+    "l4w3fix A F7 ReadSummary: mentorValor defaults to 1": (
+        RUN_LINES,
+        "then raw.mentorValor else 0",
+        "then raw.mentorValor else 1",
+    ),
+    "l4w3fix A F7 ReadSummary: damageShare defaults to 1": (
+        RUN_LINES,
+        "then raw.damageShare else 0",
+        "then raw.damageShare else 1",
+    ),
+    "l4w3fix A F7 ReadSummary: died truthy": (
+        RUN_LINES,
+        "died = raw.died == true,",
+        "died = raw.died ~= nil and raw.died ~= false,",
+    ),
+    "l4w3fix A F7 ReadSummary: materials aliased": (
+        RUN_LINES,
+        "\t\tmaterials = materials,\n\t\tvalor = raw.valor,",
+        "\t\tmaterials = raw.materials,\n\t\tvalor = raw.valor,",
+    ),
+    "l4w3fix A F7 ReadSummary: not a table read": (
+        RUN_LINES,
+        'function RunLines.ReadSummary(value: any): Types.RunSummary?\n\tif type(value) ~= "table" then\n\t\treturn nil\n\tend',
+        "function RunLines.ReadSummary(value: any): Types.RunSummary?\n\tif value == nil then\n\t\treturn nil\n\tend",
+    ),
+    "l4w3fix A F8 Read: materials may be negative": (
+        RUN_LINES,
+        "or not (finite(raw.materials) and raw.materials >= 0)",
+        "or not finite(raw.materials)",
+    ),
+    "l4w3fix A F8 Read: valor may be negative": (
+        RUN_LINES,
+        "or not (finite(raw.valor) and raw.valor >= 0)",
+        "or not finite(raw.valor)",
+    ),
+    "l4w3fix A F8 Read: cash may be negative": (
+        RUN_LINES,
+        "or not (finite(raw.cash) and raw.cash >= 0)",
+        "or not finite(raw.cash)",
+    ),
+    "l4w3fix A F8 Read: name uncapped": (
+        RUN_LINES,
+        "or not text(raw.name)",
+        'or type(raw.name) ~= "string"',
+    ),
+    "l4w3fix A F8 Read: material uncapped": (
+        RUN_LINES,
+        "or not text(raw.material)",
+        'or type(raw.material) ~= "string"',
+    ),
+    "l4w3fix A F8 Read: count need not be finite": (
+        RUN_LINES,
+        "or not (finite(raw.count) and raw.count >= 0)",
+        'or not (type(raw.count) == "number" and raw.count >= 0)',
+    ),
+    "l4w3fix A F9 SecretRows: a level with no chests gets an empty row": (
+        MAP_RULES,
+        "\t\tif #sites > 0 then\n\t\t\trows[levelId] =",
+        "\t\tif #sites >= 0 then\n\t\t\trows[levelId] =",
+    ),
+    "l4w3fix A F9 SecretRows: opened ignored": (
+        MAP_RULES,
+        "MapRules.SecretRow(sites, if opened ~= nil then opened[levelId] else nil)",
+        "MapRules.SecretRow(sites, nil)",
+    ),
+    "l4w3fix A F9 SecretRows: another level's opened chests": (
+        MAP_RULES,
+        "MapRules.SecretRow(sites, if opened ~= nil then opened[levelId] else nil)",
+        "MapRules.SecretRow(sites, if opened ~= nil then select(2, next(opened)) else nil)",
+    ),
+    "l4w3fix A F9 SecretRows: no rows at all": (
+        MAP_RULES,
+        "\tfor levelId in built do\n\t\tlocal sites = sitesOf(levelId)",
+        "\tfor levelId in {} do\n\t\tlocal sites = sitesOf(levelId)",
+    ),
+    "l4w3fix A F13 FirstPick: a starred node first (p3)": (
+        MAP_RULES,
+        "if #node.stars == 0 then",
+        "if #node.stars > 0 then",
+    ),
+    "l4w3fix A F13 FirstPick: an open flag that is not true": (
+        MAP_RULES,
+        'if typeof(node) == "table" and node.open == true and',
+        'if typeof(node) == "table" and node.open ~= false and',
+    ),
+    "l4w3fix A F13 FirstPick: the last starred node falls back": (
+        MAP_RULES,
+        "fallback = fallback or node",
+        "fallback = node",
+    ),
+    "l4w3fix A F13 FirstPick: a cleared difficulty picked": (
+        MAP_RULES,
+        "if table.find(fallback.stars, difficulty) == nil then",
+        "if table.find(fallback.stars, difficulty) ~= nil then",
+    ),
+    "l4w3fix A F13 FirstPick: all cleared reads no pick": (
+        MAP_RULES,
+        "\treturn fallback.id, nil\nend",
+        "\treturn nil, nil\nend",
+    ),
+    "l4w3fix A F13 FirstPick: star list unchecked": (
+        MAP_RULES,
+        'node.open == true and typeof(node.stars) == "table" then',
+        "node.open == true then",
+    ),
+    "l4w3fix A F13 FirstPick: no open node reads the first": (
+        MAP_RULES,
+        "\tif fallback == nil then\n\t\treturn nil, nil\n\tend",
+        '\tif fallback == nil then\n\t\treturn state.nodes[1] and "x", nil\n\tend',
+    ),
+}
+assert not set(L4W3FIX_A_MUTATIONS) & set(MUTATIONS), sorted(set(L4W3FIX_A_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W3FIX_A_MUTATIONS)
+
+
+# The L4 W3 fix round, ui-engineer B's (the review's slice 3 m3 p1, p2, p5, F13, F14, F15, s4; fix report
+# "For the designer"): TallyRules' rules, caught by tests_l4w3_tally.luau, and the hosts' lines, caught by
+# tests_l4w3_pins.luau (run_harness.py L4W3FIX_LINES).
+L4W3FIX_UIB_MUTATIONS = {
+    "l4w3fix uiB p1: a picked depart reselects on every RunState": (
+        TALLY_RULES,
+        "\t\tif pick ~= picked and node ~= nil then\n",
+        "\t\tif node ~= nil then\n",
+    ),
+    "l4w3fix uiB p2: the map never holds": (
+        TALLY_RULES,
+        '\tlocal holding = depart ~= nil and (depart.state == "waiting" or depart.state == "counting")\n',
+        "\tlocal holding = false\n",
+    ),
+    "l4w3fix uiB: the map closes on every holding RunState": (
+        TALLY_RULES,
+        "\t\tclose = holding and not memory.holding,\n",
+        "\t\tclose = holding,\n",
+    ),
+    "l4w3fix uiB: the map opens on entering though it holds": (
+        TALLY_RULES,
+        "\t\topen = (entered and not holding) or select ~= nil,\n",
+        "\t\topen = entered or select ~= nil,\n",
+    ),
+    "l4w3fix uiB: the pick is never remembered": (
+        TALLY_RULES,
+        "\t\tmemory = { holding = holding, picked = picked },\n",
+        "\t\tmemory = { holding = holding, picked = memory.picked },\n",
+    ),
+    "l4w3fix uiB: the depart read outside the lobby": (
+        TALLY_RULES,
+        "\tlocal depart = if phase == LOBBY then TallyRules.ReadDepart(raw) else nil\n",
+        "\tlocal depart = TallyRules.ReadDepart(raw)\n",
+    ),
+    "l4w3fix uiB F15: a result's levelId unchecked": (
+        TALLY_RULES,
+        '\t\tand typeof(payload.levelId) == "string"\n',
+        "",
+    ),
+    "l4w3fix uiB s4: an upcoming entry unchecked": (
+        TALLY_RULES,
+        "\t\tif upcomingEntry(def) and not Unlocks.Owns(owned, def.id) then\n",
+        '\t\tif typeof(def) == "table" and not Unlocks.Owns(owned, def.id) then\n',
+    ),
+    "l4w3fix uiB: the next ability ignores the id tie-break": (
+        TALLY_RULES,
+        "\t\t\t\tor (def.order == best.order and def.id < best.id)\n",
+        "",
+    ),
+    "l4w3fix uiB p5 rule: low end flies every coin": (
+        TALLY_RULES,
+        "\t\tcoins = if lowEnd then counts.coinsLowEnd else counts.coins\n",
+        "\t\tcoins = counts.coins\n",
+    ),
+    "l4w3fix uiB: more logs than the pile holds": (
+        TALLY_RULES,
+        "\t\tlogs = math.min(if lowEnd then counts.logsLowEnd else counts.logs, counts.logs)\n",
+        "\t\tlogs = if lowEnd then counts.logsLowEnd else counts.logs\n",
+    ),
+    "l4w3fix uiB: coins fly with no cash": (
+        TALLY_RULES,
+        "\tif totals.cash > 0 then\n",
+        "\tif true then\n",
+    ),
+    "l4w3fix uiB p5: the icons gated on reducedMotion": (
+        RUN_TALLY,
+        "TallyRules.Flights(Theme.lowEndDevice, view.totals, LOOK.flights)",
+        "TallyRules.Flights(Theme.reducedMotion, view.totals, LOOK.flights)",
+    ),
+    "l4w3fix uiB p1 host: the depart memory never kept": (
+        UI_CONTROLLER,
+        "\t\tst.depart = departStep.memory\n",
+        "",
+    ),
+    "l4w3fix uiB p2 host: the map opens on every RunState": (
+        UI_CONTROLLER,
+        "\t\t\tif departStep.open then\n",
+        "\t\t\tif true then\n",
+    ),
+    "l4w3fix uiB F15 host: any result builds a card": (
+        UI_CONTROLLER,
+        "\t\t\tTallyRules.IsRunResult(result)\n",
+        "\t\t\ttrue\n",
+    ),
+    "l4w3fix uiB p3 host: the first map opens on no rule": (
+        UI_CONTROLLER,
+        "MapRules.FirstPick(expeditions.difficulties, state)",
+        "MapScreen.FirstPick(expeditions.difficulties, state)",
+    ),
+    "l4w3fix uiB host: the dungeon card read unchecked": (
+        TALLY_HOST,
+        "\t\tlocal summary = RunLines.ReadSummary(raw)\n",
+        "\t\tlocal summary = raw\n",
+    ),
+}
+assert not set(L4W3FIX_UIB_MUTATIONS) & set(MUTATIONS), sorted(set(L4W3FIX_UIB_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W3FIX_UIB_MUTATIONS)
+
+
+# The L4 W3 fix round, ui-engineer A's (the review's slice 3 m1, m2, m3 p4, p6; F7, F11, F12, F13, F16; fix
+# report "For the designer"): TouchHold's count, caught by tests_l4w3_hub.luau, and the city's lines, caught
+# by tests_l4w3_pins.luau (run_harness.py L4W3FIX_LINES map* and city*).
+L4W3FIX_UIA_MUTATIONS = {
+    "l4w3fix uiA F11: a reason held twice counts twice": (
+        TOUCH_HOLD,
+        "\tif holds.reasons[reason] == true then\n\t\treturn\n\tend\n\tholds.reasons[reason] = true\n",
+        "\tholds.reasons[reason] = true\n",
+    ),
+    "l4w3fix uiA F11: every hold saves the controls": (
+        TOUCH_HOLD,
+        "\tif holds.count == 1 then\n",
+        "\tif holds.count >= 1 then\n",
+    ),
+    "l4w3fix uiA F11: a hold leaves the controls on": (
+        TOUCH_HOLD,
+        "\t\tGuiService.TouchControlsEnabled = false\n",
+        "\t\tGuiService.TouchControlsEnabled = true\n",
+    ),
+    "l4w3fix uiA F11: a release of a reason never held counts": (
+        TOUCH_HOLD,
+        "\tif holds.reasons[reason] ~= true then\n\t\treturn\n\tend\n\tholds.reasons[reason] = nil\n",
+        "\tholds.reasons[reason] = nil\n",
+    ),
+    "l4w3fix uiA F11: any release restores": (
+        TOUCH_HOLD,
+        "\tif holds.count == 0 then\n",
+        "\tif true then\n",
+    ),
+    "l4w3fix uiA F11: the last release restores nothing": (
+        TOUCH_HOLD,
+        "\t\t\tGuiService.TouchControlsEnabled = saved\n",
+        "\t\t\tlocal _ = saved\n",
+    ),
+    "l4w3fix uiA p4: the city map always departs public": (
+        HUB_MAP,
+        "\t\trequest:FireServer(levelId, difficulty, deps.isPublic())\n",
+        "\t\trequest:FireServer(levelId, difficulty, true)\n",
+    ),
+    "l4w3fix uiA F11: the map holds before the Armory closes": (
+        HUB_MAP,
+        "\t\t\tdeps.onOpenChanged(true)\n\t\t\tTouchHold.Hold(TOUCH_HOLD)\n",
+        "\t\t\tTouchHold.Hold(TOUCH_HOLD)\n\t\t\tdeps.onOpenChanged(true)\n",
+    ),
+    "l4w3fix uiA F11: the map's close never lets go": (
+        HUB_MAP,
+        "\t\t\tTouchHold.Release(TOUCH_HOLD)\n\t\t\tdeps.onOpenChanged(false)\n",
+        "\t\t\tdeps.onOpenChanged(false)\n",
+    ),
+    "l4w3fix uiA F11: Destroy never lets go": (
+        HUB_MAP,
+        "\t\t\tTouchHold.Release(TOUCH_HOLD)\n\t\t\tfor _, connection in connections do\n",
+        "\t\t\tfor _, connection in connections do\n",
+    ),
+    "l4w3fix uiA F13: the city map seeds on no rule": (
+        HUB_MAP,
+        "\t\t\tlocal nodeId, difficulty = MapRules.FirstPick(map.difficulties, state)\n",
+        "\t\t\tlocal nodeId: string?, difficulty: string? = nil, nil\n",
+    ),
+    "l4w3fix uiA F16: no config, no toast": (
+        HUB_MAP,
+        "\t\telse\n\t\t\tdeps.toast(UNAVAILABLE_TEXT)\n",
+        "",
+    ),
+    "l4w3fix uiA p6: the city wallet from nothing": (
+        HUB_UI,
+        "\t\treturn RunTally.Wallet(current.state.cash, current.state.combat, tallyMaterial)\n",
+        "\t\treturn RunTally.Wallet(0, current.state.combat, tallyMaterial)\n",
+    ),
+    "l4w3fix uiA F7: the city reads a card unchecked": (
+        HUB_UI,
+        "\t\t\tlocal summary = RunLines.ReadSummary(payload)\n",
+        "\t\t\tlocal summary = payload :: Types.RunSummary?\n",
+    ),
+    "l4w3fix uiA F12: the city card claims a star": (
+        HUB_UI,
+        "\t\t\tstar = false,\n",
+        "\t\t\tstar = #summary.lines > 0,\n",
+    ),
+    "l4w3fix uiA F11: the report is never up": (
+        HUB_UI,
+        "\t\treturn card ~= nil and card.IsVisible()\n",
+        "\t\treturn false\n",
+    ),
+    "l4w3fix uiA F11: the map opens over the report": (
+        HUB_UI,
+        "if model ~= nil and combatRemotesReady and not reportShown() then",
+        "if model ~= nil and combatRemotesReady then",
+    ),
+    "l4w3fix uiA F11: the Armory opens over the report": (
+        HUB_UI,
+        "\t\t\t\tand combatRemotesReady\n\t\t\t\tand not reportShown()\n\t\t\tthen\n",
+        "\t\t\t\tand combatRemotesReady\n\t\t\tthen\n",
+    ),
+    "l4w3fix uiA F11: the map holds on as the Armory opens": (
+        HUB_UI,
+        "\t\t\t\tif map ~= nil and not screen.IsOpen() then\n\t\t\t\t\tmap.Close()\n\t\t\t\tend\n\t\t\t\tscreen.Toggle()\n",
+        "\t\t\t\tscreen.Toggle()\n",
+    ),
+    "l4w3fix uiA F11: the map's open leaves the Armory up": (
+        HUB_UI,
+        '\t\t\t\t\tclosePanels()\n\t\t\t\t\tlocal screen = armoryScreen\n\t\t\t\t\tif screen ~= nil then\n\t\t\t\t\t\tscreen.Close()\n\t\t\t\t\tend\n\t\t\t\tend\n\t\t\t\tbottomBar.SetActive(if open then "expedition"',
+        '\t\t\t\t\tclosePanels()\n\t\t\t\tend\n\t\t\t\tbottomBar.SetActive(if open then "expedition"',
+    ),
+    "l4w3fix uiA F11: the report leaves the Armory up": (
+        HUB_UI,
+        "\t\tlocal armory = armoryScreen\n\t\tif armory ~= nil then\n\t\t\tarmory.Close()\n\t\tend\n",
+        "",
+    ),
+    "l4w3fix uiA F11: the report never holds": (
+        HUB_UI,
+        "\t\tTouchHold.Hold(REPORT.touchHold)\n",
+        "",
+    ),
+    "l4w3fix uiA F11: Dismiss never lets go": (
+        HUB_UI,
+        "\t\t\t\t\tcard.Hide()\n\t\t\t\t\tTouchHold.Release(REPORT.touchHold)\n",
+        "\t\t\t\t\tcard.Hide()\n",
+    ),
+}
+assert not set(L4W3FIX_UIA_MUTATIONS) & set(MUTATIONS), sorted(set(L4W3FIX_UIA_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W3FIX_UIA_MUTATIONS)
+
+
+# The L4 W3 fix round, luau-engineer B's (docs/prompts/l4-w3-fix-reports/luau-b-mutants.py, pasted whole):
+# the two entries the round made stale, re-aimed by key, then F1-F4, F6, F9, s2, s3 and the review's slice 2
+# m2 condition probes, caught by tests_l4w3_run.luau's cases and pins (run_harness.py L4W3B_LINES).
+MUTATIONS.update({
+    # --- Re-aimed (stale since the fix round) ------------------------------------------------------
+    # F6: Validate no longer checks the note (StageFlow.Notes drops it); the mutant now makes a bad
+    # note refuse the level again.
+    "l4w3b note: never checked": (
+        FLOW, "\treactProblems(layout, problem)\n\treturn problems\n",
+        "\tfor _, line in (select(2, StageFlow.Notes(level))) do\n\t\tproblem(line)\n\tend\n"
+        "\treactProblems(layout, problem)\n\treturn problems\n"),
+    # F3: the line's count is `count` now (kills for a kill's key, one for an event).
+    "l4w3b credit: no line": (
+        RUN_CREDIT, "\tRunLines.Add(summary.lines, key, count, cash, material, materials, valor)\n", ""),
+})
+
+L4W3B_FIX_MUTATIONS = {
+    # --- F1: once a server ---------------------------------------------------------------------------
+    "l4w3b-fix F1: an admit opens again": (
+        FLOW, "\tif book.departOpened then\n\t\treturn\n\tend\n\tbook.departOpened = true\n",
+        "\tbook.departOpened = true\n"),
+    "l4w3b-fix F1: the first admit not remembered": (
+        FLOW, "\tbook.departOpened = true\n\tbook.depart = StageFlow.DepartOpen(levelId, difficulty, verified, proving, since)",
+        "\tbook.depart = StageFlow.DepartOpen(levelId, difficulty, verified, proving, since)"),
+    "l4w3b-fix F1: the session's end reopens (DepartForget)": (
+        FLOW, "function StageFlow.DepartForget(book: DepartBook): ()\n\tbook.depart = nil\n",
+        "function StageFlow.DepartForget(book: DepartBook): ()\n\tbook.depart = nil\n\tbook.departOpened = false\n"),
+    "l4w3b-fix F1: the session's end keeps the auto-start": (
+        FLOW, "function StageFlow.DepartForget(book: DepartBook): ()\n\tbook.depart = nil\n",
+        "function StageFlow.DepartForget(book: DepartBook): ()\n"),
+    "l4w3b-fix F1: R is not an opening": (
+        FLOW, "\tbook.departOpened = true\n\treturn book.depart ~= nil", "\treturn book.depart ~= nil"),
+    # The ruling's own mutant: Reset clears departOpened again (the pins resetOpened, openedWrites).
+    "l4w3b-fix F1: Reset clears the opening": (
+        WAVE_SERVICE, "\tStageFlow.DepartForget(boot)\n", "\tStageFlow.DepartForget(boot)\n\tboot.departOpened = false\n"),
+    "l4w3b-fix F1: Reset forgets nothing": (WAVE_SERVICE, "\tStageFlow.DepartForget(boot)\n", ""),
+    "l4w3b-fix F1: openDepart past the book": (
+        WAVE_SERVICE, "\tStageFlow.DepartAdmit(boot, levelId, difficulty, verified, proving, since)\n",
+        "\tboot.depart = StageFlow.DepartOpen(levelId, difficulty, verified, proving, since)\n"),
+    "l4w3b-fix F1: R past the book": (
+        WAVE_SERVICE, "\treturn StageFlow.DepartLever(boot, levelId, difficulty, os.clock())\n",
+        "\tboot.depart = StageFlow.DepartOpen(levelId, difficulty, true, nil, os.clock())\n\treturn boot.depart ~= nil\n"),
+
+    # --- s3: the tick's early return -------------------------------------------------------------------
+    "l4w3b-fix s3: picked still live": (
+        FLOW, '(depart.state == "waiting" or depart.state == "counting")', '(depart.state ~= "done")'),
+    "l4w3b-fix s3: counting not live": (FLOW, ' or depart.state == "counting")', ")"),
+    "l4w3b-fix s3: no early return": (
+        WAVE_SERVICE, "\tif depart == nil or not StageFlow.DepartLive(depart) then\n", "\tif depart == nil then\n"),
+
+    # --- F2: the late arrivals at zero -------------------------------------------------------------------
+    "l4w3b-fix F2: nobody late": (FLOW, "\t\tif member.expected or member.body then\n", "\t\tif true then\n"),
+    "l4w3b-fix F2: an expected member late": (
+        FLOW, "\t\tif member.expected or member.body then\n", "\t\tif member.body then\n"),
+    "l4w3b-fix F2: everyone late": (
+        FLOW, "\tif starting == 0 then\n\t\treturn {}\n\tend\n\treturn late\n", "\treturn late\n"),
+    "l4w3b-fix F2: the auto-start passes no late": (
+        WAVE_SERVICE, "refusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())",
+        "refusal = startLevel(player, depart.levelId, depart.difficulty)"),
+    "l4w3b-fix F2: the body rule ignores late": (
+        WAVE_SERVICE, "or not VitalsService.AllHaveBodies(starting) then", "or not VitalsService.AllHaveBodies(members) then"),
+    "l4w3b-fix F2: late ignored when building the list": (
+        WAVE_SERVICE, "\t\t\tif not late[other.userId] then\n\t\t\t\ttable.insert(starting, other)",
+        "\t\t\tif true then\n\t\t\t\ttable.insert(starting, other)"),
+    "l4w3b-fix F2: a late member placed": (
+        WAVE_SERVICE, "\t\tif late ~= nil and late[other.userId] then\n\t\t\tother.waiting = true\n\t\t\tcontinue\n\t\tend\n", ""),
+    "l4w3b-fix F2: a late member fighting": (
+        WAVE_SERVICE, "\t\t\tother.waiting = true\n\t\t\tcontinue\n", "\t\t\tother.waiting = false\n\t\t\tcontinue\n"),
+    "l4w3b-fix F2: late reads no expected list": (
+        WAVE_SERVICE, "\t\t\texpected = ArenaService.IsExpected(member.userId),\n", "\t\t\texpected = false,\n"),
+    "l4w3b-fix F2: late reads no body": (
+        WAVE_SERVICE, "\t\t\tbody = VitalsService.AllHaveBodies({ member }),\n", "\t\t\tbody = false,\n"),
+    "l4w3b-fix F2: the leader's own start leaves members behind": (
+        WAVE_SERVICE, "\tlocal refusal = startLevel(player, levelId, difficulty)\n",
+        "\tlocal refusal = startLevel(player, levelId, difficulty, lateAtZero())\n"),
+
+    # --- s2: the start at zero inside a pcall --------------------------------------------------------------
+    "l4w3b-fix s2: no pcall": (
+        WAVE_SERVICE,
+        "\t\t\tlocal started, problem = pcall(function()\n"
+        "\t\t\t\trefusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())\n\t\t\tend)\n",
+        "\t\t\tlocal started, problem = true, nil\n"
+        "\t\t\trefusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())\n"),
+    "l4w3b-fix s2: a throw is no refusal": (WAVE_SERVICE, '\t\t\t\trefusal = "unavailable"\n', ""),
+
+    # --- F3: a kill's line counts kills --------------------------------------------------------------------
+    "l4w3b-fix F3: a share counts a raider": (
+        RUN_CREDIT, "local KILL_KINDS: { [string]: boolean } = { raiders = true, boss = true }",
+        "local KILL_KINDS: { [string]: boolean } = {}"),
+    "l4w3b-fix F3: the boss counts shares": (RUN_CREDIT, "{ raiders = true, boss = true }", "{ raiders = true }"),
+    "l4w3b-fix F3: every kind counts kills": (
+        RUN_CREDIT, "if KILL_KINDS[key.kind] then kills else CREDIT_COUNT", "kills"),
+
+    # --- F4: P never pays into a real save ------------------------------------------------------------------
+    "l4w3b-fix F4: the real store steps": (RUN_CREDIT, '\tif not mock then\n\t\treturn "realStore"\n\tend\n', ""),
+    "l4w3b-fix F4: nobody needed": (RUN_CREDIT, '\tif not admitted then\n\t\treturn "nobody"\n\tend\n', ""),
+    "l4w3b-fix F4: never asked": (
+        WAVE_SERVICE, "\tlocal refusal = RunCredit.PayLeverRefusal(DataService.IsMockMode(), leader ~= nil)\n",
+        "\tlocal refusal = nil\n"),
+    "l4w3b-fix F4: the store not read": (
+        WAVE_SERVICE, "RunCredit.PayLeverRefusal(DataService.IsMockMode(), leader ~= nil)",
+        "RunCredit.PayLeverRefusal(true, leader ~= nil)"),
+    "l4w3b-fix F4: a refusal still steps": (
+        WAVE_SERVICE, "\tif refusal ~= nil then\n\t\treturn current, Combat.EraCashMult(rewards, current), refusal\n\tend\n", ""),
+    "l4w3b-fix F4: no notice": (
+        DEBUG_SERVICE, '\t\tRunFx.Push({ kind = "notice", text = "P needs Studio API access off" })\n', ""),
+    "l4w3b-fix F4: another refusal still says Pay as": (
+        DEBUG_SERVICE, "\telseif refusal ~= nil then\n\t\treturn\n", "\telseif refusal ~= nil then\n"),
+
+    # --- F6: a bad note is dropped, never a refusal -----------------------------------------------------------
+    "l4w3b-fix F6: a dropped note refuses the level": (
+        WAVE_SERVICE, "\tif #problems > 0 or level.difficulties[difficulty] == nil then\n",
+        "\tif #problems > 0 or #dropped > 0 or level.difficulties[difficulty] == nil then\n"),
+    "l4w3b-fix F6: warned at every read": (
+        WAVE_SERVICE, "\tif #dropped > 0 and not boot.warnedNotes[levelId] then\n", "\tif #dropped > 0 then\n"),
+    "l4w3b-fix F6: a good note dropped": (FLOW, "\t\t\tkept[name] = note\n", ""),
+    "l4w3b-fix F6: a bad note kept": (
+        FLOW, "\t\telseif note ~= nil then\n\t\t\tkept[name] = note\n",
+        "\t\tend\n\t\tif note ~= nil then\n\t\t\tkept[name] = note\n"),
+
+    # --- F9: one copy of the secret rows -----------------------------------------------------------------------
+    "l4w3b-fix F9: no secret rows": (
+        WAVE_SERVICE,
+        "\treturn MapRules.SecretRows(\n\t\tbuilt,\n\t\tsitesOf,\n\t\tif profile ~= nil then profile.combat.secrets else nil\n\t)\n",
+        "\treturn {}\n"),
+    "l4w3b-fix F9: nothing opened": (
+        WAVE_SERVICE, "\t\tif profile ~= nil then profile.combat.secrets else nil\n\t)\n", "\t\tnil\n\t)\n"),
+
+    # --- The review's 19 condition probes (slice 2 m2), each now a pin ------------------------------------------
+    "l4w3b-fix probe 3: a start falls back to picked": (
+        WAVE_SERVICE, "\t\tif refusal ~= nil then\n\t\t\tStageFlow.DepartRefused(depart)",
+        "\t\tif refusal == nil then\n\t\t\tStageFlow.DepartRefused(depart)"),
+    "l4w3b-fix probe 4: no player is no refusal": (
+        WAVE_SERVICE, '\t\tlocal refusal: StartRefusal? = "notLeader"\n', "\t\tlocal refusal: StartRefusal? = nil\n"),
+    "l4w3b-fix probe 5: the beat never broadcast": (
+        WAVE_SERVICE, '\t\t-- A start broadcast its own RunState already.\n\t\tif run.phase == "lobby" then\n\t\t\tbroadcast()\n',
+        '\t\t-- A start broadcast its own RunState already.\n\t\tif run.phase == "lobby" then\n'),
+    "l4w3b-fix probe 6: ExpectedIn skips a missing member": (
+        ARENA_SERVICE, "\t\t\tif not session.everAdmitted[userId] then\n\t\t\t\treturn false\n",
+        "\t\t\tif not session.everAdmitted[userId] then\n\t\t\t\tcontinue\n"),
+    "l4w3b-fix probe 7: ExpectedIn during the ticket read": (
+        ARENA_SERVICE, "function ArenaService.ExpectedIn(): boolean\n\tif not session.open or session.ticketPending then\n\t\treturn false\n\tend\n",
+        "function ArenaService.ExpectedIn(): boolean\n"),
+    "l4w3b-fix probe 8: PartyIn never by the cap": (
+        ARENA_SERVICE, "\treturn session.firstArrivalAt > 0\n\t\tand os.clock() - session.firstArrivalAt >= config.coop.lobbyWaitSeconds\n",
+        "\treturn false\n"),
+    "l4w3b-fix probe 9: no first arrival": (
+        ARENA_SERVICE, "function ArenaService.FirstArrivalAt(): number\n\treturn session.firstArrivalAt\n",
+        "function ArenaService.FirstArrivalAt(): number\n\treturn 0\n"),
+    "l4w3b-fix probe 10: the wait from 0": (
+        WAVE_SERVICE, "\tif since <= 0 then\n\t\tsince = os.clock()\n\tend\n", "\tsince = 0\n"),
+    "l4w3b-fix probe 11: an empty hint level": (MAIN_SERVER, '\t\tor levelId == ""\n', ""),
+    "l4w3b-fix probe 12: any difficulty length": (MAIN_SERVER, "\t\tor #difficulty > MapRules.MAX_DIFFICULTY_LENGTH\n", ""),
+    "l4w3b-fix probe 13: a ticket's level unread": (RUN_REGISTRY, '\t\tor typeof(entry.levelId) ~= "string"\n', ""),
+    "l4w3b-fix probe 14: any difficulty verifies": (
+        RUN_REGISTRY, "\tif ticket.levelId ~= levelId or ticket.difficulty ~= difficulty then\n",
+        "\tif ticket.levelId ~= levelId then\n"),
+    "l4w3b-fix probe 15: the mock ticket names nothing": (
+        RUN_REGISTRY, "\t\t\tlevelId = levelId,\n\t\t\tdifficulty = difficulty,\n\t\t\tpublic = if combatConfig",
+        '\t\t\tlevelId = "",\n\t\t\tdifficulty = difficulty,\n\t\t\tpublic = if combatConfig'),
+    "l4w3b-fix probe 16: a manual ask not broadcast": (
+        WAVE_SERVICE,
+        '\tif refusal ~= "notLeader" and StageFlow.DepartAsked(boot.depart) and run.phase == "lobby" then\n\t\tbroadcast()\n',
+        '\tif refusal ~= "notLeader" and StageFlow.DepartAsked(boot.depart) and run.phase == "lobby" then\n'),
+    "l4w3b-fix probe 17: the RunState carries no depart": (
+        WAVE_SERVICE, '\t\tdepart = StageFlow.DepartView(boot.depart, now, phase == "lobby", lobbyWaitSeconds()),\n',
+        "\t\tdepart = nil,\n"),
+    "l4w3b-fix probe 18: BuildRunState drops the depart": (
+        ARENA_SERVICE, '\t\tdepart = if phase == "lobby" then runFields.depart else nil,\n', ""),
+    "l4w3b-fix probe 19: a family-only first clear unlined": (
+        WAVE_SERVICE, "\t\tif given ~= nil then\n\t\t\tlocal key = RunCredit.FirstClearKey",
+        "\t\tif given ~= nil and given.valor > 0 then\n\t\t\tlocal key = RunCredit.FirstClearKey"),
+    "l4w3b-fix probe 20: the host starts at zero": (
+        WAVE_SERVICE, "\t\tlocal leader = ArenaService.GetMember(ArenaService.LeaderUserId())\n\t\tlocal player = if leader",
+        "\t\tlocal leader = ArenaService.GetMember(ArenaService.GetHostUserId())\n\t\tlocal player = if leader"),
+}
+assert not set(L4W3B_FIX_MUTATIONS) & set(MUTATIONS), sorted(set(L4W3B_FIX_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W3B_FIX_MUTATIONS)
 
 
 def harness(root: Path) -> tuple:

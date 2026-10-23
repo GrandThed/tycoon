@@ -63,8 +63,9 @@
 -- & runs"). A difficulty's `note` (the level file's, at most 24 characters: Brutal's "Castle
 -- gear") stands on its button's second line in place of the recommended tier, which is the line
 -- that says what gear the difficulty asks for; "Castle gear" is about 58 design px at 11 px, inside
--- the 66 px a button has. Selected reads what is picked (the combat place's Studio R key), and
--- FirstPick is the pick a first MapState opens on, so both hosts open the map the same way.
+-- the 66 px a button has. Selected reads what is picked (the combat place's Studio R key). The
+-- pick a first MapState opens on is the shared MapRules.FirstPick (the fix round's F13), which
+-- both hosts call, so both open the map the same way by one rule the harness runs.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextService = game:GetService("TextService")
@@ -222,31 +223,6 @@ local SECRET_KEY_GLYPH_GAP = 1
 local SPREAD_EPSILON = 0.25
 
 local MapScreen = {}
-
--- The pick a session's first MapState opens the map on: the first open node, in config order,
--- that has no star, at its lowest difficulty (nil); failing that the first open node with a
--- difficulty still to clear, at the lowest such, else at its first. nil = no node is open.
--- `difficulties` = the map's, easiest first.
-function MapScreen.FirstPick(difficulties: { string }, state: Types.MapState): (string?, string?)
-	local fallback: Types.MapNodeState? = nil
-	for _, node in state.nodes do
-		if typeof(node) == "table" and node.open == true and typeof(node.stars) == "table" then
-			if #node.stars == 0 then
-				return node.id, nil
-			end
-			fallback = fallback or node
-		end
-	end
-	if fallback == nil then
-		return nil, nil
-	end
-	for _, difficulty in difficulties do
-		if table.find(fallback.stars, difficulty) == nil then
-			return fallback.id, difficulty
-		end
-	end
-	return fallback.id, nil
-end
 
 -- Pushes two overlapping footprints apart along the shorter way. A fixed one never moves, one
 -- that yields (a bonus node) moves alone against one that does not, and two equals share it.

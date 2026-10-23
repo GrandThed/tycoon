@@ -3,14 +3,18 @@
 -- DepartBeat, DepartPair) at every edge; what each credit site writes on a card (RunCredit's keys,
 -- Credit and Mentor, on RunLines); the pay era frozen at the admit (RunCredit.EraOf, PayEra,
 -- NextPayEra, through the real Combat.CombatCashMult); the run's last wallet after its last credit
--- and before the card; a difficulty's `note` (Validate). StageFlow, RunCredit, RunLines and Combat
+-- and before the card; a difficulty's `note` (Validate, StageFlow.Notes). The fix round's cases
+-- (docs/prompts/l4-w3-fix-round.md): once a server (F1, group server), the late arrivals at zero (F2,
+-- late), a kill's line counting kills (F3, kills), P on the mock store only (F4, payLever), the tick's
+-- early return (s3, live), a bad note dropped (F6, note). StageFlow, RunCredit, RunLines and Combat
 -- are loaded as they stand. WaveService and ArenaService cannot be loaded here: L4W3R.holders,
--- L4W3R.endTail, L4W3R.credit and L4W3R.cardsCredit below are their lines, copied line for line,
--- and run_harness.py reads those lines as text so a copy cannot drift. Appended by run_harness.py
--- after the earlier case files, so every local of those is in scope (check, load, near, FIXTURES,
--- L1). Everything hangs off the L4W3R table (the 200-local limit), and every group runs behind
--- L4W3R.group, so a group that throws fails one check and the bundle goes on. Last in TESTS: it
--- ends with the verdict line (run_harness.py strips that line from every file but the last).
+-- L4W3R.starting, L4W3R.endTail, L4W3R.credit and L4W3R.cardsCredit below are their lines, copied
+-- line for line, and run_harness.py reads those lines as text so a copy cannot drift. Appended by
+-- run_harness.py after the earlier case files, so every local of those is in scope (check, load,
+-- near, FIXTURES, L1). Everything hangs off the L4W3R table (the 200-local limit), and every group
+-- runs behind L4W3R.group, so a group that throws fails one check and the bundle goes on. Last in
+-- TESTS: it ends with the verdict line (run_harness.py strips that line from every file but the
+-- last).
 
 print("L4 W3: the auto-start, the cards' lines, the pay era, the wallet before the card")
 
@@ -111,6 +115,49 @@ function L4W3R.holders(depart: any, members: { any }, expected: { [number]: bool
 		end
 	end
 	return VitalsService.AllHaveBodies(holders)
+end
+
+-- WaveService.startLevel's body rule and placement for the auto-start's late arrivals (F2), line for
+-- line (run_harness.py reads them): whether the start goes ahead, and who is placed or left waiting.
+-- `members` = { userId, body, waiting }, `late` = StageFlow.DepartLate's set (nil: the leader's own).
+function L4W3R.starting(members: { any }, late: { [number]: boolean }?): (boolean, { number })
+	local VitalsService = {
+		AllHaveBodies = function(list: { any }): boolean
+			for _, member in list do
+				if not member.body then
+					return false
+				end
+			end
+			return true
+		end,
+	}
+	local ArenaService = {
+		PartyIn = function(): boolean
+			return true
+		end,
+	}
+	local starting = members
+	if late ~= nil and next(late) ~= nil then
+		starting = {}
+		for _, other in members do
+			if not late[other.userId] then
+				table.insert(starting, other)
+			end
+		end
+	end
+	if not ArenaService.PartyIn() or not VitalsService.AllHaveBodies(starting) then
+		return false, {}
+	end
+	local placed: { number } = {}
+	for _, other in members do
+		if late ~= nil and late[other.userId] then
+			other.waiting = true
+			continue
+		end
+		other.waiting = false
+		table.insert(placed, other.userId)
+	end
+	return true, placed
 end
 
 -- ArenaService.CreditSummary and CreditMentor, line for line: both cards, through RunCredit.
@@ -604,6 +651,206 @@ L4W3R.group("session", function()
 	)
 end)
 
+-- Once a server (the fix round's F1) -----------------------------------------------------------------
+
+-- WaveService's boot as StageFlow.DepartBook sees it, on a new server.
+function L4W3R.book(): any
+	return { depart = nil, departOpened = false }
+end
+
+L4W3R.group("server", function()
+	local Flow = L4W3R.Flow
+	-- A solo departure: the hub's ticket verifies Forest Road Normal.
+	local book = L4W3R.book()
+	Flow.DepartAdmit(book, "forestRoad", "normal", true, nil, 0)
+	check(
+		book.departOpened == true and book.depart ~= nil and book.depart.state == "waiting",
+		"server: the server's first admit opens the verified departure"
+	)
+	local first = book.depart
+	Flow.DepartAdmit(book, "forestRoad", "hard", true, nil, 3)
+	check(
+		book.depart == first and first.difficulty == "normal" and first.waitFrom == 0,
+		"server: a later admit in the same session opens nothing"
+	)
+	-- Arm and run: the countdown, then the start at zero.
+	Flow.DepartStep(book.depart, L4W3R.input(1))
+	check(Flow.DepartStep(book.depart, L4W3R.input(6)) == "start", "server: it starts the run once")
+	-- The player clears it and presses Return: the last member leaves, the session ends (Reset).
+	Flow.DepartForget(book)
+	check(book.depart == nil, "server: the session's end forgets the auto-start")
+	check(book.departOpened == true, "server: and keeps that this server opened one (F1)")
+	-- The trip home fails; the rejoin re-reads the same join data and the hub's ticket still verifies.
+	Flow.DepartAdmit(book, "forestRoad", "normal", true, nil, 100)
+	check(
+		book.depart == nil,
+		"server: a rejoin with the same verified ticket opens nothing: no waiting, no counting (F1)"
+	)
+	local starts, shown = 0, 0
+	for frame = 100, 160 do
+		Flow.DepartAdmit(book, "forestRoad", "normal", true, nil, frame)
+		local depart = book.depart
+		if Flow.DepartLive(depart) and Flow.DepartStep(depart, L4W3R.input(frame)) == "start" then
+			starts += 1
+		end
+		if Flow.DepartBeat(Flow.DepartView(book.depart, frame, true, 30)) ~= "" then
+			shown += 1
+		end
+	end
+	check(
+		starts == 0 and shown == 0,
+		"server: a minute after the rejoin nothing has started and the wire shows no countdown and no pick"
+	)
+	Flow.DepartAdmit(book, "", "", false, { levelId = "forestRoad", difficulty = "normal" }, 200)
+	check(book.depart == nil, "server: nor a proving boot's stand-in after the session's end")
+
+	-- A hint the ticket did not verify: picked once, never forced open again after the session's end.
+	local hinted = L4W3R.book()
+	Flow.DepartAdmit(hinted, "forestRoad", "normal", false, nil, 0)
+	check(
+		hinted.depart ~= nil and hinted.depart.state == "picked",
+		"server: a hint alone is picked"
+	)
+	Flow.DepartForget(hinted)
+	Flow.DepartAdmit(hinted, "forestRoad", "normal", false, nil, 50)
+	check(
+		hinted.depart == nil and Flow.DepartView(hinted.depart, 50, true, 30) == nil,
+		"server: after the session's end a rejoin is not picked again (the map is not forced open)"
+	)
+
+	-- R still works on a server that has opened one, from its press, standing in.
+	check(
+		Flow.DepartLever(book, "forestRoad", "hard", 300) == true
+			and book.depart ~= nil
+			and book.depart.state == "waiting"
+			and book.depart.standIn
+			and book.depart.difficulty == "hard"
+			and book.depart.waitFrom == 300
+			and book.departOpened,
+		"server: R waits on its pair after the session's end"
+	)
+	check(
+		Flow.DepartLever(book, "", "hard", 301) == false and book.depart == nil,
+		"server: R on a pair with no level is nothing"
+	)
+	local lever = L4W3R.book()
+	Flow.DepartLever(lever, "forestRoad", "normal", 5)
+	Flow.DepartAdmit(lever, "forestRoad", "hard", true, nil, 6)
+	check(
+		lever.departOpened and lever.depart ~= nil and lever.depart.difficulty == "normal",
+		"server: R counts as the server's opening (a later admit does not replace it)"
+	)
+
+	-- A session that ended before anybody was admitted leaves the first admit its own.
+	local empty = L4W3R.book()
+	Flow.DepartForget(empty)
+	Flow.DepartAdmit(empty, "forestRoad", "normal", true, nil, 0)
+	check(
+		empty.depart ~= nil and empty.depart.state == "waiting",
+		"server: a session's end before any admit opens nothing and closes nothing"
+	)
+	-- A first admit with no hint is still the server's one opening.
+	local none = L4W3R.book()
+	Flow.DepartAdmit(none, "", "", false, nil, 0)
+	Flow.DepartAdmit(none, "forestRoad", "normal", true, nil, 5)
+	check(
+		none.departOpened and none.depart == nil,
+		"server: a first admit with no hint opens nothing, and nothing opens after it"
+	)
+end)
+
+-- The tick's early return (the review's s3) -------------------------------------------------------------
+
+L4W3R.group("live", function()
+	local Flow = L4W3R.Flow
+	check(Flow.DepartLive(nil) == false, "live: none has nothing to do")
+	local depart = L4W3R.waiting(0)
+	check(Flow.DepartLive(depart) == true, "live: waiting moves")
+	depart.state = "counting"
+	check(Flow.DepartLive(depart) == true, "live: counting moves")
+	depart.state = "picked"
+	check(Flow.DepartLive(depart) == false, "live: picked never moves (its view is on the wire)")
+	depart.state = "done"
+	check(Flow.DepartLive(depart) == false, "live: done never moves")
+	-- The tick of the change still sees it: a wait that runs out turns picked inside DepartStep.
+	local capped = L4W3R.waiting(0)
+	check(Flow.DepartLive(capped), "live: a wait is live up to its cap")
+	Flow.DepartStep(capped, L4W3R.input(30, { bodies = false }))
+	check(
+		capped.state == "picked" and not Flow.DepartLive(capped),
+		"live: and the cap's own tick turns it picked, after which the tick returns at once"
+	)
+end)
+
+-- The start at zero's late arrivals (the fix round's F2) ------------------------------------------------
+
+L4W3R.group("late", function()
+	local Flow = L4W3R.Flow
+	local late = Flow.DepartLate({
+		{ userId = 1, expected = true, body = true },
+		{ userId = 2, expected = false, body = false },
+		{ userId = 3, expected = false, body = true },
+	})
+	check(
+		late[2] == true and late[1] == nil and late[3] == nil,
+		"late: a run-list arrival still spawning at zero is late; who stands is not"
+	)
+	check(
+		next(Flow.DepartLate({
+			{ userId = 1, expected = true, body = false },
+			{ userId = 2, expected = false, body = true },
+		})) == nil,
+		"late: an expected member is never late (they held the countdown; the start's body rule answers)"
+	)
+	check(
+		next(Flow.DepartLate({ { userId = 4, expected = false, body = false } })) == nil,
+		"late: when that would be every member, nobody is (a level started for nobody)"
+	)
+	check(next(Flow.DepartLate({})) == nil, "late: nobody present, nobody late")
+
+	-- The start at zero through startLevel's lines: a party of two departed; a stranger from the run
+	-- list was admitted during the countdown and their character has not spawned yet.
+	local members = {
+		{ userId = 1, body = true, waiting = false },
+		{ userId = 2, body = true, waiting = false },
+		{ userId = 9, body = false, waiting = false },
+	}
+	local set = Flow.DepartLate({
+		{ userId = 1, expected = true, body = true },
+		{ userId = 2, expected = true, body = true },
+		{ userId = 9, expected = false, body = false },
+	})
+	local goes, placed = L4W3R.starting(members, set)
+	check(
+		goes and #placed == 2 and placed[1] == 1 and placed[2] == 2,
+		"late: the auto-start goes ahead for the departed party (F2: never refused for the stranger)"
+	)
+	check(
+		members[3].waiting == true and members[1].waiting == false,
+		"late: and the stranger waits in the lobby camp, entering when their body stands"
+	)
+	local own = {
+		{ userId = 1, body = true, waiting = false },
+		{ userId = 9, body = false, waiting = false },
+	}
+	check(
+		L4W3R.starting(own, nil) == false,
+		"late: the leader's own start still needs every body (nobody is late without the auto-start)"
+	)
+	local expectedMissing = {
+		{ userId = 1, body = true, waiting = false },
+		{ userId = 2, body = false, waiting = false },
+	}
+	local stillExpected = Flow.DepartLate({
+		{ userId = 1, expected = true, body = true },
+		{ userId = 2, expected = true, body = false },
+	})
+	check(
+		L4W3R.starting(expectedMissing, stillExpected) == false,
+		"late: an expected member without a body still refuses the start at zero (busy, picked)"
+	)
+end)
+
 -- The cards' lines -------------------------------------------------------------------------------------------
 
 L4W3R.group("keys", function()
@@ -703,11 +950,11 @@ L4W3R.group("credit", function()
 	check(
 		#card.lines == 1
 			and raiders ~= nil
-			and raiders.count == 2
+			and raiders.count == 1
 			and raiders.cash == 75
 			and raiders.materials == 5
 			and raiders.material == "Timber",
-		"credit: every body on one raiders line, its count one per credit"
+		"credit: every body on one raiders line, its count one per kill (F3: a share adds its pay only)"
 	)
 	C.Credit(card, C.CampKey("pickets", "The Pickets"), 120, "Timber", 8, 0, 0)
 	C.Credit(card, C.KillKey(false, "fodder", nil), 30, "Timber", 2, 0, 1)
@@ -716,7 +963,7 @@ L4W3R.group("credit", function()
 		"credit: lines in the order of their first credit"
 	)
 	check(
-		L4W3R.line(card.lines, "raiders", "raiders").count == 3,
+		L4W3R.line(card.lines, "raiders", "raiders").count == 2,
 		"credit: a later raider merges into the first line"
 	)
 	C.Credit(card, C.ChestKey("lookout", "Lookout Chest"), 0, "Timber", 20, 6, 0)
@@ -791,6 +1038,64 @@ L4W3R.group("sites", function()
 	end
 end)
 
+-- A kill's line counts kills (the fix round's F3) --------------------------------------------------------------
+
+L4W3R.group("kills", function()
+	local C = L4W3R.Credit
+	-- A party of two splits a camp: A lands 25 killing blows, B 35, and each shares every body.
+	local a, b = C.Empty("Forest Road"), C.Empty("Forest Road")
+	for _ = 1, 25 do
+		C.Credit(a, C.KillKey(false, "fodder", nil), 6, "Timber", 1, 0, 1)
+		C.Credit(b, C.KillKey(false, "fodder", nil), 6, "Timber", 1, 0, 0)
+	end
+	for _ = 1, 35 do
+		C.Credit(a, C.KillKey(false, "brute", nil), 6, "Timber", 1, 0, 0)
+		C.Credit(b, C.KillKey(false, "brute", nil), 6, "Timber", 1, 0, 1)
+	end
+	local lineA = L4W3R.line(a.lines, "raiders", "raiders")
+	local lineB = L4W3R.line(b.lines, "raiders", "raiders")
+	check(
+		lineA.count == 25 and a.kills == 25 and lineB.count == 35 and b.kills == 35,
+		"kills: in a party Raiders xn is the card's own kills, as its kill count says (F3)"
+	)
+	check(
+		lineA.cash == 360 and lineA.materials == 60,
+		"kills: a share without the killing blow still adds its pay to the line"
+	)
+	-- The boss: the killer's line counts 1, a share counts 0.
+	C.Credit(a, C.KillKey(true, "chief", "The Camp Chief"), 600, "Timber", 30, 25, 0)
+	C.Credit(b, C.KillKey(true, "chief", "The Camp Chief"), 600, "Timber", 30, 25, 1)
+	check(
+		L4W3R.line(a.lines, "boss", "chief").count == 0
+			and L4W3R.line(b.lines, "boss", "chief").count == 1
+			and L4W3R.line(a.lines, "boss", "chief").valor == 25,
+		"kills: the boss line counts the killing blow; a share is paid on it, uncounted"
+	)
+	-- WaveService.credit's killer without a share: the kill alone, counted.
+	local blow = C.Empty("Forest Road")
+	C.Credit(blow, C.KillKey(false, "fodder", nil), 0, "Timber", 0, 0, 1)
+	check(
+		L4W3R.line(blow.lines, "raiders", "raiders").count == 1 and blow.kills == 1,
+		"kills: a killing blow with no share counts on the line and the total"
+	)
+	-- Every other kind counts one per event, whatever `kills` says.
+	local events = C.Empty("Forest Road")
+	C.Credit(events, C.CampKey("pickets", "The Pickets"), 90, "Timber", 6, 0, 0)
+	C.Credit(events, C.CampKey("pickets", "The Pickets"), 90, "Timber", 6, 0, 1)
+	C.Credit(events, C.ChestKey("lookout", "Lookout Chest"), 0, "Timber", 20, 6, 0)
+	C.Credit(events, C.KeyKey("castle", nil), 0, "", 0, 0, 0)
+	C.Credit(events, C.FirstClearKey("forestRoad", "hard"), 0, "", 0, 40, 0)
+	C.Mentor(events, 5)
+	check(
+		L4W3R.line(events.lines, "camp", "pickets").count == 2
+			and L4W3R.line(events.lines, "chest", "lookout").count == 1
+			and L4W3R.line(events.lines, "key", "castle").count == 1
+			and L4W3R.line(events.lines, "firstClear", "forestRoad:hard").count == 1
+			and L4W3R.line(events.lines, "mentor", "mentor").count == 1,
+		"kills: camp, chest, key, first clear and mentor lines count one per credit"
+	)
+end)
+
 -- The pay era -----------------------------------------------------------------------------------------------
 
 L4W3R.group("era", function()
@@ -810,6 +1115,28 @@ L4W3R.group("era", function()
 	check(C.NextPayEra(9, 4) == 1, "P: an era past the list wraps to the first")
 	check(C.NextPayEra(L4W3R.NAN, 4) == 2, "P: a bad current era steps from the first")
 	check(C.NextPayEra(2, 0) == 1, "P: with no eras known, the first")
+end)
+
+-- P never pays into a real save (the fix round's F4) ----------------------------------------------------------
+
+L4W3R.group("payLever", function()
+	local C = L4W3R.Credit
+	check(
+		C.PayLeverRefusal(true, true) == nil,
+		"P: on the mock store with a member admitted it steps"
+	)
+	check(
+		C.PayLeverRefusal(false, true) == "realStore",
+		"P: refused on the real store (Studio with API access on): it would pay into a real save (F4)"
+	)
+	check(
+		C.PayLeverRefusal(false, false) == "realStore",
+		"P: the real store refuses before anything else"
+	)
+	check(
+		C.PayLeverRefusal(true, false) == "nobody",
+		"P: with nobody admitted the store may not have answered yet: nothing steps"
+	)
 end)
 
 L4W3R.group("frozen", function()
@@ -899,42 +1226,72 @@ end)
 
 L4W3R.group("note", function()
 	local Flow = L4W3R.Flow
-	local function lines(note: any): { string }
+	-- Validate's lines that name a note, and StageFlow.Notes' kept notes and dropped lines, for a
+	-- copy of Forest Road whose Hard carries `note`.
+	local function read(note: any): ({ string }, { [string]: string }, { string })
 		local level = L1.level()
 		level.difficulties.hard.note = note
 		local found = {}
 		local ok, problems =
 			pcall(Flow.Validate, level, L1.layout(), L1.kinds, L1.ranks, L1.rules, L1.crowdMax)
 		if not ok then
-			return { "Validate threw: " .. tostring(problems) }
+			return { "Validate threw: " .. tostring(problems) }, {}, {}
 		end
 		for _, line in problems do
 			if string.find(line, ".note", 1, true) ~= nil then
 				table.insert(found, line)
 			end
 		end
-		return found
+		local kept, dropped = Flow.Notes(level)
+		return found, kept, dropped
 	end
-	check(#lines(nil) == 0, "note: none is fine")
-	check(#lines("Castle gear") == 0, "note: a short string is fine")
-	check(#lines(string.rep("x", 24)) == 0, "note: 24 bytes is fine")
-	for _, bad in { string.rep("x", 25), "", 7, true, {} } do
-		local found = lines(bad)
+	for _, good in { "Castle gear", string.rep("x", 24) } do
+		local found, kept, dropped = read(good)
 		check(
-			#found == 1 and string.find(found[1], "difficulties.hard.note", 1, true) ~= nil,
-			`note: {type(bad)} "{if type(bad) == "string" then bad else ""}" is named once`
+			#found == 0 and kept.hard == good and #dropped == 0,
+			`note: {#good} bytes is kept, nothing warned`
 		)
 	end
-	local level = nil
+	local _, keptNone, droppedNone = read(nil)
+	check(keptNone.hard == nil and #droppedNone == 0, "note: none is fine, and nothing is kept")
+	for _, bad in { string.rep("x", 25), "", 7, true, {} } do
+		local found, kept, dropped = read(bad)
+		local label = `{type(bad)} "{if type(bad) == "string" then bad else ""}"`
+		check(#found == 0, `note: {label} never refuses the level (F6: Validate names no note)`)
+		check(
+			kept.hard == nil
+				and #dropped == 1
+				and string.find(dropped[1], "difficulties.hard.note", 1, true) ~= nil
+				and string.find(dropped[1], "dropped", 1, true) ~= nil,
+			`note: {label} is dropped with one warn line naming it (F6)`
+		)
+	end
+	-- Two difficulties: the good note stays beside the dropped one, the lines in name order.
+	local level = L1.level()
+	level.difficulties.hard.note = string.rep("h", 30)
+	level.difficulties.normal.note = "Start here"
+	local kept, dropped = Flow.Notes(level)
+	check(
+		kept.normal == "Start here" and kept.hard == nil and #dropped == 1,
+		"note: a good note is kept beside a dropped one"
+	)
+	local shipped = nil
 	for _, file in FIXTURES.levels do
 		if file.id == "forestRoad" then
-			level = file
+			shipped = file
 		end
 	end
 	check(
-		level ~= nil and level.difficulties.brutal.note == "Castle gear",
+		shipped ~= nil and shipped.difficulties.brutal.note == "Castle gear",
 		"note: the shipped Forest Road's Brutal says Castle gear"
 	)
+	if shipped ~= nil then
+		local shippedKept, shippedDropped = Flow.Notes(shipped)
+		check(
+			shippedKept.brutal == "Castle gear" and #shippedDropped == 0,
+			"note: and keeps it, warning nothing"
+		)
+	end
 end)
 
 -- The lines the copies above stand for (FIXTURES.source.l4w3b: run_harness.py's L4W3B_LINES and
@@ -953,15 +1310,18 @@ L4W3R.PINS = {
 	departWait = { 1, "the wait coop.lobbyWaitSeconds" },
 	departCountdown = { 1, "and the countdown levels.departCountdownSeconds" },
 	departStart = { 1, "a start answer starts the level" },
-	departStartLevel = { 1, "through startLevel, the leader's own start, once" },
+	departStartLevel = {
+		1,
+		"through startLevel, the leader's own start, once, with the late arrivals (F2)",
+	},
 	departRefused = { 1, "a refusal leaves it picked on the map" },
 	departToast = { 1, "with the leader's refusal toast" },
 	departBeat = { 1, "and a new beat broadcasts at once" },
 	departTicked = { 1, "the lobby's tick runs it" },
 	departTickCalls = { 2, "and nothing else calls it" },
 	departWrites = {
-		3,
-		"only openDepart, FakeDepart and Reset write the auto-start (never a run's end)",
+		0,
+		"WaveService writes boot.depart nowhere: StageFlow's DepartAdmit, DepartForget and DepartLever do (F1)",
 	},
 	departStateWrites = { 0, "WaveService never writes its state (StageFlow's rule alone)" },
 	lobbyLeavesDepart = {
@@ -970,11 +1330,14 @@ L4W3R.PINS = {
 	},
 	openPick = { 1, "it opens on ArenaService.Pick" },
 	openStudio = { 1, "the proving path only in Studio" },
-	openDepart = { 1, "through StageFlow.DepartOpen" },
-	openOnAdmit = { 1, "at an admit (once a session)" },
+	openDepart = { 1, "through StageFlow.DepartAdmit (once a server, F1)" },
+	openOnAdmit = { 1, "at an admit" },
 	askedEnds = { 1, "the leader's own ask ends it" },
-	resetDepart = { 1, "the session's end forgets it" },
-	resetOpened = { 1, "and lets the next session open its own" },
+	resetDepart = { 1, "the session's end forgets it (StageFlow.DepartForget)" },
+	resetOpened = {
+		0,
+		"and Reset keeps departOpened: a later session on this server never opens it again (F1)",
+	},
 	resetCashEra = { 1, "and forgets the P lever's era" },
 	fakeStudio = { 1, "R works only in Studio and the lobby" },
 	eraStudio = { 1, "P steps only in Studio" },
@@ -1019,12 +1382,84 @@ L4W3R.PINS = {
 	hostIn = { 1, "HostIn is the session's host in the roster" },
 	expectedLoop = { 1, "ExpectedIn: every expected id admitted once" },
 	partyInExpected = { 1, "PartyIn starts from ExpectedIn" },
+	-- The fix round (docs/prompts/l4-w3-fix-round.md): F1-F6, and the conditions slice 2's m2 probed.
+	bootOpened = { 1, "only a new server boot starts with departOpened unset (F1)" },
+	openedWrites = {
+		0,
+		"WaveService never writes departOpened (StageFlow.DepartAdmit and DepartLever do, F1)",
+	},
+	leverBook = { 1, "R opens through StageFlow.DepartLever" },
+	openSince = { 1, "the wait counts from the first arrival (ArenaService.FirstArrivalAt)" },
+	openSinceGuard = { 1, "and, with none yet," },
+	openSinceClock = { 1, "from now" },
+	departLive = { 1, "the tick returns at once unless waiting or counting (s3)" },
+	departLeader = { 1, "whoever leads at zero starts it (LeaderUserId, not the host)" },
+	departNotLeader = { 1, "with no such player the refusal is notLeader" },
+	departPlayerGuard = { 1, "and startLevel runs only for a player" },
+	departPcall = { 1, "inside a pcall (s2)" },
+	departThrown = { 1, "a throw" },
+	departThrownRefusal = { 1, "is an unavailable refusal" },
+	departRefusedIf = { 1, "only a refusal falls back to picked" },
+	departToastGuard = { 1, "and toasts only a player" },
+	departBeatLobby = { 1, "a new beat broadcasts in the lobby" },
+	departBeatBroadcast = { 1, "at once" },
+	lateExpected = { 1, "the late arrivals read the expected list (F2)" },
+	lateBody = { 1, "and each member's body" },
+	lateRule = { 1, "through StageFlow.DepartLate" },
+	lateCalls = { 2, "and only the start at zero asks for them" },
+	startOwnNoLate = { 1, "the leader's own start leaves nobody late" },
+	startStarting = { 1, "startLevel's bodies are the members" },
+	startLateAny = { 1, "unless some are late" },
+	startStartingNew = { 1, "then a list of its own" },
+	startNotLate = { 1, "of every member not late" },
+	startNotLateAdd = { 1, "each added" },
+	startBodies = { 1, "and only they need a body to start" },
+	startLateWaits = { 1, "a late member is not placed" },
+	startLateWaiting = { 1, "and waits in the lobby camp" },
+	askedBroadcast = { 1, "a manual ask that ended it broadcasts at once" },
+	pushDepart = { 1, "the RunState carries the depart view" },
+	endGiven = { 1, "a first clear that gave something is credited" },
+	eraRefusal = {
+		1,
+		"P asks RunCredit.PayLeverRefusal on the mock store and an admitted member (F4)",
+	},
+	eraRefused = { 1, "a refusal steps nothing" },
+	pRealStore = { 1, "the real store's refusal" },
+	pRealStoreToast = { 1, "says P needs Studio API access off" },
+	pOtherRefusal = { 1, "any other refusal says nothing and steps nothing" },
+	pReturns = { 2, "both refusals return before the Pay as notice" },
+	noteRead = { 1, "readLevel reads the dropped notes (F6)" },
+	noteWarnOnce = { 1, "and warns them once a server" },
+	noteRefusal = { 1, "the verdict stays the problems and the difficulty alone" },
+	secretRowsShared = { 1, "the secret rows are MapRules.SecretRows (F9)" },
+	secretRowsOpened = { 1, "against the receiver's own opened chests" },
+	secretRowCopies = { 0, "and WaveService keeps no copy of the row loop" },
+	expectedGuard = { 1, "ExpectedIn answers nothing before the session and its ticket" },
+	expectedMissing = { 1, "and false for any expected id never admitted" },
+	partyInFirst = { 1, "PartyIn's cap needs a first arrival" },
+	partyInCap = { 1, "and coop.lobbyWaitSeconds since it" },
+	firstArrival = { 1, "FirstArrivalAt is the session's first admit" },
+	buildDepart = { 1, "the depart reaches the clients in the lobby only" },
+	hintLevelType = { 1, "the hint's level is a string" },
+	hintEmpty = { 1, "not empty" },
+	hintLevelCap = { 1, "within the level id cap" },
+	hintDifficultyType = { 1, "its difficulty a string" },
+	hintDifficultyCap = { 1, "within the difficulty cap" },
+	ticketLevel = { 1, "a ticket's level is a string" },
+	ticketDifficulty = { 1, "and its difficulty" },
+	resolveMatch = { 1, "a ticket verifies only its own level and difficulty" },
+	resolveServer = { 1, "on its own server" },
+	mockLevel = { 1, "the Studio mock ticket names the hint's level" },
+	mockDifficulty = { 1, "and difficulty" },
 }
 L4W3R.ORDER = {
 	endCreditThenWallets = "the first clear's credit comes before the wallets",
 	endWalletsThenCard = "the wallets come before the card",
 	killCreditThenMentor = "the boss's credit comes before the mentor bonus",
 	departStepThenStart = "the rule decides before the start",
+	departLiveThenStep = "the tick's early return comes before its work (s3)",
+	eraRefusalThenStep = "P's refusal is asked before the pay era steps (F4)",
+	noteThenVerdict = "the dropped notes are read before the verdict (F6)",
 }
 
 L4W3R.group("pins", function()

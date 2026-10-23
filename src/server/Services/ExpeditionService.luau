@@ -639,8 +639,9 @@ local function keepPartyMembers(leader: Player, group: { Player }): { Player }
 	return kept
 end
 
--- A built level's chests as its files have them, cached (L2-15's rows, L4W3-2). A file that
--- cannot be read costs the level its row, never the map: the pcall holds no yield.
+-- A built level's chests as its files have them, cached (L2-15's rows, L4W3-2): the reader SendMap
+-- hands MapRules.SecretRows (the fix round's F9). A file that cannot be read costs the level its
+-- row, never the map: the pcall holds no yield.
 local function sitesOf(levelId: string): { MapRules.Site }
 	local cached = sitesByLevel[levelId]
 	if cached ~= nil then
@@ -772,9 +773,11 @@ function ExpeditionService.Depart(
 		public = public,
 		expected = expected,
 	}
-	-- In Studio a missing ticket only costs the host gate (the combat place then unlock-checks
-	-- every arrival, the C1 rule), and the handoff record still carries the run; live, a run
-	-- without its ticket could never be joined or host-gated, so it is not started at all.
+	-- In Studio a missing ticket costs the run its run-list entry and the auto-start (the hint
+	-- alone only picks the level on the dungeon's map, L4W3-4); what may be played is still the
+	-- dungeon's own start check (MapRules.Startable at RequestStartLevel, L1 ruling 5), and the
+	-- handoff record still carries the run. Live, a run without its ticket could never be joined
+	-- or auto-started, so it is not started at all.
 	if not writeTicket(combatConfig, player.UserId, ticket) and not bridged then
 		refuseAll(members, departure, "unavailable")
 		return
@@ -883,15 +886,6 @@ function ExpeditionService.SendMap(player: Player): ()
 		end
 	end
 	local built = MapRules.Built(Catalog.GetLevelIds())
-	local opened = state.combat.secrets
-	local rows: { [string]: { Types.MapSecretState } } = {}
-	for levelId in built do
-		local sites = sitesOf(levelId)
-		if #sites > 0 then
-			rows[levelId] =
-				MapRules.SecretRow(sites, if opened ~= nil then opened[levelId] else nil)
-		end
-	end
 	RemoteService.FireClient(
 		player,
 		"MapState",
@@ -901,7 +895,7 @@ function ExpeditionService.SendMap(player: Player): ()
 			leaderStars,
 			Unlocks.StarsOf(state.combat),
 			leaderUserId,
-			rows
+			MapRules.SecretRows(built, sitesOf, state.combat.secrets)
 		)
 	)
 end

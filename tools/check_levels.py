@@ -2065,7 +2065,8 @@ def check_level_file(file, level, layouts, ctx, expect):
                                  ctx.get("weapons"), set(ctx.get("loadout") or []))
     expect(not problems, f"{name}: maxAlive is an integer of at least 1 wherever it appears, burst is at least 1, "
            f"every camp's targetWaveSeconds is over 0 and its breatherSeconds is not under 0, no camp is without a "
-           f"wave, Combat.json has every `levels` number a run reads, and StageFlow.Validate's L1b lines hold"
+           f"wave, Combat.json has every `levels` number a run reads, StageFlow.Validate's L1b lines hold, and every "
+           f"difficulty's note is a string of 1 to {sr.NOTE_MAX_BYTES} bytes (F18: the game drops any other)"
            + (": " + "; ".join(problems) if problems else ""))
     # The simulator does not mirror the director's elite (WaveService picks it per wave): a level
     # file that names one would be played with bodies no band has measured.

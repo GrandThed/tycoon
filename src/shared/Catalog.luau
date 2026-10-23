@@ -24,8 +24,8 @@ local MONETIZATION_DEFAULT_RECEIPT_HISTORY_LIMIT = 200
 -- every Economy perk helper returns its neutral value and the client hides the shop.
 local LEGACY_SHOP_SCHEMA_VERSION = 1
 -- Stamped on the fallback config when Places.json is absent (mirrors its v1). Place ids of 0
--- mean "not published yet": the hub disables the Expedition tiles and the combat place keeps the
--- player in the lobby, exactly as the shipped all-zeros file does.
+-- mean "not published yet": the hub map's Depart answers `unavailable` and the combat place keeps
+-- the player in the lobby, exactly as the shipped all-zeros file does.
 local PLACES_SCHEMA_VERSION = 1
 local PLACES_UNPUBLISHED_ID = 0
 

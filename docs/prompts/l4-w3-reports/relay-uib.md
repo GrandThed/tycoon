@@ -1,5 +1,24 @@
 # L4 W3 relay from ui-engineer B — the RunTally API (for ui-engineer A's hub host)
 
+**Fix round (2026-10-23, F13, F14): nothing you call changed.** The rules moved into the new pure
+`src/client/UI/TallyRules.luau` (a sibling of `RunTally` in both places). `RunTally.Rows`, `Totals`, `Owned`,
+`NextAbility` and `WithText` keep their signatures and answers; they now hand `TallyRules` the Expeditions config from
+`Catalog`. `RunTally.Row`, `Totals` and `Wallet` are re-exported from `TallyRules`, so your type annotations still
+resolve. Two changes in behaviour, both safer: `Owned` (and `Wallet`) read NaN and infinity as 0 (Format.Cash never
+returns on infinity), and `NextAbility` skips an `abilities.upcoming` entry that is not a table or misses a string `id`,
+`name`, `text` or `with` (slice 3 s4: it used to throw on a missing name). The Valor badge in the rows is now a "◆"
+glyph, not a turned Frame (F14).
+
+**Optional, additive: `RunTally.Wallet(cash, combat, material)`** = `TallyRules.Wallet`, the wallet line both hosts
+build: `{ cash = cash, materials = Owned(combat.materials, material), valor = combat.valor }`, any count that is not a
+finite number above 0 read as 0, `combat` nil or not a table read as none. The combat host now builds its wallet with
+it. If the hub's `tallyWallet` used it too (`RunTally.Wallet(current.state.cash, current.state.combat, tallyMaterial)`),
+the review's p6 (the wallet's cash source) would be one call line for the designer to pin; your call.
+
+```lua
+RunTally.Wallet(cash: number, combat: any, material: string): Wallet
+```
+
 **Changed since the first version (all additive, the module is built to this text):** `Row.glyph` is gone (a `key`
 row draws its key icon from its `kind`); `Deps.modal` added (the hub's scrim takes taps); `RunTally.WithText(nodeId)`
 added (the "with the Castle" words, for ArmoryAbilityPage if you want them shared).

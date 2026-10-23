@@ -932,6 +932,8 @@ function L3.heldFamilyTests(): ()
 	local weapons = FIXTURES.proving.weapons
 	local starters = FIXTURES.proving.loadout
 	local fresh = L1.copy(L3.Schema.PROFILE_TEMPLATE.combat)
+	-- LoadoutOf calls HeldFamily for both slots, so the loop proves the hand-off, not the rule:
+	-- L3.loadoutTests' explicit pairs hold the rule itself.
 	local agree = true
 	local shapes = 0
 	local loadouts = {
@@ -957,7 +959,7 @@ function L3.heldFamilyTests(): ()
 			end
 		end
 	end
-	check(agree and shapes == 36, `HeldFamily is LoadoutOf's slot, over {shapes} saved shapes`)
+	check(agree and shapes == 36, `LoadoutOf hands out HeldFamily's slots, over {shapes} saved shapes`)
 	check(
 		A.HeldFamily(fresh, weapons, starters, "nope") == ""
 			and A.HeldFamily(fresh, weapons, starters, "melee") == starters.melee,

@@ -5728,8 +5728,8 @@ def shortcut_layout(layout):
 
 
 def is_catalog_name(stem):
-    """Catalog reads a module of Config/Levels (and of Config/Missions) only when its name begins
-    with digits and an underscore: string.match(name, "^%d+_")."""
+    """Catalog reads a module of Config/Levels only when its name begins with digits and an
+    underscore: string.match(name, "^%d+_")."""
     return re.match(r"\d+_", stem) is not None
 
 
@@ -5772,7 +5772,7 @@ def held_scale(view, family, ability):
 
 
 def gear_max_hp(armory, gear, cfg=None, held=None):
-    """Armory.MaxHp of the held pair (L3-2, gearOf: Armory.HeldTiers) with no Ascension. `held` =
+    """Armory.MaxHp of the held pair (L3-2, gearOf: each held family's TierOf) with no Ascension. `held` =
     (melee family, ranged family) of the profile `gear` stands for (gear_profile, which needs `cfg`);
     without one, the gear's own tiers (the starters)."""
     import sim_combat as sc  # the Armory mirror lives there (lazy: it imports this file)
@@ -5832,7 +5832,8 @@ POSTURES = ("guard", "patrol", "fire")  # a layout spot's postures (a tent's gro
 CB_POSTURES = ("guard", "patrol", "fire", "tent")  # CampBrain's POSTURES (L1b-W2-6)
 
 
-def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=None, weapons=None, starters=None):
+def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=None, weapons=None, starters=None,
+                   notes=True):
     """The fix round's ruling 6, as StageFlow.Validate reads a resolved level: zero and empty
     mean the same on both sides. One line per problem: a maxAlive that is not an integer of at
     least 1 (the level's, or a camp's own), a burst under 1, a camp's targetWaveSeconds of 0 or
@@ -5841,7 +5842,12 @@ def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=
     and `crowd_max`) also Validate's L1b lines (camp_level_problems). Nothing here falls back on
     a number with `or`: Luau's 0 is not Python's. (A key of the level file that is missing
     altogether is a problem to Validate and a KeyError to these tools. A block or an obstacle
-    with a size of 0 or less is LevelGeometry.Pieces' to refuse, and tools/check_levels.py's.)"""
+    with a size of 0 or less is LevelGeometry.Pieces' to refuse, and tools/check_levels.py's.)
+    With `notes` (the default), also every difficulty `note` the game drops (note_problems, the L4
+    W3 fix round's F18): Validate keeps such a level playable and drops the note with one warn (F6),
+    so these tools fail on it to keep shipped data free of one; check_stage_mirror passes
+    notes=False wherever it compares this list or its verdict with Validate's, and holds the drop
+    rule itself to the Luau's on its own cases."""
     problems = []
     if rules is not None:
         lacks = [key for key in LEVEL_RULES_NEEDED if not is_num(rules.get(key))]
@@ -5875,6 +5881,8 @@ def level_problems(level, layout, rules=None, kinds=None, ranks=None, crowd_max=
     if layout is not None:
         secret_problems(level, layout, problems.append)
     first_clear_problems(level, weapons, starters, problems.append)
+    if notes:
+        note_problems(level, problems.append)
     if layout is not None:
         react_problems(layout, problems.append)
     return problems
@@ -5895,6 +5903,46 @@ def first_clear(level, difficulty):
     if given["family"] is None and given["valor"] is None:
         return None
     return given
+
+
+NOTE_MAX_BYTES = 24  # StageFlow.NOTE_MAX_LENGTH (L4 W3 section 7): a difficulty's note on the map's line
+
+
+def note_dropped(note):
+    """StageFlow's note rule (L4 W3 section 7, the fix round's F6): a difficulty's `note` the game
+    drops, keeping the level: anything given that is not a string of 1 to NOTE_MAX_BYTES bytes
+    (a number, a boolean, a table, "", 25 bytes). An absent note (None) is not dropped."""
+    return note is not None and (not isinstance(note, str) or note == ""
+                                 or len(note.encode("utf-8")) > NOTE_MAX_BYTES)
+
+
+def kept_notes(level):
+    """{difficulty: note} of the notes the game keeps after Validate (F6), the rest dropped; an
+    absent note is absent here too. check_stage_mirror's F6 cases hold it to the Luau's."""
+    difficulties = level.get("difficulties")
+    if not isinstance(difficulties, dict):
+        return {}
+    kept = {}
+    for name, scales in difficulties.items():
+        note = scales.get("note") if isinstance(scales, dict) else None
+        if note is not None and not note_dropped(note):
+            kept[str(name)] = note
+    return kept
+
+
+def note_problems(level, problem):
+    """The L4 W3 fix round's F18: each difficulty `note` the game would drop (note_dropped), as a
+    problem for the tools (the game keeps the level and warns once, F6). In difficulty-name order."""
+    difficulties = level.get("difficulties")
+    if not isinstance(difficulties, dict):
+        return
+    for name in sorted(str(n) for n in difficulties):
+        scales = difficulties[name]
+        note = scales.get("note") if isinstance(scales, dict) else None
+        if note_dropped(note):
+            size = f"{len(note.encode('utf-8'))} bytes" if isinstance(note, str) else type(note).__name__
+            problem(f"difficulties.{name}.note is {note!r} ({size}), not a string of 1 to {NOTE_MAX_BYTES} bytes: "
+                    f"the game drops it and the map shows no note (F6)")
 
 
 def first_clear_problems(level, weapons, starters, problem):
@@ -10732,10 +10780,10 @@ def print_ice(cfg, report):
 
 def armed_problems(armory, cfg, gear, runs, held, breath=None):
     """R2 (the L3 W1 fix round, review 2-M1): how each run's player fought, against the game's rule
-    recomputed from scratch (WeaponService.gearOf and damageScale): Armory.HeldTiers of a profile
-    whose starters stand at `gear`, every other family at its window start; the bar MaxHp of those
-    tiers; each striking family at its own tier; the slam as the held melee; a `breath` cast (when
-    one was cast) at the fire family's own tier. The mismatches, as text."""
+    recomputed from scratch (WeaponService.gearOf and damageScale): each held family's TierOf in a
+    profile whose starters stand at `gear`, every other family at its window start; the bar MaxHp
+    of those tiers; each striking family at its own tier; the slam as the held melee; a `breath`
+    cast (when one was cast) at the fire family's own tier. The mismatches, as text."""
     import sim_combat as sc
 
     profile = {"tiers": {cfg["loadout"]["melee"]: gear["melee"], cfg["loadout"]["ranged"]: gear["ranged"]}}
@@ -10783,7 +10831,7 @@ def check_cave_runs(cfg, report, expect):
 
     def armed(tag, label, gear, runs, held, breath=None):
         # R2: each run fought as the game fields its loadout (WeaponService.damageScale and gearOf),
-        # recomputed here with Armory.HeldTiers of the profile the gear stands for.
+        # recomputed here with each held family's TierOf in the profile the gear stands for.
         found = armed_problems(armory, cfg, gear, runs, held, breath)
         expect(not found, f"{tag}: {label} fights at each family's own tier, the bar the held pair's (R2, "
                           f"L3-6): " + ("; ".join(found) if found else armed_line(cfg, runs)))

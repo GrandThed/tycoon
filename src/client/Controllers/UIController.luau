@@ -39,6 +39,11 @@
 -- to public", the run list). The run report is the shared UI/RunTally card, still held behind
 -- the welcome-back card; its wallet is this HUD's model. The Gear Power readout is gone. One sheet
 -- at a time: the map, the Armory and a dock panel each close the others as they open.
+--
+-- The L4 W3 fix round: Roblox's touch controls step aside while the map or the report is up (F11,
+-- UI/TouchHold, kept apart from the Armory's own R9 toggle by the order of the closes: see that
+-- module); the report never opens over the Armory and nothing opens over the report; the city's
+-- report claims no star (F12); the Expedition key without Config/Expeditions says so (F16).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -67,6 +72,7 @@ local ArmoryScreen = require(uiFolder:WaitForChild("ArmoryScreen"))
 local ExpeditionPanel = require(uiFolder:WaitForChild("ExpeditionPanel"))
 local HubMap = require(uiFolder:WaitForChild("HubMap"))
 local RunTally = require(uiFolder:WaitForChild("RunTally"))
+local TouchHold = require(uiFolder:WaitForChild("TouchHold"))
 local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
 local PartyInviteToast = require(uiFolder:WaitForChild("PartyInviteToast"))
 local SettingsPanel = require(uiFolder:WaitForChild("SettingsPanel"))
@@ -107,13 +113,15 @@ local FIRST_ERA = 1
 local ARMORY_PAD_HINT = "B closes · " .. ArmoryScreen.PAD_TAB_NAMES .. " tabs"
 -- L3-24: the answers the Armory screen reads (an upgrade's and an equip's, ok or refused).
 local ARMORY_ACTIONS: { [string]: boolean } = { upgradeWeapon = true, setFamily = true }
--- L4 W3 (section 4.2): the run report's words in the city. A first clear is a new star.
+-- L4 W3 (section 4.2): the run report's words in the city. It reports a whole visit, not one
+-- clear, so it shows no star (F12: a Normal first clear pays no firstClear line to read one from).
 local REPORT = {
 	kicker = "EXPEDITION REPORT",
 	dismissId = "dismiss",
 	dismissText = "Dismiss",
 	diedNote = "You fell — the rewards you earned are yours",
-	firstClearKind = "firstClear",
+	-- The report's reason in UI/TouchHold's count (F11).
+	touchHold = "runReport",
 }
 
 -- Spec section 6: an item whose id is still 0 does not exist for the player. The Shop
@@ -139,58 +147,6 @@ end
 local function readPersistedRate(payload: { [string]: any }): number
 	local rate = payload.persistedIncomePerSecond
 	return if typeof(rate) == "number" then rate else 0
-end
-
--- C1: the run report the hub forwards after a return teleport (or a Studio handoff record).
--- It is presentation only — the rewards are already in the profile — so a malformed payload
--- is dropped rather than half-drawn. `bestWave` and `died` are optional: a combat place that
--- predates them omits them and the card falls back to wavesCleared / not died. L4 W3: `title`
--- names the level (the map, for a whole visit) and `lines` are the rows by source, read through
--- RunLines.Read (a bad line is dropped, a missing list is none; the totals stay the truth).
-local function readRunSummary(payload: any): Types.RunSummary?
-	if
-		typeof(payload) ~= "table"
-		or typeof(payload.title) ~= "string"
-		or typeof(payload.materials) ~= "table"
-		or typeof(payload.wavesCleared) ~= "number"
-		or typeof(payload.cash) ~= "number"
-		or typeof(payload.valor) ~= "number"
-		or typeof(payload.kills) ~= "number"
-		or typeof(payload.seconds) ~= "number"
-	then
-		return nil
-	end
-	local materials: { [string]: number } = {}
-	for name, amount in payload.materials do
-		if typeof(name) == "string" and typeof(amount) == "number" then
-			materials[name] = amount
-		end
-	end
-	local summary: any = {
-		title = payload.title,
-		wavesCleared = payload.wavesCleared,
-		cash = payload.cash,
-		materials = materials,
-		valor = payload.valor,
-		kills = payload.kills,
-		seconds = payload.seconds,
-		bestWave = if typeof(payload.bestWave) == "number"
-			then payload.bestWave
-			else payload.wavesCleared,
-		died = payload.died == true,
-		lines = RunLines.Read(payload.lines),
-	}
-	return summary :: Types.RunSummary
-end
-
--- A report's star: one of its lines is a first clear, which only a new star pays.
-local function hasFirstClear(lines: { Types.RunLine }): boolean
-	for _, line in lines do
-		if line.kind == REPORT.firstClearKind then
-			return true
-		end
-	end
-	return false
 end
 
 -- C2: PartyState payload. Entries with a bad shape are dropped rather than the whole party,
@@ -555,6 +511,13 @@ local function boot(): ()
 	local debugPanel: DebugPanel.DebugPanelHandle? = nil
 	-- L4 W3: the expeditions map, built with the Expeditions surface below.
 	local hubMap: HubMap.Handle? = nil
+	-- L4 W3: the run report card, built with the Expeditions surface below.
+	local runTally: RunTally.Handle? = nil
+	-- F11: the report holds the screen while it is up; neither the Armory nor the map opens over it.
+	local function reportShown(): boolean
+		local card = runTally
+		return card ~= nil and card.IsVisible()
+	end
 
 	local ceremony = Ceremony.new(screenGui, {
 		onClosed = function()
@@ -575,7 +538,7 @@ local function boot(): ()
 			-- L4 W3: the Expedition key is the map's; Party & runs opens from the map's footer.
 			local map = hubMap
 			if key == "expedition" and map ~= nil then
-				if model ~= nil and combatRemotesReady then
+				if model ~= nil and combatRemotesReady and not reportShown() then
 					map.Toggle()
 				end
 				return
@@ -616,7 +579,19 @@ local function boot(): ()
 			-- Like the bar's other keys, only once a model exists (the bar is hidden before) and
 			-- the intents are there to be sent: K follows the key's own rule.
 			local screen = armoryScreen
-			if screen ~= nil and model ~= nil and provingConfig ~= nil and combatRemotesReady then
+			if
+				screen ~= nil
+				and model ~= nil
+				and provingConfig ~= nil
+				and combatRemotesReady
+				and not reportShown()
+			then
+				-- F11: the map gives the touch controls back before the Armory's R9 toggle puts
+				-- their value aside (its own onOpenChanged would close the map only after that).
+				local map = hubMap
+				if map ~= nil and not screen.IsOpen() then
+					map.Close()
+				end
 				screen.Toggle()
 			end
 			return
@@ -857,6 +832,7 @@ local function boot(): ()
 			onPartyAndRuns = function()
 				openPanel("expedition")
 			end,
+			-- HubMap runs this before it takes its touch hold (F11): the Armory closes first.
 			onOpenChanged = function(open: boolean)
 				if open then
 					closePanels()
@@ -871,13 +847,15 @@ local function boot(): ()
 					strip.SetVisible(not open)
 				end
 			end,
+			toast = function(text: string)
+				toast.Show(text, Theme.TOAST_ERROR_SECONDS, true)
+			end,
 		})
 	end
 	-- C1, L4 W3 (section 4.2): the report of the run the player just came back from, the shared
 	-- RunTally card (the dungeon shows the same one). Built with the Expeditions surface (a hub
 	-- without Combat.json can never receive an ExpeditionSummary) and shown only when that event
 	-- fires; it holds no state of its own between runs.
-	local runTally: RunTally.Handle? = nil
 	if hasExpeditions then
 		runTally = RunTally.new(screenGui, {
 			-- The dim behind the card takes every tap, as the old report's scrim did: a stray tap
@@ -887,19 +865,15 @@ local function boot(): ()
 				local card = runTally
 				if id == REPORT.dismissId and card ~= nil then
 					card.Hide()
+					TouchHold.Release(REPORT.touchHold)
 				end
 			end,
 		})
 	end
-	-- The report's wallet: what the player holds now (the run's rewards are already in it).
+	-- The report's wallet: what the player holds now (the run's rewards are already in it). The
+	-- cash is the city's own state, never the summary's; RunTally.Wallet is the dungeon's builder too.
 	local function tallyWallet(current: Model): RunTally.Wallet
-		local combat = current.state.combat
-		local known = isCombatProfile(combat)
-		return {
-			cash = current.state.cash,
-			materials = if known then RunTally.Owned(combat.materials, tallyMaterial) else 0,
-			valor = if known then combat.valor else 0,
-		}
+		return RunTally.Wallet(current.state.cash, current.state.combat, tallyMaterial)
 	end
 	-- Shows a held report once nothing else owns the screen. Safe to call at any time: with
 	-- no report held, no model yet, or with the welcome-back card still up, it does nothing.
@@ -914,6 +888,18 @@ local function boot(): ()
 		local totals = RunTally.Totals(summary)
 		tallyMaterial = totals.material
 		local combat = current.state.combat
+		-- F11: the card never opens over the Armory (both draw at ZINDEX_CARD) or the map (its keys
+		-- would act under the card). Both close here, giving back the touch controls, before the
+		-- report's own hold is taken.
+		local armory = armoryScreen
+		if armory ~= nil then
+			armory.Close()
+		end
+		local map = hubMap
+		if map ~= nil then
+			map.Close()
+		end
+		TouchHold.Hold(REPORT.touchHold)
 		card.Show({
 			kicker = REPORT.kicker,
 			title = summary.title,
@@ -921,7 +907,7 @@ local function boot(): ()
 				.. " · "
 				.. Format.Cash(summary.kills)
 				.. " kills",
-			star = hasFirstClear(summary.lines),
+			star = false,
 			lines = RunTally.Rows(summary.lines),
 			totals = totals,
 			wallet = tallyWallet(current),
@@ -1597,8 +1583,11 @@ local function boot(): ()
 		end
 		summaryConnected = true
 		local remote = event :: RemoteEvent
+		-- The fix round's F7: the card is read by the one reader the hub server's bridge uses too
+		-- (RunLines.ReadSummary). It is presentation only (the rewards are already in the profile),
+		-- so a malformed, forged or oversized card is dropped whole, never half-drawn.
 		remote.OnClientEvent:Connect(function(payload: any)
-			local summary = readRunSummary(payload)
+			local summary = RunLines.ReadSummary(payload)
 			if summary ~= nil then
 				showExpeditionSummary(summary)
 			end

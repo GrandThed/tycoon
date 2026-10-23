@@ -13,9 +13,10 @@ What it answers:
     Road runs and minutes take both starters from T1 to T4 (assertions 1 and 2);
   * what a Normal clear of Forest Road pays at each era's cash multiplier (Combat.json
     rewards.eraCashMult, L4 W3: MISSIONS_DESIGN 26.8 and 30), against each era's remaining slot cost (4:
-    "combat must not replace the tycoon"), against the greedy city run back to back (24: never faster
-    than building) and in minutes of the era's income at its first clear (25: a few minutes at the
-    start);
+    "combat must not replace the tycoon"), against the greedy city run back to back (24: back-to-back
+    runs on Normal or Hard never finish an era sooner than building; printed beside it, ungated, the
+    best "k runs right after an Advance, then build", which can finish sooner) and in minutes of the
+    era's income at its first clear (25: a few minutes at the start);
   * the pure co-op and offline rules (5, 6, 12, 13, 22) and the level gates, pay and population
     (20, 21, 23). The fights themselves are measured by `tools/sim_range.py`, which this file imports.
 
@@ -59,7 +60,8 @@ FIRST_CLEAR_CAP_FRACTION = 0.02
 # Assertion 25 ("a few minutes at the start"): that first clear is worth this many minutes of the
 # era's income at the second it lands.
 FIRST_CLEAR_MINUTES = (1.0, 6.0)
-# Assertion 24 ("never faster than building") runs these difficulties back to back. Brutal needs
+# Assertion 24 (back-to-back runs never finish an era sooner than building) runs these difficulties
+# back to back, and its ungated line runs k of them right after the Advance, then builds. Brutal needs
 # Castle gear (T5) and a T4 Brutal clear is unmeasured (contract risk 3): re-run it with Brutal then.
 NEVER_FASTER_DIFFICULTIES = ("normal", "hard")
 # Assertion 5's fixture: a 10:1 damage duo must leave the veteran >= 75 %.
@@ -939,17 +941,25 @@ def greedy_curves(game, eras, legacy=0, rebirth_count=0):
     return curves
 
 
-def run_pause(run_seconds, clear_cash):
+def run_pause(run_seconds, clear_cash, stop_after=None):
     """sim_economy.simulate_era's pause hook (L4 W3, assertion 24): Forest Road back to back from the
     era's first second. The player buys, then leaves; for the run's seconds he buys nothing while
     the city earns on (offline.expeditionEfficiency 1.0); the clear's cash lands as he returns, he
-    buys and leaves again. A copy of the cash study's runner.py ("nonstop"), as a hook."""
-    trip = {"back": 0, "runs": 0}
+    buys and leaves again. A copy of the cash study's runner.py ("nonstop"), as a hook. With
+    `stop_after` k (the L4 W3 fix round's F17, the review's never_faster.py "stop-after-k"), he
+    stays after his k-th return and builds every second to the era's end; trip["runs"] counts the
+    departures either way."""
+    trip = {"back": 0, "runs": 0, "home": False}
 
     def pause(second):
+        if trip["home"]:
+            return False, 0
         if second < trip["back"]:
             return True, 0
         landed = clear_cash if trip["runs"] > 0 else 0
+        if stop_after is not None and trip["runs"] >= stop_after:
+            trip["home"] = True  # he stays from his k-th return; that clear's cash lands once
+            return False, landed
         trip["runs"] += 1
         trip["back"] = second + run_seconds
         return False, landed
@@ -1993,20 +2003,28 @@ def run_checks(armory, combat_cfg, places, game, eras, shop=None):
     checks.verdict(not problems and bool(notes), "23 population      ",
                    "; ".join(problems[:4]) if problems else " | ".join(notes) + f" (crowd.maxAlive {crowd_max})")
 
-    # 24. L4 W3, "never faster than building" (the cash study's constraint 2): Forest Road run back to
-    #     back on each of NEVER_FASTER_DIFFICULTIES, from each era's first second, never finishes the
-    #     era before the greedy city. The runner buys only between runs (sim_economy.simulate_era's
-    #     pause hook, run_pause: the city earns on during a run, offline.expeditionEfficiency 1.0) and
-    #     each clear pays its cash x Combat.CombatCashMult at the era's entry (forest_clears' measured
-    #     mean clear long). Brutal is left out until T5 exists (contract risk 3).
+    # 24. L4 W3 (the cash study's constraint 2, MISSIONS_DESIGN 30): back-to-back runs on Normal or Hard
+    #     never finish an era sooner than building. Forest Road run back to back on each of
+    #     NEVER_FASTER_DIFFICULTIES, from each era's first second, never finishes the era before the
+    #     greedy city. The runner buys only between runs (sim_economy.simulate_era's pause hook,
+    #     run_pause: the city earns on during a run, offline.expeditionEfficiency 1.0) and each clear
+    #     pays its cash x Combat.CombatCashMult at the era's entry (forest_clears' measured mean clear
+    #     long). Brutal is left out until T5 exists (contract risk 3).
+    #     It gates that one course, not every way of running: the fix round's F17 prints, ungated, the
+    #     best "k runs right after the Advance, then build every second" (run_pause's stop_after, min
+    #     over k), which can finish sooner at any eraCashMult entry of at least 1 (at the shipped ones it
+    #     does on Hard in every era), because the wallet is empty after an Advance: a run then costs
+    #     almost no purchases while the city earns on.
     problems = []
     notes = []
+    then_build = []
     efficiency = combat_cfg["offline"]["expeditionEfficiency"]
     if efficiency != 1:
         problems.append(f"offline.expeditionEfficiency is {efficiency:g}: run_pause models a city earning at 1.0")
     for curve in curves if report is not None else []:
         mult = combat_cash_mult(era_state(curve), game, shop, rewards, curve.index)
         row = []
+        then = []
         for difficulty in NEVER_FASTER_DIFFICULTIES:
             cash, seconds = forest_pay.get(difficulty, (None, None))
             if seconds is None:
@@ -2019,10 +2037,28 @@ def run_checks(armory, combat_cfg, places, game, eras, shop=None):
                                 f"before the city's {se.fmt_time(curve.seconds)}")
             row.append(f"{difficulty} {100 * (lap.seconds - curve.seconds) / curve.seconds:+.1f}% "
                        f"({trip['runs']} runs of {seconds} s)")
+            best = None
+            for k in range(1, trip["runs"] + 1):
+                stop, _trip = run_pause(seconds, cash * mult, stop_after=k)
+                done = se.simulate_era(curve.era, game, curve.legacy_in, "greedy", pause=stop).seconds
+                if best is None or done < best[0]:
+                    best = (done, k)
+            if best is not None:
+                then.append(f"{difficulty} {se.fmt_time(best[0])} {100 * (best[0] - curve.seconds) / curve.seconds:+.1f}% "
+                            f"(k = {best[1]})")
         notes.append(f"{curve.era['name']} x{mult:,.2f}: " + ", ".join(row))
-    checks.verdict(not problems and bool(notes), "24 never faster    ",
+        then_build.append(f"{curve.era['name']} x{mult:,.2f} (city {se.fmt_time(curve.seconds)}): " + ", ".join(then))
+    checks.verdict(not problems and bool(notes), "24 back to back    ",
                    "; ".join(problems[:4]) if problems else
-                   "; ".join(notes) + f" against the greedy city (needs >= +0.0%; Brutal waits for T5)")
+                   "back-to-back runs on Normal or Hard never finish an era sooner than building: " + "; ".join(notes)
+                   + " against the greedy city (needs >= +0.0%; Brutal waits for T5)")
+    if then_build:
+        print("  note  24 runs, then build: ungated, and negative is sooner than the city: k runs right after the "
+              "Advance, then building every second, the best k. The wallet is empty after an Advance, so those runs "
+              "cost almost no purchases while the city earns on; any eraCashMult entry of at least 1 keeps that "
+              "(Village does it at x1, today's pay). Only the back-to-back course above is gated.")
+    for line in then_build:
+        print(f"  note  24 runs, then build: {line}")
 
     # 25. L4 W3, "a few minutes at the start": rewards.eraCashMult holds one finite number of at least 1
     #     per era of Config/Eras, Village's exactly 1 (a new save keeps today's pay); with no rewards block

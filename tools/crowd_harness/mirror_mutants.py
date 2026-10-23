@@ -339,6 +339,18 @@ MUTANTS = [
      "\t\t* Combat.EraCashMult(rewards, era)\n"),
     ("CombatCashMult L4W3-7: the era factor of era 1 for everyone", "Combat",
      "\t\t* Combat.EraCashMult(rewards, era)\n", "\t\t* Combat.EraCashMult(rewards, 1)\n"),
+    # The L4 W3 fix round's F6 and F18: StageFlow.Notes against sim_range.kept_notes / note_problems, and
+    # Validate keeping a level whose note is bad (check_stage_mirror's "F6: a bad note is dropped" cases).
+    ("Notes F6: a 25-byte note kept", "StageFlow", "or #note > NOTE_MAX_LENGTH) then",
+     "or #note > NOTE_MAX_LENGTH + 1) then"),
+    ("Notes F6: an empty note kept", "StageFlow", "(type(note) ~= \"string\" or note == \"\" or #note",
+     "(type(note) ~= \"string\" or #note"),
+    ("Notes F6: a good note dropped too", "StageFlow", "\t\telseif note ~= nil then\n\t\t\tkept[name] = note\n",
+     "\t\telseif note ~= nil and false then\n\t\t\tkept[name] = note\n"),
+    ("Validate F6: a bad note refuses the level again", "StageFlow",
+     "\tfirstClearProblems(level, weapons, starters, problem)\n",
+     "\tfirstClearProblems(level, weapons, starters, problem)\n\tlocal _, droppedNotes = StageFlow.Notes(level)\n"
+     "\tfor _, line in droppedNotes do\n\t\tproblem(line)\n\tend\n"),
 ]
 
 
