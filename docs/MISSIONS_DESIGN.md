@@ -691,3 +691,15 @@ the Colossus's 80 s (every band holds; re-measured at 120° in W2's fix round 2)
 health (4,700) is the lever. The fodder's lunge likewise now slides the body forward in the strike so the club reaches about
 3.9 studs, as the block body did. Lead's rulings, told to Ben. The plated elite's axe has the same gap (drawn to about 5 of
 its 7.5-stud wedge) and is left for Ben's look.
+
+## 29. L4 W2 played (2026-10-23)
+
+After the W2 merge (`main` 106165a) Ben played the rebuilt `proving.rbxl` and said *"everything feels right"*. Studio's log:
+two sessions on that file (about 3½ minutes and 40 seconds), Forest Road with the level dressed (no grey fallback), the
+raiders brought from 86 to 53 alive, no script error, the crowd step p95 at most 0.53 ms with 86 alive. Asked with two click
+questions: the forest and the raiders were **textured, all fine** (the log showed a first-load "content representation is
+being generated" on the new images, which Roblox resolved), and he **saw the forest and camps, the raider models, the Camp
+Chief and the mountain climb**. His line is read as "about right" for the checklist's five questions (mood B, the Chief's
+length and sweep at 12.7 / 120°, the plated elite's axe against its wedge, the raiders in motion, the mountain's
+difficulty). **W2 is signed off.** **[Ben]** Next: W3 (the city map, the end screen, run cash by era) and W4 (publish
+readiness), on his word.

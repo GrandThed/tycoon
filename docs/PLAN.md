@@ -4953,9 +4953,11 @@ pose, data and gates). All fixed or ruled (K1–K10):
 - [x] Full `mutate.py`, sharded: 2,068 / 0 (`88eeae5`)
 - [x] Fix-diff review 0 / 0 / 3 + 4 (`4402ea1`)
 - [x] Fix round 2, L1–L5 (`3205405`)
-- [ ] QA (contract §11) and the lead's line
-- [ ] Merged to `main`, six place files rebuilt (lead)
-- [ ] L4 W2 playtest (Ben)
+- [x] QA on `3205405`: every gate green (harness 4,713; sharded `mutate.py` 2,129 / 0; `check_levels_mutants` 283 ok;
+  R8 and `sim_range --check` by D1 on the same inputs; the two asset-reading gates run where `assets\` is)
+- [x] Merged to `main` (`33315f2`), six place files rebuilt (`106165a`)
+- [x] L4 W2 playtest (Ben, 2026-10-23: *"everything feels right"*; textured, all fine; saw the forest, the raiders, the
+  Chief and the climb; MISSIONS_DESIGN §29)
 - [ ] W3 (on Ben's word)
 - [ ] W4 and the publish
 
