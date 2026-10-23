@@ -10,7 +10,6 @@
 			"camps": ["A", "B"],
 			"cells": [
 				{ "id": "Road5", "x": -279, "z": -44, "sx": 46, "sz": 16 },
-				{ "id": "LookoutSignPad", "x": -299, "z": -54, "sx": 6, "sz": 16 },
 				{ "id": "RoadAB1", "x": -154.5, "z": -44, "sx": 65, "sz": 16 },
 				{ "id": "RoadAB2", "x": -130, "z": -22, "sx": 16, "sz": 60 },
 				{ "id": "RoadAB3", "x": -119, "z": 0, "sx": 38, "sz": 16 },
@@ -323,8 +322,7 @@
 		{ "name": "Road3", "look": "path", "x": -348, "y": -2, "z": -22, "sx": 16, "sy": 4, "sz": 60 },
 		{ "name": "Road4", "look": "path", "x": -329, "y": -2, "z": -44, "sx": 54, "sy": 4, "sz": 16 },
 		{ "name": "Road5", "look": "path", "x": -283, "y": 2, "z": -44, "sx": 38, "sy": 12, "sz": 16 },
-		{ "name": "LookoutLedge", "look": "ground", "x": -283, "y": 15, "z": -59, "sx": 24, "sy": 38, "sz": 14 },
-		{ "name": "LookoutSignPad", "look": "path", "x": -301, "y": 2, "z": -57, "sx": 10, "sy": 12, "sz": 10 },
+		{ "name": "LookoutLedge", "look": "ground", "x": -446, "y": 11, "z": -33, "sx": 24, "sy": 30, "sz": 14 },
 		{ "name": "RoadAB1", "look": "path", "x": -150.5, "y": 6, "z": -44, "sx": 57, "sy": 4, "sz": 16 },
 		{ "name": "RoadAB2", "look": "path", "x": -130, "y": 6, "z": -22, "sx": 16, "sy": 4, "sz": 60 },
 		{ "name": "RoadAB3", "look": "path", "x": -119, "y": 6, "z": 0, "sx": 38, "sy": 4, "sz": 16 },
@@ -372,19 +370,30 @@
 		{ "name": "GatehouseWallS", "look": "wall", "x": 280.75, "y": 38, "z": -35, "sx": 49.5, "sy": 76, "sz": 2 },
 		{ "name": "GatehouseWallE", "look": "wall", "x": 322.5, "y": 38, "z": -41.25, "sx": 2, "sy": 76, "sz": 25.5 },
 		{ "name": "GatehouseWallW", "look": "wall", "x": 304.5, "y": 38, "z": -32.25, "sx": 2, "sy": 76, "sz": 7.5 },
-		{ "name": "TrailEnd", "look": "path", "x": 379, "y": 10, "z": -10, "sx": 16, "sy": 4, "sz": 16 }
+		{ "name": "TrailEnd", "look": "path", "x": 379, "y": 10, "z": -10, "sx": 16, "sy": 4, "sz": 16 },
+		{ "name": "MountainPath", "look": "path", "x": -530, "y": -2, "z": 0, "sx": 96, "sy": 4, "sz": 16 },
+		{ "name": "MountainTrail", "look": "path", "x": -570, "y": -2, "z": -35, "sx": 16, "sy": 4, "sz": 54 },
+		{ "name": "MountainYard", "look": "ground", "x": -610, "y": -2, "z": -110, "sx": 96, "sy": 4, "sz": 96 },
+		{ "name": "MountainLedge1", "look": "ground", "x": -608, "y": 10.5, "z": -86, "sx": 24, "sy": 29, "sz": 20 },
+		{ "name": "MountainLedge2", "look": "ground", "x": -586, "y": 23, "z": -88, "sx": 20, "sy": 54, "sz": 24 },
+		{ "name": "MountainLedge3", "look": "ground", "x": -586, "y": 35.5, "z": -112, "sx": 20, "sy": 79, "sz": 24 },
+		{ "name": "MountainLedge4", "look": "ground", "x": -588, "y": 48, "z": -134, "sx": 24, "sy": 104, "sz": 20 },
+		{ "name": "MountainLedge5", "look": "ground", "x": -612, "y": 60.5, "z": -134, "sx": 24, "sy": 129, "sz": 20 },
+		{ "name": "MountainLedge6", "look": "ground", "x": -634, "y": 73, "z": -132, "sx": 20, "sy": 154, "sz": 24 },
+		{ "name": "MountainLedge7", "look": "ground", "x": -634, "y": 85.5, "z": -108, "sx": 20, "sy": 179, "sz": 24 },
+		{ "name": "MountainSummit", "look": "ground", "x": -610, "y": 98, "z": -110, "sx": 28, "sy": 204, "sz": 28 }
 	],
 	"secrets": [
 		{
 			"id": "lookout",
 			"needs": "doubleJump",
-			"x": -283,
-			"y": 36,
-			"z": -59,
+			"x": -446,
+			"y": 28,
+			"z": -33,
 			"sx": 6,
 			"sy": 4,
 			"sz": 6,
-			"sign": { "x": -301, "y": 8, "z": -57, "text": "LOOKOUT - needs DOUBLE JUMP" }
+			"sign": { "x": -447, "y": 0, "z": -5, "text": "LOOKOUT - needs DOUBLE JUMP" }
 		},
 		{
 			"id": "cache",
@@ -407,6 +416,17 @@
 			"sy": 4,
 			"sz": 6,
 			"sign": { "x": -385, "y": 0, "z": 13, "text": "ISLAND SHRINE - needs ICE" }
+		},
+		{
+			"id": "mountain",
+			"needs": "doubleJump",
+			"x": -610,
+			"y": 202,
+			"z": -110,
+			"sx": 6,
+			"sy": 4,
+			"sz": 6,
+			"sign": { "x": -490, "y": 0, "z": -5, "text": "MOUNTAIN - needs DOUBLE JUMP" }
 		}
 	],
 	"shortcuts": [

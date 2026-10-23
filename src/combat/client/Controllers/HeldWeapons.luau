@@ -46,8 +46,9 @@ local RANGED_SLOT = "ranged"
 local MODEL_PREFIX = "HeldWeapon_"
 local WELD_NAME = "HeldWeaponWeld"
 local TEMPLATE_BASE_NAME = "Base"
--- One look for everyone in W2 (L3-55): the template's first stage.
-local SHOWN_STAGE = "Stage0"
+-- One look for everyone in W2 (L3-55): the template's first stage, shared with the raiders' held
+-- weapons (Figures).
+local SHOWN_STAGE = Theme.COMBAT_WEAPON_SHOWN_STAGE
 -- The right hand, R15 first and R6 second: where the weapon in use hangs, and where W1's fallback
 -- chain starts when no model is in it (then ROOT_PART).
 local HAND_PARTS = { "RightHand", "Right Arm" }

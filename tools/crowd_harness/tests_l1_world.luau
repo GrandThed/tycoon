@@ -33,35 +33,57 @@ function L1W.inside(boxes: { any }, x: number, y: number, z: number): boolean
 	return false
 end
 
--- The Village arena's shape (Layouts/Arenas/Village.luau), written out: the harness does not
--- load layout modules.
-function L1W.village(): any
+-- A gateless camp that locks behind an invisible wall, written out by hand (L4B-6): the one
+-- shape no shipped level plays since the Raider Arena went (L4 W1b), and the layout
+-- the C1 Village arena's adapter used to make of it, so its numbers are that arena's.
+-- One camp, "field", 110 x 110, its floor's top at the world origin; no gates and no checkpoint;
+-- eight spawn points and eight pieces of cover; the party enters at (-12, -12) and leaves and
+-- starts at the origin; an invisible wall 80 high and 8 deep.
+function L1W.field(): any
 	return {
-		size = { x = 110, z = 110 },
-		floor = { material = "Grass", color = { 106, 127, 63 } },
-		wall = { height = 4, material = "WoodPlanks", color = { 112, 84, 56 }, barrierHeight = 80, barrierThickness = 8 },
-		lobbyPad = { x = 0, z = 0 },
-		playerSpawns = { { x = -12, z = -12 }, { x = 12, z = -12 }, { x = 12, z = 12 }, { x = -12, z = 12 } },
-		enemySpawns = {
-			{ x = 0, z = -46 },
-			{ x = 32.5, z = -32.5 },
-			{ x = 46, z = 0 },
-			{ x = 32.5, z = 32.5 },
-			{ x = 0, z = 46 },
-			{ x = -32.5, z = 32.5 },
-			{ x = -46, z = 0 },
-			{ x = -32.5, z = -32.5 },
+		version = 1,
+		start = { x = 0, y = 0, z = 0 },
+		killY = -8,
+		barrier = { height = 80, thickness = 8 },
+		camps = {
+			{
+				id = "field",
+				x = 0,
+				y = 0,
+				z = 0,
+				sx = 110,
+				sz = 110,
+				floor = { material = "Grass", color = { 106, 127, 63 } },
+				fence = { height = 4, material = "WoodPlanks", color = { 112, 84, 56 } },
+				gates = {},
+				entry = { x = -12, z = -12 },
+				exit = { x = 0, z = 0 },
+				spawns = {
+					{ x = 0, z = -46 },
+					{ x = 32.5, z = -32.5 },
+					{ x = 46, z = 0 },
+					{ x = 32.5, z = 32.5 },
+					{ x = 0, z = 46 },
+					{ x = -32.5, z = 32.5 },
+					{ x = -46, z = 0 },
+					{ x = -32.5, z = -32.5 },
+				},
+				obstacles = {
+					{ x = 9.2, z = 22.3, sx = 5, sy = 3.5, sz = 5, material = "Slate", color = { 110, 110, 105 } },
+					{ x = 22.3, z = -9.2, sx = 6, sy = 4, sz = 5, material = "Slate", color = { 102, 104, 100 } },
+					{ x = -9.2, z = -22.3, sx = 5, sy = 3.5, sz = 6, material = "Slate", color = { 110, 110, 105 } },
+					{ x = -22.3, z = 9.2, sx = 5, sy = 3, sz = 5, material = "Slate", color = { 102, 104, 100 } },
+					{ x = 12.6, z = -30.4, sx = 12, sy = 2, sz = 3, material = "Wood", color = { 96, 70, 45 } },
+					{ x = -30.4, z = -12.6, sx = 3, sy = 2, sz = 12, material = "Wood", color = { 86, 62, 40 } },
+					{ x = -12.6, z = 30.4, sx = 12, sy = 2, sz = 3, material = "Wood", color = { 96, 70, 45 } },
+					{ x = 30.4, z = 12.6, sx = 3, sy = 2, sz = 12, material = "Wood", color = { 86, 62, 40 } },
+				},
+				locks = true,
+			},
 		},
-		obstacles = {
-			{ x = 9.2, z = 22.3, sx = 5, sy = 3.5, sz = 5, material = "Slate", color = { 110, 110, 105 } },
-			{ x = 22.3, z = -9.2, sx = 6, sy = 4, sz = 5, material = "Slate", color = { 102, 104, 100 } },
-			{ x = -9.2, z = -22.3, sx = 5, sy = 3.5, sz = 6, material = "Slate", color = { 110, 110, 105 } },
-			{ x = -22.3, z = 9.2, sx = 5, sy = 3, sz = 5, material = "Slate", color = { 102, 104, 100 } },
-			{ x = 12.6, z = -30.4, sx = 12, sy = 2, sz = 3, material = "Wood", color = { 96, 70, 45 } },
-			{ x = -30.4, z = -12.6, sx = 3, sy = 2, sz = 12, material = "Wood", color = { 86, 62, 40 } },
-			{ x = -12.6, z = 30.4, sx = 12, sy = 2, sz = 3, material = "Wood", color = { 96, 70, 45 } },
-			{ x = 30.4, z = 12.6, sx = 3, sy = 2, sz = 12, material = "Wood", color = { 86, 62, 40 } },
-		},
+		blocks = {},
+		secrets = {},
+		route = {},
 	}
 end
 
@@ -138,63 +160,26 @@ function L1W.covered(camp: any, thickness: number): (boolean, string)
 	return true, "every side"
 end
 
-function L1W.arenaTests(): ()
-	print(" FromArena: the Village arena as a level (ruling 27)")
+function L1W.fieldTests(): ()
+	print(" a gateless camp that locks behind an invisible wall (L1W.field, L4B-6)")
 	local Geo = L1W.Geo
-	local arena = L1W.village()
-	local layout = Geo.FromArena(arena, -8)
-	local camp = layout.camps[1]
-	check(#layout.camps == 1 and camp.id == "arena" and camp.x == 0 and camp.y == 0 and camp.z == 0 and camp.sx == 110 and camp.sz == 110, "one camp, \"arena\", 110 x 110, its floor's top at the world origin")
-	local spawnsMatch = #camp.spawns == 8
-	for index, point in arena.enemySpawns do
-		spawnsMatch = spawnsMatch and camp.spawns[index] ~= nil and camp.spawns[index].x == point.x and camp.spawns[index].z == point.z
-	end
-	check(spawnsMatch, "its eight spawn points are the arena's enemy spawns, in order")
-	local coverMatch = #camp.obstacles == 8
-	for index, obstacle in arena.obstacles do
-		local copy = camp.obstacles[index]
-		coverMatch = coverMatch and copy ~= nil and copy.x == obstacle.x and copy.z == obstacle.z and copy.sx == obstacle.sx and copy.sy == obstacle.sy and copy.sz == obstacle.sz and copy.material == obstacle.material
-	end
-	check(coverMatch, "its cover is the arena's eight obstacles")
-	check(layout.barrier ~= nil and layout.barrier.height == 80 and layout.barrier.thickness == 8, "the invisible wall is the arena's: 80 high, 8 deep")
-	check(camp.fence ~= nil and camp.fence.height == 4 and camp.fence.material == "WoodPlanks" and camp.fence.color[1] == 112 and camp.floor.material == "Grass" and camp.floor.color[2] == 127, "fence and floor keep the arena's height, material and colour")
-	check(#camp.gates == 0 and camp.checkpoint == nil, "no gates and no checkpoint")
-	check(camp.entry.x == -12 and camp.entry.z == -12 and camp.exit.x == 0 and camp.exit.z == 0, "the party enters at the first player spawn and leaves at the pad")
-	check(layout.start.x == 0 and layout.start.y == 0 and layout.start.z == 0 and layout.killY == -8, "the start is the pad on the floor; killY is the argument")
-	check(layout.arena == nil and #layout.blocks == 0 and #layout.secrets == 0 and #layout.route == 0 and layout.spawns == nil, "nothing else: no blocks, secrets or route, and no arena name left")
-	camp.spawns[1].x = 999
-	camp.obstacles[1].sy = 999
-	camp.fence.color[1] = 0
-	check(arena.enemySpawns[1].x == 0 and arena.obstacles[1].sy == 3.5 and arena.wall.color[1] == 112, "every table is new: changing the level leaves the arena's module untouched")
+	local thin = L1W.field()
+	thin.barrier.thickness = 0
+	local thinWall = Geo.BarrierBoxes(thin.camps[1], 1, thin.barrier)
+	check(#thinWall == 4 and near(thinWall[1].sz, 1), "a barrier of thickness 0: the wall is as deep as the fence")
 
-	local bare = L1W.village()
-	bare.playerSpawns = {}
-	bare.lobbyPad = { x = 3, z = -4 }
-	bare.wall = nil
-	local plain = Geo.FromArena(bare, -20)
-	check(plain.camps[1].entry.x == 3 and plain.camps[1].entry.z == -4 and plain.start.x == 3 and plain.start.z == -4, "no player spawn: the entry is the pad, wherever the pad is")
-	check(plain.camps[1].fence == nil and plain.barrier == nil, "no wall: no fence and no invisible wall")
-	local low = L1W.village()
-	low.wall.barrierHeight = nil
-	check(Geo.FromArena(low, -8).barrier == nil and Geo.FromArena(low, -8).camps[1].fence ~= nil, "a wall without barrierHeight: the fence, and no invisible wall")
-	local thin = L1W.village()
-	thin.wall.barrierThickness = nil
-	local thinLayout = Geo.FromArena(thin, -8)
-	local thinWall = Geo.BarrierBoxes(thinLayout.camps[1], 1, thinLayout.barrier)
-	check(thinLayout.barrier.thickness == 0 and #thinWall == 4 and near(thinWall[1].sz, 1), "no barrierThickness: the wall is as deep as the fence")
-
-	local fresh = Geo.FromArena(L1W.village(), -8)
+	local fresh = L1W.field()
 	local fence = Geo.FenceBoxes(fresh.camps[1], 1)
-	check(#fence == 4 and L1W.is(fence[1], 0, 2, -55.5, 112, 4, 1) and L1W.is(fence[2], 0, 2, 55.5, 112, 4, 1) and L1W.is(fence[3], -55.5, 2, 0, 1, 4, 110) and L1W.is(fence[4], 55.5, 2, 0, 1, 4, 110), "with no gate the fence is the C1 arena's four boxes (112 x 4 x 1 at z -55.5 and 55.5; 1 x 4 x 110 at x -55.5 and 55.5)")
+	check(#fence == 4 and L1W.is(fence[1], 0, 2, -55.5, 112, 4, 1) and L1W.is(fence[2], 0, 2, 55.5, 112, 4, 1) and L1W.is(fence[3], -55.5, 2, 0, 1, 4, 110) and L1W.is(fence[4], 55.5, 2, 0, 1, 4, 110), "with no gate the fence is four boxes (112 x 4 x 1 at z -55.5 and 55.5; 1 x 4 x 110 at x -55.5 and 55.5)")
 	local wall = Geo.BarrierBoxes(fresh.camps[1], 1, fresh.barrier)
 	check(#wall == 4 and L1W.is(wall[1], 0, 40, -59, 126, 80, 8) and L1W.is(wall[2], 0, 40, 59, 126, 80, 8) and L1W.is(wall[3], -59, 40, 0, 8, 80, 110) and L1W.is(wall[4], 59, 40, 0, 8, 80, 110), "and the invisible wall starts at the floor's edge, the fence inside it (126 x 80 x 8 at z -59 and 59; 8 x 80 x 110 at x -59 and 59)")
 	local pieces = Geo.Pieces(fresh, L1W.sizes, 600)
-	check(pieces ~= nil and #pieces == 17 and pieces[1].name == "Camp_arena_Floor" and pieces[17].name == "Barrier_arena_4", `the arena is 17 Parts: a floor, 4 fence, 8 cover, 4 wall ({pieces and #pieces})`)
+	check(pieces ~= nil and #pieces == 17 and pieces[1].name == "Camp_field_Floor" and pieces[17].name == "Barrier_field_4", `the camp is 17 Parts: a floor, 4 fence, 8 cover, 4 wall ({pieces and #pieces})`)
 	check(pieces ~= nil and L1W.is(pieces[1].box, 0, -2, 0, 110, 4, 110), `its floor is levels.floorThickness deep like any camp's (4), its top still at 0 ({pieces and L1W.show(pieces[1].box)})`)
 	local bounds = Geo.Bounds(fresh, 4)
 	check(bounds.minX == -55 and bounds.maxX == 55 and bounds.minZ == -55 and bounds.maxZ == 55 and bounds.minY == -4 and bounds.maxY == 4, "its bounds are the floor, its depth under it, and the fence's height")
 end
-L1W.arenaTests()
+L1W.fieldTests()
 
 -- How many points on top of `camp`'s fence and gates are NOT in `wall`: per box its middle and
 -- its four corners (a hair inside), a hair above its top and at a standing root's height.
@@ -354,7 +339,7 @@ function L1W.closeTests(): ()
 	local barrier = { height = 80, thickness = 8 }
 	local ends = L1W.camp()
 	ends.gates = { { side = "east", at = 28, width = 12 }, { side = "west", at = 0, width = 100 }, { side = "north", at = -29, width = 6 } }
-	local arena = Geo.FromArena(L1W.village(), -8).camps[1]
+	local arena = L1W.field().camps[1]
 	local reaching = 0
 	local first = ""
 	local floors = true
@@ -513,11 +498,6 @@ function L1W.oblongTests(): ()
 	layout.blocks = { { look = "path", x = 16, y = 6, z = -36, sx = 44, sy = 4, sz = 16 }, { look = "ground", x = 100, y = 20, z = 40, sx = 6, sy = 30, sz = 20 } }
 	local wider = Geo.Bounds(layout, 4)
 	check(wider.minX == -6 and wider.maxX == 138 and wider.minZ == -83 and wider.maxZ == 50 and wider.minY == 4 and wider.maxY == 35, `and with two blocks: each widens it by its own width along X and its own depth along Z (x {wider.minX} to {wider.maxX}, z {wider.minZ} to {wider.maxZ}, y {wider.minY} to {wider.maxY})`)
-
-	local arena = L1W.village()
-	arena.size = { x = 110, z = 90 }
-	local oblongArena = Geo.FromArena(arena, -8).camps[1]
-	check(oblongArena.sx == 110 and oblongArena.sz == 90, "FromArena: the arena's size.x is the camp's width and its size.z the depth")
 
 	local pieces = Geo.Pieces({ version = 1, start = { x = 0, y = 0, z = 0 }, killY = -40, barrier = barrier, camps = { L1W.oblong() }, blocks = {}, secrets = {}, route = {} } :: any, L1W.sizes, 600)
 	local byName: { [string]: any } = {}
@@ -759,8 +739,6 @@ function L1W.pieceTests(): ()
 	nan.blocks[2].x = 0 / 0
 	local flatPieces, flatWhy = Geo.Pieces(flat, L1W.sizes, 600)
 	check(flatPieces == nil and flatWhy ~= nil and string.find(flatWhy, "Road", 1, true) ~= nil and Geo.Pieces(nan, L1W.sizes, 600) == nil, `a block with no height, or a position that is not a number, is refused by name ({flatWhy})`)
-	local unresolved, unresolvedWhy = Geo.Pieces({ version = 1, arena = "Village" } :: any, L1W.sizes, 600)
-	check(unresolved == nil and unresolvedWhy ~= nil and string.find(unresolvedWhy, "Village", 1, true) ~= nil, "a layout that still names its arena is refused: it goes through FromArena first")
 end
 L1W.pieceTests()
 

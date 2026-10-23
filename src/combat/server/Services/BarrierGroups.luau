@@ -9,15 +9,13 @@
 -- part that is also non-colliding), so the wall gets a collision group that collides with ONE
 -- other group, the one every member's character parts are put in. A ray or a shape cast runs in
 -- the Default group, which the wall's group does not collide with, and passes through.
--- The players' group collides with exactly what Default does, group by group (the arena's own
--- group, and C1's ragdoll group, registered by EnemyService), with one exception: a member's
--- body never collides with another member's (the L2 W1 fix round's d1). Standing on a partner's
--- head would otherwise lift a player without the double jump onto a ledge only an owner reaches,
--- and two bodies put on one point (the close's entry, a lobby spawn) would shove each other.
+-- The players' group collides with exactly what Default does, group by group (every group
+-- registered before this call), with one exception: a member's body never collides with another
+-- member's (the L2 W1 fix round's d1). Standing on a partner's head would otherwise lift a player
+-- without the double jump onto a ledge only an owner reaches, and two bodies put on one point (the
+-- close's entry, a lobby spawn) would shove each other.
 
 local PhysicsService = game:GetService("PhysicsService")
-
-local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
 
 -- Names are engine plumbing.
 local BARRIER_GROUP = "ArenaBarrier"
@@ -39,8 +37,6 @@ function BarrierGroups.Ensure(): boolean
 	if known ~= nil then
 		return known
 	end
-	-- EnemyService registers its groups on this call: they must exist before the loop below.
-	EnemyService.ArenaCollisionGroup()
 	local ok, err = pcall(function()
 		for _, name in { BARRIER_GROUP, PLAYER_GROUP } do
 			if not PhysicsService:IsCollisionGroupRegistered(name) then

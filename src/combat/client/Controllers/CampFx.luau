@@ -10,7 +10,9 @@
 --    studs plus pixels: it grows near and keeps a floor of pixels far away, so it reads at 60
 --    studs on a landscape phone. Always on top, because raiders see through the palisade and
 --    the mark is the player's only word that they did. A body not drawn is skipped; a mark
---    whose body dies, leaves or is handed to another id goes at once.
+--    whose body dies or leaves goes at once. L4 W2 fix round 2 (L2): a body that changes its
+--    head part (a waiting placeholder putting its model on, or the X key's re-dress either
+--    way) keeps its mark, hung again on the new head.
 --  * `checkpoint` (L1b-18): "Checkpoint" for Theme.COMBAT_CHECKPOINT_NOTICE_SECONDS, through the
 --    host's notice handler (CombatHud.ShowNotice under the wallet, in the mission HUD).
 --
@@ -31,8 +33,9 @@ type Mark = {
 	label: TextLabel,
 	stroke: UIStroke,
 	scale: UIScale,
-	-- The body it stands over: the crowd id and the head part it was hung on (a pooled body
-	-- handed to another id keeps its head, so both are checked).
+	-- The body it stands over: its crowd id, and the head part the mark hangs on now. A body
+	-- handed back to the pool answers nil for its old id, so the id alone ends the mark; the
+	-- part only says whether it must be hung again.
 	id: number,
 	head: BasePart?,
 	-- os.clock() it showed up.
@@ -102,6 +105,14 @@ local function build(playerGui: Instance): Mark
 	return mark
 end
 
+-- The mark over `head`, its foot COMBAT_ALERT_STUDS above the part's top. A model's anchor and
+-- the placeholder's head are both the scored head's sphere, so a re-hang does not move it.
+local function hang(mark: Mark, head: BasePart): ()
+	mark.head = head
+	mark.gui.Adornee = head
+	mark.gui.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 0.5 + Theme.COMBAT_ALERT_STUDS, 0)
+end
+
 local function give(index: number): ()
 	local mark = marks[index]
 	marks[index] = marks[#marks]
@@ -131,9 +142,13 @@ local function step(): ()
 	for index = #marks, 1, -1 do
 		local mark = marks[index]
 		local age = now - mark.since
-		if age >= lasts or CrowdRenderer.GetHead(mark.id) ~= mark.head then
+		local head = CrowdRenderer.GetHead(mark.id)
+		if age >= lasts or head == nil then
 			give(index)
 			continue
+		end
+		if head ~= mark.head then
+			hang(mark, head)
 		end
 		local seen = math.clamp((lasts - age) / fade, 0, 1)
 		local transparency = 1 - seen
@@ -169,7 +184,6 @@ function CampFx.Alert(ids: any): ()
 		state.connection = RunService.Heartbeat:Connect(step)
 	end
 	local now = os.clock()
-	local rise = Theme.COMBAT_ALERT_STUDS
 	for _, id in ids :: { any } do
 		if typeof(id) ~= "number" then
 			continue
@@ -193,10 +207,8 @@ function CampFx.Alert(ids: any): ()
 		end
 		local shown = mark :: Mark
 		shown.id = id
-		shown.head = head
 		shown.since = now
-		shown.gui.Adornee = head
-		shown.gui.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 0.5 + rise, 0)
+		hang(shown, head)
 		shown.label.TextTransparency = 0
 		shown.stroke.Transparency = 0
 		shown.scale.Scale = if Theme.reducedMotion then 1 else Theme.COMBAT_ALERT_POP_FROM

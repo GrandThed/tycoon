@@ -363,6 +363,11 @@ export type AssetsConfig = {
 	-- v5 (L3 W2, L3-42): shelf icons by set ("Weapons"), then model name; absent before v5. Luau
 	-- reads only `imageId`, through WeaponLook.IconId (0 = not harvested yet, or in moderation).
 	icons: { [string]: { [string]: AssetIcon } }?,
+	-- v6 (L4 W2, docs/prompts/l4-w2-contract.md §2.1): the uploaded level dress meshes by layout
+	-- ("ForestRoad"); absent before v6. Luau reads only `planHash`, which ties the dress file
+	-- (Config/LevelDress/<layout>.json) to the meshes that were uploaded (LevelDress.Accept); the
+	-- triangles, images and mesh ids beside it are the template generator's.
+	levels: { [string]: { planHash: string } }?,
 }
 
 -- Game.json v1.3 mirror; field names follow the JSON keys exactly.
@@ -1024,73 +1029,8 @@ export type CombatProfile = {
 
 export type PlacesConfig = { version: number, hubPlaceId: number, combatPlaceId: number }
 
--- Armory.json v1. `kind` and `fire` stay `string` because they are decoded from JSON, which Luau
--- cannot narrow to a union. Melee classes carry range/arcDegrees/chain/windows/comboReset/
--- finisherKnockback; ranged carry fire/cooldown/range plus the optional per-family fields.
-export type BandDef = { band: number, eraName: string, material: string }
-export type WeaponClassDef = {
-	kind: string,
-	range: number,
-	arcDegrees: number?,
-	chain: { number }?,
-	windows: { number }?,
-	comboReset: number?,
-	finisherKnockback: number?,
-	fire: string?,
-	cooldown: number?,
-	chargeSeconds: number?,
-	minDamageFraction: number?,
-	spreadDegrees: number?,
-	pierce: number?,
-}
-export type AbilityDef = {
-	kind: string,
-	cooldown: number,
-	damageMult: number,
-	radius: number?,
-	shots: number?,
-	knockback: number?,
-	stunSeconds: number?,
-	dashStuds: number?,
-	dotSeconds: number?,
-	dotTicks: number?,
-	pierce: number?,
-}
--- `model` is a prop name under ReplicatedStorage/Assets/Props/<band eraName>/ ("" = no model, so
--- the hands stay empty); `ability` keys ArmoryConfig.abilities ("" = none).
-export type WeaponStarterDef = {
-	name: string,
-	class: string,
-	damage: number,
-	hp: number,
-	ability: string,
-	model: string,
-}
--- `cost` is in the band material; `unlockRate` is the persisted income/s the city must reach.
-export type WeaponTierDef = {
-	tier: number,
-	band: number,
-	cost: number,
-	unlockRate: number,
-	name: string,
-	class: string,
-	damage: number,
-	hp: number,
-	ability: string,
-	model: string,
-	-- C2: key into ArmoryConfig.partyEffects, fired on allies when this weapon's ability is cast.
-	partyEffect: string?,
-}
-export type ArmorySlotDef = { starter: WeaponStarterDef, tiers: { WeaponTierDef } }
--- C2: rally heals allies (never the caster) by healFraction of their MaxHp; warcry multiplies
--- allies' outgoing damage by damageMult for `seconds`. Allies within `radius` of the caster.
-export type PartyEffectDef = {
-	kind: "rally" | "warcry",
-	radius: number,
-	healFraction: number?,
-	damageMult: number?,
-	seconds: number?,
-}
+-- Armory.json. L4 W1b deleted C1's slot ladder (`slots`, `classes`, `abilities`, `bands`,
+-- `partyEffects`) with its last readers; the Ascension forge stays for the hub.
 export type AscensionLevelDef = {
 	level: number,
 	materials: { [string]: number },
@@ -1132,21 +1072,12 @@ export type ArmoryLegacyCost = { material: string, amount: number }
 export type ArmoryLegacy = { gearCosts: { ArmoryLegacyCost } }
 -- L3: `ladder`, `windows` and `legacy` are optional so a build without them degrades instead of
 -- erroring (every family fights at T1 and nothing is upgraded; Armory.Problems warns at Init).
--- `slots` and `bands` stay for the C1 readers and the hub's Ascension until L4; the tier path
--- never reads `slots`, `bands` or `unlockRate`. power.tierWeight weighs the held families'
--- multipliers in Gear Power (L3-6).
+-- power.tierWeight weighs the held families' multipliers in Gear Power (L3-6).
 export type ArmoryConfig = {
 	version: number,
 	baseHp: number,
 	power: { hpWeight: number, tierWeight: number? },
-	bands: { BandDef },
-	classes: { [string]: WeaponClassDef },
-	abilities: { [string]: AbilityDef },
-	-- Keyed by WeaponSlot; a map (not a record) because every lookup comes from a validated
-	-- client string or a config-driven loop.
-	slots: { [string]: ArmorySlotDef },
 	ascension: AscensionConfig,
-	partyEffects: { [string]: PartyEffectDef },
 	ladder: ArmoryLadder?,
 	-- Keyed by weapon family id (ProvingGrounds.json `weapons`).
 	windows: { [string]: ArmoryWindow }?,
@@ -1159,22 +1090,13 @@ export type CombatOfflineConfig = { expeditionEfficiency: number }
 -- two can never drift apart.
 export type CombatPlayerConfig = {
 	respawnSeconds: number,
-	hitDistancePad: number,
-	breatherRegenPerSecond: number,
-	killCooldownRefundSeconds: number,
 	comboTimingTolerance: number,
-	aimAssistDegrees: number,
-	corpseSeconds: number,
-	dashHitRadius: number,
-	burstConeDegrees: number,
 	-- P5 review: a member whose root is `below` studs under the floor, or `outside` studs past
 	-- its edge, is put back on a spawn (never a down). Absent = no rescue.
 	rescue: { below: number, outside: number }?,
 }
 export type CombatRemotesConfig = {
-	attackCallsPerSecond: number,
-	abilityCallsPerSecond: number,
-	-- P3 range buckets: held beams, SMGs and Mag Dump send far more than a mission weapon.
+	-- P3 buckets for every attack and ability intent: held beams, SMGs and Mag Dump send many.
 	rangeAttackCallsPerSecond: number,
 	rangeAbilityCallsPerSecond: number,
 	runListCallsPerSecond: number,
@@ -1189,7 +1111,6 @@ export type CombatDirectorConfig = {
 	eliteTempo: number,
 	breatherSeconds: number,
 	breatherMaxSeconds: number,
-	maxAlive: number,
 	runCapSeconds: number,
 	tempoWarmupSeconds: number,
 }
@@ -1236,15 +1157,9 @@ export type CombatRegistryConfig = {
 	listMax: number,
 	friendChecksPerCall: number,
 }
--- Animation asset ids; 0 = the procedural fallback. C2.5 adds run/hit for enemies and the player
--- slash/lunge overrides (Roblox-owned default tool animations are the intended first values).
+-- Animation asset ids; 0 = the procedural fallback. C2.5's player slash/lunge overrides
+-- (Roblox-owned default tool animations are the intended first values).
 export type CombatAnimationsConfig = {
-	enemyIdle: number,
-	enemyWalk: number,
-	enemyAttack: number,
-	enemyDeath: number,
-	enemyRun: number,
-	enemyHit: number,
 	playerSlash: number,
 	playerLunge: number,
 }
@@ -1258,71 +1173,18 @@ export type CombatCameraConfig = {
 	maxZoom: number,
 	touchSensitivity: number,
 	gamepadSensitivity: number,
-	touchAimAssistDegrees: number,
 	freeCursorPhases: { string },
 }
--- C2.5 enemy steering and reactions (server). Melee enemies take one of maxMeleeAttackers slots
--- around their target; the rest circle at holdRadius. Chargers wind up, then dash chargeDistance.
-export type CombatAiConfig = {
-	separationRadius: number,
-	separationWeight: number,
-	maxMeleeAttackers: number,
-	holdRadius: number,
-	strafeSpeedMult: number,
-	rangedMinDistance: number,
-	rangedMaxDistance: number,
-	pathRecomputeSeconds: number,
-	staggerSeconds: number,
-	finisherStaggerSeconds: number,
-	telegraphSeconds: number,
-	chargeDistance: number,
-	chargeSpeedMult: number,
-	chargeWindupSeconds: number,
-	-- Hit shapes checked at impact time (degrees are half-angles; lane half-width scales with body).
-	strikeHalfArcDegrees: number,
-	shotHalfConeDegrees: number,
-	strikeReachPad: number,
-	chargeLaneHalfWidth: number,
-	postPatternAttackDelay: number,
-	-- C2.5 review: the steering/reaction numbers that were code constants.
-	-- memberRadius = a party member's body radius added to every hit shape; retargetHysteresis =
-	-- studs closer another member must be before an enemy switches; cancelCooldownFraction = the
-	-- share of attackCooldown a cancelled windup costs; chargeTriggerFraction = the share of
-	-- chargeDistance a charger winds up inside; slamTriggerMargin = studs beyond a slam radius
-	-- that still starts a slam; dashTimeoutPad = seconds after the ideal dash time a blocked dash
-	-- ends; defaultSlamRadius / defaultSummonCount = pattern fallbacks; staggerShove = studs/s
-	-- push on a stagger; bossStaggerMult scales both stagger durations for bosses;
-	-- stunPatternRefundFraction = share of a boss pattern's cooldown returned when a stun cancels
-	-- it during its windup.
-	memberRadius: number,
-	retargetHysteresis: number,
-	cancelCooldownFraction: number,
-	chargeTriggerFraction: number,
-	slamTriggerMargin: number,
-	dashTimeoutPad: number,
-	defaultSlamRadius: number,
-	defaultSummonCount: number,
-	staggerShove: number,
-	bossStaggerMult: number,
-	stunPatternRefundFraction: number,
-}
--- C2.5 client impact tunables.
+-- C2.5 client impact tunables (WeaponController's swing trail and bolt; L4 W1b deleted the rest
+-- with C1's hit, kill and ragdoll effects).
 export type CombatFeelConfig = {
-	shakeLight: number,
-	shakeHeavy: number,
-	hitMarkerSeconds: number,
 	trailSeconds: number,
 	arrowSpeed: number,
-	ragdollImpulse: number,
-	ragdollSeconds: number,
-	hitSparkCount: number,
 }
 -- Studio-only levers, named here so no attribute name is duplicated in code.
 export type CombatDebugConfig = {
-	missionAttribute: string,
 	-- P1: Workspace boolean; true at boot = the Proving Grounds instead of a mission (Studio only).
 	provingAttribute: string,
-	overdriveAttribute: string,
 	grantMaterialsAttribute: string,
 	grantValorAttribute: string,
 	waveAttribute: string,
@@ -1330,16 +1192,11 @@ export type CombatDebugConfig = {
 	godModeAttribute: string,
 	killAllAttribute: string,
 	setGearAttribute: string,
-	botsAttribute: string,
 	fakeRunsAttribute: string,
 	forceTeleportFailureAttribute: string,
 	forceRegistryFailureAttribute: string,
 	handoffStoreName: string,
 	handoffMaxAgeSeconds: number,
-	botHp: number,
-	botDamagePerSecond: number,
-	-- C2: the income/s a debug bot reports to MentorBonus (0 = every bot is a mentee).
-	botIncomeRate: number,
 	-- C2 hub levers (RequestDebug "fakeParty" / "fakeInvite" use the same names).
 	fakePartyAttribute: string,
 	fakeInviteAttribute: string,
@@ -1375,25 +1232,14 @@ export type CombatDebugConfig = {
 	setTierAttribute: string?,
 	grantStarAttribute: string?,
 	resetArmoryAttribute: string?,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §8, the Z key): a number attribute > 0 (consumed): the
+	-- next level is built grey through the real fallback (LevelService.FailNextDress). nil = off.
+	dressFailAttribute: string?,
 }
--- Enemy AI tunables (EnemyService) and client presentation tunables (CombatFxController).
-export type CombatEnemyConfig = {
-	tickHz: number,
-	aggroRange: number,
-	retargetSeconds: number,
-	eliteScale: number,
-	bossScale: number,
-	-- C2: colours moved out of EnemyService. RGB 0-255; EnemyDef.color overrides defaultColor.
-	defaultColor: { number },
-	bossColor: { number },
-	botColor: { number },
-}
+-- Client presentation tunables (CombatFxController).
 export type CombatFeedbackConfig = {
-	hitstopSeconds: number,
-	cameraKickDegrees: number,
 	damageNumberSeconds: number,
 	bannerSeconds: number,
-	lowHpFraction: number,
 }
 export type CombatConfig = {
 	version: number,
@@ -1405,94 +1251,32 @@ export type CombatConfig = {
 	overdrive: CombatOverdriveConfig,
 	registry: CombatRegistryConfig,
 	animations: CombatAnimationsConfig,
-	enemy: CombatEnemyConfig,
 	feedback: CombatFeedbackConfig,
 	debug: CombatDebugConfig,
 	camera: CombatCameraConfig,
-	ai: CombatAiConfig,
 	feel: CombatFeelConfig,
-	-- P5 ruling 2: the one 10-wave skeleton every era's `crowd` block follows.
-	crowdSkeleton: { CrowdSkeletonWave },
 	-- L1: the rules every level shares (gates, triggers, the start, the build's size).
 	levels: CombatLevelsConfig,
 	-- L1b: how a camp's resident groups rest, wake, chase and go home (CampBrain).
 	camps: CampRulesConfig,
 }
 
--- Missions/<eraIndex>_<EraName>.json v1, resolved by numeric prefix like era configs.
--- kind: "melee" | "ranged" | "charger" (C2.5: chargers wind up and dash; see CombatAiConfig).
-export type EnemyDef = {
-	template: string,
-	kind: string,
-	hp: number,
-	damage: number,
-	speed: number,
-	reach: number,
-	attackCooldown: number,
-	cash: number,
-	materials: number,
-	elite: boolean,
-	color: { number }?,
-}
--- The composition in force from `fromWave` until the next entry takes over.
-export type CompositionDef = { fromWave: number, weights: { [string]: number } }
-export type WaveTableDef = {
-	baseCount: number,
-	countPerWave: number,
-	hpGrowth: number,
-	damageGrowth: number,
-	rewardGrowth: number,
-	composition: { CompositionDef },
-}
--- C2.5 boss attacks, cycled on their own cooldowns. slam = telegraphed AoE at the boss (radius,
--- damageMult); charge = the charger dash at the target; summon = `count` of mission enemy `enemy`.
-export type BossPatternDef = {
-	kind: "slam" | "charge" | "summon",
-	cooldown: number,
-	windupSeconds: number,
-	radius: number?,
-	damageMult: number?,
-	enemy: string?,
-	count: number?,
-}
-export type BossDef = {
-	template: string,
-	enemy: string,
-	hpMult: number,
-	damageMult: number,
-	cashMult: number,
-	materialsMult: number,
-	valor: number,
-	patterns: { BossPatternDef }?,
-}
+-- Missions/1_Village.json, resolved by numeric prefix like era configs: the hub's stub until W3
+-- (L4B-1), what Depart's check and the Expedition tile read. `id` is the hub ticket's key.
 export type MissionConfig = {
 	version: number,
 	id: string,
 	era: number,
 	eraName: string,
 	name: string,
-	arena: string,
 	material: string,
 	waves: number,
-	bossWaves: { number },
 	recommendedPower: number,
 	targetMinutes: number,
-	targetWaveSeconds: number,
-	enemies: { [string]: EnemyDef },
-	waveTable: WaveTableDef,
-	-- Keyed by the wave number as a string ("5"), because JSON has no integer keys.
-	bosses: { [string]: BossDef },
-	-- P5: crowd waves; a mission without one is refused at arrival (ruling 27).
-	crowd: MissionCrowdConfig?,
 }
 
--- The four numbers Combat.EnemyStats resolves for one spawned enemy. Declared here as well as
--- in Combat.luau (which is pure and cannot require this file) because it is the payload the
--- combat services hand each other.
-export type EnemyStats = { hp: number, damage: number, cash: number, materials: number }
-
--- C1: the arena a mission is fought in (Shared/Layouts/Arenas/<mission.arena>). Plain numbers and
--- names rather than Vector3/Color3/Enum so the layout stays a data file: ArenaService converts.
+-- The range's arena (Shared/Layouts/Arenas/ProvingGrounds), whose shapes a level's camps reuse.
+-- Plain numbers and names rather than Vector3/Color3/Enum so the layout stays a data file.
 -- Origin is the arena centre, the floor's TOP face is y = 0, and every obstacle sits on it.
 export type ArenaObstacle = {
 	x: number,
@@ -1519,9 +1303,8 @@ export type ArenaLayout = {
 		barrierThickness: number?,
 	}?,
 	lobbyPad: ArenaPoint,
-	-- At least 4 / 8 respectively, both used round-robin.
+	-- At least 4, used round-robin.
 	playerSpawns: { ArenaPoint },
-	enemySpawns: { ArenaPoint },
 	obstacles: { ArenaObstacle },
 }
 
@@ -1537,20 +1320,13 @@ export type RunPhase =
 	| "boss"
 	| "summary"
 	| "ended"
-export type EnemyState = "idle" | "chasing" | "attacking" | "stunned" | "dead"
--- One row of the HUD party list. `bot` rows are Studio debug rigs: they scale the wave and take
--- aggro, but their reward share is discarded. `abilityReadyIn` is SECONDS remaining, so the
--- client can draw a cooldown ring without knowing the server clock.
+-- One row of the HUD party list.
 export type PartyMember = {
 	userId: number,
 	name: string,
 	hp: number,
 	maxHp: number,
-	ready: boolean,
 	alive: boolean,
-	bot: boolean,
-	abilityReadyIn: { melee: number, ranged: number },
-	stance: WeaponSlot,
 	-- C2. host = the run's hostUserId. waiting = arrived or died mid-wave; enters at the next wave
 	-- boundary, untargetable meanwhile. damageShare = raw share of the run's damage so far, 0-1.
 	host: boolean,
@@ -1559,38 +1335,22 @@ export type PartyMember = {
 	-- L1b: in play for a camp group that is rising or fighting, so the phone client can hide
 	-- Abandon during a resident fight (camp fights happen outside the `wave` phase).
 	engaged: boolean?,
-	-- P5 ruling 18: down in a crowd mission (until a wave boundary, or the revive in Wave 4);
-	-- false for bots.
+	-- P5 ruling 18: down in a crowd mission (until a wave boundary, or the revive in Wave 4).
 	down: boolean,
 }
--- The server-side party record behind a PartyMember: it also holds the character, the ability
--- cooldown stamps and the per-run bookkeeping the client never sees. Lives in Types (not in
--- ArenaService) because EnemyService and CombatService take one as an argument, and a service
--- may not require the service above it in the boot order.
+-- The server-side party record behind a PartyMember: it also holds the character and the per-run
+-- bookkeeping the client never sees. Lives in Types (not in ArenaService) because services below
+-- ArenaService in the boot order take one as an argument (VitalsService.RunLost), and a service
+-- may not require the service above it.
 export type RunMember = {
 	userId: number,
 	name: string,
-	-- nil for a debug bot; every other field works the same for both.
-	player: Player?,
-	bot: boolean,
-	ready: boolean,
+	player: Player,
 	character: Model?,
 	humanoid: Humanoid?,
-	stance: WeaponSlot,
-	-- os.clock() stamps; a kill refunds killCooldownRefundSeconds off both.
-	abilityReadyAt: { melee: number, ranged: number },
-	godMode: boolean,
-	-- os.clock() the corpse may respawn at; 0 = alive or waiting on the run to end.
-	respawnAt: number,
-	spawnIndex: number,
-	-- C2: see PartyMember.waiting. incomeRate = profile incomeAtSave at admit (bots:
-	-- debug.botIncomeRate). drawStartedAt = os.clock() of the last RequestDraw, 0 = none.
-	-- empoweredUntil/empowerMult = an active warcry.
+	-- C2: see PartyMember.waiting. incomeRate = profile incomeAtSave at admit.
 	waiting: boolean,
 	incomeRate: number,
-	drawStartedAt: number,
-	empoweredUntil: number,
-	empowerMult: number,
 }
 export type RunSummary = {
 	missionId: string,
@@ -1610,7 +1370,6 @@ export type RunSummary = {
 export type RunState = {
 	kind: "run",
 	phase: RunPhase,
-	overdrive: boolean,
 	-- L1: `wave` and `waves` count inside the live camp.
 	wave: number,
 	waves: number,
@@ -1645,72 +1404,27 @@ export type RunState = {
 	gateIn: number?,
 	-- L1b: every camp's floor in floor-index order; {} in the lobby.
 	floors: { RunFloor },
+	-- L4B-8: the session's floor set, bumped every time the run's floors are set (a run's start,
+	-- the lobby's empty list on return). A floor's `cells` ride only on a member's first RunState
+	-- of a seq (RunFloors.Attach); the client keeps them while the seq holds (RunFloors.Merge).
+	floorsSeq: number,
 	-- L1b: the plan's population (the client's pool).
 	maxAlive: number,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §3.2): the plan's bodies by crowd kind (StageFlow.Plan's
+	-- `kinds`), for the client's pool of each kind's model. Rides only where the floors' cells do,
+	-- on a member's first RunState of a floorsSeq (ArenaService's send); absent after it, and in the
+	-- lobby. The client caps the total at crowd.maxAlive; an empty pool still builds on demand.
+	prewarm: { [string]: number }?,
 	leaderUserId: number,
 	result: RunResult?,
 }
 
 -- Presentation events, batched per Heartbeat frame into one list per client. Damage numbers,
 -- highlights, banners and camera kick are drawn from these; nothing here is authoritative.
-export type CombatFxHit = {
-	kind: "hit",
-	enemyId: number,
-	amount: number,
-	finisher: boolean,
-	position: Vector3,
-	byUserId: number,
-	-- C2.5: attacker → enemy, flattened; nil for DoT ticks. Drives sparks and the stagger lean.
-	direction: Vector3?,
-}
-export type CombatFxKill = {
-	kind: "kill",
-	enemyId: number,
-	position: Vector3,
-	cash: number,
-	materials: number,
-	byUserId: number,
-}
-export type CombatFxPlayerHit = { kind: "playerHit", userId: number, amount: number }
-export type CombatFxAbility = {
-	kind: "ability",
-	userId: number,
-	key: string,
-	slot: WeaponSlot,
-	position: Vector3,
-	radius: number?,
-}
 export type CombatFxWave = { kind: "wave", wave: number, merged: boolean, boss: boolean }
 export type CombatFxBossDown = { kind: "bossDown", name: string, valor: number }
-export type CombatFxPlayerDown = { kind: "playerDown", userId: number, respawnIn: number? }
-export type CombatFxRefused = {
-	kind: "refused",
-	reason: "cooldown" | "dead" | "lobby" | "waiting",
-}
--- C2. swing: a validated melee swing (step 1-3), sent to everyone except the swinger so other
--- players' combos animate. partyEffect: rally/warcry landed on targetIds. mentor: Valor paid to
--- userId for carrying `mentees` players through a boss wave.
-export type CombatFxSwing = { kind: "swing", userId: number, step: number }
-export type CombatFxPartyEffect = {
-	kind: "partyEffect",
-	userId: number,
-	key: string,
-	position: Vector3,
-	radius: number,
-	targetIds: { number },
-}
+-- C2. mentor: Valor paid to userId for carrying `mentees` players through a boss wave.
 export type CombatFxMentor = { kind: "mentor", userId: number, valor: number, mentees: number }
--- C2.5: a wind-up the client must draw BEFORE the blow lands (ground ring for slam, lane for
--- charge, glow for a strike). seconds = time until the hit.
-export type CombatFxTelegraph = {
-	kind: "telegraph",
-	enemyId: number,
-	attack: "strike" | "slam" | "charge" | "summon",
-	position: Vector3,
-	direction: Vector3?,
-	radius: number?,
-	seconds: number,
-}
 -- P2: a projectile left a player's weapon (range). Sent to everyone at fire time so every
 -- client draws the same arrow/shell flying; the damage arrives later as CombatFxStrike.
 -- direction is unit and already includes spread; seq seeds the split fan like pellets.
@@ -1734,17 +1448,8 @@ export type CombatFxShot = {
 export type CombatFx =
 	CombatFxShot
 	| CombatFxCast
-	| CombatFxTelegraph
-	| CombatFxHit
-	| CombatFxKill
-	| CombatFxPlayerHit
-	| CombatFxAbility
 	| CombatFxWave
 	| CombatFxBossDown
-	| CombatFxPlayerDown
-	| CombatFxRefused
-	| CombatFxSwing
-	| CombatFxPartyEffect
 	| CombatFxMentor
 	| CombatFxStrike
 	| CombatFxHurt
@@ -1961,6 +1666,99 @@ export type WeaponModelsConfig = {
 	folder: string,
 	families: { [string]: WeaponModelDef },
 }
+-- L4 W2 (docs/prompts/l4-w2-contract.md §3.1; docs/prompts/l4-w2-reports/raiders.md §2-§5):
+-- Config/RaiderModels.json, copied by tools/assets/raider_frames.py from the raider builder's
+-- config. Keys of `kinds` are crowd kind names; a kind's template is
+-- ReplicatedStorage.Assets.Props.<folder>.<model> (Base plus Stage0..Stage4 = its pieces in
+-- order). Every point and pivot is studs in the model's frame (feet at the origin, front -Z). An
+-- entry counts only when its height, radius and headRadius equal ProvingGrounds.json's kind's.
+-- A MeshPart's role: gear is never painted; cloth, clothLeg (the legs' cloth, its own shade),
+-- skin, glow and plate take the kind's paint (raiders.md §3: plate is the plated elite's shell,
+-- shown while plated).
+export type RaiderPartRole = "gear" | "cloth" | "clothLeg" | "skin" | "glow" | "plate"
+-- One piece: its stage's index, the point it turns about, and its MeshParts' roles by name.
+export type RaiderPiece = {
+	name: string,
+	stage: number,
+	pivot: { number },
+	parts: { [string]: RaiderPartRole },
+}
+-- Three angles (radians) of the arm piece; whirl and steady per raiders.md §2.
+export type RaiderArmShape = {
+	coil: { number },
+	strike: { number },
+	follow: { number },
+	whirl: { turns: number, sin: { number }, cos: { number } }?,
+	steady: boolean?,
+}
+export type RaiderArm = {
+	carry: { number },
+	seat: { number },
+	slump: { number },
+	shapes: { [string]: RaiderArmShape },
+}
+-- The lit piece rides points[point] carried by piece `piece`; size and charged = the Chief's core.
+export type RaiderCue = { piece: string, point: string, size: number?, charged: number? }
+-- The farthest any piece reaches (studs from the body's axis, and up from its feet) over every
+-- sampled pose before a hit; withCue = with the lit piece at its largest.
+export type RaiderPosedReach = {
+	out: number,
+	outRadii: number,
+	up: number,
+	outPose: string?,
+	upPose: string?,
+	withCue: { out: number, up: number }?,
+}
+-- A weapon template carried in the hand: Assets.Props.<folder>.<model> (pivot = its grip), placed
+-- at the arm piece x CFrame.fromMatrix(grip, right, up) and scaled by `scale` once.
+export type RaiderHold = {
+	model: string,
+	folder: string,
+	scale: number,
+	piece: string,
+	grip: { number },
+	right: { number },
+	up: { number },
+}
+export type RaiderKindModel = {
+	model: string,
+	height: number,
+	radius: number,
+	headRadius: number,
+	skin: { number },
+	pieces: { RaiderPiece },
+	points: { [string]: { number } },
+	legLength: number,
+	leadLeg: string,
+	armSwingShare: number,
+	arm: RaiderArm,
+	hold: RaiderHold?,
+	cue: RaiderCue?,
+	posedReach: RaiderPosedReach,
+}
+-- rig: the walk, seat and throw numbers every kind shares (raiders.md §2, raiderpose.py `rig`).
+export type RaiderRig = {
+	headKeep: number,
+	headNod: number,
+	headTurn: number,
+	legSwing: number,
+	armSwing: number,
+	walkLean: number,
+	strideLegs: number,
+	walkFullShare: number,
+	walkNearStuds: number,
+	stepShare: number,
+	seatLean: number,
+	seatSplay: number,
+	airTuck: number,
+	throwShare: number,
+}
+export type RaiderModelsConfig = {
+	version: number,
+	folder: string,
+	rig: RaiderRig,
+	kinds: { [string]: RaiderKindModel },
+}
 -- A crowd enemy kind: body sphere (radius, centre at height/2) + head sphere (crit weak point).
 export type CrowdKindDef = {
 	radius: number,
@@ -2080,6 +1878,11 @@ export type RangeMovementConfig = {
 	dashSeconds: number,
 	dashCooldown: number,
 	dashIframes: number,
+	-- L4B-7: a dash's i-frames open only once the server's own ring has seen it move (DashProof):
+	-- flat speed over a stretch of dashProofSeconds reaching dashProofShare of the dash's
+	-- dashDistance / dashSeconds. The window still starts at the request.
+	dashProofShare: number,
+	dashProofSeconds: number,
 	slamMinHeight: number,
 	slamRadius: number,
 	slamDamage: number,
@@ -2210,6 +2013,13 @@ export type ProvingGroundsConfig = {
 		-- P4 Stop 2: a body of this radius or more is large: smaller bodies never push it and give
 		-- way to it, and it does not widen the crowd's neighbour search.
 		largeRadius: number,
+		-- L4 W2 (docs/prompts/l4-w2-contract.md §5): a body resting at a fire sits. Its `seat` (0
+		-- standing, 1 seated) moves toward 1 while its state is `rest` and toward 0 otherwise, at
+		-- 1 / riseBlendSeconds a second, on the server as on every client; seated, its head and its
+		-- body capsule's top are drawn and judged restDrop of its height lower, eased by smoothstep
+		-- (HitShapes.SeatDrop). A dormant body holds its goal.
+		restDrop: number,
+		riseBlendSeconds: number,
 		-- P4: rules of enemies that fight. spawnGrace = seconds a fresh enemy cannot start a
 		-- windup; spawnClear = a slot does not respawn while a player stands within this many
 		-- studs; maxShots = most enemy projectiles alive (a shooter waits when it is reached);
@@ -2397,7 +2207,7 @@ export type CrowdSpawnInfo = {
 -- L1b: one floor of the crowd: centre = the floor's top centre; half.X and half.Z its half extents;
 -- half.Y the highest a launch may carry a body over it (levels.crowdCeiling).
 -- CrowdFloor, replacing the type (L1b Wave 4). region: the chase region its bodies are clamped into
--- and routed through (L1b-W4-17); nil = its rectangle, as before (a locking camp, the range, the arena).
+-- and routed through (L1b-W4-17); nil = its rectangle, as before (a locking camp, the range).
 export type CrowdFloor = { centre: Vector3, half: Vector3, region: RegionGraph? }
 export type CrowdSnapshotEntry = {
 	id: number,
@@ -2542,8 +2352,8 @@ export type RangeStats = {
 	god: boolean?,
 }
 
--- P4 threat effects (range only; the mission kinds telegraph / playerHit / playerDown are not
--- reused). The server batches them once per crowd step. Times are server time.
+-- P4 threat effects (in the range and since P5 in a run; C1's telegraph / playerHit / playerDown
+-- kinds went in L4 W1b). The server batches them once per crowd step. Times are server time.
 -- hurt: an enemy attack reached `userId`. dodged = an i-frame voided it (amount 0). down = this
 -- hit put them down until upAt. from = the attacker's position; push/launch are applied by the
 -- victim's own client.
@@ -2596,8 +2406,8 @@ export type CombatMode = "range" | "mission"
 -- the tiers are the held families' (Armory.HeldTiers), the Ascension levels the slots'.
 export type SlotTiers = { melee: number, ranged: number }
 
--- Missions/<n>_<Era>.json `crowd` block. Counts are per solo run; party size scales them
--- (Combat.CrowdWave). Scales multiply ProvingGrounds.json's tier-1 kind numbers.
+-- A camp wave's groups (P5's mission `crowd` shapes, kept by name for the levels). Counts are
+-- per solo run; party size scales them (Combat.CampWave).
 -- L1: minDifficulty = the lowest difficulty that fields the group (nil = every one).
 export type MissionCrowdGroup = {
 	kind: string,
@@ -2608,27 +2418,10 @@ export type MissionCrowdGroup = {
 export type MissionCrowdBoss = { kind: string, at: { number }, valor: number } -- at = { x, z }
 export type MissionCrowdWave = { groups: { MissionCrowdGroup }, boss: MissionCrowdBoss? }
 export type MissionCrowdReward = { cash: number, materials: number }
-export type MissionCrowdConfig = {
-	hpScale: number,
-	plateScale: number,
-	damageScale: number,
-	regenShare: number,
-	maxAlive: number,
-	burst: number,
-	burstSpacing: number,
-	eliteKind: string?,
-	waves: { MissionCrowdWave },
-	rewards: { [string]: MissionCrowdReward },
-}
-
--- Combat.json `crowdSkeleton` (ruling 2): wave i may hold the kinds introduced in waves 1..i
--- (bosses excepted) and must hold its own `introduces`.
-export type CrowdSkeletonWave = { introduces: { string }, boss: string? }
-
 -- L1 (docs/INTERFACES.md "L1 contracts")
 
--- Config/Levels/<n>_<Name>.json. LevelFile is the file as decoded (one with `mission` holds only
--- the keys of its first two lines); LevelConfig is what StageFlow.Resolve returns.
+-- Config/Levels/<n>_<Name>.json. LevelFile is the file as decoded; LevelConfig is what
+-- StageFlow.Resolve returns.
 -- L3-17: what a difficulty's first clear gives a member who earns its star for the first time: a
 -- non-starter weapon family (written to the profile's families) and/or Valor (a whole number).
 export type LevelFirstClear = { family: string?, valor: number? }
@@ -2642,8 +2435,7 @@ export type LevelDifficulty = {
 	recommendedTier: number,
 	firstClear: LevelFirstClear?,
 }
--- MissionCrowdBoss.at is { x, z } from the camp's centre. A camp's waves are MissionCrowdWave, as
--- the arena's.
+-- MissionCrowdBoss.at is { x, z } from the camp's centre. A camp's waves are MissionCrowdWave.
 export type LevelCrowdConfig = {
 	regenShare: number,
 	maxAlive: number,
@@ -2675,8 +2467,6 @@ export type LevelFile = {
 	id: string,
 	name: string,
 	layout: string,
-	mission: string?,
-	recommendedTier: number?,
 	material: string?,
 	targetMinutes: number?,
 	runCapSeconds: number?,
@@ -2693,7 +2483,6 @@ export type LevelConfig = {
 	id: string,
 	name: string,
 	layout: string,
-	mission: string?,
 	material: string,
 	targetMinutes: number,
 	runCapSeconds: number,
@@ -2706,11 +2495,20 @@ export type LevelConfig = {
 	secrets: { [string]: LevelSecretConfig }?,
 }
 -- L2-13: Config/Levels/<n>_<Name>.json `secrets.<id>`. A chest pays only when its entry has
--- valor, materials or family (a "reward entry"); a name alone pays nothing. Whole numbers >= 0.
-export type LevelSecretConfig =
-	{ name: string, valor: number?, materials: number?, family: string? }
+-- valor, materials, family or key (a "reward entry"); a name alone pays nothing. Whole numbers >= 0.
+-- L4 W2 (docs/prompts/l4-w2-contract.md §0, MISSIONS_DESIGN §28): `key` = a key id ("castle"), at
+-- most Unlocks.MAX_FAMILY_LENGTH bytes. A key is held once the secret that gives it is opened
+-- (Unlocks.HasLevelKey): it is never written anywhere else in the profile. Expeditions.json `keys`
+-- names it.
+export type LevelSecretConfig = {
+	name: string,
+	valor: number?,
+	materials: number?,
+	family: string?,
+	key: string?,
+}
 
--- Layouts/Levels/<Name>.json. World coordinates, studs. A file with `arena` holds nothing else.
+-- Layouts/Levels/<Name>.json. World coordinates, studs.
 export type LevelBlock = {
 	name: string?,
 	look: string,
@@ -2793,7 +2591,6 @@ export type LevelRoutePoint = { x: number, y: number, z: number, via: string? }
 export type LevelBarrier = { height: number, thickness: number }
 export type LevelLayout = {
 	version: number,
-	arena: string?,
 	start: { x: number, y: number, z: number },
 	-- the lobby's points
 	spawns: { { x: number, y: number, z: number } }?,
@@ -2811,6 +2608,60 @@ export type LevelLayout = {
 	-- simulators), like `sneak`: the game never reads it.
 	shortcuts: { LevelShortcut }?,
 	shortcutRoute: { LevelRoutePoint }?,
+}
+
+-- L4 W2 (docs/prompts/l4-w2-contract.md §2.1): Config/LevelDress/<layout>.json, generated by
+-- tools/levels/forest.py. The game reads only the fields below; the file's others (`units`,
+-- `triangles`, `palette*`, `textures`, `bakedPieces`, `propPieces`, a prop's tags but `with`,
+-- `hide.keep`) are the tools'. `frame` must be "level" (world studs). The server accepts a dress
+-- all or nothing (LevelDress.Decide) before it hides anything; the client draws it only on the
+-- server's word (Workspace.Level's `Dress` and `DressHash`). The fix round's K7: every list below
+-- must be there and be a list, even an empty one (a level with no fire writes `"effects": []`),
+-- and every entry must have its shape; anything else is refused and the level is grey.
+export type LevelDress = {
+	version: number,
+	level: string,
+	layout: string,
+	planHash: string,
+	frame: string,
+	meshes: { LevelDressMesh },
+	props: { LevelDressProp },
+	effects: { LevelDressEffect },
+	barriers: { LevelDressBarrier },
+	-- blocks: the layout's block names drawn by a mesh; camps: camp id -> LevelGeometry's roles of
+	-- that camp drawn by a mesh ("floor", "fence", "obstacle", "fire", "tent"). Each hidden piece
+	-- keeps its collision and its query, shows nothing and carries the attribute `Skinned`.
+	hide: { blocks: { string }, camps: { [string]: { string } } },
+	-- Laid over Expeditions.json `looks` for the level's Parts while it is dressed.
+	looks: { [string]: LevelLook },
+}
+-- The template's name: ReplicatedStorage.Assets.Levels.<layout>.<name>, a Model the client
+-- parents as cloned (its parts are placed in the template). `group` orders the client's build.
+export type LevelDressMesh = { name: string, group: string }
+-- ReplicatedStorage.Assets.Props.Forest.<piece>, its pivot (the Base's bottom centre) at x, y, z,
+-- turned `yaw` degrees about +Y, scaled by `scale`. `with` = the level Part it stands with (it
+-- leaves when that Part does: a bramble that burns).
+export type LevelDressProp = {
+	piece: string,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number,
+	scale: number,
+	with: string?,
+}
+-- kind "fire": a fire's light and flames at x, y, z (client only).
+export type LevelDressEffect = { kind: string, x: number, y: number, z: number }
+-- One invisible wall of the dressed level (a tree line, the yard's walls): a centre and a size,
+-- world studs. The server builds it in BarrierGroups' group, collidable from the build.
+export type LevelDressBarrier = {
+	name: string,
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
 }
 
 -- Config/Expeditions.json
@@ -2846,7 +2697,15 @@ export type ExpeditionsConfig = {
 	-- Studio lever, a secret or a first clear writes it); the Armory lists a family it names.
 	-- L3-25: every non-starter family has a hint, this entry or the secret that pays it. nil = none.
 	found: { [string]: { node: string, text: string } }?,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §0): what a level key is called and what it opens, by
+	-- key id (a secret's `key`, Types.LevelSecretConfig). Presentation only: the key is held
+	-- through the secret that gives it (Unlocks.HasLevelKey). nil = no key is named.
+	keys: { [string]: { name: string, text: string } }?,
+	-- L4 W2 (§2.4, L4W2-7): a level's light while it is dressed, by level id, set by each client
+	-- and never by the server (a key left out leaves that Lighting property alone). nil = none.
+	moods: { [string]: LevelMood }?,
 }
+export type LevelMood = { lighting: WorldLightingConfig?, atmosphere: WorldAtmosphereConfig? }
 -- L2-6: one bought ability (named apart from the weapons' AbilityDef). price.valor is a whole
 -- number > 0; a bad entry is warned at Init and cannot be bought.
 export type UnlockAbilityDef = {
@@ -2931,7 +2790,9 @@ export type CombatIceConfig = {
 
 -- RunState (built only by ArenaService)
 -- RunFloor, replacing the type (L1b Wave 4). cells: its region's cells (RegionGraph.cells), the same
--- list on every floor of that region; nil = the rectangle alone.
+-- list on every floor of that region; nil = the rectangle alone. L4B-8: on the wire `cells` rides
+-- only on a member's first RunState of its floorsSeq (RunFloors.Attach) and is absent after; the
+-- client keeps the cells it was sent while the seq holds (RunFloors.Merge).
 export type RunFloor = {
 	x: number,
 	y: number,
@@ -2979,7 +2840,9 @@ export type MapNodeState = {
 	secrets: { MapSecretState }?,
 }
 -- L2-15: needs = the layout's key ("doubleJump" | "fire" | "ice"); found = the receiver opened it.
-export type MapSecretState = { id: string, name: string, needs: string, found: boolean }
+-- L4 W2 (§0): key = the level key id the chest gives ("castle": the map row's key glyph); nil = none.
+export type MapSecretState =
+	{ id: string, name: string, needs: string, found: boolean, key: string? }
 export type MapState = { kind: "map", leaderUserId: number, nodes: { MapNodeState } }
 
 -- CombatFx gains two kinds. L1b: event: "closed" | "cleared" | "alert" | "checkpoint".
@@ -3019,6 +2882,9 @@ export type CombatFxSecret = {
 	materials: number,
 	material: string,
 	family: string?,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §0): on "found", the key id the chest gave (its card
+	-- adds "<Expeditions.json keys.<key>.name> found"); nil = none.
+	key: string?,
 }
 
 -- L1b (docs/INTERFACES.md "L1b contracts — the living road", Wave 1)

@@ -4,12 +4,11 @@ with stubbed Roblox globals and runs the tests_*.luau cases under the plain luau
 P5 adds tests_p5.luau: the mission scales, kill info, KillAll, VitalsService.SetMission and
 the pure PositionRing (the server's own reading of a player's speed).
 L1 adds the pure rules of a run through a level: StageFlow (tests_l1.luau, with Combat and
-Economy, which it is checked against) and LevelGeometry (tests_l1_world.luau). The Village
-mission and Combat.json are injected as FIXTURES, the way Armory.json is.
+Economy, which it is checked against) and LevelGeometry (tests_l1_world.luau). Combat.json is
+injected as a FIXTURE, the way Armory.json is.
 "The real files" (tests_l1.luau) runs those same rules on the data that ships: every level
-file, layout, mission and the map are injected as they stand, the arena layouts a level names
-are bundled as modules, and tools/check_levels.py is asked for its Part counts and its own
-reading of each arena, so the Luau rules and the Python gate are held to one answer.
+file, layout and the map are injected as they stand, and tools/check_levels.py is asked for its
+Part counts, so the Luau rules and the Python gate are held to one answer.
 L1b adds the pure CampBrain (how a camp's resident groups rest, wake, chase and go home) and two
 case files: tests_l1b_crowd.luau (CampBrain and CrowdService's floors and groups) and
 tests_l1b.luau (StageFlow's open camps, checkpoints and clear field, Combat's per-kill split with
@@ -59,6 +58,11 @@ PrepareCharacter, and the client lines that tear down, re-show and drive the mod
 Its second fix round (docs/prompts/l3-w2-fix2.md G1 to G3) pins the flush another player's swing
 runs first (its first code line in T9's branch, before SwingOther), the order in Muzzle and a new
 rig's first state, and that the stage hears no gamepad stick.
+L4 W1b (docs/prompts/l4-w1b-contract.md) retires the C1 mission code: the Village mission, the
+missions' and the arenas' fixtures and the Raider Arena's adapter go (the cases that used the arena
+only as a fixture for a rule that stays play the hand-written L1W.field / L1.field instead), and
+adds the pure DashProof (tests_l4b.luau: a dash's i-frames once the server's ring has seen it) and
+RunFloors (tests_l4b_run.luau: RunState's region cells once per member per floor set).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 
 The cases are this folder's, and the sources the first argument's. So it refuses to run (exit 2,
@@ -84,6 +88,7 @@ Usage: py tools/crowd_harness/run_harness.py [repo root] [luau.exe]
 Importing this file runs nothing: `sources`, `wrap`, `fixtures`, `to_luau` and `prelude` are
 there for another tool that wants the same modules under the same wrapper."""
 import json
+import os
 import re
 import subprocess
 import sys
@@ -135,6 +140,15 @@ SOURCES = {
     "ProfileCopy": "src/shared/ProfileCopy.luau",
     # L3 W2: what a player's weapons look like, read by the server and every client (tests_l3_w2.luau).
     "WeaponLook": "src/shared/WeaponLook.luau",
+    # L4 W1b: a dash's proof against the server's ring (tests_l4b.luau) and RunState's floors sent
+    # once per member per floor set (tests_l4b_run.luau).
+    "DashProof": "src/combat/server/Services/DashProof.luau",
+    "RunFloors": "src/shared/RunFloors.luau",
+    # L4 W2: the server's all-or-nothing reading of a level's dress (tests_l4w2.luau).
+    "LevelDress": "src/combat/server/Services/LevelDress.luau",
+    # The L4 W2 fix round's K7 and K8: what the client's LevelScenery decides, pure
+    # (tests_l4w2_scenery.luau).
+    "ScenePlan": "src/combat/client/Controllers/ScenePlan.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -172,6 +186,13 @@ TESTS = [
     "tests_l3_ui.luau",
     # L3 W2: WeaponLook on built inputs and on the shipped WeaponModels.json, then T1 to T14 as text.
     "tests_l3_w2.luau",
+    "tests_l4b.luau",
+    "tests_l4b_run.luau",
+    # L4 W2: LevelDress, StageFlow.Plan's kinds, the seat, the Castle Key (luau-engineer A's).
+    "tests_l4w2.luau",
+    # The L4 W2 fix round: the scenery's decisions on the client (ScenePlan; ui-engineer A's). Last:
+    # it ends with the verdict line.
+    "tests_l4w2_scenery.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -215,18 +236,16 @@ def read_folder(repo: Path, folder: str, numbered: bool = False) -> list:
 
 def gate_reading() -> dict:
     """What tools/check_levels.py makes of the layouts: its Part count for each (its `N Parts`
-    lines) and, for a layout that names an arena, the level layout its own adapter reads out of
-    that arena. Always this checkout's files (the tool takes no root; a mutant root holds copies
-    of the same data). Empty when the tool cannot be imported: the cases that need it then fail."""
+    lines less a dressed level's walls: part_count's `walls` stays 0 here, so the count is
+    LevelGeometry.Pieces' alone, L4 W2). Always this checkout's files (the tool takes no root; a
+    mutant root holds copies of the same data). Empty when the tool cannot be imported: the cases
+    that need it then fail."""
     try:
         sys.path.insert(0, str(HERE.parent))
         import check_levels
 
         layouts = check_levels.load_all()[2]
-        return {
-            "parts": {name: check_levels.part_count(layout) for name, layout in layouts.items()},
-            "arenas": {name: layout for name, layout in layouts.items() if layout.get("arena")},
-        }
+        return {"parts": {name: check_levels.part_count(layout) for name, layout in layouts.items()}}
     except (Exception, SystemExit) as problem:  # the harness still runs, and says so
         print(f"run_harness: tools/check_levels.py could not be read ({problem!r})", file=sys.stderr)
         return {}
@@ -1416,7 +1435,667 @@ def source_reading(repo: Path) -> dict:
         "w3fix3": w3_fix3_reading(text),
         "l3": l3_reading(text),
         "l3w2": l3w2_reading(text, repo),
+        "l4b": l4b_reading(text),
+        "l4w2": l4w2_reading(text),
     }
+
+
+# L4 W1b (docs/prompts/l4-w1b-contract.md §4, §5): the lines that apply L4B-7 (a dash's i-frames once
+# the server's ring has seen it) in WeaponService and L4B-8 (a floor set's cells once per member) in
+# ArenaService and WaveService, none of which loads here. Each: (file, function body or None for the
+# whole file's code, how it is counted, the text, the count expected), counted on the code with its
+# comments blanked (luau_code); "lines" = whole lines with their indentation, "text" = occurrences,
+# "regex" = matches. The expected counts are tests_l3_w2.luau's (L4BP).
+ON_DASH_BODY = re.compile(r"(?ms)^function WeaponService\.OnDash\(.*?^end$")
+PROVE_DASH_BODY = re.compile(r"(?ms)^local function proveDash\(.*?^end$")
+PENDING_DASH_BODY = re.compile(r"(?ms)^local function pendingDash\(.*?^end$")
+WEAPON_STEP_BODY = re.compile(r"(?ms)^local function step\(.*?^end$")
+WEAPON_START_BODY = re.compile(r"(?ms)^function WeaponService\.Start\(.*?^end$")
+GRANT_IFRAMES_BODY = re.compile(r"(?ms)^function WeaponService\.GrantIframes\(.*?^end$")
+SEND_RUN_STATE_BODY = re.compile(r"(?ms)^local function sendRunState\(.*?^end$")
+BUILD_RUN_STATE_BODY = re.compile(r"(?ms)^function ArenaService\.BuildRunState\(.*?^end$")
+ADMIT_BODY = re.compile(r"(?ms)^function ArenaService\.Admit\(.*?^end$")
+REMOVE_BODY = re.compile(r"(?ms)^function ArenaService\.Remove\(.*?^end$")
+SET_FLOORS_BODY = re.compile(r"(?ms)^local function setFloors\(.*?^end$")
+PUSH_RUN_FIELDS_BODY = re.compile(r"(?ms)^local function pushRunFields\(.*?^end$")
+# The L4 W1b fix round (docs/prompts/l4-w1b-fix-round.md F3, F4, F6): the client's half of the
+# cells-once rule, in CombatUIController (both functions are nested in bootMission, one tab in),
+# and the mentor pay's deciding lines in WaveService.payMentors.
+UI_CONTROLLER = "src/combat/client/Controllers/CombatUIController.luau"
+APPLY_FLOORS_BODY = re.compile(r"(?ms)^\tlocal function applyFloors\(.*?^\tend$")
+ON_RUN_STATE_BODY = re.compile(r"(?ms)^\tlocal function onRunState\(.*?^\tend$")
+PAY_MENTORS_BODY = re.compile(r"(?ms)^local function payMentors\(.*?^end$")
+# Fix round 3 (docs/prompts/l4-w1b-fix3.md): G2's warn handler (m2) and H2's per-shooter xpcall in
+# WeaponService; H1's hold on a clear field in WaveService (luau-b-3.md).
+STEP_FAILED_BODY = re.compile(r"(?ms)^local function stepFailed\(.*?^end$")
+FIELD_HELD_BODY = re.compile(r"(?ms)^local function fieldHeld\(.*?^end$")
+ADVANCE_BODY = re.compile(r"(?ms)^local function advance\(.*?^end$")
+TICK_BODY = re.compile(r"(?ms)^local function tick\(.*?^end$")
+BOOT_BODY = re.compile(r"(?ms)^function WaveService\.Boot\(.*?^end$")
+ON_DOWN_BODY = re.compile(r"(?ms)^function WaveService\.OnDown\(.*?^end$")
+FRESH_RUN_BODY = re.compile(r"(?ms)^local function freshRun\(.*?^end$")
+L4B_LINES = {
+    # L4B-7, WeaponService.
+    "dashGrantsNothing": (WEAPON_SERVICE, ON_DASH_BODY, "regex",
+                          r"\bGrantIframes\(|\bDashProof\.|\bshowIframes\(|\bopenIframes\(|\biframes\w*\s*=(?!=)"),
+    "dashClaim": (WEAPON_SERVICE, ON_DASH_BODY, "lines", "\tshooter.dashClaimAt = now"),
+    "dashStamp": (WEAPON_SERVICE, ON_DASH_BODY, "lines", "\tshooter.lastDashAt = now"),
+    "dashDown": (WEAPON_SERVICE, ON_DASH_BODY, "lines",
+                 "\tif character == nil or root == nil or VitalsService.IsDown(player) or not mayAct(player) then"),
+    "trackRecordThenProve": (WEAPON_SERVICE, TRACK_AIR_BODY, "text",
+                             "\t\tPositionRing.Record(shooter.history, now, position)\n\t\tif shooter.dashClaimAt ~= nil then\n"
+                             "\t\t\tproveDash(shooter, now, position)\n\t\tend\n"),
+    "trackNoRootClears": (WEAPON_SERVICE, TRACK_AIR_BODY, "lines", "\t\t\tshooter.dashClaimAt = nil"),
+    # H2 (fix round 3, luau-a-3.md): each shooter's air tracking (trackOne, nested in trackAir) runs
+    # under its own xpcall, the loop holding nothing else.
+    "trackEach": (WEAPON_SERVICE, TRACK_AIR_BODY, "text",
+                  "\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n"),
+    "trackOneDefined": (WEAPON_SERVICE, TRACK_AIR_BODY, "lines",
+                        "\tlocal function trackOne(player: Player, shooter: Shooter): ()"),
+    "trackOneNames": (WEAPON_SERVICE, None, "text", "trackOne"),
+    "proveStep": (WEAPON_SERVICE, PROVE_DASH_BODY, "text",
+                  "\tlocal verdict = DashProof.Step(\n\t\tshooter,\n\t\tshooter.history,\n\t\tnow,\n\t\tposition,\n"
+                  "\t\tdashRule(config),\n\t\tconfig.movement.dashIframes\n\t)\n"),
+    "proveShows": (WEAPON_SERVICE, PROVE_DASH_BODY, "text", '\tif verdict == "proven" then\n\t\tshowIframes(shooter, now)\n\tend\n'),
+    "proveWritesNothing": (WEAPON_SERVICE, PROVE_DASH_BODY, "regex",
+                           r"\bdashClaimAt\s*=(?!=)|\biframes\w*\s*=(?!=)|\bDashProof\.Open\("),
+    "ruleRead": (WEAPON_SERVICE, None, "text", "local rule = DashProof.Rule(config.movement, config.shooting)"),
+    "ruleCalls": (WEAPON_SERVICE, None, "text", "DashProof.Rule("),
+    "pendingNoClaim": (WEAPON_SERVICE, PENDING_DASH_BODY, "lines",
+                       "\tif shooter == nil or shooter.dashClaimAt == nil then"),
+    "pendingClaim": (WEAPON_SERVICE, PENDING_DASH_BODY, "text",
+                     "return DashProof.Pending(shooter.dashClaimAt, dashRule(config), config.movement.dashIframes)"),
+    "hookClaim": (WEAPON_SERVICE, WEAPON_START_BODY, "lines", "\t\tdashClaim = pendingDash,"),
+    # G2 and G3 (docs/prompts/l4-w1b-fix2.md): step opens with the clock, then the proofs, then
+    # VitalsService, each under xpcall, with nothing between the function's start and the two
+    # (stepHead, one block); the rest comes after (stepRest, restLast); Start connects step itself.
+    "stepHead": (WEAPON_SERVICE, WEAPON_STEP_BODY, "text",
+                 "local function step(deltaTime: number): ()\n\tlocal now = os.clock()\n"
+                 "\txpcall(trackAir, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n"),
+    "stepVitals": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\txpcall(VitalsService.Step, stepFailed, deltaTime)"),
+    "stepRest": (WEAPON_SERVICE, WEAPON_STEP_BODY, "lines", "\txpcall(stepRest, stepFailed, now, deltaTime)"),
+    "startConnects": (WEAPON_SERVICE, WEAPON_START_BODY, "lines", "\tRunService.Heartbeat:Connect(step)"),
+    # m2 (fix round 3): G2's handler as one block: keyed by the message, warned once, never silent.
+    "stepFailedBody": (WEAPON_SERVICE, STEP_FAILED_BODY, "text",
+                       "local function stepFailed(problem: any): ()\n\tlocal message = tostring(problem)\n"
+                       "\tif state.stepErrors[message] then\n\t\treturn\n\tend\n\tstate.stepErrors[message] = true\n"
+                       "\twarn(debug.traceback(`[WeaponService] Heartbeat: {message}`, 2))\nend"),
+    "vitalsStepCalls": (WEAPON_SERVICE, None, "text", "VitalsService.Step"),
+    "heartbeats": (WEAPON_SERVICE, None, "text", "Heartbeat:Connect("),
+    "grantOpens": (WEAPON_SERVICE, GRANT_IFRAMES_BODY, "text",
+                   "\tDashProof.Open(shooter, math.min(from or now, now), seconds)\n\tshowIframes(shooter, now)\n"),
+    "openCalls": (WEAPON_SERVICE, None, "text", "DashProof.Open("),
+    "stepCalls": (WEAPON_SERVICE, None, "text", "DashProof.Step("),
+    "claimWrites": (WEAPON_SERVICE, None, "regex", r"\bshooter\.dashClaimAt\s*=(?!=)"),
+    "resetDropsClaim": (WEAPON_SERVICE, RESET_AIR_BODY, "text", "shooter.dashClaimAt = nil"),
+    # L4B-8, ArenaService.
+    "runStateSpelled": (ARENA_SERVICE, None, "text", '"RunState"'),
+    "sendRunStateCalls": (ARENA_SERVICE, None, "text", "sendRunState("),
+    "attachCalls": (ARENA_SERVICE, None, "text", "RunFloors.Attach("),
+    "sendSkip": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\tif play.cellsSent[userId] ~= seq then"),
+    "sendAttach": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines",
+                   "\t\tlocal floors, cellsWent = RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])"),
+    "sendCellsWent": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\tif cellsWent then"),
+    "sendClone": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent = table.clone(runState)"),
+    "sendFloors": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent.floors = floors"),
+    "sendFloorsWrites": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "regex", r"\bsent\.floors\s*=(?!=)"),
+    "sendNote": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\tplay.cellsSent[userId] = seq"),
+    "sendFires": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", '\tRemoteService.FireClient(player, "RunState", sent)'),
+    "buildAttach": (ARENA_SERVICE, BUILD_RUN_STATE_BODY, "text",
+                    "local floors = RunFloors.Attach(runFields.floors, runFields.floorsSeq, runFields.floorsSeq)"),
+    "buildFloors": (ARENA_SERVICE, BUILD_RUN_STATE_BODY, "lines", "\t\tfloors = floors,"),
+    "buildSeq": (ARENA_SERVICE, BUILD_RUN_STATE_BODY, "lines", "\t\tfloorsSeq = runFields.floorsSeq,"),
+    "admitClears": (ARENA_SERVICE, ADMIT_BODY, "lines", "\tplay.cellsSent[player.UserId] = nil"),
+    "removeClears": (ARENA_SERVICE, REMOVE_BODY, "lines", "\tplay.cellsSent[member.userId] = nil"),
+    "noteWrites": (ARENA_SERVICE, None, "regex", r"\bplay\.cellsSent\[[^\]]*\]\s*=(?!=)"),
+    # L4B-8, WaveService.
+    "floorsAssigned": (WAVE_SERVICE, None, "regex", r"\brun\.floors\s*=(?!=)"),
+    "seqRaised": (WAVE_SERVICE, SET_FLOORS_BODY, "lines", "\tboot.floorsSeq += 1"),
+    "seqWrites": (WAVE_SERVICE, None, "regex", r"\bboot\.floorsSeq\s*(?:\+=|=(?!=))"),
+    "setFloorsCalls": (WAVE_SERVICE, None, "text", "setFloors("),
+    "startSets": (WAVE_SERVICE, None, "lines", "\tsetFloors(runFloors)"),
+    "lobbySets": (WAVE_SERVICE, None, "lines", "\tsetFloors({})"),
+    "pushSeq": (WAVE_SERVICE, PUSH_RUN_FIELDS_BODY, "lines", "\t\tfloorsSeq = boot.floorsSeq,"),
+    # L4B-8, CombatUIController (the client's half; F3, F4).
+    "uiHeld": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tlocal held = st.floors"),
+    "uiMerge": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tfresh = RunFloors.Merge(held, st.floorsSeq, fresh, seq)"),
+    "uiSeq": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tst.floorsSeq = seq"),
+    "uiKeep": (UI_CONTROLLER, APPLY_FLOORS_BODY, "lines", "\t\tst.floors = fresh"),
+    "uiCall": (UI_CONTROLLER, ON_RUN_STATE_BODY, "lines",
+               '\t\tapplyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)'),
+    "uiApplyCalls": (UI_CONTROLLER, None, "text", "applyFloors("),
+    "uiMergeCalls": (UI_CONTROLLER, None, "text", "RunFloors.Merge("),
+    "uiSeqWrites": (UI_CONTROLLER, None, "regex", r"\bst\.floorsSeq\s*=(?!=)"),
+    "uiConnect": (UI_CONTROLLER, None, "lines", "\tremotes.runState.OnClientEvent:Connect(onRunState)"),
+    # F6, WaveService.payMentors (B's lines; the rule itself is check_stage_mirror's MentorBonus).
+    # s1 (fix round 2): its inputs too: the damage total, and the guard on a bonus of nothing.
+    "mentorTotal": (WAVE_SERVICE, PAY_MENTORS_BODY, "text",
+                    "\tlocal total = 0\n\tfor _, damage in tally do\n\t\ttotal += damage\n\tend\n"),
+    "mentorNone": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\tif total <= 0 then"),
+    "mentorFloor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                    "\t\tif mentor.waiting or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare then"),
+    "menteeOther": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\t\t\tother ~= mentor"),
+    "menteeFloor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                    "\t\t\t\tand (tally[other.userId] or 0) / total >= coop.mentorMinDamageShare"),
+    "menteeRate": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\t\t\ttable.insert(menteeRates, other.incomeRate)"),
+    "mentorBonusCall": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines",
+                        "\t\tlocal bonus = Combat.MentorBonus(combatConfig, mentor.incomeRate, menteeRates)"),
+    "mentorValor": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\tstate.combat.valor += bonus"),
+    "mentorCard": (WAVE_SERVICE, PAY_MENTORS_BODY, "lines", "\t\tArenaService.CreditMentor(mentor.userId, bonus)"),
+    "mentorNoBonus": (WAVE_SERVICE, PAY_MENTORS_BODY, "text", "\t\tif bonus <= 0 then\n\t\t\tcontinue\n\t\tend\n"),
+    "mentorBonusCalls": (WAVE_SERVICE, None, "text", "Combat.MentorBonus("),
+    "bossPaysMentors": (WAVE_SERVICE, None, "lines", "\t\tpayMentors(combatConfig, tally)"),
+    # H1 (fix round 3, luau-b-3.md), WaveService: the field is held while a fighter's blow waits.
+    "h1Body": (WAVE_SERVICE, FIELD_HELD_BODY, "text",
+               "\tlocal waits = false\n\tfor _, member in ArenaService.GetMembers() do\n"
+               "\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then\n"
+               "\t\t\twaits = true\n\t\t\tbreak\n\t\tend\n\tend\n\tif delta == nil then\n"
+               "\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n\tend\n"
+               "\trun.blowWaits = waits\n\tif not waits or not StageFlow.FieldClear(plan, flow, input) then\n"
+               "\t\trun.heldSince = 0\n\t\treturn false\n\tend\n\tif run.heldSince == 0 then\n\t\trun.heldSince = now\n"
+               "\tend\n\tlocal tuning = Tuning.Get()\n\tlocal rule = DashProof.Rule(tuning.movement, tuning.shooting)\n"
+               "\tlocal lapse = if rule ~= nil then rule.lapse else 0\n\treturn now - run.heldSince <= lapse + delta\nend"),
+    "h1Asks": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+               "\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then"),
+    "h1DownKeeps": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+                    "\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)"),
+    "h1Notes": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\trun.blowWaits = waits"),
+    "h1ClearOnly": (WAVE_SERVICE, FIELD_HELD_BODY, "lines",
+                    "\tif not waits or not StageFlow.FieldClear(plan, flow, input) then"),
+    "h1Resets": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\t\trun.heldSince = 0"),
+    "h1Starts": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\t\trun.heldSince = now"),
+    "h1Rule": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\tlocal rule = DashProof.Rule(tuning.movement, tuning.shooting)"),
+    "h1Lapse": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\tlocal lapse = if rule ~= nil then rule.lapse else 0"),
+    "h1Cap": (WAVE_SERVICE, FIELD_HELD_BODY, "lines", "\treturn now - run.heldSince <= lapse + delta"),
+    "h1Writes": (WAVE_SERVICE, None, "regex", r"\brun\.(?:blowWaits|heldSince)\s*=(?!=)"),
+    "h1Defs": (WAVE_SERVICE, None, "lines", "local function fieldHeld("),
+    "h1Calls": (WAVE_SERVICE, None, "regex", r"\bfieldHeld\("),
+    "h1AdvanceDelta": (WAVE_SERVICE, None, "lines",
+                       "local function advance(combatConfig: Types.CombatConfig, delta: number?): ()"),
+    "h1AdvanceHolds": (WAVE_SERVICE, ADVANCE_BODY, "lines", "\tif fieldHeld(plan, flow, input, now, delta) then"),
+    "h1AdvanceHoldWrites": (WAVE_SERVICE, ADVANCE_BODY, "lines", "\t\tinput.spawningDone = false"),
+    "h1SpawningWrites": (WAVE_SERVICE, None, "regex", r"\binput\.spawningDone\s*=(?!=)"),
+    "h1AdvanceCalls": (WAVE_SERVICE, None, "regex", r"(?<![\w.])advance\(combatConfig[,)]"),
+    "h1TickDelta": (WAVE_SERVICE, None, "lines", "local function tick(delta: number): ()"),
+    "h1TickAdvance": (WAVE_SERVICE, TICK_BODY, "lines", "\tadvance(combatConfig, delta)"),
+    "h1DownAdvance": (WAVE_SERVICE, ON_DOWN_BODY, "lines", "\t\tadvance(combatConfig)"),
+    "h1BootTick": (WAVE_SERVICE, BOOT_BODY, "lines", "\t\ttick(delta)"),
+    "h1FreshBlowWaits": (WAVE_SERVICE, FRESH_RUN_BODY, "lines", "\t\tblowWaits = false,"),
+    "h1FreshHeldSince": (WAVE_SERVICE, FRESH_RUN_BODY, "lines", "\t\theldSince = 0,"),
+    "h1DashProof": (WAVE_SERVICE, None, "lines", 'local DashProof = require(script.Parent:WaitForChild("DashProof"))'),
+}
+# Two lines that must come in this order inside their function: (key, file, body, first, then).
+L4B_ORDER = {
+    "trackOrder": (WEAPON_SERVICE, TRACK_AIR_BODY, "PositionRing.Record(shooter.history, now, position)",
+                   "proveDash(shooter, now, position)"),
+    "frameOrder": (WEAPON_SERVICE, WEAPON_STEP_BODY, "xpcall(trackAir, stepFailed, now, deltaTime)",
+                   "xpcall(VitalsService.Step, stepFailed, deltaTime)"),
+    "restLast": (WEAPON_SERVICE, WEAPON_STEP_BODY, "xpcall(VitalsService.Step, stepFailed, deltaTime)",
+                 "xpcall(stepRest, stepFailed, now, deltaTime)"),
+    "sendOrder": (ARENA_SERVICE, SEND_RUN_STATE_BODY,
+                  "RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])", "play.cellsSent[userId] = seq"),
+    "uiMergeThenSeq": (UI_CONTROLLER, APPLY_FLOORS_BODY,
+                       "RunFloors.Merge(held, st.floorsSeq, fresh, seq)", "st.floorsSeq = seq"),
+    "uiMergeThenSame": (UI_CONTROLLER, APPLY_FLOORS_BODY,
+                        "RunFloors.Merge(held, st.floorsSeq, fresh, seq)", "local same = #fresh == #held"),
+    "uiGuardThenFloors": (UI_CONTROLLER, ON_RUN_STATE_BODY, "if not isRunState(payload) then", "applyFloors(run.floors, "),
+    "uiFloorsFirst": (UI_CONTROLLER, ON_RUN_STATE_BODY, "applyFloors(run.floors, ", "if run.levelId ~= st.levelId then"),
+    "bonusGuardThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY, "if bonus <= 0 then", "state.combat.valor += bonus"),
+    "mentorFloorThenPay": (WAVE_SERVICE, PAY_MENTORS_BODY,
+                           "(tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare", "state.combat.valor += bonus"),
+    # H1 (fix round 3): the hold reads the input advance has built, and comes before StageFlow decides.
+    "h1InputThenHold": (WAVE_SERVICE, ADVANCE_BODY, "runCap = run.runEndsAt > 0 and now >= run.runEndsAt,",
+                        "if fieldHeld(plan, flow, input, now, delta) then"),
+    "h1HoldThenAdvance": (WAVE_SERVICE, ADVANCE_BODY, "input.spawningDone = false",
+                          "local actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)"),
+}
+
+
+def l4b_reading(text) -> dict:
+    """L4B_LINES counted on the code (comments blanked) of the function each belongs to, and the
+    L4B_ORDER pairs (True when both are there, in that order). `found` names the bodies found.
+    `text` reads a repo file (empty when missing)."""
+    counts, found = {}, {}
+    for key, (rel, pattern, how, line) in L4B_LINES.items():
+        code = luau_code(text(rel))
+        if pattern is not None:
+            body = pattern.search(code)
+            found[pattern.pattern] = body is not None
+            code = body.group(0) if body else ""
+        if how == "lines":
+            counts[key] = whole_lines(code, line)
+        elif how == "regex":
+            counts[key] = len(re.findall(line, code))
+        else:
+            counts[key] = code.count(line)
+    order = {}
+    for key, (rel, pattern, first, then) in L4B_ORDER.items():
+        body = pattern.search(luau_code(text(rel)))
+        code = body.group(0) if body else ""
+        a, b = code.find(first), code.find(then)
+        order[key] = a >= 0 and b > a
+    return {"counts": counts, "order": order, "missing": sorted(p for p, ok in found.items() if not ok)}
+
+
+# L4 W2 (docs/prompts/l4-w2-contract.md 2.2, 3.2, 5, 8 and section 0; luau-a.md "For D2" 4) and its
+# fix round (docs/prompts/l4-w2-fix-round.md K3, K7, K8, K9): the lines that lay LevelDress's answer
+# (LevelService), lower a seated head in every hit (WeaponService; the client's aim in
+# InputController and CrowdRenderer), send the pools' counts (WaveService, ArenaService), carry the
+# chest's key (WaveService), pull the Z lever (DebugService), and act on ScenePlan's answers on the
+# client (LevelScenery, CameraController; Figures' head and anchor), read as text: none of those
+# files loads here. The rules themselves are tests_l4w2.luau's and tests_l4w2_scenery.luau's
+# (LevelDress, ScenePlan, HitShapes, StageFlow, SecretFlow). K7: the line that DECIDES whether a
+# call runs is pinned whole with its indentation, not only the call. Counted on the code (comments
+# blanked) of the function each lives in, as L4B_LINES; tests_l3_w2.luau holds every count to its
+# expected value (L4BP.W2).
+LEVEL_SCENERY = "src/combat/client/Controllers/LevelScenery.luau"
+CAMERA_CONTROLLER = "src/combat/client/Controllers/CameraController.luau"
+CROWD_RENDERER = "src/combat/client/Controllers/CrowdRenderer.luau"
+FIGURES = "src/combat/client/Controllers/Raiders/Figures.luau"
+CONSTRUCT_BODY = body_of("construct")
+PLACE_BODY = body_of("place")
+RAISE_BODY = body_of("raise")
+TEMPLATES_OF_BODY = body_of("templatesOf")
+DRESS_OF_BODY = body_of("dressOf")
+LEVEL_BUILD_BODY = body_of("LevelService.Build")
+LEVEL_CLEAR_BODY = body_of("LevelService.Clear")
+GATHER_BODY = body_of("gather")
+RAY_CANDIDATES_BODY = body_of("rayCandidates")
+START_LEVEL_BODY = body_of("startLevel")
+REFRESH_LOBBY_KINDS_BODY = body_of("refreshLobbyKinds")
+ANNOUNCE_SECRET_BODY = body_of("announceSecret")
+APPLY_LEVER_BODY = body_of("applyLever")
+SCENERY_SEAL_BODY = body_of("seal")
+SHOW_CHILD_BODY = body_of("showChild")
+APPLY_VIEW_BODY = body_of("applyView")
+SCENERY_FAIL_BODY = body_of("fail")
+SCENERY_BUILD_BODY = body_of("build")
+BUILD_STEPS_BODY = body_of("buildSteps")
+SCENERY_START_BODY = body_of("start")
+AWAIT_LOADED_BODY = body_of("awaitLoaded")
+# evaluate is declared ahead (awaitLoaded calls it) and assigned: `evaluate = function(): ()`.
+EVALUATE_BODY = re.compile(r"(?ms)^evaluate = function\(.*?^end$")
+CHILD_ADDED_BODY = body_of("onLevelChildAdded")
+SYNC_MOOD_BODY = body_of("syncMood")
+ON_PLACED_BODY = body_of("onPlaced")
+IN_LOBBY_AT_BODY = body_of("inLobbyAt")
+SCENERY_STARTS_BODY = body_of("LevelScenery.Start")
+SCENERY_DETACH_BODY = body_of("LevelScenery.Detach")
+CAMERA_UPDATE_BODY = body_of("update")
+SET_DRESSED_BODY = body_of("CameraController.SetDressed")
+ENEMY_IN_SIGHTS_BODY = body_of("enemyInSights")
+ENEMY_IN_REACH_BODY = body_of("enemyInReach")
+FOR_EACH_BODY = body_of("CrowdRenderer.ForEach")
+LOOK_OF_BODY = body_of("lookOf")
+FIGURES_LAY_BODY = body_of("lay")
+FIGURES_QUEUE_BODY = body_of("Figures.Queue")
+# A seated body's spheres in the client's aim: the body sphere lowered but never under its foot,
+# the head lowered (InputController's assist, auto-fire and melee reach; the review's slice 3 s1).
+SEATED_AIM_BODY = "\t\t\tlocal body = position + Vector3.new(0, math.max(height * HALF - drop, radius), 0)"
+SEATED_AIM_HEAD = "\t\t\tlocal head = position + Vector3.new(0, height - headRadius - drop, 0)"
+# Fix round 2 (docs/prompts/l4-w2-fix2.md L4: the fix-diff review's m1, the lines that decide): K3's
+# client half (Figures' pools, CrowdRenderer's wait and swap, the lobby fill), LevelScenery's helpers,
+# the crosshair behind the summary (L3), the "!" that follows the head (L2) and raiderpose.py's sweep
+# gate (L1; a Python file, read as it stands: l4w2_reading blanks no comment in it).
+COMBAT_UI = "src/combat/client/Controllers/CombatUIController.luau"
+CAMP_FX = "src/combat/client/Controllers/CampFx.luau"
+RAIDER_POSE_PY = "tools/testfit/raiderpose.py"
+TAKE_BODY = body_of("Figures.Take")
+FIGURES_PREWARM_BODY = body_of("Figures.Prewarm")
+FIGURES_BUILD_BODY = body_of("Figures.Build")
+DRESS_FIGURE_BODY = body_of("dressFigure")
+WEAR_BODY = body_of("wear")
+RENDER_STEP_BODY = body_of("step")
+BOOT_MISSION_BODY = body_of("bootMission")
+IS_SKINNED_BODY = body_of("isSkinned")
+IS_WALL_BODY = body_of("isWall")
+TEARDOWN_BODY = body_of("teardown")
+BODY_IN_LOBBY_BODY = body_of("bodyInLobby")
+SHOWS_CROSSHAIR_BODY = body_of("CameraController.ShowsCrosshair")
+UPDATE_CROSSHAIR_BODY = body_of("updateCrosshair")
+HANG_BODY = body_of("hang")
+CAMP_STEP_BODY = body_of("step")
+CAMP_ALERT_BODY = body_of("CampFx.Alert")
+
+
+def py_body_of(name: str) -> re.Pattern:
+    """A module-level Python function's whole text: `def <name>(` up to the next line that starts
+    with neither a blank nor a space (the next top-level statement)."""
+    return re.compile(r"(?ms)^def " + re.escape(name) + r"\(.*?(?=^\S|\Z)")
+
+
+TELL_LEAD_BODY = py_body_of("tell_lead")
+IMPACT_REACH_BODY = py_body_of("impact_reach")
+L4W2_LINES = {
+    # LevelService: construct lays what LevelDress.Lay answered (its pieces, hidden names, looks).
+    "constructLooks": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\tlocal looks = laid.looks"),
+    "constructHidden": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\tlocal hidden = laid.hidden"),
+    "constructPieces": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\tfor _, piece in laid.pieces do"),
+    # It leaves a piece out only when the groups were refused: the dress walls are built like any piece.
+    "constructSkips": (LEVEL_SERVICE, CONSTRUCT_BODY, "regex", r"\b(?:continue|break|return)\b"),
+    "constructWallRole": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tlocal isWall = piece.role == LevelDress.WALL_ROLE"),
+    "constructNoGroupNoWall": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tif (isBarrier or isWall) and not walls then"),
+    "constructWallBranch": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\telseif isWall then"),
+    "constructGroups": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER"),
+    "constructArmed": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart.CanCollide = true"),
+    # The review's slice 1 m1 (`:448`): the dress wall's whole look, unseen and armed.
+    "constructWallLook": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines",
+                          "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER\n\t\t\tpart.Transparency = 1\n"
+                          "\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = true"),
+    "constructSkinnedIf": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\tif hidden[piece.name] then"),
+    "constructSkinned": (LEVEL_SERVICE, CONSTRUCT_BODY, "lines", "\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)"),
+    "constructSkinnedWrites": (LEVEL_SERVICE, CONSTRUCT_BODY, "text",
+                               "\t\t\tpart.Transparency = 1\n\t\t\tpart.CastShadow = false\n"
+                               "\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)\n\t\tend\n\t\tpart.Parent = folder\n"),
+    "constructCollides": (LEVEL_SERVICE, CONSTRUCT_BODY, "regex", r"\bpart\.CanCollide\s*=(?!=)"),
+    # place and raise (the lobby) build a laid answer; the lobby's base looks.
+    "placeConstruct": (LEVEL_SERVICE, PLACE_BODY, "lines",
+                       "\tlocal ok, camps = pcall(construct, folder, laid, expeditions, made, cells)"),
+    "raiseBase": (LEVEL_SERVICE, RAISE_BODY, "lines", "\tlocal base = if expeditions ~= nil then expeditions.looks else nil"),
+    "raiseLaid": (LEVEL_SERVICE, RAISE_BODY, "lines",
+                  "\treturn place(folder, LevelDress.Lay(pieces, base, nil), expeditions, reactive, ice)"),
+    # templatesOf: each Model's MeshParts' MeshIds (LevelDress.Present judges them; slice 1 s2).
+    "templatesIds": (LEVEL_SERVICE, TEMPLATES_OF_BODY, "lines", "\t\t\t\tlocal meshIds: { string } = {}"),
+    "templatesMeshPart": (LEVEL_SERVICE, TEMPLATES_OF_BODY, "lines", '\t\t\t\t\tif part:IsA("MeshPart") then'),
+    "templatesMeshId": (LEVEL_SERVICE, TEMPLATES_OF_BODY, "lines", "\t\t\t\t\t\ttable.insert(meshIds, part.MeshId)"),
+    "templatesFound": (LEVEL_SERVICE, TEMPLATES_OF_BODY, "lines", "\t\t\t\tfound[child.Name] = meshIds"),
+    # dressOf only gathers: the lever read and spent, everything handed to LevelDress.Decide.
+    "dressFailRead": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\tlocal failLever = state.failNextDress"),
+    "dressFailSpent": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\tstate.failNextDress = false"),
+    "dressFailWrites": (LEVEL_SERVICE, DRESS_OF_BODY, "regex", r"\bstate\.failNextDress\s*=(?!=)"),
+    "dressAccept": (LEVEL_SERVICE, DRESS_OF_BODY, "text",
+                    "LevelDress.Decide({\n\t\tdress = Catalog.GetLevelDress(layoutName),\n"
+                    "\t\tuploadedHash = uploadedHash(layoutName),\n\t\tfailLever = failLever,\n"
+                    "\t\ttemplates = templatesOf(layoutName),\n\t\tlayout = layout,\n\t\tpieces = pieces,\n"
+                    "\t\tfound = open,\n\t\tgroupsOk = BarrierGroups.Ensure(),\n\t\tmaxParts = maxParts,\n"
+                    "\t\tlayoutName = layoutName,\n\t})"),
+    "dressRefused": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\tif accepted == nil then"),
+    "dressGreyWarns": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\t\twarn(`[LevelService] the level is grey: {reason}`)"),
+    "dressAnswers": (LEVEL_SERVICE, DRESS_OF_BODY, "lines", "\treturn accepted"),
+    # Build: both words cleared, the dress asked of a named level only, the answer laid and placed,
+    # its looks kept, and the word written last, the hash before the name (K7, slice 2 s2).
+    "buildNilDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)"),
+    "buildNilHash": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)"),
+    "buildAcceptedNil": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tlocal accepted: LevelDress.Accepted? = nil"),
+    "buildNamed": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tif layoutName ~= nil then"),
+    "buildDressOf": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                     "\t\taccepted = dressOf(layout, layoutName, pieces, open, rules.maxParts)"),
+    "buildAcceptedWrites": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "regex", r"\baccepted\s*=(?!=)"),
+    "buildLay": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tlocal laid = LevelDress.Lay(pieces, expeditions.looks, accepted)"),
+    "buildPlace": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                   "\tlocal camps, problem = place(folder, laid, expeditions, reactive, ice)"),
+    "buildLooks": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tstate.looks = laid.looks"),
+    "buildWord": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tlocal word = laid.word"),
+    "buildWorded": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\tif word ~= nil then"),
+    "buildDressHash": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines",
+                       "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)"),
+    "buildDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)"),
+    "buildDressWrites": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "regex", r"SetAttribute\(CONST\.DRESS(?:_HASH)?_ATTRIBUTE,"),
+    # Clear: both words gone before any Part.
+    "clearNilDress": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)"),
+    "clearNilHash": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "lines", "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)"),
+    # WeaponService (contract 5): every candidate's head lowered by its seat on crowd.restDrop (the
+    # review's slice 1 m1 / slice 4 P4: the input, not only the call), the drop handed on.
+    "gatherRestDrop": (WEAPON_SERVICE, GATHER_BODY, "lines", "\tlocal restDrop = config.crowd.restDrop"),
+    "gatherDrop": (WEAPON_SERVICE, GATHER_BODY, "lines",
+                   "\t\tlocal drop = HitShapes.SeatDrop(def.height, enemy.seat, restDrop)"),
+    "gatherHead": (WEAPON_SERVICE, GATHER_BODY, "lines",
+                   "\t\tlocal head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)"),
+    "gatherTest": (WEAPON_SERVICE, GATHER_BODY, "lines",
+                   "\t\t\ttest(body, def.radius, head, def.headRadius, enemy.position, def.height, drop)"),
+    "gatherSeatDrops": (WEAPON_SERVICE, GATHER_BODY, "text", "HitShapes.SeatDrop("),
+    "rayDrop": (WEAPON_SERVICE, RAY_CANDIDATES_BODY, "text", "\t\t\t\theadRadius,\n\t\t\t\tdrop\n\t\t\t)"),
+    # WaveService (3.2, section 0): the plan's kinds go out as the pools' counts; the dress named;
+    # the chest's key carried to the client.
+    "startPrewarm": (WAVE_SERVICE, START_LEVEL_BODY, "lines", "\trun.prewarm = plan.kinds"),
+    "startBuild": (WAVE_SERVICE, START_LEVEL_BODY, "text",
+                   "LevelService.Build(\n\t\t\tlayout,\n\t\t\tmap,\n\t\t\trules,\n"
+                   "\t\t\tUnlockService.FoundShortcuts(player, levelId),\n\t\t\tlevel.layout\n\t\t)"),
+    # K3: the lobby's RunState carries every built level's plan, at every difficulty, merged.
+    "pushPrewarm": (WAVE_SERVICE, PUSH_RUN_FIELDS_BODY, "lines",
+                    '\t\tprewarm = if phase == "lobby" then boot.lobbyKinds else run.prewarm,'),
+    "lobbyOnce": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines",
+                  "\tif boot.lobbyKinds ~= nil or boot.lobbyKindsSeq == boot.floorsSeq then"),
+    "lobbySeq": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\tboot.lobbyKindsSeq = boot.floorsSeq"),
+    "lobbyLevels": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\tfor levelId in builtLevels() do"),
+    "lobbyDifficulties": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\t\tfor _, difficulty in map.difficulties do"),
+    "lobbyResolve": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines",
+                     "\t\t\tlocal level, layout = resolveLevel(levelId, difficulty, combatConfig, map)"),
+    "lobbyPlan": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "text",
+                  "StageFlow.Plan(\n\t\t\t\t\tlevel,\n\t\t\t\t\tlayout,\n\t\t\t\t\tdifficulty,\n\t\t\t\t\trules,\n"
+                  "\t\t\t\t\tLevelGeometry.Bounds(layout, rules.floorThickness),\n\t\t\t\t\tranks,\n"
+                  "\t\t\t\t\tTuning.Get().crowd.kinds\n\t\t\t\t)"),
+    "lobbyBounds": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines",
+                    "\t\t\t\t\tLevelGeometry.Bounds(layout, rules.floorThickness),"),
+    "lobbyKindsTuned": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\t\t\t\t\tTuning.Get().crowd.kinds"),
+    "lobbyKeeps": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\t\t\t\ttable.insert(found, plan.kinds)"),
+    "lobbyMerged": (WAVE_SERVICE, REFRESH_LOBBY_KINDS_BODY, "lines", "\tboot.lobbyKinds = StageFlow.MostKinds(found)"),
+    "bootLobbyKinds": (WAVE_SERVICE, BOOT_BODY, "lines",
+                       "\trefreshLobbyKinds()\n\tboot.loop = RunService.Heartbeat:Connect(function(delta: number)"),
+    "tickLobbyKinds": (WAVE_SERVICE, BOOT_BODY, "lines", "\t\t\trefreshLobbyKinds()\n\t\t\tbroadcast()"),
+    "bootLobbyCalls": (WAVE_SERVICE, BOOT_BODY, "regex", r"\brefreshLobbyKinds\(\)"),
+    "announceKey": (WAVE_SERVICE, ANNOUNCE_SECRET_BODY, "text", "key = opening.key,"),
+    # ArenaService (3.2): the counts only with a member's first RunState of a floor set.
+    "sendPrewarm": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "lines", "\t\t\tsent.prewarm = runFields.prewarm"),
+    "sendPrewarmWrites": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "regex", r"\bsent\.prewarm\s*=(?!=)"),
+    # DebugService (8): the Z lever.
+    "leverDressFail": (DEBUG_SERVICE, APPLY_LEVER_BODY, "text",
+                       'elseif lever == "dressFail" then\n\t\tLevelService.FailNextDress()'),
+    # LevelScenery (K7, ui-engineer A): nothing of the scenery collides, queries or touches; a
+    # failed client warns, tears down, marks itself failed and shows the grey view (every Skinned
+    # Part shown, every wall drawn in the grey look); the whole build under one pcall.
+    "sealAnchored": (LEVEL_SCENERY, SCENERY_SEAL_BODY, "lines", "\t\tpart.Anchored = true"),
+    "sealCollide": (LEVEL_SCENERY, SCENERY_SEAL_BODY, "lines", "\t\tpart.CanCollide = false"),
+    "sealQuery": (LEVEL_SCENERY, SCENERY_SEAL_BODY, "lines", "\t\tpart.CanQuery = false"),
+    "sealTouch": (LEVEL_SCENERY, SCENERY_SEAL_BODY, "lines", "\t\tpart.CanTouch = false"),
+    "failPath": (LEVEL_SCENERY, SCENERY_FAIL_BODY, "lines",
+                 "\twarnOnce(`the level is grey on this client: {reason}`)\n\tteardown()\n\tstate.failed = true\n\tapplyView()"),
+    "showSkinned": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines", "\tif show.skinned and isSkinned(child) then"),
+    "showSkinnedPaint": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines", "\t\tpaint(child :: BasePart, 0, nil)"),
+    "showWalls": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines", '\tif show.walls ~= "none" and isWall(child) then'),
+    "showWallColor": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines",
+                      '\t\tlocal color = if show.walls == "debug" then Theme.COMBAT_SCENERY_WALL_COLOR else greyColor'),
+    "showWallPaint": (LEVEL_SCENERY, SHOW_CHILD_BODY, "lines",
+                      "\t\tpaint(child :: BasePart, Theme.COMBAT_SCENERY_WALL_TRANSPARENCY, color)"),
+    "viewShow": (LEVEL_SCENERY, APPLY_VIEW_BODY, "lines",
+                 "\tlocal show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)"),
+    "viewFolder": (LEVEL_SCENERY, APPLY_VIEW_BODY, "lines", "\t\tfolder.Parent = if show.folder then Workspace else nil"),
+    "viewChild": (LEVEL_SCENERY, APPLY_VIEW_BODY, "lines", "\t\tshowChild(show, child, greyColor)"),
+    "addedShow": (LEVEL_SCENERY, CHILD_ADDED_BODY, "lines",
+                  "\tlocal show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)"),
+    "addedChild": (LEVEL_SCENERY, CHILD_ADDED_BODY, "lines",
+                   '\tshowChild(show, child, if show.walls == "grey" then greyWallColor() else nil)'),
+    "buildPcall": (LEVEL_SCENERY, SCENERY_BUILD_BODY, "lines",
+                   "\tlocal ok, problem = pcall(function()\n\t\tbuildSteps(generation, dress, folder)\n\tend)"),
+    "buildFails": (LEVEL_SCENERY, SCENERY_BUILD_BODY, "lines", "\tif not ok and generation == state.generation then"),
+    "buildFailCall": (LEVEL_SCENERY, SCENERY_BUILD_BODY, "lines", "\t\tfail(`the build stopped ({tostring(problem)})`)"),
+    "startFails": (LEVEL_SCENERY, SCENERY_START_BODY, "lines",
+                   "\t\tfail(`the scenery could not start ({tostring(problem)})`)"),
+    "startSpawns": (LEVEL_SCENERY, SCENERY_START_BODY, "lines", "\ttask.spawn(build, state.generation, dress, folder)"),
+    "sceneryBareSteps": (LEVEL_SCENERY, None, "regex", r"task\.spawn\(\s*buildSteps"),
+    # The word's decision (K7: ScenePlan.Decide, after game.Loaded, a nil answer never kept; K9).
+    "evalKey": (LEVEL_SCENERY, EVALUATE_BODY, "lines", "\tlocal key = ScenePlan.Key(name, hash)"),
+    "evalSame": (LEVEL_SCENERY, EVALUATE_BODY, "lines", "\tif key == state.builtKey then"),
+    "evalDressed": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\tCameraController.SetDressed(typeof(name) == "string")'),
+    "evalDecide": (LEVEL_SCENERY, EVALUATE_BODY, "lines",
+                   "\tlocal decision = ScenePlan.Decide(name, hash, game:IsLoaded(), Catalog.GetLevelDress)"),
+    "evalKeep": (LEVEL_SCENERY, EVALUATE_BODY, "lines", "\tstate.builtKey = if decision.keep then key else nil"),
+    "evalBuild": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\tif decision.action == "build" and dress ~= nil then'),
+    "evalFail": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\telseif decision.action == "fail" then'),
+    "evalFailCall": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\t\tfail(decision.reason or "the dress cannot be drawn")'),
+    "evalWait": (LEVEL_SCENERY, EVALUATE_BODY, "lines", '\t\tif decision.action == "wait" then\n\t\t\tawaitLoaded()'),
+    "awaitIf": (LEVEL_SCENERY, AWAIT_LOADED_BODY, "lines",
+                "\t\tif not game:IsLoaded() then\n\t\t\tgame.Loaded:Wait()\n\t\tend"),
+    "awaitEval": (LEVEL_SCENERY, AWAIT_LOADED_BODY, "lines", "\t\tevaluate()"),
+    "stepsJobs": (LEVEL_SCENERY, BUILD_STEPS_BODY, "lines", "\tfor _, job in ScenePlan.Jobs(dress, Theme.lowEndDevice) do"),
+    # A build a newer word outlived stops at its next frame (the review's slice 2 s1).
+    "stepsGeneration": (LEVEL_SCENERY, BUILD_STEPS_BODY, "lines",
+                        "\t\t\tif generation ~= state.generation then\n\t\t\t\treturn\n\t\t\tend"),
+    # K8: mood B only while the body is in the level.
+    "moodRule": (LEVEL_SCENERY, SYNC_MOOD_BODY, "lines",
+                 "\t\tand ScenePlan.Mood(dress ~= nil, state.failed, state.moodWanted, bodyInLobby())"),
+    "placedLobby": (LEVEL_SCENERY, ON_PLACED_BODY, "lines", "\tstate.inLobby = inLobbyAt(position)"),
+    "lobbyBox": (LEVEL_SCENERY, IN_LOBBY_AT_BODY, "lines",
+                 "\treturn ScenePlan.InBox(ScenePlan.Box(feet), point.X, point.Z, boxMargin())"),
+    "startPlaced": (LEVEL_SCENERY, SCENERY_STARTS_BODY, "lines", "\tCameraController.OnPlaced(onPlaced)"),
+    "detachDressed": (LEVEL_SCENERY, SCENERY_DETACH_BODY, "lines", "\tCameraController.SetDressed(false)"),
+    # K9: in a dressed level the summary and ended phases keep the shoulder camera.
+    "cameraEnds": (CAMERA_CONTROLLER, CAMERA_UPDATE_BODY, "lines",
+                   "\tlocal phaseEndsCamera = not rangeMode\n\t\tand DEFAULT_CAMERA_PHASES[phase] == true\n"
+                   "\t\tand not levelDressed"),
+    "cameraDressed": (CAMERA_CONTROLLER, SET_DRESSED_BODY, "lines", "\tlevelDressed = dressed"),
+    "cameraDressedWrites": (CAMERA_CONTROLLER, None, "regex", r"(?<![\w.])levelDressed\s*=(?!=)"),
+    # The client's aim reads the seat as the server does (L4W2-11; the review's slice 3 m3, s1).
+    "sightsRayDrop": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "text", "\t\t\t\theadRadius,\n\t\t\t\tdrop\n\t\t\t)"),
+    "sightsRefusedBody": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "lines",
+                          "\t\t\t\t\t\t\tthen math.max(height * HALF - drop, radius)"),
+    "sightsRefusedHead": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "lines", "\t\t\t\t\t\t\telse height - headRadius - drop"),
+    "sightsBody": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "lines", SEATED_AIM_BODY),
+    "sightsHead": (INPUT_CONTROLLER, ENEMY_IN_SIGHTS_BODY, "lines", SEATED_AIM_HEAD),
+    "reachBody": (INPUT_CONTROLLER, ENEMY_IN_REACH_BODY, "lines", SEATED_AIM_BODY),
+    "reachHead": (INPUT_CONTROLLER, ENEMY_IN_REACH_BODY, "lines", SEATED_AIM_HEAD),
+    "forEachDrop": (CROWD_RENDERER, FOR_EACH_BODY, "lines",
+                    "\t\t\t\tHitShapes.SeatDrop(entity.height, entity.seat, poseConsts.restDrop)"),
+    # Figures (K4, K5): the drawn head stands on the scored head; the anchor laid by Rig; the lean split.
+    "figuresHead": (FIGURES, LOOK_OF_BODY, "lines", "\tlocal head = entry.points.head"),
+    "figuresScored": (FIGURES, LOOK_OF_BODY, "lines", "\tlocal scored = def.height - def.headRadius"),
+    "figuresHeadTest": (FIGURES, LOOK_OF_BODY, "lines",
+                        "\t\tmath.abs(head[1]) > HEAD_EPSILON\n\t\tor math.abs(head[2] - scored) > HEAD_EPSILON\n"
+                        "\t\tor math.abs(head[3]) > HEAD_EPSILON"),
+    "figuresEpsilon": (FIGURES, None, "lines", "local HEAD_EPSILON = 0.01"),
+    "figuresAnchor": (FIGURES, FIGURES_LAY_BODY, "lines", "\tframes[count] = root * frameOf(rigOut.anchor)"),
+    "figuresLean": (FIGURES, FIGURES_QUEUE_BODY, "lines",
+                    "\tpose.lean, pose.leanSide = RaiderPose.Lean(yaw, lean.X, lean.Z)"),
+    # Fix round 2 (L4, m1): K3's client half. Take only takes; Prewarm splits the cap; Build keeps to
+    # the per-frame budget in all three of its loops.
+    "takeTakes": (FIGURES, TAKE_BODY, "lines",
+                  "\tlocal figure: Figure? = if pool ~= nil then table.remove(pool) else nil"),
+    "takeBuilds": (FIGURES, TAKE_BODY, "regex", r"\bbuild\("),
+    "prewarmRoom": (FIGURES, FIGURES_PREWARM_BODY, "lines", "\tlocal room = math.max(math.floor(cap), 0)"),
+    "prewarmShare": (FIGURES, FIGURES_PREWARM_BODY, "lines", "\tlocal share = if total > room then room / total else 1"),
+    "prewarmExact": (FIGURES, FIGURES_PREWARM_BODY, "lines", "\t\tlocal exact = math.floor(counts[kind]) * share"),
+    "buildBudget": (FIGURES, FIGURES_BUILD_BODY, "lines",
+                    "\tlocal budget = math.max(math.floor(Theme.COMBAT_RAIDER_PREWARM_PER_FRAME), 1)"),
+    "buildWaitBudget": (FIGURES, FIGURES_BUILD_BODY, "lines",
+                        "\t\twhile look ~= nil and made < budget and spare < count do"),
+    "buildRoundBudget": (FIGURES, FIGURES_BUILD_BODY, "lines", "\twhile more and made < budget do"),
+    "buildGoalBudget": (FIGURES, FIGURES_BUILD_BODY, "lines",
+                        "\t\t\tlocal look = if made < budget and (built[kind] or 0) < goal then lookFor(kind) else nil"),
+    # CrowdRenderer: a body that met an empty pool waits for its model, and wears it once one is built;
+    # the pools fill on every step.
+    "dressTakes": (CROWD_RENDERER, DRESS_FIGURE_BODY, "lines",
+                   "\tlocal figure = if look ~= nil then Figures.Take(look) else nil"),
+    "dressWants": (CROWD_RENDERER, DRESS_FIGURE_BODY, "lines", "\tentity.wants = if figure == nil then look else nil"),
+    "wearReady": (CROWD_RENDERER, WEAR_BODY, "lines", "\tif not Figures.Ready(wanted.kind) then"),
+    "wearWaits": (CROWD_RENDERER, WEAR_BODY, "lines", "\t\tFigures.Wait(wanted)"),
+    "wearDresses": (CROWD_RENDERER, WEAR_BODY, "lines", "\t\tapplyKind(entity, def)"),
+    "stepBuilds": (CROWD_RENDERER, RENDER_STEP_BODY, "lines", "\tlocal built = Figures.Build()"),
+    "stepWants": (CROWD_RENDERER, RENDER_STEP_BODY, "lines", "\t\t\tlocal wanted = entity.wants"),
+    "stepWears": (CROWD_RENDERER, RENDER_STEP_BODY, "lines", "\t\t\t\twear(entity, wanted)"),
+    # CombatUIController: every RunState's prewarm counts go to the renderer (the lobby fill's start).
+    "uiPrewarmCounts": (COMBAT_UI, BOOT_MISSION_BODY, "lines", "\t\tlocal kinds = prewarmCounts(run.prewarm)"),
+    "uiPrewarmHands": (COMBAT_UI, BOOT_MISSION_BODY, "lines", "\t\t\tCrowdRenderer.Prewarm(kinds)"),
+    # LevelScenery's helpers: the Skinned and wall tests, teardown's state, where the body is.
+    "isSkinnedRule": (LEVEL_SCENERY, IS_SKINNED_BODY, "lines",
+                      '\treturn child:IsA("BasePart") and child:GetAttribute(NAMES.skinned) == true'),
+    "isWallRule": (LEVEL_SCENERY, IS_WALL_BODY, "lines",
+                   "\treturn child:IsA(\"BasePart\") and child.CollisionGroup ~= NAMES.defaultGroup"),
+    "teardownState": (LEVEL_SCENERY, TEARDOWN_BODY, "lines",
+                      "\tstate.dress = nil\n\tstate.built = false\n\tstate.failed = false"),
+    "teardownFailedWrites": (LEVEL_SCENERY, TEARDOWN_BODY, "regex", r"\bstate\.failed\s*=(?!=)"),
+    "lobbyKnown": (LEVEL_SCENERY, BODY_IN_LOBBY_BODY, "lines",
+                   "\tlocal known = state.inLobby\n\tif known ~= nil then\n\t\treturn known\n\tend"),
+    "lobbyRoot": (LEVEL_SCENERY, BODY_IN_LOBBY_BODY, "lines",
+                  "\tlocal character = Players.LocalPlayer.Character\n"
+                  "\tlocal root = if character ~= nil then character:FindFirstChild(NAMES.root) else nil\n"
+                  "\tif root == nil or not root:IsA(\"BasePart\") then\n\t\treturn false\n\tend"),
+    "lobbyJudged": (LEVEL_SCENERY, BODY_IN_LOBBY_BODY, "lines", "\treturn inLobbyAt(root.Position)"),
+    "lobbyAnswers": (LEVEL_SCENERY, BODY_IN_LOBBY_BODY, "regex", r"\breturn\b"),
+    # L3: the crosshair hides behind the summary (ScenePlan.Crosshair, one list of phases).
+    "cameraScenePlan": (CAMERA_CONTROLLER, None, "lines", 'local ScenePlan = require(script.Parent:WaitForChild("ScenePlan"))'),
+    "cameraRunOver": (CAMERA_CONTROLLER, None, "lines",
+                      "local DEFAULT_CAMERA_PHASES: { [string]: boolean } = ScenePlan.RUN_OVER"),
+    "cameraCrosshair": (CAMERA_CONTROLLER, SHOWS_CROSSHAIR_BODY, "lines",
+                        "\treturn ScenePlan.Crosshair(active, phase, rangeMode)"),
+    "feedbackCrosshair": (FEEDBACK, UPDATE_CROSSHAIR_BODY, "lines", "\t\tCameraController.ShowsCrosshair(),"),
+    "feedbackNoActive": (FEEDBACK, None, "regex", r"\bCameraController\.IsActive\("),
+    # L2: the camp's "!" follows the body's head part; a body gone (nil head) ends it.
+    "campHead": (CAMP_FX, CAMP_STEP_BODY, "lines", "\t\tlocal head = CrowdRenderer.GetHead(mark.id)"),
+    "campEnds": (CAMP_FX, CAMP_STEP_BODY, "lines", "\t\tif age >= lasts or head == nil then"),
+    "campRehangs": (CAMP_FX, CAMP_STEP_BODY, "lines", "\t\tif head ~= mark.head then\n\t\t\thang(mark, head)\n\t\tend"),
+    "hangHead": (CAMP_FX, HANG_BODY, "lines", "\tmark.head = head"),
+    "hangAdornee": (CAMP_FX, HANG_BODY, "lines", "\tmark.gui.Adornee = head"),
+    "hangOffset": (CAMP_FX, HANG_BODY, "lines",
+                   "\tmark.gui.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 0.5 + Theme.COMBAT_ALERT_STUDS, 0)"),
+    "alertHangs": (CAMP_FX, CAMP_ALERT_BODY, "lines", "\t\thang(shown, head)"),
+    # L1: raiderpose.py's sweep gate (5-degree sectors, the span's ends, the lag behind the tell).
+    "sweepSectors": (RAIDER_POSE_PY, None, "lines", "SECTOR_DEGREES = 5.0"),
+    "sweepKinds": (RAIDER_POSE_PY, None, "lines", 'SWEEP_FLOOR_KINDS = ("chief",)'),
+    "sweepTell": (RAIDER_POSE_PY, TELL_LEAD_BODY, "lines", "    return half - 2 * half * sweep"),
+    "sweepLeading": (RAIDER_POSE_PY, IMPACT_REACH_BODY, "lines",
+                     "                        if d >= at_range:\n                            leading = min(leading, angle)"),
+    "sweepBehind": (RAIDER_POSE_PY, IMPACT_REACH_BODY, "lines",
+                    "                    behind = leading - tell_lead(half, t.sweep)"),
+    "sweepGate": (RAIDER_POSE_PY, IMPACT_REACH_BODY, "lines",
+                  "            ok = (ok and min(sectors) >= at_range - 1e-9\n"
+                  "                  and span[0] <= -half + SECTOR_DEGREES + 1e-9 and span[1] >= half - SECTOR_DEGREES - 1e-9\n"
+                  "                  and lag <= SECTOR_DEGREES + 1e-9)"),
+}
+L4W2_ORDER = {
+    "wallThenArmed": (LEVEL_SERVICE, CONSTRUCT_BODY, "elseif isWall then", "part.CanCollide = true"),
+    "hiddenThenSkinned": (LEVEL_SERVICE, CONSTRUCT_BODY, "if hidden[piece.name] then",
+                          "part:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)"),
+    "failReadThenSpent": (LEVEL_SERVICE, DRESS_OF_BODY, "local failLever = state.failNextDress", "state.failNextDress = false"),
+    "failSpentThenDecide": (LEVEL_SERVICE, DRESS_OF_BODY, "state.failNextDress = false", "LevelDress.Decide("),
+    "nilThenPieces": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)",
+                      "local pieces, refused = piecesOf("),
+    "piecesThenDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local pieces, refused = piecesOf(", "accepted = dressOf("),
+    "layThenPlace": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local laid = LevelDress.Lay(", "local camps, problem = place("),
+    "placeThenBuilt": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "local camps, problem = place(", "state.built = true"),
+    "builtThenWord": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "state.built = true",
+                      "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)"),
+    # K7 (slice 2 s2): the hash before the name, so a client that reads the name finds the hash.
+    "hashThenDress": (LEVEL_SERVICE, LEVEL_BUILD_BODY, "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)",
+                      "folder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)"),
+    "clearNilThenParts": (LEVEL_SERVICE, LEVEL_CLEAR_BODY, "folder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)",
+                          "folder:ClearAllChildren()"),
+    "gatherRestThenDrop": (WEAPON_SERVICE, GATHER_BODY, "local restDrop = config.crowd.restDrop",
+                           "local drop = HitShapes.SeatDrop("),
+    "gatherDropThenHead": (WEAPON_SERVICE, GATHER_BODY, "local drop = HitShapes.SeatDrop(",
+                           "local head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)"),
+    "cellsWentThenPrewarm": (ARENA_SERVICE, SEND_RUN_STATE_BODY, "if cellsWent then", "sent.prewarm = runFields.prewarm"),
+    "lobbyKindsThenBroadcast": (WAVE_SERVICE, BOOT_BODY, "refreshLobbyKinds()", "broadcast()"),
+    "evalDressedThenDecide": (LEVEL_SCENERY, EVALUATE_BODY, 'CameraController.SetDressed(typeof(name) == "string")',
+                              "local decision = ScenePlan.Decide("),
+    "evalKeepThenTeardown": (LEVEL_SCENERY, EVALUATE_BODY, "state.builtKey = if decision.keep then key else nil",
+                             "teardown()"),
+}
+
+
+def l4w2_reading(text) -> dict:
+    """L4W2_LINES and L4W2_ORDER, read as l4b_reading reads L4B's. A Python file (raiderpose.py's
+    sweep gate) is read as it stands: luau_code's comment rule is Luau's. A function looked for and
+    not found is named with its file (two files each have a `step`)."""
+    counts, found = {}, {}
+    for key, (rel, pattern, how, line) in L4W2_LINES.items():
+        code = text(rel) if rel.endswith(".py") else luau_code(text(rel))
+        if pattern is not None:
+            body = pattern.search(code)
+            found[f"{rel}: {pattern.pattern}"] = body is not None
+            code = body.group(0) if body else ""
+        if how == "lines":
+            counts[key] = whole_lines(code, line)
+        elif how == "regex":
+            counts[key] = len(re.findall(line, code))
+        else:
+            counts[key] = code.count(line)
+    order = {}
+    for key, (rel, pattern, first, then) in L4W2_ORDER.items():
+        body = pattern.search(luau_code(text(rel)))
+        code = body.group(0) if body else ""
+        a, b = code.find(first), code.find(then)
+        order[key] = a >= 0 and b > a
+    return {"counts": counts, "order": order, "missing": sorted(p for p, ok in found.items() if not ok)}
 
 
 def w3_fix3_reading(text) -> dict:
@@ -1564,23 +2243,15 @@ def w3_fix_reading(text, react_text: str, freeze_text: str) -> dict:
 
 
 def sources(repo: Path) -> dict:
-    """SOURCES, plus every arena a level layout names: an arena is a .luau data module, bundled
-    like a source and loaded as `Arena_<name>`."""
-    found = dict(SOURCES)
-    layouts = dict(read_folder(repo, "src/shared/Layouts/Levels"))
-    for arena in sorted({layout["arena"] for layout in layouts.values() if layout.get("arena")}):
-        if (repo / f"src/shared/Layouts/Arenas/{arena}.luau").exists():
-            found[f"Arena_{arena}"] = f"src/shared/Layouts/Arenas/{arena}.luau"
-    return found
+    """SOURCES. (Until L4 W1b also every arena a level layout named, for ruling 27's adapter: no
+    layout names one since the Raider Arena went.)"""
+    return dict(SOURCES)
 
 
 def fixtures(repo: Path) -> dict:
     """One local for every config a case reads (the bundle is one chunk of at most 200 locals)."""
     layouts = dict(read_folder(repo, "src/shared/Layouts/Levels"))
-    bundled = sources(repo)
-    arenas = sorted({layout["arena"] for layout in layouts.values() if layout.get("arena")})
     return {
-        "village": read(repo, "src/shared/Config/Missions/1_Village.json"),
         "combat": read(repo, "src/shared/Config/Combat.json"),
         # The real files, as they ship (tests_l1.luau "the real files").
         "expeditions": read(repo, "src/shared/Config/Expeditions.json"),
@@ -1589,7 +2260,6 @@ def fixtures(repo: Path) -> dict:
         # that read it then fail).
         "weaponModels": read_optional(repo, "src/shared/Config/WeaponModels.json"),
         "levels": [content for _, content in read_folder(repo, "src/shared/Config/Levels", True)],
-        "missions": [content for _, content in read_folder(repo, "src/shared/Config/Missions", True)],
         # Files of those two folders that Catalog does not read (it takes <n>_<Name> only), while
         # tools/check_levels.py reads every *.json there.
         "unread": sorted(
@@ -1599,7 +2269,13 @@ def fixtures(repo: Path) -> dict:
             if not re.match(NUMBERED, path.stem)
         ),
         "layouts": layouts,
-        "arenas": [arena for arena in arenas if f"Arena_{arena}" in bundled],
+        # L4 W2: every level's dress file (Config/LevelDress/<layout>.json) and the plan hash the
+        # upload recorded for it (Assets.json levels.<layout>.planHash), as LevelService reads both.
+        "levelDress": dict(read_folder(repo, "src/shared/Config/LevelDress")),
+        "levelHashes": {
+            name: (entry or {}).get("planHash")
+            for name, entry in ((read_optional(repo, "src/shared/Config/Assets.json") or {}).get("levels") or {}).items()
+        },
         "gate": gate_reading(),
         "source": source_reading(repo),
     }
@@ -1671,7 +2347,12 @@ def main(argv: list) -> int:
         )
         print(f"HARNESS: REFUSED (another checkout's harness, {HERE})")
         return 2
-    path = HERE / "bundle.luau"
+    # mutate_shards.py runs several harnesses at once from this folder: each names its own bundle.
+    name = os.environ.get("HARNESS_BUNDLE", "bundle.luau")
+    if not re.fullmatch(r"bundle[\w-]*\.luau", name):
+        print(f"run_harness: HARNESS_BUNDLE {name!r} is not a bundle file name", file=sys.stderr)
+        return 2
+    path = HERE / name
     path.write_text(bundle(repo), encoding="utf-8")
     try:
         result = subprocess.run([luau, str(path)], capture_output=True, text=True, timeout=TIMEOUT_SECONDS)

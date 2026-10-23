@@ -4765,6 +4765,8 @@ Press **Play**: the map is open on Forest Road, Normal, and your gear is **2 / 2
 - [ ] 1. **The road and the first camp.**
       - **Enter** (Depart). The road is long now: the gap, the bridge, the climb by the lookout,
         about a minute's walk.
+      - *Since L4 W1 the lookout ledge stands at the trailhead (north of Road1, across a
+        gully), not by the climb.*
       - The first camp stands on a raised floor behind a fence. From the road you see its tent's
         roof.
       - At the top of a jump (or from the step by the lookout) you see the raiders already
@@ -5202,6 +5204,8 @@ twice to see the chest.
       - Bug: the late press does nothing at the edge; the toast shows; a knock-up gives a jump.
 - [ ] 5. **The lookout, without Double Jump.** Just before the first camp, left of the road, a tall
       grey ledge has a **light column** above it.
+      - *Since L4 W1 the ledge stands at the trailhead instead: north of Road1, across a gully,
+        a few steps from the start (no **N** needed). The same holds for step 7.*
       - Try to get up: jump at the face, jump and dash, jump from the **corner of the first camp's
         fence** nearest the ledge, and a **wall hop** (jump into the face and flick the camera).
       - You never stand on the ledge.
@@ -5286,6 +5290,8 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - The Flamethrower is a held stream of fire. You equip it in the lobby's **Armory**.
 - The bramble under the lookout burns. Behind it a roofed tunnel runs past the Pickets to Main
   Camp, with the **Raiders' Cache** inside.
+- *Since L4 W1 the lookout stands at the trailhead. The bramble's mouth is still on Road4, before
+  the first camp (steps below).*
 - Once you have walked it, your later runs start with the tunnel open.
 - **About 20 minutes. Keys only, no panel.** Grey blocks, no sound.
 
@@ -5341,6 +5347,7 @@ no secrets, no tunnel and no Valor. J, F, H and V stand in for clearing the leve
 - [ ] 5. **Burn the bramble.** Go back to **Road4**, just before the climb to the first camp. On
       its north side, **under the lookout**, a bramble fills a mouth in the ridge. A sign beside
       it: **"RAIDERS' CACHE - needs FIRE"**.
+      - *Since L4 W1 the lookout is at the trailhead; the bramble is still here.*
       - Hold fire on it. In about **0.6 s** it darkens and throws embers, then flashes and
         collapses.
       - A Longbow arrow or Dragon's Breath does **nothing** to it.
@@ -5914,6 +5921,213 @@ Asked afterwards, as click questions:
   are too small.
 
 Also, if you have a view: anything wrong, by step number, PC or phone.
+
+## L4 W2 — the real forest in the game
+
+<!-- FILE TO OPEN: start. Lead: if L4 W2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Only after the lead's word that L4 W2 is merged to `main`.** Then VS Code,
+  **Ctrl+Shift+B** → **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** the key hint ends **"Y scenery · O light · X models · Z grey
+  level"**.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** Forest Road is a real forest.
+- Baked ground, cliffs, firs and rocks. Invisible walls at the tree line. A darker, hazed light
+  (mood B).
+- The seven raiders are real models. The boss is the **Camp Chief**, with the Warhammer.
+- A mountain climb behind the trailhead gives the **Castle Key**.
+- **About 40 minutes. Play and keys only, no panel.** No sound.
+
+**Status 2026-10-23:** built and reviewed (W1b: three slices, 0 Critical, 0 Major, 9 Minor, then
+two checks of the fixes; W2: four slices, 0 / 2 / 14, then 0 / 0 / 3; all fixed or ruled). The 81
+models are uploaded and harvested (your paste, 2026-10-22). **Waiting on QA and the lead's merge
+word.**
+
+Setup: `docs/MANUAL_STEPS.md` "L4 W2".
+
+**Keys:**
+- **Enter** = Depart. **Arrows** = level and difficulty. **M** = map (lobby). **K** = Armory.
+- **Space** = jump (twice = double jump). **Left Shift** = dash.
+- **1** / **2** = sword / bow. **Left click** = attack.
+- **N** = next camp: once = before the Pickets; twice = before Main Camp; three times = inside
+  the Chief's gate.
+- **Do not use B.** It brings the ambush and the Chief at once.
+- **G** = gear T1 → T3 → T5. **J** = Double Jump on / off. **Backspace** twice = Abandon.
+- Studio only, new:
+  - **Y** = forest → grey → walls → forest;
+  - **O** = the forest's light ↔ default light;
+  - **X** = raider models ↔ placeholders;
+  - **Z** = build the next level grey.
+- **Output** = View (*Vista*) → Output (*Salida*).
+
+**Studio resets your save every session:** T1 / T1, no Double Jump, no secrets.
+
+### The look (keys only)
+
+- [ ] 1. **Output first.** **Play.** Open View (*Vista*) → **Output** (*Salida*); keep it in
+      sight. Press **Enter** (Normal).
+      - Output must **NOT** show **`[LevelService] the level is grey`**.
+      - No `[LevelScenery]` or `[Figures]` warning either.
+      - If one shows: send Claude the whole line, then go on. The level stays grey blocks. That
+        is safe and playable, but the forest did not load (the game could not read its meshes).
+- [ ] 2. **The forest.** At the trailhead, within a second or two:
+      - ground, cliffs, firs, broadleaf trees, the road, wooden signs, the log bridge ahead;
+      - north of the road (your left), across a gully: the lookout rock, its chest on top;
+      - the light darker, with haze (mood B). **Take a screenshot.**
+      - Bug: grey blocks; a tree or rock in the air; you sink into drawn ground, or bump into
+        nothing.
+- [ ] 3. **Y, three presses.** Stand where the road ends at the gap.
+      - 1st, **"Scenery: grey …"**: the blocks, each exactly where its forest piece was. The
+        invisible walls show as dark see-through slabs.
+      - 2nd, **"Scenery: forest + invisible walls in red"**: red along the tree lines. **No red
+        across the gap or the gully.**
+      - 3rd, **"Scenery: forest"**.
+      - Bug: a block a stud or more off its drawn ground or rock; red across the gap or the
+        gully.
+- [ ] 4. **O, twice.** **"Light: default"**, then **"Light: the level's mood"**. A screenshot of
+      each, from the same spot.
+- [ ] 5. **The edges.** Walk off the road into the trees, in a few places.
+      - An invisible wall stops you at the tree line. The camera passes through trunks.
+      - If a wall feels unfair somewhere, note where.
+      - Bug: you walk out into the forest; a wall across the road.
+- [ ] 6. **To the mountain.** Press **J** (Double Jump on). From the trailhead go **west**, past
+      the sign **"MOUNTAIN - needs DOUBLE JUMP"**, then up the trail **north** into a walled yard.
+      - A tall mountain of stacked rock ledges.
+      - **No markers:** finding the way up is the challenge (your call).
+- [ ] 7. **Climb.** About 8 double jumps, 1–2 minutes. Second jump near the top of the first.
+      - A miss drops you to the ledge below, or the yard. Never out of the level.
+      - One jump alone never reaches the next ledge.
+      - Stuck? The first ledge is on the yard's south side; the way goes round counter-clockwise
+        (seen from above).
+      - Bug: a fall out of the level; a ledge you cannot stand on; a hop that needs no double
+        jump.
+- [ ] 8. **The summit chest.** Walk onto it.
+      - The card: **"MOUNTAIN SUMMIT FOUND"**, **+4 Valor**, **+50 Timber**, then a gold
+        **"Castle Key found"**.
+      - Bug: no card; no key line.
+- [ ] 9. **The key on the map.** **Backspace** twice (to the lobby). Press **M**.
+      - Forest Road's secrets row: four icons. The mountain's has a small **gold key** beside it.
+      - Every word whole ("2x JUMP" not cut). **M** again closes it.
+- [ ] 10. **The Pickets at rest.** Wait a few seconds in the lobby. **Enter**, then **N** once:
+      you stand before the Pickets (camp A). Don't go in yet.
+      - The models you approved, each kind in its colour, from the first second.
+      - Some sit at the fires. A patrol walks, legs and arms swinging.
+      - Bug: block figures; a raider floating or sunk into the ground.
+- [ ] 11. **Seated heads.** Press **2** (bow). Draw and shoot a **seated** raider in the head.
+      - A **yellow crit** number. Shoot one mid-wind-up too: a crit as well.
+      - Bug: a head hit that reads as a body hit or a miss.
+- [ ] 12. **Wind-ups.** Press **1** (sword). Fight in the camp.
+      - Fodder: the club coils back, then the lunge: body and club slide forward together.
+      - Slinger: the orb whirls twice over the shoulder, swells red, then flies.
+      - Every wind-up heats the body red; the blow flashes; a spent body goes dull.
+      - Bug: a blow with no wind-up; a body sliding with its feet frozen.
+- [ ] 13. **The fodder's reach.** Stand still about 4 studs (two of your widths) from a fodder
+      winding up at you.
+      - The club meets you as the hit lands. One step back out of reach: it misses.
+      - Bug: hit while the club is clearly short of you; the club goes through you and nothing
+        lands.
+- [ ] 14. **The dash.**
+      - A raider winds up at you (red). Dash away (**Left Shift**): **DODGED**, as before.
+      - Now dash straight **into** a log or a rock of the camp's edge as a blow lands. You **take
+        the hit**, as if you had not dashed. It may land about **half a second** after the press.
+        That is the new rule.
+      - Bug: an honest dash gets hit; a dash into a wall reads DODGED.
+- [ ] 15. **X.** Toast **"Raiders: placeholders"**: every raider turns to block figures. **X**
+      again: **"Raiders: models"**.
+      - Nothing jumps or floats. A "!" over an awake raider stays.
+- [ ] 16. **Main Camp.** **N** (before Main Camp, at its west gate). Wake it.
+      - **Plated elite:** blue planks while plated; a white flash on a turned hit. On the break
+        the planks burst outward, then it reels. The plate bar sits over its head, seated or
+        standing.
+      - **Watch its axe against the red wedge on the ground.** The axe is drawn to about 5 of the
+        wedge's 7.5 studs (click question 3).
+      - **Lobber:** reaches back to his satchel, throws overhand. **Brutes** charge.
+      - Bug: the plate never breaks; the bar gone after the break.
+- [ ] 17. **Frame and Draw.** At the west gate, with Main Camp awake and coming: read the
+      bottom-left line **"Server … · Frame … · Draw …"**. **Screenshot it.**
+- [ ] 18. **The Chief's clearing.** **N** once more (never **B**). You land inside the gate; it
+      shuts; the ambush rushes in (about 20 s). **G** if you need gear.
+- [ ] 19. **The Camp Chief.** Skull mask, fur cloak, the **Warhammer** in his right hand.
+      - **Sweep:** a red wedge (120°) on the ground first. The hammer winds out to his right,
+        sweeps low across his front and ends at his left, along the wedge's rim. Jump it or step
+        out.
+      - **Slam** (a ring), **charge** (a lane), **call** (about 12 small raiders).
+      - His chest core glows pink and swells red in every wind-up. At half health it turns **gold
+        and bigger**. His eyes glow.
+      - About 75 s at T1 if you dodge. Kill him.
+      - Bug: hit by the sweep with the hammer nowhere near you; the hammer off his hand.
+- [ ] 20. **The summary.** The far gate opens; the summary card shows for 10 seconds.
+      - **No crosshair** in the middle of the screen.
+      - Hold the **right mouse button**, swing the view into the tall wall: the camera **stops at
+        the wall**. Never the inside of a rock, never the void.
+      - The cursor is free for the card. Back in the lobby the crosshair returns.
+- [ ] 21. **Grey on purpose.** In the lobby press **Z**: notice **"The next level is built grey
+      (its dress refused)"**. **Enter**.
+      - Grey blocks, default light. The raiders are still models.
+      - Output: **one** `[LevelService] the level is grey: …` line, ending **(the dressFail
+        lever)**. Expected here.
+      - **Backspace** twice, **Enter** again: the forest is back.
+      - Bug: the forest right after Z; grey again on the next run; a second warning.
+- [ ] 22. **Phone, landscape.** Stop. Test (*Prueba*) → Device (*Dispositivo*) → a 375×667
+      phone, turned to landscape (**667×375**). **Play.**
+      - **M**: the four secret cells fit inside the card, words whole.
+      - **Enter**: the forest and the raiders as on PC. The perf line inside the screen.
+      - **Backspace** twice → the summary: no crosshair under the card; a drag on the right half
+        turns the view; the card's buttons respond.
+- [ ] 23. **Phone, portrait** (**375×667**). The same three checks.
+- [ ] 24. Stop. Close Studio without saving. Tell Claude you are done: five click questions
+      follow. Send the screenshots (mood B, default light, Frame / Draw).
+
+**Optional, not one of the 24:**
+- **Two players.** Test (*Prueba*) → **Local Server** (*Servidor local*), **2 players**
+  (*2 jugadores*) → **Start** (*Iniciar*). Player1 presses **Enter**: both land at the trailhead.
+  - Both windows: the forest, mood B, the same raider models.
+  - Player1 presses **Y**, **O** and **X**: only Player1's window changes.
+  - After the run both are back in the lobby, in default light.
+  - Bug: one window grey (read its Output); the mood kept in the lobby.
+- **Low graphics** (level 1–3): campfires keep their flames but no sparks or glow; raiders cast
+  no shadow.
+- **The marksman** (Hard only): **G** twice, Depart on **Hard**. He raises the crossbow level;
+  its tip glows through the lock.
+- **The bramble.** In the lobby: **F**, then **K** → **Flamethrower** → **Equip**. **Enter**,
+  **N** once. The bramble fills a mouth in the ridge, north of the road. Burn it (**2**, hold left
+  click): its shrubs leave with it. **H** resets it.
+
+### Not a bug (don't report these)
+
+- **After Z:** one `[LevelService] the level is grey` line and a grey level. Expected.
+- Trees, rocks and props are walk-through; the camera passes trunks.
+- An invisible wall at every tree line. Open on purpose: the gap, the gully, water and steps.
+- **A dash into a wall takes the hit**, sometimes about half a second late.
+- Depart without waiting in the lobby: raiders may show as block figures for about a second, then
+  turn into models.
+- On Normal the Pickets hold fodder and slingers only. The marksman shows only on Hard.
+- No climb markers (your call). A miss drops you a ledge.
+- **The Castle Key opens nothing yet.** Its room comes with the Castle.
+- The end screen and the city are unchanged. W3 brings the tally, the coins and the city map.
+- The mood is a first guess. The fix is a number from your screenshots: no upload.
+- The Chief's fight is a few seconds shorter than the Colossus's. His health is the lever.
+- Leap Smash and Impale Dash still give i-frames at the cast.
+- The Warlord, his guard and the range's Colossus are still placeholders (not in Forest Road).
+- Studio's phone view is not a phone. A real phone's frame time is measured at the publish (W4).
+- No sound.
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- **Mood B:** right / too dark / too hazy / I prefer the default light.
+- **The Camp Chief** (about 75 s; the hammer sweep): about right / too short or easy / too long or
+  hard / the sweep is hard to read.
+- **The plated elite's axe against its red wedge:** looks fair / the axe looks short of where it
+  hits / didn't notice.
+- **The raiders in motion** (wind-ups, walk, plate, seated): read well / one is hard to read (say
+  which) / something looks off.
+- **The mountain climb:** too easy / about right / too hard / couldn't find the way.
+
+Also: the Frame / Draw numbers, and anything wrong, by step number, PC or phone.
 
 ## M12 — Village growing city
 

@@ -11,6 +11,8 @@ Usage: py tools/crowd_harness/mutate.py <repo root> <luau.exe> [filter] [from:to
 (`filter` = only the mutations whose label holds that text; "" = all of them; "files:<a>,<b>" =
 only the mutations of the files whose repo path ends with one of those names, the run a fix round
 owes for the files it changed.)"""
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -41,7 +43,6 @@ FILES = [
     COMBAT,
     "src/shared/Economy.luau",
     "src/shared/Config/Combat.json",
-    "src/shared/Config/Missions/1_Village.json",
     "src/shared/CrowdCodec.luau",
     "src/shared/HitShapes.luau",
     "src/shared/Armory.luau",
@@ -106,10 +107,14 @@ MUTATIONS = {
     ),
     "18: no knock window at the decision": (
         VITALS,
-        "local voided = covered or now < vitals.knockUntil",
-        "local voided = covered",
+        "\tif at < vitals.knockUntil then\n\t\tentry.covered = true\n\tend\n",
+        "",
     ),
-    "18: hits waiting at the knock not voided": (VITALS, "other.covered = true", "other.covered = other.covered"),
+    "18: hits waiting at the knock not voided": (
+        VITALS,
+        "\t\t\tif other.vitals == vitals and struckBy(other, at) then\n\t\t\t\tother.covered = true\n",
+        "\t\t\tif other.vitals == vitals and struckBy(other, at) then\n\t\t\t\tother.covered = other.covered\n",
+    ),
     "21: reach measured in 3D": (
         BRAIN,
         "local distance = flat.Magnitude\n\tif distance > FACING_EPSILON then\n\t\tmind.facing = flat.Unit\n\tend\n\tlocal ready",
@@ -222,8 +227,8 @@ MUTATIONS = {
     "lob: judged at its throw": (VITALS, "\tstrike.at += seconds\n", ""),
     "lob: a knock voids one still in the air": (
         VITALS,
-        "if other.vitals == vitals and other.strike.at <= now then",
-        "if other.vitals == vitals then",
+        "return other.strike.at <= at and other.queuedAt <= at",
+        "return other.queuedAt <= at",
     ),
     "lob: pushed along its throw": (VITALS, 'elseif shape == "lob" then strike.aim', "elseif false then strike.aim"),
     "lob: with nothing under its target it lands at the root": (
@@ -602,7 +607,11 @@ MUTATIONS = {
     "boss: its attacks outlive it": (CROWD, "dismiss(enemy, boss)", "dismiss(enemy, false)"),
     "boss: every kind's attacks die with it": (CROWD, "dismiss(enemy, boss)", "dismiss(enemy, true)"),
     "boss: its queued impact is still handed over": (CROWD, "\tCrowdBrain.Recall(ids)\n", ""),
-    "boss: decisions still waiting are kept": (VITALS, "if not ids[entry.strike.bodyId] then", "if true then"),
+    "boss: decisions still waiting are kept": (
+        VITALS,
+        "if not ids[entry.strike.bodyId] then",
+        "if true then",
+    ),
     "boss: what travels is kept": (VITALS, "\tThreatField.Drop(ids, raise)\n", ""),
     "boss: its ring is kept": (FIELD, "return not ids[ring.strike.bodyId]", "return true"),
     "boss: its charge is kept": (FIELD, "return not ids[charge.strike.bodyId]", "return true"),
@@ -679,6 +688,9 @@ MUTATIONS = {
     "review: a circle does not name its body": (VITALS, "\t\tenemyId = strike.bodyId,\n", "\t\tenemyId = 0,\n"),
     "review: the large line is fixed at 3": (CROWD, "separate(crowd.largeRadius)", "separate(3)"),
     "review: largeRadius may be tuned below 0": (TUNING, '\t"^crowd%.largeRadius$",\n', ""),
+    # L4 W2: the seat's numbers (the lead's NON_NEGATIVE_PATHS lines; tests_s2.luau's tuning cases).
+    "l4w2: restDrop may be tuned below 0": (TUNING, '\t"^crowd%.restDrop$",\n', ""),
+    "l4w2: riseBlendSeconds may be tuned below 0": (TUNING, '\t"^crowd%.riseBlendSeconds$",\n', ""),
     "review: a removed body is booked as a hit of 0": (
         TALLY,
         '\tif verdict == "gone" or verdict == "held" then\n',
@@ -815,8 +827,8 @@ MUTATIONS = {
     # Review round: ruling 18 judged from state (VitalsService.RunLost).
     "p5 lost: a member on the pad still fights": (
         VITALS,
-        "if member.bot or player == nil or member.waiting then",
-        "if member.bot or player == nil then",
+        "\t\tif member.waiting then\n\t\t\tcontinue\n\t\tend\n\t\ttable.insert(fighters, member.userId)",
+        "\t\ttable.insert(fighters, member.userId)",
     ),
     "p5 lost: a dead partner still stands": (
         VITALS,
@@ -841,7 +853,7 @@ MUTATIONS = {
     # Second review round.
     "p5: a start does not wait for bodies": (
         VITALS,
-        "if not member.bot and player ~= nil and bodyOf(player) == nil then",
+        "if bodyOf(member.player) == nil then",
         "if false then",
     ),
     "p5: ClearThreats keeps the queued decisions": (
@@ -1143,12 +1155,6 @@ L1_MUTATIONS = {
         "\town[difficulty] = true\n\town.normal = true\n\treturn true\n",
     ),
     "l1: the arena adapter without bankEachWave": (FLOW, "\t\tbankEachWave = true,\n", "\t\tbankEachWave = false,\n"),
-    "l1: the arena adapter without merging": (FLOW, "\t\tmerge = true,\n", "\t\tmerge = false,\n"),
-    "l1: the arena is always played on normal": (
-        FLOW,
-        "difficulties = { [firstDifficulty] = only },",
-        "difficulties = { normal = only },",
-    ),
     "l1: burst rows stepping outward": (
         FLOW,
         "local inward = Vector3.new(zone.rect.x - at.X, 0, zone.rect.z - at.Z)",
@@ -1581,19 +1587,6 @@ WORLD_MUTATIONS = {
         "if value ~= nil and value > 0 and isFinite(value) then",
         "if value ~= nil and value > 0 then",
     ),
-    # ------------------------------------------------------------------ the arena as a level
-    # caught by: the party enters at the first player spawn and leaves at the pad
-    "world: the arena's entry is its pad": (
-        GEOMETRY,
-        "local first = listOf(arena.playerSpawns)[1] or pad",
-        "local first = pad",
-    ),
-    # caught by: every table is new: changing the level leaves the arena's module untouched
-    "world: the level shares the arena's obstacle tables": (
-        GEOMETRY,
-        "table.insert(obstacles, table.clone(obstacle))",
-        "table.insert(obstacles, obstacle)",
-    ),
     # ------------------------------------------------------------------ what Pieces refuses
     # caught by: a camp with gates and no fence is refused, by name
     "world: gates with no fence are built": (
@@ -1818,12 +1811,6 @@ WORLD_MUTATIONS = {
         "z = sign.z,\n\t\tsx = size.sx,\n\t\tsy = size.sy,\n\t\tsz = size.sz,",
         "z = sign.z,\n\t\tsx = size.sz,\n\t\tsy = size.sy,\n\t\tsz = size.sx,",
     ),
-    # caught by: FromArena: the arena's size.x is the camp's width and its size.z the depth
-    "world: the arena's camp is as wide as the arena is deep": (
-        GEOMETRY,
-        "sx = arena.size.x,\n\t\tsz = arena.size.z,",
-        "sx = arena.size.z,\n\t\tsz = arena.size.x,",
-    ),
 }
 MUTATIONS.update(WORLD_MUTATIONS)
 
@@ -1841,13 +1828,8 @@ REAL_MUTATIONS = {
     ),
     "real: a level file's id dropped for its layout's": (
         FLOW,
-        "\t\t\tversion = file.version,\n\t\t\tid = file.id,\n",
-        "\t\t\tversion = file.version,\n\t\t\tid = file.layout,\n",
-    ),
-    "real: the arena's level takes its mission's id": (
-        FLOW,
-        "\t\tid = file.id,\n\t\tname = file.name,\n\t\tlayout = file.layout,\n\t\tmission = file.mission,",
-        "\t\tid = mission.id,\n\t\tname = file.name,\n\t\tlayout = file.layout,\n\t\tmission = file.mission,",
+        "\t\tversion = file.version,\n\t\tid = file.id,\n",
+        "\t\tversion = file.version,\n\t\tid = file.layout,\n",
     ),
     "real: the plan's floor as deep as it is wide": (
         FLOW,
@@ -2311,11 +2293,6 @@ L1B_RUN_MUTATIONS = {
         "local gates: { Box } = if locks then LevelGeometry.GateBoxes(camp, thickness) else {}",
         "local gates: { Box } = LevelGeometry.GateBoxes(camp, thickness)",
     ),
-    "l1b: FromArena not locking": (
-        GEOMETRY,
-        "\t\tlocks = true,\n\t\tspots = nil,",
-        "\t\tlocks = nil,\n\t\tspots = nil,",
-    ),
     "l1b: a fire marker on a spot that is no fire": (
         GEOMETRY,
         'if spot.posture == "fire" and spot.points ~= nil then',
@@ -2750,8 +2727,8 @@ L1B_W2_CROWD_MUTATIONS = {
     ),
     "l1b w2 crowd: CrowdRay's head at half height": (
         HITSHAPES,
-        "local head = feet + Vector3.new(0, height - headRadius, 0)\n\tlocal bodyEntry",
-        "local head = feet + Vector3.new(0, height / 2, 0)\n\tlocal bodyEntry",
+        "local head = feet + Vector3.new(0, height - headRadius - lower, 0)\n\tlocal bodyEntry",
+        "local head = feet + Vector3.new(0, height / 2 - lower, 0)\n\tlocal bodyEntry",
     ),
     "l1b w2 crowd: CrowdRay's body back to a sphere": (
         HITSHAPES,
@@ -4388,8 +4365,9 @@ L2_MUTATIONS = {
     "l2: a site stands on the block's centre": (SECRET_FLOW, "floorY = secret.y - secret.sy / 2,", "floorY = secret.y,"),
     "l2: a name alone is a reward entry": (
         SECRET_FLOW,
-        "if entry == nil or (entry.valor == nil and entry.materials == nil and entry.family == nil) then",
-        "if entry == nil then",
+        "\tif\n\t\tentry == nil\n\t\tor (\n\t\t\tentry.valor == nil\n\t\t\tand entry.materials == nil\n"
+        "\t\t\tand entry.family == nil\n\t\t\tand entry.key == nil\n\t\t)\n\tthen\n",
+        "\tif entry == nil then\n",
     ),
     "l2: a fractional amount pays": (
         SECRET_FLOW,
@@ -4433,7 +4411,11 @@ L2_MUTATIONS = {
         "found = found ~= nil and found[site.id] ~= nil,",
     ),
     # StageFlow's secrets lines and map rows (L2-13, L2-15).
-    "l2: Resolve drops the secrets": (FLOW, "\t\t\tsecrets = file.secrets,\n\t\t}\n\tend", "\t\t}\n\tend"),
+    "l2: Resolve drops the secrets": (
+        FLOW,
+        "\t\tsecrets = file.secrets,\n\t}\nend",
+        "\t}\nend",
+    ),
     "l2: Validate skips the secrets": (FLOW, "\tsecretProblems(level, layout, problem)\n", ""),
     "l2: an entry needs no name": (
         FLOW,
@@ -7654,7 +7636,7 @@ L3W2_FIX_MUTATIONS = {
     "l3w2 fix S2: the admit's handler leaves before the hook": (
         ARENA_SERVICE,
         "\t\t\t\tplaceBody(live)\n",
-        "\t\t\t\tplaceBody(live)\n\t\t\t\tif live.bot then\n\t\t\t\t\treturn\n\t\t\t\tend\n",
+        "\t\t\t\tplaceBody(live)\n\t\t\t\tif live.waiting then\n\t\t\t\t\treturn\n\t\t\t\tend\n",
     ),
     "l3w2 fix S2: ArenaService keeps no hook": (ARENA_SERVICE, "\thooks.character = hook\n", "\tlocal _ = hook\n"),
     "l3w2 fix S2: a second writer clears the hook": (
@@ -8045,6 +8027,1023 @@ L3W2_FIX2_MUTATIONS = {
 }
 MUTATIONS.update(L3W2_FIX2_MUTATIONS)
 
+# ------------------------------------------------------------------------------------------------
+# L4 W1b (docs/prompts/l4-w1b-contract.md §4, §5; docs/prompts/l4-w1b-reports/luau-a.md and
+# luau-b.md, "For the designer"). DashProof and RunFloors load in the harness: their mutants are
+# caught by tests_l4b.luau and tests_l4b_run.luau. WeaponService, ArenaService and WaveService do not:
+# theirs are caught by the source.l4b pins (run_harness.py L4B_LINES, tests_l3_w2.luau L4BP).
+DASH_PROOF = "src/combat/server/Services/DashProof.luau"
+RUN_FLOORS = "src/shared/RunFloors.luau"
+FILES += [DASH_PROOF, RUN_FLOORS]
+# L4 W2 (tests_l4w2.luau): LevelDress, and the data its shipped case reads (every dress file and
+# Assets.json's levels block, run_harness.py's FIXTURES.levelDress and levelHashes).
+LEVEL_DRESS = "src/combat/server/Services/LevelDress.luau"
+FILES += [LEVEL_DRESS, "src/shared/Config/Assets.json"]
+FILES += [f"src/shared/Config/LevelDress/{path.name}" for path in sorted((repo / "src/shared/Config/LevelDress").glob("*.json"))]
+L4B_MUTATIONS = {
+    # DashProof (A): tests_l4b (d), (e), (b), Rule and Open.
+    "l4b: the proof not flat": (DASH_PROOF, "rule.span, true)", "rule.span, false)"),
+    "l4b: no lookback": (DASH_PROOF, "local window = now - claimAt + rule.lookback", "local window = now - claimAt"),
+    "l4b: a claim never lapses": (DASH_PROOF, "if now > claimAt + rule.lapse then", "if false then"),
+    "l4b: the share at 0": (DASH_PROOF, "speed = share * distance / seconds,", "speed = 0,"),
+    "l4b: Open never reaches back": (
+        DASH_PROOF,
+        "windows.iframesFrom = math.min(windows.iframesFrom, from)",
+        "windows.iframesFrom = windows.iframesFrom",
+    ),
+    # PositionRing (A): tests_l4b (d), a fall at 120 studs/s proves nothing only when flat.
+    "l4b: Motion's flat ignored": (RING, "\t\tif flat == true then\n", "\t\tif false then\n"),
+    # WeaponService (A): the source.l4b pins. F1 moved the per-frame decision into DashProof.Step,
+    # so the window's start is now DashProof's (tests_l4b), and OnDash's grant is the review's own
+    # mutant (slice 3 m2: a GrantIframes call; dashGrantsNothing).
+    "l4b: OnDash opens on the request": (
+        WEAPON,
+        "\tshooter.dashClaimAt = now\nend",
+        "\tshooter.dashClaimAt = now\n\tWeaponService.GrantIframes(player, movement.dashIframes)\nend",
+    ),
+    "l4b: the window from the proof": (
+        DASH_PROOF,
+        "DashProof.Open(claimant, claimAt, seconds)",
+        "DashProof.Open(claimant, now, seconds)",
+    ),
+    "l4b: the claim never judged": (WEAPON, "\t\t\tproveDash(shooter, now, position)\n", ""),
+    "l4b: resetAir keeps the claim": (
+        WEAPON,
+        "\t-- The last body's dash is not this one's.\n\tshooter.dashClaimAt = nil\n",
+        "",
+    ),
+    # RunFloors (A's module; B's eight scratch mutants, written here): tests_l4b_run.
+    "l4b: Attach always sends the cells": (RUN_FLOORS, "local withCells = sentSeq ~= seq", "local withCells = true"),
+    "l4b: Attach never sends the cells": (RUN_FLOORS, "local withCells = sentSeq ~= seq", "local withCells = false"),
+    "l4b: Attach strips the run's own floors": (
+        RUN_FLOORS,
+        "\tlocal copy = table.clone(floor)\n\tcopy.cells = nil\n",
+        "\tlocal copy = floor\n\tcopy.cells = nil\n",
+    ),
+    "l4b: Attach drops a field": (
+        RUN_FLOORS,
+        "\tcopy.cells = nil\n\treturn copy\n",
+        "\tcopy.cells = nil\n\tcopy.ceiling = nil\n\treturn copy\n",
+    ),
+    "l4b: Attach says nothing went": (RUN_FLOORS, "\treturn out, withCells\n", "\treturn out, false\n"),
+    "l4b: Merge keeps the cells across a set": (RUN_FLOORS, "local same = heldSeq == seq", "local same = true"),
+    "l4b: Merge never keeps the cells": (RUN_FLOORS, "local same = heldSeq == seq", "local same = false"),
+    "l4b: Merge prefers the held cells": (
+        RUN_FLOORS,
+        "\t\tif copy.cells == nil and same then\n",
+        "\t\tif same then\n",
+    ),
+    # ArenaService (B): the source.l4b pins.
+    "l4b: a member's note is never written": (ARENA_SERVICE, "\t\tplay.cellsSent[userId] = seq\n", ""),
+    "l4b: the one payload carries the cells": (
+        ARENA_SERVICE,
+        "RunFloors.Attach(runFields.floors, runFields.floorsSeq, runFields.floorsSeq)",
+        "RunFloors.Attach(runFields.floors, runFields.floorsSeq, nil)",
+    ),
+    "l4b: a first send drops its cells": (ARENA_SERVICE, "\t\t\tsent.floors = floors\n", ""),
+    "l4b: a send asks Attach with the set": (
+        ARENA_SERVICE,
+        "RunFloors.Attach(runFields.floors, seq, play.cellsSent[userId])",
+        "RunFloors.Attach(runFields.floors, seq, seq)",
+    ),
+    "l4b: an admit keeps the note": (ARENA_SERVICE, "\tplay.cellsSent[player.UserId] = nil\n", ""),
+    "l4b: a removal keeps the note": (ARENA_SERVICE, "\tplay.cellsSent[member.userId] = nil\n", ""),
+    "l4b: the summary card skips the attach": (
+        ARENA_SERVICE,
+        'sendRunState(player, userId, ArenaService.BuildRunState("summary", summary, result))',
+        'RemoteService.FireClient(player, "RunState", ArenaService.BuildRunState("summary", summary, result))',
+    ),
+    "l4b: the broadcast skips the attach": (
+        ARENA_SERVICE,
+        "\t\t\tsendRunState(member.player, userId, runState)\n",
+        '\t\t\tRemoteService.FireClient(member.player, "RunState", runState)\n',
+    ),
+    "l4b: RunState names no set": (ARENA_SERVICE, "\t\tfloorsSeq = runFields.floorsSeq,\n", "\t\tfloorsSeq = 0,\n"),
+    # WaveService (B): the source.l4b pins.
+    "l4b: the number never moves": (WAVE_SERVICE, "\tboot.floorsSeq += 1\n", ""),
+    "l4b: a start's floors are no new set": (WAVE_SERVICE, "\tsetFloors(runFloors)\n", "\trun.floors = runFloors\n"),
+    "l4b: the lobby's empty list is no new set": (
+        WAVE_SERVICE,
+        "\trun = freshRun()\n\tsetFloors({})\n\tArenaService.SetLevel(nil)\n",
+        "\trun = freshRun()\n\tArenaService.SetLevel(nil)\n",
+    ),
+    "l4b: a session reset's empty list is no new set": (
+        WAVE_SERVICE,
+        "\trun = freshRun()\n\tsetFloors({})\n\tboot.returning = false\n",
+        "\trun = freshRun()\n\tboot.returning = false\n",
+    ),
+    "l4b: RunFields carry a stale number": (WAVE_SERVICE, "\t\tfloorsSeq = boot.floorsSeq,\n", "\t\tfloorsSeq = 1,\n"),
+}
+MUTATIONS.update(L4B_MUTATIONS)
+
+
+# ------------------------------------------------------------------------------------------------
+# The L4 W1b fix round (docs/prompts/l4-w1b-fix-round.md; docs/prompts/l4-w1b-fix-reports/designer.md
+# lists each entry and what catches it). F1: DashProof.Step and the hold in VitalsService load in the
+# harness (tests_l4b.luau); F2, F3 and F6's service and client lines are the source.l4b pins
+# (run_harness.py L4B_LINES / L4B_ORDER, tests_l3_w2.luau L4BP). Run them alone with
+# `mutate.py <root> <luau> "l4b f"`.
+UI_CONTROLLER = "src/combat/client/Controllers/CombatUIController.luau"
+FILES.append(UI_CONTROLLER)
+L4B_FIX_MUTATIONS = {
+    # F1, DashProof.Step / Verdict / Rule / Pending (A): tests_l4b.
+    "l4b f1: Step opens unless lapsed": (
+        DASH_PROOF,
+        "\tif verdict == \"proven\" then\n\t\tclaimant.dashClaimAt = nil\n\t\tDashProof.Open(",
+        "\tif verdict ~= \"lapsed\" then\n\t\tclaimant.dashClaimAt = nil\n\t\tDashProof.Open(",
+    ),
+    "l4b f1: Step drops a claim not proven on its first frame": (
+        DASH_PROOF,
+        "\telseif verdict == \"lapsed\" then\n\t\tclaimant.dashClaimAt = nil\n\tend\n\treturn verdict",
+        "\telse\n\t\tclaimant.dashClaimAt = nil\n\tend\n\treturn verdict",
+    ),
+    "l4b f1: a proof keeps the claim": (
+        DASH_PROOF,
+        "\tif verdict == \"proven\" then\n\t\tclaimant.dashClaimAt = nil\n",
+        "\tif verdict == \"proven\" then\n",
+    ),
+    "l4b f1: a lapse keeps the claim": (
+        DASH_PROOF,
+        "\telseif verdict == \"lapsed\" then\n\t\tclaimant.dashClaimAt = nil\n",
+        "\telseif verdict == \"lapsed\" then\n",
+    ),
+    "l4b f1: no rule keeps the claim": (
+        DASH_PROOF,
+        "\tif rule == nil then\n\t\tclaimant.dashClaimAt = nil\n\t\treturn \"lapsed\"",
+        "\tif rule == nil then\n\t\treturn \"lapsed\"",
+    ),
+    "l4b f1: the proof speed passed, not reached": (DASH_PROOF, "if speed >= rule.speed then", "if speed > rule.speed then"),
+    "l4b f1: a lapse beats a proof": (
+        DASH_PROOF,
+        "\tlocal window = now - claimAt + rule.lookback\n",
+        "\tif now > claimAt + rule.lapse then\n\t\treturn \"lapsed\"\n\tend\n\tlocal window = now - claimAt + rule.lookback\n",
+    ),
+    "l4b f1: a negative lookback is a rule": (DASH_PROOF, "lookback >= 0 and lookback < math.huge", "lookback < math.huge"),
+    "l4b f1: Pending never lapses": (
+        DASH_PROOF,
+        "return claimAt, claimAt + math.max(seconds, 0), claimAt + rule.lapse",
+        "return claimAt, claimAt + math.max(seconds, 0), math.huge",
+    ),
+    "l4b f1: Pending's window empty": (
+        DASH_PROOF,
+        "return claimAt, claimAt + math.max(seconds, 0), claimAt + rule.lapse",
+        "return claimAt, claimAt, claimAt + rule.lapse",
+    ),
+    "l4b f1: Pending without a rule": (
+        DASH_PROOF,
+        "if claimAt == nil or rule == nil then\n\t\treturn 0, 0, 0",
+        "if claimAt == nil then\n\t\treturn 0, 0, 0",
+    ),
+    # RunFloors' "every floor is new" (slice 1 S2; "l4b: Attach strips the run's own floors" already
+    # covers bare's clone): tests_l4b's RunFloors group.
+    "l4b f1: Attach shares the floor it sends with cells": (
+        RUN_FLOORS,
+        "out[index] = if withCells then table.clone(floor) else bare(floor)",
+        "out[index] = if withCells then floor else bare(floor)",
+    ),
+    "l4b f1: Merge shares the incoming floor": (
+        RUN_FLOORS,
+        "\t\tlocal copy = table.clone(floor)\n\t\tif copy.cells",
+        "\t\tlocal copy = floor\n\t\tif copy.cells",
+    ),
+    # F1, VitalsService's hold (A): tests_l4b (g) and the hold group.
+    "l4b f1: the hold outlives the lapse": (
+        VITALS,
+        "return now <= lapseAt and met(from, untilClock, impact, limit)",
+        "return met(from, untilClock, impact, limit)",
+    ),
+    "l4b f1: nothing is held": (VITALS, "return now <= lapseAt and met(from, untilClock, impact, limit)", "return false"),
+    "l4b f1: held whatever the claim's window": (
+        VITALS,
+        "return now <= lapseAt and met(from, untilClock, impact, limit)",
+        "return now <= lapseAt",
+    ),
+    "l4b f1: decide never holds": (
+        VITALS,
+        "\t\tor (not voided and awaitsDash(player, strike.at, entry.decideAt, now))\n",
+        "\t\tor false\n",
+    ),
+    "l4b f1: a held hit lands on a new body": (VITALS, "\t\tif hold.humanoid ~= humanoid then", "\t\tif false then"),
+    "l4b f1: a held hit judged by a later knock": (
+        VITALS,
+        "\tif at < vitals.knockUntil then\n",
+        "\tif now < vitals.knockUntil then\n",
+    ),
+    "l4b f1: a knock voids a held hit": (
+        VITALS,
+        "\t\t(hold == nil and #vitals.waiting > 0)\n\t\tor (not voided",
+        "\t\tfalse\n\t\tor (not voided",
+    ),
+    "l4b f1: a striker's death drops a held hit": (
+        VITALS,
+        "\tThreatField.Drop(ids, raise)\n",
+        "\tfor _, vitals in vitalsByPlayer do\n\t\ttable.clear(vitals.waiting)\n\tend\n\tThreatField.Drop(ids, raise)\n",
+    ),
+    "l4b f1: an aimed miss is held": (
+        VITALS,
+        "\t\theld\n\t\tand not voided\n\t\tand (#vitals.waiting > 0 or awaitsDash(",
+        "\t\tnot voided\n\t\tand (#vitals.waiting > 0 or awaitsDash(",
+    ),
+    "l4b f1: what travels is never held": (
+        VITALS,
+        "\t\tand (#vitals.waiting > 0 or awaitsDash(player, impactAt, limit, now))\n",
+        "\t\tand false\n",
+    ),
+    "l4b f1: a held shot is stopped on them": (
+        VITALS,
+        "\t\ttable.insert(vitals.waiting, entry)\n\t\treturn \"dodged\"\n",
+        "\t\ttable.insert(vitals.waiting, entry)\n\t\treturn \"landed\"\n",
+    ),
+    "l4b f1: a held travelling hit judged when it left": (VITALS, "\t\tstruck.at = impactAt\n", ""),
+    "l4b f1: no knock window for what travels": (
+        VITALS,
+        "local voided = shielded(player, impactAt, limit) or now < vitals.knockUntil",
+        "local voided = shielded(player, impactAt, limit)",
+    ),
+    # Re-aimed in fix round 3 (H2, luau-a-3.md: settle takes a due entry out before deciding it).
+    "l4b f1: settle drops a held entry": (
+        VITALS,
+        "\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n",
+        "\t\tif due then\n\t\t\tdecide(config, entry, now)\n",
+    ),
+    "l4b f1: a held entry judged again at the release": (
+        VITALS,
+        "\t\theld, position, at = hold.inShape, hold.position, hold.at\n",
+        "\t\theld, position, at = inPlan(strike, position), position, hold.at\n",
+    ),
+    "l4b f1: a held hit pushed from the live root": (
+        VITALS,
+        "\t\theld, position, at = hold.inShape, hold.position, hold.at\n",
+        "\t\theld, at = hold.inShape, hold.at\n",
+    ),
+    "l4b f1: VitalsService connects its own Heartbeat": (
+        VITALS,
+        "\t\tshotsAlive = ThreatField.ShotsAlive,\n\t})\nend",
+        "\t\tshotsAlive = ThreatField.ShotsAlive,\n\t})\n\tgame:GetService(\"RunService\").Heartbeat:Connect(VitalsService.Step)\nend",
+    ),
+    # F1 and F2, WeaponService (A's lines): the source.l4b pins. The first five are the review's
+    # (slice 3 m2: the lapse branch is now Step's, above; slice 1 m1: the claim test and the lookback).
+    "l4b f2: OnDash opens through DashProof": (
+        WEAPON,
+        "\tshooter.dashClaimAt = now\nend",
+        "\tshooter.dashClaimAt = now\n\tDashProof.Open(shooter, now, movement.dashIframes)\nend",
+    ),
+    "l4b f2: OnDash writes the window": (
+        WEAPON,
+        "\tshooter.dashClaimAt = now\nend",
+        "\tshooter.dashClaimAt = now\n\tshooter.iframesUntil = now + movement.dashIframes\nend",
+    ),
+    "l4b f2: OnDash keeps no cooldown": (WEAPON, "\tshooter.lastDashAt = now\n", ""),
+    "l4b f2: OnDash while down": (
+        WEAPON,
+        "if character == nil or root == nil or VitalsService.IsDown(player) or not mayAct(player) then",
+        "if character == nil or root == nil or not mayAct(player) then",
+    ),
+    "l4b f2: judged only without a claim": (
+        WEAPON,
+        "\t\tif shooter.dashClaimAt ~= nil then\n\t\t\tproveDash(",
+        "\t\tif shooter.dashClaimAt == nil then\n\t\t\tproveDash(",
+    ),
+    "l4b f2: no root keeps the claim": (
+        WEAPON,
+        "\t\t\t-- No body to prove a dash with, and none to shield.\n\t\t\tshooter.dashClaimAt = nil\n",
+        "",
+    ),
+    "l4b f2: a lapse shows the attribute": (
+        WEAPON,
+        "\tif verdict == \"proven\" then\n\t\tshowIframes(shooter, now)\n\tend\n",
+        "\tif verdict == \"lapsed\" then\n\t\tshowIframes(shooter, now)\n\tend\n",
+    ),
+    "l4b f2: proveDash opens by itself": (
+        WEAPON,
+        "\tif verdict == \"proven\" then\n\t\tshowIframes(shooter, now)\n\tend\n",
+        "\tif verdict ~= \"lapsed\" then\n\t\tDashProof.Open(shooter, now, config.movement.dashIframes)\n\t\tshowIframes(shooter, now)\n\tend\n",
+    ),
+    "l4b f2: a lookback of 1e6": (
+        WEAPON,
+        "local rule = DashProof.Rule(config.movement, config.shooting)",
+        "local rule = DashProof.Rule(config.movement, { originLagMaxSeconds = 1e6 } :: any)",
+    ),
+    "l4b f1: VitalsService decides before the proofs": (
+        WEAPON,
+        "\txpcall(trackAir, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n",
+        "\txpcall(VitalsService.Step, stepFailed, deltaTime)\n\txpcall(trackAir, stepFailed, now, deltaTime)\n",
+    ),
+    "l4b f1: VitalsService never stepped": (
+        WEAPON,
+        "\txpcall(VitalsService.Step, stepFailed, deltaTime)\n",
+        "",
+    ),
+    "l4b f1: no claim hook": (
+        WEAPON,
+        "\t\tdashClaim = pendingDash,\n",
+        "\t\tdashClaim = function()\n\t\t\treturn 0, 0, 0\n\t\tend,\n",
+    ),
+    "l4b f1: the hook ignores the claim": (
+        WEAPON,
+        "return DashProof.Pending(shooter.dashClaimAt, dashRule(config), config.movement.dashIframes)",
+        "return DashProof.Pending(nil, dashRule(config), config.movement.dashIframes)",
+    ),
+    "l4b f1: a grant from the past": (
+        WEAPON,
+        "\tDashProof.Open(shooter, math.min(from or now, now), seconds)\n",
+        "\tDashProof.Open(shooter, math.min(from or now, now) - 0.3, seconds)\n",
+    ),
+    "l4b f1: a second Heartbeat": (
+        WEAPON,
+        "\tRunService.Heartbeat:Connect(step)\n",
+        "\tRunService.Heartbeat:Connect(step)\n\tRunService.Heartbeat:Connect(VitalsService.Step)\n",
+    ),
+    # F3, ArenaService.sendRunState (B's final lines): the source.l4b pins. "review 5/6/7" are the
+    # review's slice 2 m1 mutants 5 to 7; the note never written is "l4b: a member's note ..." above.
+    "l4b f3: the skip never passes": (
+        ARENA_SERVICE,
+        "\tif play.cellsSent[userId] ~= seq then\n",
+        "\tif false then\n",
+    ),
+    "l4b f3: the skip always passes": (
+        ARENA_SERVICE,
+        "\tif play.cellsSent[userId] ~= seq then\n",
+        "\tif true then\n",
+    ),
+    "l4b f3: the skip reads never sent": (
+        ARENA_SERVICE,
+        "\tif play.cellsSent[userId] ~= seq then\n",
+        "\tif play.cellsSent[userId] == nil then\n",
+    ),
+    "l4b f3: review 5, no cells ever go": (ARENA_SERVICE, "\t\tif cellsWent then\n", "\t\tif false then\n"),
+    "l4b f3: review 6, the bare floors sent after the swap": (
+        ARENA_SERVICE,
+        "\t\t\tsent.floors = floors\n",
+        "\t\t\tsent.floors = floors\n\t\t\tsent.floors = runState.floors\n",
+    ),
+    "l4b f3: review 7, the cells on every send": (
+        ARENA_SERVICE,
+        "\t\tif cellsWent then\n",
+        "\t\tif cellsWent or true then\n",
+    ),
+    "l4b f3: the shared payload mutated": (
+        ARENA_SERVICE,
+        "\t\t\tsent = table.clone(runState)\n",
+        "\t\t\tsent = runState\n",
+    ),
+    "l4b f3: the bare payload fired": (
+        ARENA_SERVICE,
+        "\tRemoteService.FireClient(player, \"RunState\", sent)\n",
+        "\tRemoteService.FireClient(player, \"RunState\", runState)\n",
+    ),
+    # F3 and F4, CombatUIController (the ui-engineer's final lines): the source.l4b pins. "review 1-4"
+    # are the review's slice 2 m1 mutants 1 to 4.
+    "l4b f3: review 1, the client never merges": (
+        UI_CONTROLLER,
+        "\t\tfresh = RunFloors.Merge(held, st.floorsSeq, fresh, seq)\n",
+        "",
+    ),
+    "l4b f3: review 2, the client never keeps the set's number": (UI_CONTROLLER, "\t\tst.floorsSeq = seq\n", ""),
+    "l4b f3: review 3, the client's call names no set": (
+        UI_CONTROLLER,
+        'applyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)',
+        "applyFloors(run.floors, 0)",
+    ),
+    "l4b f3: review 4, the client merges against the incoming list": (
+        UI_CONTROLLER,
+        "RunFloors.Merge(held, st.floorsSeq, fresh, seq)",
+        "RunFloors.Merge(fresh, st.floorsSeq, fresh, seq)",
+    ),
+    # F4 undone: the call back after the wallet, past the new-level branch.
+    "l4b f4: the client takes the floors after the level branch": moved_down(
+        UI_CONTROLLER,
+        '\t\tapplyFloors(run.floors, if typeof(run.floorsSeq) == "number" then run.floorsSeq else 0)\n',
+        "\t\t\tpaintWallet()\n\t\tend\n",
+    ),
+    "l4b f3: the client keeps the number before it merges": moved_down(
+        UI_CONTROLLER,
+        "\t\tfresh = RunFloors.Merge(held, st.floorsSeq, fresh, seq)\n",
+        "\t\tst.floorsSeq = seq\n",
+    ),
+    "l4b f3: the client merges against nothing held": (
+        UI_CONTROLLER,
+        "\t\tlocal held = st.floors\n",
+        "\t\tlocal held = {}\n",
+    ),
+    "l4b f3: the client never keeps the merged floors": (UI_CONTROLLER, "\t\tst.floors = fresh\n", ""),
+    "l4b f3: the client never listens for RunState": (
+        UI_CONTROLLER,
+        "\tremotes.runState.OnClientEvent:Connect(onRunState)\n",
+        "",
+    ),
+    # F6, WaveService.payMentors (B's lines): the source.l4b pins. "review 1/2" are slice 3 m3's
+    # first two; its third (Combat.MentorBonus `<=`) is check_stage_mirror's, not this tool's.
+    "l4b f6: review 1, a waiting mentor paid": (
+        WAVE_SERVICE,
+        "if mentor.waiting or (tally[mentor.userId]",
+        "if (tally[mentor.userId]",
+    ),
+    "l4b f6: an idle mentor paid": (
+        WAVE_SERVICE,
+        "\t\tif mentor.waiting or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare then\n",
+        "\t\tif mentor.waiting then\n",
+    ),
+    "l4b f6: a mentor at the floor unpaid": (
+        WAVE_SERVICE,
+        "(tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare",
+        "(tally[mentor.userId] or 0) / total <= coop.mentorMinDamageShare",
+    ),
+    "l4b f6: review 2, mentees under the floor": (
+        WAVE_SERVICE,
+        "\t\t\t\tand (tally[other.userId] or 0) / total >= coop.mentorMinDamageShare\n",
+        "",
+    ),
+    "l4b f6: a mentee at the floor dropped": (
+        WAVE_SERVICE,
+        "(tally[other.userId] or 0) / total >= coop.mentorMinDamageShare",
+        "(tally[other.userId] or 0) / total > coop.mentorMinDamageShare",
+    ),
+    "l4b f6: the mentor's own rate as the mentee's": (
+        WAVE_SERVICE,
+        "table.insert(menteeRates, other.incomeRate)",
+        "table.insert(menteeRates, mentor.incomeRate)",
+    ),
+    "l4b f6: the bonus against rate 0": (
+        WAVE_SERVICE,
+        "Combat.MentorBonus(combatConfig, mentor.incomeRate, menteeRates)",
+        "Combat.MentorBonus(combatConfig, 0, menteeRates)",
+    ),
+    "l4b f6: the wallet unpaid": (WAVE_SERVICE, "\t\tstate.combat.valor += bonus\n", ""),
+    "l4b f6: the boss pays no mentor": (WAVE_SERVICE, "\t\tpayMentors(combatConfig, tally)\n", ""),
+}
+assert not set(L4B_FIX_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4B_FIX_MUTATIONS)
+
+# The L4 W1b fix round 2 (docs/prompts/l4-w1b-fix2.md): G1 (a held hit keeps the knock rules: the
+# moment, the queue behind it, the release), G2 (each part of WeaponService's step contained), G3
+# (the review's two probes of the wire that gates every enemy hit), luau-engineer A's entries
+# (luau-a-2.md); s1 (payMentors' inputs) and s2 (no rule built without a claim), the designer's.
+# G1's are caught by tests_l4b (g); the WeaponService and WaveService ones by source.l4b's pins.
+L4B_FIX2_MUTATIONS = {
+    'l4b g1: a released knock voids nothing waiting behind it': (VITALS, '\t\tfor _, other in vitals.waiting do\n\t\t\tif struckBy(other, at) then', '\t\tfor _, other in vitals.waiting do\n\t\t\tif false then'),
+    "l4b g1: a released knock's i-frames from the release": (VITALS, 'grantIframes(player, knockIframes, at)', 'grantIframes(player, knockIframes)'),
+    "l4b g1: a released knock's window from the release": (VITALS, 'vitals.knockUntil = at + knockIframes', 'vitals.knockUntil = now + knockIframes'),
+    'l4b g1: a knock voids what joined the queue after it': (VITALS, 'return other.strike.at <= at and other.queuedAt <= at', 'return other.strike.at <= at'),
+    'l4b g1: a waiting decision judged at the release': (VITALS, 'held, position, at = hold.inShape, hold.position, hold.at', 'held, position = hold.inShape, hold.position'),
+    'l4b g1: the release asks no window again': (VITALS, '\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n', ''),
+    # Re-aimed in fix round 3 (H2: the release puts a still-waiting entry back on the front).
+    'l4b g1: the release drops one that still waits': (VITALS, '\t\tif decide(config, entry, now) then\n\t\t\ttable.insert(list, 1, entry)\n\t\t\treturn\n\t\tend\n', '\t\tdecide(config, entry, now)\n'),
+    'l4b g1: ClearThreats keeps the waiting': (VITALS, '\t\ttable.clear(vitals.waiting)\n', ''),
+    'l4b g1: what travels never waits behind': (VITALS, 'and (#vitals.waiting > 0 or awaitsDash(player, impactAt, limit, now))', 'and awaitsDash(player, impactAt, limit, now)'),
+    'l4b g1: the knock window only at the first try': (VITALS, '\tif at < vitals.knockUntil then\n\t\tentry.covered = true', '\tif hold == nil and at < vitals.knockUntil then\n\t\tentry.covered = true'),
+    'l4b g1: rule at the release': (VITALS, 'local verdict = rule(config, vitals, strike, held, voided, position, humanoid, at, now)', 'local verdict = rule(config, vitals, strike, held, voided, position, humanoid, now, now)'),
+    'l4b g1: regen from the release': (VITALS, 'vitals.lastHurtAt = math.max(vitals.lastHurtAt, at)', 'vitals.lastHurtAt = now'),
+    'l4b g1: the down runs from the release': (VITALS, 'vitals.downUntil = at + downSeconds', 'vitals.downUntil = now + downSeconds'),
+    'l4b g1: upAt from the release': (VITALS, 'fx.upAt = Workspace:GetServerTimeNow() + downSeconds - (now - at)', 'fx.upAt = Workspace:GetServerTimeNow() + downSeconds'),
+    "l4b g1: the hold's moment wrong": (VITALS, 'entry.hold = { at = now, inShape = held', 'entry.hold = { at = now - 0.2, inShape = held'),
+    'l4b g1: the waiting never released': (VITALS, '\t\tif #vitals.waiting > 0 then\n\t\t\trelease(config, vitals, now)', '\t\tif false then\n\t\t\trelease(config, vitals, now)'),
+    "l4b g1: a travelling wait's moment its impact": (VITALS, '\t\t\t\tat = now,\n', '\t\t\t\tat = impactAt,\n'),
+    'l4b g1: a knock voids queued hits raised after it': (VITALS, '\t\t\tif other.vitals == vitals and struckBy(other, at) then', '\t\t\tif other.vitals == vitals and other.strike.at <= at then'),
+    'l4b g1: the down starts at the release': (VITALS, '\t\tvitals.downFrom = at\n', '\t\tvitals.downFrom = now\n'),
+    'l4b g3: step never connected': (WEAPON, '\tRunService.Heartbeat:Connect(step)\n', '\tRunService.Heartbeat:Connect(function() end)\n'),
+    'l4b g3: step returns before the proofs': (WEAPON, '\tlocal now = os.clock()\n\txpcall(trackAir, stepFailed, now, deltaTime)\n', '\tlocal now = os.clock()\n\tif #state.projectiles == 0 then\n\t\treturn\n\tend\n\txpcall(trackAir, stepFailed, now, deltaTime)\n'),
+    'l4b g2: the proofs unprotected': (WEAPON, '\txpcall(trackAir, stepFailed, now, deltaTime)\n', '\ttrackAir(now, deltaTime)\n'),
+    'l4b g2: VitalsService unprotected': (WEAPON, '\txpcall(VitalsService.Step, stepFailed, deltaTime)\n', '\tVitalsService.Step(deltaTime)\n'),
+    'l4b g2: the rest unprotected': (WEAPON, '\txpcall(stepRest, stepFailed, now, deltaTime)\n', '\tstepRest(now, deltaTime)\n'),
+    'l4b g2: the rest never runs': (WEAPON, '\txpcall(stepRest, stepFailed, now, deltaTime)\n', ''),
+    'l4b g2: the rest before VitalsService': (WEAPON, '\txpcall(VitalsService.Step, stepFailed, deltaTime)\n\txpcall(stepRest, stepFailed, now, deltaTime)\n', '\txpcall(stepRest, stepFailed, now, deltaTime)\n\txpcall(VitalsService.Step, stepFailed, deltaTime)\n'),
+    "l4b s1: the total is the top damage": (
+        WAVE_SERVICE,
+        "\t\ttotal += damage\n",
+        "\t\ttotal = math.max(total, damage)\n",
+    ),
+    "l4b s1: the total starts at one": (
+        WAVE_SERVICE,
+        "\tlocal total = 0\n\tfor _, damage in tally do\n",
+        "\tlocal total = 1\n\tfor _, damage in tally do\n",
+    ),
+    "l4b s1: a bonus of nothing is paid": (
+        WAVE_SERVICE,
+        "\t\tif bonus <= 0 then\n\t\t\tcontinue\n\t\tend\n",
+        "",
+    ),
+    "l4b s1: the guard on nothing turns nobody back": (
+        WAVE_SERVICE,
+        "\t\tif bonus <= 0 then\n\t\t\tcontinue\n",
+        "\t\tif bonus <= 0 then\n",
+    ),
+    "l4b s2: a rule built with no claim": (
+        WEAPON,
+        "\tif shooter == nil or shooter.dashClaimAt == nil then\n\t\treturn 0, 0, 0\n",
+        "\tif shooter == nil then\n\t\treturn 0, 0, 0\n",
+    ),
+}
+assert not set(L4B_FIX2_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX2_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4B_FIX2_MUTATIONS)
+
+# The L4 W1b fix round 3 (docs/prompts/l4-w1b-fix3.md): H1 (a stage's clear waits while a fighter's
+# decision waits for a dash claim: VitalsService.HasWaiting, WaveService.fieldHeld), H2 (each entry
+# leaves its list before it is decided; each shooter's air tracking under its own xpcall), luau-engineer
+# A's entries (luau-a-3.md) and B's (luau-b-3.md); and m2 (5-fix2-diff.md): G2's warn handler, the
+# review's three probes. VitalsService's are caught by tests_l4b (g); WeaponService's and WaveService's by
+# source.l4b's pins (trackEach, trackOneDefined, trackOneNames, stepFailedBody, h1*).
+L4B_FIX3_MUTATIONS = {
+    'l4b h2: the release takes an entry out only once it is decided': (VITALS, '\t\ttable.remove(list, 1)\n\t\tif not entry.covered then\n\t\t\t-- Its whole span is past; asked again now, the windows a proof or a released knock\n\t\t\t-- opened from earlier moments count.\n\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n\t\tend\n\t\tif decide(config, entry, now) then\n\t\t\ttable.insert(list, 1, entry)\n\t\t\treturn\n\t\tend\n\t\tentry = list[1]\n', '\t\tif not entry.covered then\n\t\t\t-- Its whole span is past; asked again now, the windows a proof or a released knock\n\t\t\t-- opened from earlier moments count.\n\t\t\tentry.covered = shielded(vitals.player, entry.strike.at, entry.decideAt)\n\t\tend\n\t\tif decide(config, entry, now) then\n\t\t\treturn\n\t\tend\n\t\ttable.remove(list, 1)\n\t\tentry = list[1]\n'),
+    'l4b h2: the release puts a held entry back behind the others': (VITALS, '\t\t\ttable.insert(list, 1, entry)\n', '\t\t\ttable.insert(list, entry)\n'),
+    'l4b h2: the queue takes an entry out only once it is decided': (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n\t\tend\n', '\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due and decide(config, entry, now) then\n\t\t\ttable.insert(entry.vitals.waiting, entry)\n\t\tend\n\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n'),
+    "l4b h2: the queue asks a due entry's i-frames before taking it out": (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n', '\t\tif not entry.covered then\n\t\t\t-- Asked every frame, not only at the decision, and of the window before the current\n\t\t\t-- one as well: a dash that covered the impact may have lapsed and been replaced by\n\t\t\t-- then, or even before the step that raised the strike.\n\t\t\tentry.covered =\n\t\t\t\tshielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))\n\t\tend\n\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n'),
+    'l4b h2: the queue never takes a due entry out': (VITALS, '\t\tif due then\n\t\t\ttable.remove(pending, index)\n\t\telse\n\t\t\tindex += 1\n\t\tend\n', '\t\tindex += 1\n'),
+    'l4b h1: HasWaiting(player) never true': (VITALS, '\t\treturn vitals ~= nil and #vitals.waiting > 0\n', '\t\treturn false\n'),
+    'l4b h1: HasWaiting() never true': (VITALS, '\t\tif #vitals.waiting > 0 then\n\t\t\treturn true\n', '\t\tif false then\n\t\t\treturn true\n'),
+    'l4b h1: HasWaiting(player) answers for anyone': (VITALS, '\tif player ~= nil then\n\t\tlocal vitals = vitalsByPlayer[player]\n\t\treturn vitals', '\tif false then\n\t\tlocal vitals = vitalsByPlayer[player]\n\t\treturn vitals'),
+    'l4b h1: HasWaiting reads the queue, not the waiting': (VITALS, '\t\treturn vitals ~= nil and #vitals.waiting > 0\n', '\t\treturn vitals ~= nil and #pending > 0\n'),
+    "l4b h2: one shooter's throw stops the rest": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\ttrackOne(player, shooter)\n\tend\n'),
+    "l4b h2: a shooter's throw ends the loop": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\tif not xpcall(trackOne, stepFailed, player, shooter) then\n\t\t\tbreak\n\t\tend\n\tend\n'),
+    'l4b h2: no shooter is tracked': (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', ''),
+    "l4b h2: a shooter's throw is swallowed": (WEAPON, '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, stepFailed, player, shooter)\n\tend\n', '\tfor player, shooter in state.shooters do\n\t\txpcall(trackOne, function() end, player, shooter)\n\tend\n'),
+    'l4b h2: trackOne holds nothing (the body back in the loop, unprotected)': (WEAPON, '\tlocal function trackOne(player: Player, shooter: Shooter): ()\n', '\tlocal function trackOne(_player: Player, _shooter: Shooter): () end\n\tlocal function trackTwo(player: Player, shooter: Shooter): ()\n'),
+    'l4b m2: every frame warns (the note deleted)': (WEAPON, '\tstate.stepErrors[message] = true\n', ''),
+    'l4b m2: nothing is ever warned (the guard always true)': (WEAPON, '\tif state.stepErrors[message] then\n\t\treturn\n\tend\n', '\tif true then\n\t\treturn\n\tend\n'),
+    'l4b m2: a throw is swallowed (the warn deleted)': (WEAPON, '\twarn(debug.traceback(`[WeaponService] Heartbeat: {message}`, 2))\n', ''),
+    'l4b h1: a waiting blow never found': (WAVE_SERVICE, '\t\tif ArenaService.IsFighting(member) and VitalsService.HasWaiting(member.player) then\n', '\t\tif false then\n'),
+    "l4b h1: the down's advance forgets the tick's finding": (WAVE_SERVICE, '\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n', '\t\treturn waits and StageFlow.FieldClear(plan, flow, input)\n'),
+    "l4b h1: the down's advance never holds": (WAVE_SERVICE, '\t\treturn (waits or run.blowWaits) and StageFlow.FieldClear(plan, flow, input)\n', '\t\treturn false\n'),
+    "l4b h1: the tick's finding never noted": (WAVE_SERVICE, '\trun.blowWaits = waits\n', ''),
+    'l4b h1: the deferral never starts over': (WAVE_SERVICE, '\t\trun.heldSince = 0\n', ''),
+    "l4b h1: the deferral's start never noted": (WAVE_SERVICE, '\t\trun.heldSince = now\n', ''),
+    'l4b h1: the deferral never capped': (WAVE_SERVICE, '\treturn now - run.heldSince <= lapse + delta\n', '\treturn true\n'),
+    'l4b h1: the cap a frame short': (WAVE_SERVICE, '\treturn now - run.heldSince <= lapse + delta\n', '\treturn now - run.heldSince <= lapse\n'),
+    'l4b h1: the cap at nothing': (WAVE_SERVICE, '\tlocal lapse = if rule ~= nil then rule.lapse else 0\n', '\tlocal lapse = 0\n'),
+    'l4b h1: a waiting blow holds a field that is not clear': (WAVE_SERVICE, '\tif not waits or not StageFlow.FieldClear(plan, flow, input) then\n', '\tif not waits then\n'),
+    'l4b h1: the hold never asked': (WAVE_SERVICE, '\tif fieldHeld(plan, flow, input, now, delta) then\n', '\tif false then\n'),
+    'l4b h1: the hold changes nothing': (WAVE_SERVICE, '\t\tinput.spawningDone = false\n', ''),
+    'l4b h1: the hold after StageFlow decided': (WAVE_SERVICE, '\tif fieldHeld(plan, flow, input, now, delta) then\n\t\t-- StageFlow.FieldClear reads this first: the field does not read clear.\n\t\tinput.spawningDone = false\n\tend\n\tlocal actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)\n', '\tlocal actions = StageFlow.Advance(plan, flow, input, combatConfig.levels)\n\tif fieldHeld(plan, flow, input, now, delta) then\n\t\t-- StageFlow.FieldClear reads this first: the field does not read clear.\n\t\tinput.spawningDone = false\n\tend\n'),
+    'l4b h1: the tick passes no frame': (WAVE_SERVICE, '\tadvance(combatConfig, delta)\n', '\tadvance(combatConfig)\n'),
+    "l4b h1: the down's advance passes a frame": (WAVE_SERVICE, '\t\tadvance(combatConfig)\n', '\t\tadvance(combatConfig, 0)\n'),
+    'l4b h1: the tick told a frame of nothing': (WAVE_SERVICE, '\t\ttick(delta)\n', '\t\ttick(0)\n'),
+    'l4b h1: a run starts with the deferral spent': (WAVE_SERVICE, '\t\theldSince = 0,\n', '\t\theldSince = 1,\n'),
+    'l4b h1: a run starts with a blow found': (WAVE_SERVICE, '\t\tblowWaits = false,\n', '\t\tblowWaits = true,\n'),
+}
+assert not set(L4B_FIX3_MUTATIONS) & set(MUTATIONS), sorted(set(L4B_FIX3_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4B_FIX3_MUTATIONS)
+
+# L4 W2 (docs/prompts/l4-w2-contract.md 2.2, 3.2, 5, section 0): luau-engineer A's entries, each caught
+# by tests_l4w2.luau (luau-a.md "For D2" 3): LevelDress.Accept's refusals and its answer, LeftOut and
+# Overlay, StageFlow.Plan's kinds, the seat (HitShapes.SeatDrop, SeatStep, CrowdRay's drop, CrowdService's
+# stepping), the Castle Key (Validate's line, SecretFlow's reward, opening and map row, Unlocks.HasLevelKey).
+L4W2_A_MUTATIONS = {
+    # LevelDress.Accept
+    "l4w2 dress: a dress of another layout is taken": (LEVEL_DRESS, "\tif file.layout ~= layout then\n", "\tif false then\n"),
+    "l4w2 dress: any frame is taken": (LEVEL_DRESS, "\tif file.frame ~= LEVEL_FRAME then\n", "\tif false then\n"),
+    "l4w2 dress: nothing uploaded is not named": (LEVEL_DRESS, "\tif uploadedHash == nil then\n", "\tif false then\n"),
+    "l4w2 dress: another plan's hash is taken": (LEVEL_DRESS, 'if type(file.planHash) ~= "string" or file.planHash ~= uploadedHash then', 'if type(file.planHash) ~= "string" then'),
+    "l4w2 dress: a mesh with no template is taken": (LEVEL_DRESS, "\t\tif haveMeshes[name] ~= true then\n", "\t\tif false then\n"),
+    "l4w2 dress: a mesh with no name is taken": (LEVEL_DRESS, "\t\tif type(name) ~= \"string\" then\n\t\t\treturn nil, `mesh {index} has no name`\n", "\t\tif false then\n\t\t\treturn nil, `mesh {index} has no name`\n"),
+    "l4w2 dress: a hidden block no block is is taken": (LEVEL_DRESS, "\t\telseif open == nil or open[name] ~= true then\n", "\t\telseif false then\n"),
+    "l4w2 dress: a left-out block is refused": (LEVEL_DRESS, "\t\telseif open == nil or open[name] ~= true then\n", "\t\telse\n"),
+    "l4w2 dress: a named block is not hidden": (LEVEL_DRESS, "\t\tif blocks[name] then\n\t\t\thidden[name] = true\n", "\t\tif blocks[name] then\n\t\t\thidden[name] = nil\n"),
+    "l4w2 dress: a camp-piece name counts as a block": (LEVEL_DRESS, '\t\tif piece.role == "block" then\n\t\t\tblocks[piece.name] = true\n', "\t\tdo\n\t\t\tblocks[piece.name] = true\n"),
+    "l4w2 dress: a camp no piece has is taken": (LEVEL_DRESS, "\t\tif own == nil then\n\t\t\treturn nil, `hide.camps names the camp", "\t\tif own == nil then\n\t\t\town = {}\n\t\tend\n\t\tif false then\n\t\t\treturn nil, `hide.camps names the camp"),
+    "l4w2 dress: any role may be hidden": (LEVEL_DRESS, 'if type(role) ~= "string" or HIDEABLE[role] ~= true then', 'if type(role) ~= "string" then'),
+    "l4w2 dress: a role no piece of the camp has is taken": (LEVEL_DRESS, "\t\t\tif own[role] ~= true then\n", "\t\t\tif false then\n"),
+    "l4w2 dress: the camp roles hide nothing": (LEVEL_DRESS, "\t\tif wanted ~= nil and wanted[piece.role] then\n", "\t\tif false then\n"),
+    "l4w2 dress: the walls' groups are not asked": (LEVEL_DRESS, "\tif not groupsOk then\n", "\tif false then\n"),
+    "l4w2 dress: a barrier with no name is taken": (LEVEL_DRESS, 'if type(name) ~= "string" or name == "" or box == nil then', "if box == nil then"),
+    "l4w2 dress: a barrier's numbers are not checked": (LEVEL_DRESS, 'if type(name) ~= "string" or name == "" or box == nil then', 'if type(name) ~= "string" or name == "" then'),
+    "l4w2 dress: a NaN barrier is sound": (LEVEL_DRESS, "\t\tnot (finite(x) and finite(y) and finite(z) and finite(sx) and finite(sy) and finite(sz))\n", "\t\tfalse\n"),
+    "l4w2 dress: a flat barrier is sound": (LEVEL_DRESS, "\t\tor sx <= 0\n\t\tor sy <= 0\n\t\tor sz <= 0\n", ""),
+    "l4w2 dress: a barrier's name may be taken": (LEVEL_DRESS, "\t\tif named[name] then\n", "\t\tif false then\n"),
+    "l4w2 dress: the walls do not count": (LEVEL_DRESS, "\tlocal count = #pieces + #walls\n", "\tlocal count = #pieces\n"),
+    "l4w2 dress: maxParts one short": (LEVEL_DRESS, "\tif count > maxParts then\n", "\tif count >= maxParts then\n"),
+    "l4w2 dress: a wall is not armed": (LEVEL_DRESS, "\t\t\tcollide = true,\n", "\t\t\tcollide = false,\n"),
+    "l4w2 dress: a wall is a camp's barrier": (LEVEL_DRESS, "\t\t\trole = WALL_ROLE,\n", '\t\t\trole = "barrier",\n'),
+    "l4w2 dress: the dress's looks dropped": (LEVEL_DRESS, '\t\tlooks = if type(looks) == "table" then looks else {},\n', "\t\tlooks = {},\n"),
+    "l4w2 dress: Overlay writes the base": (LEVEL_DRESS, "= if base ~= nil then table.clone(base) else {}", "= if base ~= nil then base else {}"),
+    "l4w2 dress: Overlay keeps the base's look": (LEVEL_DRESS, "\t\t\tlooks[name] = look\n", "\t\t\tlooks[name] = looks[name] or look\n"),
+    "l4w2 dress: LeftOut leaves nothing out": (LEVEL_DRESS, "\t\t\tleft[block.name] = true\n", "\t\t\tleft[block.name] = nil\n"),
+    "l4w2 dress: LeftOut leaves out every opening block": (LEVEL_DRESS, "\t\t\tand open[block.opens] == true\n", ""),
+    # StageFlow.Plan's kinds
+    "l4w2 kinds: residents not counted": (FLOW, "\t\tfor kind, count in stock do\n\t\t\tcounts[kind] = (counts[kind] or 0) + count\n", "\t\tfor kind, count in stock do\n\t\t\tcounts[kind] = (counts[kind] or 0) + 0 * count\n"),
+    "l4w2 kinds: tents not counted": (FLOW, "\t\tfor _, kind in tent.kinds do\n\t\t\tcounts[kind] = (counts[kind] or 0) + 1\n", "\t\tfor _, kind in tent.kinds do\n\t\t\tcounts[kind] = (counts[kind] or 0) + 0\n"),
+    "l4w2 kinds: the waves summed, not the most": (FLOW, "\t\t\t\tmost[kind] = math.max(most[kind] or 0, count)\n", "\t\t\t\tmost[kind] = (most[kind] or 0) + count\n"),
+    "l4w2 kinds: countMult not applied": (FLOW, "\t\t\t\t\t+ math.max(math.round(unit.count * countMult), 0)\n", "\t\t\t\t\t+ unit.count\n"),
+    "l4w2 kinds: a wave's minDifficulty ignored": (FLOW, "\t\t\tfor _, unit in fieldedUnits(wave.groups or {}, rank, ranks) do\n", "\t\t\tfor _, unit in wave.groups or {} do\n"),
+    "l4w2 kinds: the boss not counted": (FLOW, "\t\t\t\there[boss.kind] = (here[boss.kind] or 0) + 1\n", "\t\t\t\there[boss.kind] = (here[boss.kind] or 0) + 0\n"),
+    "l4w2 kinds: a boss's calls added up": (FLOW, "\t\t\t\t\t\tcalls[raised] = math.max(calls[raised] or 0, attack.count or 0)\n", "\t\t\t\t\t\tcalls[raised] = (calls[raised] or 0) + (attack.count or 0)\n"),
+    "l4w2 kinds: a boss's calls not counted": (FLOW, "\t\t\t\t\there[kind] = (here[kind] or 0) + count\n\t\t\t\tend\n\t\t\tend\n\t\t\tfor kind, count in here do\n", "\t\t\t\t\there[kind] = (here[kind] or 0) + 0 * count\n\t\t\t\tend\n\t\t\tend\n\t\t\tfor kind, count in here do\n"),
+    "l4w2 kinds: an empty kind kept": (FLOW, "\t\tif count <= 0 then\n\t\t\tcounts[kind] = nil\n", "\t\tif count < 0 then\n\t\t\tcounts[kind] = nil\n"),
+    "l4w2 kinds: Plan reads no countMult": (FLOW, "\t\t\tlevel.difficulties[difficulty].countMult,\n", "\t\t\t1,\n"),
+    # The seat
+    "l4w2 seat: SeatDrop not eased": (HITSHAPES, "\treturn height * restDrop * u * u * (3 - 2 * u)\n", "\treturn height * restDrop * u\n"),
+    "l4w2 seat: SeatDrop not clamped": (HITSHAPES, "\tlocal u = math.min(math.max(seat, 0), 1)\n", "\tlocal u = seat\n"),
+    "l4w2 seat: SeatDrop takes a negative restDrop": (HITSHAPES, "\t\tor not (restDrop >= 0 and restDrop < math.huge)\n", "\t\tor not (restDrop < math.huge)\n"),
+    "l4w2 seat: SeatStep overshoots up": (HITSHAPES, "\t\treturn math.min(seat + step, target)\n", "\t\treturn seat + step\n"),
+    "l4w2 seat: SeatStep overshoots down": (HITSHAPES, "\treturn math.max(seat - step, target)\n", "\treturn seat - step\n"),
+    "l4w2 seat: SeatStep at twice the pace": (HITSHAPES, "\tlocal step = math.max(dt, 0) / blendSeconds\n", "\tlocal step = 2 * math.max(dt, 0) / blendSeconds\n"),
+    "l4w2 seat: SeatStep with no pace never moves": (HITSHAPES, "\t\treturn target\n\tend\n\tlocal step", "\t\treturn seat\n\tend\n\tlocal step"),
+    "l4w2 seat: CrowdRay's head not lowered": (HITSHAPES, "\tlocal head = feet + Vector3.new(0, height - headRadius - lower, 0)\n", "\tlocal head = feet + Vector3.new(0, height - headRadius, 0)\n"),
+    "l4w2 seat: CrowdRay's capsule top not lowered": (HITSHAPES, "\tlocal top = math.max(height - 2 * headRadius, height / 2 + radius) - lower\n", "\tlocal top = math.max(height - 2 * headRadius, height / 2 + radius)\n"),
+    "l4w2 seat: CrowdRay ignores its drop": (HITSHAPES, "\tlocal lower = drop or 0\n", "\tlocal lower = 0\n"),
+    "l4w2 seat: the crowd never steps a seat": (CROWD, "\tstepSeats(dt, crowd.riseBlendSeconds)\n", ""),
+    "l4w2 seat: a dormant body steps its seat": (CROWD, "\t\tenemy.seat = if enemy.dormant\n\t\t\tthen goal\n\t\t\telse HitShapes.SeatStep(enemy.seat, goal, dt, riseBlendSeconds)\n", "\t\tenemy.seat = HitShapes.SeatStep(enemy.seat, goal, dt, riseBlendSeconds)\n"),
+    "l4w2 seat: a dormant body stands": (CROWD, "\t\t\tthen goal\n\t\t\telse HitShapes.SeatStep(", "\t\t\tthen 0\n\t\t\telse HitShapes.SeatStep("),
+    "l4w2 seat: nobody's goal is the seat": (CROWD, '\t\tlocal goal = if enemy.state == "rest" then 1 else 0\n', "\t\tlocal goal = 0\n"),
+    "l4w2 seat: a resident placed at a fire stands": (CROWD, '\tenemy.seat = if shown == "rest" then 1 else 0\n', "\tenemy.seat = 0\n"),
+    "l4w2 seat: Get hides the seat": (CROWD, "\t\tseat = enemy.seat,\n", "\t\tseat = 0,\n"),
+    # The Castle Key
+    "l4w2 key: Validate takes any key": (FLOW, '\t\t\tkey ~= nil and (type(key) ~= "string" or key == "" or #key > Unlocks.MAX_FAMILY_LENGTH)\n', "\t\t\tfalse\n"),
+    "l4w2 key: Validate takes a long key": (FLOW, '(type(key) ~= "string" or key == "" or #key > Unlocks.MAX_FAMILY_LENGTH)', '(type(key) ~= "string" or key == "")'),
+    "l4w2 key: Validate takes an empty key": (FLOW, '(type(key) ~= "string" or key == "" or #key > Unlocks.MAX_FAMILY_LENGTH)', '(type(key) ~= "string" or #key > Unlocks.MAX_FAMILY_LENGTH)'),
+    "l4w2 key: a key is no reward field": (SECRET_FLOW, "\t\t\tand entry.key == nil\n", ""),
+    "l4w2 key: the reward drops its key": (SECRET_FLOW, '\t\tkey = if type(key) == "string" and key ~= "" then key else nil,\n', "\t\tkey = nil,\n"),
+    "l4w2 key: the opening drops its key": (SECRET_FLOW, "\t\tkey = reward.key,\n", "\t\tkey = nil,\n"),
+    "l4w2 key: the map row drops its key": (SECRET_FLOW, "\t\t\tkey = if reward ~= nil then reward.key else nil,\n", "\t\t\tkey = nil,\n"),
+    "l4w2 key: HasLevelKey needs no opening": (UNLOCKS, 'if type(entry) == "table" and entry.key == key and own[secretId] == true then', 'if type(entry) == "table" and entry.key == key then'),
+    "l4w2 key: HasLevelKey takes any key": (UNLOCKS, 'if type(entry) == "table" and entry.key == key and own[secretId] == true then', 'if type(entry) == "table" and own[secretId] == true then'),
+    "l4w2 key: HasLevelKey reads any level": (UNLOCKS, "\t\tlocal own: any = opened[level.id]\n", "\t\tlocal own: any = opened.otherLevel or opened[level.id]\n"),
+    "l4w2 key: HasLevelKey never held": (UNLOCKS, "\t\t\t\treturn true\n\t\t\tend\n\t\tend\n\tend\n\treturn false\nend\n", "\t\t\t\treturn false\n\t\t\tend\n\t\tend\n\tend\n\treturn false\nend\n"),
+}
+assert not set(L4W2_A_MUTATIONS) & set(MUTATIONS), sorted(set(L4W2_A_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W2_A_MUTATIONS)
+
+# L4 W2: the service lines run_harness.py's L4W2_LINES and L4W2_ORDER pin (tests_l3_w2.luau's L4BP.W2):
+# LevelService builds what Accept answered, WeaponService lowers a seated head, WaveService and
+# ArenaService send the pools' counts and the key, DebugService's Z lever.
+L4W2_PIN_MUTATIONS = {
+    "l4w2 pins: the dress wall not armed": (
+        LEVEL_SERVICE,
+        "\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = true\n",
+        "\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = false\n",
+    ),
+    "l4w2 pins: a hidden piece not marked Skinned": (
+        LEVEL_SERVICE, "\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE, true)\n", ""),
+    "l4w2 pins: a hidden piece left visible": (
+        LEVEL_SERVICE,
+        "\t\t\tpart.Transparency = 1\n\t\t\tpart.CastShadow = false\n\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE",
+        "\t\t\tpart.CastShadow = false\n\t\t\tpart:SetAttribute(CONST.SKINNED_ATTRIBUTE",
+    ),
+    # Re-aimed in the fix round (K7): the walls are appended in LevelDress.Lay now (tests_l4w2.luau).
+    "l4w2 pins: no wall appended": (
+        LEVEL_DRESS, "\ttable.move(accepted.walls, 1, #accepted.walls, #built + 1, built)\n", ""),
+    "l4w2 pins: the dress's looks not laid": (
+        LEVEL_DRESS, "\t\tlooks = LevelDress.Overlay(base, accepted.looks),\n", "\t\tlooks = base,\n"),
+    "l4w2 pins: Dress never set": (LEVEL_SERVICE, "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)\n", ""),
+    "l4w2 pins: Clear leaves the words": (
+        LEVEL_SERVICE,
+        "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, nil)\n\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, nil)\n"
+        "\t\tfolder:ClearAllChildren()",
+        "\t\tfolder:ClearAllChildren()",
+    ),
+    # Re-aimed (K7): the lever's hash is LevelDress.Decide's (tests_l4w2.luau).
+    "l4w2 pins: the Z lever's hash never wrong": (
+        LEVEL_DRESS, "\t\t\tif ask.failLever then FAILED_HASH else ask.uploadedHash,\n", "\t\t\task.uploadedHash,\n"),
+    "l4w2 pins: the shortcut's left-out names not given": (
+        LEVEL_DRESS, "\t\t\tLevelDress.LeftOut(ask.layout, ask.found),\n", "\t\t\t{},\n"),
+    "l4w2 pins: a seated head not lowered in gather": (
+        WEAPON, "local head = enemy.position + Vector3.new(0, def.height - def.headRadius - drop, 0)",
+        "local head = enemy.position + Vector3.new(0, def.height - def.headRadius, 0)"),
+    "l4w2 pins: CrowdRay not told the drop": (
+        WEAPON, "\t\t\t\theadRadius,\n\t\t\t\tdrop\n\t\t\t)", "\t\t\t\theadRadius\n\t\t\t)"),
+    "l4w2 pins: no prewarm": (WAVE_SERVICE, "\trun.prewarm = plan.kinds\n", ""),
+    "l4w2 pins: the level built with no dress name": (
+        WAVE_SERVICE, "\t\t\tUnlockService.FoundShortcuts(player, levelId),\n\t\t\tlevel.layout\n",
+        "\t\t\tUnlockService.FoundShortcuts(player, levelId),\n\t\t\tnil\n"),
+    "l4w2 pins: the chest's key not sent": (WAVE_SERVICE, "key = opening.key,", "key = nil,"),
+    "l4w2 pins: the prewarm with every RunState": (
+        ARENA_SERVICE, "\t\t\tsent.prewarm = runFields.prewarm\n\t\tend\n",
+        "\t\tend\n\t\tsent.prewarm = runFields.prewarm\n"),
+    "l4w2 pins: the Z lever does nothing": (DEBUG_SERVICE, "\t\tLevelService.FailNextDress()\n", ""),
+}
+assert not set(L4W2_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(L4W2_PIN_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(L4W2_PIN_MUTATIONS)
+
+# The L4 W2 fix round (docs/prompts/l4-w2-fix-round.md; docs/prompts/l4-w2-fix-reports/): the files the
+# new pins read (run_harness.py L4W2_LINES) and ScenePlan, which the bundle loads.
+SCENE_PLAN = "src/combat/client/Controllers/ScenePlan.luau"
+LEVEL_SCENERY = "src/combat/client/Controllers/LevelScenery.luau"
+CAMERA_CONTROLLER = "src/combat/client/Controllers/CameraController.luau"
+CROWD_RENDERER = "src/combat/client/Controllers/CrowdRenderer.luau"
+FIGURES = "src/combat/client/Controllers/Raiders/Figures.luau"
+FILES += [SCENE_PLAN, LEVEL_SCENERY, CAMERA_CONTROLLER, CROWD_RENDERER, FIGURES]
+
+# K7 (luau-engineer A, fix-reports/luau-a.md): LevelDress.Decide, Present, Lay and Accept's new
+# refusals, caught by tests_l4w2.luau. Four of A's 39 are the re-aimed "l4w2 pins" entries above
+# ("no wall appended", "the dress's looks not laid", "the Z lever's hash never wrong", "the
+# shortcut's left-out names not given") and are not repeated here.
+K7_A_MUTATIONS = {
+    # Accept: props and effects have the client's shape (slice 2 m1).
+    "k7 dress: props need not be a list": (LEVEL_DRESS, '\tif type(props) ~= "table" then\n', "\tif false then\n"),
+    "k7 dress: a bad prop is taken": (LEVEL_DRESS, "\t\t\treturn nil, `prop {index} {problem}`\n", "\t\t\tcontinue\n"),
+    "k7 dress: a prop that is no table is taken": (LEVEL_DRESS, '\tif type(entry) ~= "table" then\n\t\treturn "is not a table"\n\tend\n\tif type(entry.piece)', '\tif false then\n\t\treturn "is not a table"\n\tend\n\tif type(entry.piece)'),
+    "k7 dress: a prop's empty piece is taken": (LEVEL_DRESS, 'if type(entry.piece) ~= "string" or entry.piece == "" then', 'if type(entry.piece) ~= "string" then'),
+    "k7 dress: a prop with no piece is taken": (LEVEL_DRESS, 'if type(entry.piece) ~= "string" or entry.piece == "" then', 'if entry.piece == "" then'),
+    "k7 dress: a prop's turn is not checked": (LEVEL_DRESS, "finite(entry.z) and finite(entry.yaw)) then", "finite(entry.z)) then"),
+    "k7 dress: a prop's place is not checked": (LEVEL_DRESS, "\tif not (finite(entry.x) and finite(entry.y) and finite(entry.z) and finite(entry.yaw)) then\n", "\tif not finite(entry.yaw) then\n"),
+    "k7 dress: a prop of scale 0 is taken": (LEVEL_DRESS, "\tif not finite(entry.scale) or entry.scale <= 0 then\n", "\tif not finite(entry.scale) or entry.scale < 0 then\n"),
+    "k7 dress: a prop of any finite scale is taken": (LEVEL_DRESS, "\tif not finite(entry.scale) or entry.scale <= 0 then\n", "\tif not finite(entry.scale) then\n"),
+    "k7 dress: a prop of no scale is taken": (LEVEL_DRESS, "\tif not finite(entry.scale) or entry.scale <= 0 then\n", '\tif type(entry.scale) == "number" and entry.scale <= 0 then\n'),
+    "k7 dress: a prop's empty with is taken": (LEVEL_DRESS, 'if with ~= nil and (type(with) ~= "string" or with == "") then', 'if with ~= nil and type(with) ~= "string" then'),
+    "k7 dress: a prop's with is not checked": (LEVEL_DRESS, 'if with ~= nil and (type(with) ~= "string" or with == "") then', "if false then"),
+    "k7 dress: effects need not be a list": (LEVEL_DRESS, '\tif type(effects) ~= "table" then\n', "\tif false then\n"),
+    "k7 dress: a bad effect is taken": (LEVEL_DRESS, "\t\t\treturn nil, `effect {index} {problem}`\n", "\t\t\tcontinue\n"),
+    "k7 dress: an effect that is no table is taken": (LEVEL_DRESS, '\tif type(entry) ~= "table" then\n\t\treturn "is not a table"\n\tend\n\tif type(entry.kind)', '\tif false then\n\t\treturn "is not a table"\n\tend\n\tif type(entry.kind)'),
+    "k7 dress: an effect's empty kind is taken": (LEVEL_DRESS, 'if type(entry.kind) ~= "string" or entry.kind == "" then', 'if type(entry.kind) ~= "string" then'),
+    "k7 dress: an effect with no kind is taken": (LEVEL_DRESS, 'if type(entry.kind) ~= "string" or entry.kind == "" then', 'if entry.kind == "" then'),
+    "k7 dress: an effect's place is not checked": (LEVEL_DRESS, '\tif not (finite(entry.x) and finite(entry.y) and finite(entry.z)) then\n\t\treturn "has a place', '\tif not finite(entry.x) then\n\t\treturn "has a place'),
+    # Accept's word (the answer carries the hash).
+    "k7 dress: the word's hash dropped": (LEVEL_DRESS, "\t\tword = { layout = layout, planHash = uploadedHash },\n", '\t\tword = { layout = layout, planHash = "" },\n'),
+    "k7 dress: the word names another layout": (LEVEL_DRESS, "\t\tword = { layout = layout, planHash = uploadedHash },\n", '\t\tword = { layout = "", planHash = uploadedHash },\n'),
+    # Present (slice 1 s2).
+    "k7 dress: an empty MeshId is a mesh": (LEVEL_DRESS, 'if type(meshId) == "string" and NO_MESH[meshId] ~= true then', 'if type(meshId) == "string" then'),
+    "k7 dress: the never-uploaded id is a mesh": (LEVEL_DRESS, '\t["rbxassetid://0"] = true,\n', ""),
+    "k7 dress: no template is present": (LEVEL_DRESS, "\t\t\t\tpresent[name] = true\n", "\t\t\t\tpresent[name] = nil\n"),
+    "k7 dress: a Model with no MeshPart is present": (LEVEL_DRESS, "\tfor name, meshIds in templates do\n\t\tfor _, meshId: any in meshIds do\n", "\tfor name, meshIds in templates do\n\t\tpresent[name] = true\n\t\tfor _, meshId: any in meshIds do\n"),
+    # Decide (slice 1 m2: the pcall; the lever; the inputs).
+    "k7 decide: a throw is no refusal": (LEVEL_DRESS, "\tif not ok then\n\t\treturn nil, `the dress could not be read", "\tif false then\n\t\treturn nil, `the dress could not be read"),
+    "k7 decide: the lever's hash is the uploaded one": (LEVEL_DRESS, 'local FAILED_HASH = "(the dressFail lever)"\n', 'local FAILED_HASH = "plan-1"\n'),
+    "k7 decide: every Model is a template": (LEVEL_DRESS, "\t\t\tLevelDress.Present(ask.templates),\n", "\t\t\t(function(): any\n\t\t\t\tlocal all = {}\n\t\t\t\tfor name in ask.templates do\n\t\t\t\t\tall[name] = true\n\t\t\t\tend\n\t\t\t\treturn all\n\t\t\tend)(),\n"),
+    "k7 decide: the groups not asked": (LEVEL_DRESS, "\t\t\task.groupsOk,\n", "\t\t\ttrue,\n"),
+    "k7 decide: maxParts not asked": (LEVEL_DRESS, "\t\t\task.maxParts,\n", "\t\t\tmath.huge,\n"),
+    "k7 decide: a refusal names nothing": (LEVEL_DRESS, '\t\treturn nil, reason or "the dress was refused"\n', '\t\treturn nil, "the dress was refused"\n'),
+    # Lay.
+    "k7 lay: the walls written into the layout's pieces": (LEVEL_DRESS, "\tlocal built = table.clone(pieces)\n", "\tlocal built = pieces\n"),
+    "k7 lay: nothing hidden": (LEVEL_DRESS, "\t\thidden = accepted.hidden,\n", "\t\thidden = {},\n"),
+    "k7 lay: no word": (LEVEL_DRESS, "\t\tword = accepted.word,\n", "\t\tword = nil,\n"),
+    "k7 lay: grey takes no base looks": (LEVEL_DRESS, "\t\treturn { pieces = pieces, hidden = {}, looks = base, word = nil }\n", "\t\treturn { pieces = pieces, hidden = {}, looks = nil, word = nil }\n"),
+    "k7 lay: grey is dressed with nothing": (LEVEL_DRESS, "\tif accepted == nil then\n\t\treturn { pieces = pieces", '\tif accepted == nil then\n\t\taccepted = { walls = {}, hidden = {}, looks = {}, word = { layout = "", planHash = "" } }\n\tend\n\tif false then\n\t\treturn { pieces = pieces'),
+}
+assert not set(K7_A_MUTATIONS) & set(MUTATIONS), sorted(set(K7_A_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_A_MUTATIONS)
+
+# K7 on LevelService (luau-engineer A's, plus D2's for the further lines pinned): caught only by
+# run_harness.py's L4W2_LINES / L4W2_ORDER pins. "Dress never set" is the re-aimed "l4w2 pins"
+# entry above.
+K7_PIN_MUTATIONS = {
+    # Build (slice 4 P3, P1; slice 2 s2).
+    "k7 pins: no level is dressed": (LEVEL_SERVICE, "\tif layoutName ~= nil then\n\t\taccepted = dressOf(", "\tif false then\n\t\taccepted = dressOf("),
+    "k7 pins: the dress asked of no level": (LEVEL_SERVICE, "\t\taccepted = dressOf(layout, layoutName, pieces, open, rules.maxParts)\n", ""),
+    "k7 pins: the answer not laid": (LEVEL_SERVICE, "\tlocal laid = LevelDress.Lay(pieces, expeditions.looks, accepted)\n", "\tlocal laid = LevelDress.Lay(pieces, expeditions.looks, nil)\n"),
+    "k7 pins: built from the grey pieces": (LEVEL_SERVICE, "\tlocal camps, problem = place(folder, laid, expeditions, reactive, ice)\n", "\tlocal camps, problem = place(folder, LevelDress.Lay(pieces, expeditions.looks, nil), expeditions, reactive, ice)\n"),
+    "k7 pins: SetCamp's looks not the laid ones": (LEVEL_SERVICE, "\tstate.looks = laid.looks\n", "\tstate.looks = expeditions.looks\n"),
+    "k7 pins: the word not taken from the answer": (LEVEL_SERVICE, "\tlocal word = laid.word\n", "\tlocal word: any = nil\n"),
+    "k7 pins: hidden, but the word never set": (LEVEL_SERVICE, "\tif word ~= nil then\n", "\tif false then\n"),
+    "k7 pins: DressHash never set": (LEVEL_SERVICE, "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)\n", ""),
+    "k7 pins: Dress before DressHash": (LEVEL_SERVICE, "\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)\n\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)\n", "\t\tfolder:SetAttribute(CONST.DRESS_ATTRIBUTE, word.layout)\n\t\tfolder:SetAttribute(CONST.DRESS_HASH_ATTRIBUTE, word.planHash)\n"),
+    # construct (slice 1 m1's looks probe; the hidden branch; the wall's look).
+    "k7 pins: construct builds in the base looks": (LEVEL_SERVICE, "\tlocal looks = laid.looks\n", "\tlocal looks = if expeditions ~= nil then expeditions.looks else nil\n"),
+    "k7 pins: construct reads no hidden names": (LEVEL_SERVICE, "\tlocal hidden = laid.hidden\n", "\tlocal hidden = {}\n"),
+    "k7 pins: construct builds the grey pieces": (LEVEL_SERVICE, "\tfor _, piece in laid.pieces do\n", "\tfor _, piece in laid.pieces do\n\t\tif piece.role == LevelDress.WALL_ROLE then\n\t\t\tcontinue\n\t\tend\n"),
+    "k7 pins: no hidden piece is hidden": (LEVEL_SERVICE, "\t\tif hidden[piece.name] then\n", "\t\tif false then\n"),
+    "k7 pins: the dress wall drawn": (LEVEL_SERVICE, "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER\n\t\t\tpart.Transparency = 1\n\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = true\n", "\t\t\tpart.CollisionGroup = BarrierGroups.BARRIER\n\t\t\tpart.Transparency = 0\n\t\t\tpart.CanTouch = false\n\t\t\tpart.CastShadow = false\n\t\t\tpart.CanCollide = true\n"),
+    "k7 pins: place builds the grey pieces": (LEVEL_SERVICE, "\tlocal ok, camps = pcall(construct, folder, laid, expeditions, made, cells)\n", "\tlocal ok, camps = pcall(construct, folder, LevelDress.Lay(laid.pieces, laid.looks, nil), expeditions, made, cells)\n"),
+    "k7 pins: the lobby built with no looks": (LEVEL_SERVICE, "\treturn place(folder, LevelDress.Lay(pieces, base, nil), expeditions, reactive, ice)\n", "\treturn place(folder, LevelDress.Lay(pieces, nil, nil), expeditions, reactive, ice)\n"),
+    "k7 pins: the lobby's base looks dropped": (LEVEL_SERVICE, "\tlocal base = if expeditions ~= nil then expeditions.looks else nil\n", "\tlocal base: any = nil\n"),
+    # dressOf (slice 4 P2, P6; the gathered ask).
+    "k7 pins: the lever latched on": (LEVEL_SERVICE, "\tlocal failLever = state.failNextDress\n", "\tlocal failLever = true\n"),
+    "k7 pins: the lever never spent": (LEVEL_SERVICE, "\tlocal failLever = state.failNextDress\n\tstate.failNextDress = false\n", "\tlocal failLever = state.failNextDress\n"),
+    "k7 pins: the lever not handed on": (LEVEL_SERVICE, "\t\tfailLever = failLever,\n", "\t\tfailLever = false,\n"),
+    "k7 pins: the uploaded hash not asked": (LEVEL_SERVICE, "\t\tuploadedHash = uploadedHash(layoutName),\n", "\t\tuploadedHash = nil,\n"),
+    "k7 pins: the dress file not read": (LEVEL_SERVICE, "\t\tdress = Catalog.GetLevelDress(layoutName),\n", "\t\tdress = nil,\n"),
+    "k7 pins: the templates not gathered": (LEVEL_SERVICE, "\t\ttemplates = templatesOf(layoutName),\n", "\t\ttemplates = {},\n"),
+    "k7 pins: the found shortcuts not handed on": (LEVEL_SERVICE, "\t\tfound = open,\n", "\t\tfound = nil,\n"),
+    "k7 pins: the groups never asked": (LEVEL_SERVICE, "\t\tgroupsOk = BarrierGroups.Ensure(),\n", "\t\tgroupsOk = true,\n"),
+    "k7 pins: maxParts not handed on": (LEVEL_SERVICE, "\t\tmaxParts = maxParts,\n", "\t\tmaxParts = math.huge,\n"),
+    "k7 pins: a refusal not known": (LEVEL_SERVICE, "\tif accepted == nil then\n\t\twarn(", "\tif false then\n\t\twarn("),
+    "k7 pins: the grey level not warned": (LEVEL_SERVICE, "\t\twarn(`[LevelService] the level is grey: {reason}`)\n", ""),
+    "k7 pins: dressOf answers nothing": (LEVEL_SERVICE, "\treturn accepted\nend\n", "\treturn nil\nend\n"),
+    # templatesOf (slice 1 s2): a Model counts by its MeshParts' MeshIds, not its name.
+    "k7 pins: a template counted by its name": (LEVEL_SERVICE, "\t\t\t\t\t\ttable.insert(meshIds, part.MeshId)\n", '\t\t\t\t\t\ttable.insert(meshIds, "rbxassetid://1")\n'),
+    "k7 pins: a template with no MeshPart counted": (LEVEL_SERVICE, "\t\t\t\tlocal meshIds: { string } = {}\n", '\t\t\t\tlocal meshIds: { string } = { "rbxassetid://1" }\n'),
+    "k7 pins: any part's id read": (LEVEL_SERVICE, '\t\t\t\t\tif part:IsA("MeshPart") then\n', '\t\t\t\t\tif part:IsA("BasePart") then\n'),
+    "k7 pins: a template's ids not kept": (LEVEL_SERVICE, "\t\t\t\tfound[child.Name] = meshIds\n", '\t\t\t\tfound[child.Name] = { "rbxassetid://1" }\n'),
+    # WeaponService gather's input (slice 1 m1, slice 4 P4: :828).
+    "k7 pins: gather's restDrop not read": (WEAPON, "\tlocal restDrop = config.crowd.restDrop\n", "\tlocal restDrop = 0\n"),
+}
+assert not set(K7_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(K7_PIN_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_PIN_MUTATIONS)
+
+# K3 (luau-engineer A's follow-up): the lobby's prewarm. StageFlow.MostKinds is caught by
+# tests_l4w2.luau ("lobby kinds"); WaveService's lines by the pins.
+K3_A_MUTATIONS = {
+    "k3 lobby: MostKinds sums the plans": (FLOW, "\t\t\tif count > (most[kind] or 0) then\n\t\t\t\tmost[kind] = count\n", "\t\t\tif count > 0 then\n\t\t\t\tmost[kind] = (most[kind] or 0) + count\n"),
+    "k3 lobby: MostKinds keeps the last plan's count": (FLOW, "\t\t\tif count > (most[kind] or 0) then\n", "\t\t\tif count > 0 then\n"),
+    "k3 lobby: MostKinds sends an empty table": (FLOW, "\treturn if any then most else nil\n", "\treturn most\n"),
+    "k3 lobby: MostKinds sends nothing": (FLOW, "\treturn if any then most else nil\n", "\treturn nil\n"),
+    "k3 lobby: MostKinds writes into a plan's kinds": (FLOW, "\tlocal most: { [string]: number } = {}\n\tlocal any = false\n", "\tlocal most: { [string]: number } = kinds[1] or {}\n\tlocal any = false\n"),
+}
+K3_PIN_MUTATIONS = {
+    "k3 pins: the lobby sends no prewarm": (WAVE_SERVICE, '\t\tprewarm = if phase == "lobby" then boot.lobbyKinds else run.prewarm,\n', "\t\tprewarm = run.prewarm,\n"),
+    "k3 pins: the lobby kinds not made at boot": (WAVE_SERVICE, "\trefreshLobbyKinds()\n\tboot.loop = ", "\tboot.loop = "),
+    "k3 pins: the lobby kinds never tried again": (WAVE_SERVICE, "\t\t\trefreshLobbyKinds()\n\t\t\tbroadcast()\n", "\t\t\tbroadcast()\n"),
+    "k3 pins: the lobby kinds made on every broadcast": (WAVE_SERVICE, "\tif boot.lobbyKinds ~= nil or boot.lobbyKindsSeq == boot.floorsSeq then\n", "\tif false then\n"),
+    "k3 pins: a failed try retried every broadcast": (WAVE_SERVICE, "\tboot.lobbyKindsSeq = boot.floorsSeq\n", ""),
+    "k3 pins: one difficulty planned": (WAVE_SERVICE, "\t\tfor _, difficulty in map.difficulties do\n\t\t\tlocal level, layout = resolveLevel(", "\t\tfor _, difficulty in { map.difficulties[1] } do\n\t\t\tlocal level, layout = resolveLevel("),
+    "k3 pins: no plan kept": (WAVE_SERVICE, "\t\t\t\ttable.insert(found, plan.kinds)\n", ""),
+    "k3 pins: the plans not merged": (WAVE_SERVICE, "\tboot.lobbyKinds = StageFlow.MostKinds(found)\n", "\tboot.lobbyKinds = found[1]\n"),
+}
+for extra in (K3_A_MUTATIONS, K3_PIN_MUTATIONS):
+    assert not set(extra) & set(MUTATIONS), sorted(set(extra) & set(MUTATIONS))
+    MUTATIONS.update(extra)
+
+# K7, K8 (ui-engineer A, fix-reports/ui-a.md): ScenePlan's rules, caught by tests_l4w2_scenery.luau.
+K7_SCENE_MUTATIONS = {
+    "k7 scene: decided before the place has loaded": (SCENE_PLAN, "\tif not loaded then\n", "\tif false then\n"),
+    "k7 scene: the missing file's answer kept": (SCENE_PLAN, "return { action = \"fail\", keep = false, reason = `Config/LevelDress/{dress} is missing` }", "return { action = \"fail\", keep = true, reason = `Config/LevelDress/{dress} is missing` }"),
+    "k7 scene: Dress without DressHash builds": (SCENE_PLAN, '\tif type(hash) ~= "string" then\n', "\tif false then\n"),
+    "k7 scene: a failed client draws no wall": (SCENE_PLAN, '\tif failed then\n\t\treturn { folder = false, skinned = true, walls = "grey" }\n', '\tif failed then\n\t\treturn { folder = false, skinned = true, walls = "none" }\n'),
+    "k7 scene: the grey view draws no wall": (SCENE_PLAN, '\tif view == "grey" then\n\t\treturn { folder = false, skinned = true, walls = "grey" }\n', '\tif view == "grey" then\n\t\treturn { folder = false, skinned = true, walls = "none" }\n'),
+    "k8 scene: mood B in the lobby camp": (SCENE_PLAN, "\treturn dressed and not failed and wanted and not inLobby\n", "\treturn dressed and not failed and wanted\n"),
+    "k7 scene: fires on a low-end device": (SCENE_PLAN, "\tif not lowEnd then\n", "\tif true then\n"),
+    "k8 scene: the box's west margin dropped": (SCENE_PLAN, "\treturn x >= box.minX - margin\n", "\treturn x >= box.minX\n"),
+    "k8 scene: the box's east margin dropped": (SCENE_PLAN, "\t\tand x <= box.maxX + margin\n", "\t\tand x <= box.maxX\n"),
+    "k8 scene: the box's south margin dropped": (SCENE_PLAN, "\t\tand z >= box.minZ - margin\n", "\t\tand z >= box.minZ\n"),
+    "k8 scene: the box's north margin dropped": (SCENE_PLAN, "\t\tand z <= box.maxZ + margin\n", "\t\tand z <= box.maxZ\n"),
+    "k7 scene: another plan hash builds": (SCENE_PLAN, "\tif read.planHash ~= hash then\n", "\tif false then\n"),
+    "k7 scene: a missing list builds": (SCENE_PLAN, "\t\tif not isList(read[field]) then\n", "\t\tif false then\n"),
+    "k7 scene: another frame builds": (SCENE_PLAN, "\tif read.frame ~= ScenePlan.FRAME then\n", "\tif false then\n"),
+    "k7 scene: the key ignores the hash": (SCENE_PLAN, 'then `{dress}\\0{tostring(hash)}` else ""', 'then `{dress}` else ""'),
+    "k7 scene: Rgb takes any number": (SCENE_PLAN, "channel ~= channel or channel < 0 or channel > 255 then", "channel ~= channel then"),
+    "k7 scene: the groups built backward": (SCENE_PLAN, "\t\t\treturn ra < rb\n", "\t\t\treturn ra > rb\n"),
+    "k7 scene: the none answer not kept": (SCENE_PLAN, '\t\treturn { action = "none", keep = true }\n', '\t\treturn { action = "none", keep = false }\n'),
+}
+assert not set(K7_SCENE_MUTATIONS) & set(MUTATIONS), sorted(set(K7_SCENE_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_SCENE_MUTATIONS)
+
+# K7, K8, K9 on the client (ui-engineer A) and the seat in the client's aim (ui-engineer B, the review's
+# slice 3 m3, s1), K4, K5 (Figures): caught only by run_harness.py's L4W2_LINES / L4W2_ORDER pins.
+SEAL = "\t\tpart.Anchored = true\n\t\tpart.CanCollide = false\n\t\tpart.CanQuery = false\n\t\tpart.CanTouch = false\n"
+FAIL_PATH = "\tteardown()\n\tstate.failed = true\n\tapplyView()\n"
+SIGHTS_TAKEN = "\t\t\tif found then\n\t\t\t\treturn\n\t\t\tend\n"
+REACH_TAKEN = "\t\t\tif taken and found then\n\t\t\t\treturn\n\t\t\tend\n"
+AIM_BODY_LINE = "\t\t\tlocal body = position + Vector3.new(0, math.max(height * HALF - drop, radius), 0)\n"
+AIM_HEAD_LINE = "\t\t\tlocal head = position + Vector3.new(0, height - headRadius - drop, 0)\n"
+K7_CLIENT_PIN_MUTATIONS = {
+    "k7 client pins: a scenery part not anchored": (LEVEL_SCENERY, SEAL, SEAL.replace("Anchored = true", "Anchored = false")),
+    "k7 client pins: a scenery part collides": (LEVEL_SCENERY, SEAL, SEAL.replace("CanCollide = false", "CanCollide = true")),
+    "k7 client pins: a scenery part stops rays": (LEVEL_SCENERY, SEAL, SEAL.replace("CanQuery = false", "CanQuery = true")),
+    "k7 client pins: a scenery part touches": (LEVEL_SCENERY, SEAL, SEAL.replace("CanTouch = false", "CanTouch = true")),
+    "k7 client pins: a failed client not marked": (LEVEL_SCENERY, FAIL_PATH, "\tteardown()\n\tapplyView()\n"),
+    "k7 client pins: a failed client marked as not failed": (LEVEL_SCENERY, FAIL_PATH, FAIL_PATH.replace("failed = true", "failed = false")),
+    "k7 client pins: a failed client shows nothing": (LEVEL_SCENERY, FAIL_PATH, "\tteardown()\n\tstate.failed = true\n"),
+    "k7 client pins: a hidden part shown invisible": (LEVEL_SCENERY, "paint(child :: BasePart, 0, nil)", "paint(child :: BasePart, 1, nil)"),
+    "k7 client pins: no wall drawn": (LEVEL_SCENERY, '\tif show.walls ~= "none" and isWall(child) then\n', "\tif false and isWall(child) then\n"),
+    "k7 client pins: the view forgets the failure": (LEVEL_SCENERY, "\tlocal show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)\n\tlocal folder = state.folder\n", "\tlocal show = ScenePlan.Show(state.dress ~= nil, false, state.view)\n\tlocal folder = state.folder\n"),
+    "k7 client pins: a later child forgets the failure": (LEVEL_SCENERY, "\tlocal show = ScenePlan.Show(state.dress ~= nil, state.failed, state.view)\n\tshowChild(show, child", "\tlocal show = ScenePlan.Show(state.dress ~= nil, false, state.view)\n\tshowChild(show, child"),
+    "k7 client pins: the view shows no child": (LEVEL_SCENERY, "\t\tshowChild(show, child, greyColor)\n", ""),
+    "k7 client pins: a later child not shown": (LEVEL_SCENERY, '\tshowChild(show, child, if show.walls == "grey" then greyWallColor() else nil)\n', ""),
+    "k7 client pins: a build's throw ignored": (LEVEL_SCENERY, "\tif not ok and generation == state.generation then\n", "\tif false then\n"),
+    "k7 client pins: the build not under its pcall": (LEVEL_SCENERY, "\tlocal ok, problem = pcall(function()\n\t\tbuildSteps(generation, dress, folder)\n\tend)\n", "\tbuildSteps(generation, dress, folder)\n\tlocal ok, problem = true, nil\n"),
+    "k7 client pins: the thread skips the pcall": (LEVEL_SCENERY, "\ttask.spawn(build, state.generation, dress, folder)\n", "\ttask.spawn(buildSteps, state.generation, dress, folder)\n"),
+    "k7 client pins: a start's throw not failed": (LEVEL_SCENERY, "\t\tfail(`the scenery could not start ({tostring(problem)})`)\n", ""),
+    "k7 client pins: decided before the place loaded": (LEVEL_SCENERY, "game:IsLoaded(), Catalog.GetLevelDress)", "true, Catalog.GetLevelDress)"),
+    "k7 client pins: a nil answer kept": (LEVEL_SCENERY, "\tstate.builtKey = if decision.keep then key else nil\n", "\tstate.builtKey = if decision.keep then key else key\n"),
+    "k7 client pins: a word read once whatever it was": (LEVEL_SCENERY, "\tif key == state.builtKey then\n", "\tif false then\n"),
+    "k7 client pins: a fail answer not failed": (LEVEL_SCENERY, '\t\tfail(decision.reason or "the dress cannot be drawn")\n', "\t\tapplyView()\n"),
+    "k7 client pins: the place never awaited": (LEVEL_SCENERY, "\t\t\tawaitLoaded()\n", ""),
+    "k7 client pins: the wait does not wait": (LEVEL_SCENERY, "\t\tif not game:IsLoaded() then\n\t\t\tgame.Loaded:Wait()\n", "\t\tif false then\n\t\t\tgame.Loaded:Wait()\n"),
+    "k7 client pins: the word not read again after loading": (LEVEL_SCENERY, "\t\tevaluate()\n", ""),
+    "k7 client pins: fires on a low-end device": (LEVEL_SCENERY, "ScenePlan.Jobs(dress, Theme.lowEndDevice)", "ScenePlan.Jobs(dress, false)"),
+    "k9 client pins: the camera never told": (LEVEL_SCENERY, '\tCameraController.SetDressed(typeof(name) == "string")\n', "\tCameraController.SetDressed(false)\n"),
+    "k9 client pins: a detached level still dressed": (LEVEL_SCENERY, "\tCameraController.SetDressed(false)\n", ""),
+    "k8 client pins: mood B in the lobby": (LEVEL_SCENERY, "state.moodWanted, bodyInLobby())", "state.moodWanted, false)"),
+    "k8 client pins: the lobby box with no margin": (LEVEL_SCENERY, "point.Z, boxMargin())", "point.Z, 0)"),
+    "k8 client pins: no placement heard": (LEVEL_SCENERY, "\tCameraController.OnPlaced(onPlaced)\n", ""),
+    "k8 client pins: a placement never in the lobby": (LEVEL_SCENERY, "\tstate.inLobby = inLobbyAt(position)\n", "\tstate.inLobby = false\n"),
+    "k9 client pins: the summary drops the camera in a dressed level": (CAMERA_CONTROLLER, "\t\tand DEFAULT_CAMERA_PHASES[phase] == true\n\t\tand not levelDressed\n", "\t\tand DEFAULT_CAMERA_PHASES[phase] == true\n"),
+    "k9 client pins: SetDressed writes nothing": (CAMERA_CONTROLLER, "\tlevelDressed = dressed\n", "\tlevelDressed = false\n"),
+    # The seat in the client's aim (ui-engineer B's lines and mutants).
+    "l4w2 aim: a refused body's sphere not lowered": (INPUT, "then math.max(height * HALF - drop, radius)", "then math.max(height * HALF, radius)"),
+    "l4w2 aim: a refused body's sphere under its foot": (INPUT, "then math.max(height * HALF - drop, radius)", "then height * HALF - drop"),
+    "l4w2 aim: a refused head standing": (INPUT, "else height - headRadius - drop", "else height - headRadius"),
+    "l4w2 aim: the assist's body sphere not lowered": (INPUT, SIGHTS_TAKEN + AIM_BODY_LINE, SIGHTS_TAKEN + AIM_BODY_LINE.replace("height * HALF - drop", "height * HALF")),
+    "l4w2 aim: the assist's body sphere under its foot": (INPUT, SIGHTS_TAKEN + AIM_BODY_LINE, SIGHTS_TAKEN + AIM_BODY_LINE.replace("math.max(height * HALF - drop, radius)", "height * HALF - drop")),
+    "l4w2 aim: the assist's head standing": (INPUT, AIM_HEAD_LINE + "\t\t\tfound = sphereInSights(", AIM_HEAD_LINE.replace(" - drop, 0)", ", 0)") + "\t\t\tfound = sphereInSights("),
+    "l4w2 aim: the melee reach's body sphere not lowered": (INPUT, REACH_TAKEN + AIM_BODY_LINE, REACH_TAKEN + AIM_BODY_LINE.replace("height * HALF - drop", "height * HALF")),
+    "l4w2 aim: the melee reach's head standing": (INPUT, AIM_HEAD_LINE + "\t\t\tlocal inside = inMeleeShape(", AIM_HEAD_LINE.replace(" - drop, 0)", ", 0)") + "\t\t\tlocal inside = inMeleeShape("),
+    "l4w2 aim: the assist's CrowdRay not told the drop": (INPUT, "\t\t\t\theadRadius,\n\t\t\t\tdrop\n\t\t\t)", "\t\t\t\theadRadius,\n\t\t\t\t0\n\t\t\t)"),
+    "l4w2 aim: ForEach hands no drop": (CROWD_RENDERER, "\t\t\t\tHitShapes.SeatDrop(entity.height, entity.seat, poseConsts.restDrop)\n", "\t\t\t\t0\n"),
+    # Figures (K4, K5).
+    "k5 figures: a head off the axis taken (x)": (FIGURES, "\t\tmath.abs(head[1]) > HEAD_EPSILON\n", "\t\tfalse\n"),
+    "k5 figures: a head off the scored height taken": (FIGURES, "\t\tor math.abs(head[2] - scored) > HEAD_EPSILON\n", "\t\tor false\n"),
+    "k5 figures: a head off the axis taken (z)": (FIGURES, "\t\tor math.abs(head[3]) > HEAD_EPSILON\n", "\t\tor false\n"),
+    "k5 figures: the scored head at the top": (FIGURES, "\tlocal scored = def.height - def.headRadius\n", "\tlocal scored = def.height\n"),
+    "k5 figures: a stud off is near enough": (FIGURES, "local HEAD_EPSILON = 0.01\n", "local HEAD_EPSILON = 1\n"),
+    "k4 figures: the anchor not on the body": (FIGURES, "\tframes[count] = root * frameOf(rigOut.anchor)\n", "\tframes[count] = frameOf(rigOut.anchor)\n"),
+    "k4 figures: the lean's halves swapped": (FIGURES, "\tpose.lean, pose.leanSide = RaiderPose.Lean(yaw, lean.X, lean.Z)\n", "\tpose.leanSide, pose.lean = RaiderPose.Lean(yaw, lean.X, lean.Z)\n"),
+}
+assert not set(K7_CLIENT_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(K7_CLIENT_PIN_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_CLIENT_PIN_MUTATIONS)
+
+# The review's slice 1 m2: Accept's three guards that no case reached (tests_l4w2.luau's shapes group
+# now does), and slice 2 s1's generation check in the scenery's build (a pin).
+K7_LATE_MUTATIONS = {
+    "k7 dress: hide.blocks need not be a list": (LEVEL_DRESS, '\tif type(hideBlocks) ~= "table" then\n', "\tif false then\n"),
+    "k7 dress: hide.camps need not be a table": (LEVEL_DRESS, '\tif type(hideCamps) ~= "table" then\n', "\tif false then\n"),
+    "k7 dress: a camp's roles need not be a list": (LEVEL_DRESS, '\t\tif type(list) ~= "table" then\n', "\t\tif false then\n"),
+    "k7 client pins: an outlived build goes on": (
+        LEVEL_SCENERY, "\t\t\tif generation ~= state.generation then\n\t\t\t\treturn\n\t\t\tend\n\t\t\tstarted = os.clock()",
+        "\t\t\tif false then\n\t\t\t\treturn\n\t\t\tend\n\t\t\tstarted = os.clock()"),
+}
+assert not set(K7_LATE_MUTATIONS) & set(MUTATIONS), sorted(set(K7_LATE_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(K7_LATE_MUTATIONS)
+
+# Fix round 2 (docs/prompts/l4-w2-fix2.md; docs/prompts/l4-w2-fix-reports/*-2.md). ScenePlan.Crosshair and
+# RUN_OVER (L3, ui-engineer A's nine), caught by tests_l4w2_scenery.luau's crosshair group.
+CROSSHAIR = "\treturn cameraUp and (range or ScenePlan.RUN_OVER[phase] ~= true)\n"
+RUN_OVER = "ScenePlan.RUN_OVER = { summary = true, ended = true } :: { [string]: boolean }\n"
+FIX2_SCENE_MUTATIONS = {
+    "fix2 scene: the crosshair under the summary (camera alone)": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp\n"),
+    "fix2 scene: the crosshair ignores the phase": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp and (true or ScenePlan.RUN_OVER[phase] ~= true)\n"),
+    "fix2 scene: the bench needs a live phase too": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp and (range and ScenePlan.RUN_OVER[phase] ~= true)\n"),
+    "fix2 scene: the crosshair without the shoulder camera": (SCENE_PLAN, CROSSHAIR, "\treturn true and (range or ScenePlan.RUN_OVER[phase] ~= true)\n"),
+    "fix2 scene: the crosshair only once the run is over": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp and (range or ScenePlan.RUN_OVER[phase] == true)\n"),
+    "fix2 scene: the bench's crosshair turned around": (SCENE_PLAN, CROSSHAIR, "\treturn cameraUp and (not range or ScenePlan.RUN_OVER[phase] ~= true)\n"),
+    "fix2 scene: RUN_OVER without ended": (SCENE_PLAN, RUN_OVER, "ScenePlan.RUN_OVER = { summary = true } :: { [string]: boolean }\n"),
+    "fix2 scene: RUN_OVER without the summary": (SCENE_PLAN, RUN_OVER, "ScenePlan.RUN_OVER = { ended = true } :: { [string]: boolean }\n"),
+    "fix2 scene: RUN_OVER holds a wave": (SCENE_PLAN, RUN_OVER, "ScenePlan.RUN_OVER = { summary = true, ended = true, wave = true } :: { [string]: boolean }\n"),
+}
+assert not set(FIX2_SCENE_MUTATIONS) & set(MUTATIONS), sorted(set(FIX2_SCENE_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(FIX2_SCENE_MUTATIONS)
+
+# L4 (the fix-diff review's m1, its eleven probes first), L3's camera and crosshair lines, L2's "!"
+# and L1's sweep gate in raiderpose.py: caught only by run_harness.py's L4W2_LINES pins.
+CAMP_FX = "src/combat/client/Controllers/CampFx.luau"
+RAIDER_POSE_PY = "tools/testfit/raiderpose.py"
+FILES += [CAMP_FX, RAIDER_POSE_PY]
+TAKE_LINE = "\tlocal figure: Figure? = if pool ~= nil then table.remove(pool) else nil\n"
+BUDGET_LINE = "\tlocal budget = math.max(math.floor(Theme.COMBAT_RAIDER_PREWARM_PER_FRAME), 1)\n"
+SKINNED_LINE = '\treturn child:IsA("BasePart") and child:GetAttribute(NAMES.skinned) == true\n'
+WALL_LINE = '\treturn child:IsA("BasePart") and child.CollisionGroup ~= NAMES.defaultGroup\n'
+TEARDOWN_STATE = "\tstate.dress = nil\n\tstate.built = false\n\tstate.failed = false\n"
+LOBBY_KNOWN = "\tlocal known = state.inLobby\n\tif known ~= nil then\n\t\treturn known\n\tend\n"
+SHOWS_LINE = "\treturn ScenePlan.Crosshair(active, phase, rangeMode)\n"
+FEEDBACK_SHOWS = "\t\tCameraController.ShowsCrosshair(),\n"
+WEAR_TAIL = "\tlocal def = kindDef(entity.kind)\n\tif def ~= nil then\n\t\tapplyKind(entity, def)\n\tend\nend\n\nlocal function step("
+SWEEP_GATE = (
+    "            ok = (ok and min(sectors) >= at_range - 1e-9\n"
+    "                  and span[0] <= -half + SECTOR_DEGREES + 1e-9 and span[1] >= half - SECTOR_DEGREES - 1e-9\n"
+    "                  and lag <= SECTOR_DEGREES + 1e-9)\n"
+)
+FIX2_PIN_MUTATIONS = {
+    # The review's m1, in its order.
+    "fix2 pins: no pool ever fills (m1, CrowdRenderer:2672)": (CROWD_RENDERER, "\tlocal built = Figures.Build()\n", "\tlocal built = 0\n"),
+    "fix2 pins: Take builds again (m1, Figures:733)": (FIGURES, TAKE_LINE, "\tlocal figure: Figure? = if pool ~= nil and #pool > 0 then table.remove(pool) else build(look)\n"),
+    "fix2 pins: no split over the cap (m1, Figures:800)": (FIGURES, "\tlocal share = if total > room then room / total else 1\n", "\tlocal share = 1\n"),
+    "fix2 pins: the whole envelope in one frame (m1, Figures:836)": (FIGURES, BUDGET_LINE, "\tlocal budget = math.huge\n"),
+    "fix2 pins: a body that met an empty pool never waits (m1, CrowdRenderer:1013)": (CROWD_RENDERER, "\tentity.wants = if figure == nil then look else nil\n", "\tentity.wants = nil\n"),
+    "fix2 pins: a waiting body only waits (m1, CrowdRenderer:2699)": (CROWD_RENDERER, "\t\t\t\twear(entity, wanted)\n", "\t\t\t\tFigures.Wait(wanted)\n"),
+    "fix2 pins: the lobby fill never starts (m1, CombatUIController:1716)": (UI_CONTROLLER, "\t\tlocal kinds = prewarmCounts(run.prewarm)\n", "\t\tlocal kinds = nil\n"),
+    "fix2 pins: no Skinned part known (m1, LevelScenery:249)": (LEVEL_SCENERY, SKINNED_LINE, "\treturn false\n"),
+    "fix2 pins: no wall known (m1, LevelScenery:253)": (LEVEL_SCENERY, WALL_LINE, "\treturn false\n"),
+    "fix2 pins: one failure greys every later level (m1, LevelScenery:649)": (LEVEL_SCENERY, TEARDOWN_STATE, "\tstate.dress = nil\n\tstate.built = false\n"),
+    "fix2 pins: mood B in the lobby, bodyInLobby false (m1, LevelScenery:476-479)": (LEVEL_SCENERY, LOBBY_KNOWN, "\treturn false\n"),
+    # Their neighbours (the same decisions, one line over).
+    "fix2 pins: Take builds a kind with no pool": (FIGURES, TAKE_LINE, "\tlocal figure: Figure? = if pool ~= nil then table.remove(pool) else build(look)\n"),
+    "fix2 pins: the cap's room unbounded": (FIGURES, "\tlocal room = math.max(math.floor(cap), 0)\n", "\tlocal room = math.huge\n"),
+    "fix2 pins: the share never applied": (FIGURES, "\t\tlocal exact = math.floor(counts[kind]) * share\n", "\t\tlocal exact = math.floor(counts[kind])\n"),
+    "fix2 pins: the waiting bodies built past the budget": (FIGURES, "\t\twhile look ~= nil and made < budget and spare < count do\n", "\t\twhile look ~= nil and spare < count do\n"),
+    "fix2 pins: the goals' rounds past the budget": (FIGURES, "\twhile more and made < budget do\n", "\twhile more do\n"),
+    "fix2 pins: a goal's figure past the budget": (FIGURES, "\t\t\tlocal look = if made < budget and (built[kind] or 0) < goal then lookFor(kind) else nil\n", "\t\t\tlocal look = if (built[kind] or 0) < goal then lookFor(kind) else nil\n"),
+    "fix2 pins: dressFigure takes no figure": (CROWD_RENDERER, "\tlocal figure = if look ~= nil then Figures.Take(look) else nil\n", "\tlocal figure: Figures.Figure? = nil\n"),
+    "fix2 pins: wear swaps before the pool is ready": (CROWD_RENDERER, "\tif not Figures.Ready(wanted.kind) then\n", "\tif false then\n"),
+    "fix2 pins: wear never counts a wait": (CROWD_RENDERER, "\t\tFigures.Wait(wanted)\n\t\treturn\n", "\t\treturn\n"),
+    "fix2 pins: wear never puts the model on": (CROWD_RENDERER, WEAR_TAIL, WEAR_TAIL.replace("\t\tapplyKind(entity, def)\n", "")),
+    "fix2 pins: the step reads no wish": (CROWD_RENDERER, "\t\t\tlocal wanted = entity.wants\n", "\t\t\tlocal wanted: Figures.Look? = nil\n"),
+    "fix2 pins: the counts never handed to the renderer": (UI_CONTROLLER, "\t\t\tCrowdRenderer.Prewarm(kinds)\n", ""),
+    "fix2 pins: the wrong parts painted as walls": (LEVEL_SCENERY, WALL_LINE, WALL_LINE.replace("~=", "==")),
+    "fix2 pins: teardown keeps the dress": (LEVEL_SCENERY, TEARDOWN_STATE, "\tstate.built = false\n\tstate.failed = false\n"),
+    "fix2 pins: teardown keeps the built flag": (LEVEL_SCENERY, TEARDOWN_STATE, "\tstate.dress = nil\n\tstate.failed = false\n"),
+    "fix2 pins: the server's word read as out of the lobby": (LEVEL_SCENERY, "\t\treturn known\n", "\t\treturn false\n"),
+    "fix2 pins: the root never judged": (LEVEL_SCENERY, "\treturn inLobbyAt(root.Position)\n", "\treturn false\n"),
+    "fix2 pins: no root is the lobby": (LEVEL_SCENERY, '\tif root == nil or not root:IsA("BasePart") then\n\t\treturn false\n', '\tif root == nil or not root:IsA("BasePart") then\n\t\treturn true\n'),
+    # L3: the crosshair (ui-engineer A's mutants).
+    "fix2 pins: the crosshair under the summary again": (CAMERA_CONTROLLER, SHOWS_LINE, "\treturn active\n"),
+    "fix2 pins: the crosshair judged in a wave": (CAMERA_CONTROLLER, SHOWS_LINE, '\treturn ScenePlan.Crosshair(active, "wave", rangeMode)\n'),
+    "fix2 pins: the camera's own list of phases": (CAMERA_CONTROLLER, "local DEFAULT_CAMERA_PHASES: { [string]: boolean } = ScenePlan.RUN_OVER\n", "local DEFAULT_CAMERA_PHASES: { [string]: boolean } = {}\n"),
+    "fix2 pins: the camera requires no ScenePlan": (CAMERA_CONTROLLER, 'local ScenePlan = require(script.Parent:WaitForChild("ScenePlan"))\n', ""),
+    "fix2 pins: the crosshair follows the camera alone": (FEEDBACK, FEEDBACK_SHOWS, "\t\tCameraController.IsActive(),\n"),
+    "fix2 pins: the crosshair always shown": (FEEDBACK, FEEDBACK_SHOWS, "\t\ttrue,\n"),
+    # L2: the "!" follows the head (ui-engineer B's mutants and lines).
+    "fix2 pins: a swap drops the mark": (CAMP_FX, "\t\tif age >= lasts or head == nil then\n", "\t\tif age >= lasts or head ~= mark.head then\n"),
+    "fix2 pins: a gone body keeps its mark": (CAMP_FX, "\t\tif age >= lasts or head == nil then\n", "\t\tif age >= lasts then\n"),
+    "fix2 pins: the mark stays on the old part": (CAMP_FX, "\t\t\thang(mark, head)\n", "\t\t\tmark.head = head\n"),
+    "fix2 pins: a new head never hung": (CAMP_FX, "\t\tif head ~= mark.head then\n", "\t\tif false then\n"),
+    "fix2 pins: the head read once at the alert": (CAMP_FX, "\t\tlocal head = CrowdRenderer.GetHead(mark.id)\n", "\t\tlocal head = mark.head\n"),
+    "fix2 pins: the mark hung on nothing": (CAMP_FX, "\tmark.gui.Adornee = head\n", ""),
+    "fix2 pins: hang forgets the part": (CAMP_FX, "\tmark.head = head\n\tmark.gui.Adornee", "\tmark.gui.Adornee"),
+    "fix2 pins: the mark inside the head": (CAMP_FX, "head.Size.Y * 0.5 + Theme.COMBAT_ALERT_STUDS, 0)", "0, 0)"),
+    "fix2 pins: Alert hangs nothing": (CAMP_FX, "\t\thang(shown, head)\n", ""),
+    # L1: raiderpose.py's sweep gate (ui-engineer B's lines and mutants).
+    "fix2 pins: the sweep binned at 15 degrees": (RAIDER_POSE_PY, "SECTOR_DEGREES = 5.0\n", "SECTOR_DEGREES = 15.0\n"),
+    "fix2 pins: the Chief's sweep ungated": (RAIDER_POSE_PY, 'SWEEP_FLOOR_KINDS = ("chief",)\n', "SWEEP_FLOOR_KINDS = ()\n"),
+    "fix2 pins: the tell's leading edge runs backward": (RAIDER_POSE_PY, "    return half - 2 * half * sweep\n", "    return -half + 2 * half * sweep\n"),
+    "fix2 pins: the leading end is the trailing one": (RAIDER_POSE_PY, "                            leading = min(leading, angle)\n", "                            leading = max(-math.inf if leading == math.inf else leading, angle)\n"),
+    "fix2 pins: the lag measured against nothing": (RAIDER_POSE_PY, "                    behind = leading - tell_lead(half, t.sweep)\n", "                    behind = 0.0\n"),
+    "fix2 pins: no sector rule": (RAIDER_POSE_PY, SWEEP_GATE, SWEEP_GATE.replace("ok and min(sectors) >= at_range - 1e-9", "ok")),
+    "fix2 pins: no span rule": (RAIDER_POSE_PY, SWEEP_GATE, SWEEP_GATE.replace("span[0] <= -half + SECTOR_DEGREES + 1e-9 and span[1] >= half - SECTOR_DEGREES - 1e-9", "True")),
+    "fix2 pins: no lag rule": (RAIDER_POSE_PY, SWEEP_GATE, SWEEP_GATE.replace("lag <= SECTOR_DEGREES + 1e-9", "True")),
+}
+assert not set(FIX2_PIN_MUTATIONS) & set(MUTATIONS), sorted(set(FIX2_PIN_MUTATIONS) & set(MUTATIONS))
+MUTATIONS.update(FIX2_PIN_MUTATIONS)
+
+
+
 def harness(root: Path) -> tuple:
     """Runs the harness on `root`. Returns its failing check lines and its verdict line ("" when
     it printed none: run_harness.py prints one whenever a case ran)."""
@@ -8076,6 +9075,11 @@ def copy(root: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(here / name, target)
 
+
+# mutate_shards.py asks how long the list is before it splits it into "from:to" slices.
+if os.environ.get("MUTATE_COUNT") == "1":
+    print(f"MUTATIONS: {len(MUTATIONS)} entries")
+    sys.exit(0)
 
 # An optional fifth argument "from:to" runs that slice of the list (a long run in two halves).
 span = sys.argv[4] if len(sys.argv) > 4 else ""
@@ -8116,7 +9120,12 @@ if stale:
 
 # The unmutated bundle first. A harness that does not pass as it stands (or says nothing at all:
 # no interpreter, a bundle that does not compile) would make every mutation look caught.
-root = here / "mutant"
+# Each shard of mutate_shards.py works in its own copy (MUTATE_ROOT), so they can run at once.
+root_name = os.environ.get("MUTATE_ROOT", "mutant")
+if not re.fullmatch(r"mutant[\w-]*", root_name):
+    print(f"MUTATIONS: MUTATE_ROOT {root_name!r} is not a mutant folder name")
+    sys.exit(2)
+root = here / root_name
 copy(root)
 fails, verdict = harness(root)
 if not verdict.startswith("HARNESS: PASS (") or fails:

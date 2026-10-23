@@ -1,6 +1,6 @@
 {
 	"name": "EraCityTycoonExpeditions",
-	"globIgnorePaths": ["templates/_props", "templates/_paths", "templates/_enemies", "templates/_world"],
+	"globIgnorePaths": ["templates/_props", "templates/_paths", "templates/_enemies", "templates/_world", "templates/_levels"],
 	"tree": {
 		"$className": "DataModel",
 		"ReplicatedStorage": {
@@ -16,6 +16,10 @@
 				"Props": {
 					"$className": "Folder",
 					"$path": { "optional": "templates/_props" }
+				},
+				"Levels": {
+					"$className": "Folder",
+					"$path": { "optional": "templates/_levels" }
 				}
 			}
 		},
@@ -39,11 +43,7 @@
 		},
 		"ServerStorage": {
 			"$className": "ServerStorage",
-			"$ignoreUnknownInstances": true,
-			"Enemies": {
-				"$className": "Folder",
-				"$path": { "optional": "templates/_enemies" }
-			}
+			"$ignoreUnknownInstances": true
 		},
 		"Workspace": {
 			"$className": "Workspace",

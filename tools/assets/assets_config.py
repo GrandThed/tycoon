@@ -1,7 +1,8 @@
 """Read, shape and write src/shared/Config/Assets.json (schema v1, INTERFACES.md "M7 contracts";
 v2 adds the city-dressing `props` block, "M9 contracts"; v3 adds the baked-path `paths` block,
 "Wave 1d — baked paths"; v4 adds the landscape `world` block, "M13 Wave 2 — the Valley meshes"; v5
-adds the shelf `icons` block, docs/prompts/l3-w2-contract.md L3-42).
+adds the shelf `icons` block, docs/prompts/l3-w2-contract.md L3-42; v6 adds the dungeon `levels`
+block, docs/prompts/l4-w2-reports/pipeline.md).
 
 Shared by upload_models.py (writes modelAssetId / vipSwatchAssetId), harvest.py (writes meshId,
 imageId, size, offset, vipImageId) and gen_templates.py (reads everything). Every writer goes
@@ -59,6 +60,16 @@ WORLD_LOOKS = (WORLD_LOOK_PALETTE, WORLD_LOOK_FLAT)
 # top-level block, not a key of a prop entry: ensure_prop rebuilds a prop entry from its stages alone.
 ICONS_SCHEMA_VERSION = 5
 ICONS_KEY = "icons"
+# A file only becomes v6 once it carries a level's baked meshes, so every earlier run keeps its
+# bytes. A level is the world route with more than one image: each mesh wears either the level's
+# palette (`palette` look, per-face UVs) or one named ground texture (`texture` look, world-planar
+# UVs), so the images are a map, and the palette is the image called "palette".
+LEVELS_SCHEMA_VERSION = 6
+LEVELS_KEY = "levels"
+LEVEL_LOOK_PALETTE = "palette"
+LEVEL_LOOK_TEXTURE = "texture"
+LEVEL_LOOKS = (LEVEL_LOOK_PALETTE, LEVEL_LOOK_TEXTURE)
+LEVEL_PALETTE_IMAGE = "palette"
 SINGLE_STAGE_TYPES = ("unlock", "decor", "monument")
 
 _NUMBER_LIST = re.compile(r"\[\s*((?:-?\d+(?:\.\d+)?(?:e-?\d+)?\s*,\s*)*-?\d+(?:\.\d+)?(?:e-?\d+)?)\s*\]")
@@ -292,6 +303,52 @@ def world_mesh_harvested(mesh: dict) -> bool:
     return int((mesh or {}).get("meshId", 0)) != 0
 
 
+def ensure_level(assets: dict, level: str, plan_hash: str, triangles: int = 0) -> dict:
+    """Pre-list one level's block without touching ids; marks the file v6. `planHash` is the bake
+    record's: the dungeon server compares it with the level's dress data and keeps the grey level
+    when they differ, so a stale upload is visible from the committed files alone."""
+    assets["version"] = max(int(assets.get("version", SCHEMA_VERSION)), LEVELS_SCHEMA_VERSION)
+    entry = assets.setdefault(LEVELS_KEY, {}).setdefault(level, {})
+    entry["planHash"] = str(plan_hash)
+    entry["triangles"] = int(triangles or entry.get("triangles", 0))
+    entry.setdefault("images", {})
+    entry.setdefault("meshes", {})
+    return entry
+
+
+def ensure_level_image(assets: dict, level: str, image: str) -> dict:
+    """Pre-list one of a level's images (the palette or a ground texture) without touching ids. An
+    image is a Decal like a shelf icon: `assetId` from the upload, `imageId` from the harvest,
+    `sha256` of the uploaded PNG so a changed file goes up again."""
+    entry = assets[LEVELS_KEY][level]["images"].setdefault(image, {})
+    for key, default in empty_icon().items():
+        entry.setdefault(key, default)
+    return entry
+
+
+def ensure_level_mesh(assets: dict, level: str, mesh_name: str, triangles: int, look: str, texture: str | None, group: str) -> dict:
+    """Pre-list one baked level mesh without touching ids. Its look, the texture it wears and its
+    group are the bake record's and are refreshed on every run: they are how the template is drawn
+    (which image, and gen_templates' per-group fidelity and shadow), not something an upload or a
+    harvest decides."""
+    mesh = assets[LEVELS_KEY][level]["meshes"].setdefault(mesh_name, {})
+    for key, default in empty_path_mesh().items():
+        mesh.setdefault(key, default)
+    mesh["triangles"] = int(triangles)
+    mesh["look"] = look
+    if look == LEVEL_LOOK_TEXTURE:
+        mesh["texture"] = str(texture)
+    else:
+        mesh.pop("texture", None)
+    mesh["group"] = str(group)
+    return mesh
+
+
+def level_mesh_image(mesh: dict) -> str:
+    """The name of the image a level mesh wears: the palette, or its ground texture."""
+    return str(mesh.get("texture")) if mesh.get("look") == LEVEL_LOOK_TEXTURE else LEVEL_PALETTE_IMAGE
+
+
 def empty_icon() -> dict:
     return {"assetId": 0, "imageId": 0, "sha256": ""}
 
@@ -371,6 +428,8 @@ def render_assets(assets: dict) -> str:
             set_name: {model: render_icon(assets[ICONS_KEY][set_name][model]) for model in sorted(assets[ICONS_KEY][set_name])}
             for set_name in sorted(assets[ICONS_KEY])
         }
+    if LEVELS_KEY in assets:
+        ordered[LEVELS_KEY] = {name: render_level(assets[LEVELS_KEY][name]) for name in sorted(assets[LEVELS_KEY])}
     text = json.dumps(ordered, indent=2, ensure_ascii=False)
     text = _NUMBER_LIST.sub(lambda m: "[" + ", ".join(v.strip() for v in m.group(1).split(",")) + "]", text)
     return text + "\n"
@@ -453,6 +512,60 @@ def render_icon(icon: dict) -> dict:
     """Fixed key order for one shelf icon (L3-42): assetId, imageId, sha256."""
     icon = icon or {}
     return {"assetId": int(icon.get("assetId", 0)), "imageId": int(icon.get("imageId", 0)), "sha256": str(icon.get("sha256", ""))}
+
+
+def render_level(entry: dict) -> dict:
+    """Fixed key order for one level: planHash, triangles, images (each an icon's three keys), then
+    meshes (a world mesh's keys, `texture` on texture-look meshes only, then `group`)."""
+    entry = entry or {}
+    images = entry.get("images") or {}
+    meshes = entry.get("meshes") or {}
+    out: dict = {
+        "planHash": str(entry.get("planHash", "")),
+        "triangles": int(entry.get("triangles", 0)),
+        "images": {name: render_icon(images[name]) for name in sorted(images)},
+        "meshes": {},
+    }
+    for name in sorted(meshes):
+        mesh = meshes[name] or {}
+        row: dict = {
+            "assetId": int(mesh.get("assetId", 0)),
+            "meshId": int(mesh.get("meshId", 0)),
+            "size": list(mesh.get("size") or [0, 0, 0]),
+            "offset": list(mesh.get("offset") or [0, 0, 0]),
+            "sha256": str(mesh.get("sha256", "")),
+            "triangles": int(mesh.get("triangles", 0)),
+            "look": str(mesh.get("look", LEVEL_LOOK_PALETTE)),
+        }
+        if row["look"] == LEVEL_LOOK_TEXTURE:
+            row["texture"] = str(mesh.get("texture", ""))
+        row["group"] = str(mesh.get("group", ""))
+        out["meshes"][name] = row
+    return out
+
+
+def pending_level_images(assets: dict, include_all: bool = False) -> list[tuple[str, str, int]]:
+    """(level, image, assetId) for every uploaded level image whose Image asset is still unknown."""
+    out = []
+    for level in sorted(assets.get(LEVELS_KEY, {})):
+        images = (assets[LEVELS_KEY][level] or {}).get("images") or {}
+        for image in sorted(images):
+            asset_id = int((images[image] or {}).get("assetId", 0))
+            if asset_id != 0 and (include_all or int(images[image].get("imageId", 0)) == 0):
+                out.append((level, image, asset_id))
+    return out
+
+
+def pending_level_meshes(assets: dict, include_all: bool = False) -> list[tuple[str, str, int]]:
+    """(level, mesh, assetId) for every uploaded level mesh whose MeshId is still unknown."""
+    out = []
+    for level in sorted(assets.get(LEVELS_KEY, {})):
+        meshes = (assets[LEVELS_KEY][level] or {}).get("meshes") or {}
+        for name in sorted(meshes):
+            asset_id = int((meshes[name] or {}).get("assetId", 0))
+            if asset_id != 0 and (include_all or not world_mesh_harvested(meshes[name])):
+                out.append((level, name, asset_id))
+    return out
 
 
 def save_assets(assets: dict) -> None:

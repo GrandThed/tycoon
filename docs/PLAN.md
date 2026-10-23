@@ -2849,7 +2849,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 | L1 | Forest Road in grey: lobby camp, map, three camp parts, stand-in boss, difficulties | Merged 2026-10-14; L1b and L1c after it; closed 2026-10-16 on Ben's word |
 | L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | W1–W3 merged (2026-10-17 → 19); closed 2026-10-20 on Ben's word, with L1c |
 | L3 | The Armory: per-weapon tiers, the profile shape, weapon models | **Closed 2026-10-21 on Ben's word ("everything feels good, lets close it"). W1 merged 448987e, W2 merged a454932, harvest 9524edf.** See "L3" below |
-| L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | Not started |
+| L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | **In progress.** W1 and W1b done; W2 done 2026-10-23, merging to `main` after QA; W3, W4 not started. See "L4" below |
 | L5 | Friends: parties and revive in a level | Not started |
 
 **Where it is (2026-10-13):**
@@ -4628,6 +4628,336 @@ and stage light (lead + ui-engineer, from Ben's first screenshot); the two-clien
 joins); the phone fits with icons (Ben); the R15-only avatar setting before the L4 publish (lead, MANUAL_STEPS L4-0);
 growing looks need look attributes (L3-55); every item listed above under W1 and W2 stands. The publish freeze on both
 places holds until L4.
+
+## L4 — the real forest
+
+**Goal:** Forest Road becomes a real forest with real raiders and the Camp Chief; the city map departs into it; an end
+screen and rewards set against the city; then the first publish of both places.
+- **No sound. Phones must work.** Each wave is playable alone in Studio.
+- **Publish freeze (lead):** neither place publishes from `main` until W4.
+
+**Documents:**
+- Ben's decisions: `docs/MISSIONS_DESIGN.md` §26 (eight decisions, 2026-10-21), §27 (the picture gate; the rocks
+  redone), §28 (the mountain and the Castle Key; the approvals; R8 as built; the Chief's sweep and the fodder's lunge as
+  drawn).
+- Study: `docs/prompts/l4-study.md` → `l4-study-report-forest.md`, `l4-study-report-chief.md`,
+  `l4-study-report-publish.md`.
+- Values: `docs/BALANCE.md` "L4 W2" and "L4 W2 fix round" sections.
+- Worktrees: `C:\Users\benja\Desktop\tycoon-p5` (branch `l4-real-forest`, then `l4-w2`); `tycoon-p5b` (W1b, then
+  `l4-verify` for the long gates); `tycoon-p5c` (W1b fix 2; removable).
+
+**Ben's rulings (MISSIONS_DESIGN §26–§28; the lead's recommendation every time):**
+1. The lookout moves to the trailhead (a ledge 26 up over Road1). The chain is unchanged.
+2. Natural camp edges on today's outlines: logs, rocks, thicket, at most 4 studs, gaps at the gates.
+3. Real models for all seven looks (fodder, slinger, marksman, lobber, brute, plated elite, Camp Chief). Each kind keeps
+   its colour.
+4. The Camp Chief's own move is a war-club sweep. Look A: fur cloak, skull mask, the Warhammer.
+5. The city map departs straight into the level (W3).
+6. The Raider Arena is hidden for the publish.
+7. The end screen: rows counting up, coins flying in, Timber piling up (W3).
+8. Run cash grows with the city's era (W3).
+9. **Mood B:** darker, hazed, in the dungeon place only; tuned after his first Studio look.
+10. **R8 judged fairly:** no spot may out-earn fighting it all with the same gear, over 30 seeds.
+11. Every rock redone after his two references; the tall walls less regular (same depth).
+12. **The mountain climb** behind the trailhead: one lap of about 8 double jumps; the summit chest gives the Castle Key.
+    No climb markers: "finding the way up is part of the challenge".
+- Lead rulings told to him (he may overrule):
+  - baked planar-UV ground and wall skins;
+  - scenery is walk-through, except the layout's own blocks;
+  - invisible walls at the tree line, except at designed drops;
+  - the next ability shown locked "with the Castle";
+  - a solo-first publish (L5 brings parties into levels);
+  - R8 against the same gear (the pair player);
+  - the Chief's sweep 12.7 studs / 120° (what the hammer draws); his health (4,700) is the lever if he feels short;
+  - the fodder's lunge slides its body, so the club reaches about 3.9 studs.
+
+**Steps:**
+
+| Step | Scope | State |
+|---|---|---|
+| W1 | The forest on paper: the lookout moved, the forest generator and renders, raider and Chief prototypes | **Done 2026-10-21.** Ben's picture gate passed the same day (§27) |
+| W1b | The old mission code out; a dash proven by the server's ring (the dash hold); RunState cells once | **Done 2026-10-22.** Three fix rounds; merged into `l4-real-forest` (`37ccfe4`) |
+| W2 | The forest, the raiders, the Camp Chief and the Castle Key in the game; one upload, one harvest paste | **Done 2026-10-23** (`3205405`): reviewed, two fix rounds, harvest pasted 2026-10-22. **Merging to `main` after QA**, then Ben's look |
+| W3 | The city map departs into the level; the end screen; rewards by era | Not started |
+| W4 | Publish readiness: the Theme round, phones, the checklist, both places published together | Not started |
+
+### Wave 1 — the forest on paper and the lookout (2026-10-21)
+
+**Documents:** briefs `docs/prompts/l4-w1-lookout.md`, `l4-w1-forest.md`, `l4-w1-raiders.md`; reports
+`docs/prompts/l4-w1-reports/` (`lookout.md`, `forest.md`, `raiders.md`, `lead-notes.md`).
+
+**What shipped (no uploads):**
+- **Track D, the lookout at the trailhead** (economy-designer):
+  - `LookoutLedge` moved to (−446, 11, −33), top 26 over Road1. The chest and its sign moved with it.
+  - `LookoutSignPad` and its region cell removed.
+  - Double Jump reaches the ledge. One jump plus a dash falls 5 short. No lifting ability lands on it.
+  - `SNIPER_KNOWN_LIMIT_L4` removed with its reader: Normal is green on all 30 seeds.
+  - One R8 row stayed red (Road3, Hard, sword T1 / bow T4, ×1.60; red on 12 of 30 seeds before L4). W2's fair R8
+    closed it.
+- **Track F, the forest generator** (forest kit lead): `tools/levels/forest.py` (`build`, `check`) and
+  `forestcheck.py`.
+  - They turn the layout into baked meshes, client props, invisible tree-line walls and one data file. Deterministic.
+  - Renders: `assets/testfit/out/Levels/ForestRoad/` (`_L4_forest_overview.png`, `_L4_moods.png`).
+- **Track R, the raider prototypes** (raider kit lead): fodder, brute and the Chief (looks A and B) as generated meshes;
+  the pose mirror `tools/testfit/raiderpose.py --check`; `raiderview.py` strips.
+- **Gates at track D:** check_levels PASS; check_levels_mutants PASS; harness 4,032; check_stage_mirror PASS;
+  sim_range FAIL (1), the R8 row above.
+
+**Commits:** study `0b30e45`, `21c620e`; decisions `f5c9da6`; briefs `2a297a0`; tracks `5744df9` (D), `1d3b0d2` (R),
+`54294ca` (F); lead notes `4d12157`; the picture verdict `9851af2`.
+
+### Wave 1b — the old mission code goes; the dash hold (2026-10-21 → 22)
+
+**Documents:**
+- Brief `docs/prompts/l4-w1b-brief.md`. Contract `l4-w1b-contract.md` (L4B-1 to L4B-9; §10 = the lead's rulings after
+  the review).
+- Fix rounds: `l4-w1b-fix-round.md` (F1–F6), `l4-w1b-fix2.md` (G1–G3), `l4-w1b-fix3.md` (H1–H3).
+- Reports `l4-w1b-reports/`, `l4-w1b-fix-reports/`. Findings `l4-w1b-review/` (1–5). QA `l4-w1b-qa.md`.
+
+**What shipped:**
+- **Deleted:**
+  - `EnemyService` (2,264 lines), `CombatService`;
+  - the C1 remotes (`RequestReady`, `RequestAttack`, `RequestFire`, `RequestDraw`, `RequestAbility`), their client paths
+    and the C1 HUD boot;
+  - the CombatFx kinds only they sent (incl. the `onSwing` path, L3-53);
+  - debug bots;
+  - missions 2–4 and the four arena layouts; both mission adapters;
+  - dead `Combat.luau` functions and `Combat.json` keys;
+  - `Armory.json slots`, `classes`, `abilities`, `bands`, `partyEffects` (L3-54);
+  - `ServerStorage.Enemies` in `combat.project.json`.
+- **The Raider Arena is hidden** by deleting its data (node, level file, layout). `RequestStartLevel("raiderArena")`
+  answers `locked`. The `bonus` node kind stays.
+- **Kept for the hub until W3:** `Config/Missions/1_Village.json` as a stub, `Combat.json overdrive`. Saved data is
+  untouched (`combat.missions`, `combat.gear`, `Armory.json legacy`).
+- **L4B-7, a dash proven by the ring.** A dash's i-frames count only once the server's position ring has seen the
+  dash.
+  - **The dash hold (F1):** a hit decided while a dash claim is pending, which that claim would cover, is held. It is
+    voided if the claim is proven, and lands if it lapses (at most about 0.45 s later).
+  - One order every frame: proofs before decisions (pure `DashProof.Step`; `VitalsService.Step` driven from
+    `WeaponService.step`, each part under `xpcall`).
+  - G1: a held hit keeps the knock rules as of when it was due. A player's later decisions queue behind it.
+  - H1: a boss room's clear waits, at most one lapse, for a held blow (`VitalsService.HasWaiting`).
+  - **What it stops (F5):** a request-only forger, and a dash into a wall. Not a modified client that moves its own root
+    (the game has no movement anti-cheat). Leap Smash and Impale Dash keep their i-frames at the cast.
+- **L4B-8:** RunState carries each floor's `cells` once per member per floor set.
+- F6: the mentor pay is tied to the game (a `Combat.MentorBonus` mirror).
+
+**Review:** three slices, **0 Critical, 0 Major, 9 Minor** (+9 suggestions) → F1–F6.
+- Fix-diff review: 0 / 1 / 2. The Major: a held hit lost the knock rules → G1–G3.
+- Second fix-diff review: 0 / 0 / 3 → H1–H3. All fixed.
+
+**QA** (`l4-w1b-qa.md`, on `f16515a`): every gate green except the known R8 row (closed in W2).
+- Harness 4,162 checks (4,244 after fix 3). Full `mutate.py` 1,764 run, 0 not caught.
+- Fix 2 and fix 3: filtered `mutate.py` 260 and 278, 0 not caught; stale 0.
+
+**Commits:** brief `59a2279`; contract `9fa7191`, §10 `d604685`; build `1ae8bfb`; review `a098eaf`; fix round
+`f16515a`; fix-diff `0489eef`; fix 2 `c01348a`; second fix-diff `d191d54`; fix 3 `7f43124`; QA `5f19b0f`; merged
+`555e17c`, then into `l4-real-forest` `37ccfe4`.
+
+### Wave 2 — the forest, the raiders, the Camp Chief, the Castle Key (2026-10-21 → 23)
+
+**Documents:**
+- Brief `docs/prompts/l4-w2-brief.md`. Contract `l4-w2-contract.md` (L4W2-1 to L4W2-15; §0 = the lead's amendments,
+  incl. the mountain and the Castle Key). Kickoff `l4-w2-kickoff.md`.
+- Track briefs `l4-w2-raiders.md`, `l4-w2-pipeline.md`, `l4-w2-rocks.md`, `l4-w2-mountain.md`, `l4-w2-forest2.md`;
+  reports `docs/prompts/l4-w2-reports/`.
+- The asset run: runbook `docs/prompts/l4-w2-asset-run.md`; report `l4-w2-reports/asset-run.md`.
+- Code reports `l4-w2-code-reports/`. Review brief `l4-w2-review.md`, findings `l4-w2-review/` (1–5).
+- Fix rounds `l4-w2-fix-round.md` (K1–K10), `l4-w2-fix-d2.md`, `l4-w2-fix2.md` (L1–L5); reports
+  `l4-w2-fix-reports/`.
+
+**Before the code (tracks, 2026-10-21 → 22):**
+- **R2:** the slinger, marksman, lobber and plated elite; fodder detail; the Chief's smaller core; posed reach in
+  config. Ben approved all seven on `assets/testfit/out/Raiders/_overview.png`.
+- **P, the level asset route:** `upload_level.py`; harvest kinds `levelMesh` / `levelTexture`;
+  `gen_templates.py --levels`; `Assets.json` v6 `levels`.
+  - The dress data lives in `src/shared/Config/LevelDress/ForestRoad.json`.
+  - A narrowed plan hash: a boss's kind or Valor no longer moves it.
+  - Project files: `templates/_levels` → `ReplicatedStorage.Assets.Levels` in the combat place; ignored by every hub
+    place.
+- **K, the rocks redone** after Ben's two references (stacked bevelled cliffs, standing stones).
+- **M, the mountain climb:** 7 ledges round a 200-stud core, 8 double jumps of 25 up; every miss lands on a lower
+  ledge. The summit secret `mountain` pays 4 Valor, 50 Timber and the Castle Key. New gate `tools/check_parkour.py`.
+- **F2:** the mountain dressed, the walls less regular. 37 meshes, 163,647 triangles. Ben: "yes, as it is".
+- **The asset run (2026-10-22):**
+  - 81 uploads, first try: 37 level meshes, 5 images, 4 forest props, 35 raider stages.
+  - Ben's one harvest paste: 81 loaded, 0 failed.
+  - 48 new templates (37 level meshes, 4 forest props, 7 raiders; 617 in all); the six place files rebuilt.
+  - MANUAL_STEPS "L4 W2".
+
+**What shipped (code wave `afdce67` plus two fix rounds):**
+- **The forest in the game, server:**
+  - pure `LevelDress` decides "dressed", all or nothing. Its answer carries the hash. It refuses a missing mesh
+    template, a bad shape, a hash mismatch, a missing collision group or too many parts;
+  - `LevelService` builds the 70 invisible walls in `ArenaBarrier` (collidable from the build), hides the skinned blocks
+    (`Skinned`), lays the overlay looks, then sets `Workspace.Level` `DressHash`, then `Dress`;
+  - on a refusal: today's grey level and one warn, `[LevelService] the level is grey: <reason>`.
+- **The forest in the game, client:**
+  - `LevelScenery` (with pure `ScenePlan`) builds `Workspace.LevelScenery` on the server's word, 8 clones a frame: 37
+    meshes, 23 props (Bramble, Campfire, SpawnTent, ChiefTent), 8 fires;
+  - no fire particles or lights on low-end devices;
+  - any failure: one warn and the grey look with the walls drawn. An invisible wall is never left unmarked;
+  - the brambles leave with their block (burnt, or a found shortcut).
+- **Mood B** (`Expeditions.json moods.forestRoad`): per client, only while the character is in the level (the lobby
+  keeps its light); restored exactly.
+- **The raiders' models:**
+  - `Raiders/Figures`: a pool per kind, filled in the lobby from every level's plan (`StageFlow.MostKinds`), split in
+    proportion over the cap. A body not built yet draws the placeholder and swaps.
+  - Pure `Raiders/RaiderPose`: the threat pose (placeholders and models), the rig, the arm, the walk, the paint.
+    Mirrored exactly by `tools/check_raider_mirror.py`.
+  - The plate role: blue planks, a white glint, a burst on the break.
+  - A kind with a broken entry or template stays a placeholder, one warn. The guard, the Warlord and the Colossus stay
+    placeholders.
+  - K1: a blow with no ground tell reaches at least where the placeholder's did. The fodder's lunge slides the body in
+    the strike window, the club reaching about 3.9 studs.
+- **The Camp Chief:**
+  - crowd kind `chief` on the Colossus's body (14 / 4 / 1.6; 4,700 HP; enrage at half health);
+  - slam, charge, a call of 12 fodder, and the war-club sweep where the barrage was (an arc: range 12.7, reach 10.5,
+    120°, damage 30);
+  - holds the Warhammer; pays 42,900 cash, 76 Timber, 10 Valor;
+  - about 77 s alone at Normal T1 (every band holds). The Colossus stays for the range.
+- **The seated head:** the server steps each body's seat as the client does. `HitShapes.SeatDrop` lowers the head and
+  the capsule top; aim assist and auto-fire use the dropped body.
+- **The Castle Key:**
+  - `secrets.mountain.key = "castle"`; `Expeditions.json keys.castle`;
+  - `Unlocks.HasLevelKey`: held once the secret is in `combat.secrets` (no profile change);
+  - the chest card's gold "Castle Key found" line; the map's key glyph. The end screen's row is W3's.
+- **R8 judged fairly (K6):** `sim_range.py --r8 --check`. The sniper and the fighter carry the same gear (the pair
+  player) and differ only by the spot.
+  - PASS on every table. Tightest x0.986 (Hard T1 / T1, Road3; margin 1.4%), guarded by a +3% mutant.
+  - The sword-alone table is printed, ungated (Road3 Hard bow T4 x1.013).
+- **The walls in the movement gates:** `check_levels.py` reads the dress walls (never ground, never standable,
+  unclimbable); every "can" claim is re-proved against them; camp C's sight gate reads the widest drawn reach (K10).
+- **Studio levers** (local unless said): **Y** forest → grey → walls → forest; **O** mood ↔ default light; **X**
+  models ↔ placeholders; **Z** (server) the next level built grey through the real fallback. Perf line: "Server ·
+  Frame · Draw" ms, p95.
+- K8 mood only in the level; K9 the shoulder camera keeps its collision in a dressed level's summary; L3 no crosshair
+  behind the summary; L2 the "!" follows the head on a swap.
+- **The plan hash survives both Pythons (L5):** `5792c659ca2e772e` under 3.14 and 3.12. Nothing re-uploaded: the
+  meshes are byte-identical.
+
+**First review: four Opus slices, 0 Critical, 2 Major, 14 Minor** (+14 suggestions; server, scenery, raiders and
+pose, data and gates). All fixed or ruled (K1–K10):
+- **3-M1:** a model's blow fell short of where the placeholder's had reached → K1.
+- **4-M1:** R8 set the sniper's sword alone against the pair player → K6 (the faithful R8).
+- K2 the Chief's sweep drawn where it hits (range 17 → 12.7); K3 pools filled in the lobby; K4, K5 the lean, the
+  anchor and the head point in the mirror; K7 all or nothing on both sides; K8 mood only in the level; K9 the summary
+  camera; K10 the sight gate's widest reach.
+- Left, with reasons (`l4-w2-fix-round.md`): see "Carried".
+
+**Fix-diff review: 0 Critical, 0 Major, 3 Minor** (+4 suggestions) → L1 the sweep at 120° with no blind slice; L2 the
+"!" follows the head; L3 no crosshair behind the summary; L4 pins on the deciding lines; L5 the plan hash.
+
+**Gates:**
+- Code wave: harness 4,412; check_raider_mirror 16,806 cases, 14 / 14 mutants; `raider_frames.py --check
+  --require-harvest` 7 / 7; check_levels PASS; mirror_mutants 136 / 136; `forest.py check` PASS, mutants 29 / 29;
+  check_compile 181 files.
+- Fix round (3.12): `sim_range.py --check` PASS (495 lines); `--r8 --check` PASS (46 lines).
+- **Full `mutate.py`, sharded** (`tools/crowd_harness/mutate_shards.py`, 10 shards) on `88eeae5`: **2,068 run, 0 not
+  caught**, 2 h 15 min.
+- Fix round 2 (`3205405`):
+  - harness **4,713**; `mutate.py` filtered: 61 new and 36 changed-file entries, 0 not caught; stale 0 of 2,129;
+  - check_raider_mirror 16,842 cases, 20 / 20 mutants; raider_frames 7 / 7; check_levels PASS; check_stage_mirror
+    PASS; mirror_mutants 138 / 138;
+  - `forest.py check` PASS under both Pythons, mutants 33 / 33; `upload_level.py --dry-run` 0 pending; manifest
+    regenerated;
+  - at 120°: sim_range PASS (495), R8 PASS (46), sim_combat PASS.
+- **QA: pending** (contract §11's list, from `tycoon-p5`).
+
+**Commits:**
+- Briefs `03f063f`; contract `94c3749`, §0 `a2d5d7e`. Tracks: P `646e24c` (+ project files `156a7db`), R2 `c6f55a2`,
+  K `7b3e07e`, M `cd93c27`, F2 `f2f7080`. Ben's approvals `a27585a`, `74bf437`.
+- Asset run: uploads `9ad3cb5`; harvest `95fc5c2`; templates and place files `148dacd`.
+- Kickoff `dc56c7d`; R8 reading `c75b232`; project file `5abc72f`; code `afdce67`.
+- Review brief `4ad9f7d`; findings and K rulings `96cee96`; D2's list `a6136a8`, `5dc6fb4`; fix round `46fd98f`;
+  sharded runner `88eeae5`.
+- Fix-diff and L rulings `4402ea1`; MISSIONS_DESIGN `4d392f3`; fix round 2 `3205405`. Plus this docs change.
+
+### W3 and W4 (not started)
+
+- **W3:** the city map departs straight into the level (one loading screen; the lobby camp counts down; a refusal falls
+  back to the lobby with the level picked); the end screen (a row per source counting up, coins flying in, Timber
+  piling up; the same card in both places; the per-camp clear bonus and the Castle Key row on it); run cash by the
+  city's era. The hub stub `Config/Missions/1_Village.json`, `Combat.json overdrive`, the Overdrive toggle and the
+  ticket's `missionId` / `overdrive` go then (L4B-1, L4B-2).
+- **W4:** the Theme round, phones, the publish checklist; both places published together (a private staging experience
+  first is recommended; Ben decides).
+
+**Carried (owners):**
+- **Ben, then ui-engineer B + economy-designer: the plated elite's axe** is drawn to about 3.9–5.0 studs of its
+  7.5-stud, 120° wedge; its left two sectors are never swept. Left for Ben's look (PLAYTEST click question 3). A fix
+  goes K1/K2's way: arm keys, or the wedge cut to what is drawn and the bands re-measured.
+- **lead + economy-designer: bake the forest under plain `py` (3.14).** The hash is the same under both Pythons, but a
+  `py -3.12` bake writes `Cover`, `Hills_1` and `Dress_11` with different normal bytes: three re-uploads and a paste.
+  The cure (snap normal components under 1e-9 in `levelmesh` and `forest_kit`) goes with the next re-bake that
+  re-uploads anyway.
+- **economy-designer (Castle): the map-pinning harness check.** `realMapTests`' `table.concat(open, " ") ==
+  "forestRoad"` goes red once the Castle gets a level file. Replace it with the rule: a node with a level file and no
+  `requires` is open; one with `requires` is locked by it.
+- **lead + Castle designer: the Castle's locked room** that only the Castle Key opens. What it holds is decided with the
+  Castle.
+- **luau-engineer A, only if Ben minds: the seated areas' standing sphere.** Cones, capsules, arcs and blasts still meet
+  a seated body's standing sphere (up to about 1 stud above a seated brute's drawn head). Generous to the player.
+- **ui-engineer, cosmetic: FeedbackController's pellet tracers** (`drawPellets`) stop at a seated body's standing head:
+  its ForEach callback ignores the new `drop`.
+- **economy-designer (later levels): the walls' redundant "can" checks** and `path_blocked`'s lenient dropping legs. No
+  shipped leg drops.
+- **economy-designer: the dash-hold simulator gaps.** The simulator dates an unproven dash's hits at their decision,
+  not at the lapse, and does not model the queue order when a held hit lands in the same frame as another decision.
+  Neither moves a gated number while no simulated dash goes unproven.
+- **economy-designer: the open tunnel at Hard, bow T4,** passes R8 at x0.964 (noted, not gated tighter).
+- **lead, with Ben (W4 staging publish): phone frame time is unmeasured.** About 164k forest triangles plus about 81k
+  of raiders in about 950 moving MeshParts. Studio's device view is not a phone. Until then only his desktop Frame and
+  Draw numbers.
+- **ui-engineer A + economy-designer D1: mood B** from Ben's screenshots (`Expeditions.json moods.forestRoad`); config
+  only, no upload.
+- **ui-engineer (W3): the end screen** (MISSIONS_DESIGN §17.5, §26.7), with the per-camp clear bonus on screen and the
+  Castle Key row.
+- **lead + economy-designer (W3): Valor has nothing to buy** after Double Jump (the next ability shown locked "with the
+  Castle"); **Ascension is unreachable** (it needs Steel, Circuits and Alloy, which no level pays).
+- **luau-engineer + ui-engineer (W3 hub pass):** the hub's stale DebugBots comment; the Missions stub and Overdrive go.
+- **economy-designer:** a better simulated human (slow on several threats, misreads tells, hit by melee).
+- **luau-engineer A, L4 or later:** sight through walls (no ray in the crowd's step).
+- **lead + economy-designer: the free rescue** gives the get-up i-frames. A level with enemies near an open edge needs a
+  rescue cooldown.
+- **lead: never run an asset tool** in a checkout without `l4-w2`'s `assets_config.py` (`main` until W2 merges,
+  `tycoon-c2`, `tycoon-m11`): an older one erases the v6 `levels` block.
+- **Publish (lead, W4; MANUAL_STEPS "L3 W1" → "The L4 publish order"):**
+  - L4-0: both places **R15 only** in Creator Hub (the combat code and the weapons assume R15);
+  - both places publish together (`ProfileSchema` is shared);
+  - L4-4: **"Shut down all servers"** after both are published (R12).
+- **lead + ui-engineer (W4): the Theme round** for the weapon grip, the back pose and the stage light, from Ben's first
+  screenshot; the two-client weapons check and the phone fits with icons (Ben).
+- **Closed by L4 so far:** the sniper perches on Normal and Hard (R8 fair, the set empty); `OnDash` before any publish
+  (L4B-7, with F5's scope); dead code (W1b); the arena's clear time (the arena is hidden); RunState cells every send
+  (L4B-8); the seated head scores a body hit (W2); the C1 `onSwing` path (L3-53) and `Armory.json slots` (L3-54);
+  scenery and the Camp Chief (W2).
+- Every L3, L2, L1c and L1b carried item above not named here stands.
+
+**Next:**
+1. QA (contract §11's full list), then the lead merges `l4-w2` to `main` and rebuilds the six place files.
+2. **Ben's look:** `docs/PLAYTEST.md` "L4 W2 — the real forest in the game"; setup `docs/MANUAL_STEPS.md` "L4 W2".
+3. Five click questions; the mood tuned from his screenshots.
+4. W3 only on his word.
+
+- [x] Ben's eight decisions (`f5c9da6`)
+- [x] W1 tracks D, F, R (`5744df9`, `54294ca`, `1d3b0d2`)
+- [x] Picture gate (`9851af2`); rocks redone (`7b3e07e`); all seven raiders approved (`a27585a`)
+- [x] W1b built (`1ae8bfb`), reviewed 0 / 0 / 9, three fix rounds, QA (`5f19b0f`), merged into `l4-real-forest`
+      (`37ccfe4`)
+- [x] The mountain (`cd93c27`); F2 approved (`74bf437`)
+- [x] W2 uploads (`9ad3cb5`), Ben's harvest paste (`95fc5c2`), templates and place files (`148dacd`)
+- [x] W2 built (`afdce67`)
+- [x] Reviewed: four slices, 0 / 2 / 14 + 14 (`96cee96`)
+- [x] Fix round K1–K10 (`46fd98f`)
+- [x] Full `mutate.py`, sharded: 2,068 / 0 (`88eeae5`)
+- [x] Fix-diff review 0 / 0 / 3 + 4 (`4402ea1`)
+- [x] Fix round 2, L1–L5 (`3205405`)
+- [ ] QA (contract §11) and the lead's line
+- [ ] Merged to `main`, six place files rebuilt (lead)
+- [ ] L4 W2 playtest (Ben)
+- [ ] W3 (on Ben's word)
+- [ ] W4 and the publish
 
 ## M12 — Growing city
 

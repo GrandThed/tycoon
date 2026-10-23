@@ -126,6 +126,13 @@ export type Plan = {
 	tents: { PlanTent },
 	-- L1b-W2-5's left side at the played difficulty: what the client prewarms its pool with.
 	population: number,
+	-- L4 W2 (docs/prompts/l4-w2-contract.md §3.2): the bodies of each crowd kind the run may show,
+	-- for the client's pool of that kind's model (RunState.prewarm): every resident (minDifficulty
+	-- applied, never countMult, as they are placed), every tent's stock, and of the locking camps'
+	-- waves the most any one wave fields of the kind: its groups (minDifficulty and countMult
+	-- applied, for a party of one), its boss and what the boss's `summon` attacks raise (the most
+	-- one call tops up to). A kind with none is absent.
+	kinds: { [string]: number },
 	-- L2-58: every block a body falls through (`collide` false: deep water, ice or not, the fix
 	-- round's Q3) that has a landing, in the layout's order (Landing).
 	waters: { Water },
@@ -216,8 +223,6 @@ local KIND_CAMP = "camp"
 local WIRE_REACH = 1000
 -- Under this Roblox destroys falling parts before the rescue could see them.
 local LOWEST_KILL_Y = -450
--- The arena adapter's one camp (ruling 27).
-local ARENA_ZONE = "arena"
 -- The numbers a run reads, by where they are kept: Validate names every one that is missing.
 local NEEDED = {
 	rules = {
@@ -264,86 +269,30 @@ local StageFlow = {}
 
 -- Levels -------------------------------------------------------------------------------------
 
--- A level file as a level. One with no `mission` is taken as it stands (nil when it lacks
--- stages, difficulties or a crowd block; its `camps` are {} when it names none). One that names
--- a mission (the Raider Arena, ruling 27) borrows that mission's crowd block and becomes one camp
--- of all its waves, with the director's breather and merging: the arena as P5 played it, every
--- kill paid as it falls (L1b-15). Its one difficulty is `firstDifficulty`, the first of
--- Expeditions.json `difficulties`: the map offers that one for a level that names no others, so
--- the two can never disagree.
-function StageFlow.Resolve(
-	file: Types.LevelFile,
-	mission: Types.MissionConfig?,
-	runCapSeconds: number,
-	firstDifficulty: string?
-): Types.LevelConfig?
-	if file.mission == nil then
-		local stages = file.stages
-		local difficulties = file.difficulties
-		local crowd = file.crowd
-		if stages == nil or difficulties == nil or crowd == nil then
-			return nil
-		end
-		local ownCap = file.runCapSeconds
-		return {
-			version = file.version,
-			id = file.id,
-			name = file.name,
-			layout = file.layout,
-			mission = nil,
-			material = file.material or "",
-			targetMinutes = file.targetMinutes or 0,
-			-- A level that names no cap of its own runs under the director's.
-			runCapSeconds = if ownCap ~= nil and ownCap > 0 then ownCap else runCapSeconds,
-			difficulties = difficulties,
-			crowd = crowd,
-			stages = stages,
-			camps = file.camps or {},
-			secrets = file.secrets,
-		}
-	end
-	local block = if mission ~= nil then mission.crowd else nil
-	if mission == nil or block == nil or firstDifficulty == nil then
+-- A level file as a level, taken as it stands: nil when it lacks stages, difficulties or a crowd
+-- block; its `camps` are {} when it names none. (Ruling 27's mission branch went with the Raider
+-- Arena in L4 W1b: no level borrows a mission's crowd block.)
+function StageFlow.Resolve(file: Types.LevelFile, runCapSeconds: number): Types.LevelConfig?
+	local stages = file.stages
+	local difficulties = file.difficulties
+	local crowd = file.crowd
+	if stages == nil or difficulties == nil or crowd == nil then
 		return nil
 	end
-	local only: Types.LevelDifficulty = {
-		hpScale = block.hpScale,
-		damageScale = block.damageScale,
-		plateScale = block.plateScale,
-		countMult = 1,
-		rewardMult = 1,
-		recommendedTier = file.recommendedTier or 0,
-	}
-	local camp: Types.LevelStage = {
-		kind = KIND_CAMP,
-		name = file.name,
-		zone = ARENA_ZONE,
-		waves = block.waves,
-		targetWaveSeconds = mission.targetWaveSeconds,
-		breatherSeconds = nil,
-		merge = true,
-		maxAlive = nil,
-	}
+	local ownCap = file.runCapSeconds
 	return {
 		version = file.version,
 		id = file.id,
 		name = file.name,
 		layout = file.layout,
-		mission = file.mission,
-		material = mission.material,
-		targetMinutes = mission.targetMinutes,
-		runCapSeconds = runCapSeconds,
-		difficulties = { [firstDifficulty] = only },
-		crowd = {
-			regenShare = block.regenShare,
-			maxAlive = block.maxAlive,
-			burst = block.burst,
-			burstSpacing = block.burstSpacing,
-			eliteKind = block.eliteKind,
-			rewards = block.rewards,
-		},
-		stages = { camp },
-		camps = {},
+		material = file.material or "",
+		targetMinutes = file.targetMinutes or 0,
+		-- A level that names no cap of its own runs under the director's.
+		runCapSeconds = if ownCap ~= nil and ownCap > 0 then ownCap else runCapSeconds,
+		difficulties = difficulties,
+		crowd = crowd,
+		stages = stages,
+		camps = file.camps or {},
 		secrets = file.secrets,
 	}
 end
@@ -660,6 +609,76 @@ local function populationOf(
 	return placed + tents + room + reserve
 end
 
+-- L4 W2 (§3.2): Plan's `kinds` (its type says what is counted). `residentStocks` is groupsOf's
+-- third answer, `tents` tentsOf's first; `countMult` is the played difficulty's.
+local function kindsOf(
+	level: Types.LevelConfig,
+	residentStocks: { [string]: { [string]: number } },
+	tents: { PlanTent },
+	rank: number,
+	ranks: { [string]: number }?,
+	countMult: number,
+	kinds: { [string]: Types.CrowdKindDef }?
+): { [string]: number }
+	local counts: { [string]: number } = {}
+	for _, stock in residentStocks do
+		for kind, count in stock do
+			counts[kind] = (counts[kind] or 0) + count
+		end
+	end
+	for _, tent in tents do
+		for _, kind in tent.kinds do
+			counts[kind] = (counts[kind] or 0) + 1
+		end
+	end
+	-- One wave's bodies at a time: a locking camp's waves follow each other.
+	local most: { [string]: number } = {}
+	for _, stage in level.stages do
+		local waves: { Types.MissionCrowdWave } = if stage.kind == KIND_CAMP
+			then stage.waves or {}
+			else {}
+		for _, wave in waves do
+			local here: { [string]: number } = {}
+			for _, unit in fieldedUnits(wave.groups or {}, rank, ranks) do
+				here[unit.kind] = (here[unit.kind] or 0)
+					+ math.max(math.round(unit.count * countMult), 0)
+			end
+			local boss = wave.boss
+			if boss ~= nil and type(boss.kind) == "string" then
+				here[boss.kind] = (here[boss.kind] or 0) + 1
+				local def = if kinds ~= nil then kinds[boss.kind] else nil
+				local attacks: { Types.CrowdAttackDef } = if def ~= nil
+						and def.attacks ~= nil
+					then def.attacks
+					else {}
+				-- A call tops its living summons up to its count, so one kind's calls never add up.
+				local calls: { [string]: number } = {}
+				for _, attack in attacks do
+					local raised = attack.summon
+					if attack.shape == "summon" and raised ~= nil then
+						calls[raised] = math.max(calls[raised] or 0, attack.count or 0)
+					end
+				end
+				for kind, count in calls do
+					here[kind] = (here[kind] or 0) + count
+				end
+			end
+			for kind, count in here do
+				most[kind] = math.max(most[kind] or 0, count)
+			end
+		end
+	end
+	for kind, count in most do
+		counts[kind] = (counts[kind] or 0) + count
+	end
+	for kind, count in counts do
+		if count <= 0 then
+			counts[kind] = nil
+		end
+	end
+	return counts
+end
+
 local function sumOf(byId: { [string]: number }): number
 	local total = 0
 	for _, value in byId do
@@ -910,8 +929,8 @@ end
 
 -- L2-13: the level file's `secrets` block against the layout's secrets. Every layout secret has
 -- an entry with a name; an entry's valor and materials, when given, are whole numbers >= 0, and
--- its family a short string. Which secrets may pay at all (a reward only behind a sold key) is
--- check_levels.py's rule (L2-18e), not a refusal here.
+-- its family and its key (L4 W2) short strings. Which secrets may pay at all (a reward only behind
+-- a sold key) is check_levels.py's rule (L2-18e), not a refusal here.
 local function secretProblems(
 	level: Types.LevelConfig,
 	layout: Types.LevelLayout,
@@ -953,6 +972,13 @@ local function secretProblems(
 			and (type(family) ~= "string" or family == "" or #family > Unlocks.MAX_FAMILY_LENGTH)
 		then
 			problem(`secrets.{id}.family is {tostring(family)}, not a family id`)
+		end
+		-- L4 W2 (§0): a key id is held to the family id's cap, in bytes, as the mirror counts.
+		local key = entry.key
+		if
+			key ~= nil and (type(key) ~= "string" or key == "" or #key > Unlocks.MAX_FAMILY_LENGTH)
+		then
+			problem(`secrets.{id}.key is {tostring(key)}, not a key id`)
 		end
 	end
 end
@@ -1761,6 +1787,24 @@ function StageFlow.Ceiling(camp: Types.LevelCamp, triggerHeight: number): number
 	return triggerHeight
 end
 
+-- The L4 W2 fix round's K3 (the lobby fill): the most bodies of each kind any one of `kinds`
+-- fields, where each entry is one plan's `kinds` (WaveService hands in every built level's plan at
+-- every difficulty, so the lobby's RunState.prewarm covers whichever run the leader starts). A new
+-- table; nil when no entry fields a body.
+function StageFlow.MostKinds(kinds: { { [string]: number } }): { [string]: number }?
+	local most: { [string]: number } = {}
+	local any = false
+	for _, counts in kinds do
+		for kind, count in counts do
+			if count > (most[kind] or 0) then
+				most[kind] = count
+				any = true
+			end
+		end
+	end
+	return if any then most else nil
+end
+
 -- The level as the run walks it, at one difficulty: a zone for every camp of the layout (its
 -- floor index is its place in `layout.camps`), the stages, every resident group, every tent and
 -- the population. `ranks` (the place of every difficulty in Expeditions.json) decides which
@@ -1937,6 +1981,15 @@ function StageFlow.Plan(
 			sumOf(tentStocks),
 			caps,
 			StageFlow.BossReserve(level, kinds)
+		),
+		kinds = kindsOf(
+			level,
+			residentStocks,
+			tents,
+			rank,
+			ranks,
+			level.difficulties[difficulty].countMult,
+			kinds
 		),
 		waters = waters,
 	}

@@ -5,7 +5,8 @@
     py tools/assets/gen_templates.py --props   # (re)write templates/_props/<Era>/<PropName>.rbxmx
     py tools/assets/gen_templates.py --paths   # (re)write templates/_paths/<Era>/<pieceId>.rbxmx
     py tools/assets/gen_templates.py --world   # (re)write templates/_world/<Set>/<Mesh>.rbxmx
-    py tools/assets/gen_templates.py --check   # regenerate all four trees in memory, diff against disk, exit 1 if stale
+    py tools/assets/gen_templates.py --levels  # (re)write templates/_levels/<Level>/<Mesh>.rbxmx
+    py tools/assets/gen_templates.py --check   # regenerate all five trees in memory, diff against disk, exit 1 if stale
 
 Template shape (frozen in INTERFACES.md "M7 contracts"):
 
@@ -59,6 +60,18 @@ templates/_world as an era folder and finds no template directly inside. A mesh 
 is harvested (a palette mesh also needs the set's harvested palette image); a missing one is left
 out and the server falls back as INTERFACES describes.
 
+A dungeon level's baked meshes (Assets.json `levels`, v6; docs/prompts/l4-w2-reports/pipeline.md)
+take the landscape shape, under templates/_levels/ -> ReplicatedStorage.Assets.Levels in the combat
+place, because the client clones them:
+
+    Model "<Mesh>"               WorldPivot identity: the mesh is already in the level frame
+      MeshPart "Mesh"            sealed, SmoothPlastic, white, TextureID = the image it wears (the
+                                 level's palette, or its named ground texture); RenderFidelity and
+                                 CastShadow by the mesh's `group` (LEVEL_GROUP_DRAW)
+
+A mesh is written once it and the image it wears are harvested; a missing one is left out, and the
+game keeps the grey level unless every mesh of the level has its template.
+
 --out points every run at another templates root (fixtures and dry runs), as --assets-json does
 for the config.
 """
@@ -80,13 +93,30 @@ CITY_DRESSING_PATH = os.path.join(cfg.REPO_ROOT, "src", "shared", "Config", "Cit
 PROPS_DIRNAME = "_props"
 PATHS_DIRNAME = "_paths"
 WORLD_DIRNAME = "_world"
-GROUP_DIRNAMES = {"props": PROPS_DIRNAME, "paths": PATHS_DIRNAME, "world": WORLD_DIRNAME}
+LEVELS_DIRNAME = "_levels"
+GROUP_DIRNAMES = {"props": PROPS_DIRNAME, "paths": PATHS_DIRNAME, "world": WORLD_DIRNAME, "levels": LEVELS_DIRNAME}
 MATERIAL_SMOOTH_PLASTIC = 272
 BASE_SIZE = (1.0, 0.2, 1.0)
 COLLISION_FIDELITY_BOX = 2
 # Enum.RenderFidelity.Precise: Automatic draws a decimated copy at a distance, and most of the
 # landscape is only ever seen from a distance.
 RENDER_FIDELITY_PRECISE = 1
+RENDER_FIDELITY_AUTOMATIC = 0
+# How each group of a level's baked meshes is drawn: (RenderFidelity, CastShadow). RenderFidelity
+# cannot be set from a game script, so the template decides it. The ground and the skins that lie
+# a few hundredths of a stud over it stay Precise: two layers decimated apart at a distance would
+# flicker into each other. What stands up (trees, rock faces, cribs, the canopy) is Automatic, so
+# the engine's mesh LODs carry a 150k-triangle level on a phone, and casts a shadow; flat ground
+# and the far hills cast none. CastShadow is scriptable, so the client may still turn it off.
+LEVEL_GROUP_DRAW = {
+    "ground": (RENDER_FIDELITY_PRECISE, False),
+    "skin": (RENDER_FIDELITY_PRECISE, False),
+    "camp": (RENDER_FIDELITY_PRECISE, True),
+    "rock": (RENDER_FIDELITY_AUTOMATIC, True),
+    "dress": (RENDER_FIDELITY_AUTOMATIC, True),
+    "canopy": (RENDER_FIDELITY_AUTOMATIC, True),
+    "backdrop": (RENDER_FIDELITY_AUTOMATIC, False),
+}
 WORLD_MESH_NAME = "Mesh"
 MATERIAL_PLASTIC = 256
 COLOR_WHITE = 16777215  # Color3uint8 packing of (255, 255, 255)
@@ -397,12 +427,80 @@ def generate_world(assets: dict) -> tuple[dict[str, str], list[str]]:
     return out, notes
 
 
+def level_template_xml(mesh_name: str, mesh: dict, image_id: int) -> str:
+    """One baked level mesh: the landscape template with the image it wears and its group's
+    fidelity and shadow. `harvested_cframe` with no lift puts it back at its generator coordinates,
+    which are the level's own (the dress data's frame "level"), so the client only parents a clone."""
+    fidelity, shadow = LEVEL_GROUP_DRAW[str(mesh.get("group"))]
+    refs = Referents()
+    lines = [
+        '<roblox version="4">',
+        f'  <Item class="Model" referent="{refs.next()}">',
+        "    <Properties>",
+        f'      <string name="Name">{escape(mesh_name)}</string>',
+        '      <bool name="NeedsPivotMigration">false</bool>',
+    ]
+    lines += coordinate_frame("WorldPivot", (0, 0, 0), "      ")
+    lines.append("    </Properties>")
+    p = "        "
+    lines += [f'    <Item class="MeshPart" referent="{refs.next()}">', "      <Properties>"]
+    lines.append(f'{p}<string name="Name">{WORLD_MESH_NAME}</string>')
+    lines.append(f'{p}<bool name="Anchored">true</bool>')
+    lines += harvested_cframe(mesh.get("offset") or [0, 0, 0], p)
+    lines.append(f'{p}<bool name="CanCollide">false</bool>')
+    lines.append(f'{p}<bool name="CanQuery">false</bool>')
+    lines.append(f'{p}<bool name="CanTouch">false</bool>')
+    lines.append(f'{p}<bool name="CastShadow">{"true" if shadow else "false"}</bool>')
+    lines.append(f'{p}<token name="CollisionFidelity">{COLLISION_FIDELITY_BOX}</token>')
+    lines.append(f'{p}<Color3uint8 name="Color3uint8">{COLOR_WHITE}</Color3uint8>')
+    lines += vector3("InitialSize", mesh["size"], p)
+    lines.append(f'{p}<token name="Material">{MATERIAL_SMOOTH_PLASTIC}</token>')
+    lines.append(f'{p}<Content name="MeshContent">')
+    lines.append(f"{p}  <uri>rbxassetid://{int(mesh['meshId'])}</uri>")
+    lines.append(f"{p}</Content>")
+    lines.append(f'{p}<token name="RenderFidelity">{fidelity}</token>')
+    lines += vector3("size", mesh["size"], p)
+    lines.append(f'{p}<Content name="TextureContent">')
+    lines.append(f"{p}  <uri>rbxassetid://{int(image_id)}</uri>")
+    lines.append(f"{p}</Content>")
+    lines += ["      </Properties>", "    </Item>", "  </Item>", "</roblox>"]
+    return "\n".join(lines) + "\n"
+
+
+def generate_levels(assets: dict) -> tuple[dict[str, str], list[str]]:
+    out: dict[str, str] = {}
+    notes: list[str] = []
+    for level, entry in sorted((assets.get(cfg.LEVELS_KEY) or {}).items()):
+        images = entry.get("images") or {}
+        waiting: dict[str, list[str]] = {}
+        for mesh_name, mesh in sorted((entry.get("meshes") or {}).items()):
+            if int(mesh.get("assetId", 0)) == 0:
+                continue
+            if not cfg.world_mesh_harvested(mesh):
+                notes.append(f"levels/{level}/{mesh_name}: uploaded but not harvested; mesh left out")
+                continue
+            if mesh.get("group") not in LEVEL_GROUP_DRAW:
+                notes.append(f"levels/{level}/{mesh_name}: group {mesh.get('group')!r} has no draw rule (LEVEL_GROUP_DRAW); mesh left out")
+                continue
+            image = cfg.level_mesh_image(mesh)
+            image_id = int((images.get(image) or {}).get("imageId", 0))
+            if image_id == 0:
+                waiting.setdefault(image, []).append(mesh_name)
+                continue
+            out[f"{level}/{mesh_name}.rbxmx"] = level_template_xml(mesh_name, mesh, image_id)
+        for image, names in sorted(waiting.items()):
+            notes.append(f"levels/{level}: no harvested {image!r} image id; {len(names)} mesh(es) left out ({', '.join(names)})")
+    return out, notes
+
+
 def generate(assets: dict, group: str = "eras") -> tuple[dict[str, str], list[str]]:
     """relative path -> xml, plus notes about what was skipped and why; group "props" for props."""
     if group == "paths":
         return generate_paths(assets)
     if group == "world":
         return generate_world(assets)
+    if group == "levels":
+        return generate_levels(assets)
     prop = group == "props"
     prefix = f"{group}/" if prop else ""
     out: dict[str, str] = {}
@@ -428,7 +526,7 @@ def generate(assets: dict, group: str = "eras") -> tuple[dict[str, str], list[st
 
 class Tree:
     """One template root: buildings in templates/, props in templates/_props/, baked path pieces
-    in templates/_paths/, landscape meshes in templates/_world/."""
+    in templates/_paths/, landscape meshes in templates/_world/, level meshes in templates/_levels/."""
 
     def __init__(self, group: str):
         self.group = group
@@ -458,6 +556,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--props", action="store_true", help="write city-dressing prop templates to templates/_props/")
     parser.add_argument("--paths", action="store_true", help="write baked path templates to templates/_paths/")
     parser.add_argument("--world", action="store_true", help="write landscape mesh templates to templates/_world/")
+    parser.add_argument("--levels", action="store_true", help="write level mesh templates to templates/_levels/")
     parser.add_argument("--assets-json", help="read this Assets.json instead of src/shared/Config/Assets.json")
     parser.add_argument("--out", help="read and write this templates root instead of templates/")
     args = parser.parse_args(argv)
@@ -469,7 +568,7 @@ def main(argv: list[str]) -> int:
         return check(assets)
     chosen = [group for group in GROUP_DIRNAMES if getattr(args, group)]
     if len(chosen) > 1:
-        print("pass at most one of --props, --paths and --world")
+        print("pass at most one of --props, --paths, --world and --levels")
         return 1
     return write(assets, Tree(chosen[0] if chosen else "eras"))
 
@@ -477,7 +576,7 @@ def main(argv: list[str]) -> int:
 def check(assets: dict) -> int:
     problems = []
     total = 0
-    for tree in (Tree("eras"), Tree("props"), Tree("paths"), Tree("world")):
+    for tree in (Tree("eras"), Tree("props"), Tree("paths"), Tree("world"), Tree("levels")):
         wanted, notes = generate(assets, tree.group)
         for note in notes:
             log(note)
@@ -496,7 +595,7 @@ def check(assets: dict) -> int:
     if problems:
         hints = [
             f" ({flag} for {Tree(group).label})"
-            for group, flag in (("props", "--props"), ("paths", "--paths"), ("world", "--world"))
+            for group, flag in (("props", "--props"), ("paths", "--paths"), ("world", "--world"), ("levels", "--levels"))
             if any(line.startswith(Tree(group).label + "/") for line in problems)
         ]
         print(f"CHECK: FAIL -- {len(problems)} problem(s); rerun py tools/assets/gen_templates.py{''.join(hints)}")
@@ -534,7 +633,7 @@ def write(assets: dict, tree: Tree) -> int:
                 os.rmdir(folder)  # Rojo maps the folder tree; an empty era folder is just clutter
         if tree.group in GROUP_DIRNAMES and not os.listdir(tree.root):
             os.rmdir(tree.root)
-    kind = {"props": "prop ", "paths": "path ", "world": "world "}.get(tree.group, "")
+    kind = {"props": "prop ", "paths": "path ", "world": "world ", "levels": "level "}.get(tree.group, "")
     log(f"{len(wanted)} {kind}template(s): {written} written, {unchanged} unchanged, {removed} removed")
     return 0
 

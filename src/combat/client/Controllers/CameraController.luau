@@ -15,14 +15,19 @@
 --    in `camera.freeCursorPhases`, while any cursor hold is set (debug strip, load card) and
 --    after Alt toggles it; with a free cursor the right mouse button still turns the view.
 --  * Touch: a drag that starts on the right half of the screen (and not on a button) turns
---    the view, two fingers pinch-zoom, and the finger that holds the attack button also
---    aims (AdoptTouch) the way modern mobile shooters do. The Roblox thumbstick keeps the
---    left half.
---  * Gamepad: right stick aims; the bindings for R2 / L1 / R1 / Y live in InputController.
+--    the view, and two fingers pinch-zoom. The Roblox thumbstick keeps the left half.
+--  * Gamepad: right stick aims; the bindings for R2 / L2 / L1 / R1 / Y live in InputController.
 --
 -- The default camera comes back whenever the character is dead or missing and in the
 -- summary / ended phases, so a down player watches their own ragdoll and the summary card
--- has the ordinary cursor.
+-- has the ordinary cursor. Not in those phases in a dressed level (L4 W2 fix round K9): the
+-- pieces its scenery draws over are Transparency 1, and Roblox's own camera (Poppercam) stops
+-- only at parts under 0.25, so in the 10 s summary it would pass through camp C's wall, the
+-- gatehouse and every rock face. There the shoulder camera, whose spherecast stops at them,
+-- stays up; the summary's free cursor is camera.freeCursorPhases', as before. LevelScenery
+-- tells it the server's word (SetDressed). The crosshair does not stay with it (fix round 2, L3):
+-- ShowsCrosshair is false in those phases whatever the camera, so no aim mark is drawn under the
+-- summary card (ScenePlan.Crosshair; ScenePlan.RUN_OVER is the one list of those phases).
 --
 -- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts"): this module is the one place the
 -- other controllers ask which combat runs, because it is the lowest-level controller and both
@@ -56,8 +61,7 @@
 --    carried, and the mission HUD turns the view along the way forward. A build whose server
 --    writes no such attributes simply hears nothing.
 --  * LookToward turns the VIEW to a point (the body follows the view's yaw), from the body or
---    from a point the body is about to be at. FaceToward is not that: it turns the body alone
---    for a moment and hands it back to the view.
+--    from a point the body is about to be at.
 --  * KeepAltFree: while Abandon waits for its second press, a new phase does not take back the
 --    cursor the player freed with Alt to press it; it is taken back when the wait is over.
 --
@@ -111,6 +115,7 @@ local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 local WallClip = require(sharedFolder:WaitForChild("WallClip"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
+local ScenePlan = require(script.Parent:WaitForChild("ScenePlan"))
 
 local BIND_NAME = "CombatShoulderCamera"
 -- Range-only presentation constants (purely visual, so they live here, not in config).
@@ -123,13 +128,13 @@ local FOV_KICK_RISE = 25
 local FOV_KICK_DECAY = 5
 local FOV_KICK_MAX = 15
 local LAG_EPSILON = 0.01
-local ENEMIES_FOLDER = "Enemies"
 -- The server's word that it moved a body, on the character model (ArenaService.MoveMember):
 -- where it put the feet, and a count that rises by one with every move.
 local PLACED_ATTRIBUTE = "Placed"
 local PLACED_SEQ_ATTRIBUTE = "PlacedSeq"
--- Phases in which the run is over: the ordinary camera and cursor return for the summary.
-local DEFAULT_CAMERA_PHASES: { [string]: boolean } = { summary = true, ended = true }
+-- Phases in which the run is over: the ordinary camera and cursor return for the summary,
+-- unless the level is dressed (K9: `levelDressed`). The crosshair's list too (ShowsCrosshair).
+local DEFAULT_CAMERA_PHASES: { [string]: boolean } = ScenePlan.RUN_OVER
 -- Fallbacks used only when Combat.json is missing; the config is the real home of these.
 local FALLBACK_CAMERA: Types.CombatCameraConfig = {
 	shoulderOffset = { 1.75, 0.6, 0 },
@@ -139,7 +144,6 @@ local FALLBACK_CAMERA: Types.CombatCameraConfig = {
 	maxZoom = 16,
 	touchSensitivity = 1,
 	gamepadSensitivity = 1,
-	touchAimAssistDegrees = 12,
 	freeCursorPhases = { "lobby", "summary", "ended" },
 }
 
@@ -152,6 +156,8 @@ local freePhases: { [string]: boolean } = {}
 local shoulderOffset = Vector3.zero
 
 local phase = "lobby"
+-- K9: Workspace.Level carries the server's `Dress` (LevelScenery.evaluate says so).
+local levelDressed = false
 local active = false
 -- Both decided once in Init and never change: the range bench, and the range's combat.
 local rangeMode = false
@@ -221,23 +227,18 @@ local windowFocused = true
 local rightMouseHeld = false
 local gamepadLook = Vector2.zero
 -- Touches that steer the camera: the last seen position and the delta not yet applied.
--- `adopted` = the finger holding the attack button; it always turns and never pinches.
-type TouchState = { last: Vector2, pending: Vector2, adopted: boolean }
+type TouchState = { last: Vector2, pending: Vector2 }
 local cameraTouches: { [InputObject]: TouchState } = {}
 local pinchDistance: number? = nil
-
-local faceTarget: Vector3? = nil
-local faceUntil = 0
 
 local trauma = 0
 local kickPitch = 0
 local shakeClock = 0
 
 local connections: { RBXScriptConnection } = {}
--- Camera collision ignores every character and the enemies folder. The list only changes
--- when a character spawns or a player joins or leaves, so it is rebuilt then, not per frame.
+-- Camera collision ignores every character. The list only changes when a character spawns or
+-- a player joins or leaves, so it is rebuilt then, not per frame.
 local collisionParams: RaycastParams? = nil
-local collisionEnemies: Instance? = nil
 local characterConnections: { [Player]: RBXScriptConnection } = {}
 
 local function currentCamera(): Camera?
@@ -379,10 +380,8 @@ local function invalidateCollision(): ()
 end
 
 local function collisionParamsFor(): RaycastParams
-	-- The enemies folder can replicate after the first frame; its arrival forces one rebuild.
-	local enemies = Workspace:FindFirstChild(ENEMIES_FOLDER)
 	local cached = collisionParams
-	if cached ~= nil and enemies == collisionEnemies then
+	if cached ~= nil then
 		return cached
 	end
 	local list: { Instance } = {}
@@ -392,14 +391,10 @@ local function collisionParamsFor(): RaycastParams
 			table.insert(list, character)
 		end
 	end
-	if enemies ~= nil then
-		table.insert(list, enemies)
-	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = list
 	collisionParams = params
-	collisionEnemies = enemies
 	return params
 end
 
@@ -485,17 +480,14 @@ local function consumeLookInput(deltaTime: number): ()
 			cameraTouches[input] = nil
 		end
 	end
-	-- Only free camera fingers pinch. The attack finger (claw grip) always turns, even while
-	-- another finger is down, so firing and tracking never zooms by accident.
-	local free: { TouchState } = {}
+	-- Two camera fingers pinch-zoom; one turns the view.
+	local fingers: { TouchState } = {}
 	for _, state in cameraTouches do
-		if not state.adopted then
-			table.insert(free, state)
-		end
+		table.insert(fingers, state)
 	end
-	local pinching = #free >= 2
+	local pinching = #fingers >= 2
 	if pinching then
-		local distance = (free[1].last - free[2].last).Magnitude
+		local distance = (fingers[1].last - fingers[2].last).Magnitude
 		local previous = pinchDistance
 		if previous ~= nil and distance > 0 then
 			targetZoom *= previous / distance
@@ -506,7 +498,7 @@ local function consumeLookInput(deltaTime: number): ()
 	end
 	local sensitivity = cameraConfig.touchSensitivity
 	for _, state in cameraTouches do
-		if not pinching or state.adopted then
+		if not pinching then
 			turn += Vector2.new(state.pending.X, state.pending.Y * Theme.COMBAT_CAMERA_PITCH_RATIO) * math.rad(
 				Theme.COMBAT_CAMERA_TOUCH_DEGREES_PER_PIXEL
 			) * sensitivity
@@ -537,18 +529,8 @@ local function faceCharacter(rig: Rig): ()
 	if rig.humanoid.Sit or rig.humanoid.PlatformStand then
 		return
 	end
-	local facing = yaw
-	local target = faceTarget
-	if target ~= nil and os.clock() < faceUntil then
-		local flat = Vector3.new(target.X - rig.root.Position.X, 0, target.Z - rig.root.Position.Z)
-		if flat.Magnitude > 0.01 then
-			facing = yawOf(flat.Unit)
-		end
-	else
-		faceTarget = nil
-	end
 	local position = rig.root.Position
-	rig.root.CFrame = CFrame.new(position) * CFrame.Angles(0, facing, 0)
+	rig.root.CFrame = CFrame.new(position) * CFrame.Angles(0, yaw, 0)
 end
 
 local function shakeOffset(deltaTime: number): CFrame
@@ -721,7 +703,9 @@ local function update(deltaTime: number): ()
 	end
 	local camera = currentCamera()
 	local rig = localRig()
-	local phaseEndsCamera = not rangeMode and DEFAULT_CAMERA_PHASES[phase] == true
+	local phaseEndsCamera = not rangeMode
+		and DEFAULT_CAMERA_PHASES[phase] == true
+		and not levelDressed
 	if camera == nil or rig == nil or phaseEndsCamera then
 		deactivate()
 		return
@@ -827,7 +811,7 @@ local function onInputBegan(input: InputObject, processed: boolean): ()
 	if inputType == Enum.UserInputType.Touch then
 		if not processed and active and isCameraTouch(input) then
 			local position = Vector2.new(input.Position.X, input.Position.Y)
-			cameraTouches[input] = { last = position, pending = Vector2.zero, adopted = false }
+			cameraTouches[input] = { last = position, pending = Vector2.zero }
 		end
 	elseif inputType == Enum.UserInputType.MouseButton2 then
 		if not processed then
@@ -845,8 +829,7 @@ end
 local function onInputChanged(input: InputObject, processed: boolean): ()
 	local inputType = input.UserInputType
 	if inputType == Enum.UserInputType.Touch then
-		-- Not filtered by `processed`: an adopted touch began on the attack button, so every
-		-- one of its moves arrives already processed by that button.
+		-- Not filtered by `processed`: whether a touch steers was decided when it began.
 		local state = cameraTouches[input]
 		if state ~= nil then
 			local position = Vector2.new(input.Position.X, input.Position.Y)
@@ -1000,6 +983,13 @@ function CameraController.SetPhase(nextPhase: string): ()
 	phase = nextPhase
 end
 
+-- K9 (docs/prompts/l4-w2-fix-round.md; review slice 1 m3): whether Workspace.Level carries the
+-- server's `Dress`. While it does, the summary and ended phases keep the shoulder camera (see the
+-- header); LevelScenery calls this on every change of the server's word and on Detach.
+function CameraController.SetDressed(dressed: boolean): ()
+	levelDressed = dressed
+end
+
 -- L1 fix round, item 1. Abandon asks twice, and a player who freed the cursor with Alt to click
 -- it must still have the cursor for the second click when a phase changes in between (the road
 -- into a camp's countdown, the countdown into the wave). `keep` = Abandon is armed. When it is
@@ -1026,6 +1016,13 @@ function CameraController.IsActive(): boolean
 	return active
 end
 
+-- Fix round 2, L3 (the fix-diff review's s2): whether FeedbackController draws the crosshair. Not
+-- IsActive: in a dressed level the shoulder camera stays up through summary and ended (K9), and
+-- the crosshair would sit at the screen's centre under the summary card.
+function CameraController.ShowsCrosshair(): boolean
+	return ScenePlan.Crosshair(active, phase, rangeMode)
+end
+
 -- True when this client booted into the Proving Grounds bench (CombatMode "range": Studio, the
 -- provingAttribute and `debug.provingBoots` "range"). Only the bench's own pieces ask this.
 function CameraController.IsRange(): boolean
@@ -1034,10 +1031,8 @@ end
 
 -- P5: true when the range's combat runs (the bench and every crowd mission): the crowd, the
 -- weapon families, abilities, vitals and movement. False only in a build without the
--- ProvingGrounds config. That config always ships, and since P5 Wave 1 nothing fights without
--- it: the server no longer handles the C1 attack remotes, so the C1 HUD that
--- CombatUIController still falls back to there (with a warning) can show a run but not play
--- one. Wave 3 deletes that path.
+-- ProvingGrounds config, which has no weapons: nothing fights there, and since L4 W1b no HUD
+-- or input boots either.
 function CameraController.IsCrowdCombat(): boolean
 	return crowdCombat
 end
@@ -1062,17 +1057,6 @@ function CameraController.GetAimRay(): (Vector3, Vector3)
 	end
 	local resolved = frame :: CFrame
 	return resolved.Position, resolved.LookVector
-end
-
--- Melee assist: the rig turns to the locked enemy for `seconds`, then back to the camera.
--- The server measures the swing arc from the root's facing, so the turn is what lands it.
-function CameraController.FaceToward(position: Vector3, seconds: number): ()
-	faceTarget = position
-	faceUntil = os.clock() + math.max(seconds, 0)
-	local rig = localRig()
-	if active and rig ~= nil then
-		faceCharacter(rig) -- now, not next frame: the swing intent leaves this frame
-	end
 end
 
 -- L1 fix round, item 2. Turns the VIEW to a world point; the body turns with it, because the
@@ -1103,7 +1087,6 @@ function CameraController.LookToward(position: Vector3, from: Vector3?): boolean
 	placement.lookAt = os.clock()
 	if active then
 		yaw = wanted
-		faceTarget = nil -- a melee assist still turning the body would turn it away again
 	end
 	return true
 end
@@ -1124,16 +1107,6 @@ function CameraController.OnPlaced(
 	if table.find(placedHandlers, handler) == nil then
 		table.insert(placedHandlers, handler)
 	end
-end
-
--- The finger holding the attack button also steers, so a phone player can fire and track
--- with one thumb. The touch is dropped when it ends.
-function CameraController.AdoptTouch(input: InputObject): ()
-	if not active or input.UserInputType ~= Enum.UserInputType.Touch then
-		return
-	end
-	local position = Vector2.new(input.Position.X, input.Position.Y)
-	cameraTouches[input] = { last = position, pending = Vector2.zero, adopted = true }
 end
 
 -- P3: a leap or lunge runs for `seconds`; the pivot may trail the character horizontally
@@ -1159,8 +1132,9 @@ function CameraController.FovKick(degrees: number): ()
 	fovKick = math.min(fovKick + scaled, FOV_KICK_MAX)
 end
 
--- Trauma-style shake: `amount` (feel.shakeLight / shakeHeavy) adds to a 0-1 trauma that
--- decays; the view moves by trauma squared. Reduce motion keeps it, at a smaller size.
+-- Trauma-style shake: `amount` (a hit's or a hurt's shake, scaled by the tuned feedback layer)
+-- adds to a 0-1 trauma that decays; the view moves by trauma squared. Reduce motion keeps it,
+-- at a smaller size.
 function CameraController.Shake(amount: number): ()
 	if amount <= 0 then
 		return
@@ -1169,7 +1143,7 @@ function CameraController.Shake(amount: number): ()
 	trauma = math.min(trauma + scaled, 1)
 end
 
--- A short upward kick in degrees (feedback.cameraKickDegrees), decaying on its own.
+-- A short upward kick in degrees (a hurt's, VitalsController), decaying on its own.
 function CameraController.Kick(degrees: number): ()
 	local scaled = if Theme.reducedMotion then degrees * Theme.REDUCED_MOTION_FACTOR else degrees
 	kickPitch += scaled

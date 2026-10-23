@@ -29,6 +29,15 @@ when src/shared/Config/WeaponModels.json exists: per family its model, blueprint
 upload, harvest and template (the props route, folder `Weapons`), the points the config gives it,
 and its shelf icon's upload and harvest (Assets.json `icons`, optional key).
 
+Prop folders that are not eras (L4 W2: `Raiders`, the raider kit's seven rigs; `Forest`, the four
+pieces a level places as props) get a "Props" table each, the era props' columns, from the same
+sources. The Weapons folder keeps its own table. A folder is listed only once Assets.json `props`
+has it, so blueprints that are not uploaded yet leave the committed manifest's bytes alone.
+
+Dungeon levels (L4 W2) get a "Levels" table from Assets.json `levels` (optional key, v6): per level
+the plan hash, the mesh and image counts, the triangle total and how far both have travelled.
+Absent, heading and all, until that key exists.
+
 Output is deterministic (stable ordering, no timestamps) so --check can diff
 it. The GLB column is the one local-only fact (assets/build is gitignored), so
 --check masks that column on both sides before comparing.
@@ -62,6 +71,7 @@ STAGES_DIR = REPO_ROOT / "assets" / "build" / "stages"
 TEMPLATES_DIR = REPO_ROOT / "templates"
 PROPS_DIRNAME = "_props"
 WORLD_DIRNAME = "_world"
+LEVELS_DIRNAME = "_levels"
 PROP_TYPE = "prop"
 MANIFEST_PATH = REPO_ROOT / "docs" / "ASSET_MANIFEST.md"
 WEAPON_MODELS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "WeaponModels.json"
@@ -490,8 +500,12 @@ def render(eras: list[dict], assets: dict | None) -> tuple[str, list[str]]:
     weapon_lines, weapon_notes = render_weapons(assets)
     lines += weapon_lines
     notes += weapon_notes
+    folder_lines, folder_notes = render_prop_folders(eras, assets)
+    lines += folder_lines
+    notes += folder_notes
     lines += render_paths(assets)
     lines += render_world(assets)
+    lines += render_levels(assets)
     lines += ["## Totals", "", f"{totals['slots']} models: {summary_line(totals)}", ""]
     return "\n".join(lines), notes
 
@@ -580,6 +594,89 @@ def render_weapons(assets: dict | None) -> tuple[list[str], list[str]]:
         WEAPONS_RULE,
     ]
     return lines + rows + [""], notes
+
+
+def render_prop_folders(eras: list[dict], assets: dict | None) -> tuple[list[str], list[str]]:
+    """One table per prop folder in Assets.json `props` that is neither an era nor the Weapons
+    folder (its own table above), in the era props' columns. Listed only once uploaded: a folder
+    whose blueprints exist but whose props are not in Assets.json yet adds nothing."""
+    block = (assets or {}).get("props")
+    if not isinstance(block, dict):
+        return [], []
+    era_names = {str(era.get("name", "")) for era in eras}
+    weapons = load_weapon_models()
+    skip = era_names | ({str(weapons.get("folder", "Weapons"))} if weapons is not None else set())
+    lines: list[str] = []
+    notes: list[str] = []
+    for folder in sorted(name for name in block if name not in skip):
+        rows, folder_notes = collect_props(folder, assets)
+        notes += folder_notes
+        lines += [
+            f"## Props — {folder}",
+            "",
+            f"Blueprints: `tools/testfit/blueprints/{PROPS_DIRNAME}/{folder}/` -- templates: "
+            f"`templates/{PROPS_DIRNAME}/{folder}/` -- in game: `ReplicatedStorage/Assets/Props/{folder}/` "
+            "(a prop folder, not an era).",
+            "",
+            f"Summary: {summary_line(summarize([cov for _, cov in rows]))}",
+            "",
+            TABLE_HEADER,
+            TABLE_RULE,
+        ]
+        for index, (prop_name, cov) in enumerate(rows, start=1):
+            lines.append(render_row(index, {"modelName": prop_name, "name": NONE, "type": PROP_TYPE}, cov))
+        lines.append("")
+    return lines, notes
+
+
+def render_levels(assets: dict | None) -> list[str]:
+    """One row per dungeon level. Absent, heading and all, until Assets.json has a `levels` key."""
+    block = assets.get("levels") if assets is not None else None
+    if not isinstance(block, dict) or not block:
+        return []
+    lines = [
+        "## Levels",
+        "",
+        "Pipeline: the level's generator (`tools/levels/forest.py build` for ForestRoad: one GLB per mesh ->"
+        " Models; its palette and ground textures -> Decals; the upload record) -> `tools/assets/upload_level.py`"
+        " -> Studio harvest (the size check) -> `tools/assets/gen_templates.py --levels`"
+        f" -> `templates/{LEVELS_DIRNAME}/<Level>/<Mesh>.rbxmx` -> `ReplicatedStorage/Assets/Levels/<Level>/`"
+        " (the combat place).",
+        "",
+        "A mesh has a template once it and the image it wears are harvested. The game draws a level's"
+        " dressing only when every one of its meshes has a template and the plan hash matches its dress"
+        " data; otherwise it keeps the grey level.",
+        "",
+        "| Level | Plan hash | Meshes | Triangles | Images uploaded | Images harvested | Meshes uploaded | Meshes harvested | Templates | Status |",
+        "|-------|-----------|--------|-----------|-----------------|------------------|-----------------|------------------|-----------|--------|",
+    ]
+    for level in sorted(block):
+        entry = block[level] if isinstance(block[level], dict) else {}
+        meshes = entry.get("meshes") or {}
+        images = entry.get("images") or {}
+        uploaded = sum(1 for m in meshes.values() if int(m.get("assetId") or 0) != 0)
+        harvested = sum(1 for m in meshes.values() if int(m.get("meshId") or 0) != 0)
+        images_up = sum(1 for i in images.values() if int(i.get("assetId") or 0) != 0)
+        images_in = sum(1 for i in images.values() if int(i.get("imageId") or 0) != 0)
+        templates = sum(1 for name in meshes if (TEMPLATES_DIR / LEVELS_DIRNAME / level / f"{name}.rbxmx").is_file())
+        if not meshes:
+            status = "not baked"
+        elif uploaded == 0 and images_up == 0:
+            status = "baked, not uploaded"
+        elif uploaded < len(meshes) or images_up < len(images):
+            status = "uploading"
+        elif harvested < len(meshes) or images_in < len(images):
+            status = "uploaded, awaiting harvest"
+        elif templates < len(meshes):
+            status = "harvested, templates stale"
+        else:
+            status = "in game"
+        lines.append(
+            f"| {md_cell(level)} | `{md_cell(entry.get('planHash') or NONE)}` | {len(meshes)} | {int(entry.get('triangles') or 0)} "
+            f"| {images_up}/{len(images)} | {images_in}/{len(images)} | {uploaded}/{len(meshes)} | {harvested}/{len(meshes)} "
+            f"| {templates}/{len(meshes)} | {status} |"
+        )
+    return lines + [""]
 
 
 def render_world(assets: dict | None) -> list[str]:

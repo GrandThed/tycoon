@@ -6438,3 +6438,859 @@ The R2 SIM_CASES, proposed for `check_levels_mutants.py`. Each was run here thro
 The full `sim_range --check` output differs from the clean copy's only in the cave section above (71 lines): every
 Normal, Hard, Brutal, arena, R8 and range row is byte-identical. PASS lines went from 549 to 561: six old pair
 gates left and eighteen new ones came in.
+
+## L4 W1: the lookout at the trailhead (2026-10-21)
+
+Ben's ruling (MISSIONS_DESIGN 26.1): the lookout moves to the trailhead, the study's V3, so the perches L1 to L3
+accepted as a known limit go away and R8 gates every spot. Measured on Python 3.12.10 64-bit (the gate's) unless
+said otherwise.
+
+### L4 W1: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Layouts/Levels/ForestRoad.json` LookoutLedge | (-283, 15, -59), 24 x 38 x 14, top 34 over Road5 (0.0 off the plateau region) | **(-446, 11, -33), 24 x 30 x 14**, top 26 over Road1, 18 studs across the void from Road1's north edge | 26.1: 132 studs from the nearest region cell, beyond the Longbow's 110 and `dormantRadius` 120 |
+| the `lookout` secret | (-283, 36, -59) | **(-446, 28, -33)**, on the ledge | the chest goes with its ledge |
+| its sign | (-301, 8, -57) on LookoutSignPad | **(-447, 0, -5)**, on Road1, its foot flush with the road's north edge | the study had z -2, which stood the 6 x 4 x 6 walk-through sign across the walking line at the spawn; at -5 it sits beside the road on the ledge's side, as the cache's sign does on Road4 |
+| LookoutSignPad block and its `plateau` region cell | a 10 x 12 x 10 step, top 8, and a 6 x 16 cell | **removed** | the step to the old ledge; its west 4 studs were a Hard sniper spot (x2.09 with the bow at T4) |
+| `check_levels.py` `EXPECTED` sniper lists (all four) | with LookoutLedge, LookoutSignPad, Secret_lookout | **without them** | the pinned lists are what check_levels finds; nothing else moved |
+| `sim_range.py` `SNIPER_KNOWN_LIMIT_L4` | Normal: LookoutLedge, Secret_lookout; Hard: the same and LookoutSignPad | **removed, with its reader and `r8_gate`'s `known` branch** | an empty exemption would be dead code; every spot is gated (Ben, 2026-10-16) |
+
+No game number moved; `Config/Levels/1_ForestRoad.json` is unchanged. check_levels: PASS (the lookout's L2-18 (a)-(d)
+hold: 26 over the road, "the closest call: Trailhead, 5 studs short" for one jump, a step up and a dash; no lifting
+ability's arc reaches it).
+
+### L4 W1: R8 before and after (the gate's seeds 11 / 23 / 37)
+
+Best cash a minute over the seeds, as a multiple of the mission player's on the same seed (the bow-T4 rows' mission
+player fights with the sword alone, so his rates are the T1 ones). "Before" is a clean copy of HEAD 59a2279 run on
+the same machine and Python.
+
+| Table | Spot | Before | After |
+|---|---|---|---|
+| Normal, T1/T1 | Secret_lookout / LookoutLedge / LookoutSignPad | x1.59 / x1.35 / x0.54 (the first two known limit) | gone |
+| Normal, T1/T1 | Road3 / Road2 / Road4 | x0.72 / x0.69 / x0.06 | the same |
+| Normal, sword T1 / bow T4 | Secret_lookout / LookoutLedge / LookoutSignPad | x1.66 / x1.37 / x0.54 (known limit) | gone |
+| Normal, sword T1 / bow T4 | Road3 / Road2 / Road4 | x0.72 / x0.69 / x0.06 | the same |
+| Hard, T1/T1 | LookoutLedge / LookoutSignPad / Secret_lookout | x1.30 / x0.93 / x0.62 (known limit) | gone |
+| Hard, T1/T1 | Road3 / Road2 | x0.87 / x0.83 | x0.87 / x0.83 (Road3 seed 11: 20,288 -> 14,082) |
+| Hard, sword T1 / bow T4 | Secret_lookout / LookoutLedge / LookoutSignPad | x4.44 / x4.13 / x2.09 (known limit) | gone |
+| Hard, sword T1 / bow T4 | Road2 / Road4 / the gatehouse | x0.83 / x0.15 / x0.15 | the same |
+| **Hard, sword T1 / bow T4** | **Road3** | x0.79 (seed 11: 8 kills in 13 s) | **x1.60, RED** (seed 11: 16 kills in 13 s, 39,504 / 55.1 against 24,703 / 37.2) |
+| Hard, the tunnel open | CaveMouth | seed 11: 0 | seed 11: 19,164, x0.78; its "nearest point" rows went (it is one point now) |
+
+Every other spot (RoadBC5, RoadBC6, ShrineSignPad, Creek, CaveExit) is byte-identical. `sim_range.py --check`:
+**CHECK: FAIL (1)**, that Road3 row, in 11 min 46 s; HEAD: PASS.
+
+### L4 W1: Road3 on Hard with the bow at T4 (the lead's decision)
+
+The cause, isolated on in-memory variants of HEAD's layout (sim_range's own `LevelRun`): dropping only the
+LookoutSignPad **region cell** reproduces the new rows exactly. The block alone and the ledge's move change nothing for
+Road3. The cell was one of the sim's sight blockers (`scene_walls`) and a place chasing bodies stood. Without it, on
+seed 11 camp A's fireN group reaches the plateau's west edge in Road3's view inside the 13-second window, beside
+fireW.
+
+**The row was red before too, out of the gate's seeds.** The same course over seeds 1-30, counting a seed when its
+cash or Timber a minute beats the lowest of the three gate-seed mission rates (Normal 24,986 / 40.1, Hard 21,332 /
+31.9):
+
+| Course | HEAD | L4 W1 |
+|---|---|---|
+| Hard, sword T1 / bow T4, Road3 | 12 of 30, worst 67,179 (26 kills in 13 s, x3.1) | 13 of 30 (11 added), worst the same |
+| Hard, sword T1 / bow T4, Road2 | not run | 10 of 30, worst 47,489 (18 kills, x2.2) |
+| Hard, T1/T1, Road3 | not run | 7 of 30, worst 21,352 (x1.00) |
+| every other spot, Hard, both gears | not run | 0 of 30 |
+| every spot, Normal, both gears | not run | **0 of 30** |
+
+From Road3's corner (-340, 0, -51), 38 studs off and 8 below the plateau, and from Road2, the straight course pulls
+camp A's west groups to the plateau's edge and kills one, two or three groups in 13 s with the x6.74 bow. That pays
+4-14K once (camps never refill), but as a rate it is x0.8-x3 the sword-T1 mission's. It is L3's structural point
+(a bow at T4 against a sword at T1 out-earns from wherever it sees a camp) at a spot that is not a perch. No wall
+can stand between the low road and the plateau's edge without standing on Road4, and a body stopped at the region's
+edge is always in view from below. Options for the lead:
+
+1. **A plateau nub where the pad stood**: a block (-299, 2, -57) 6 x 12 x 10 wholly under a restored region cell
+   (-299, -54) 6 x 16, so nobody on it is out of a rusher's reach. Measured: check_levels PASS with the same
+   pinned lists, and Road3's three gate seeds are back to HEAD's (8 / 8 / 3 kills), so `--check` passes. Road2 and
+   Road3 stay out-earning on a third of the seeds: this only restores the gate seeds' luck.
+2. **Ben rules on the Hard bow-T4 burst** from the low road: a one-off 4-14K in 13 s, then the player still fights
+   the rest.
+3. **Change what R8 measures** for a burst (`sim_range.py`, mine, but it changes the gate's meaning): for example,
+   rate a course on more seeds, or on its pay against what the mission player earns from the same residents.
+4. **Camp A's design** in the real forest (26.2's natural edges, the west fires' posts), so that one pull from the
+   road wakes one group, not three. This is the wave's forest work, with every camp gate re-run.
+
+### L4 W1: `check_levels_mutants.py`, re-aimed cases
+
+| Case | Was | Now |
+|---|---|---|
+| L2-18b, a step the ledge is one jump from | a ledge (top 14) west of the sign pad | the same step in the void between Road1 and the ledge (x -450..-446, z -22..-16) |
+| L2-18b, a cliff on the ledge's east side (84 control, 60 red) | x -275..-271, z -66..-52 | x -438..-434, z -40..-26 (`cliff`) |
+| L2-18a, the ledge 6 higher | top 40, chest y 42 | top 32, chest y 34 |
+| L2-18d, the chest at the front edge / 1.5 back (control) / 2 back | z -54 / -60.5 / -61 | z -28 / -34.5 / -35 (the back edge is z -40) |
+| L2-18d, a root on the road below | secretBelow 25, secretReach 8 (Road5) | secretBelow 25, secretReach 26 (Road1, 22 off the chest's footprint) |
+| L2-18c, Leap Smash height 20 (a target on A's fence) | red | **height 23 red, 22 green**: at the trailhead every take-off is ground at 0, so the margin over the shipped 10 is 13 studs |
+| L2-37f, the ridge CaveWallS1 | 60 red / 81 control (43 over the lookout's chest, 38) | **54 red / 55 control** (43 over camp A's fence and the cache's chest, 12); plus 80 red with L2's lookout put back |
+| d-M1, the 84 ridge (five cases) | measured from the lookout's ledge | the same cases with L2's lookout put back (`l2_lookout`). Without it the three red ones go green: on today's data nothing lifts a player onto a 64-high ridge, so d-M1 alone no longer needs the 84 tops (CaveWallS2, CaveRoofE, the alcove); whether another gate does was not checked |
+| W3 frozen, a pond by the ledge | x -295..-271, z -80..-68, 17 red / 6 control | x -458..-434, z -54..-42 (behind the ledge), 17 red / -1 control (the creek's own height) |
+| SIM_CASES L3-26 | LookoutLedge out of Normal's known limit | **R8's band at half the mission's pay**: Road3's Normal sword-T1 / bow-T4 row (x0.72) goes red, which it can only do while the bow-upgraded rows are gated |
+
+`tools/crowd_harness/tests_l2.luau` (realTests): the "from the road below" case read Road5's 8 as a literal. Under the
+new ledge, one jump from 8 would reach the chest's band. It now reads the road from the layout's route point nearest
+the chest (0). Shown red with the old 8 (1 of 4,032 checks), green as written.
+
+## L4 W2: the mountain climb and the Castle Key (2026-10-21)
+
+Ben's request (MISSIONS_DESIGN 28): a parkour of double jumps round a mountain behind the trailhead, one lap of about
+eight, 1-2 minutes, wide ledges, a miss drops you to the ledge below; a summit chest that gives the Castle Key. Measured
+on Python 3.12.10 64-bit (the gate's). Report: `docs/prompts/l4-w2-reports/mountain.md`; gate: `tools/check_parkour.py`.
+
+### L4 W2: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Layouts/Levels/ForestRoad.json` blocks | 61 | **72**: `MountainPath` (96 x 16 off the trailhead's west edge), `MountainTrail` (16 x 54 north), `MountainYard` (96 x 96, x -658..-562, z -158..-62), `MountainLedge1..7` and `MountainSummit` (the core, 28 x 28) | a walled yard behind the trailhead with a 200-stud stepped mountain in it |
+| ledge tops | | **25, 50, ..., 175, the summit 200: every hop 25** | one jump and check_levels' step up reach 21 (4 short); the double jump peaks at 30 (5 over); horizontally a dash outreaches the double jump, so only height makes a hop need it |
+| hops | | **flush**: each ledge's face rises straight off the end of the one below (no gap) | a missed double jump hits the face and drops back onto the ledge it left (Ben's "a miss drops you to the ledge below") |
+| ledges | | **24 x 20** (the lookout ledge is 24 x 14); faces 20-24 wide | a phone's thumb; LEDGE_MIN 14 x 20, FACE_MIN 14 |
+| the `mountain` secret | | **(-610, 202, -110)** on the summit, needs `doubleJump`; sign "MOUNTAIN - needs DOUBLE JUMP" at (-490, 0, -5) on the path | the fourth Forest chest (the lead's ruling) |
+| `Config/Levels/1_ForestRoad.json` `secrets.mountain` | | **`{ "name": "Mountain Summit", "valor": 4, "materials": 50, "key": "castle" }`** | below |
+| `check_levels.py` | | the pinned secrets with `mountain`; L2-18a judges a climb's chest over its last ledge (`check_parkour.ledge_below`); one call to `check_parkour.check_climbs` | the band would otherwise measure the summit against the road 200 below |
+
+### The pay
+
+The Forest's Normal clear pays about 10 Valor (Double Jump costs "one clear") and holds 220 Timber, in about 5 minutes:
+roughly 2 Valor and 44 Timber a minute. A first climb is about a minute (a perfect one 21 s) and is the hardest
+double-jump test in the game, so **4 Valor and 50 Timber** (23% of the Normal stock) pay about two minutes' Valor and a
+minute's Timber, once per player. Between the lookout (3 + 50, a 15-second detour that also gives the Flamethrower) and
+the shrine (6 + 60, which needs Castle gear and stays the best chest). The Castle Key is the prize. Inside L2-13 /
+L2-37 (2 or more Valor, under Double Jump's 10; 15-30% of the stock).
+
+### Flight, the new measure
+
+`check_parkour.flight_reach` is longer than check_levels' `stray_reach` because MovementController lets the double
+jump fire any time after `airJumpDelay` and *set* the rise (late in a fall it buys most), and an air dash's flat mover
+leaves no fall speed. From 200 up: 90.8 studs (stray_reach 66.2; no dash 61.1); from 50 up: 69.0. After a landed slam
+the dash key dashes for `slamCooldown` 1.8 s, so three dashes fit in one flight: 133.3 from 200 up (an outer bound,
+reported, not gated). The yard's only mouth is 116-181 studs from every top: past each flight plus Leap Smash's 32
+plus 10 (tightest L2, +5.1), and past even the three-dash bound by 10.8 or more.
+
+One gate number moved: check_levels' frozen-sheet bound (W3 fd-m2) falls from the jumps' apex over the highest top
+reached anywhere, now the summit, so the fastest fall onto the ice is 1.265 studs a physics step (was 0.644). The
+shipped sheet, `levels.react.ice.thickness` 1.9, still passes (under the root's 2); the mutant pair around the bound
+moved from 0.6 / 0.7 to 1.2 / 1.3. No game number changed; nothing in `Economy.luau`.
+
+## L4 W1b: the old mission code goes (2026-10-21)
+
+Contract `docs/prompts/l4-w1b-contract.md`. The C1 missions, the P5 crowd mission and the Raider Arena leave the game,
+and their mirrors and gates leave the tools (L4B-5, L4B-6). Two numbers are new; no number a run plays moved.
+Measured on Python 3.12.10 64-bit (the gate's) unless said otherwise; "HEAD" is a clean copy of 1d3b0d2 run on the
+same machine.
+
+### L4 W1b: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json movement.dashProofShare` | (none) | **0.5** | L4B-7: a dash's i-frames count once the server's ring has seen it move at half the dash's speed (0.5 x 20 / 0.15 = 66.7 studs/s: 3.3 x the walk's 20, half a dash's 133) |
+| `ProvingGrounds.json movement.dashProofSeconds` | (none) | **0.05** | the stretch that speed is measured over: 3.3 studs of flat travel, three Heartbeats. A walk covers 1.0 in it and never proves one; a dash covers 6.67; a dash stopped by a wall after less than 3.3 studs earns none |
+| `Config/Missions/2_Boomtown`, `3_Metropolis`, `4_OrbitalColony.json` | drafts with no crowd block (refused since P5) | **deleted** | L4B-1 |
+| `Config/Missions/1_Village.json` | the C1 mission and P5's crowd block | **the hub stub**: `version`, `id` "village", `era` 1, `eraName`, `name` "Forest Road", `material` "Timber", `waves` 3, `targetMinutes` 5, `recommendedPower` 64 | L4B-1: the hub's tile reads only these until W3's city map; 64 is T1/T1's Gear Power |
+| `Config/Levels/0_RaiderArena.json`, `Layouts/Levels/RaiderArena.json`, `Layouts/Arenas/{Village,Boomtown,Metropolis,OrbitalColony}.luau` | the arena and its layouts | **deleted** | L4B-3: the arena is hidden by deleting its data |
+| `Expeditions.json` | the `raiderArena` node and the `bonus` theme | **gone** (the `bonus` node kind stays) | §3 |
+| `Combat.json` | `enemy`, `ai`, `crowdSkeleton`; `player.hitDistancePad`, `aimAssistDegrees`, `corpseSeconds`, `breatherRegenPerSecond`, `killCooldownRefundSeconds`, `dashHitRadius`, `burstConeDegrees`; `remotes.attackCallsPerSecond`, `abilityCallsPerSecond`; `director.maxAlive`; `animations.enemy*`; `debug.missionAttribute`, `overdriveAttribute`, `botsAttribute`, `botHp`, `botDamagePerSecond`, `botIncomeRate`; `camera.touchAimAssistDegrees`; `feel.shakeLight`, `shakeHeavy`, `hitMarkerSeconds`, `ragdollImpulse`, `ragdollSeconds`, `hitSparkCount`; `feedback.hitstopSeconds`, `cameraKickDegrees`, `lowHpFraction` | **deleted** | L4B-5: their last `src` reader went this wave (each proved by grep). `overdrive` stays (L4B-2) |
+| `Armory.json` | `slots`, `classes`, `abilities`, the top-level `bands`, `partyEffects` | **deleted** | L4B-5 (row 17). `ladder`, `windows`, `legacy` and `ascension` stay; `legacy.gearCosts` keeps the twelve slot prices for v8 (L4B-9) |
+| `Sounds.json` (and `tools/audio_map.json`) | 15 event keys no code plays (`swing` .. `waveClear`) | **deleted** | the lead's routing; `audio_map.json` loses them too, or `upload_audio.py` would upload a key `set_sound_id` cannot write |
+| `Layouts/Arenas/ProvingGrounds.luau enemySpawns` | 8 points "required by the contract" | **deleted** | its readers (the C1 arena and the adapter) went |
+
+### L4 W1b: the dash proof in the simulator (L4B-7)
+
+`sim_range.py`'s `start_dash` appends its window only when its own clamped path covers `dashProofShare` of the dash's
+speed in its first `dashProofSeconds`, and `plan_shielded` applies the same. Every simulated dash of every policy was
+proven (`DASH PROOF`: 118 dashes, 0 unproven: the human 54, the reacting player 37 + 2 + 1 + 2, the one who stands to
+half health 16, the kite 6), so no run moved: every gate line is byte-identical to HEAD's. The facts now say
+"invulnerable 39% (31%) of the time when every dash moves; a forged dash that never moves the character 0%", and a
+new gate holds it: a forged still dash 0%, a walk (1.00 studs in 0.05 s) never proves one, a real dash (6.67) does.
+The cost the contract states (§4.5) is a feel change only Ben can judge: a dash pressed into a wall earns nothing.
+
+**Corrected by the fix round (below).** As built at 1ae8bfb, "no run moved" was a property of this mirror, not of the
+game: the mirror opened a proven dash's window at its first frame, while the game opened it only when the ring proved
+the claim, a few Heartbeats later, so a hit decided in between landed in the game and was dodged here (slice 3 m1
+measured 33 such voids on Forest Road). The fix round's F1 holds those decisions until the claim resolves, so the game
+now does what the mirror did; the mirror models the hold itself, and the claim is true again on that footing.
+
+### L4 W1b: the gates before and after
+
+| Gate | HEAD | Now |
+|---|---|---|
+| `sim_range.py --check` | FAIL (1): R8 Road3, Hard, sword T1 / bow T4, **x1.60** (seed 11: 39,504 / 55.1 against 24,703 / 37.2) | **FAIL (1): the same row, x1.60, every seed byte-identical**; the 12 arena lines retired, 1 dash line added; 537 PASS (was 548) |
+| `sim_combat.py --check` | PASS, 23 assertions | **PASS, 11 assertions** (1, 2, 4, 5, 6, 12, 13, 20-23); 1, 2, 5, 6, 21, 22, 23 byte-identical |
+| `sim_combat.py` assertion 4 | Village's crowd run 144,250 cash = 1.01% of 14,280,000 | **Forest Road Normal 131,733 cash = 0.92%** of the 14,280,000 the Village era still owes at 20:55 (needs <= 25%) |
+| `check_levels.py` | PASS | PASS: the arena's lines retired, two tripwires added (`debug.provingLevel` names a map node with a level file; no level file names a `mission`, no layout an `arena`) |
+| `check_stage_mirror.py` | PASS | PASS, with the same comparison counts as HEAD (see below) |
+
+### L4 W1b: coverage the arena carried (risk 4)
+
+The arena was the only level that played a stage's `merge`, the director's breather and a gateless camp that locks
+behind an invisible wall. Those rules stay in the game (Forest Road's locking camp and the level schema read them),
+so the cases that used the arena as a fixture now use a hand-written copy of what it resolved to: `L1W.field` /
+`L1.field` in the harness (the wave, skip, Force, plan and fence cases) and `FIELD_LEVEL` on `FIELD_LAYOUT` in
+`check_stage_mirror.py`, whose scripted runs keep `LevelRun.advance`'s merge and breather held to `StageFlow.Advance`
+(Resolve 2, Plan 8, scripted runs 20, Skip 8, Force 4 compared: HEAD's counts). **No shipped level plays them.** A
+level that merges or rides the director's breather is measured by nothing in `sim_range.py` until one ships.
+
+### L4 W1b: what the simulators no longer measure
+
+`sim_combat.py` keeps assertions 1, 2, 4, 5, 6, 12, 13 and 20-23 under their old numbers. Retired with their rules: 3
+and 7-11 and 14 (the C1 run model: run length, merging at 2x, the under-geared death, WaveComposition, Overdrive cash,
+party boss waves, the horde's shape), 15-18 (the P5 crowd mission) and 19 (ruling 27's adapter); the `--era`,
+`--power`, `--party` and `--overdrive` flags went with them. 1 now pins ladder HP T1-T11 and `legacy.gearCosts` as
+literals (the slot tiers they were read from are gone). 12 and 13 are pure checks of `mentor_pay`, a mirror of
+`WaveService.payMentors` over `Combat.MentorBonus`, on fixture rates and shares (a 10:1 duo pays the mentor 5 Valor,
+an equal duo nobody, a mentee at exactly hostRate x mentorRatio is not carried, the 1% damage floor on both sides, a
+waiting mentor nothing). `sim_range.py` loses the Raider Arena report and its 12 gate lines (the bosses' 64-90 s and
+77-101 s bands, the 10-15 min clear, the stand-down, the arena's hit share and regen), `--mission` and `--level arena`.
+Its range bosses (P4 Stop 2 and 3) keep their own bands.
+
+## L4 W1b fix round: the dash held for its proof, and the gates it needed (2026-10-21)
+
+Rulings `docs/prompts/l4-w1b-fix-round.md` (F1, F2, F3, F6 and two suggestions are the designer's), report
+`docs/prompts/l4-w1b-fix-reports/designer.md`. No number a run plays moved. Measured on Python 3.12.10 64-bit (the
+gate's) unless said otherwise; "before" is this worktree at the start of the round (the W1b build with the engineers'
+fix-round code, the simulator not yet changed), run on the same machine.
+
+### Fix round: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Config/Missions/1_Village.json waves` | 3 | **2** | slice 3 S4: the hub card reads "Waves cleared n / waves", and a Forest Road clear counts the `clear` actions of its one locking camp, the Chief's Clearing, which has 2 waves (the ambush, then the Colossus); open camps emit `campClear`. W3 replaces the stub |
+| `sim_range.py DASH_PROOF_FRAMES` (new, simulator only) | (none) | **2** | F1: the ring proves a real dash two Heartbeats after it begins (one after its first moving sample at a smooth 60 Hz, tests_l4b (a)). With the hold its value moves no outcome of a proven dash; it is there so the mirror carries a proof time, as the game does |
+
+### Fix round: the dash in the simulator (F1)
+
+The game now holds a decision that falls while the player's dash claim is pending, when the claim's window would
+cover it, until the claim resolves: proven, it is voided as before L4; lapsed (`dashSeconds + originLagMaxSeconds` =
+0.45 s after the request), it lands then. The mirror (`start_dash`, `settle_claim`, `awaits`, `hold`, `release`):
+- a dash records a claim (its window from the request, its proof time `DASH_PROOF_FRAMES` Heartbeats on if its own
+  clamped path proves it, else none, and its lapse), and opens no window by itself;
+- each frame, before anything is decided (WeaponService's one order), a claim past its proof opens its window from the
+  request, and one never proven is over once the frame is past its lapse;
+- a decision the pending claim would cover (VitalsService's `met`) is held with what the commit rule found at its own
+  moment, hit or miss (the instant shapes), or the contact (shots, charges and rings, which fly on, as for a dodge);
+- a held decision is judged when its claim is over: voided by an i-frame that met its span, a knock since then voiding
+  nothing; a downed player is judged by nothing; it outlives its striker's death; ClearThreats takes it with the rest.
+
+So a proven dash's outcome is the one it had before W1b, whatever the latency; only an unproven dash's covered hits
+move, to its lapse. Slice 3 m1's delay model (a window counts only for a hit decided two Heartbeats after the dash
+began) no longer describes the game: it modelled the proof's latency without the hold, which is what F1 removed.
+
+**Result.** `sim_range.py --check` prints every line it printed before, byte for byte (the whole output compared),
+but two: the `DASH PROOF` report gains the held decisions, and one gate line is new.
+
+| Policy | Dashes / never proven | Held, then voided at the proof / judged unvoided at a lapse |
+|---|---|---|
+| a human's reaction, attacks the nearest | 54 / 0 | 1 / 0 |
+| reacts to every tell, attacks the nearest | 37 / 0 | 26 / 0 |
+| ... carrying broadsword and longbow | 1 / 0 | 1 / 0 |
+| ... carrying frostHammer and longbow | 2 / 0 | 2 / 0 |
+| wakes a group, runs out, comes back | 6 / 0 | 3 / 0 |
+| reacts to every tell, attacks (range) | 2 / 0 | 0 / 0 |
+| stands to half health, then fights (range) | 16 / 0 | 0 / 0 |
+
+The 33 Forest Road decisions held for a proof are slice 3 m1's 33 "margin 0" voids (a dash begun in the frame of the
+decision): the game now dodges them, as the mirror always had. No simulated dash went unproven, so nothing was held to
+a lapse in a gated run. The new gate line runs the hold through the simulator's own code on one lunge decided in the
+frame of the press: dodged once the ring proves the dash (2 Heartbeats later), landing 0.467 s after the press when it
+is never proven (the first Heartbeat past the 0.45 s lapse), and at once with no dash. The reviewer's suggested line
+("a dash begun in the decision's frame does not dodge") is the opposite of F1's rule and was not added.
+
+**The R8 row.** Unchanged at **x1.60**: Road3, Hard, sword T1 / bow T4: seed 11 39,504 / 55.1 against 24,703 / 37.2;
+seed 23 18,374 / 27.6 against 23,330 / 34.8; seed 37 2,756 / 0.0 against 21,332 / 31.9. Slice 3 m1's x1.65 came from
+the delay model above. The known limit stands as L4 W1 left it: the only failing line.
+
+**What the mirror does not model.** The planner (`plan_hits`) still dates an unproven dash's hits at their decision,
+not at the lapse; it only orders failing plans by when their first hit lands, and no gated run dashed unproven. When a
+held hit lands at a lapse in the same frame as a decision that was queued before it, the game walks its queue in
+insertion order and the mirror releases the held one first; this can only matter for an unproven dash.
+
+### Fix round: the gates before and after
+
+| Gate | Before | Now |
+|---|---|---|
+| harness (`run_harness.py`) | FAIL (2 of 4,133): B's two re-indented `sendRunState` pins (A's fixture and pins applied) | **PASS (4,162 checks)**: +29 (5 sendRunState, 9 client, 10 payMentors pins, 5 orders) |
+| `sim_range.py --check` | FAIL (1): the R8 row, x1.60; 537 PASS | **FAIL (1): the same row, x1.60**; 538 PASS (+1: the F1 hold) |
+| `check_stage_mirror.py` | PASS | **PASS**, with `Combat.MentorBonus` 28 cases and its 11 boss kills through `mentor_pay` compared (F6) |
+| `mirror_mutants.py` | 129 of 129 | **132 of 132 caught** (+3: MentorBonus `<` made `<=`, the ratio ignored, one mentorValor whatever the head count) |
+| `check_levels.py` | PASS | **PASS** (222 lines) |
+| `check_levels_mutants.py` | PASS | **MUTANTS: PASS** (274 cases as expected, about 3 h beside the other runs) |
+| `sim_combat.py --check` | PASS, 11 assertions | **PASS, 11 assertions**, 12 and 13 now read their boss kills from `sim_combat.mentor_fixtures`, the list check_stage_mirror replays |
+| `mutate.py`, filtered to the changed files | (not run) | **269 run, 0 not caught** (baseline PASS 4,162), filtered to DashProof, VitalsService, WeaponService, ArenaService, WaveService, CombatUIController and RunFloors |
+
+### Fix round: new gates and their mutants
+
+- **F2, WeaponService (the source.l4b pins, A's lines).** OnDash grants nothing (one regex counts 0 of `GrantIframes(`,
+  `DashProof.`, `showIframes(`, `openIframes(` and any i-frame write), stamps `lastDashAt`, refuses a downed player;
+  trackAir proves a pending claim right after the ring sample, and a frame with no living root drops it; proveDash is
+  one `DashProof.Step` call and shows the attribute only for a proof; the rule read once; pendingDash is VitalsService's
+  `dashClaim` hook; `step` runs `trackAir`, then `VitalsService.Step` (one Heartbeat). The verdict and lapse branches
+  moved into the pure `DashProof.Step`, which tests_l4b runs. Every review mutant of slice 3 m2 and slice 1 m1 is a
+  `mutate.py` entry, caught: open unless lapsed and the lapse branch made `else` (tests_l4b), OnDash calling
+  `GrantIframes` (dashGrantsNothing), the no-root clear deleted (trackNoRootClears), the claim test inverted
+  (trackRecordThenProve), a 1e6 lookback (ruleRead), the cooldown stamp deleted (dashStamp), the down refusal dropped
+  (dashDown).
+- **F3, the cells-once lines.** Server (B's): the skip test, Attach as a whole line, `if cellsWent then`, the clone, the
+  swap (and one write of `sent.floors`), the note and the FireClient of `sent`. Client (the ui-engineer's, a new body
+  regex for two functions nested one tab in): merge against the held list, through `RunFloors.Merge` with the held
+  set's number, keep the incoming number after it (order pinned), keep the merged floors; onRunState's call with the
+  RunState's `floorsSeq`, after the guard and before the new-level branch (F4); the one RunState listener. The review's
+  seven are caught: 1 (uiMerge), 2 (uiSeq), 3 (uiCall), 4 (uiMerge and the orders), 5 and 7 (sendCellsWent), 6
+  (sendFloorsWrites).
+- **F6, the mentor pay.** payMentors' deciding lines are pinned whole (nobody paid at a total of 0, the mentor's
+  waiting-and-floor test, a mentee is another member over the floor, the mentee's own rate, the MentorBonus call
+  against the mentor's rate, the Valor, the card, the boss kill's call). `check_stage_mirror.py` compares the real
+  `Combat.MentorBonus` with `sim_combat.mentor_bonus` on every call `mentor_pay` makes on assertions 12 and 13's boss
+  kills, plus a rate exactly at, and 1e-7 either side of, hostRate x mentorRatio for three host rates; then pays each
+  of those kills with the Luau's answers. Review mutants 1 and 2 are caught by the pins (mentorFloor, menteeFloor);
+  mutant 3 (`rate < threshold` made `<=`) by the mirror: 6 of the 28 cases differ.
+- **Slice 3 S2.** The two real-file checks that pinned today's map became rules: every level file is played by a map
+  node and was resolved, validated and planned (1 today); every side node hangs off a level node and has a map theme
+  (0 today).
+
+## L4 W1b fix round 2: a held hit keeps the knock rules (2026-10-22)
+
+Rulings `docs/prompts/l4-w1b-fix2.md` (the designer's: G1's simulator mirror and its gate line, G3's pins and the
+review's two probes as mutants, s1's two payMentors pins), finding `docs/prompts/l4-w1b-review/4-fix-diff.md` M1,
+luau-engineer A's G1 as built in `docs/prompts/l4-w1b-fix-reports/luau-a-2.md`, report
+`docs/prompts/l4-w1b-fix-reports/designer-2.md`. **No config key changed and no number a run plays moved.** Measured on
+Python 3.12.10 64-bit (the gate's); "before" is the simulator and data of f16515a (this worktree's are byte-identical to
+it before the round), run on the same machine.
+
+### Fix round 2: the hold in the simulator (G1)
+
+The review found that a dash the ring never proves (one pressed against a fence) cost more than no dash: every hit its
+claim held was released at the lapse with the knock rules skipped, so a knocking hit and the hit behind it both landed
+(16 lost where no dash loses 8). The game now judges a held decision as of its own moment, and the mirror
+(`hold`, `release`, `rule`, `hurt`, `struck_by`) follows it:
+- a decision that waits keeps its moment `at` (the frame it fell due; for a shot, charge or ring contact, the crowd step
+  that found it) and its queue time (`queued`: the step that raised it, the throw for a lob, the step that judged a
+  contact);
+- while one of his decisions waits, every later one waits behind it (`holds` is VitalsService's `waiting`), voided or
+  not; a contact that travels too, unless an i-frame or a knock already voids it (it lands nothing and is answered now);
+- each frame, after the claim is settled and before the queue, the waiting ones are released first to last until one
+  the still pending claim covers: each is asked its whole span of the windows again (a proven dash's, and a knock
+  released before it), voided by a knock decided before its moment (`at` < knock_until), and dropped if he is or was
+  down or a barrage he answered;
+- a released hit's regen delay, its down (`down_span`, the get-up clock) and its knock's window, `knock_until` and voids
+  run from `at`; it voids what had struck and was queued by then (`struck_by`), in the queue and among the waiting.
+  Its push and launch leave at the release, and the log dates its damage there (when the bar moves).
+
+**Result.** `sim_range.py --check` prints every line f16515a printed, byte for byte (the whole output compared), but two:
+the `DASH PROOF` header's wording ("F1 and G1: decisions held (for a pending claim, or behind one), voided / judged
+unvoided at their release") and the new gate line. The DASH PROOF counts are the fix round's table above, unchanged
+(33 held, all voided at their proof; 0 dashes unproven). Nothing could move in a gated run: every simulated dash is
+proven 2 Heartbeats after its press, and a decision due in those 2 Heartbeats has its impact well inside the claim's
+window (dashIframes 0.25 s), so it waits for the claim itself, never only behind another, and the proof voids every
+held entry with no knock released.
+
+**The new gate line** (`dash_fence_probe`): the review's three queues, each lunge holding the root and decided at its
+impact, against a dash pressed into the fence and against no dash. Seconds after the press:
+
+| Queue | No dash | Fence dash, f16515a's mirror | Fence dash, G1 (the gate) |
+|---|---|---|---|
+| a knocking lunge at 0, a plain one at 0.05 | knock lands 0.000, plain dodged | both land, 0.467 | knock lands 0.467, plain dodged |
+| two knocking lunges at 0, one step | knock lands 0.000, the other dodged | both land, 0.467 | knock lands 0.467, the other dodged |
+| a knocking lunge at 0.05 (held), a plain one at 0.27 (past the claim's window, inside the knock's) | knock lands 0.050, plain dodged | plain lands 0.283, knock 0.467 | knock lands 0.467, plain dodged |
+
+The middle column is the old mirror running the same queues: it reproduces M1's three rows exactly. The gate passes
+when every queue loses what no dash loses (the same lunges land, the same count dodged) and the first is one landed,
+one dodged. The 0.467 is the first Heartbeat past the 0.45 s lapse; the plain lunge's 0.27 is computed from
+`dashIframes` + 0.02, so the third queue keeps its meaning if the dash's window is retuned.
+
+**The R8 row.** Unchanged at **x1.60** (seed 11 39,504 / 55.1 against 24,703 / 37.2; 23: 18,374 / 27.6 against
+23,330 / 34.8; 37: 2,756 / 0.0 against 21,332 / 31.9), the only failing line.
+
+**What the mirror does not model.** The planner (`plan_hits`) still dates an unproven dash's hits at their decision
+(no gated run dashes unproven). The fix round's second gap is closed: the game now also releases a player's waiting
+decisions before it walks the queue. A's known limits: an aimed miss against a held knock (limit 1) has no counterpart,
+since the mirror models no aimed-miss dodge for what travels; regen ticking during a hold (2), a contact queued behind
+answering "dodged" (3) and the push leaving at the release (4) are mirrored as the game does them. The mirror keeps
+every i-frame window of the last second where the game keeps the last two, as before.
+
+### Fix round 2: the gates before and after
+
+| Gate | Before (A's code, the designer's pins not yet re-aimed) | Now |
+|---|---|---|
+| harness (`run_harness.py`) | FAIL (4 of 4,177): `grantOpens`, `stepVitals`, `vitalsStepCalls`, `frameOrder` | **PASS (4,185 checks)**: the four re-aimed, +8 (G3 `stepHead`, `startConnects`; G2 `stepRest`, `restLast`; s1 `mentorTotal`, `mentorNoBonus`, `bonusGuardThenPay`; s2 `pendingNoClaim`) |
+| `sim_range.py --check` | FAIL (1): the R8 row, x1.60; 538 PASS | **FAIL (1): the same row, x1.60**; 539 PASS (+1: G1's fence dash) |
+| `check_stage_mirror.py` | PASS | **PASS** |
+| `mirror_mutants.py` | 132 of 132 | **132 of 132 caught** |
+| `sim_combat.py --check` | PASS, 11 assertions | **PASS, 11 assertions**, its whole output byte-identical to f16515a's (it runs the mirror's LevelRun) |
+| `mutate.py` stale check, all entries | 17 stale of 1,764 | **0 stale of 1,795** (17 re-aimed, 31 new) |
+| `mutate.py`, filtered to VitalsService, WeaponService, DashProof, WaveService | (not run) | **260 run, 0 not caught** (baseline PASS 4,185) |
+
+### Fix round 2: new gates and their mutants
+
+- **G3, the wire that gates every enemy hit.** `startConnects` pins `\tRunService.Heartbeat:Connect(step)` whole in
+  `WeaponService.Start`; `stepHead` pins `step`'s head as one block from its first line, `local now = os.clock()`, then
+  `xpcall(trackAir, ...)`, then `xpcall(VitalsService.Step, ...)`, so nothing can sit between the function's start and
+  the two calls. The review's probes are `mutate.py` entries: "l4b g3: step never connected" (`Connect(function() end)`)
+  and "l4b g3: step returns before the proofs" (an early return when no arrow flies), both caught by these pins.
+- **G2, each part contained.** `stepVitals`, `stepRest` (whole lines under `xpcall`), `frameOrder` and `restLast` (the
+  proofs, then VitalsService, then the rest); `vitalsStepCalls` now counts `VitalsService.Step` once. Five mutants (each
+  part unprotected, the rest never run, the rest before VitalsService).
+- **G1.** The pin `grantOpens` reads `DashProof.Open(shooter, math.min(from or now, now), seconds)`. A's 19 G1 mutants
+  (the moment, the queue behind, the release, rule at `at`, struckBy's queue time, ClearThreats) are caught by
+  tests_l4b (g); 14 earlier F1 and ruling-18 entries were re-aimed to the new code, "l4b f1: a knock voids a held hit"
+  now being the mutant that lets a later decision land out of turn (the reversed pin).
+- **s1, payMentors' inputs.** `mentorTotal` pins the damage total as one block (`local total = 0`, the loop, `total +=
+  damage`), `mentorNoBonus` the guard on a bonus of nothing with its `continue`, `bonusGuardThenPay` its place before the
+  pay. Four mutants: the total as the top damage (the review's), the total starting at 1, the guard deleted (the
+  review's), the guard without its `continue`.
+- **s2.** `pendingNoClaim` pins pendingDash's early `0, 0, 0` with no claim; one mutant (the guard without the claim
+  test), caught by the pin: the rule is behaviourally equivalent, so only the pin holds the saving.
+
+## L4 W1b fix round 3: gates that see the rule, and a clear that waits for a held blow (2026-10-22)
+
+Rulings `docs/prompts/l4-w1b-fix3.md` (the designer's part: H3, plus pinning H1 and H2). Findings
+`docs/prompts/l4-w1b-review/5-fix2-diff.md` m1, m2 and m3. Luau-engineer A's H1 query and H2 are in
+`docs/prompts/l4-w1b-fix-reports/luau-a-3.md`, B's H1 in `luau-b-3.md`, and the report in
+`docs/prompts/l4-w1b-fix-reports/designer-3.md`.
+
+**No config key changed and no number a run plays moved.** Everything was measured on Python 3.12.10 64-bit (the gate's).
+"Before" is the simulator and data of c01348a, run on the same machine. This worktree's simulator was byte-identical to it
+before the round.
+
+### Fix round 3: the fence-dash gate sees the moment (H3, m1)
+
+The review found that the gate line on G1's mirror could not tell "from the moment" from "from the release". Its three
+queues released everything in one frame, inside one knock window, so seven of eight sim-side mutants of the mirror passed
+it. Three changes fix that:
+
+- Four queues are added to `fence_queues`.
+- The gate now also compares his health and his downs on every frame from the one after the release on. The run lasts
+  4.6 s, so regen begins inside it.
+- Each queue's no-dash outcome is pinned, so none of them can go quiet.
+
+Every hit is a 1-damage lunge, and the player is now mortal (the probe used to be immortal).
+
+| Queue (seconds after the press) | No dash, pinned | What it holds |
+|---|---|---|
+| a knocking lunge at 0, a plain one at 0.05 (review) | knock lands, plain dodged | regen from the knock's moment (4.0 s, not 4.47) |
+| two knocking lunges at 0 (review) | knock lands, the other dodged | as above |
+| a held knocking lunge at 0.05, a plain one at 0.27 (review) | knock lands, plain dodged | "no queue behind" |
+| a knocking lunge at 0, a plain one at 0.5 (the harness's fourth case) | both land | the knock's window and `knock_until` from its moment (to 0.4), not the release (to 0.87) |
+| at 1 health: a lunge at 0, one at 0.3, one at 2.2 | the first downs him, the second falls in the down, the third is dodged (get-up i-frames) | the down and its get-up from the moment (up at 2.0, not 2.47) |
+| two knocking lunges at 0, knockIframes 0 | knock lands, the other dodged | ruling 18's "struck and waiting" among the waiting (the `holds` loop in `hurt`): no window voids the second |
+| a knocking lunge at 0, a hit struck at -0.1 that a step raises at 0.2 | knock lands, the late one dodged | the release's `at < knock_until`: no window met its span, and it was not in the queue at the knock's moment |
+
+**A mirror fix the knockIframes-0 queue needed.**
+
+- The simulator's `covered` counted a window that met a span at a single point (`a <= until and b >= start`). At
+  knockIframes 0, a knock therefore opened a zero-length window that "covered" the second knock and hid the `holds` loop.
+- VitalsService's `met` is `untilClock > max(from, impact) and from <= limit`, so a window of no length covers nothing.
+- `covered` now reads the same.
+- With the old test, the `holds` mutant survives even this queue.
+- The full `--check` output did not move (below).
+
+**The reviewer's mutants.** Each is one exact-text change to `tools/sim_range.py`, run through the gate's own condition on
+a scratch copy. None is kept in a mutant list, so they are listed here.
+
+| Mutant | Caught by |
+|---|---|
+| `knock_until = t + ...` | the plain one at 0.5 |
+| the knock window from `t` | the plain one at 0.5 |
+| `rule(..., at=None)` in `release` | every queue (the regen, the 0.5 hit, the down) |
+| `last_hurt = t` | the review's three, knockIframes 0 and the raised hit (regen begins 0.47 s late) |
+| `down_until = t + ...` | the low-health queue (up 0.47 s late, so the 2.2 hit falls in the down instead of being dodged) |
+| the `holds` loop in `hurt` deleted | knockIframes 0 (the second knock lands) |
+| the release's `at < knock_until` check deleted | the raised hit (it lands) |
+| "no queue behind" (caught before) | still caught, by the review's third, the low-health queue and the raised hit |
+
+### Fix round 3: H1 in the simulator
+
+The game now holds a stage's clear while a fighter has a decision waiting for a dash claim (WaveService.fieldHeld over
+VitalsService.HasWaiting). The lead accepted B's rulings R1 to R3. The simulator models the boss room's clear (`on_clear`
+drops `holds`, as ClearThreats does), so the mirror follows the game in three places.
+
+`field_held(given, t, delta)` mirrors fieldHeld line for line:
+- The one player always fights.
+- The tick notes what it found (`blow_waits`).
+- It notes the first tick that held a clear field (`held_since`). The simulator uses None where the game uses 0, because
+  a simulated run's clock starts at 0.
+- A down's advance (`delta` None) keeps the last tick's finding.
+- The cap is the claim's lapse (`dash_lapse`, 0 with no rule) plus the frame.
+- `advance` asks `field_held` before StageFlow decides. A held field does not read clear (`spawningDone` is False).
+
+WaveService.OnDown:
+- The simulator had no advance at a down. Its tick follows the decisions in the same frame, and until now that gave the
+  same answer.
+- With H1 the two differ. `vitals_step` (resolve, then the down's advance) now runs a held down's advance at once, and
+  the run ends "down" before the tick could find the field clear with his list already empty.
+- An unheld down is left to the tick as before, so nothing else in a run moved.
+
+StandsUp:
+- In the game, StandsUp reads the held input. The simulator's tick asks it unheld.
+- The answer is the same: a field the tick holds has a decision of his waiting, so he is standing.
+
+**The new gate line** (`boss_clear_probe`, in the forest check). The setup:
+- Forest Road's boss room, entered through its own countdown, in its last wave with one body left.
+- Solo, Normal, the proving gear.
+- A slam that takes the whole bar falls due 0.1 s after a dash press, and the body dies at 0.2 s.
+
+Seconds after the press:
+
+| Case | Ends | The slam | The clear |
+|---|---|---|---|
+| no dash | down at 0.100 (lost) | lands 0.100 | none |
+| a claim never proven (the lapse 0.45 s) | down at 0.467 (lost, as with no dash) | lands 0.467 | none |
+| a claim proven at 0.333 | cleared at 0.333 | dodged | 0.333, the proof's frame |
+| the control, the field never held (m3) | cleared at 0.200 (won) | never lands | 0.200, at the kill |
+
+**Sim-side mutants of the H1 mirror, run through this line.** Each of these is caught:
+- the field never held;
+- the down's advance never asked;
+- the down's advance forgetting the tick's finding;
+- the tick's finding never noted;
+- the cap at nothing;
+- the hold changing nothing;
+- the deferral's start never noted (it crashes);
+- the hold asked after the clear is decided.
+
+**The cap a frame short is equivalent here.** The simulator runs one Heartbeat order: the decisions, then the tick. The
+release and the down's advance therefore always come before that frame's tick, and a hold never outlasts a lapse from its
+start. B's harness runs both orders and holds this mutant there.
+
+**Result.** `sim_range.py --check` prints every line c01348a printed, byte for byte (the whole output compared), except two:
+- the fence-dash line, now over seven queues and still PASS;
+- the new H1 line, PASS.
+
+Every Forest Road line, every DASH PROOF count and the R8 row are unchanged, which shows that neither the `covered` fix nor
+the H1 mirror moved a gated run. The R8 row is still **x1.60**, and it is the only failing line: seed 11 39,504 / 55.1
+against 24,703 / 37.2; seed 23 18,374 / 27.6 against 23,330 / 34.8; seed 37 2,756 / 0.0 against 21,332 / 31.9.
+`sim_combat.py --check`, which runs the mirror's LevelRun, is byte-identical to c01348a's.
+
+### Fix round 3: the gates before and after
+
+| Gate | Before (A's and B's code, no new pins) | Now |
+|---|---|---|
+| harness (`run_harness.py`) | PASS (4,213 checks) | **PASS (4,244 checks)**: +31 (`stepFailedBody`; H2 `trackEach`, `trackOneDefined`, `trackOneNames`; H1 25 lines, 2 orders) |
+| `sim_range.py --check` | FAIL (1): the R8 row, x1.60; 539 PASS | **FAIL (1): the same row, x1.60**; 540 PASS (+1: H1's boss room; the fence-dash line now over seven queues) |
+| `sim_combat.py --check` | PASS, 11 assertions | **PASS, 11 assertions**, its whole output byte-identical to c01348a's |
+| `check_stage_mirror.py` | PASS | **PASS** |
+| `mirror_mutants.py` | 132 of 132 | **132 of 132 caught** |
+| `check_levels.py` | PASS | **PASS** (it imports `sim_range` for geometry) |
+| `mutate.py` stale check, all entries | 2 stale of 1,795 (A's H2 moved their text) | **0 stale of 1,830** (2 re-aimed, 35 new) |
+| `mutate.py`, filtered to VitalsService, WeaponService, WaveService | (not run) | **278 run, 0 not caught** (baseline PASS 4,244) |
+
+### Fix round 3: new pins and mutants
+
+**m2, G2's warn handler.**
+- `stepFailedBody` pins `stepFailed` whole, from its first line to its `end`: the message as the key, the guard with its
+  `return`, the note, and the warn with its traceback.
+- The review's three probes are mutate.py entries in `L4B_FIX3_MUTATIONS`: "l4b m2: every frame warns", "nothing is ever
+  warned" and "a throw is swallowed".
+- The pin catches each of them. WeaponService does not load in the harness, so only the text holds them.
+
+**H2.**
+- New pins:
+  - `trackEach`: the loop as one block, each shooter under `xpcall(trackOne, stepFailed, ...)` and nothing else in it.
+  - `trackOneDefined`: trackOne nested in trackAir, so every TRACK_AIR_BODY pin still reads its body.
+  - `trackOneNames`: 2.
+- These pins catch A's five WeaponService mutants.
+- tests_l4b (g), which loads VitalsService, catches A's nine VitalsService mutants:
+  - five for H2: an entry taken out only once decided, a held one put back behind the others, and the queue's three;
+  - four for HasWaiting.
+- Two earlier entries were re-aimed to H2's text, with the same labels: "l4b f1: settle drops a held entry" and "l4b g1:
+  the release drops one that still waits".
+
+**H1.**
+- B's 25 lines and 2 orders, among them:
+  - `h1Body`: fieldHeld as one block;
+  - `h1AdvanceHolds` and `h1AdvanceHoldWrites`: advance asks fieldHeld with the frame, and a held field does not read
+    clear;
+  - `h1TickAdvance`, `h1DownAdvance` and `h1BootTick`: the tick passes its frame, OnDown passes none, and Boot's Heartbeat
+    passes its own;
+  - `h1InputThenHold` and `h1HoldThenAdvance`: the hold reads the built input, before StageFlow decides.
+- B's 18 mutants are `L4B_FIX3_MUTATIONS` entries.
+- Three of them are equivalent in play and held only by the pins:
+  - a waiting blow holding a field that is not clear;
+  - a run starting with the deferral spent;
+  - a run starting with a blow found.
+
+## L4 W2: the Camp Chief, the seated head and R8 judged fairly (2026-10-22)
+
+Contract `docs/prompts/l4-w2-contract.md` sections 2.4, 4, 5, 6 and 8 (rulings L4W2-11, -12, -13); Ben's rulings in
+MISSIONS_DESIGN 26.4, 27.2, 27.5 and 28. Report: `docs/prompts/l4-w2-code-reports/d1.md`. Measured on Python 3.12.10
+64-bit (the gate's).
+
+**Superseded in part by the fix round below** (the next section): the Chief's sweep is range 12.7, reach 10.5 (not 17
+and 14), and R8's gate holds a sniper who fights with sword and bow (not the sword alone) to the pair player.
+
+### L4 W2: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json crowd.kinds.chief` | none: the Clearing's boss was the `colossus` | **a kind of its own**, "Camp Chief": the Colossus's body (height 14, radius 4, head 1.6), speed 9, hp 4,700, no knockback, `rush`, boss, colour (110, 40, 60), enrage at 0.5 (windups x0.8, recovers x0.7, chains of 2); attacks `ring` (the slam), `lane` (the charge), `summon` 12 fodder, then the sweep | L4W2-12. His model is built and uploaded at the Colossus's size, so every hit shape and camp C geometry line stays. The Colossus stays the range's and the Raider Arena's |
+| the Chief's sweep (attack 4) | the Colossus's barrage (`lob` x5, enraged only) | **`arc`: reach 14, range 17, 150 degrees, height 6, windup 1.0, recover 1.6, damage 30, knockback 30, launch 3, cooldown 7, in both phases** | 26.4: "a wedge that fills after a warning: jump it or step out". Range 17 holds the hammer's posed sweep (17.10 at the impact; raiderpose `--check` allows range + 0.5). The angle, windup and recover are the ones the strips were posed with. Damage 30 is the Warlord's and the plated elite's arc; it keeps every difficulty under `FOREST_HIT_SHARE` (the study's ceiling was 33). Cooldown 7 sits between the slam's 6 and the charge's 8 |
+| the Chief's call | the Colossus's 12 | **12 fodder**, unchanged | the boss reserve stays 1 + 12 = 13, so Hard and Brutal stay at 157 of 160. The contract allowed 10-12 and at most 15 |
+| `Levels/1_ForestRoad.json` | stage C's boss `colossus`; reward `colossus` 42,900 / 76 | **`chief`**, the same 42,900 cash, 76 Timber and 10 Valor | Double Jump's price, the L3 climb and the chests' shares hang on that pay |
+| `ProvingGrounds.json crowd.restDrop` / `riseBlendSeconds` | Theme's `COMBAT_REST_DROP` 0.35 / `COMBAT_RISE_BLEND_SECONDS` 0.5, client only | **0.35 / 0.5, in config** | L4W2-11: the server seats its bodies as the client draws them, so a headshot on a seated raider lands where his head is drawn |
+| `Expeditions.json moods.forestRoad` | none | **lighting `brightness` 1.6, `outdoorAmbient` [110, 120, 130]; atmosphere `density` 0.38, `offset` 0, `color` [110, 124, 120], `decay` [92, 106, 100], `glare` 0, `haze` 1.6** | 27.2, mood B: the contract's start values, to be tuned from Ben's first Studio screenshots |
+| `Expeditions.json keys.castle` | none | **`{ "name": "Castle Key", "text": "Opens a sealed door in the Castle." }`** | 28: the mountain's chest gives it |
+| `Combat.json debug.dressFailAttribute` | none | **"DebugDressFail"** | the Z lever (contract 8) |
+| `sim_range.py FOREST_BOSS` | "colossus" | **"chief"**; `BOW_KINDS` follows it | every Forest boss band now measures the Chief. No band moved |
+| `sim_range.py`, the seat | none | **`hs_seat_drop`, `hs_crowd_ray(..., drop)`, every body's seat stepped as CrowdService steps it**, a resident seated at spawn when it is first shown at rest | mirrors HitShapes.SeatDrop, SeatStep and CrowdRay's `drop`; `check_stage_mirror.py` compares them (SeatDrop on seats -0.25 to 1.4, CrowdRay at half and fully seated bodies) |
+| `sim_range.py secret_problems` | | **the `key` line**: a string of 1 to 24 bytes, "secrets.<id>.key is ..., not a key id" | StageFlow.secretProblems' new line, word for word; three refusals in `check_stage_mirror.py` |
+
+### The Camp Chief against the bands
+
+No band moved; every one is re-measured on the Chief (`--check`: PASS, 495 lines).
+
+| Band | The Colossus (the L4 study) | The Camp Chief |
+|---|---|---|
+| alone in his camp, the reacting Broadsword, Normal T1 (64-90 s) | 81.2 s (79.3-82.3) | **80.4 s** (80.4-80.4) |
+| alone, Hard T3 / Brutal T5 (64-100 s) | 81.7 / 83.8 s | **86.0 / 85.2 s** |
+| hits of the boss on the reacting player | 0 | **0** |
+| fodder his call raises in that fight | 56-60 | **48** Normal, **60** Hard and Brutal |
+| the worst hit (25% / 30% / 30% of the bar) | the charge, 23.2% / 27.8% / 28.2% | the charge, the same; **the sweep 34 = 22% / 60 = 26% / 101 = 27%** |
+| one preset below, the boss alone (135 / 180 s) | not killed in 240 s | not killed in 240 s (4% / 2% of his health left) |
+| Normal first clear, walking included (4.5-5.75 min) | 4.75-5.3 min | **5.28 / 4.74 / 5.10 min** |
+| Hard / Brutal mean clear, within 5% of 5.21 / 5.19 min (L3-29) | 5.22 / 5.24 min | **5.25 (+0.7%) / 5.25 (+1.2%) min** |
+
+He uses the sweep as often as the slam and the charge. In a Normal run's 80-second fight he lands 9 slams, 8 charges,
+8 sweeps and 4 calls. The player with a human's reaction takes none of them (his only hits are the slingers' in camps A
+and B), and the reacting player takes none at any difficulty. `sim_combat.py --check`: PASS.
+
+### check_levels with the dress walls and the models (D2's measures)
+
+- Camp C's sight gate with the models' posed reach: eyes **+2.93** (was +4.09), cameras **+4.04**; `sightMargin` 1.5
+  holds. The floors rule's tallest body is the Chief, **24.13** (his hammer raised in the slam's windup): PASS.
+- Forest Road's Parts: 264 + 70 dress walls = **334 of 600**.
+- Every dress wall is unclimbable. The tightest is TreeLine2, 50 over the lookout's chest, which needs 43.
+
+### R8 judged fairly (L4W2-13, MISSIONS_DESIGN 27.5)
+
+**The lead's ruling (2026-10-22), on Ben's words.** Ben said "a spot is compared over a whole run (shoot what you
+can from it, then fight the rest) against fighting it all **with the same gear**". So R8 is held to the pair player:
+the player with the same gear, sword and bow, each swing with the one that reaches. He is measured at the same gear,
+difficulty and seeds 1-30. The ruling also:
+- keeps the sword-alone comparison (L3-26's) printed beside the gate, not gated, so its +1% stays visible;
+- accepts that the fight half starts back on the road (a spot that shoots nothing is not sniping);
+- accepts that every whole run is simulated to its end.
+
+**The rule as built.** R8's gate is its own line, `py -3.12 tools/sim_range.py --r8 --check`. It took 54 minutes on the
+owner's machine with 8 workers while `--check` and a variant ran beside it; `--jobs N` sets the workers.
+
+Per spot, the sniper's whole run on each of seeds 1-30:
+1. The mission player's own course from the start to where he would engage the spot's camp.
+2. R8's course as today from there: the straight walk to the pull point, the crossing to the spot, then the bow until
+   nothing lands for 10 s, never dodging. The fire courses cast Dragon's Breath beside it.
+3. Back on the road where he turned off it, then the mission with the starter sword to the level's end (`R8_FIGHT`
+   "sword").
+
+A run's rate is its whole pay over its whole minutes (a down: to the down). **A spot fails when its mean cash a minute
+or its mean Timber a minute over the 30 seeds is above the pair player's.** The gate names the seeds whose run
+out-earns his, and every hit from the spot must land.
+
+Scope:
+- Normal and Hard, each at the proving gear (T1/T1) and with only the bow at T4 (L3-26).
+- The eight listed spots and the frozen layout's (Creek).
+- At the proving gear, the open tunnel's spots (CaveMouth and CaveExit), each also with Dragon's Breath, and CaveExit
+  from its nearest point.
+
+`--check` keeps today's course on its three seeds as "R8's burst", printed and not gated. The fire courses' cast and
+tier gates (F6, R2) stay gated there.
+
+**The three choices, with what the other one gave:**
+
+| Choice | Ruled | The other, measured |
+|---|---|---|
+| whom R8 is held to | **the pair player** (sword and bow: "the same gear") | the mission player with the sword alone: Road3 x1.014 and Road2 x1.003 on Hard, sword T1 / bow T4, red. It is printed, ungated (the table below) |
+| where the fight half starts (`R8_RESUME`) | **"road"**: back where he turned off it, after the straight walk back. A spot that shoots nothing is not sniping | "spot" (`--r8-resume spot`, the contract's first text: "from where he stands"). The four spots past camp B's far end (RoadBC5, RoadBC6, GatehouseWalk, GatehouseTurn) read x1.015-x1.037 the sword-alone player's on Hard, **with nothing ever shot from them** (burst 0 on all 30 seeds). The straight crossing puts him at camp B's east end, and from there the mission player on Hard T1 clears B with fewer leashes than from its entry (seed 1: 437 s against 498 s, 10 leashes against 12). That measures the fight's starting place, not the spot |
+| whole runs or composed (`R8_COMPOSE`) | **whole runs**, each simulated to its end | `--r8-compose`: each run simulated to the clear of the spot's camp, then the same kind of player's own rest of that seed. It costs a fifth, but it read Road3 x1.000 of the sword-alone player where whole runs read x0.984 (fight from the spot), and x1.005 against x1.014 (fight from the road) |
+
+**Result: CHECK (R8): PASS** (46 lines). Ratios are the whole run's mean cash a minute over each player's, seeds 1-30
+(the Timber ratios differ from these by at most 0.032, the highest of all 0.842).
+
+| Table (pair player / sword alone, cash a minute) | Spot | Gated: x the pair | Ungated: x the sword alone (seeds out-earning) | The burst (his course alone, ungated): mean, best |
+|---|---|---|---|---|
+| Hard, sword T1 / bow T4 (39,183 / 24,019) | **Road3** | **x0.621** | x1.014 (19) | 30,201, best 63,950 |
+| | **Road2** | **x0.615** | x1.003 (13) | 26,346, best 45,551 |
+| | Road4 | x0.602 | x0.982 (11) | 6,696 |
+| | ShrineSignPad, Creek, RoadBC5, RoadBC6, GatehouseWalk, GatehouseTurn | x0.574-0.595 | x0.936-0.971 | 0 |
+| Hard, T1/T1 (29,615 / 24,019) | Road2 / Road3 | x0.803 / x0.801 | x0.990 (14) / x0.988 (9) | 18,306 / 15,552 |
+| | CaveMouth / with Dragon's Breath | x0.788 / x0.788 | x0.971 (10) / x0.972 (11) | 12,491 / 9,342 |
+| | the others | x0.413-0.778 (Road4 x0.540: 11 downs; CaveExit with Breath x0.413-0.424: 30 downs) | x0.510-0.966 | |
+| Normal, T1/T1 (30,729 / 26,543) | every spot | x0.487-0.842 (CaveExit with Breath: 13-16 downs) | x0.563-0.975 (at most 9) | at most 12,088 |
+| Normal, sword T1 / bow T4 (40,226 / 26,543) | every spot | x0.570-0.637 | x0.864-0.967 (at most 8) | at most 12,088 |
+
+No course out-earns the pair player on any seed of any table: every row has 0 seeds out-earning him.
+
+**The stricter reading, measured (not the gate).** `--r8-fight pair` has the sniper fight the rest with sword and bow,
+like the player he is held to, so the two runs differ in nothing but the spot. Hard, sword T1 / bow T4, seeds 1-30:
+
+| Road3 | Road2 | Road4 | Creek | ShrineSignPad | GatehouseTurn | RoadBC6 | RoadBC5 | GatehouseWalk |
+|---|---|---|---|---|---|---|---|---|
+| x0.982 (13 seeds out-earn) | x0.977 (9) | x0.975 (8) | x0.944 (5) | x0.939 (2) | x0.920 (1) | x0.910 | x0.909 | x0.902 |
+
+All pass, and the sniper's own course (the burst) is the same in both readings. From Road2 or Road3 a pull brings camp
+A's west groups to the plateau's edge, and the bow at x6.74 kills them in seconds while none can reach him (L4 W1's
+finding). Against the sword alone that is worth about +1% over a whole run. Against fighting with the same gear it is
+worth less than nothing: 2% under the pair even when the sniper also fights the rest with both weapons.
+**Road3 on Hard, sword T1 / bow T4 is closed** (contract section 6): green at x0.621 under the ruled gate and x0.982
+under the stricter reading.
+
+### R8: the mutants (`check_levels_mutants.py` SIM_CASES, D2's file)
+
+Both were proved red against the pair gate under that harness's in-memory copy, where the runs stay in order
+(`r8_poolable`). Each takes about 8 minutes: the sword-alone, pair and sniper runs of one Normal spot.
+
+| Case | `sim_range.py r8_rate` line swapped | Runs | Goes red (ships green) |
+|---|---|---|---|
+| L3-26, "R8's band at half the mission's pay" | its line went with the old `r8_gate` | retired | |
+| the whole pay over the sniper's own minutes | `minutes = run["ownMinutes"] or math.inf` | `--r8 --check --r8-table normal --r8-spot Road3` | Normal at the proving gear, Road3: x0.835 the pair's becomes x18.7 |
+| the fight half dropped from the clock (its pay kept) | `minutes = (run["fightFrom"] or run["at"]) / 60` | `--r8 --check --r8-table normal --r8-spot Road2` | Normal at the proving gear, Road2: x0.832 the pair's becomes x7.43 |
+
+The contract's "drops the fight half" taken literally, the run ending where today's course ends, cannot go red on this
+data. That run is the walk to the camp plus the course, and it pays less than the pair player on every row. So the
+mutant drops the fight half from the clock and keeps its pay.
+
+## L4 W2 fix round: the faithful R8, the Chief's sweep where it is drawn, the seat's mirror (2026-10-22)
+
+The lead's rulings K6 and K2 (`docs/prompts/l4-w2-fix-round.md`) on the W2 review's findings (slice 4: M1, m1, m4).
+Report: `docs/prompts/l4-w2-fix-reports/d1.md`. Measured on Python 3.12.10 64-bit (the gate's).
+
+### What changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `sim_range.py R8_FIGHT` | "sword": the sniper fought the rest with the starter sword alone | **"pair"**: sword and bow before and after the spot, as the player he is held to | K6 (review M1): with the sword half the gate measured the weapon gap (x0.41-0.84), and a spot paying up to 1.6x more over a whole run would have stayed green. Now both runs differ only by the spot (Ben's "against fighting it all with the same gear", MISSIONS_DESIGN 28's correction) |
+| `sim_range.py R8_PRINTED` | none | **("sword",)**: the sword-fight sniper runs, printed twice, not gated: against the mission player with the sword alone (L3-26's comparison) and against the pair player (the gate as first built) | K6: "print the sword-alone and the old gated tables ungated". `--r8-gate-only` skips them (the same verdict in about half the time; the mutants use it) |
+| `ProvingGrounds.json` the Chief's sweep `range` | 17 | **12.7** | K2 (review m1): the drawn hammer cannot reach 17 across the 150° wedge. With the shoulder 2.96 off the axis, weapon points at most 14.07 from it and the rig's twist capped at ±37.5°, his far left sector can reach at most 12.46 (ui-engineer B). Re-keyed, the hammer sweeps every 15° sector at 12.4-13.0, so a range in [12.53, 12.90] passes both of raiderpose's bounds (reach ≤ range + 0.5 inside the arc, every sector ≥ range − 0.5). 12.7 is the middle |
+| the Chief's sweep `reach` | 14 | **10.5** | K2: a sweep may not start beyond its range. 10.5 keeps the start 2.2 studs inside the wedge, as the other arcs do (armoured and guard 6 of 7.5, the Warlord 9 of 11): from where he starts it, a player has a real step to make. The angle stayed 150 in this round (**120 since fix round 2**, below) |
+| `sim_range.py seat_goal` | a hand copy of CampBrain.Shows' `rest` branch | **`cb_shows(group, moving) == "rest"`** | review m4: the mirror check_stage_mirror already holds to Shows |
+| `sim_range.py step_seats` | its own step, `max(blend, 1e-3)` for no pace | **`hs_seat_step`**, a mirror of HitShapes.SeatStep (no pace: the goal at once) | review m4; `check_stage_mirror.py` compares it on 1,350 rows (`ray.seatStep`). The shipped numbers did not move: with `riseBlendSeconds` 0.5 both rules give the same steps |
+
+### The Chief's sweep at 12.7: what moved
+
+`py -3.12 tools/sim_range.py --check`: **CHECK: PASS** (495 lines, the same set). Every line that moved concerns the
+Chief's fight; the hit shares did not move (the damage is unchanged).
+
+| Band | range 17, reach 14 | **range 12.7, reach 10.5** | (range 12.7, reach 12.7: measured, not taken) |
+|---|---|---|---|
+| alone in his camp, the reacting Broadsword, Normal T1 (64-90 s) | 80.4 s | **76.8 s** (76.5-77.0) | 76.8 s |
+| alone, Hard T3 / Brutal T5 (64-100 s) | 86.0 / 85.2 s | **79.0 / 78.7 s** | 78.8 / 78.2 s |
+| the Chief in the run, Normal, seeds 11 / 23 / 37 (64-90 s) | 79.5 / 79.2 / 81.1 s | **72.0 / 71.3 / 72.8 s** | 73.8 / 74.3 / 77.5 s |
+| the Chief in the run, Hard (64-100 s) | 83.7 / 81.6 / 84.6 s | **79.4 / 74.5 / 75.3 s** | 79.0 / 77.1 / 80.5 s |
+| the Chief in the run, Brutal (64-100 s) | 83.7 / 82.8 / 83.8 s | **79.0 / 74.1 / 75.3 s** | 79.0 / 76.7 / 80.1 s |
+| hits of the boss on the reacting player | 0 | **0** | 0 |
+| fodder his call raises, alone, Normal / Hard / Brutal | 48 / 60 / 60 | **48 / 48 / 48** (a shorter fight, one call fewer) | |
+| the worst hit; the sweep's share (25% / 30% / 30%) | the charge 23.2 / 27.8 / 28.2%; the sweep 22 / 26 / 27% | **the same** | the same |
+| Normal first clear, walking included (4.5-5.75 min) | 5.28 / 4.74 / 5.10 min | **5.15 / 4.61 / 4.96 min** | 5.18 / 4.66 / 5.04 min |
+| the clear's Timber a minute, Normal (37.8-46.2) | 40.0 / 44.5 / 41.4 | **41.0 / 45.8 / 42.5** | 40.7 / 45.3 / 41.9 |
+| the human's reaction, the first run (L2-20, 4-5.75 min) | 4.28 / 4.30 min, ... | **4.17 / 4.19 min, ...**, no down | 4.25 min, ... |
+| Hard / Brutal mean clear, within 5% of 5.21 / 5.19 min (L3-29) | 5.25 (+0.7%) / 5.25 (+1.2%) | **5.13 (−1.5%) / 5.13 (−1.2%)** | 5.18 (−0.7%) / 5.17 (−0.4%) |
+| one preset below, the Chief alone (not killed in 135 / 180 s) | not killed in 240 s | **229.7 / 228.3 s** | 233.7 / 228.1 s |
+| the Flamethrower pair's Chief against the Longbow pair's (≥ x0.9) | 46.9 against 48.4 s | **45.7 against 45.1 s** (x1.01) | |
+
+**Why the fight is shorter.** The smaller wedge is the cause, not the reach: with the reach at the range the fight
+is 0-4.7 s longer than the taken row, still well under the old one. A 12.7-stud wedge has 0.56 of a 17-stud one's area,
+so the reacting player steps out of it sooner and swings sooner; he still takes no hit. The fight stays inside every band, but Ben's "about right"
+length for a boss was the Colossus's 80 s, and the Chief is now 72-79 s in a run. Margins that grew thin: Normal's first
+clear on seed 23 (4.61 against a floor of 4.5 min), the human's first run (4.17 against 4.0) and seed 23's Timber a
+minute (45.8 against a ceiling of 46.2). If Ben finds the Chief short, his HP (4,700) is the lever, not the sweep:
+the sweep's range is now fixed by what the hammer draws.
+
+Other gates on the final config: `raiderpose.py --check` PASS on every row (the Chief's arc 13.03 inside the wedge
+against 12.7, each sector 12.4-13.0 against a floor of 12.2); `check_levels.py` PASS (the Chief is in the locked camp C,
+outside the open camps' reach rules); `sim_combat.py --check` PASS.
+
+**Not changed, by the lead's ruling:** the plated elite's axe is drawn 3.9-5.0 against its 7.5-stud, 120° wedge, with
+its left two sectors never swept. It is left for Ben's Studio look.
+
+### R8, the faithful gate (K6)
+
+`py -3.12 tools/sim_range.py --r8 --check`: **CHECK (R8): PASS** (46 gated lines), on the final config (the Chief's
+sweep at 12.7). It took 69 min 33 s with 8 workers, the printed sword runs included; `--r8-gate-only` runs the gate's
+alone. Ratios are the whole run's mean cash a minute over the pair player's, seeds 1-30.
+
+**The sniper's whole run is the pair player's run but for the spot:** the pair's course to where he would engage the
+spot's camp, R8's course from the spot (the bow alone, as before), back on the road, then the pair's fight to the
+level's end.
+
+| Table (pair player, cash a minute) | Gated: the tightest spots, x the pair (seeds out-earning) | The rest | Margin |
+|---|---|---|---|
+| Hard, T1/T1 (29,983) | **Road2 x0.982** (14), Road3 x0.981 (7), CaveMouth x0.972 (12) | x0.503-0.960 (Road4 x0.654: 11 downs; CaveExit with Breath: 30 downs) | 1.8% |
+| Hard, sword T1 / bow T4 (37,719) | **Road3 x0.982** (10), Road2 x0.975 (10), Road4 x0.975 (8) | x0.902-0.942 | 1.8% |
+| Normal, T1/T1 (31,681) | **CaveExit x0.966** (7), Road4 x0.957 (3), Road3 x0.952 (3) | x0.539-0.949 | 3.4% |
+| Normal, sword T1 / bow T4 (39,194) | **Road4 x0.942** (2), Road2 x0.931, Road3 x0.931 | x0.816-0.902 | 5.8% |
+
+The spots that shoot nothing read x0.82-0.96: the walk to the spot and back. The review measured the same reading at
+range 17 (Hard T1/T1 Road3 x0.987, Hard bow T4 Road3 x0.982, Normal CaveExit x0.968, Normal bow Road4 x0.943); of the
+twelve rows it listed, the shorter sweep moved none by more than 0.006.
+
+**Printed, not gated: the sniper who fights with the sword alone.**
+
+| Table | x the sword alone (L3-26's comparison) | x the pair (the gate as first built) |
+|---|---|---|
+| Hard, sword T1 / bow T4 | **Road3 x1.013 (19 seeds), Road2 x1.005 (15)**, the rest x0.936-0.987 | x0.599-0.649 |
+| Hard, T1/T1 | x0.507-0.993 | x0.408-0.801 |
+| Normal, T1/T1 | x0.559-0.974 | x0.480-0.836 |
+| Normal, sword T1 / bow T4 | x0.861-0.964 | x0.598-0.669 |
+
+Road3 and Road2 on Hard with the bow at T4 still out-earn a player who leaves his T4 bow unused by about 1%; that is
+the comparison Ben's ruling replaced ("against fighting it all with the same gear"), kept in view.
+
+### The mutants (`check_levels_mutants.py` SIM_CASES, D2's file)
+
+| Case | The `sim_range.py` line swapped | Runs | Goes red |
+|---|---|---|---|
+| **K6, sized to the margin:** the sniper's whole-run cash 3% more | `r8_rate`: `run["wallet"]["cash"] * 1.03 / minutes` | `--r8 --check --r8-table hard-bow --r8-spot Road3 --r8-gate-only` | Hard, sword T1 / bow T4, Road3: x0.982 becomes about x1.011. Proved red at range 17 (11 min 54 s) and on the final config |
+| the whole pay over the sniper's own minutes | `minutes = run["ownMinutes"] or math.inf` | `... --r8-table normal --r8-spot Road3 --r8-gate-only` | red against the faithful gate |
+| the fight half dropped from the clock (its pay kept) | `minutes = (run["fightFrom"] or run["at"]) / 60` | `... --r8-table normal --r8-spot Road2 --r8-gate-only` | red against the faithful gate |
+
+The K6 case is a tripwire for the margin: a spot whose whole run pays 3% more on the row Ben's ruling named goes red.
+If a later change widens that row's margin past 3%, the case goes NOT and is re-sized to the new margin, never
+dropped. The two clock cases now run with `--r8-gate-only` (about 6 minutes each instead of 11).
+
+### The seat's mirror (review m4)
+
+`seat_goal` now asks the mirrored `cb_shows` (check_stage_mirror holds it to CampBrain.Shows); `step_seats` calls
+`hs_seat_step`, held to HitShapes.SeatStep by `check_stage_mirror.py`'s `ray.seatStep` (1,350 rows: seats -0.25 to
+1.4, goals -1 to 2, steps of 0, a frame, 0.1, 0.45, a backward one and 10 s, paces of riseBlendSeconds, 0.5, 0.2, 0 and
+-1). Two mirror mutants catch it (SeatStep at twice the pace; with no pace it never moves). The Luau side of the row
+is D2's op in `stage_mirror.luau`.
+
+### Fix round 2 (L1): the sweep narrowed to 120° (2026-10-22)
+
+The lead's ruling on ui-engineer B's fix round 2 (`docs/prompts/l4-w2-fix-reports/ui-b-2.md`): the hammer cannot be drawn
+to the left edge of a 150° wedge, so the Chief's sweep is **`arcDegrees` 120**. `range` 12.7 and `reach` 10.5 stay; the
+arm keys are tuned to 120 (raiderpose: the arc 13.11 of 12.7 inside it, every 5° sector 12.25-13.11 against a floor of
+12.2, spanning -57.5..+60° at 12.2; `posedReach.out` 14.82).
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `ProvingGrounds.json` the Chief's sweep `arcDegrees` | 150 | **120** | the drawn hammer reaches the wedge's edges only at 120 (ui B's L1). The Warlord's arc is 180, the plated elite's and the guard's 120 |
+
+**What moved: almost nothing.** `py -3.12 tools/sim_range.py --check`: **CHECK: PASS** (495 lines). Against the 150°
+run, every gated line reads the same to the printed digit (the Chief alone 76.8 / 79.0 / 78.7 s, in a run 71-79 s, every
+clear, the hit shares 22 / 26 / 27%, one preset below 229.7 / 228.3 s), except two lines of the one-preset-below runs:
+the reacting player at Hard 1/1 is paid 25,161 / 23,988 / 21,856 a minute (was 25,161 / 23,702 / 21,859), at Brutal 3/3
+48,667 / 47,980 / 45,499 (was 48,667 / 47,409 / 45,499), still well under the recommended gear's 53,432-111,617. The
+reacting player steps out of the wedge either way, so its width does not change his fight at the recommended gear.
+
+`py -3.12 tools/sim_range.py --r8 --check --r8-gate-only`: **CHECK (R8): PASS** (46 lines, 41 min). No row moved by more
+than 0.005; the pair player's own rate rose 0.5% on Hard T1/T1 and 1.0% on Hard bow T4.
+
+| Table (pair player, cash a minute) | Tightest gated spots, x the pair (seeds out-earning) | Margin |
+|---|---|---|
+| Hard, T1/T1 (30,135) | **Road3 x0.986** (7), Road2 x0.985 (15), CaveMouth x0.975 (12) | 1.4% |
+| Hard, sword T1 / bow T4 (38,099) | **Road3 x0.977** (10), Road2 x0.975 (11), Road4 x0.971 (8) | 2.3% |
+| Normal, T1/T1 (31,667) | **CaveExit x0.965** (6), Road4 x0.957 (3), Road3 x0.951 (2) | 3.5% |
+| Normal, sword T1 / bow T4 (39,194) | **Road4 x0.942** (2), Road3 x0.931, Road2 x0.931 | 5.8% |
+
+The K6 mutant's row (Hard, sword T1 / bow T4, Road3) is now x0.977, so the +3% mutant lands at about x1.006: still
+red, with 0.6% to spare. Should a later change widen that row's margin past 3%, the case goes NOT and is re-sized (or
+moved to the tightest row, Hard T1/T1 Road3 at 1.4%).
+
+Other gates at 120: `raiderpose.py --check` exit 0, every row PASS; `check_levels.py` PASS; `sim_combat.py --check`
+PASS.

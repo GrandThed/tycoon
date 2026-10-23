@@ -53,6 +53,10 @@
 -- A resident thinks of the players its group knows; a stood-down rusher walks home and heals while
 -- its group's shooters fight on; every hit lands but on a held group; the close makes every other
 -- floor's groups forget the road (ForgetOthers).
+-- L4 W2 (docs/prompts/l4-w2-contract.md §5, L4W2-11): every body keeps a `seat` stepped as every
+-- client steps it (HitShapes.SeatStep toward 1 while its state is `rest`, else 0, at 1 /
+-- crowd.riseBlendSeconds; a dormant body holds its goal), so a weapon judges a seated head where it
+-- is drawn (Get's `seat`, HitShapes.SeatDrop).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -62,6 +66,7 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local CrowdCodec = require(sharedFolder:WaitForChild("CrowdCodec"))
+local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 local Region = require(sharedFolder:WaitForChild("Region"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local RemoteService =
@@ -131,6 +136,8 @@ type Enemy = {
 	goalGap: number,
 	-- R4: a stood-down rusher already healed at its post (cleared once it no longer stands down).
 	healed: boolean,
+	-- L4 W2 (§5): 0 standing .. 1 seated at a fire, as every client draws it (stepSeats).
+	seat: number,
 }
 
 -- One resident group: CampBrain's state, the floor it lives on, its living members, and the
@@ -178,6 +185,8 @@ type EnemyView = {
 	hp: number,
 	maxHp: number,
 	state: Types.CrowdState,
+	-- L4 W2 (§5): how far it sits (HitShapes.SeatDrop lowers its head by it).
+	seat: number,
 }
 
 -- What fighting enemies need from whoever owns the players' bodies. Every hook is called from
@@ -1222,6 +1231,21 @@ local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
 	end
 end
 
+-- L4 W2 (§5): every living body's seat, after its state for this step is decided, as each client
+-- steps it from the wire's state: toward 1 in `rest`, else toward 0, at 1 / riseBlendSeconds a
+-- second. A dormant body (shown at rest, never integrated) holds its goal: nobody near saw it rise.
+local function stepSeats(dt: number, riseBlendSeconds: number): ()
+	for _, enemy in order do
+		if enemy.deadAt ~= nil then
+			continue
+		end
+		local goal = if enemy.state == "rest" then 1 else 0
+		enemy.seat = if enemy.dormant
+			then goal
+			else HitShapes.SeatStep(enemy.seat, goal, dt, riseBlendSeconds)
+	end
+end
+
 -- `clock` = the frame's os.clock(): what the brain times its attacks on.
 local function simulate(dt: number, clock: number): ()
 	simTime += dt
@@ -1264,6 +1288,7 @@ local function simulate(dt: number, clock: number): ()
 	for _, enemy in expired do
 		removeRecord(enemy)
 	end
+	stepSeats(dt, crowd.riseBlendSeconds)
 
 	gridRebuild()
 	separate(crowd.largeRadius)
@@ -1762,6 +1787,7 @@ function CrowdService.Spawn(
 		closing = false,
 		goalGap = math.huge,
 		healed = false,
+		seat = 0,
 	}
 	clampToBounds(enemy, def.radius)
 	enemies[id] = enemy
@@ -1973,6 +1999,7 @@ function CrowdService.Get(id: number): EnemyView?
 		hp = enemy.hp,
 		maxHp = enemy.maxHp,
 		state = enemy.state,
+		seat = enemy.seat,
 	}
 end
 
@@ -2304,6 +2331,8 @@ function CrowdService.SpawnResident(
 	local shown: Types.CrowdState = CampBrain.Shows(record.brain, false) or enemy.state
 	enemy.state = shown
 	enemy.entry.state = shown
+	-- L4 W2 (§5): seated from the first step, as a client draws a body first seen at rest.
+	enemy.seat = if shown == "rest" then 1 else 0
 	table.insert(record.bodies, enemy)
 	camp.groupedOn[record.floor] = (camp.groupedOn[record.floor] or 0) + 1
 	return id

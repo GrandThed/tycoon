@@ -126,9 +126,10 @@ def record_problems(bake: dict, set_name: str) -> list[str]:
     return problems
 
 
-def palette_problems(data: bytes, expected_size: list | None) -> list[str]:
+def palette_problems(data: bytes, expected_size: list | None, what: str = "palette") -> list[str]:
     """Opaque, any size (the swatch grid grows with the palette). The size is only compared with
-    the bake record's own note of it, which catches a PNG left over from another build."""
+    the bake record's own note of it, which catches a PNG left over from another build. A level's
+    ground textures (upload_level.py) pass `what` and are held to the same two rules."""
     if not data.startswith(glbtools.PNG_SIGNATURE) or data[12:16] != b"IHDR":
         return ["not a PNG"]
     width, height, _depth, colour_type = struct.unpack(">IIBB", data[16:26])
@@ -136,9 +137,9 @@ def palette_problems(data: bytes, expected_size: list | None) -> list[str]:
     if expected_size and [width, height] != [int(v) for v in expected_size]:
         problems.append(f"is {width}x{height}, the bake record says {expected_size[0]}x{expected_size[1]}")
     if colour_type in PNG_ALPHA_COLOUR_TYPES:
-        problems.append("has an alpha channel; the palette must be fully opaque (write it as RGB)")
+        problems.append(f"has an alpha channel; the {what} must be fully opaque (write it as RGB)")
     elif b"tRNS" in png_chunk_types(data):
-        problems.append("has a tRNS transparency chunk; the palette must be fully opaque")
+        problems.append(f"has a tRNS transparency chunk; the {what} must be fully opaque")
     return problems
 
 
@@ -170,14 +171,15 @@ def glb_problems(data: bytes, baked: dict) -> list[str]:
     if len(meshes) != 1 or len(primitives) != 1:
         return [f"expected one mesh with one primitive, found {len(meshes)} mesh(es) and {len(primitives)} primitive(s)"]
     if doc.get("materials") or doc.get("images") or doc.get("textures"):
-        problems.append("carries a material or an image; world meshes have none (the template colours them)")
+        problems.append("carries a material or an image; baked meshes have none (the template colours them)")
     primitive = primitives[0]
     attributes = primitive.get("attributes") or {}
     accessors = doc.get("accessors") or []
     if "POSITION" not in attributes or "indices" not in primitive:
         return problems + ["has no POSITION attribute or no indices"]
-    if baked.get("look") == cfg.WORLD_LOOK_PALETTE and "TEXCOORD_0" not in attributes:
-        problems.append("is a palette mesh without TEXCOORD_0; it could not sample the palette")
+    # A level's `texture` look (upload_level.py) samples its ground texture through the same UVs.
+    if baked.get("look") in (cfg.WORLD_LOOK_PALETTE, cfg.LEVEL_LOOK_TEXTURE) and "TEXCOORD_0" not in attributes:
+        problems.append(f"is a {baked.get('look')} mesh without TEXCOORD_0; it could not sample its image")
     triangles = int(accessors[primitive["indices"]]["count"]) // 3
     if triangles != int(baked.get("triangles", -1)):
         problems.append(f"has {triangles} triangles, the bake record says {baked.get('triangles')}")

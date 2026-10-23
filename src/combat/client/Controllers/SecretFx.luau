@@ -33,6 +33,11 @@
 --    reads "SHORTCUT FOUND" over "<name> stays open on runs you lead"; everyone else gets a toast.
 --    The server sends it once per run per player, so nothing is remembered here.
 --
+-- L4 W2 (docs/prompts/l4-w2-contract.md section 0; MISSIONS_DESIGN section 28): a chest that gives
+-- a level key (CombatFxSecret `key`, the mountain's "castle") adds a gold row under the pay,
+-- "Castle Key found": the key's name from Expeditions.json `keys` (else the id with a capital and
+-- " Key"). The key is held through the opened secret itself, so nothing here remembers it.
+--
 -- The card is Active = false and takes no tap; no sound (combat has none).
 
 local Players = game:GetService("Players")
@@ -68,6 +73,8 @@ type Card = {
 	scale: UIScale,
 	title: TextLabel,
 	lines: { TextLabel },
+	-- L4 W2: "Castle Key found", under the pay and over the family note.
+	key: TextLabel,
 	note: TextLabel,
 }
 
@@ -80,6 +87,8 @@ local FOUND_SUFFIX = " FOUND"
 local ARMORY_NOTE = " is yours: equip it in the Armory"
 local SHORTCUT_TITLE = "SHORTCUT FOUND"
 local SHORTCUT_LINE = " stays open on runs you lead"
+local KEY_FOUND = " found"
+local KEY_SUFFIX = " Key"
 local SOMEONE = "Someone"
 -- The card's rows: each label is its wrapped text's height plus this tall (fitRow), with this
 -- gap between rows.
@@ -308,9 +317,10 @@ local function buildCard(gui: ScreenGui): Card
 		cardLabel("Valor", Theme.SECRET_CARD_LINE_TEXT, Theme.MAP_COLOR_TEXT, 2, frame),
 		cardLabel("Materials", Theme.SECRET_CARD_LINE_TEXT, Theme.MAP_COLOR_TEXT, 3, frame),
 	}
-	local note = cardLabel("Family", Theme.SECRET_CARD_NOTE_TEXT, Theme.MAP_COLOR_DIM, 4, frame)
+	local key = cardLabel("Key", Theme.SECRET_CARD_LINE_TEXT, Theme.MAP_COLOR_GOLD, 4, frame)
+	local note = cardLabel("Family", Theme.SECRET_CARD_NOTE_TEXT, Theme.MAP_COLOR_DIM, 5, frame)
 	note.Font = Theme.FONT
-	return { frame = frame, scale = scale, title = title, lines = lines, note = note }
+	return { frame = frame, scale = scale, title = title, lines = lines, key = key, note = note }
 end
 
 -- A family's name from the weapons config, else its id with a capital.
@@ -320,6 +330,18 @@ local function familyName(id: string): string
 		return def.name
 	end
 	return string.upper(string.sub(id, 1, 1)) .. string.sub(id, 2)
+end
+
+-- L4 W2: a level key's name from Expeditions.json `keys` ("Castle Key"), else the id with a
+-- capital and " Key". Read each time, as openLook: a config still replicating is read again.
+local function keyName(id: string): string
+	local expeditions = Catalog.GetExpeditionsConfig()
+	local keys = if expeditions ~= nil then expeditions.keys else nil
+	local entry = if keys ~= nil then keys[id] else nil
+	if entry ~= nil and typeof(entry.name) == "string" and entry.name ~= "" then
+		return entry.name
+	end
+	return string.upper(string.sub(id, 1, 1)) .. string.sub(id, 2) .. KEY_SUFFIX
 end
 
 -- Minor 2: a row's height for its text as it is now, wrapped at the card's inner width (design
@@ -338,7 +360,7 @@ local function placeCard(card: Card): ()
 	local layout = state.layout
 	local height = Theme.SECRET_CARD_PADDING * 2
 	local rows = 0
-	for _, row in { card.title, card.lines[1], card.lines[2], card.note } do
+	for _, row in { card.title, card.lines[1], card.lines[2], card.key, card.note } do
 		if row.Visible then
 			height += row.Size.Y.Offset
 			rows += 1
@@ -360,7 +382,7 @@ end
 
 -- Shows the card for Theme.SECRET_CARD_SECONDS, placed for the rows it shows this time.
 local function revealCard(card: Card): ()
-	for _, row in { card.title, card.lines[1], card.lines[2], card.note } do
+	for _, row in { card.title, card.lines[1], card.lines[2], card.key, card.note } do
 		fitRow(row)
 	end
 	placeCard(card)
@@ -379,7 +401,8 @@ local function showCard(
 	valor: number,
 	materials: number,
 	material: string,
-	family: string?
+	family: string?,
+	key: string?
 ): ()
 	local card = state.card
 	if card == nil then
@@ -393,6 +416,7 @@ local function showCard(
 			then "+" .. Format.Cash(materials) .. " " .. material
 			else nil
 	)
+	setRow(card.key, if key ~= nil then keyName(key) .. KEY_FOUND else nil)
 	setRow(
 		card.note,
 		if family ~= nil then familyName(family) .. ARMORY_NOTE .. state.armoryKey else nil
@@ -408,6 +432,7 @@ local function showShortcutCard(name: string): ()
 	card.title.Text = SHORTCUT_TITLE
 	setRow(card.lines[1], name .. SHORTCUT_LINE)
 	setRow(card.lines[2], nil)
+	setRow(card.key, nil)
 	setRow(card.note, nil)
 	revealCard(card)
 end
@@ -551,7 +576,8 @@ function SecretFx.OnFx(fx: any): ()
 		if typeof(fx.valor) == "number" then fx.valor else 0,
 		if typeof(fx.materials) == "number" then fx.materials else 0,
 		if typeof(fx.material) == "string" then fx.material else "",
-		if typeof(fx.family) == "string" and fx.family ~= "" then fx.family else nil
+		if typeof(fx.family) == "string" and fx.family ~= "" then fx.family else nil,
+		if typeof(fx.key) == "string" and fx.key ~= "" then fx.key else nil
 	)
 end
 

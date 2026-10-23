@@ -72,11 +72,11 @@ hit memory, reachable, the leash held by `closing`, the stand-down, home's turn-
 the close), the pace tent and the clear on an empty floor; its players are `archer`, `walkout`,
 `lose` and `sniper` (the bow scenes see through gates and over the drop's lip only: the
 simulator's one line of sight). The run is `LevelRun`, which mirrors StageFlow.Advance row for row and
-fights each camp on that camp's own floor. The ten-wave Village arena is the level "Raider
-Arena", read through mirrors of the two adapters (StageFlow.Resolve and
-LevelGeometry.FromArena), and keeps its P5 bands. Forest Road is read from
-Config/Levels/1_ForestRoad.json and Layouts/Levels/ForestRoad.json and has bands of its own, at
-each of its three difficulties.
+fights each camp on that camp's own floor. Forest Road is read from Config/Levels/1_ForestRoad.json
+and Layouts/Levels/ForestRoad.json and has bands of its own, at each of its three difficulties.
+(Until L4 W1b the ten-wave Village arena was a second level, the "Raider Arena", read through
+mirrors of ruling 27's two adapters, with its P5 bands. It went with the missions' C1 code: its
+data is deleted and so are its report, its bands, `--mission` and `--level arena`.)
 
 The L1 fix round (docs/prompts/l1-fix-round.md, part E) adds the bands that can see a
 difficulty's damageScale. The player who reacts to every tell takes no hit, so his runs say how
@@ -121,8 +121,9 @@ Usage:
   py tools/sim_range.py --config PATH   # measure another ProvingGrounds.json
   py tools/sim_range.py --trials 60     # fewer random trials (faster, noisier)
   py tools/sim_range.py --levels-only   # only the level sections (with --check: their bands)
-  py tools/sim_range.py --levels-only --level forest   # only Forest Road (or: arena)
-  py tools/sim_range.py --mission PATH  # play another Missions/*.json as the Raider Arena
+  py tools/sim_range.py --levels-only --level forest   # only Forest Road
+  py tools/sim_range.py --r8 --check   # R8 judged fairly (L4W2-13): whole sniper runs, its own gate
+  py tools/sim_range.py --r8 --check --r8-gate-only   # the same verdict, without the printed sword tables
 """
 
 from __future__ import annotations
@@ -131,10 +132,12 @@ import argparse
 import heapq
 import json
 import math
+import os
 import random
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "ProvingGrounds.json"
@@ -203,8 +206,25 @@ SWARM_HITS_PER_SECOND = (1.5, 3.5)
 # time + the walk out of the shape, so stepping out, dashing and jumping all work.
 TELL_MARGIN_SECONDS = 0.05
 # Dash spam keeps a player invulnerable this share of the time (the server accepts a dash every
-# dashCooldown x the timing tolerance): enough to dodge with, never enough to stand in a rush.
+# dashCooldown x the timing tolerance): enough to dodge with, never enough to stand in a rush. Since
+# L4B-7 only a dash that moves earns its window, so this is the spam of real dashes; a forged one
+# that never moves the character earns none (dash_proof).
 DASH_UPTIME = (0.20, 0.50)
+# L4B-7: every dash the simulator's players made and how many the server's ring would never have
+# proven (DashProof.Verdict), by policy label: [dashes, unproven, decisions held (for a claim, or
+# behind one, G1) and voided at their release, held and judged unvoided at it]. Expected 0 unproven
+# on open ground (so 0 judged unvoided: a proven claim voids what it covers, and nothing waits behind
+# it past its proof); a dash pressed against a fence is listed, not failed (print_dash_proof).
+DASH_TALLY = {}
+# The L4 W1b fix round's F1 (docs/prompts/l4-w1b-fix-round.md): the ring proves a real dash this many
+# Heartbeats after it begins (one after its first moving sample at a smooth 60 Hz, tests_l4b (a); two
+# after the server's copy starts to move). Until then, and for an unproven claim until its lapse
+# (dashSeconds + originLagMaxSeconds after the request), a decision the claim's window would cover is
+# held (VitalsService's awaitsDash): proven, it is voided as before L4; lapsed, it lands then. So a
+# proven dash's outcome is the one it had before W1b whatever this number is: only an unproven dash's
+# covered hits move, to its lapse (start_dash, settle_claim, release), where G1 (fix round 2) judges
+# them, and every later decision of his that waited behind them, as of their own moments.
+DASH_PROOF_FRAMES = 2
 # An i-frame dodge leaves at least this wide a window to press in (dashIframes + lag).
 DASH_WINDOW_SECONDS = 0.20
 # A knock carries the player out of the shape of a second enemy of the same kind standing up to
@@ -586,22 +606,52 @@ def hs_ray_upright(origin, direction, rng, width, pad, feet, low, high, radius):
 RAY_RULE = "capsule"
 
 
-def hs_crowd_ray(origin, direction, rng, width, pad, feet, radius, height, head_radius):
+def hs_crowd_ray(origin, direction, rng, width, pad, feet, radius, height, head_radius, drop=0.0):
     """HitShapes.CrowdRay: (entry, crit). The padded ray hits the body capsule (ground to the
     head's base, or to the old sphere's top when that is higher) or the head sphere; the entry is
-    the nearer; it crits when the unpadded ray touches the head. (None, False) for a miss."""
-    head = (feet[0], feet[1] + height - head_radius, feet[2])
+    the nearer; it crits when the unpadded ray touches the head. (None, False) for a miss. L4 W2
+    (L4W2-11): `drop` (HitShapes.SeatDrop, 0 standing) lowers the head and the capsule's top."""
+    head = (feet[0], feet[1] + height - head_radius - drop, feet[2])
     if RAY_RULE == "sphere":
         entry = hs_ray(origin, direction, rng, width, pad, (feet[0], feet[1] + height / 2, feet[2]), radius)
         if entry is None:
             return None, False
         return entry, hs_ray(origin, direction, rng, width, 0, head, head_radius) is not None
-    top = max(height - 2 * head_radius, height / 2 + radius)
+    top = max(height - 2 * head_radius, height / 2 + radius) - drop
     body = hs_ray_upright(origin, direction, rng, width, pad, feet, radius, top - radius, radius)
     entry = hs_earlier(body, hs_ray(origin, direction, rng, width, pad, head, head_radius))
     if entry is None:
         return None, False
     return entry, hs_ray(origin, direction, rng, width, 0, head, head_radius) is not None
+
+
+def hs_smoothstep(u):
+    """The seat's ease (HitShapes.SeatDrop): u clamped to 0..1, then u^2 (3 - 2u)."""
+    u = min(max(u, 0.0), 1.0)
+    return u * u * (3 - 2 * u)
+
+
+def hs_seat_drop(height, seat, rest_drop):
+    """HitShapes.SeatDrop (L4W2-11): how far a body `seat` of the way down (0 standing, 1 seated at a
+    fire) lowers its head and its capsule's top: height x crowd.restDrop x smoothstep(seat). A restDrop
+    that is not a finite number of at least 0, a height not finite and above 0, or a NaN seat: 0."""
+    if not (finite(rest_drop) and rest_drop >= 0 and finite(height) and height > 0) or seat != seat:
+        return 0.0
+    return height * rest_drop * hs_smoothstep(seat)
+
+
+def hs_seat_step(seat, goal, dt, blend_seconds):
+    """HitShapes.SeatStep (L4W2-11): one step of a seat toward its goal (clamped to 0..1) at 1 /
+    blendSeconds a second both ways, never past it. A pace that is not a finite number above 0 (a
+    config without crowd.riseBlendSeconds) or a NaN seat: the goal at once. Held to the Luau by
+    tools/check_stage_mirror.py (ray.seatStep)."""
+    target = min(max(goal, 0.0), 1.0)
+    if not (finite(blend_seconds) and blend_seconds > 0) or seat != seat:
+        return target
+    step = max(dt, 0.0) / blend_seconds
+    if target > seat:
+        return min(seat + step, target)
+    return max(seat - step, target)
 
 
 def hs_flat_to_rect(x, z, cx, cz, hx, hz):
@@ -684,7 +734,8 @@ def hs_scatter(center, count, spacing, seed):
 class Enemy:
     """A dummy that never moves: body sphere centred height/2 up, head sphere at the top."""
 
-    __slots__ = ("id", "r", "hr", "height", "body_y", "body", "head", "hp", "max_hp", "armor", "alive", "back_at")
+    __slots__ = ("id", "r", "hr", "height", "body_y", "body", "head", "hp", "max_hp", "armor", "alive", "back_at",
+                 "drop")
 
     def __init__(self, ident, kind, x, z):
         self.id = ident
@@ -698,6 +749,7 @@ class Enemy:
         self.armor = max(kind["armor"], 0)
         self.alive = True
         self.back_at = 0.0
+        self.drop = 0.0  # L4 W2: how far its seat lowers its head and its capsule's top (HitShapes.SeatDrop)
 
 
 class World:
@@ -919,7 +971,7 @@ def strike(world, cfg, spec):
         def test(e):
             # WeaponService.rayCandidates: one HitShapes.CrowdRay per body (L1b-W2-15).
             entry, crit = hs_crowd_ray(origin, unit, size, width, pad, (e.body[0], e.body[1] - e.body_y, e.body[2]),
-                                       e.r, e.height, e.hr)
+                                       e.r, e.height, e.hr, e.drop)
             if entry is None:
                 return None
             return (entry, want_crit and crit)
@@ -965,7 +1017,7 @@ def path_candidates(world, origin, direction, reach, width, pad):
         if not e.alive:
             continue
         entry, crit = hs_crowd_ray(origin, unit, reach, width, pad, (e.body[0], e.body[1] - e.body_y, e.body[2]),
-                                   e.r, e.height, e.hr)
+                                   e.r, e.height, e.hr, e.drop)
         if entry is not None:
             found.append((entry, e.id, e, crit))
     found.sort(key=lambda f: (f[0], f[1]))
@@ -1606,6 +1658,29 @@ def timing_tolerance():
         return TIMING_TOLERANCE_DEFAULT
 
 
+def dash_proof(move, covered):
+    """DashProof.Rule and Verdict (L4B-7) on a stretch the simulator knows exactly: does a flat
+    distance of `covered` studs in movement.dashProofSeconds reach movement.dashProofShare of the
+    dash's speed (dashDistance / dashSeconds)? False when a number the rule needs is missing."""
+    share, span = move.get("dashProofShare"), move.get("dashProofSeconds")
+    distance, seconds = move.get("dashDistance"), move.get("dashSeconds")
+    if not all(isinstance(v, (int, float)) and v > 0 for v in (share, span, distance, seconds)):
+        return False
+    return covered >= share * distance / seconds * span - 1e-9
+
+
+def print_dash_proof():
+    """L4B-7: the dashes of every simulated player so far, by policy, and those the ring never proved."""
+    if not DASH_TALLY:
+        return
+    print()
+    print("DASH PROOF (L4B-7; a dash's i-frames once the server's ring has seen it): per policy, dashes made / "
+          "never proven (0 expected on open ground; one pressed against a fence is listed, not failed); F1 "
+          "and G1: decisions held (for a pending claim, or behind one), voided / judged unvoided at their release")
+    for label, (made, unproven, voided, landed) in sorted(DASH_TALLY.items()):
+        print(f"  {label}: {made} / {unproven}; held {voided} / {landed}")
+
+
 def load_arena(name):
     """The numbers of Layouts/Arenas/<name>.luau the threat needs: the floor, the fence height
     and the lobby pad. The layout is a data file of plain numbers and named constants; they are
@@ -1874,6 +1949,11 @@ class Fighter(Enemy):
         # L1b-W2-10: a dormant body (its resting group far from every player) is not integrated,
         # not separated and not clamped; it stays where it stood.
         self.dormant = False
+        # L4 W2 (L4W2-11): CrowdService's seat, stepped as the client steps it (toward 1 while the
+        # wire says `rest`, else 0, at 1 / crowd.riseBlendSeconds a second), and whether its brain
+        # asked for a walk this step (the executor's `moving`).
+        self.seat = 0.0
+        self.moving = False
         self.spawn(0.0)
 
     def spawn(self, now):
@@ -1914,7 +1994,7 @@ class Fighter(Enemy):
 
     def place(self):
         self.body = (self.x, self.body_y, self.z)
-        self.head = (self.x, self.head_y, self.z)
+        self.head = (self.x, self.head_y - self.drop, self.z)
 
     def usable(self, index):
         """[choice] CrowdBrain.usable: may the body still use this attack at all? Not an
@@ -2186,6 +2266,17 @@ class ThreatRun:
         self.down_until = None
         self.down_span = (math.inf, -math.inf)  # the last time down: (from, until)
         self.windows = []  # i-frame windows (from, until): dash, knock and get-up
+        # F1: the dash claim the ring has not proven yet (start_dash; None = none), the decisions held
+        # for it (release), and when an unproven one lapses after its request (DashProof.Rule's lapse:
+        # None when the rule cannot be built, and then nothing is held). G1: `holds` is VitalsService's
+        # `waiting`: the first waits for the claim, every later decision of his waits behind it, in the
+        # order they fell due.
+        self.claim = None
+        self.holds = []
+        lookback = shooting.get("originLagMaxSeconds")
+        self.dash_lapse = (self.move["dashSeconds"] + lookback
+                           if isinstance(lookback, (int, float)) and lookback >= 0 and dash_proof(
+                               self.move, math.inf) else None)
         self.knock_until = -math.inf  # [together] the last knock voids what is decided before this
         self.knock = None  # the slide a knock gave him: (unit x, unit z, speed, from)
         self.lift = None  # the launch that came with it: (from, until, apex)
@@ -2297,7 +2388,7 @@ class ThreatRun:
         self.log = []  # every hit that landed: (time, damage, kind, shape)
         self.outcomes = {}  # per enemy kind: [attacks decided against a standing player, landed]
         self.downs = []
-        self.dodged = self.whiffed = self.dashes = 0
+        self.dodged = self.whiffed = self.dashes = self.unproven = 0
         self.full_at = None
         self.nearest = math.inf
         self.in_reach = []
@@ -2386,6 +2477,27 @@ class ThreatRun:
         """Once per crowd step, after the player is tracked and before any body thinks (a level
         run's camp step)."""
 
+    def seat_goal(self, e):
+        """Where a body's seat is heading: 1 while the wire would say `rest`, else 0. Only a level's
+        resident sits (LevelRun)."""
+        return 0.0
+
+    def step_seats(self, dt):
+        """L4 W2 (L4W2-11, CrowdService's seat): every living body's seat moves toward its goal at
+        1 / crowd.riseBlendSeconds a second, a dormant one holds its goal; its drop (HitShapes.SeatDrop)
+        then lowers the head the next place() draws and the capsule CrowdRay tests."""
+        crowd = self.cfg["crowd"]
+        rest_drop = crowd.get("restDrop") or 0.0
+        blend = crowd.get("riseBlendSeconds")
+        for e in self.fighters:
+            if not e.alive:
+                continue
+            goal = self.seat_goal(e)
+            e.seat = goal if e.dormant else hs_seat_step(e.seat, goal, dt, blend)
+            e.drop = hs_seat_drop(e.height, e.seat, rest_drop)
+            if e.dormant:
+                e.place()
+
     def swingable(self):
         """The bodies he may strike."""
         return [e for e in self.fighters if e.alive]
@@ -2423,7 +2535,79 @@ class ThreatRun:
 
     def shielded(self, start, until, t):
         """Did an i-frame meet [start, until], or does the last knock still void hits at t?"""
-        return t < self.knock_until or any(a <= until and b >= start for a, b in self.windows)
+        return t < self.knock_until or self.covered(start, until)
+
+    def covered(self, start, until):
+        """Did an i-frame meet [start, until]? (VitalsService's `covered`: the windows alone.) Its
+        `met`: a window [a, b) meets the span when b > max(a, start) and a <= until, so a window of
+        no length covers nothing (fix round 3, H3: a knock at knockIframes 0 opens none in the game)."""
+        return any(b > max(a, start) and a <= until for a, b in self.windows)
+
+    def awaits(self, impact, decided):
+        """F1, VitalsService.awaitsDash: must a decision on [impact, decided] wait? Yes while a dash
+        claim is pending (settle_claim ends it at its proof or its lapse) and its window, once
+        proven, would meet that span (`met`: until > max(from, impact), from <= decided)."""
+        claim = self.claim
+        return (claim is not None and claim["until"] > max(claim["from"], impact)
+                and claim["from"] <= decided)
+
+    def hold(self, at, queued, impact, decided, kind, attack, held, voided, push, volley):
+        """F1 and G1 (VitalsService's `waiting`): a decision that waits, for the pending claim or behind
+        an earlier one of his, with what the commit rule found at its moment `at` (the frame it fell
+        due; for what travels, the crowd step that found it): in the shape, voided by then, the push
+        from where the root was. `queued` = when it joined the queue (struck_by). Released by
+        release()."""
+        self.holds.append({"at": at, "queued": queued, "impact": impact, "decided": decided, "kind": kind,
+                           "attack": attack, "held": held, "voided": voided, "push": push, "volley": volley})
+
+    def settle_claim(self, t):
+        """F1, DashProof.Step in this frame, before anything is decided (WeaponService's one order):
+        a claim the ring proves opens its window from the request; one never proven is over once
+        `t` is past its lapse."""
+        claim = self.claim
+        if claim is None:
+            return
+        if claim["proof"] is not None:
+            if t >= claim["proof"] - THREAT_EPS:
+                self.windows.append((claim["from"], claim["until"]))
+                self.claim = None
+        elif t > claim["lapse"] + THREAT_EPS:
+            self.claim = None
+
+    def release(self, t):
+        """G1, VitalsService.release: his waiting decisions, first to last, each decided as of its own
+        moment `at` (in the shape or not, the push, as found then), until one the pending claim still
+        covers: it and those behind it stay. Its whole span is asked of the windows again (a proven
+        dash's, from the request, and a knock released before it, from that knock's moment), and a
+        knock decided before its moment voids it (`at` < knock_until). What a released hit starts runs
+        from `at` (rule), so the next is judged as it would have been then: a dash that never proves
+        costs what no dash costs. A downed player is judged by nothing, and a barrage he has answered
+        is done: both dropped."""
+        if not self.holds:
+            return
+        released = 0
+        for entry in self.holds:
+            if not entry["voided"]:
+                entry["voided"] = self.covered(entry["impact"], entry["decided"])
+            if self.down_until is not None or self.was_down(entry["impact"]):
+                released += 1
+                continue
+            volley = entry["volley"]
+            if volley is not None and volley in self.volleys:
+                released += 1
+                continue
+            at = entry["at"]
+            if at < self.knock_until:
+                entry["voided"] = True
+            if not entry["voided"] and self.awaits(entry["impact"], entry["decided"]):
+                break
+            released += 1
+            tally = DASH_TALLY.setdefault(self.policy.get("label") or "?", [0, 0, 0, 0])
+            tally[2 if entry["voided"] else 3] += 1
+            if (self.rule(t, entry["impact"], entry["kind"], entry["attack"], entry["held"], entry["voided"],
+                          entry["push"], at=at) and volley is not None):
+                self.volleys.add(volley)
+        del self.holds[:released]
 
     def control(self, t, dt):
         if self.down_until is not None:
@@ -2674,14 +2858,36 @@ class ThreatRun:
             walk = self.move["walkSpeed"]
             self.shift(ax * walk * dt, az * walk * dt)
 
+    def dash_proven(self, direction):
+        """L4B-7 (DashProof.Verdict): would the server's ring prove a dash begun here toward
+        `direction`? Its own path, clamped where the player may go, over its first dashProofSeconds,
+        against dash_proof's flat distance. A dash into a fence moves too little and is not."""
+        span = self.move.get("dashProofSeconds") or 0.0
+        run = self.move["dashDistance"] / self.dash_seconds * min(span, self.dash_seconds)
+        x0, x1, z0, z1 = self.player_box()
+        x = clamp(self.x + direction[0] * run, x0, x1)
+        z = clamp(self.z + direction[1] * run, z0, z1)
+        return dash_proof(self.move, math.hypot(x - self.x, z - self.z))
+
     def start_dash(self, t, direction):
-        """MovementController: the whole distance in dashSeconds; RangeService.OnDash opens the
-        i-frames."""
+        """MovementController: the whole distance in dashSeconds; WeaponService.OnDash records the
+        claim, and its i-frames (from the request) count only once the ring has seen the dash
+        (L4B-7: dash_proven), DASH_PROOF_FRAMES later; a claim never proven lapses (F1: the
+        decisions it would cover wait for either, settle_claim). An unproven dash moves him all
+        the same. A newer claim replaces a pending one (OnDash)."""
+        proven = self.dash_proven(direction)
         speed = self.move["dashDistance"] / self.dash_seconds
         self.dash = (direction[0] * speed, direction[1] * speed, t + self.dash_seconds)
         self.dash_ready = t + self.move["dashCooldown"]
-        self.windows.append((t, t + self.move["dashIframes"]))
+        if self.dash_lapse is not None:
+            self.claim = {"from": t, "until": t + self.move["dashIframes"],
+                          "proof": t + DASH_PROOF_FRAMES * FRAME if proven else None, "lapse": t + self.dash_lapse}
+        if not proven:
+            self.unproven += 1
         self.dashes += 1
+        tally = DASH_TALLY.setdefault(self.policy.get("label") or "?", [0, 0, 0, 0])
+        tally[0] += 1
+        tally[1] += 0 if proven else 1
 
     # -- the player who reacts ------------------------------------------------------------------
 
@@ -2753,7 +2959,9 @@ class ThreatRun:
         return x, z, self.feet(tau)
 
     def plan_shielded(self, plan, t0, start, until):
-        if plan["dash"] and t0 <= until and t0 + self.move["dashIframes"] >= start:
+        # L4B-7: a planned dash shields only if the ring would prove it (start_dash's rule).
+        if (plan["dash"] and t0 <= until and t0 + self.move["dashIframes"] >= start
+                and self.dash_proven((plan["ux"], plan["uz"]))):
             return True
         return self.shielded(start, until, until)
 
@@ -2979,33 +3187,46 @@ class ThreatRun:
         counts[0] += 1
         counts[1] += 1 if landed else 0
 
-    def rule(self, t, impact, kind, attack, held, voided, push):
-        """VitalsService.rule: one standing player's outcome of one attack, judged at t. `held` =
-        the shape holds him; `voided` = an i-frame met its span or a knock was decided with it.
-        Returns True when the hit lands."""
+    def rule(self, t, impact, kind, attack, held, voided, push, at=None):
+        """VitalsService.rule: one standing player's outcome of one attack, its effect leaving at t.
+        `held` = the shape holds him; `voided` = an i-frame met its span or a knock was decided before
+        it (the caller judges both as of the decision's moment). `at` = that moment: t, unless the
+        decision waited (G1), when what it starts runs from `at` (hurt). Returns True when the hit
+        lands."""
         if not held:
             self.whiffed += 1
             self.tally(kind, False)
             return False
-        if voided or t < self.knock_until:
+        if voided:
             self.dodged += 1  # ruling 7: a voided hit that would have landed shows "dodged"
             self.tally(kind, False)
             return False
         self.tally(kind, True)
-        self.hurt(t, kind, attack, push)
+        self.hurt(t, kind, attack, push, t if at is None else at)
         return True
 
-    def hurt(self, t, kind, attack, push):
+    @staticmethod
+    def struck_by(impact, queued, at):
+        """G1, VitalsService.struckBy: had it struck by the moment `at`, and was it in the queue then? A
+        contact that travels, or a lob, joins the queue at its own step: a knock decided before that
+        did not void it, so a released one does not either."""
+        return impact <= at and queued <= at
+
+    def hurt(self, t, kind, attack, push, at=None):
+        """A landed hit, its effect leaving at t. G1: `at` (default t) is the decision's moment; a hit
+        that waited for a dash claim starts its regen delay, its down and its knock's window and voids
+        there, as the same hit decided then would have. Its push and launch leave at t."""
+        at = t if at is None else at
         damage = attack["damage"]
         self.log.append((t, damage, kind, attack["shape"]))
-        self.last_hurt = t
+        self.last_hurt = max(self.last_hurt, at)
         self.full_at = None
         if self.immortal:
             damage = 0
         if self.hp - damage <= 0:  # [health] never 0: down, then up in place and full
             self.downs.append(t)
-            self.down_until = t + self.vitals["downSeconds"]
-            self.down_span = (t, self.down_until)
+            self.down_until = at + self.vitals["downSeconds"]
+            self.down_span = (at, self.down_until)
             self.knock = self.dash = self.lift = self.step = self.jump_at = None
             return
         self.hp -= damage
@@ -3013,14 +3234,18 @@ class ThreatRun:
         if knockback <= 0 and launch <= 0:
             return
         knock_iframes = self.vitals["knockIframes"]
-        self.windows.append((t, t + knock_iframes))  # [knock]
-        # [together] VitalsService.rule: what has struck and waits for its decision is voided
-        # here (a lob still in the air has not struck); knock_until voids what is decided next.
-        self.knock_until = t + knock_iframes
+        self.windows.append((at, at + knock_iframes))  # [knock]
+        # [together] VitalsService.rule: what had struck and was waiting for its decision at this
+        # hit's moment is voided here (a lob still in the air has not struck), those waiting behind
+        # it (G1) among them; knock_until voids what is decided inside its window from then on.
+        self.knock_until = at + knock_iframes
         for queue in (self.pending, self.judging):
             for other in queue:
-                if other[1] <= t:
+                if self.struck_by(other[1], other[11], at):
                     other[7] = True
+        for other in self.holds:
+            if self.struck_by(other["impact"], other["queued"], at):
+                other["voided"] = True
         if self.dash is not None and t < self.dash[2]:
             return  # ApplyKnock: a dash under way beats the knock; the hit still costs health
         # ApplyKnock: capped at crowd.knockMax, bled off at player.knockFriction, and no slide
@@ -3037,10 +3262,15 @@ class ThreatRun:
 
     def resolve(self, t):
         """[commit] Walks the queue as VitalsService.settle does and decides every impact whose
-        T + lag has come: a lunge, an arc, a line, and a lob at its landing."""
+        T + lag has come: a lunge, an arc, a line, and a lob at its landing. F1: the dash claim is
+        judged first (settle_claim), the decisions held for it are released, and a decision a still
+        pending claim would cover is held (hold) with what was found at its moment, hit or miss. G1:
+        so is every decision of his while one waits (voided or not), behind it."""
+        self.settle_claim(t)
+        self.release(t)
         self.judging, self.pending = self.pending, []
         for entry in self.judging:
-            decided, impact, kind, attack, ex, ez, face, voided, aim, _thrown, floor_y = entry
+            decided, impact, kind, attack, ex, ez, face, voided, aim, _thrown, floor_y, queued = entry
             if decided > t + THREAT_EPS:
                 self.pending.append(entry)
                 continue
@@ -3061,8 +3291,11 @@ class ThreatRun:
                 push = face
             away = math.hypot(push[0], push[1])
             push = (push[0] / away, push[1] / away) if away > EPSILON else face
-            if (self.rule(t, impact, kind, attack, held, voided or self.shielded(impact, decided, t), push)
-                    and volley is not None):
+            voided = voided or self.shielded(impact, decided, t)
+            if self.holds or (not voided and self.awaits(impact, decided)):
+                self.hold(t, queued, impact, decided, kind, attack, held, voided, push, volley)
+                continue
+            if self.rule(t, impact, kind, attack, held, voided, push) and volley is not None:
                 self.volleys.add(volley)
         self.judging = ()
         self.windows = [w for w in self.windows if w[1] >= t - 1.0]
@@ -3087,8 +3320,14 @@ class ThreatRun:
             if (self.down_until is None and not shot["done"] and to >= start and not self.was_down(now - lag)
                     and point_segment_gap(root, self.shot_at(shot, start), self.shot_at(shot, to)) <= shot["radius"]):
                 shot["done"] = True  # one attack, one outcome each
-                if self.rule(now, now - lag, shot["kind"], shot["attack"], True,
-                             self.shielded(now - lag, now, now), shot["push"]):
+                voided = self.shielded(now - lag, now, now)
+                if not voided and (self.holds or self.awaits(now - lag, now)):
+                    # F1 (judgeTravelling): held for the dash claim, or behind a decision of his
+                    # that waits (G1); ThreatField hears "dodged" and the shot flies on, landing
+                    # from the queue if the claim lapses.
+                    self.hold(now, now, now - lag, now, shot["kind"], shot["attack"], True, False, shot["push"],
+                              None)
+                elif self.rule(now, now - lag, shot["kind"], shot["attack"], True, voided, shot["push"]):
                     continue  # the one that lands ends it; a voided one flies on
             if now - lag < shot["ends"]:
                 kept.append(shot)
@@ -3112,8 +3351,11 @@ class ThreatRun:
                      charge["z"] + charge["face"][1] * self.charge_run(charge, to))
                 if point_segment_gap((self.x, self.z), a, b) <= (attack.get("width") or 0) / 2:
                     charge["done"] = True
-                    self.rule(now, now - lag, charge["kind"], attack, True,
-                              self.shielded(now - lag, now, now), charge["face"])
+                    voided = self.shielded(now - lag, now, now)
+                    if not voided and (self.holds or self.awaits(now - lag, now)):  # F1, G1
+                        self.hold(now, now, now - lag, now, charge["kind"], attack, True, False, charge["face"], None)
+                    else:
+                        self.rule(now, now - lag, charge["kind"], attack, True, voided, charge["face"])
             if now - lag < charge["end"]:
                 kept.append(charge)
             elif not charge["done"] and not charge["blind"]:
@@ -3138,7 +3380,11 @@ class ThreatRun:
                 if away <= radius and not (left + (away + half) / speed < start or left + (away - half) / speed > to):
                     ring["done"] = True  # each player at most once per ring
                     push = ((self.x - ring["x"]) / away, (self.z - ring["z"]) / away) if away > EPSILON else (0.0, 1.0)
-                    self.rule(now, now - lag, ring["kind"], attack, True, self.shielded(now - lag, now, now), push)
+                    voided = self.shielded(now - lag, now, now)
+                    if not voided and (self.holds or self.awaits(now - lag, now)):  # F1, G1
+                        self.hold(now, now, now - lag, now, ring["kind"], attack, True, False, push, None)
+                    else:
+                        self.rule(now, now - lag, ring["kind"], attack, True, voided, push)
             if speed > 0 and now - lag < ends:
                 kept.append(ring)
             elif not ring["done"] and not ring["blind"]:
@@ -3265,7 +3511,7 @@ class ThreatRun:
         if shape in ("lunge", "arc", "line"):
             if standing:
                 self.pending.append([impact + self.lag, impact, e.name, attack, e.x, e.z, e.face, False, None, None,
-                                     self.floor_y(e)])
+                                     self.floor_y(e), now])
             return
         # A shot and a lob are aimed now: at the target's place at the impact's own time, which
         # this step may have passed.
@@ -3289,7 +3535,7 @@ class ThreatRun:
                     far = spread * math.sqrt(self.rng.random())
                     cx, cz = cx + math.cos(turn) * far, cz + math.sin(turn) * far
                 self.pending.append([lands + self.lag, lands, e.name, attack, e.x, e.z, e.face, False,
-                                     (cx, cz), impact, self.stand_y()])  # a lob's floor: under its target
+                                     (cx, cz), impact, self.stand_y(), now])  # a lob's floor: under its target
         elif shape == "shot":  # [shot]
             speed = attack.get("speed") or 0
             seconds = attack.get("seconds") or 0
@@ -3497,6 +3743,7 @@ class ThreatRun:
                     cx, cz = self.clamp_body(e.x - e.face[0] * (e.band_min - gap),
                                              e.z - e.face[1] * (e.band_min - gap), e.r, e.floor)
                     vx, vz = self.seek(e, cx, cz, e.speed, 0.0, dt)
+            e.moving = math.hypot(vx, vz) > MOVE_THRESHOLD
             if e.charge is not None and state == "attack":
                 # [lane] CrowdBrain.Carried: the brain carries the body down its lane.
                 c = e.charge
@@ -3552,6 +3799,7 @@ class ThreatRun:
                 b.x += nx * overlap * (1 - share_a)
                 b.z += nz * overlap * (1 - share_a)
                 ax, az = a.x, a.z
+        self.step_seats(dt)
         for e in live:
             e.x, e.z = self.clamp_body(e.x, e.z, e.r, e.floor)
             e.place()
@@ -3601,7 +3849,7 @@ class ThreatRun:
                 "whiffed": self.whiffed, "byKind": by_kind, "outcomes": self.outcomes,
                 "burst": burst, "rate": rate, "gap": gap, "kills": self.world.kills,
                 "cancelled": self.world.cancelled, "blocked": self.world.blocked, "broken": self.world.broken,
-                "dashes": self.dashes, "peakShots": self.peak_shots,
+                "dashes": self.dashes, "unproven": self.unproven, "peakShots": self.peak_shots,
                 "solidGap": min((b - a for a, b in zip(solid, solid[1:])), default=None),
                 "nearest": self.nearest, "fullAt": self.full_at,
                 "killAt": self.kill_at, "enragedAt": self.boss.enraged_at if self.boss is not None else None,
@@ -3648,7 +3896,7 @@ def threat_rows(cfg, env):
             runs = [ThreatRun(cfg, env, set_name, policy, seed, seconds).run() for seed in THREAT_SEEDS]
             row = {"set": set_name, "policy": key, "label": policy["label"], "seconds": seconds}
             for field in ("firstHit", "downs", "damage", "hits", "dodged", "whiffed", "rate", "kills", "cancelled",
-                          "dashes", "inReach", "wokeAt", "blocked", "broken"):
+                          "dashes", "unproven", "inReach", "wokeAt", "blocked", "broken"):
                 row[field] = mean_of([r[field] for r in runs])
             # A row goes down only if every seed does; the checks then use the earliest and latest.
             downs = [r["firstDown"] for r in runs]
@@ -3885,6 +4133,8 @@ def threat_facts(cfg, env):
             "cap": cap, "volley": volley, "ceiling": ceiling, "instants": instants, "counts": counts,
             "floorSeconds": hp / ceiling if ceiling > 0 else math.inf,
             "dashUptime": move["dashIframes"] / accepted if accepted > 0 else 1.0,
+            # L4B-7: a forged dash, sent while the character never moves, is never proven.
+            "dashForged": (move["dashIframes"] / accepted if accepted > 0 else 1.0) if dash_proof(move, 0.0) else 0.0,
             "dashHonest": move["dashIframes"] / move["dashCooldown"] if move["dashCooldown"] > 0 else 1.0,
             "dashAccepted": accepted, "dashWindow": move["dashIframes"] + lag,
             "regenFull": (vitals["regenDelay"] + hp / vitals["regenPerSecond"] if vitals["regenPerSecond"] > 0
@@ -4331,7 +4581,9 @@ def print_threat(cfg, env, facts, rows, roles, plates, ab_rows=()):
           f"{facts['floorSeconds']:.1f} s under that")
     print(f"  dash: {move['dashIframes']:.2f} s of i-frames, accepted every {facts['dashAccepted']:.2f} s "
           f"({move['dashCooldown']:.2f} s from an honest client) = invulnerable {facts['dashUptime']:.0%} "
-          f"({facts['dashHonest']:.0%}) of the time;")
+          f"({facts['dashHonest']:.0%}) of the time when every dash moves; a forged dash that never moves the "
+          f"character {facts['dashForged']:.0%} (L4B-7: proven at {move.get('dashProofShare', 0):g} of the dash's "
+          f"speed over {move.get('dashProofSeconds', 0):g} s);")
     print(f"    an i-frame dodge can be pressed for {facts['dashWindow']:.2f} s; its {move['dashDistance']:.0f} studs "
           f"also leave any shape (the longest way out is {facts['longest']:.1f})")
     print(f"  regen: {vitals['regenPerSecond']:.0f}/s after {vitals['regenDelay']:.0f} s unhurt: an empty bar is full "
@@ -4468,6 +4720,219 @@ def print_threat(cfg, env, facts, rows, roles, plates, ab_rows=()):
         print("  same weapon; unplated = from its first hit to the kill of an elite with no plate.")
 
 
+HOLD_PROBE_LABEL = "F1 hold probe"
+
+
+def dash_hold_probe(cfg, env):
+    """The L4 W1b fix round's F1 on the simulator's own code (start_dash, settle_claim, awaits, hold,
+    release): one lunge that holds the root, decided in the very frame a dash is pressed, under a
+    dash the ring proves (into open ground), one it never proves (into the fence), and no dash.
+    Returns {case: (the times it landed, dodged)}; the frames run from 1 s, Heartbeat by Heartbeat."""
+    attack = {"shape": "lunge", "range": 6.0, "width": 4.0, "damage": 1.0, "knockback": 0, "launch": 0}
+    t0 = 1.0
+    found = {}
+    for case in ("proven", "unproven", "none"):
+        run = ThreatRun(cfg, env, COUNT_SET, dict(THREAT_POLICIES["stand"], label=HOLD_PROBE_LABEL), 1, seconds=2.0,
+                        immortal=True)
+        x0, x1, z0, z1 = run.player_box()
+        run.x, run.z = (x1 if case == "unproven" else (x0 + x1) / 2), (z0 + z1) / 2
+        if case != "none":
+            run.start_dash(t0, (1.0, 0.0))
+        run.pending.append([t0, t0, "probe", attack, run.x - 2.0, run.z, (1.0, 0.0), False, None, None, 0.0, t0])
+        for frame in range(int(round(0.8 / FRAME))):
+            run.resolve(t0 + frame * FRAME)
+        found[case] = ([when for when, *_rest in run.log], run.dodged)
+    DASH_TALLY.pop(HOLD_PROBE_LABEL, None)  # a probe, not a player: kept out of the DASH PROOF report
+    return found
+
+
+FENCE_PROBE_LABEL = "G1 fence probe"
+
+
+def fence_queues(cfg):
+    """The fence-dash queues, each {"strikes": [(seconds after the press, name, knocks?, raised)],
+    "hp": his health at the press (None = full), "knockIframes": the knock's window (None = the
+    config's), "none": what lands and what is dodged with no dash, as ([names], dodged)}. `raised` =
+    when a late crowd step put it in the queue (None = at its impact, when it is due at once).
+    The review's three (docs/prompts/l4-w1b-review/4-fix-diff.md M1): a knocking lunge then a plain
+    one; two knocking lunges in one step; and a knocking lunge a pending claim covers, then a plain
+    one whose impact is past the claim's window (dashIframes) but inside the knock's, which waits
+    only because the first does. Fix round 3's H3 (5-fix2-diff.md m1), so the gate tells a rule
+    dated from the moment from one dated from the release: the harness's fourth case (a plain lunge
+    at 0.5, after the knock's window from its moment, inside one from the release); a held hit that
+    downs him (the down, its get-up and what falls inside it); two knocks in one step at
+    knockIframes 0 (no window: only ruling 18's "struck and waiting" voids the second); and a hit
+    that struck before the knock but that a step raised after it, inside the knock's window from
+    its moment (only the release's `at < knock_until` voids it: no window met its span, and it was
+    not in the queue at the knock's moment)."""
+    late = cfg["movement"]["dashIframes"] + 0.02
+    knock = cfg["player"]["knockIframes"]
+    down = cfg["player"]["downSeconds"]
+    return {
+        "a knocking lunge then a plain one": {
+            "strikes": [(0.0, "knock", True, None), (0.05, "plain", False, None)], "none": (["knock"], 1)},
+        "two knocking lunges in one step": {
+            "strikes": [(0.0, "knock", True, None), (0.0, "knock2", True, None)], "none": (["knock"], 1)},
+        "a held knock then a plain one its claim does not cover": {
+            "strikes": [(0.05, "knock", True, None), (late, "plain", False, None)], "none": (["knock"], 1)},
+        "a knocking lunge then a plain one after its window": {
+            "strikes": [(0.0, "knock", True, None), (knock + 0.1, "plain", False, None)],
+            "none": (["knock", "plain"], 0)},
+        "a held hit that downs him, one inside the down, one after the get-up": {
+            "strikes": [(0.0, "fell", False, None), (0.3, "inside", False, None), (down + 0.2, "after", False, None)],
+            "hp": 1.0, "none": (["fell"], 1)},
+        "two knocking lunges in one step, knockIframes 0": {
+            "strikes": [(0.0, "knock", True, None), (0.0, "knock2", True, None)], "knockIframes": 0.0,
+            "none": (["knock"], 1)},
+        "a knocking lunge, then a hit struck before it that a step raised inside its window": {
+            "strikes": [(0.0, "knock", True, None), (-0.1, "raised", False, knock / 2)], "none": (["knock"], 1)},
+    }
+
+
+def dash_fence_probe(cfg, env):
+    """The L4 W1b fix round 2's G1 on the simulator's own code (hold, release, rule, hurt, and the
+    regen and get-up of control): a dash pressed against the fence, which the ring never proves
+    (L4B-7), so every decision it would cover, and every later one behind it, waits to its lapse;
+    and the same queue with no dash. Each lunge holds the root and is decided at its impact (no
+    lag), 1 damage a hit. Returns {queue: {case: (the lunges that landed, in order, as (name,
+    seconds after the press); dodged; his (health, down?) on every frame from the one after the
+    release on, regen begun included)}}."""
+    attack = {"shape": "lunge", "range": 6.0, "width": 4.0, "damage": 1.0, "knockback": 0, "launch": 0}
+    knock = dict(attack, knockback=30.0)  # the review's elite and brute knock 30; any knock voids alike
+    t0 = 1.0
+    move = cfg["movement"]
+    after = move["dashSeconds"] + cfg["shooting"]["originLagMaxSeconds"] + 2 * FRAME  # past the release
+    frames = int(round((cfg["player"]["regenDelay"] + 0.6) / FRAME))
+    found = {}
+    for queue, spec in fence_queues(cfg).items():
+        view = cfg
+        if spec.get("knockIframes") is not None:
+            view = dict(cfg, player=dict(cfg["player"], knockIframes=spec["knockIframes"]))
+        found[queue] = {}
+        for case in ("unproven", "none"):
+            run = ThreatRun(view, env, COUNT_SET, dict(THREAT_POLICIES["stand"], label=FENCE_PROBE_LABEL), 1,
+                            seconds=frames * FRAME)
+            x0, x1, z0, z1 = run.player_box()
+            run.x, run.z = x1, (z0 + z1) / 2
+            if spec.get("hp") is not None:
+                run.hp, run.last_hurt = spec["hp"], t0  # just hurt down to it: no regen before the queue
+            if case == "unproven":
+                run.start_dash(t0, (1.0, 0.0))
+            raised = []
+            for when, name, knocks, raise_at in spec["strikes"]:
+                at = t0 + when
+                entry = [at, at, name, knock if knocks else attack, run.x - 2.0, run.z, (1.0, 0.0), False, None, None,
+                         0.0, at if raise_at is None else t0 + raise_at]
+                if raise_at is None:
+                    run.pending.append(entry)
+                else:
+                    raised.append(entry)
+            trace = []
+            for frame in range(frames):
+                t = t0 + frame * FRAME
+                for entry in [e for e in raised if e[11] <= t + THREAT_EPS]:
+                    raised.remove(entry)
+                    run.pending.append(entry)  # [step] a late crowd step queues it now
+                run.control(t, FRAME)
+                run.resolve(t)
+                if t - t0 > after:
+                    trace.append((round(run.hp, 9), run.down_until is not None))
+            found[queue][case] = ([(name, when - t0) for when, _d, name, _s in run.log], run.dodged, trace)
+    DASH_TALLY.pop(FENCE_PROBE_LABEL, None)  # a probe, not a player: kept out of the DASH PROOF report
+    return found
+
+
+CLEAR_PROBE_LABEL = "H1 boss room probe"
+CLEAR_PROBE_SLAM = 0.1  # seconds after the press: the slam's moment
+CLEAR_PROBE_KILL = 0.2  # the room's last body dies
+CLEAR_PROBE_PROOF = 1 / 3  # an honest claim the ring proves late, after the kill and inside the lapse
+
+
+def boss_clear_probe(cfg, report):
+    """Fix round 3's H1 on the simulator's own run (vitals_step, advance and field_held):
+    the level's boss room, entered through its own countdown (skip_into), in its last wave with
+    one body left on its floor, solo, on the first difficulty at the proving gear. A slam that
+    holds him and takes his whole bar falls due CLEAR_PROBE_SLAM after a dash press, and the body
+    dies at CLEAR_PROBE_KILL. Cases: "none" (no dash), "unproven" (a claim the ring never proves:
+    the slam waits to the lapse), "honest" (a claim proven at CLEAR_PROBE_PROOF: the slam is
+    dodged) and "unheld" (the unproven claim with a field the hold never keeps: m3, the control
+    that shows the race is real). Returns {case: (end, its time, [the slam's landings], dodged,
+    the clear's time or None)}, times in seconds after the press."""
+    level, ctx, layout = report["level"], report["ctx"], report["layout"]
+    difficulty = ctx["expeditions"]["difficulties"][0]
+    view, hp = level_view(cfg, level["difficulties"][difficulty], level["crowd"]["regenShare"], ctx["armory"],
+                          report["proving"])
+    slam = {"shape": "lunge", "range": 6.0, "width": 4.0, "damage": hp, "knockback": 0, "launch": 0}
+    t0 = 1.0
+    found = {}
+    for case in ("none", "unproven", "honest", "unheld"):
+        run = LevelRun(view, hp, ctx, level, layout, difficulty, dict(THREAT_POLICIES["stand"], label=CLEAR_PROBE_LABEL),
+                       1)
+        stages = run.plan["stages"]
+        run.skip_into(len(stages), t0)
+        stage, zone = stages[-1], stages[-1]["zone"]
+        run.wave, run.settled = stage["waves"], stage["waves"] - 1
+        run.queue, run.boss_pending = [], None
+        last = SimpleNamespace(alive=True, floor=zone["floor"], resident=None)
+        run.fighters[:] = [last]
+        if case == "unheld":
+            run.field_held = lambda _given, _t, _delta: False
+        if case != "none":
+            run.claim = {"from": t0, "until": t0 + cfg["movement"]["dashIframes"],
+                         "proof": t0 + CLEAR_PROBE_PROOF if case == "honest" else None, "lapse": t0 + run.dash_lapse}
+        at = t0 + CLEAR_PROBE_SLAM
+        run.pending.append([at, at, "slam", slam, run.x - 2.0, run.z, (1.0, 0.0), False, None, None, zone["floorY"], at])
+        cleared = None
+        for frame in range(int(round(1.0 / FRAME))):
+            t = t0 + frame * FRAME
+            if last.alive and t >= t0 + CLEAR_PROBE_KILL - THREAT_EPS:
+                last.alive = False
+                run.fighters[:] = []
+            actions = len(run.actions)
+            run.vitals_step(t)  # LevelRun.run's order: VitalsService.Step and the down's advance, then the tick's
+            run.advance(t)
+            if cleared is None and any(kind == "clear" for kind, _f in run.actions[actions:]):
+                cleared = t - t0
+            if run.end_reason is not None:
+                break
+        found[case] = (run.end_reason, None if run.end_at is None else run.end_at - t0,
+                       [when - t0 for when, _d, name, _s in run.log if name == "slam"], run.dodged, cleared)
+    DASH_TALLY.pop(CLEAR_PROBE_LABEL, None)  # a probe, not a player: kept out of the DASH PROOF report
+    return found
+
+
+def boss_clear_verdict(cfg, probe):
+    """H1's gate on boss_clear_probe: (passes, the line's text). A claim that never proves loses
+    the run as no dash does (down as it lapses, no clear first); an honest one is dodged and the
+    clear goes through within a frame of its proof; and the unheld control clears at the kill with
+    the slam never landing, so the probe is one where the hold decides."""
+    lapse = cfg["movement"]["dashSeconds"] + cfg["shooting"]["originLagMaxSeconds"]
+
+    def near(value, at):
+        return value is not None and abs(value - at) <= THREAT_EPS
+
+    def within(value, start):
+        return value is not None and start - THREAT_EPS <= value <= start + FRAME + THREAT_EPS
+
+    none, unproven, honest, unheld = (probe[case] for case in ("none", "unproven", "honest", "unheld"))
+    ok = (none[0] == "down" and len(none[2]) == 1 and near(none[2][0], CLEAR_PROBE_SLAM) and none[4] is None
+          and unproven[0] == "down" and len(unproven[2]) == 1 and lapse < unproven[2][0] <= lapse + FRAME + THREAT_EPS
+          and unproven[4] is None
+          and honest[0] == "cleared" and honest[2] == [] and honest[3] == 1 and within(honest[4], CLEAR_PROBE_PROOF)
+          and unheld[0] == "cleared" and unheld[2] == [] and near(unheld[4], CLEAR_PROBE_KILL))
+
+    def ended(row):
+        landed = ", ".join(f"{when:.3f}" for when in row[2]) or "never"
+        clear = "no clear" if row[4] is None else f"the clear at {row[4]:.3f}"
+        return f"{row[0]} at {fmt(row[1], 0, 3).strip()} s (the slam landed {landed}, {row[3]} dodged, {clear})"
+
+    return ok, (f"forest: H1, the boss room's clear waits for a decision held for a dash claim: a slam that takes "
+                f"the whole bar {CLEAR_PROBE_SLAM:.1f} s after a press, the room's last body dead at "
+                f"{CLEAR_PROBE_KILL:.1f} s. No dash: {ended(none)}; a claim never proven (the lapse {lapse:.2f} s): "
+                f"{ended(unproven)}, lost as with no dash; one proven at {CLEAR_PROBE_PROOF:.3f} s: {ended(honest)}; "
+                f"the control whose field is never held (m3): {ended(unheld)}")
+
+
 def check_threat(cfg, env, facts, rows, roles, plates, expect):
     """The P4 bands. `expect` is check()'s PASS/FAIL printer."""
     hp = facts["hp"]
@@ -4531,6 +4996,57 @@ def check_threat(cfg, env, facts, rows, roles, plates, expect):
     lo_u, hi_u = DASH_UPTIME
     expect(lo_u <= facts["dashUptime"] <= hi_u,
            f"dash: spam is invulnerable {facts['dashUptime']:.0%} of the time, in [{lo_u:.0%}, {hi_u:.0%}]")
+    walk_flat = move["walkSpeed"] * move.get("dashProofSeconds", 0.0)
+    dash_flat = move["dashDistance"] / max(move["dashSeconds"], FRAME) * move.get("dashProofSeconds", 0.0)
+    expect(facts["dashForged"] == 0 and not dash_proof(move, walk_flat) and dash_proof(move, dash_flat),
+           f"dash: L4B-7, a forged still dash is invulnerable {facts['dashForged']:.0%} of the time; a walk "
+           f"({walk_flat:.2f} studs in {move.get('dashProofSeconds', 0):g} s) never proves one, a real dash "
+           f"({dash_flat:.2f}) does")
+    # F1: a hit decided in the very frame of the press waits for the claim: voided once the ring
+    # proves the dash (as before W1b), landing on the first Heartbeat past the lapse when it never
+    # does, and at its own decision with no dash at all.
+    probe = dash_hold_probe(cfg, env)
+    lapse = move["dashSeconds"] + cfg["shooting"]["originLagMaxSeconds"]
+    late = probe["unproven"][0]
+    expect(probe["proven"] == ([], 1) and len(late) == 1 and 0 < late[0] - (1.0 + lapse) <= FRAME + THREAT_EPS
+           and probe["unproven"][1] == 0 and probe["none"] == ([1.0], 0),
+           f"dash: F1, a hit decided in the frame a dash is pressed is held for the claim: dodged once the ring "
+           f"proves it ({DASH_PROOF_FRAMES} Heartbeats later; landed {probe['proven'][0] or 'never'}), landing "
+           f"{', '.join(f'{when - 1.0:.3f}' for when in late) or 'never'} s after the press when it is never "
+           f"proven (the lapse, {lapse:.2f} s), and at once with no dash ({probe['none'][0]})")
+    # G1 (fix round 2): a dash that never proves costs no more than not dashing. Pressed against the
+    # fence, the claim holds the knocking lunge to its lapse and the plain one behind it; released,
+    # the knock's window and voids run from its own moment, so the plain one is dodged as with no
+    # dash. The review's other two queues lose what no dash loses too. H3 (fix round 3): and so do
+    # four queues on which a rule dated from the release would show, with his health and his downs
+    # the same on every frame from the release on (the regen delay, the down and its get-up from
+    # the moment); each queue's no-dash outcome is pinned, so none of them can go quiet.
+    fence = dash_fence_probe(cfg, env)
+    queues = fence_queues(cfg)
+
+    def told(outcome):
+        landed, dodged, _trace = outcome
+        return f"{', '.join(f'{name} at {after:.3f}' for name, after in landed) or 'none'} landed, {dodged} dodged"
+
+    def names(outcome):
+        return [name for name, _a in outcome[0]], outcome[1]
+
+    def same(case):
+        return names(case["unproven"]) == names(case["none"]) and case["unproven"][2] == case["none"][2]
+
+    def worth(queue):
+        landed, dodged = queues[queue]["none"]
+        return names(fence[queue]["none"]) == (landed, dodged) and len(fence[queue]["none"][2]) > 0
+
+    first = next(iter(fence))
+    expect(all(same(case) and worth(queue) for queue, case in fence.items()),
+           f"dash: G1, a dash into the fence (never proven) under {first} loses what no dash loses: "
+           f"{told(fence[first]['unproven'])} (no dash: {told(fence[first]['none'])}); so do the other "
+           f"{len(fence) - 1} queues, with the same health and downs on every frame from the release on: "
+           + "; ".join(f"{queue}, {told(case['unproven'])} (no dash: {told(case['none'])}"
+                       f"{'' if same(case) else ', NOT the same health and downs'}"
+                       f"{'' if worth(queue) else ', NOT the pinned no-dash outcome'})"
+                       for queue, case in fence.items() if queue != first))
     expect(facts["dashWindow"] >= DASH_WINDOW_SECONDS and move["dashDistance"] >= facts["longest"],
            f"dash: the i-frame dodge's press window {facts['dashWindow']:.2f} s >= {DASH_WINDOW_SECONDS}, and its "
            f"{move['dashDistance']:.0f} studs >= the longest way out of a shape {facts['longest']:.1f}")
@@ -5045,10 +5561,9 @@ def check_siege(cfg, env, boss, expect):
 #              armour read the tier-1 amount;
 #   [health]   P5 ruling 11: the bar is Armory.MaxHp of the gear; ruling 18: solo, a down ends
 #              the run, unless the field is already clear;
-#   [level]    L1 rulings 1 and 27: a level is an ordered list of stages, `travel` and `camp`
-#              (resolve_level mirrors StageFlow.Resolve: a level file that names a mission
-#              becomes one camp of all that mission's waves, with the director's breather,
-#              merging and a bank at every wave; plan_level mirrors StageFlow.Plan);
+#   [level]    L1 ruling 1: a level is an ordered list of stages, `travel` and `camp`
+#              (resolve_level mirrors StageFlow.Resolve, which takes a level file as it stands;
+#              plan_level mirrors StageFlow.Plan);
 #   [road]     the player walks the layout's `route` at movement.walkSpeed, jumps included, his
 #              own line (the seed's start offset) beside it; there is no enemy on the road;
 #   [trigger]  L1 ruling 9 as the fix round's ruling 1 rewrote it: a camp triggers when his
@@ -5085,6 +5600,8 @@ def check_siege(cfg, env, boss, expect):
 #              the merge; the clear (threats cleared, the pool banked when the camp is beaten or
 #              the stage banks each wave, the downed stood up), then the stage's breather or the
 #              director's, or the gates open and the next stage begins, or the run ends cleared;
+#              H1 (L4 W1b fix round 3): a field is never clear while a decision of his waits for a
+#              dash claim (field_held), and a down that hold covers is judged at once (vitals_step);
 #   [bank]     L1 ruling 15: only a checkpoint pays. Kills go to a pool; a bank moves the pool to
 #              the wallet; whatever ends the run drops what was not banked.
 # The player of a whole run reacts to every tell and attacks with the default melee family only
@@ -5093,19 +5610,12 @@ def check_siege(cfg, env, boss, expect):
 # where its last body fell to its exit and on.
 # ---------------------------------------------------------------------------------------------
 
-MISSIONS_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Missions"
-MISSION_FILE = "1_Village.json"
 LEVEL_LAYOUT_DIR = REPO_ROOT / "src" / "shared" / "Layouts" / "Levels"
 LEVELS_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Levels"
 EXPEDITIONS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Expeditions.json"
 MISSION_GEAR_DEFAULT = {"melee": 1, "ranged": 1}  # L3-11: T1 (the old 2/2)
 NO_ASCENSION = {"melee": 0, "ranged": 0}
-# The Raider Arena's bands (INTERFACES "P5" -> "Balance bands"): the bosses with the default
-# sword, a clear of all ten waves by a reacting player (breathers included), a still player in a
-# fodder wave, no enemy hit over HIT_SHARE_MAX of the bar, regen close to the range's 10/130.
-MISSION_BOSS_SECONDS = {"colossus": (64.0, 90.0), "warlord": (77.0, 101.0)}
-MISSION_CLEAR_SECONDS = (600.0, 900.0)
-MISSION_STAND_DOWN_SECONDS = (6.0, 12.0)
+# P5's regen band, which Forest Road keeps: a level's regen close to the range's 10/130.
 MISSION_REGEN_SHARE = 10 / 130
 MISSION_REGEN_TOLERANCE = 0.10
 MISSION_SEEDS = (11, 23, 37)
@@ -5115,10 +5625,13 @@ MISSION_SEEDS = (11, 23, 37)
 # since L3 (they were 4/4 and 6/6). "One preset below" is the preset before it.
 GATE_PYTHON = (3, 12)  # the interpreter the bands are measured on: see interpreter_note
 FOREST_LEVEL = "forestRoad"
-FOREST_BOSS = "colossus"
-# Normal's first clear at the proving gear T1 (the old 2 / 2), from the start point to the Colossus's fall,
+# L4 W2 (L4W2-12, MISSIONS_DESIGN 26.4): the Chief's Clearing's boss is the Camp Chief, a crowd kind of its own
+# with the Colossus's body, slam, charge and call and the war-club sweep in place of the barrage (the
+# Colossus stays the range's and the Raider Arena's).
+FOREST_BOSS = "chief"
+# Normal's first clear at the proving gear T1 (the old 2 / 2), from the start point to the boss's fall,
 # walking included, every seed. L1b Wave 2 banded it 5.75-7 min; L1c (the Chief's Clearing redone:
-# an ambush of 10, then the Colossus, in place of 36 residents and two waves of about 35) takes
+# an ambush of 10, then the boss, in place of 36 residents and two waves of about 35) takes
 # about 1.4 minutes out of it, so it is re-measured at 4.75-5.3 min and banded 4.5-5.75
 # (docs/BALANCE.md "L1c").
 FOREST_CLEAR_SECONDS = (270.0, 345.0)
@@ -5138,7 +5651,7 @@ FOREST_TIMBER_PER_MINUTE = (37.8, 46.2)
 FOREST_CASH_PER_MINUTE_WAVE1 = 19800
 # The bow at T1 (the old 2 / 2; reported for Ben's bow question): the default ranged family alone against
 # these kinds, at the boss's spot in the boss room, aiming at the body and at the head.
-BOW_KINDS = ("brute", "armoured", "colossus")
+BOW_KINDS = ("brute", "armoured", FOREST_BOSS)
 BOW_SECONDS = 240.0
 TENT_AT_PACE = 1  # L1b-W4-28: at the recommended gear a tent sends at most this many bodies
 TENT_FAST = {"A": 2, "B": 3}  # ... and on Normal one gear preset up at least this many (B 4 -> 3: the fix round's R7, see BALANCE)
@@ -5157,12 +5670,12 @@ FOREST_HIT_SHARE = {"normal": 0.25, "hard": 0.30, "brutal": 0.30}
 HUMAN_REACTION_SECONDS = 0.55
 # "Clearly beyond the gear below" (the lead's ruling, fix round E4). One preset below the
 # recommended gear the human EITHER goes down (or meets the run cap) OR takes this many times as
-# long as his slowest clear at the recommended gear; and the Colossus alone is not killed inside
+# long as his slowest clear at the recommended gear; and the boss alone is not killed inside
 # FOREST_BELOW_BOSS seconds. An under-geared player who plays well and clears slowly is fine.
 # The lead's numbers are 1.8 and 135 s / 200 s. Hard's are his. Brutal's are the designer's:
 # its two presets are x2.17 apart in melee scale, where Hard's are x3.33 apart, and a third of a
 # clear is walking, countdowns and the bursts' own pace, so a slow Brutal clear at 4/4 takes
-# x1.5 and its Colossus 196-203 s. 1.8 and 200 s cannot hold there without retuning Brutal to
+# x1.5 and its boss 196-203 s. 1.8 and 200 s cannot hold there without retuning Brutal to
 # the gate.
 # L3-29: Hard at T3 and Brutal at T5 keep the clock they had at 4/4 and 6/6 (the reacting player's
 # mean clear over MISSION_SEEDS, measured before the remap: Hard 306.7 / 319.9 / 311.8 s, Brutal
@@ -5180,67 +5693,10 @@ def luau_round(value):
     return math.floor(value + 0.5) if value >= 0 else -math.floor(-value + 0.5)
 
 
-def load_arena_points(name, key):
-    """A named list of `{ x = , z = }` points of Layouts/Arenas/<name>.luau, in order: [(x, z)]."""
-    text = (LAYOUT_DIR / f"{name}.luau").read_text(encoding="utf-8")
-    names = {m.group(1): float(m.group(2))
-             for m in re.finditer(r"^local ([A-Z][A-Z0-9_]*) = (-?\d+(?:\.\d+)?)\s*$", text, re.MULTILINE)}
-    block = re.search(key + r" = \{(.*?)\n\t\}", text, re.DOTALL)
-    if block is None:
-        raise SystemExit(f"sim_range: no {key} in Layouts/Arenas/{name}.luau")
-
-    def number(token):
-        token = token.strip()
-        negative = token.startswith("-")
-        token = token.lstrip("-")
-        value = names[token] if token in names else float(token)
-        return -value if negative else value
-
-    return [(number(x), number(z)) for x, z in re.findall(r"\{ x = ([\w.-]+), z = ([\w.-]+) \}", block.group(1))]
-
-
-def load_rim(name):
-    """The `enemySpawns` points of Layouts/Arenas/<name>.luau, in order: [(x, z)]."""
-    return load_arena_points(name, "enemySpawns")
-
-
-def arena_as_layout(name, kill_y):
-    """LevelGeometry.FromArena (L1 ruling 27): an arena layout as a level layout of one camp
-    "arena" at the world origin, that locks (L1b-12). Size, fence and barrier from the arena; no gates; entry =
-    playerSpawns[1] (else the lobby pad); exit and start = the lobby pad; spawns = enemySpawns.
-    The arena's obstacles are counted, not read: the crowd walks through them."""
-    arena = load_arena(name)
-    text = (LAYOUT_DIR / f"{name}.luau").read_text(encoding="utf-8")
-    pad = arena["pad"]
-    try:
-        seats = load_arena_points(name, "playerSpawns")
-    except SystemExit:
-        seats = []
-    entry = seats[0] if seats else pad
-    height = re.search(r"barrierHeight = ([\d.]+)", text)
-    thickness = re.search(r"barrierThickness = ([\d.]+)", text)
-    barrier = None
-    if height is not None:
-        barrier = {"height": float(height.group(1)), "thickness": float(thickness.group(1)) if thickness else 1.0}
-    obstacles = re.search(r"obstacles = \{(.*?)\n\t\}", text, re.DOTALL)
-    camp = {"id": "arena", "locks": True, "x": 0.0, "y": 0.0, "z": 0.0, "sx": arena["half"][0] * 2,
-            "sz": arena["half"][1] * 2, "fence": {"height": arena["wall"]}, "gates": [],
-            "entry": {"x": entry[0], "z": entry[1]}, "exit": {"x": pad[0], "z": pad[1]},
-            "spawns": [{"x": x, "z": z} for x, z in load_rim(name)],
-            "obstacleCount": len(re.findall(r"\bsx = ", obstacles.group(1))) if obstacles else 0,
-            # How tall its cover is, for tools/check_levels.py's note: nothing here stands on it.
-            "obstacleTops": [float(top) for top in re.findall(r"\bsy = ([\d.]+)", obstacles.group(1))] if obstacles else []}
-    return {"version": 1, "arena": name, "start": {"x": pad[0], "y": 0.0, "z": pad[1]}, "killY": kill_y,
-            "barrier": barrier, "camps": [camp], "blocks": [], "secrets": [], "route": []}
-
-
-def load_level_layout(name, rescue_below):
-    """Catalog.GetLevelLayout, and for a file that names an `arena` the adapter of ruling 27
-    (WaveService: LevelGeometry.FromArena(arena, -player.rescue.below))."""
-    layout = load_config(LEVEL_LAYOUT_DIR / f"{name}.json")
-    if layout.get("arena"):
-        return arena_as_layout(layout["arena"], -rescue_below)
-    return layout
+def load_level_layout(name):
+    """Catalog.GetLevelLayout: Layouts/Levels/<name>.json as it stands. (Ruling 27's arena adapter
+    went in L4 W1b; tools/check_levels.py refuses a layout that names an `arena`.)"""
+    return load_config(LEVEL_LAYOUT_DIR / f"{name}.json")
 
 
 def shortcut_layout(layout):
@@ -5336,39 +5792,19 @@ def mission_gear():
     return {"melee": gear["melee"], "ranged": gear["ranged"]}
 
 
-def resolve_level(file, mission, run_cap, first_difficulty="normal"):
-    """StageFlow.Resolve. A file with no `mission` is the level as it stands (None when it lacks
-    stages, difficulties or a crowd block), under its own run cap when it names one over 0 and
-    under the director's otherwise, with its `camps` (the residents, L1b) or none. A file that
-    names a mission borrows that mission's crowd block and becomes one camp "arena" of all its
-    waves: the mission's material, target and targetWaveSeconds; its one difficulty is
-    `first_difficulty` (the first of Expeditions.json `difficulties`, which the map offers for a
-    level that names none) with the block's three scales; the director's breather; merging; no
-    residents. Nothing banks in either (L1b-15): every kill is paid as it falls."""
-    if not file.get("mission"):
-        if not file.get("stages") or not file.get("difficulties") or not file.get("crowd"):
-            return None
-        own = file.get("runCapSeconds") or 0
-        return {"version": file["version"], "id": file["id"], "name": file["name"], "layout": file["layout"],
-                "mission": None, "material": file.get("material") or "", "targetMinutes": file.get("targetMinutes") or 0,
-                "runCapSeconds": own if own > 0 else run_cap, "difficulties": file["difficulties"],
-                "crowd": file["crowd"], "stages": file["stages"], "camps": file.get("camps") or [],
-                "secrets": file.get("secrets")}
-    block = mission.get("crowd") if mission is not None else None
-    if block is None or first_difficulty is None:
+def resolve_level(file, run_cap):
+    """StageFlow.Resolve: the level file as it stands (None when it lacks stages, difficulties or a
+    crowd block), under its own run cap when it names one over 0 and under the director's otherwise,
+    with its `camps` (the residents, L1b) or none. Nothing banks (L1b-15): every kill is paid as it
+    falls. (Until L4 W1b a file that named a mission borrowed its crowd block: ruling 27's branch.)"""
+    if not file.get("stages") or not file.get("difficulties") or not file.get("crowd"):
         return None
-    only = {"hpScale": block["hpScale"], "damageScale": block["damageScale"], "plateScale": block["plateScale"],
-            "countMult": 1, "rewardMult": 1, "recommendedTier": file.get("recommendedTier") or 0}
-    camp = {"kind": "camp", "name": file["name"], "zone": "arena", "waves": block["waves"],
-            "targetWaveSeconds": mission["targetWaveSeconds"], "breatherSeconds": None, "merge": True,
-            "maxAlive": None}
+    own = file.get("runCapSeconds") or 0
     return {"version": file["version"], "id": file["id"], "name": file["name"], "layout": file["layout"],
-            "mission": file["mission"], "material": mission["material"], "targetMinutes": mission["targetMinutes"],
-            "runCapSeconds": run_cap, "difficulties": {first_difficulty: only},
-            "crowd": {"regenShare": block["regenShare"], "maxAlive": block["maxAlive"], "burst": block["burst"],
-                      "burstSpacing": block["burstSpacing"], "eliteKind": block.get("eliteKind"),
-                      "rewards": block["rewards"]},
-            "stages": [camp], "camps": [], "secrets": file.get("secrets")}
+            "material": file.get("material") or "", "targetMinutes": file.get("targetMinutes") or 0,
+            "runCapSeconds": own if own > 0 else run_cap, "difficulties": file["difficulties"],
+            "crowd": file["crowd"], "stages": file["stages"], "camps": file.get("camps") or [],
+            "secrets": file.get("secrets")}
 
 
 def whole(value):
@@ -5506,13 +5942,17 @@ def unlocks_cap(name):
 # L2-13: Unlocks.MAX_FAMILY_LENGTH (StageFlow's secrets and the remotes read it), the longest weapon
 # family id a secret may give, in bytes.
 SECRET_FAMILY_MAX = unlocks_cap("MAX_FAMILY_LENGTH")
+# L4 W2 (MISSIONS_DESIGN 28): a secret's `key` (the mountain's Castle Key) is held to the family id's
+# cap, Unlocks.MAX_FAMILY_LENGTH bytes, as StageFlow.secretProblems holds it.
+SECRET_KEY_MAX = SECRET_FAMILY_MAX
 
 
 def secret_problems(level, layout, problem):
     """StageFlow.secretProblems (L2-13), the last of Validate's lines: every layout secret has an
     entry in the level's `secrets` with a name; an entry's valor and materials, when given, are
-    whole numbers of at least 0, and its family a short string. Which secrets may pay at all is
-    tools/check_levels.py's rule (L2-18e), not a refusal."""
+    whole numbers of at least 0, and its family and (L4 W2) its key short strings, at most
+    Unlocks.MAX_FAMILY_LENGTH bytes. Which secrets may pay at all is tools/check_levels.py's rule
+    (L2-18e), not a refusal."""
     entries = level.get("secrets")
     if entries is not None and not isinstance(entries, (dict, list)):
         problem("secrets is not a table")
@@ -5537,6 +5977,9 @@ def secret_problems(level, layout, problem):
         if family is not None and (not isinstance(family, str) or family == ""
                                    or len(family.encode("utf-8")) > SECRET_FAMILY_MAX):
             problem(f"secrets.{sid}.family is {family}, not a family id")
+        key = entry.get("key")
+        if key is not None and (not isinstance(key, str) or key == "" or len(key.encode("utf-8")) > SECRET_KEY_MAX):
+            problem(f"secrets.{sid}.key is {key}, not a key id")
 
 
 # L2-34: the words a block's `react` may say (StageFlow.reactProblems).
@@ -7115,10 +7558,8 @@ def level_context():
     """Every config a level run reads, loaded once."""
     combat_cfg = load_config(COMBAT_PATH)
     expeditions = load_config(EXPEDITIONS_PATH)
-    missions = {m["id"]: m for m in (load_config(p) for p in sorted(MISSIONS_DIR.glob("*.json")))}
     return {"armory": load_config(ARMORY_PATH), "combat": combat_cfg, "expeditions": expeditions,
-            "ranks": difficulty_ranks(expeditions), "missions": missions,
-            "files": {f["id"]: f for f in load_level_files()}}
+            "ranks": difficulty_ranks(expeditions), "files": {f["id"]: f for f in load_level_files()}}
 
 
 def level_view(cfg, scales, regen_share, armory, gear, held=None):
@@ -7217,24 +7658,18 @@ SNIPER_HARD = "hard"  # R8: rated on Normal and on this difficulty, both at the 
 # and the bow at this tier (the Forest's last), against the mission player at the same gear (he
 # fights with the sword alone, so he is the gate's comparison) and, reported, the pair player.
 SNIPER_BOW_TIER = 4
-# Ben's ruling on R8's stop (2026-10-16): on Normal these spots out-earn the mission and are accepted
-# for L1 as a known limit (camps never refill, so the pay is bounded and a camp only clears faster).
-# Their rate is reported, not gated; every hit landing stays gated. L4 re-places the perches, and the
-# set must be empty before L4 ships.
-# Lead, 2026-10-20 (L3 W1): the same perches on Hard, where Hard's re-measured hpScale and a bow
-# upgraded alone tip them over; the same L4 fix (re-placed perches) covers both difficulties.
-SNIPER_KNOWN_LIMIT_L4 = {
-    "normal": ("LookoutLedge", "Secret_lookout"),  # L2 W2: the cache moved into the cave
-    "hard": ("LookoutLedge", "LookoutSignPad", "Secret_lookout"),
-}
+# Ben's ruling on R8 (2026-10-16, restated for Hard in L3): no spot may out-earn the mission. L1 to L3
+# accepted the lookout's perches as a known limit until L4; L4 W1 (MISSIONS_DESIGN 26.1) moved the
+# lookout to the trailhead, beyond the Longbow's reach of every region cell, so every spot is gated.
 # The L3 W1 fix round 2's F6: the fire sniper's "casts at least once" is judged per spot, so a course
 # that never casts fails by name, unless its spot is listed here for that difficulty with the reason
 # it cannot cast. A listed course is held to its reason instead: no run casts and no living body's
 # edge ever comes within the ability's reach (range + pad), so a listing that went stale fails too.
-# CaveMouth (measured 2026-10-20, Normal and Hard, both of its points, every seed): it stands on
-# Road4 at the ground (y 0), west of the plateau camp A stands on (height 8). The residents who come
-# for him stop at the plateau's west edge, x about -300 (he is not reachable, L1b-W4), so the
-# nearest body's edge stays 25.7 studs or more off on the flat, past Dragon's Breath's 20.8.
+# CaveMouth (measured 2026-10-20, Normal and Hard, both of its points, every seed; again 2026-10-21
+# for L4 W1, one point since the sign pad's region cell went: 26.6): it stands on Road4 at the ground
+# (y 0), west of the plateau camp A stands on (height 8). The residents who come for him stop at the
+# plateau's west edge, x about -300 (he is not reachable, L1b-W4), so the nearest body's edge stays
+# 25.7 studs or more off on the flat, past Dragon's Breath's 20.8.
 BREATH_OUT_OF_REACH = {
     "CaveMouth": {
         "difficulties": ("normal", "hard"),
@@ -7258,7 +7693,7 @@ def sniper_spots_of(level, layout, combat_cfg, cfg):
     solids = cl.solids_of(layout, levels["fenceThickness"], levels["floorThickness"])
     # L3-25: the reach is check_levels', the longest range of the ownable ranged families.
     files = load_level_files()
-    layouts = {f["layout"]: load_level_layout(f["layout"], combat_cfg["player"]["rescue"]["below"]) for f in files}
+    layouts = {f["layout"]: load_level_layout(f["layout"]) for f in files}
     owned = cl.ownable_families(files, layouts, load_config(EXPEDITIONS_PATH), cfg["weapons"],
                                 (cfg.get("loadout") or {}).values())
     spots = cl.sniper_spots(level, layout, {"camps": combat_cfg["camps"], "sniperReach": cl.sniper_reach(cfg["weapons"], owned),
@@ -7385,6 +7820,11 @@ class LevelRun(ThreatRun):
         self.tempo = 1.0
         self.stamps = []
         self.live = None  # the boss room whose gates are closed (its zone), or None
+        # H1 (fix round 3, WaveService's run.blowWaits and run.heldSince; field_held): the last
+        # tick found a decision of his waiting (G1), and the first tick in a row whose clear field
+        # that held (None = none; the game's 0, which os.clock() never is, but t is at the start).
+        self.blow_waits = False
+        self.held_since = None
         # The wallet (L1b-15): every kill split at once with the carry; `priced` is the sum of
         # each kill's reward x the share, kept exactly, that the wallet must equal (solo).
         self.carry = {}
@@ -7405,6 +7845,8 @@ class LevelRun(ThreatRun):
         self.walked = 0.0
         self.actions = []
         self.cleared_at = {}  # zone index -> when its camp was cleared
+        self.wallet_at = {}  # zone index -> the wallet at that clear (L4 W2, R8's whole runs)
+        self.scene_saved = None  # L4W2-13: the whole sniper run's own policy and anchor while it snipes
         self.reached_at = {}
         self.first_hit = {}  # group index -> the first hit of his that landed on a member
         self.first_windup = {}  # group index -> the first windup a member began
@@ -7443,6 +7885,10 @@ class LevelRun(ThreatRun):
                     body.resident = {"group": index, "post": post, "leg": post["leg"]}
                     body.face = (-math.sin(post["yaw"]), -math.cos(post["yaw"]))
                     group["members"].append(body)
+                    # L4W2-11: CrowdService.SpawnResident seats a body first shown at rest at once.
+                    body.seat = self.seat_goal(body)
+                    body.drop = hs_seat_drop(body.height, body.seat, cfg["crowd"].get("restDrop") or 0.0)
+                    body.place()
         # L1b-W2-6: each tent's stock is a group of its own, after the residents' (AddGroup answers
         # #plan.groups + t), with nobody out at the start. `only` places a tent only by its id.
         self.tents = []
@@ -7662,6 +8108,15 @@ class LevelRun(ThreatRun):
         """CrowdService.integrate's resting clause for a stood-down rusher (L1b-W4-22): it walks to
         its post unless an attack of its own is under way."""
         return cb_stands_down(group, b.kind.get("brain") != "keepAway") and b.state not in ("windup", "attack")
+
+    def seat_goal(self, e):
+        """L4W2-11: a resident sits while CampBrain.Shows (cb_shows, the mirror check_stage_mirror holds
+        to it) says `rest` for its group and its brain's walk this step: held or at rest, not walking,
+        a fire group (a guard, a patrol and a tent's group stand). The wire's airborne and stagger
+        states are not modelled: a hit or a launch wakes the group first, and Shows answers `rise`."""
+        if e.resident is None:
+            return 0.0
+        return 1.0 if cb_shows(self.groups[e.resident["group"] - 1], e.moving) == "rest" else 0.0
 
     def may_target(self, e):
         """L1b-W4-21: a resident in fight goes only for a player its group knows; one that is not
@@ -7908,6 +8363,9 @@ class LevelRun(ThreatRun):
                 self.leave_zone(floor)
                 return
             if self.near(zone) or self.awake_in(floor) or not self.path:
+                if self.snipe_due(floor):
+                    self.begin_snipe(t)
+                    return
                 self.mode = "clear"
                 self.ground = zone["floorY"]
                 self.path = []
@@ -8044,7 +8502,12 @@ class LevelRun(ThreatRun):
             self.scene["phase"] = "in"
         elif kind == "sniper":
             # R8: on the spot if a resident can be seen from it, else the pull from the road by the
-            # camp's gate nearer the spot.
+            # camp's gate nearer the spot. L4W2-13's whole run (sniperFight) comes here from the
+            # road at `t0`, standing at `from`: the walk to the pull point and the crossing to the
+            # spot are straight lines at walk speed from there; today's course stands at the pull
+            # point at 0.
+            t0 = self.scene.get("t0", 0.0)
+            here = self.scene.get("from")
             self.scene["spot"] = spot["id"]
             sx, sy, sz = spot["at"]
             self.place_scene(sx, sz, sy)
@@ -8056,10 +8519,90 @@ class LevelRun(ThreatRun):
                 pulls.append(((zone["exit"][0] + after[0]) / 2, (zone["exit"][1] + after[1]) / 2, after[2]))
             pull = min(pulls, key=lambda q: math.hypot(q[0] - sx, q[1] - sz))
             self.place_scene(pull[0], pull[1], pull[2])
-            self.scene.update({"phase": "pull", "pulledFrom": None if seen else (pull[0], pull[1]),
-                               "travel": math.hypot(pull[0] - sx, pull[1] - sz) / self.move["walkSpeed"]})
+            walk = (0.0 if here is None or seen
+                    else math.hypot(pull[0] - here[0], pull[1] - here[1]) / self.move["walkSpeed"])
+            start = here if here is not None and seen else pull
+            self.scene.update({"phase": "walk" if walk > 0 else "pull", "pullFrom": t0 + walk,
+                               "pulledFrom": None if seen else (pull[0], pull[1]),
+                               "travel": math.hypot(start[0] - sx, start[1] - sz) / self.move["walkSpeed"]})
             if seen:
-                self.sniper_go(0.0)
+                self.sniper_go(t0)
+
+    def pulled(self, floor):
+        """R8's pull: a hit of his has landed on a group of this floor (a whole run has hit
+        others before)."""
+        return any(self.groups[index - 1]["def"]["floor"] == floor for index in self.first_hit)
+
+    def snipe_due(self, floor):
+        """L4W2-13: a whole sniper run (policy `snipe`) has not sniped yet and this is its spot's
+        camp."""
+        spot = self.policy.get("snipe")
+        return spot is not None and not self.scene and self.zones[floor - 1]["id"] == spot["camp"]
+
+    def begin_snipe(self, t):
+        """L4W2-13, the whole run's turn to the spot: where the mission player would engage his
+        spot's camp (steer), he takes up the bow and plays R8's course as today from where he
+        stands (start_scene with `t0` and `from`), never dodging, his Breath cast beside the bow."""
+        snipe = self.policy
+        # A pair player's kit is set aside: from the spot only the bow shoots.
+        self.scene_saved = {"policy": snipe, "anchor": self.anchor, "kit": self.kit}
+        self.kit = None
+        self.policy = dict(THREAT_POLICIES["sniper"], weapon=(snipe["bow"], None), spot=snipe["snipe"],
+                           breath=snipe.get("breath"), then="fight")
+        self.take_up(snipe["bow"])
+        self.scene.update({"t0": t, "from": (self.x - self.jitter[0], self.z - self.jitter[1]), "fromY": self.ground,
+                           "paidBefore": dict(self.wallet), "evadedBefore": self.world.evaded})
+        self.mode = "scene"
+        self.path = []
+        self.start_scene("sniper")
+
+    def end_snipe(self, t):
+        """L4W2-13: R8's course is over (his own minutes and pay booked); the mission from where he
+        stands (the contract's rule), or with `resume` "road" from the road where he turned off it,
+        after the straight walk back (he waits on the spot meanwhile, and shoots nothing)."""
+        sc = self.scene
+        before = sc.get("paidBefore") or {}
+        sc["ownPay"] = {key: self.wallet[key] - before.get(key, 0) for key in ("cash", "materials")}
+        sc["ownEvaded"] = self.world.evaded - sc.get("evadedBefore", 0)
+        if self.scene_saved["policy"].get("resume") == "road" and sc.get("from") is not None:
+            fx, fz = sc["from"]
+            gap = math.hypot(self.x - self.jitter[0] - fx, self.z - self.jitter[1] - fz)
+            sc["phase"] = "back"
+            sc["backUntil"] = t + gap / self.move["walkSpeed"]
+            return
+        self.fight_on(t)
+
+    def fight_on(self, t):
+        """L4W2-13: the whole run's fight half: the starter melee back in hand, the mission player's
+        course and the anchor his dodges keep to, on to clearing the spot's camp and the rest of the
+        level."""
+        sc = self.scene
+        sc["fightFrom"] = t
+        sc["phase"] = "fight"
+        saved = self.scene_saved
+        self.policy = saved["policy"]
+        self.anchor = saved["anchor"]
+        self.kit = saved["kit"]
+        if self.kit is not None:
+            self.wield(self.kit["melee"])
+        else:
+            self.take_up(self.cfg["loadout"]["melee"])
+        self.mode = "road"
+        self.target = self.order.index(sc["floor"])
+        self.path = []
+
+    def take_up(self, family):
+        """L4W2-13: the whole sniper run changes weapons (the bow for R8's course, the starter melee
+        for the mission): his variant, its scales and whether it is heavy, as __init__ sets them."""
+        self.variant = variant_of(self.cfg, family)
+        self.melee = self.variant["kind"] == "melee"
+        self.hit_scale = held_scale(self.cfg, family, False)
+        self.cast_scale = held_scale(self.cfg, family, True)
+        chain = self.variant.get("chain") or [1.0]
+        self.heavy = self.variant["damage"] * (max(chain) if self.melee else 1) >= self.cfg["crowd"]["heavyHit"]
+        self.world.scale = self.hit_scale
+        self.armed["hit"][family] = self.hit_scale
+        self.combo = 0
 
     def sniper_go(self, t):
         """R8: on to the spot, arriving after the straight crossing; no shot on the way."""
@@ -8133,7 +8676,8 @@ class LevelRun(ThreatRun):
     def scene_targets(self):
         """What a scene's bow may shoot: camp A's bodies he can see (scene_sees), worked out once a
         crowd step."""
-        if self.scene.get("kind") not in ("archer", "sniper") or self.scene.get("phase") in ("gone", "travel"):
+        if (self.scene.get("kind") not in ("archer", "sniper")
+                or self.scene.get("phase") in ("gone", "travel", "walk", "back")):
             return []
         step = self.world.now // self.interval
         if self.scene.get("seenAt") != step:
@@ -8227,15 +8771,27 @@ class LevelRun(ThreatRun):
         if sc["reached"] is None and any(shape in ("lunge", "arc", "lane") for _w, _d, _k, shape in self.log):
             sc["reached"] = t
         if sc["kind"] == "sniper":
-            if sc["phase"] == "pull" and (self.first_hit or t >= SNIPER_PULL_SECONDS):
+            if sc["phase"] == "back":
+                if t >= sc["backUntil"]:
+                    self.place_scene(sc["from"][0], sc["from"][1], sc["fromY"])
+                    self.fight_on(t)
+                return
+            if sc["phase"] == "walk" and t >= sc["pullFrom"]:
+                sc["phase"] = "pull"
+            if sc["phase"] == "pull" and (self.pulled(sc["floor"]) or t >= sc["pullFrom"] + SNIPER_PULL_SECONDS):
                 self.sniper_go(t)
             elif sc["phase"] == "travel" and t >= sc["arrived"]:
                 sc["phase"] = "spot"
             elif sc["phase"] == "spot" and (t >= sc["arrived"] + SNIPER_SPOT_SECONDS or not self.residents_left(sc["floor"])
                                             or t - max(self.last_landed or 0.0, sc["arrived"]) >= self.sniper_idle()):
                 sc["lastLanded"] = self.last_landed
-                sc["minutes"] = max(self.last_landed or 0.0, sc["arrived"] + self.sniper_idle()) / 60
-                self.end("stopped", t)
+                # His own minutes, from where his course began (today's course: the run's start).
+                sc["minutes"] = (max(self.last_landed or 0.0, sc["arrived"] + self.sniper_idle())
+                                 - sc.get("t0", 0.0)) / 60
+                if self.policy.get("then") == "fight":
+                    self.end_snipe(t)
+                else:
+                    self.end("stopped", t)
             if sc["phase"] == "spot":
                 for group in self.groups:
                     if group["def"]["floor"] == sc["floor"] and group["standDown"] and group["state"] == "fight":
@@ -8471,6 +9027,7 @@ class LevelRun(ThreatRun):
 
     def clear_threats(self):
         self.pending = []
+        self.holds = []  # F1: VitalsService.ClearThreats empties the whole queue, held entries too
         self.shots = []
         self.charges = []
         self.rings = []
@@ -8560,9 +9117,11 @@ class LevelRun(ThreatRun):
         self.path = []
 
     def on_camp_clear(self, floor, t):
-        """`campClear` (L1b-17): the bonus x rewardMult, split evenly among the fighting humans."""
+        """`campClear` (L1b-17): the bonus x rewardMult, split evenly among the fighting humans. L4
+        W2: the wallet then, bonus paid (R8's whole runs compose on it)."""
         self.cleared_at[floor] = t
         self.pay_clear_bonus(floor)
+        self.wallet_at[floor] = dict(self.wallet)
         if self.stop_zone == floor:
             self.end("stopped", t)
 
@@ -8571,13 +9130,25 @@ class LevelRun(ThreatRun):
         self.end_reason = reason
         self.end_at = t
 
-    def hurt(self, t, kind, attack, push):
-        """P5 ruling 18: in a run a down does not end by itself (no get-up timer)."""
+    def hurt(self, t, kind, attack, push, at=None):
+        """P5 ruling 18: in a run a down does not end by itself (no get-up timer). G1: it began at the
+        hit's moment `at`."""
         before = len(self.downs)
-        super().hurt(t, kind, attack, push)
+        super().hurt(t, kind, attack, push, at)
         if len(self.downs) > before:
             self.down_until = math.inf
-            self.down_span = (t, math.inf)
+            self.down_span = (t if at is None else at, math.inf)
+
+    def vitals_step(self, t):
+        """VitalsService.Step in this frame (resolve), then WaveService.OnDown (P5 ruling 18): a down
+        among its decisions asks StageFlow at once, with the last tick's finding (H1: field_held with
+        no frame). The simulator runs that Step before the tick (one Heartbeat order), so an unheld
+        answer is the tick's own in this frame and is left to it; a held one ends the run here
+        ("down"), before the tick could see the field clear with his list already empty."""
+        before = len(self.downs)
+        self.resolve(t)
+        if len(self.downs) > before and self.flow != "over" and self.field_held(self.flow_input(t), t, None):
+            self.advance(t, None)
 
     def stand_up(self, t):
         """`boundary`: VitalsService.StandUp: the down ends here, full health, the get-up i-frames."""
@@ -8618,6 +9189,27 @@ class LevelRun(ThreatRun):
         if self.flow in ("fight", "breather"):
             return given["spawningDone"] and given["alive"] == 0
         return given["spawningDone"] and given["awake"] == 0
+
+    def field_held(self, given, t, delta):
+        """H1 (fix round 3), WaveService.fieldHeld: is a field that would read clear held, because a
+        decision of a fighter's has fallen due and waits for a dash claim (G1's `holds`;
+        VitalsService.HasWaiting)? The one player of a run always fights (ArenaService.IsFighting:
+        never waiting in the lobby camp, never dead: a down is not a death). `delta` = the tick's
+        frame; None = the down's advance (WaveService.OnDown, inside VitalsService.Step), which
+        keeps the last tick's finding, since the release that downed him emptied his list. The
+        tick notes what it found, and never holds a clear field longer than the claim's lapse and
+        its frame from the first tick that held it. Asked by advance(), before StageFlow decides."""
+        waits = bool(self.holds)
+        if delta is None:
+            return (waits or self.blow_waits) and self.field_clear(given)
+        self.blow_waits = waits
+        if not waits or not self.field_clear(given):
+            self.held_since = None
+            return False
+        if self.held_since is None:
+            self.held_since = t
+        lapse = self.dash_lapse if self.dash_lapse is not None else 0.0  # no rule, no lapse: nothing waits
+        return t - self.held_since <= lapse + delta
 
     def armed_index(self):
         index = self.stage if self.flow == "armed" else self.stage + 1 if self.flow == "travel" else 0
@@ -8726,8 +9318,9 @@ class LevelRun(ThreatRun):
     def breather_input(self):
         return self.sc.breather_seconds(self.tempo, self.director)
 
-    def advance(self, t):
-        """[advance] StageFlow.Advance, row for row."""
+    def advance(self, t, delta=FRAME):
+        """[advance] StageFlow.Advance, row for row. `delta` = the tick's frame, None from a down
+        (vitals_step); H1: a field held by a waiting decision (field_held) does not read clear."""
         stages = self.plan["stages"]
         if self.flow == "over":
             return
@@ -8737,6 +9330,8 @@ class LevelRun(ThreatRun):
             self.end("runCap", t)
             return
         given = self.flow_input(t)
+        if self.field_held(given, t, delta):
+            given["spawningDone"] = False  # StageFlow.FieldClear reads it first: the field does not read clear
         clear = self.field_clear(given)
         fallen = given["fallen"]
         if fallen is not None and not clear:
@@ -8960,6 +9555,8 @@ class LevelRun(ThreatRun):
                 self.entered = True
                 self.grace_moves += 1
         self.advance(t)
+        # H1: WaveService's StandsUp reads the held input; this one is unheld and the same answer,
+        # since a field the tick holds has a decision of his waiting, so he is standing.
         if self.flow != "over" and self.stands_up(self.flow_input(t)):
             # A down on a quiet road (nothing awake): WaveService's placer puts him on the safe
             # point and he gets up (never met in the gated runs; it is here so a run cannot hang).
@@ -9044,7 +9641,7 @@ class LevelRun(ThreatRun):
                 accumulator -= self.interval
                 self.crowd_step(t, self.interval)
                 self.fighters[:] = [f for f in self.fighters if f.alive]
-            self.resolve(t)
+            self.vitals_step(t)
             if self.downs and down_in is None:
                 down_in = self.where()
             self.tick(t)
@@ -9057,6 +9654,7 @@ class LevelRun(ThreatRun):
         names = {zone["id"]: zone["name"] for zone in self.zones}
         return {"end": self.end_reason, "at": self.end_at, "camps": self.camps, "zones": self.zones,
                 "clearedAt": {self.zones[f - 1]["id"]: at for f, at in self.cleared_at.items()},
+                "walletAt": {self.zones[f - 1]["id"]: dict(w) for f, w in self.wallet_at.items()},
                 "reachedAt": {self.zones[f - 1]["id"]: at for f, at in self.reached_at.items()},
                 "waves": first["waves"] if first is not None else {}, "killed": self.killed,
                 "killedIn": {self.zones[f - 1]["id"]: k for f, k in self.killed_in.items() if f is not None},
@@ -9068,6 +9666,7 @@ class LevelRun(ThreatRun):
                 "hits": len(log), "damage": sum(d for _w, d, _k, _s in log), "dodged": self.dodged,
                 "byKind": {k: sum(d for _w, d, kk, _s in log if kk == k) for k in {kk for _w, _d, kk, _s in log}},
                 "peakAlive": self.peak_alive, "placed": self.placed, "breathers": self.breathers,
+                "dashes": self.dashes, "unproven": self.unproven,
                 "summoned": self.summoned, "forgiven": self.forgiven, "firstHit": log[0][0] if log else None,
                 "wallet": dict(self.wallet), "priced": dict(self.priced), "credits": self.credits,
                 "walked": self.walked, "wave": self.wave, "graceMoves": self.grace_moves,
@@ -9111,8 +9710,8 @@ THREAT_POLICIES["cross"] = {"label": "walks the road through every camp, never f
 THREAT_POLICIES["parked"] = {"label": "stands at the start point, never moves", "parked": True}
 # L1b Wave 4 (the run's `weapon` is given by forest_report): the road archer shoots camp A from
 # Road5 outside its west gate and holds the road; the walk-out walks into A until a group wakes and
-# out of its east gate; the lose does that, then runs on along the road; the sniper shoots from
-# below A's west drop, then from the lookout ledge, never on the plateau.
+# out of its east gate; the lose does that, then runs on along the road; the sniper is R8's straight
+# course from one unreachable spot (the policy's `spot`), never on the plateau.
 THREAT_POLICIES["archer"] = {"label": "the bow from Road5 outside A's west gate, holds the road", "fight": True,
                              "react": True, "hold": True, "hunt": True, "scene": "archer", "airJump": False}
 THREAT_POLICIES["walkout"] = {"label": "walks into A, out of its east gate once a group wakes", "scene": "walkout"}
@@ -9120,7 +9719,7 @@ THREAT_POLICIES["lose"] = {"label": "the walk-out, then runs east along the road
 # Fix round R7: the lose, then back into the camp for a clear (the playtest checklist's order).
 THREAT_POLICIES["loseclear"] = dict(THREAT_POLICIES["mission"], label="the lose, then a clear of the camp it lost",
                                     scene="lose", then="clear")
-THREAT_POLICIES["sniper"] = {"label": "the bow from below A's west drop, then from the lookout ledge", "fight": True,
+THREAT_POLICIES["sniper"] = {"label": "the bow from an unreachable spot (R8's straight course)", "fight": True,
                              "hunt": True, "scene": "sniper"}
 
 
@@ -9319,15 +9918,14 @@ def camp_split(run, r, boss):
 def bow_report(cfg):
     """L1b-W3-2/4: on Forest Road at Normal and the proving gear, solo, every MISSION_SEED, the
     Broadsword alone and the Longbow alone (body aim, head aim), for the reacting player and the
-    human's reaction; and the two bosses with the Longbow, body and head aim: in the range
-    (the P4 rows' scales) and in the Raider Arena at the proving gear."""
+    human's reaction; and the two bosses with the Longbow, body and head aim, in the range (the P4
+    rows' scales). (The Raider Arena's rows went with it in L4 W1b.)"""
     ctx = level_context()
     combat_cfg = ctx["combat"]
     file = ctx["files"][FOREST_LEVEL]
     difficulty = ctx["expeditions"]["difficulties"][0]
-    level = resolve_level(file, ctx["missions"].get(file.get("mission")), combat_cfg["director"]["runCapSeconds"],
-                          difficulty)
-    layout = load_level_layout(level["layout"], combat_cfg["player"]["rescue"]["below"])
+    level = resolve_level(file, combat_cfg["director"]["runCapSeconds"])
+    layout = load_level_layout(level["layout"])
     gear = mission_gear()
     view, hp = level_view(cfg, level["difficulties"][difficulty], level["crowd"]["regenShare"], ctx["armory"], gear)
     bow = cfg["loadout"]["ranged"]
@@ -9351,43 +9949,8 @@ def bow_report(cfg):
     for set_name, name, _kind in boss_sets(cfg):
         for aim in ("body", "head"):
             bosses.append(("range", name, aim, aimed_row(cfg, env, set_name, "slay", aim, bow)))
-    arena = arena_view(cfg, ctx)
-    if arena is not None:
-        a_level, a_view, a_hp, a_plan = arena
-        for name in MISSION_BOSS_SECONDS:
-            spot = boss_spots(a_level).get(name)
-            if spot is None:
-                continue
-            set_name = f"_bow_arena_{name}"
-            a_view["dummySets"][set_name] = [{"kind": name, "behaviour": "fight", "count": 1,
-                                              "at": list(spot[1]), "spacing": 0, "respawnSeconds": 12}]
-            env_arena = camp_env(a_plan, a_hp, spot[0], a_plan["start"])
-            for aim in ("body", "head"):
-                bosses.append(("arena", name, aim, aimed_row(a_view, env_arena, set_name, "slay", aim, bow)))
     return {"gear": gear, "hp": hp, "rows": rows, "bosses": bosses,
             "damage": {k: v["damage"] for k, v in cfg["weapons"][bow]["variants"].items()}}
-
-
-def arena_view(cfg, ctx):
-    """The Raider Arena's (level, view, hp, plan) at the proving gear and the first difficulty,
-    resolved as mission_report does but with no run; None when its mission has no crowd block."""
-    combat_cfg = ctx["combat"]
-    mission = load_config(MISSIONS_DIR / MISSION_FILE)
-    if mission.get("crowd") is None:
-        return None
-    below = combat_cfg["player"]["rescue"]["below"]
-    file = next((f for f in ctx["files"].values() if f.get("mission") == mission["id"]), None)
-    if file is None:
-        file = {"version": 1, "id": mission["id"], "name": mission["name"], "layout": None, "mission": mission["id"]}
-        layout = arena_as_layout(mission["arena"], -below)
-    else:
-        layout = load_level_layout(file["layout"], below)
-    difficulty = ctx["expeditions"]["difficulties"][0]
-    level = resolve_level(file, mission, combat_cfg["director"]["runCapSeconds"], difficulty)
-    view, hp = level_view(cfg, level["difficulties"][difficulty], level["crowd"]["regenShare"], ctx["armory"],
-                          mission_gear())
-    plan = plan_level(level, layout, difficulty, combat_cfg["levels"], ctx["ranks"], cfg["crowd"]["kinds"])
-    return level, view, hp, plan
 
 
 def to_rise(s):
@@ -9399,7 +9962,7 @@ def print_bow(rep):
     print()
     print(f"THE BOW (L1b Wave 3; Forest Road, Normal, gear {gear_text(rep['gear'])}, health {rep['hp']:.0f}, solo; "
           "Longbow damage " + ", ".join(f"{k} {v}" for k, v in rep["damage"].items())
-          + "; time = the start point to the Colossus's rise, the boss excluded; per camp: seconds / hits taken / "
+          + "; time = the start point to the boss's rise, the boss excluded; per camp: seconds / hits taken / "
           "crits landed)")
     means = {}
     for row in rep["rows"]:
@@ -9411,7 +9974,7 @@ def print_bow(rep):
             fight = f"{boss[1] - boss[0]:.1f} s" if boss and boss[1] is not None else "not reached"
             print(f"    seed {s['seed']}: {s['end']} at {s['at'] / 60:.2f} min, {s['downs']} down(s); {camps}; "
                   f"to the boss {fmt(to_rise(s), 0, 1).strip()} s, {s['hits']} hits, {s['crits']} crits in all; "
-                  f"the Colossus {fight}")
+                  f"the {FOREST_BOSS} {fight}")
         times = [to_rise(s) for s in row["seeds"]]
         means[(row["who"], row["label"])] = mean_of(times) if all(t is not None for t in times) else None
     for who in ("mission", "human"):
@@ -9423,51 +9986,9 @@ def print_bow(rep):
                     if who == "mission" and label.endswith("head aim") else "")
             print(f"  {who}: {label} {fmt(bow, 0, 1).strip()} s against the Broadsword's {fmt(sword, 0, 1).strip()} s "
                   f"= {ratio}{band}")
-    for where, name, aim, b in rep["bosses"]:
-        place = "the range (P4 scales)" if where == "range" else "the Raider Arena at the proving gear"
-        print(f"  the {name} with the Longbow, {aim} aim, {place}: {boss_text(b)}; hits of the boss {b['solid']}")
-
-
-def mission_report(cfg, path=None, mission=None, careless=True):
-    """The Raider Arena: a mission's crowd block played as a level through the two adapters of
-    L1 ruling 27. Everything its P5 bands read: the hit shares, the still player in the first
-    wave, the two bosses at the mission's scales, and the whole run of the reacting player (and,
-    for information, of one who never dodges). `mission` = an already loaded mission config."""
-    import sim_combat as sc
-    ctx = level_context()
-    if mission is None:
-        mission = load_config(path or MISSIONS_DIR / MISSION_FILE)
-    if mission.get("crowd") is None:
-        return None
-    combat_cfg = ctx["combat"]
-    below = combat_cfg["player"]["rescue"]["below"]
-    file = next((f for f in ctx["files"].values() if f.get("mission") == mission["id"]), None)
-    if file is None:  # a mission no level names yet: the same adapters, on its own arena
-        file = {"version": 1, "id": mission["id"], "name": mission["name"], "layout": None, "mission": mission["id"]}
-        layout = arena_as_layout(mission["arena"], -below)
-    else:
-        layout = load_level_layout(file["layout"], below)
-    difficulty = ctx["expeditions"]["difficulties"][0]
-    level = resolve_level(file, mission, combat_cfg["director"]["runCapSeconds"], difficulty)
-    gear = mission_gear()
-    scales = level["difficulties"][difficulty]
-    view, hp = level_view(cfg, scales, level["crowd"]["regenShare"], ctx["armory"], gear)
-    plan = plan_level(level, layout, difficulty, combat_cfg["levels"], ctx["ranks"], cfg["crowd"]["kinds"])
-    hits = hit_rows(cfg, view, hp, level_kinds(view, level, ctx["ranks"][difficulty], ctx["ranks"]))
-
-    def run(key, seed):
-        return LevelRun(view, hp, ctx, level, layout, difficulty, THREAT_POLICIES[key], seed).run()
-
-    stand = [run("stand", seed) for seed in MISSION_SEEDS]
-    bosses = {}
-    for name in MISSION_BOSS_SECONDS:
-        row = boss_alone(view, plan, hp, level, name, start=plan["start"])
-        if row is not None:
-            bosses[name] = row
-    runs = [run("mission", seed) for seed in MISSION_SEEDS]
-    careless_runs = [run("rampage", seed) for seed in MISSION_SEEDS] if careless else []
-    return {"mission": mission, "level": level, "layout": layout, "view": view, "gear": gear, "hp": hp, "hits": hits,
-            "stand": stand, "bosses": bosses, "runs": runs, "careless": careless_runs, "combat": combat_cfg, "sc": sc}
+    for _where, name, aim, b in rep["bosses"]:
+        print(f"  the {name} with the Longbow, {aim} aim, the range (P4 scales): {boss_text(b)}; hits of the boss "
+              f"{b['solid']}")
 
 
 # L2 W3 (docs/prompts/l2-w3-contract.md section 9): the crossing to the island shrine. A player who
@@ -9626,9 +10147,8 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
     if file is None:
         return None
     combat_cfg = ctx["combat"]
-    level = resolve_level(file, ctx["missions"].get(file.get("mission")), combat_cfg["director"]["runCapSeconds"],
-                          ctx["expeditions"]["difficulties"][0])
-    layout = load_level_layout(level["layout"], combat_cfg["player"]["rescue"]["below"])
+    level = resolve_level(file, combat_cfg["director"]["runCapSeconds"])
+    layout = load_level_layout(level["layout"])
     problems = level_problems(level, layout, combat_cfg["levels"], cfg["crowd"]["kinds"], ctx["ranks"],
                               cfg["crowd"]["maxAlive"], cfg["weapons"], set(cfg["loadout"].values())) + cb_problems(
                                   combat_cfg.get("camps"))
@@ -9837,127 +10357,9 @@ def forest_report(cfg, careless=True, level_id=FOREST_LEVEL, human=True, ranged=
     return report
 
 
-def print_run_rows(runs):
-    print("    seed  end      clear    down  hits  damage  peak alive  breathers  kills")
-    for seed, r in zip(MISSION_SEEDS, runs):
-        kills = sum(r["killed"].values())
-        print(f"    {seed:>4}  {r['end']:<7}  {r['at'] / 60:5.2f} min  {r['downs']:>4}  {r['hits']:>4}  {r['damage']:>6.0f}  "
-              f"{r['peakAlive']:>10}  {r['breathers']:>7.1f} s  {kills:>5}")
-
-
 def wallet_text(r):
     w = r["wallet"]
     return f"{w['cash']:,} cash, {w['materials']} mat, {w['valor']} Valor"
-
-
-def print_mission(cfg, report):
-    if report is None:
-        print()
-        print("RAIDER ARENA: no crowd block, nothing to measure")
-        return
-    mission, view, level = report["mission"], report["view"], report["level"]
-    scales_of = next(iter(level["difficulties"].values()))
-    scales = {slot: held_scale(view, family, False) for slot, family in zip(("melee", "ranged"), view["_held"])}
-    print()
-    print(f"RAIDER ARENA (P5 and L1 ruling 27; {mission['name']} as a level of one camp, arena {mission['arena']}, gear "
-          f"{report['gear']['melee']}/{report['gear']['ranged']}, health {report['hp']:.0f}; hpScale "
-          f"{scales_of['hpScale']:g}, plateScale {scales_of['plateScale']:g}, damageScale {scales_of['damageScale']:g}, "
-          f"regenShare {level['crowd']['regenShare']:g} = {view['player']['regenPerSecond']:.1f}/s; his HP-loss scale "
-          f"melee x{scales['melee']:g}, ranged x{scales['ranged']:g})")
-    print("  enemy hits at the arena's scale:")
-    for h in report["hits"]:
-        print(f"    {h['kind']:<9} {h['shape']:<6} {h['base']:>3} -> {h['damage']:>3} = {100 * h['share']:4.1f}% of the bar")
-    print("  stands still in wave 1 (from the gates' closing, which is the wave's start): first hit "
-          + ", ".join(fmt(r["hitAfterClose"], 0, 1).strip() for r in report["stand"]) + " s; down at "
-          + ", ".join(fmt(r["downAfterClose"], 0, 1).strip() for r in report["stand"]) + " s")
-    for name, row in report["bosses"].items():
-        lo, hi = MISSION_BOSS_SECONDS[name]
-        span = row["killSpan"]
-        print(f"  {row['weapon']} against the {name} alone at its boss.at, from the pad: kill "
-              f"{fmt(row['kill'], 0, 1).strip()} s ({span[0]:.1f}-{span[1]:.1f}) " if span else
-              f"  {row['weapon']} against the {name}: never killed ", end="")
-        print(f"[band {lo:.0f}-{hi:.0f}], hits of the boss {row['solid']}, lunges {row['lunges']}, "
-              f"summoned {row['summoned']:.1f}, damage taken {row['damage']:.0f}")
-    print("  the whole run, reacting player, default melee only (per seed; the clock starts at the start point, "
-          f"{load_config(COMBAT_PATH)['levels']['gateSeconds']:g} s before the gates close):")
-    print_run_rows(report["runs"])
-    forgiven = sum(r["forgiven"] for r in report["runs"] + report["careless"])
-    if forgiven:
-        print(f"  downs on a field already clear, stood up at the boundary (a clear field wins): {forgiven}")
-    first = report["runs"][0]
-    print(f"  waves of seed {MISSION_SEEDS[0]}: wave  bodies  start  spawned by  clear  length  kills  merged")
-    for wave, w in sorted(first["waves"].items()):
-        clear = w["clear"]
-        print(f"    {wave:>4}  {w['bodies'] + (1 if w['boss'] else 0):>6}  {w['start']:6.1f}  "
-              f"{fmt(w['spawnEnd'], 0, 1):>9}  {fmt(clear, 0, 1):>6}  "
-              f"{fmt(clear - w['start'] if clear is not None else None, 0, 1):>6}  {w['kills']:>5}  "
-              f"{'yes' if w['merged'] else ''}")
-    for name, (spawned, fell) in sorted(first["bosses"].items()):
-        print(f"    the {name} in the run: {fmt(fell - spawned if fell is not None else None, 0, 1).strip()} s "
-              f"from its rise to its fall")
-    if report["careless"]:
-        print("  the same player who never dodges (information): "
-              + "; ".join(f"seed {seed} {r['end']} in wave {r['wave']} at {r['at'] / 60:.2f} min "
-                          f"({r['hits']} hits; " + ", ".join(f"{k} {v:.0f}" for k, v in sorted(r["byKind"].items()))
-                          + f"; kept {r['wallet']['cash']:,} cash)"
-                          for seed, r in zip(MISSION_SEEDS, report["careless"])))
-    killed = {}
-    for r in report["runs"]:
-        for kind, n in r["killed"].items():
-            killed[kind] = killed.get(kind, 0) + n / len(report["runs"])
-    print("  kills per run (mean): " + ", ".join(f"{k} {v:.1f}" for k, v in sorted(killed.items())))
-    print("  what the runs paid (every kill as it falls, L1b-15): "
-          + "; ".join(f"{r['wallet']['cash']:,} cash, {r['wallet']['materials']} {mission['material']}, "
-                      f"{r['wallet']['valor']} Valor" for r in report["runs"])
-          + " (sim_combat.py --check bands the configured run)")
-
-
-def check_mission(cfg, report, expect):
-    if report is None:
-        return
-    mission, view, level = report["mission"], report["view"], report["level"]
-    crowd = level["crowd"]
-    hp = report["hp"]
-    worst = max(report["hits"], key=lambda h: h["share"])
-    expect(worst["share"] <= HIT_SHARE_MAX,
-           f"arena: no enemy hit over {HIT_SHARE_MAX:.0%} of the bar ({hp:.0f}): the worst is the {worst['kind']}'s "
-           f"{worst['shape']}, {worst['damage']} = {worst['share']:.1%}")
-    regen = crowd["regenShare"]
-    expect(abs(regen / MISSION_REGEN_SHARE - 1) <= MISSION_REGEN_TOLERANCE,
-           f"arena: regenShare {regen:g} within {MISSION_REGEN_TOLERANCE:.0%} of the range's 10/130 = "
-           f"{MISSION_REGEN_SHARE:.4f} ({view['player']['regenPerSecond']:.1f}/s on {hp:.0f})")
-    lo, hi = MISSION_STAND_DOWN_SECONDS
-    downs = [r["downAfterClose"] for r in report["stand"]]
-    expect(all(d is not None and lo <= d <= hi for d in downs),
-           f"arena: standing still in wave 1, down in {lo:.0f}-{hi:.0f} s from the wave's start, "
-           f"every seed: " + ", ".join(fmt(d, 0, 1).strip() for d in downs))
-    for name, (lo, hi) in MISSION_BOSS_SECONDS.items():
-        row = report["bosses"].get(name)
-        if row is None:
-            expect(False, f"arena: the {name} is fought in the arena")
-            continue
-        span = row["killSpan"]
-        expect(span is not None and lo <= span[0] and span[1] <= hi,
-               f"arena: the {name} with the {row['weapon']}, every seed, {lo:.0f}-{hi:.0f} s: "
-               + (f"{span[0]:.1f}-{span[1]:.1f} s" if span else "never killed"))
-        expect(row["solid"] == 0 and row["lunges"] == 0,
-               f"arena: the {name}: the reacting player takes no hit ({row['solid']} of the boss, "
-               f"{row['lunges']} lunges)")
-    lo, hi = MISSION_CLEAR_SECONDS
-    for seed, r in zip(MISSION_SEEDS, report["runs"]):
-        expect(r["end"] == "cleared" and lo <= r["at"] <= hi,
-               f"arena: seed {seed}, the reacting player clears all {mission['waves']} waves in "
-               f"{lo / 60:.0f}-{hi / 60:.0f} min: {r['end']} at {r['at'] / 60:.2f} min, {r['downs']} down(s)")
-    alive = max(r["peakAlive"] for r in report["runs"])
-    expect(alive <= cfg["crowd"]["maxAlive"] and crowd["maxAlive"] <= cfg["crowd"]["maxAlive"],
-           f"arena: maxAlive {crowd['maxAlive']} <= the crowd's {cfg['crowd']['maxAlive']} (peak alive {alive})")
-    # L1b-15: every kill is paid as it falls, so a failed run keeps every kill it made.
-    every = report["runs"] + report["careless"] + report["stand"]
-    paid = all(r["wallet"] == {k: luau_round(v) for k, v in r["priced"].items()} for r in every)
-    kept = [r for r in report["careless"] if r["end"] != "cleared"]
-    expect(paid and all(r["wallet"]["cash"] > 0 for r in kept),
-           f"arena: every kill is paid as it falls (L1b-15): each of {len(every)} runs was paid exactly what its kills "
-           f"pay, and each failed run kept its kills: " + ", ".join(f"{r['end']} {r['wallet']['cash']:,}" for r in kept))
 
 
 def boss_text(row):
@@ -10192,7 +10594,8 @@ def print_snipers(snipers, mission, tag):
     """R8's table: every spot, every seed, against the mission player on the same seed."""
     if not snipers:
         return
-    print(f"    R8 snipers ({tag}, a straight course from every unreachable spot; cash / Timber a minute against the "
+    print(f"    R8's burst ({tag}, ungated: R8 is judged over whole runs by --r8, L4W2-13; today's straight course "
+          f"from every unreachable spot, his own pay over his own minutes; cash / Timber a minute against the "
           f"mission's on the same seed):")
     for spot, runs in snipers.items():
         owners = f" (owners of {SNIPER_SPOT_NEEDS[spot]} only)" if spot in SNIPER_SPOT_NEEDS else ""
@@ -10233,7 +10636,7 @@ def cash_rate(runs):
     return mean_of([pay_rate(r)[0] for r in runs]) if runs and all(r["end"] == "cleared" for r in runs) else None
 
 
-def colossus_seconds(runs):
+def boss_seconds(runs):
     """The mean of the boss's fight inside each run (None unless every run killed it)."""
     fights = [r["bosses"].get(FOREST_BOSS) for r in runs]
     if not fights or any(f is None or f[1] is None for f in fights):
@@ -10395,7 +10798,7 @@ def check_cave_runs(cfg, report, expect):
             ftag = f"forest, {names.get(difficulty, difficulty)} at gear {gear_text(fire['gear'])} (the Flamethrower's first run)"
             fname = cfg["weapons"][flame]["name"]
             mine, full = cash_rate(pair), cash_rate(bow)
-            boss, base = colossus_seconds(pair), colossus_seconds(bow)
+            boss, base = boss_seconds(pair), boss_seconds(bow)
             yard = mean_of([r["at"] for r in bow]) if bow and all(r["end"] == "cleared" for r in bow) else None
             lo, hi = ((s * yard for s in PAIR_CLEAR_SHARE) if yard is not None else (math.inf, -math.inf))
             expect(yard is not None and all(r["end"] == "cleared" and lo <= r["at"] <= hi and r["downs"] == 0 for r in pair),
@@ -10419,7 +10822,7 @@ def check_cave_runs(cfg, report, expect):
             # R2: the Frost Hammer is a Castle weapon arriving at T5 (lever-only in the Forest), so its
             # Forest balance rows are reported, not gated, until the Castle. What it fights with is gated.
             ice_pair, bow = ice["runs"], row.get("pairBow") or []
-            mine, boss, base, yard = cash_rate(ice_pair), colossus_seconds(ice_pair), colossus_seconds(bow), cash_rate(bow)
+            mine, boss, base, yard = cash_rate(ice_pair), boss_seconds(ice_pair), boss_seconds(bow), cash_rate(bow)
             fname = cfg["weapons"][report["frost"]]["name"]
             print(f"  note  {tag}: the {fname} (T{ice['tier']}, bar {ice['hp']:.0f}) + Longbow pair, reported until the "
                   f"Castle (R2): clears {clears(ice_pair)}; cash a minute "
@@ -10450,12 +10853,11 @@ def check_cave_runs(cfg, report, expect):
         sniper_gear = row["gear"] if row.get("cutSniper") else (row.get("under") or {}).get("gear")
         fire_rows = [spot for spot in snipers if " + " in spot]  # the courses that cast the fire family's ability
         for spot, runs in snipers.items():
-            good = all(sniper_rate(r)[0] < pay_rate(m)[0] and sniper_rate(r)[1] < pay_rate(m)[1] and r["evaded"] == 0
-                       for r, m in zip(runs, mission))
-            expect(good, f"{stag}: with the tunnel open, the sniper from {spot} earns less cash and less Timber a minute "
-                   f"than the mission player on the same seeds, every hit landing (R8, L2-37): " + "; ".join(
-                       f"seed {seed} {sniper_rate(r)[0]:,.0f} / {sniper_rate(r)[1]:.1f} against {pay_rate(m)[0]:,.0f} / "
-                       f"{pay_rate(m)[1]:.1f}" for seed, r, m in zip(MISSION_SEEDS, runs, mission)))
+            # The rate (R8, L2-37) is judged over whole runs by --r8 since L4 W2 (L4W2-13); here
+            # the burst, reported, and the fire courses' tiers.
+            print(f"  note  {stag}: with the tunnel open, the burst from {spot} (ungated; R8 is --r8): " + "; ".join(
+                f"seed {seed} {sniper_rate(r)[0]:,.0f} / {sniper_rate(r)[1]:.1f} against {pay_rate(m)[0]:,.0f} / "
+                f"{pay_rate(m)[1]:.1f}" for seed, r, m in zip(MISSION_SEEDS, runs, mission)))
             if spot in fire_rows:
                 armed(stag, f"the sniper from {spot}", sniper_gear, runs, (sword, longbow), breath=flame)
         ability = cfg["weapons"][flame]["ability"] if flame else {}
@@ -10501,6 +10903,7 @@ def check_forest(cfg, report, expect):
         return
     check_cave_runs(cfg, report, expect)
     check_crossing(cfg, report, expect)
+    expect(*boss_clear_verdict(cfg, boss_clear_probe(cfg, report)))  # H1 (fix round 3)
     level, ctx = report["level"], report["ctx"]
     names = ctx["expeditions"]["difficultyNames"]
     # L2-20: every reacting policy says it has one jump, in so many words.
@@ -10673,7 +11076,7 @@ def check_forest(cfg, report, expect):
                    + "; ".join(run_text(seed, r) for seed, r in zip(MISSION_SEEDS, row["careless"])))
         if below is not None:
             # Clearly beyond the gear below: he goes down (or meets the cap), or takes this many
-            # times as long as his slowest clear at the recommended gear; the Colossus alone is
+            # times as long as his slowest clear at the recommended gear; the boss alone is
             # not killed inside FOREST_BELOW_BOSS seconds.
             slowest = max((r["at"] for r in human if r["end"] == "cleared"), default=None)
             times = HUMAN_BELOW_SLOWER[difficulty]
@@ -10773,7 +11176,7 @@ def check_first_run(ctx, level, row, tag, gear, expect):
            + ", ".join(str(v) for v in valor) + f" Valor against a price of {price}")
     import check_levels as cl
 
-    shape = load_level_layout(level["layout"], 0) or {}
+    shape = load_level_layout(level["layout"]) or {}
     keys = {s["id"]: s["needs"] for s in shape.get("secrets") or []}
     # L2-37: an element key (fire) costs what the ability its chain starts from costs.
     chain, _families = cl.key_chain(level, shape, ctx["expeditions"], load_config(CONFIG_PATH)["weapons"])
@@ -10855,45 +11258,336 @@ def check_scenes(cfg, row, tag, expect):
         expect(good, f"{tag}: the lose: every group of A that followed him onto the road turns home with its farthest body {lo:g}-{hi:g} studs past "
                f"A's east edge along the road, and is back at rest, healed, within {LOSE_REST_SECONDS:g} s: "
                + "; ".join(told))
-    # R8: the sniper must not pay. A straight course from every unreachable spot earns less cash and
-    # less Timber a minute than the mission player on the same seed, on Normal and on Hard, both at
-    # the proving gear; and every hit of his lands. One band per spot (R8's stop rule names one).
-    under = row["under"] or {}
-    snipers, mission = (row["sniper"], row["runs"]) if row["sniper"] else (under.get("sniper") or {}, under.get("runs"))
-    known = SNIPER_KNOWN_LIMIT_L4.get("normal" if row["sniper"] else SNIPER_HARD, ())
-    r8_gate(tag, "at the proving gear", snipers, mission, known, expect)
-    # L3-26: the same with only the bow upgraded (sword T1, bow SNIPER_BOW_TIER), against the
-    # mission player at that gear, on Normal and on Hard; the same known limit on Normal.
-    up = row.get("bowUp")
-    if up is not None:
-        r8_gate(tag, f"at gear {gear_text(up['gear'])} (only the bow upgraded, L3-26)", up["sniper"], up["runs"], known,
-                expect)
+    # R8 (the sniper must not pay) is judged over whole runs since L4 W2 (L4W2-13): `--r8`, r8_check.
+    # This table is today's course on MISSION_SEEDS, its own pay over its own minutes: the burst,
+    # printed and not gated.
 
 
-def r8_gate(tag, where, snipers, mission, known, expect):
-    """R8's gate on one table: every spot outside `known` earns less cash and less Timber a minute
-    than the mission player on the same seeds, and every hit lands; a known spot is reported and
-    gated on its hits landing only."""
-    for spot, runs in (snipers or {}).items():
-        told = []
-        good = landed = True
-        for seed, r, m in zip(MISSION_SEEDS, runs, mission):
-            cash, timber = sniper_rate(r)
-            mine_cash, mine_timber = pay_rate(m)
-            good = good and cash < mine_cash and timber < mine_timber
-            landed = landed and r["evaded"] == 0
-            told.append(f"seed {seed} {cash:,.0f} / {timber:.1f} against {mine_cash:,.0f} / {mine_timber:.1f}"
-                        + ("" if r["evaded"] == 0 else f", {r['evaded']} hit(s) of his blocked"))
-        if spot in known:
-            ratio = max(sniper_rate(r)[0] / max(pay_rate(m)[0], 1) for r, m in zip(runs, mission))
-            owners = f", owners of {SNIPER_SPOT_NEEDS[spot]} only (L2-5)" if spot in SNIPER_SPOT_NEEDS else ""
-            print(f"  note  {tag} {where}: the sniper from {spot}{owners}, known limit, L4 (Ben's ruling; "
-                  f"reported, not gated; up to x{ratio:.2f} the mission's cash a minute): " + "; ".join(told))
-            expect(landed, f"{tag} {where}: the sniper from {spot} (known limit, L4): every hit lands")
-            continue
-        expect(good and landed, f"{tag} {where}: the sniper from {spot} earns less cash and less Timber a minute than "
-               f"the mission player on the same seeds (R8; his minutes to his last landed hit, at least his arrival "
-               f"+ {SNIPER_IDLE_SECONDS:g} s), every hit lands: " + "; ".join(told))
+# ---------------------------------------------------------------------------------------------
+# R8 judged fairly (L4 W2: L4W2-13, MISSIONS_DESIGN 27.5, docs/prompts/l4-w2-contract.md section 6).
+# Ben's rule stands: no spot may out-earn fighting, and he said how it is judged: "a spot is compared
+# over a whole run (shoot what you can from it, then fight the rest) against fighting it all with the
+# same gear". The sniper's whole run: the mission player's own course from the level's start to where
+# he would engage the spot's camp, R8's straight course from there (the walk to the pull point and the
+# crossing to the spot at walk speed, the bow until nothing lands for SNIPER_IDLE_SECONDS:
+# LevelRun.begin_snipe), then the mission to the level's end (end_snipe) from the road where he turned
+# off it (R8_RESUME), fighting as R8_FIGHT says. A run's rate is its whole pay over its whole minutes
+# (a down: to the down). It is held to the player who fights it all with the same gear: the pair
+# player, sword and bow, each swing with the one that reaches (the lead's ruling on Ben's words,
+# 2026-10-22), at the same gear, difficulty and seeds R8_SEEDS. A spot fails when its mean cash a
+# minute or its mean Timber a minute is above his; the seeds whose run out-earns his are named, and
+# every hit from the spot must land. Since the W2 fix round (K6) the sniper fights with that same
+# pair before and after the spot, so the two runs differ only by the spot. The runs of a sniper who
+# fights with the sword alone (R8_PRINTED) are printed beside the gate, not gated, twice: against the
+# mission player with the sword alone (L3-26's comparison, which reads Road2 and Road3 on Hard with
+# the bow at T4 about 1% over) and against the pair player (the gate as first built, which mostly
+# measured the weapon gap). Scope: the four tables (Normal and SNIPER_HARD, at the proving gear and
+# with only the bow at SNIPER_BOW_TIER), every listed spot, the frozen layout's and, at the proving
+# gear, the open tunnel's with the fire family's courses (L2-37, d-m4).
+# The gate simulates every whole run to its end (the lead's ruling). `--r8-compose` is a quicker look
+# (R8_COMPOSE): each sniper run simulated to the clear of its spot's camp, then the run of the player
+# who fights as he does, on that seed, from his clear of the same camp to his end (time and pay). It
+# is not the gate: on Hard with the bow at T4 it read Road3 x1.000 of the sword-alone player where the
+# whole runs read x0.984 (docs/BALANCE.md "L4 W2: R8 judged fairly"). A player who did not clear the
+# camp has no such half: that seed's sniper run is simulated whole either way.
+R8_SEEDS = tuple(range(1, 31))
+R8_COMPOSE = False
+# Where the fight half begins (the lead's ruling): back on the road where he turned off it, where the
+# mission player engages the camp, after the straight walk back. A spot that shoots nothing is not
+# sniping: from the spot itself (`--r8-resume spot`, the contract's first text) the four spots past camp
+# B's far end read 1.5-3.7% over the sword-alone player on Hard though nothing is ever shot from them (on
+# all 30 seeds), because the straight crossing puts him at camp B's far end, where the mission player on
+# Hard at T1 clears it with fewer leashes than from its entry: the fight's starting place, not the spot.
+R8_RESUME = "road"
+# How the gate's sniper fights on the way to the spot and after it: "pair", sword and bow as the player
+# he is held to, so both runs are alike but the spot (the W2 review's M1, the lead's ruling K6: "against
+# fighting it all with the same gear"). It passes with margins of 1.4-5.8% (Hard T1/T1 Road3 x0.986, Hard
+# bow T4 Road3 x0.977, Normal T1/T1 CaveExit x0.965, Normal bow T4 Road4 x0.942), guarded by
+# check_levels_mutants' "K6: R8's sniper paid 3% more over a whole run". "sword" (`--r8-fight sword`), the
+# starter melee alone, was the gate as first built: against the pair player it read x0.41-0.84, a gap
+# that a spot paying up to 1.6x more would have hidden.
+R8_FIGHT = "pair"
+# The other ways of fighting run beside the gate and printed, not gated (the lead's K6); `--r8-gate-only`
+# runs the gate's alone (about half the time; the verdict is the same).
+R8_PRINTED = ("sword",)
+R8_TABLES = ("normal", "normal-bow", "hard", "hard-bow")
+THREAT_POLICIES["sniperFight"] = dict(THREAT_POLICIES["mission"],
+                                      label="the mission, R8's course from the spot, then the mission (L4W2-13)")
+R8_PAIR_LABEL = "the pair player (sword and bow)"
+_R8_CACHE = {}
+
+
+def _r8_context(config_path):
+    """A worker's (or the serial run's) Forest Road, built once: the config, the level, its layouts
+    (the main one, the frozen one, the open tunnel's with the main route) and the views by gear."""
+    found = _R8_CACHE.get(config_path)
+    if found is None:
+        cfg = load_config(config_path)
+        ctx = level_context()
+        combat_cfg = ctx["combat"]
+        level = resolve_level(ctx["files"][FOREST_LEVEL], combat_cfg["director"]["runCapSeconds"])
+        layout = load_level_layout(level["layout"])
+        cut = shortcut_layout(layout)
+        frozen = frozen_layout(layout, (combat_cfg["levels"].get("react") or {}).get("ice"))
+        found = {"cfg": cfg, "ctx": ctx, "level": level, "views": {},
+                 "layouts": {"main": layout, "frozen": frozen,
+                             "snipe": {**cut, "route": layout["route"]} if cut is not None else None}}
+        _R8_CACHE[config_path] = found
+    return found
+
+
+def _r8_task(task):
+    """One run of R8's gate, in a worker or in order: the mission player's whole run (`course`
+    None), the pair player's (`course` "pair": sword and bow, reported) or a whole sniper run,
+    trimmed to what the gate and its tables read."""
+    config_path, difficulty, gear, seed, course = task
+    c = _r8_context(config_path)
+    cfg, ctx, level = c["cfg"], c["ctx"], c["level"]
+    if (difficulty, gear) not in c["views"]:
+        c["views"][(difficulty, gear)] = level_view(cfg, level["difficulties"][difficulty], level["crowd"]["regenShare"],
+                                                    ctx["armory"], {"melee": gear[0], "ranged": gear[1]})
+    view, hp = c["views"][(difficulty, gear)]
+    if course is None or course == "pair":
+        policy = (THREAT_POLICIES["mission"] if course is None else
+                  dict(THREAT_POLICIES["mission"], pair=(cfg["loadout"]["melee"], cfg["loadout"]["ranged"])))
+        r = LevelRun(view, hp, ctx, level, c["layouts"]["main"], difficulty, policy, seed).run()
+        return {"end": r["end"], "at": r["at"], "wallet": r["wallet"], "clearedAt": r["clearedAt"],
+                "walletAt": r["walletAt"], "downs": r["downs"], "evaded": r["evaded"]}
+    policy = dict(THREAT_POLICIES["sniperFight"], snipe=course["spot"], bow=cfg["loadout"]["ranged"],
+                  breath=course.get("breath"), resume=course.get("resume"))
+    if course.get("fight") == "pair":
+        policy["pair"] = (cfg["loadout"]["melee"], cfg["loadout"]["ranged"])
+    run = LevelRun(view, hp, ctx, level, c["layouts"][course["layout"]], difficulty, policy, seed)
+    if course.get("stopZone") is not None:
+        run.stop_zone = next(z["floor"] for z in run.zones if z["id"] == course["stopZone"])
+    r = run.run()
+    sc = r["scene"]
+    t0 = sc.get("t0")
+    if "ownPay" in sc or t0 is None:
+        own, minutes, evaded = sc.get("ownPay"), sc.get("minutes"), sc.get("ownEvaded", 0)
+    else:
+        # The run ended on his course (his camp cleared from the spot, or a down).
+        before = sc.get("paidBefore") or {}
+        own = {key: r["wallet"][key] - before.get(key, 0) for key in ("cash", "materials")}
+        minutes, evaded = (r["at"] - t0) / 60, r["evaded"] - sc.get("evadedBefore", 0)
+    return {"end": r["end"], "at": r["at"], "wallet": r["wallet"], "downs": r["downs"], "evaded": r["evaded"],
+            "sniped": t0 is not None, "t0": t0, "ownPay": own, "ownMinutes": minutes, "ownEvaded": evaded,
+            "fightFrom": sc.get("fightFrom"), "fromSpot": sc.get("pulledFrom") is None,
+            "stoodDown": sc.get("stoodDown"), "kills": sum(r["killed"].values()), "hits": r["hits"],
+            "armed": r["armed"]}
+
+
+def r8_poolable():
+    """Worker processes import this file by its module's name. A copy run from memory (the SIM_CASES
+    of tools/check_levels_mutants.py) is not that file, so its runs stay in order, in its own code."""
+    module = sys.modules.get(_r8_task.__module__)
+    return getattr(module, "_r8_task", None) is _r8_task and getattr(module, "__file__", None) is not None
+
+
+def r8_map(tasks, jobs):
+    """Every task through _r8_task: in `jobs` worker processes when it can, else in order."""
+    if jobs > 1 and len(tasks) > 1 and r8_poolable():
+        import concurrent.futures
+
+        with concurrent.futures.ProcessPoolExecutor(max_workers=jobs) as pool:
+            return list(pool.map(_r8_task, tasks, chunksize=2))
+    return [_r8_task(task) for task in tasks]
+
+
+def r8_rate(run):
+    """L4W2-13: what a whole run paid a minute (cash, Timber): its whole pay over its whole minutes
+    (a down: to the down)."""
+    minutes = run["at"] / 60 if run["at"] else math.inf
+    return run["wallet"]["cash"] / minutes, run["wallet"]["materials"] / minutes
+
+
+def r8_burst(run):
+    """The burst (printed, not gated): what his course from the spot paid over its own minutes."""
+    minutes = run["ownMinutes"] or math.inf
+    own = run["ownPay"] or {"cash": 0, "materials": 0}
+    return own["cash"] / minutes, own["materials"] / minutes
+
+
+def r8_whole(course, mission, zone, compose):
+    """The whole run R8 rates: the course as simulated, and when it stopped at its camp's clear
+    (R8_COMPOSE), the mission player's own run after his clear of that camp. It carries his course's
+    own pay and minutes too (the burst)."""
+    own = {"ownMinutes": course["ownMinutes"], "ownPay": course["ownPay"] or {"cash": 0, "materials": 0},
+           "fightFrom": course["fightFrom"]}
+    if not compose or course["end"] != "stopped" or zone not in (mission.get("walletAt") or {}):
+        return {"at": course["at"], "wallet": course["wallet"], "end": course["end"], "composed": False, **own}
+    after = mission["at"] - mission["clearedAt"][zone]
+    wallet = {key: course["wallet"][key] + mission["wallet"][key] - mission["walletAt"][zone][key]
+              for key in ("cash", "materials")}
+    return {"at": course["at"] + after, "wallet": wallet, "end": mission["end"], "composed": True, **own}
+
+
+def r8_courses(report, cfg, with_cut):
+    """A table's courses: (key, layout, spot, fire family): every listed spot on the main layout,
+    the frozen layout's, and with `with_cut` the open tunnel's on its layout with the main route,
+    each also carrying the fire family (and from its nearest point when that differs)."""
+    found = [(spot["id"], "main", spot, None) for spot in report["spots"]]
+    found += [(spot["id"], "frozen", spot, None) for spot in report["iceSpots"]]
+    flame = report.get("flame")
+    if with_cut and report.get("cut") is not None:
+        for spot in report["cutSpots"]:
+            found.append((spot["id"], "snipe", spot, None))
+            if flame is None:
+                continue
+            ability = cfg["weapons"][flame]["ability"]["name"]
+            found.append((f"{spot['id']} + {ability}", "snipe", spot, flame))
+            if spot.get("near") is not None and tuple(spot["near"]) != tuple(spot["at"]):
+                found.append((f"{spot['id']} + {ability}, nearest point", "snipe", dict(spot, at=spot["near"]), flame))
+    return found
+
+
+def r8_report(cfg, config_path, jobs, tables=R8_TABLES, spot_filter=None, seeds=R8_SEEDS, compose=R8_COMPOSE,
+              resume=R8_RESUME, fight=R8_FIGHT, printed=R8_PRINTED):
+    """R8 over whole runs, every table: the players' runs first (the pair player, the gate's, and the
+    mission player with the sword alone when a sniper who fights so is run; each seed's clear of every
+    camp is where a composed sniper run stops), then every course on every seed, for the gate's way of
+    fighting (`fight`) and for each printed one (`printed`)."""
+    ctx = level_context()
+    combat_cfg = ctx["combat"]
+    level = resolve_level(ctx["files"][FOREST_LEVEL], combat_cfg["director"]["runCapSeconds"])
+    layout = load_level_layout(level["layout"])
+    report = {"spots": sniper_spots_of(level, layout, combat_cfg, cfg)}
+    shut = {spot["id"] for spot in report["spots"]}
+    cut = shortcut_layout(layout)
+    report["cut"] = cut
+    report["cutSpots"] = ([spot for spot in sniper_spots_of(level, cut, combat_cfg, cfg) if spot["id"] not in shut]
+                          if cut is not None else [])
+    frozen = frozen_layout(layout, (combat_cfg["levels"].get("react") or {}).get("ice"))
+    report["iceSpots"] = ([spot for spot in sniper_spots_of(level, frozen, combat_cfg, cfg) if spot["id"] not in shut]
+                          if frozen is not layout else [])
+    report["flame"] = next((f for f, w in cfg["weapons"].items() if w.get("element") == "fire"), None)
+    proving = mission_gear()
+    first = ctx["expeditions"]["difficulties"][0]
+    plan = []
+    for name in tables:
+        difficulty = first if name.startswith("normal") else SNIPER_HARD
+        bow = name.endswith("-bow")
+        gear = (proving["melee"], SNIPER_BOW_TIER if bow else proving["ranged"])
+        courses = [c for c in r8_courses(report, cfg, not bow) if spot_filter is None or c[0] == spot_filter]
+        names = ctx["expeditions"]["difficultyNames"]
+        where = ("only the bow upgraded, L3-26" if bow else "the proving gear")
+        plan.append({"name": name, "difficulty": difficulty, "gear": gear, "courses": courses, "runs": {},
+                     "tag": f"forest, {names.get(difficulty, difficulty)} at gear {gear[0]}/{gear[1]} ({where})"})
+    fights = (fight,) + tuple(way for way in printed if way != fight)
+    # The pair player (the gate's), and the mission player with the sword alone when a sniper fights so
+    # (printed): table["pairs"], table["missions"].
+    players = ("pair",) + ((None,) if "sword" in fights else ())
+    missions = r8_map([(config_path, t["difficulty"], t["gear"], seed, who) for who in players for t in plan
+                       for seed in seeds], jobs)
+    block = len(plan) * len(seeds)
+    for k, who in enumerate(players):
+        for index, table in enumerate(plan):
+            at = k * block + index * len(seeds)
+            table["pairs" if who == "pair" else "missions"] = missions[at:at + len(seeds)]
+    tasks = []
+    for way in fights:
+        for table in plan:
+            # A composed run ends as the player who fights as he does.
+            like = table["pairs"] if way == "pair" else table["missions"]
+            for key, where, spot, flame in table["courses"]:
+                for seed, mission in zip(seeds, like):
+                    stop = (spot["camp"] if compose and spot["camp"] in (mission.get("walletAt") or {})
+                            else None)
+                    tasks.append((config_path, table["difficulty"], table["gear"], seed,
+                                  {"spot": spot, "layout": where, "breath": flame, "stopZone": stop,
+                                   "resume": resume, "fight": way}))
+    done = iter(r8_map(tasks, jobs))
+    for way in fights:
+        for table in plan:
+            like = table["pairs"] if way == "pair" else table["missions"]
+            table["runs"][way] = {}
+            for key, _where, spot, _flame in table["courses"]:
+                courses = [next(done) for _ in seeds]
+                table["runs"][way][key] = {"camp": spot["camp"], "courses": courses,
+                                           "whole": [r8_whole(c, m, spot["camp"], compose)
+                                                     for c, m in zip(courses, like)]}
+    return {"tables": plan, "seeds": seeds, "compose": compose, "jobs": jobs, "resume": resume, "fight": fight,
+            "fights": fights}
+
+
+def r8_rows(runs, against, seeds):
+    """One spot against one player's runs: (mean cash, mean Timber a minute of the whole sniper runs,
+    his means, the seeds out-earning him as text)."""
+    whole = [r8_rate(w) for w in runs["whole"]]
+    theirs = [pay_rate(m) for m in against]
+    out = [f"seed {seed} {w[0]:,.0f} / {w[1]:.1f} against {m[0]:,.0f} / {m[1]:.1f}"
+           for seed, w, m in zip(seeds, whole, theirs) if w[0] > m[0] or w[1] > m[1]]
+    return (mean_of([w[0] for w in whole]), mean_of([w[1] for w in whole]),
+            mean_of([m[0] for m in theirs]), mean_of([m[1] for m in theirs]), out)
+
+
+def r8_fought(way):
+    """How a sniper run of this way of fighting fights before and after the spot, in words."""
+    return "sword and bow" if way == "pair" else "the sword alone"
+
+
+def print_r8(report):
+    seeds = report["seeds"]
+    print()
+    where = ("from the road where he turned off it" if report["resume"] == "road" else "from where he stands")
+    composed = " (composed: after his camp, his own kind of player's run on that seed)" if report["compose"] else ""
+    others = [way for way in report["fights"] if way != report["fight"]]
+    print(f"R8 JUDGED FAIRLY (L4W2-13; Forest Road; seeds {seeds[0]}-{seeds[-1]}; a whole run: the mission to the "
+          f"spot's camp, R8's straight course from the spot, then the mission {where} to the level's end{composed}; "
+          f"cash / Timber a minute, the mean over the seeds. GATED: the sniper who fights with "
+          f"{r8_fought(report['fight'])} before and after the spot, against {R8_PAIR_LABEL}"
+          + "".join(f"; printed, not gated: the sniper who fights with {r8_fought(way)}, against the mission player "
+                    f"with the sword alone (L3-26's comparison) and against {R8_PAIR_LABEL} (the gate as first built)"
+                    for way in others) + ")")
+    for table in report["tables"]:
+        pair = [pay_rate(m) for m in table["pairs"]]
+        mine = [pay_rate(m) for m in table.get("missions") or []]
+        print(f"  {table['tag']}: {R8_PAIR_LABEL} {mean_of([m[0] for m in pair]):,.0f} / "
+              f"{mean_of([m[1] for m in pair]):.1f} a minute"
+              + (f"; the sword alone {mean_of([m[0] for m in mine]):,.0f} / {mean_of([m[1] for m in mine]):.1f}"
+                 if mine else "")
+              + "; the pair " + ", ".join(f"{end} {sum(1 for x in table['pairs'] if x['end'] == end)}"
+                                          for end in sorted({x['end'] for x in table["pairs"]})))
+        for way in report["fights"]:
+            gated = way == report["fight"]
+            print(f"    {'GATED' if gated else 'printed, not gated'}: the sniper who fights with {r8_fought(way)}")
+            for key, runs in table["runs"][way].items():
+                cash, timber, pair_cash, _pair_timber, out = r8_rows(runs, table["pairs"], seeds)
+                against = f"x{cash / pair_cash:.3f} the pair's, out-earning seeds {len(out)}"
+                if not gated and table.get("missions"):
+                    _c, _t, sword_cash, _st, sword_out = r8_rows(runs, table["missions"], seeds)
+                    against = (f"x{cash / sword_cash:.3f} the sword alone's, out-earning seeds {len(sword_out)}; "
+                               + against)
+                burst = [r8_burst(c) for c in runs["courses"]]
+                sniped = sum(1 for c in runs["courses"] if c["sniped"])
+                print(f"      {key:<34} {cash:>8,.0f} / {timber:5.1f} ({against}); the burst (ungated) mean "
+                      f"{mean_of([b[0] for b in burst]):,.0f} / {mean_of([b[1] for b in burst]):.1f}, best "
+                      f"{max(b[0] for b in burst):,.0f}; kills in his run"
+                      f"{' (to its stop: composed)' if report['compose'] else ''} "
+                      f"{mean_of([c['kills'] for c in runs['courses']]):.1f}; "
+                      f"sniped {sniped}/{len(seeds)}; downs {sum(c['downs'] for c in runs['courses'])}")
+
+
+def r8_check(report, expect):
+    """R8's gate (L4W2-13): per table and spot, the mean cash and the mean Timber a minute of the whole
+    sniper runs are not above the pair player's (sword and bow: "fighting it all with the same gear"),
+    every course turned to its spot (unless it fell or met the run cap before his camp: then it is the
+    mission's own run), and every hit from the spot lands."""
+    seeds = report["seeds"]
+    for table in report["tables"]:
+        for key, runs in table["runs"][report["fight"]].items():
+            cash, timber, theirs_cash, theirs_timber, out = r8_rows(runs, table["pairs"], seeds)
+            blocked = [f"seed {seed} {c['ownEvaded']}" for seed, c in zip(seeds, runs["courses"]) if c["ownEvaded"]]
+            missed = [str(seed) for seed, c in zip(seeds, runs["courses"])
+                      if not c["sniped"] and c["end"] in ("cleared", "stopped")]
+            good = cash <= theirs_cash and timber <= theirs_timber and not blocked and not missed
+            expect(good, f"R8 (L4W2-13), {table['tag']}: the sniper from {key} earns no more cash and no more Timber "
+                   f"a minute than {R8_PAIR_LABEL} over a whole run at the same gear, the mean of seeds "
+                   f"{seeds[0]}-{seeds[-1]}: {cash:,.0f} / {timber:.1f} against {theirs_cash:,.0f} / {theirs_timber:.1f} "
+                   f"(x{cash / theirs_cash:.3f} / x{timber / theirs_timber:.3f}); every hit from the spot lands"
+                   + (f" (blocked: {', '.join(blocked)})" if blocked else "")
+                   + (f"; NEVER TURNED TO THE SPOT on seed(s) {', '.join(missed)}" if missed else "")
+                   + f"; out-earning seeds {len(out)}" + (": " + "; ".join(out) if out else ""))
 
 
 def plan_floor(plan, group_id):
@@ -10921,7 +11615,7 @@ def interpreter_note():
                                          f"run's times can differ here by up to 0.08 min)"))
 
 
-def check(cfg, fam_rows, ab_rows, threat=None, bosses=None, mission=None, forest=None):
+def check(cfg, fam_rows, ab_rows, threat=None, bosses=None, forest=None):
     failures = []
 
     def expect(ok, text):
@@ -10979,8 +11673,6 @@ def check(cfg, fam_rows, ab_rows, threat=None, bosses=None, mission=None, forest
         check_threat(cfg, *threat, expect)
         if bosses:
             check_boss(cfg, threat[0], bosses, expect)
-    if mission is not None:
-        check_mission(cfg, mission, expect)
     if forest is not None:
         check_forest(cfg, forest, expect)
     print()
@@ -10993,27 +11685,44 @@ def main():
     parser.add_argument("--check", action="store_true", help="exit 1 if a shipped value leaves the design bands")
     parser.add_argument("--config", default=str(CONFIG_PATH), help="ProvingGrounds.json to measure")
     parser.add_argument("--trials", type=int, default=120, help="random trials per measurement")
-    parser.add_argument("--mission", default=None,
-                        help="a Missions/*.json to play as the Raider Arena (default: Village)")
-    parser.add_argument("--levels-only", "--mission-only", dest="levels_only", action="store_true",
-                        help="only the level sections (the Raider Arena and Forest Road)")
+    parser.add_argument("--levels-only", dest="levels_only", action="store_true",
+                        help="only the level sections (Forest Road)")
     parser.add_argument("--bow", action="store_true",
                         help="only the bow report (L1b Wave 3): the Longbow against the Broadsword on Forest Road")
-    parser.add_argument("--level", choices=("arena", "forest"), default=None,
+    parser.add_argument("--level", choices=("forest",), default=None,
                         help="with --levels-only: only that level")
+    parser.add_argument("--r8", action="store_true",
+                        help="only R8 judged fairly (L4W2-13): whole sniper runs against the pair player at the same "
+                             "gear, every table, seeds R8_SEEDS; with --check its gate")
+    parser.add_argument("--jobs", type=int, default=max(1, min(8, (os.cpu_count() or 2) - 4)),
+                        help="with --r8: worker processes (1 = in order)")
+    parser.add_argument("--r8-table", dest="r8_table", choices=R8_TABLES, default=None,
+                        help="with --r8: only that table")
+    parser.add_argument("--r8-spot", dest="r8_spot", default=None, help="with --r8: only that course (its key)")
+    parser.add_argument("--r8-seeds", dest="r8_seeds", type=int, default=None,
+                        help="with --r8: only the first N of R8_SEEDS (a look, not the gate)")
+    parser.add_argument("--r8-compose", dest="r8_compose", action="store_true",
+                        help="with --r8: compose each sniper run with the mission's own run after his camp (a "
+                             "quicker look, not the gate)")
+    parser.add_argument("--r8-resume", dest="r8_resume", choices=("spot", "road"), default=R8_RESUME,
+                        help="with --r8: where the fight half begins (R8_RESUME)")
+    parser.add_argument("--r8-fight", dest="r8_fight", choices=("sword", "pair"), default=R8_FIGHT,
+                        help="with --r8: how the gate's sniper fights before and after the spot (R8_FIGHT)")
+    parser.add_argument("--r8-gate-only", dest="r8_gate_only", action="store_true",
+                        help="with --r8: only the gate's runs, without the printed ways of fighting (R8_PRINTED): "
+                             "the same verdict in about half the time")
     args = parser.parse_args()
     cfg = load_config(args.config)
     if args.bow:
         print_bow(bow_report(cfg))
         return
-    if args.levels_only:
-        report = mission_report(cfg, args.mission) if args.level in (None, "arena") else None
-        forest = forest_report(cfg) if args.level in (None, "forest") else None
-        if args.level in (None, "arena"):
-            print_mission(cfg, report)
-        if args.level in (None, "forest"):
-            print_forest(cfg, forest)
-            print_cave(cfg, forest)
+    if args.r8:
+        seeds = R8_SEEDS[:args.r8_seeds] if args.r8_seeds else R8_SEEDS
+        r8 = r8_report(cfg, str(Path(args.config).resolve()), args.jobs,
+                       tables=(args.r8_table,) if args.r8_table else R8_TABLES, spot_filter=args.r8_spot,
+                       seeds=seeds, compose=R8_COMPOSE or args.r8_compose, resume=args.r8_resume,
+                       fight=args.r8_fight, printed=() if args.r8_gate_only else R8_PRINTED)
+        print_r8(r8)
         if args.check:
             failures = []
 
@@ -11024,7 +11733,29 @@ def main():
 
             print()
             print(f"  {interpreter_note()}")
-            check_mission(cfg, report, expect)
+            if (seeds != R8_SEEDS or args.r8_spot or args.r8_table or args.r8_compose != R8_COMPOSE
+                    or args.r8_resume != R8_RESUME or args.r8_fight != R8_FIGHT):
+                print("  note  a part or a variant of R8 only (--r8-seeds, --r8-spot, --r8-table, --r8-compose, "
+                      "--r8-resume or --r8-fight): not the gate's run")
+            r8_check(r8, expect)
+            print(f"\nCHECK (R8): {'PASS' if not failures else 'FAIL (' + str(len(failures)) + ')'}")
+            sys.exit(0 if not failures else 1)
+        return
+    if args.levels_only:
+        forest = forest_report(cfg)
+        print_forest(cfg, forest)
+        print_cave(cfg, forest)
+        print_dash_proof()
+        if args.check:
+            failures = []
+
+            def expect(ok, text):
+                print(f"  {'PASS' if ok else 'FAIL'}  {text}")
+                if not ok:
+                    failures.append(text)
+
+            print()
+            print(f"  {interpreter_note()}")
             check_forest(cfg, forest, expect)
             print(f"\nCHECK (levels only): {'PASS' if not failures else 'FAIL (' + str(len(failures)) + ')'}")
             sys.exit(0 if not failures else 1)
@@ -11038,13 +11769,12 @@ def main():
     print_threat(cfg, *threat, ab_rows)
     bosses = boss_rows(cfg, env)
     print_boss(cfg, env, bosses)
-    report = mission_report(cfg, args.mission)
-    print_mission(cfg, report)
     forest = forest_report(cfg)
     print_forest(cfg, forest)
     print_cave(cfg, forest)
+    print_dash_proof()
     if args.check:
-        sys.exit(0 if check(cfg, fam_rows, ab_rows, threat, bosses, report, forest) else 1)
+        sys.exit(0 if check(cfg, fam_rows, ab_rows, threat, bosses, forest) else 1)
 
 
 if __name__ == "__main__":

@@ -311,35 +311,34 @@ function P5.lostTests(): ()
 	})
 	Vitals.PrepareCharacter(player, character)
 	join2(vec(30, 3, 30))
-	local a: any = { userId = 7, player = player, bot = false, waiting = false }
-	local b: any = { userId = 8, player = player2, bot = false, waiting = false }
-	local bot: any = { userId = -1001, player = nil, bot = true, waiting = false }
-	check(not Vitals.RunLost({ a, b, bot }), "two standing: the run goes on")
+	local a: any = { userId = 7, player = player, waiting = false }
+	local b: any = { userId = 8, player = player2, waiting = false }
+	check(not Vitals.RunLost({ a, b }), "two standing: the run goes on")
 	humanoid.Health = 5
 	hooks.impact(arc(fakeNow))
 	advance(0.15)
 	gather()
 	check(Vitals.IsDown(player) and not Vitals.IsDown(player2), "(A goes down, B stands)")
-	check(not Vitals.RunLost({ a, b, bot }), "A down while B stands: the run goes on")
-	local lost, fallen = Vitals.RunLost({ a, bot })
+	check(not Vitals.RunLost({ a, b }), "A down while B stands: the run goes on")
+	local lost, fallen = Vitals.RunLost({ a })
 	check(lost and #fallen == 1 and fallen[1] == 7, "then B leaves: lost, A fallen")
-	lost, fallen = Vitals.RunLost({ a, bot }, true)
+	lost, fallen = Vitals.RunLost({ a }, true)
 	check(not lost and #fallen == 1, "but a clear field wins: the same down with the wave's last body dead loses nothing")
-	check((Vitals.RunLost({ a, bot }, false)), "(and with a body still alive it is lost)")
+	check((Vitals.RunLost({ a }, false)), "(and with a body still alive it is lost)")
 	b.waiting = true
-	lost, fallen = Vitals.RunLost({ a, b, bot })
+	lost, fallen = Vitals.RunLost({ a, b })
 	check(lost and #fallen == 1 and fallen[1] == 7, "or B respawns onto the pad: lost, the waiting one is no fighter")
 	b.waiting = false
 	humanoid2.Health = 0
-	lost, fallen = Vitals.RunLost({ a, b, bot })
+	lost, fallen = Vitals.RunLost({ a, b })
 	check(lost and #fallen == 2, "or B dies outright (a reset): lost, both fallen")
 	a.waiting = true
 	b.waiting = true
-	check(not Vitals.RunLost({ a, b, bot }) and not Vitals.RunLost({ bot }), "nobody in the fight (all on the pad, or bots alone) is not a lost run")
+	check(not Vitals.RunLost({ a, b }) and not Vitals.RunLost({}), "nobody in the fight (all on the pad, or nobody at all) is not a lost run")
 	a.waiting = false
 	b.waiting = false
 	Vitals.StandUp(player)
-	check(not Vitals.RunLost({ a, b, bot }), "A standing again with B dead: the run goes on")
+	check(not Vitals.RunLost({ a, b }), "A standing again with B dead: the run goes on")
 	humanoid2.Health = 130
 	leave2()
 	Vitals.SetMission(nil)
@@ -351,18 +350,17 @@ P5.lostTests()
 function P5.reviewTests(): ()
 	print(" a run does not start before every human has a body")
 	fresh()
-	local a: any = { userId = 7, player = player, bot = false, waiting = false }
-	local b: any = { userId = 8, player = player2, bot = false, waiting = false }
-	local bot: any = { userId = -1001, player = nil, bot = true, waiting = false }
-	check(player2.Character == nil and not Vitals.AllHaveBodies({ a, b, bot }), "a human whose character has not spawned: not yet")
+	local a: any = { userId = 7, player = player, waiting = false }
+	local b: any = { userId = 8, player = player2, waiting = false }
+	check(player2.Character == nil and not Vitals.AllHaveBodies({ a, b }), "a human whose character has not spawned: not yet")
 	check((Vitals.RunLost({ b })), "(a run would read that missing body as fallen, and end in its first frame)")
 	join2(vec(30, 3, 30))
-	check(Vitals.AllHaveBodies({ a, b, bot }), "every human has a living body: the run may start")
+	check(Vitals.AllHaveBodies({ a, b }), "every human has a living body: the run may start")
 	humanoid2.Health = 0
-	check(not Vitals.AllHaveBodies({ a, b, bot }), "a dead body is no body")
+	check(not Vitals.AllHaveBodies({ a, b }), "a dead body is no body")
 	humanoid2.Health = 130
 	leave2()
-	check(Vitals.AllHaveBodies({ bot }) and Vitals.AllHaveBodies({}), "bots, or nobody, never hold a start")
+	check(Vitals.AllHaveBodies({}), "nobody never holds a start")
 
 	print(" ClearThreats (the wave's clear, the run's end)")
 	fresh()

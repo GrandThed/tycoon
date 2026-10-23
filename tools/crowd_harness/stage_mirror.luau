@@ -180,27 +180,10 @@ end
 -- Levels ------------------------------------------------------------------------------------------
 local L: any = {}
 function L.layout(name: string): any
-	local layout = data.layouts[name]
-	if layout ~= nil and layout.arena ~= nil then
-		return Geo.FromArena(M.load("Arena_" .. layout.arena), -data.combat.player.rescue.below)
-	end
-	return layout
-end
-function L.mission(file: any): any
-	for _, mission in data.missions do
-		if file.mission ~= nil and mission.id == file.mission then
-			return mission
-		end
-	end
-	return nil
+	return data.layouts[name]
 end
 function L.resolve(file: any): any
-	return Flow.Resolve(
-		file,
-		L.mission(file),
-		director.runCapSeconds,
-		data.expeditions.difficulties[1]
-	)
+	return Flow.Resolve(file, director.runCapSeconds)
 end
 function L.rect(rect: any): any
 	return { rect.x, rect.z, rect.hx, rect.hz }
@@ -400,7 +383,7 @@ for _, case in data.waveCases do
 			local level = L.resolve(file)
 			local paid = {}
 			for _, kind in case.kinds do
-				local cash, materials = Combat.CampReward(level.crowd.rewards, kind, spec)
+				local cash, materials = Combat.KillReward(level.crowd.rewards, kind, spec.rewardMult)
 				paid[kind] = { cash, materials }
 			end
 			return paid
@@ -410,18 +393,6 @@ end
 
 -- Combat: prices under reward multipliers that leave halves, and the director's four numbers, on
 -- the Python's grids -----------------------------------------------------------------------------
-J.try("grid.campReward", function()
-	local found = {}
-	for index, case in data.rewardCases do
-		local cash, materials = Combat.CampReward(
-			{ probe = { cash = case[1], materials = case[2] } },
-			"probe",
-			{ rewardMult = case[3] }
-		)
-		found[index] = { cash, materials }
-	end
-	return found
-end)
 J.try("grid.killReward", function()
 	local found = {}
 	for index, case in data.rewardCases do
@@ -457,6 +428,15 @@ J.try("grid.breatherSeconds", function()
 	local found = {}
 	for index, tempo in data.breatherCases do
 		found[index] = Combat.BreatherSeconds(tempo, director)
+	end
+	return found
+end)
+-- The L4 W1b fix round's F6: every Combat.MentorBonus call sim_combat's mentor_pay makes on assertions
+-- 12 and 13's boss kills, and the edges of hostRate x mentorRatio, on the shipped Combat.json.
+J.try("grid.mentorBonus", function()
+	local found = {}
+	for index, case in data.mentorCases do
+		found[index] = Combat.MentorBonus(data.combat, case[1], case[2])
 	end
 	return found
 end)
@@ -911,7 +891,8 @@ for _, case in data.rayCases do
 					C.v(row[6]),
 					row[7],
 					row[8],
-					row[9]
+					row[9],
+					row[10]
 				)
 				found[index] = { if entry ~= nil then entry else "nil", crit }
 			elseif case.op == "rayUpright" then
@@ -927,6 +908,12 @@ for _, case in data.rayCases do
 					row[9]
 				)
 				found[index] = if entry ~= nil then entry else "nil"
+			elseif case.op == "seatDrop" then
+				-- L4 W2 (contract 5): rows { height, seat, restDrop }.
+				found[index] = Shapes.SeatDrop(row[1], row[2], row[3])
+			elseif case.op == "seatStep" then
+				-- L4 W2 (the review's m4): rows { seat, goal, dt, blendSeconds }.
+				found[index] = Shapes.SeatStep(row[1], row[2], row[3], row[4])
 			else
 				found[index] = Shapes.FlatToRect(row[1], row[2], row[3], row[4], row[5], row[6])
 			end

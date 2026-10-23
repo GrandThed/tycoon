@@ -1,0 +1,2898 @@
+{
+ "version": 1,
+ "level": "forestRoad",
+ "layout": "ForestRoad",
+ "planHash": "5792c659ca2e772e",
+ "frame": "level",
+ "units": "studs; yaw in degrees about +Y (CFrame.Angles); a prop's origin is its bottom centre, front -Z",
+ "triangles": 163647,
+ "palette": "palette.png",
+ "textures": {
+  "forestFloor": {
+   "file": "forestFloor.png",
+   "tileStuds": 16.0
+  },
+  "road": {
+   "file": "road.png",
+   "tileStuds": 12.0
+  },
+  "roadRim": {
+   "file": "roadRim.png",
+   "tileStuds": 12.0
+  },
+  "camp": {
+   "file": "camp.png",
+   "tileStuds": 14.0
+  }
+ },
+ "meshes": [
+  {
+   "name": "Floor",
+   "look": "texture",
+   "group": "ground",
+   "triangles": 1368,
+   "min": [
+    -752.0,
+    -3.6,
+    -248.0
+   ],
+   "max": [
+    480.0,
+    71.694,
+    248.0
+   ],
+   "texture": "forestFloor"
+  },
+  {
+   "name": "Slopes_1",
+   "look": "palette",
+   "group": "ground",
+   "triangles": 3566,
+   "min": [
+    -462.0,
+    -20.957,
+    -248.0
+   ],
+   "max": [
+    -296.0,
+    8.0,
+    248.0
+   ]
+  },
+  {
+   "name": "Slopes_2",
+   "look": "palette",
+   "group": "ground",
+   "triangles": 1711,
+   "min": [
+    222.0,
+    8.0,
+    -248.0
+   ],
+   "max": [
+    404.0,
+    74.542,
+    0.0
+   ]
+  },
+  {
+   "name": "Slopes_3",
+   "look": "palette",
+   "group": "ground",
+   "triangles": 3199,
+   "min": [
+    224.0,
+    8.0,
+    0.0
+   ],
+   "max": [
+    404.0,
+    76.598,
+    248.0
+   ]
+  },
+  {
+   "name": "Road",
+   "look": "texture",
+   "group": "skin",
+   "triangles": 3056,
+   "min": [
+    -578.6,
+    0.09,
+    -62.6
+   ],
+   "max": [
+    387.0,
+    12.09,
+    18.372
+   ],
+   "texture": "road"
+  },
+  {
+   "name": "RoadRim_1",
+   "look": "texture",
+   "group": "skin",
+   "triangles": 2380,
+   "min": [
+    -579.124,
+    0.03,
+    -65.987
+   ],
+   "max": [
+    -0.248,
+    26.06,
+    69.898
+   ],
+   "texture": "roadRim"
+  },
+  {
+   "name": "RoadRim_2",
+   "look": "texture",
+   "group": "skin",
+   "triangles": 1664,
+   "min": [
+    -0.248,
+    8.03,
+    -65.874
+   ],
+   "max": [
+    387.0,
+    12.03,
+    90.498
+   ],
+   "texture": "roadRim"
+  },
+  {
+   "name": "CampFloor",
+   "look": "texture",
+   "group": "skin",
+   "triangles": 924,
+   "min": [
+    -264.6,
+    8.06,
+    -65.508
+   ],
+   "max": [
+    371.6,
+    12.06,
+    89.967
+   ],
+   "texture": "camp"
+  },
+  {
+   "name": "CaveFloor",
+   "look": "texture",
+   "group": "skin",
+   "triangles": 904,
+   "min": [
+    -340.6,
+    0.075,
+    -110.27
+   ],
+   "max": [
+    -74.0,
+    8.075,
+    -51.4
+   ],
+   "texture": "roadRim"
+  },
+  {
+   "name": "Rock_1",
+   "look": "palette",
+   "group": "rock",
+   "triangles": 7572,
+   "min": [
+    -650.653,
+    -1.0,
+    -151.459
+   ],
+   "max": [
+    -568.466,
+    200.146,
+    -69.884
+   ]
+  },
+  {
+   "name": "Rock_2",
+   "look": "palette",
+   "group": "rock",
+   "triangles": 4995,
+   "min": [
+    -462.475,
+    -22.191,
+    -149.908
+   ],
+   "max": [
+    -220.0,
+    121.767,
+    66.431
+   ]
+  },
+  {
+   "name": "Rock_3",
+   "look": "palette",
+   "group": "rock",
+   "triangles": 4483,
+   "min": [
+    -326.0,
+    -1.0,
+    -119.704
+   ],
+   "max": [
+    -70.754,
+    118.471,
+    -7.258
+   ]
+  },
+  {
+   "name": "Rock_4",
+   "look": "palette",
+   "group": "rock",
+   "triangles": 4075,
+   "min": [
+    216.922,
+    6.837,
+    -103.716
+   ],
+   "max": [
+    260.075,
+    101.418,
+    136.058
+   ]
+  },
+  {
+   "name": "Rock_5",
+   "look": "palette",
+   "group": "rock",
+   "triangles": 3682,
+   "min": [
+    252.862,
+    10.511,
+    -65.259
+   ],
+   "max": [
+    410.286,
+    90.507,
+    5.994
+   ]
+  },
+  {
+   "name": "Rock_6",
+   "look": "palette",
+   "group": "rock",
+   "triangles": 4872,
+   "min": [
+    251.889,
+    11.0,
+    -5.29
+   ],
+   "max": [
+    410.326,
+    107.026,
+    128.271
+   ]
+  },
+  {
+   "name": "BridgeDeck",
+   "look": "palette",
+   "group": "camp",
+   "triangles": 340,
+   "min": [
+    -412.0,
+    -1.43,
+    -8.525
+   ],
+   "max": [
+    -388.0,
+    0.12,
+    8.526
+   ]
+  },
+  {
+   "name": "Cover",
+   "look": "palette",
+   "group": "camp",
+   "triangles": 3432,
+   "min": [
+    -260.58,
+    7.9,
+    -17.08
+   ],
+   "max": [
+    349.58,
+    15.44,
+    58.08
+   ]
+  },
+  {
+   "name": "Lintel",
+   "look": "palette",
+   "group": "camp",
+   "triangles": 208,
+   "min": [
+    256.6,
+    23.724,
+    -54.415
+   ],
+   "max": [
+    258.4,
+    31.179,
+    -33.585
+   ]
+  },
+  {
+   "name": "Canopy_1",
+   "look": "palette",
+   "group": "canopy",
+   "triangles": 3429,
+   "min": [
+    -756.961,
+    -19.228,
+    -252.809
+   ],
+   "max": [
+    -253.363,
+    35.283,
+    251.059
+   ]
+  },
+  {
+   "name": "Canopy_2",
+   "look": "palette",
+   "group": "canopy",
+   "triangles": 2199,
+   "min": [
+    -517.008,
+    -0.3,
+    -12.587
+   ],
+   "max": [
+    2.513,
+    37.196,
+    252.144
+   ]
+  },
+  {
+   "name": "Canopy_3",
+   "look": "palette",
+   "group": "canopy",
+   "triangles": 1799,
+   "min": [
+    -261.509,
+    7.7,
+    -252.946
+   ],
+   "max": [
+    266.114,
+    40.801,
+    -18.17
+   ]
+  },
+  {
+   "name": "Canopy_4",
+   "look": "palette",
+   "group": "canopy",
+   "triangles": 3177,
+   "min": [
+    -6.138,
+    7.7,
+    -253.248
+   ],
+   "max": [
+    482.884,
+    61.581,
+    251.999
+   ]
+  },
+  {
+   "name": "Hills_1",
+   "look": "palette",
+   "group": "backdrop",
+   "triangles": 233,
+   "min": [
+    -1272.0,
+    14.0,
+    0.0
+   ],
+   "max": [
+    14.777,
+    107.056,
+    768.0
+   ]
+  },
+  {
+   "name": "Hills_2",
+   "look": "palette",
+   "group": "backdrop",
+   "triangles": 233,
+   "min": [
+    -1272.0,
+    14.0,
+    -768.0
+   ],
+   "max": [
+    48.571,
+    104.861,
+    0.0
+   ]
+  },
+  {
+   "name": "Hills_3",
+   "look": "palette",
+   "group": "backdrop",
+   "triangles": 151,
+   "min": [
+    -14.905,
+    16.698,
+    0.0
+   ],
+   "max": [
+    1000.0,
+    106.096,
+    758.008
+   ]
+  },
+  {
+   "name": "Hills_4",
+   "look": "palette",
+   "group": "backdrop",
+   "triangles": 151,
+   "min": [
+    -36.727,
+    20.637,
+    -758.008
+   ],
+   "max": [
+    1000.0,
+    103.473,
+    0.0
+   ]
+  },
+  {
+   "name": "Dress_1",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 6046,
+   "min": [
+    -673.219,
+    -0.635,
+    -173.325
+   ],
+   "max": [
+    -573.766,
+    203.489,
+    28.572
+   ]
+  },
+  {
+   "name": "Dress_2",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 8153,
+   "min": [
+    -573.274,
+    -0.599,
+    -171.424
+   ],
+   "max": [
+    -381.358,
+    42.1,
+    -6.604
+   ]
+  },
+  {
+   "name": "Dress_3",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 11020,
+   "min": [
+    -578.516,
+    -0.72,
+    6.251
+   ],
+   "max": [
+    -380.927,
+    38.588,
+    177.541
+   ]
+  },
+  {
+   "name": "Dress_4",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 8645,
+   "min": [
+    -386.19,
+    -0.623,
+    -4.95
+   ],
+   "max": [
+    -191.66,
+    40.233,
+    180.31
+   ]
+  },
+  {
+   "name": "Dress_5",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 15854,
+   "min": [
+    -386.459,
+    -0.537,
+    -132.773
+   ],
+   "max": [
+    -188.842,
+    46.216,
+    6.445
+   ]
+  },
+  {
+   "name": "Dress_6",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 11585,
+   "min": [
+    -194.068,
+    7.429,
+    -121.936
+   ],
+   "max": [
+    0.534,
+    45.813,
+    3.998
+   ]
+  },
+  {
+   "name": "Dress_7",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 7082,
+   "min": [
+    -192.493,
+    7.409,
+    -4.122
+   ],
+   "max": [
+    4.515,
+    45.782,
+    94.097
+   ]
+  },
+  {
+   "name": "Dress_8",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 6773,
+   "min": [
+    -3.608,
+    7.411,
+    -0.212
+   ],
+   "max": [
+    196.203,
+    46.464,
+    90.92
+   ]
+  },
+  {
+   "name": "Dress_9",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 10687,
+   "min": [
+    -1.534,
+    7.378,
+    -87.865
+   ],
+   "max": [
+    192.8,
+    45.844,
+    2.298
+   ]
+  },
+  {
+   "name": "Dress_10",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 6527,
+   "min": [
+    191.843,
+    7.412,
+    -76.599
+   ],
+   "max": [
+    384.847,
+    86.47,
+    1.16
+   ]
+  },
+  {
+   "name": "Dress_11",
+   "look": "palette",
+   "group": "dress",
+   "triangles": 2871,
+   "min": [
+    188.119,
+    7.546,
+    -41.181
+   ],
+   "max": [
+    400.171,
+    74.748,
+    88.0
+   ]
+  }
+ ],
+ "props": [
+  {
+   "piece": "Campfire",
+   "x": -251.5,
+   "y": 8.0,
+   "z": -14,
+   "yaw": 178.18,
+   "scale": 1.0,
+   "camp": "A",
+   "effect": "fire"
+  },
+  {
+   "piece": "Campfire",
+   "x": -229.5,
+   "y": 8.0,
+   "z": -26,
+   "yaw": 123.91,
+   "scale": 1.0,
+   "camp": "A",
+   "effect": "fire"
+  },
+  {
+   "piece": "SpawnTent",
+   "x": -207.5,
+   "y": 8.0,
+   "z": 6,
+   "yaw": 0.0,
+   "scale": 1.0,
+   "camp": "A",
+   "marker": "tent"
+  },
+  {
+   "piece": "Campfire",
+   "x": -49.5,
+   "y": 8.0,
+   "z": -24,
+   "yaw": 100.51,
+   "scale": 1.0,
+   "camp": "B",
+   "effect": "fire"
+  },
+  {
+   "piece": "Campfire",
+   "x": -21.5,
+   "y": 8.0,
+   "z": -23,
+   "yaw": 120.45,
+   "scale": 1.0,
+   "camp": "B",
+   "effect": "fire"
+  },
+  {
+   "piece": "Campfire",
+   "x": 0.5,
+   "y": 8.0,
+   "z": 52,
+   "yaw": 161.84,
+   "scale": 1.0,
+   "camp": "B",
+   "effect": "fire"
+  },
+  {
+   "piece": "Campfire",
+   "x": 44.5,
+   "y": 8.0,
+   "z": 24,
+   "yaw": 44.26,
+   "scale": 1.0,
+   "camp": "B",
+   "effect": "fire"
+  },
+  {
+   "piece": "SpawnTent",
+   "x": 50.5,
+   "y": 8.0,
+   "z": 48,
+   "yaw": 90.0,
+   "scale": 1.0,
+   "camp": "B",
+   "marker": "tent"
+  },
+  {
+   "piece": "ChiefTent",
+   "x": 314.291,
+   "y": 12.0,
+   "z": 76.0,
+   "yaw": 2.95,
+   "scale": 1.25,
+   "camp": "C",
+   "boss": [
+    313.5,
+    61.5
+   ]
+  },
+  {
+   "piece": "Campfire",
+   "x": 301.291,
+   "y": 12.0,
+   "z": 54.663,
+   "yaw": 5.29,
+   "scale": 1.0,
+   "camp": "C",
+   "effect": "fire"
+  },
+  {
+   "piece": "Campfire",
+   "x": 327.291,
+   "y": 12.0,
+   "z": 54.663,
+   "yaw": 335.69,
+   "scale": 1.0,
+   "camp": "C",
+   "effect": "fire"
+  },
+  {
+   "piece": "Bramble",
+   "x": -339.0,
+   "y": 0.0,
+   "z": -54.4,
+   "yaw": 5.44,
+   "scale": 1.29,
+   "with": "CaveBrambleW"
+  },
+  {
+   "piece": "Bramble",
+   "x": -334.764,
+   "y": 0.0,
+   "z": -54.4,
+   "yaw": 6.43,
+   "scale": 1.448,
+   "with": "CaveBrambleW"
+  },
+  {
+   "piece": "Bramble",
+   "x": -330.773,
+   "y": 0.0,
+   "z": -54.4,
+   "yaw": 358.88,
+   "scale": 1.448,
+   "with": "CaveBrambleW"
+  },
+  {
+   "piece": "Bramble",
+   "x": -339.0,
+   "y": 0.0,
+   "z": -51.6,
+   "yaw": 356.18,
+   "scale": 1.264,
+   "with": "CaveBrambleW"
+  },
+  {
+   "piece": "Bramble",
+   "x": -334.886,
+   "y": 0.0,
+   "z": -51.6,
+   "yaw": 4.21,
+   "scale": 1.224,
+   "with": "CaveBrambleW"
+  },
+  {
+   "piece": "Bramble",
+   "x": -330.995,
+   "y": 0.0,
+   "z": -51.6,
+   "yaw": 5.95,
+   "scale": 1.218,
+   "with": "CaveBrambleW"
+  },
+  {
+   "piece": "Bramble",
+   "x": -85.0,
+   "y": 8.0,
+   "z": -54.4,
+   "yaw": 4.2,
+   "scale": 1.283,
+   "with": "CaveBrambleE"
+  },
+  {
+   "piece": "Bramble",
+   "x": -80.663,
+   "y": 8.0,
+   "z": -54.4,
+   "yaw": 0.81,
+   "scale": 1.448,
+   "with": "CaveBrambleE"
+  },
+  {
+   "piece": "Bramble",
+   "x": -76.914,
+   "y": 8.0,
+   "z": -54.4,
+   "yaw": 356.44,
+   "scale": 1.366,
+   "with": "CaveBrambleE"
+  },
+  {
+   "piece": "Bramble",
+   "x": -85.0,
+   "y": 8.0,
+   "z": -51.6,
+   "yaw": 5.89,
+   "scale": 1.344,
+   "with": "CaveBrambleE"
+  },
+  {
+   "piece": "Bramble",
+   "x": -81.355,
+   "y": 8.0,
+   "z": -51.6,
+   "yaw": 354.1,
+   "scale": 1.422,
+   "with": "CaveBrambleE"
+  },
+  {
+   "piece": "Bramble",
+   "x": -77.395,
+   "y": 8.0,
+   "z": -51.6,
+   "yaw": 357.58,
+   "scale": 1.215,
+   "with": "CaveBrambleE"
+  }
+ ],
+ "propPieces": [
+  "Bramble",
+  "Campfire",
+  "ChiefTent",
+  "SpawnTent"
+ ],
+ "effects": [
+  {
+   "kind": "fire",
+   "x": -251.5,
+   "y": 8.6,
+   "z": -14,
+   "camp": "A"
+  },
+  {
+   "kind": "fire",
+   "x": -229.5,
+   "y": 8.6,
+   "z": -26,
+   "camp": "A"
+  },
+  {
+   "kind": "fire",
+   "x": -49.5,
+   "y": 8.6,
+   "z": -24,
+   "camp": "B"
+  },
+  {
+   "kind": "fire",
+   "x": -21.5,
+   "y": 8.6,
+   "z": -23,
+   "camp": "B"
+  },
+  {
+   "kind": "fire",
+   "x": 0.5,
+   "y": 8.6,
+   "z": 52,
+   "camp": "B"
+  },
+  {
+   "kind": "fire",
+   "x": 44.5,
+   "y": 8.6,
+   "z": 24,
+   "camp": "B"
+  },
+  {
+   "kind": "fire",
+   "x": 301.291,
+   "y": 12.6,
+   "z": 54.663,
+   "camp": "C"
+  },
+  {
+   "kind": "fire",
+   "x": 327.291,
+   "y": 12.6,
+   "z": 54.663,
+   "camp": "C"
+  }
+ ],
+ "barriers": [
+  {
+   "name": "TreeLine1",
+   "x": -558.0,
+   "y": 132.5,
+   "z": -87.0,
+   "sx": 8.0,
+   "sy": 295.0,
+   "sz": 158.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -562.0,
+    -158.0,
+    -8.0
+   ]
+  },
+  {
+   "name": "TreeLine2",
+   "x": -454.0,
+   "y": 32.5,
+   "z": 14.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 12.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -458.0,
+    8.0,
+    12.0
+   ]
+  },
+  {
+   "name": "TreeLine3",
+   "x": -432.0,
+   "y": 45.5,
+   "z": -17.0,
+   "sx": 8.0,
+   "sy": 121.0,
+   "sz": 18.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -436.0,
+    -26.0,
+    -8.0
+   ]
+  },
+  {
+   "name": "TreeLine4",
+   "x": -430.0,
+   "y": 45.5,
+   "z": -33.0,
+   "sx": 8.0,
+   "sy": 121.0,
+   "sz": 30.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -434.0,
+    -40.0,
+    -26.0
+   ]
+  },
+  {
+   "name": "TreeLine5",
+   "x": -386.0,
+   "y": 32.5,
+   "z": -23.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 30.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -390.0,
+    -30.0,
+    -8.0
+   ]
+  },
+  {
+   "name": "TreeLine6",
+   "x": -386.0,
+   "y": 32.5,
+   "z": 57.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 78.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -390.0,
+    18.0,
+    96.0
+   ]
+  },
+  {
+   "name": "TreeLine7",
+   "x": -376.0,
+   "y": 32.5,
+   "z": 17.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 18.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -380.0,
+    8.0,
+    18.0
+   ]
+  },
+  {
+   "name": "TreeLine8",
+   "x": -360.0,
+   "y": 32.5,
+   "z": 126.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 76.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -364.0,
+    96.0,
+    156.0
+   ]
+  },
+  {
+   "name": "TreeLine9",
+   "x": -336.0,
+   "y": 32.5,
+   "z": -10.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 52.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -340.0,
+    -36.0,
+    8.0
+   ]
+  },
+  {
+   "name": "TreeLine10",
+   "x": -174.0,
+   "y": 36.5,
+   "z": -59.75,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 15.5,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -178.0,
+    -59.5,
+    -52.0
+   ]
+  },
+  {
+   "name": "TreeLine11",
+   "x": -174.0,
+   "y": 36.5,
+   "z": -0.25,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 71.5,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -178.0,
+    -36.0,
+    27.5
+   ]
+  },
+  {
+   "name": "TreeLine12",
+   "x": -96.0,
+   "y": 36.5,
+   "z": -10.0,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 52.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    -100.0,
+    -36.0,
+    8.0
+   ]
+  },
+  {
+   "name": "TreeLine13",
+   "x": 76.0,
+   "y": 36.5,
+   "z": -62.75,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 21.5,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    72.0,
+    -65.5,
+    -52.0
+   ]
+  },
+  {
+   "name": "TreeLine14",
+   "x": 76.0,
+   "y": 36.5,
+   "z": 20.75,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 113.5,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    72.0,
+    -36.0,
+    69.5
+   ]
+  },
+  {
+   "name": "TreeLine15",
+   "x": 132.0,
+   "y": 36.5,
+   "z": -34.0,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 52.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    128.0,
+    -52.0,
+    -8.0
+   ]
+  },
+  {
+   "name": "TreeLine16",
+   "x": 202.0,
+   "y": 36.5,
+   "z": -10.0,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 52.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    198.0,
+    -36.0,
+    8.0
+   ]
+  },
+  {
+   "name": "TreeLine17",
+   "x": 391.0,
+   "y": 38.5,
+   "z": -10.0,
+   "sx": 8.0,
+   "sy": 107.0,
+   "sz": 32.0,
+   "group": "ArenaBarrier",
+   "side": "east",
+   "edge": [
+    387.0,
+    -18.0,
+    -2.0
+   ]
+  },
+  {
+   "name": "TreeLine18",
+   "x": -610.0,
+   "y": 132.5,
+   "z": -162.0,
+   "sx": 112.0,
+   "sy": 295.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -158.0,
+    -658.0,
+    -562.0
+   ]
+  },
+  {
+   "name": "TreeLine19",
+   "x": 3.0,
+   "y": 36.5,
+   "z": -69.5,
+   "sx": 154.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -65.5,
+    -71.0,
+    72.0
+   ]
+  },
+  {
+   "name": "TreeLine20",
+   "x": -221.5,
+   "y": 36.5,
+   "z": -63.5,
+   "sx": 103.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -59.5,
+    -265.0,
+    -178.0
+   ]
+  },
+  {
+   "name": "TreeLine21",
+   "x": -352.0,
+   "y": 32.5,
+   "z": -56.0,
+   "sx": 24.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -52.0,
+    -356.0,
+    -342.0
+   ]
+  },
+  {
+   "name": "TreeLine22",
+   "x": -296.5,
+   "y": 36.5,
+   "z": -56.0,
+   "sx": 63.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -52.0,
+    -326.0,
+    -265.0
+   ]
+  },
+  {
+   "name": "TreeLine23",
+   "x": -147.0,
+   "y": 36.5,
+   "z": -56.0,
+   "sx": 62.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -52.0,
+    -178.0,
+    -122.0
+   ]
+  },
+  {
+   "name": "TreeLine24",
+   "x": -72.5,
+   "y": 36.5,
+   "z": -56.0,
+   "sx": 3.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -52.0,
+    -72.0,
+    -71.0
+   ]
+  },
+  {
+   "name": "TreeLine25",
+   "x": 104.0,
+   "y": 36.5,
+   "z": -56.0,
+   "sx": 64.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -52.0,
+    72.0,
+    128.0
+   ]
+  },
+  {
+   "name": "TreeLine26",
+   "x": 219.0,
+   "y": 38.5,
+   "z": -56.0,
+   "sx": 90.0,
+   "sy": 107.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -52.0,
+    182.0,
+    256.0
+   ]
+  },
+  {
+   "name": "TreeLine27",
+   "x": -446.0,
+   "y": 45.5,
+   "z": -44.0,
+   "sx": 40.0,
+   "sy": 121.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -40.0,
+    -458.0,
+    -434.0
+   ]
+  },
+  {
+   "name": "TreeLine28",
+   "x": -400.0,
+   "y": 32.5,
+   "z": -34.0,
+   "sx": 36.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -30.0,
+    -410.0,
+    -390.0
+   ]
+  },
+  {
+   "name": "TreeLine29",
+   "x": 383.0,
+   "y": 38.5,
+   "z": -22.0,
+   "sx": 24.0,
+   "sy": 107.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -18.0,
+    373.5,
+    387.0
+   ]
+  },
+  {
+   "name": "TreeLine30",
+   "x": -474.0,
+   "y": 45.5,
+   "z": -16.0,
+   "sx": 32.0,
+   "sy": 121.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -12.0,
+    -482.0,
+    -458.0
+   ]
+  },
+  {
+   "name": "TreeLine31",
+   "x": -522.0,
+   "y": 132.5,
+   "z": -12.0,
+   "sx": 80.0,
+   "sy": 295.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -8.0,
+    -562.0,
+    -482.0
+   ]
+  },
+  {
+   "name": "TreeLine32",
+   "x": -423.0,
+   "y": 45.5,
+   "z": -12.0,
+   "sx": 26.0,
+   "sy": 121.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -8.0,
+    -436.0,
+    -410.0
+   ]
+  },
+  {
+   "name": "TreeLine33",
+   "x": -373.0,
+   "y": 32.5,
+   "z": -12.0,
+   "sx": 34.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -8.0,
+    -390.0,
+    -356.0
+   ]
+  },
+  {
+   "name": "TreeLine34",
+   "x": 155.0,
+   "y": 36.5,
+   "z": -12.0,
+   "sx": 54.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    -8.0,
+    128.0,
+    182.0
+   ]
+  },
+  {
+   "name": "TreeLine35",
+   "x": -427.0,
+   "y": 32.5,
+   "z": 92.0,
+   "sx": 34.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    96.0,
+    -436.0,
+    -410.0
+   ]
+  },
+  {
+   "name": "TreeLine36",
+   "x": -373.0,
+   "y": 32.5,
+   "z": 92.0,
+   "sx": 34.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "north",
+   "edge": [
+    96.0,
+    -390.0,
+    -364.0
+   ]
+  },
+  {
+   "name": "TreeLine37",
+   "x": -622.0,
+   "y": 132.5,
+   "z": -58.0,
+   "sx": 88.0,
+   "sy": 295.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    -62.0,
+    -658.0,
+    -578.0
+   ]
+  },
+  {
+   "name": "TreeLine38",
+   "x": -302.5,
+   "y": 36.5,
+   "z": -32.0,
+   "sx": 75.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    -36.0,
+    -340.0,
+    -265.0
+   ]
+  },
+  {
+   "name": "TreeLine39",
+   "x": -158.0,
+   "y": 36.5,
+   "z": -32.0,
+   "sx": 40.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    -36.0,
+    -178.0,
+    -138.0
+   ]
+  },
+  {
+   "name": "TreeLine40",
+   "x": -85.5,
+   "y": 36.5,
+   "z": -32.0,
+   "sx": 29.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    -36.0,
+    -100.0,
+    -71.0
+   ]
+  },
+  {
+   "name": "TreeLine41",
+   "x": 92.0,
+   "y": 36.5,
+   "z": -32.0,
+   "sx": 40.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    -36.0,
+    72.0,
+    112.0
+   ]
+  },
+  {
+   "name": "TreeLine42",
+   "x": 231.0,
+   "y": 38.5,
+   "z": -32.0,
+   "sx": 66.0,
+   "sy": 107.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    -36.0,
+    198.0,
+    256.0
+   ]
+  },
+  {
+   "name": "TreeLine43",
+   "x": -431.0,
+   "y": 45.5,
+   "z": -22.0,
+   "sx": 10.0,
+   "sy": 121.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    -26.0,
+    -436.0,
+    -434.0
+   ]
+  },
+  {
+   "name": "TreeLine44",
+   "x": 383.0,
+   "y": 38.5,
+   "z": 2.0,
+   "sx": 24.0,
+   "sy": 107.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    -2.0,
+    373.5,
+    387.0
+   ]
+  },
+  {
+   "name": "TreeLine45",
+   "x": -534.0,
+   "y": 132.5,
+   "z": 12.0,
+   "sx": 104.0,
+   "sy": 295.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    8.0,
+    -578.0,
+    -482.0
+   ]
+  },
+  {
+   "name": "TreeLine46",
+   "x": -434.0,
+   "y": 32.5,
+   "z": 12.0,
+   "sx": 48.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    8.0,
+    -458.0,
+    -410.0
+   ]
+  },
+  {
+   "name": "TreeLine47",
+   "x": -356.0,
+   "y": 32.5,
+   "z": 12.0,
+   "sx": 48.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    8.0,
+    -380.0,
+    -340.0
+   ]
+  },
+  {
+   "name": "TreeLine48",
+   "x": -119.0,
+   "y": 36.5,
+   "z": 12.0,
+   "sx": 54.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    8.0,
+    -138.0,
+    -100.0
+   ]
+  },
+  {
+   "name": "TreeLine49",
+   "x": 155.0,
+   "y": 36.5,
+   "z": 12.0,
+   "sx": 102.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    8.0,
+    112.0,
+    198.0
+   ]
+  },
+  {
+   "name": "TreeLine50",
+   "x": -470.0,
+   "y": 32.5,
+   "z": 16.0,
+   "sx": 40.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    12.0,
+    -482.0,
+    -458.0
+   ]
+  },
+  {
+   "name": "TreeLine51",
+   "x": -381.0,
+   "y": 32.5,
+   "z": 22.0,
+   "sx": 18.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    18.0,
+    -390.0,
+    -380.0
+   ]
+  },
+  {
+   "name": "TreeLine52",
+   "x": -221.5,
+   "y": 36.5,
+   "z": 31.5,
+   "sx": 103.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    27.5,
+    -265.0,
+    -178.0
+   ]
+  },
+  {
+   "name": "TreeLine53",
+   "x": 0.5,
+   "y": 36.5,
+   "z": 73.5,
+   "sx": 159.0,
+   "sy": 103.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    69.5,
+    -71.0,
+    72.0
+   ]
+  },
+  {
+   "name": "TreeLine54",
+   "x": -400.0,
+   "y": 32.5,
+   "z": 160.0,
+   "sx": 88.0,
+   "sy": 95.0,
+   "sz": 8.0,
+   "group": "ArenaBarrier",
+   "side": "south",
+   "edge": [
+    156.0,
+    -436.0,
+    -364.0
+   ]
+  },
+  {
+   "name": "TreeLine55",
+   "x": -662.0,
+   "y": 132.5,
+   "z": -110.0,
+   "sx": 8.0,
+   "sy": 295.0,
+   "sz": 112.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -658.0,
+    -158.0,
+    -62.0
+   ]
+  },
+  {
+   "name": "TreeLine56",
+   "x": -582.0,
+   "y": 132.5,
+   "z": -23.0,
+   "sx": 8.0,
+   "sy": 295.0,
+   "sz": 78.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -578.0,
+    -62.0,
+    8.0
+   ]
+  },
+  {
+   "name": "TreeLine57",
+   "x": -486.0,
+   "y": 32.5,
+   "z": -14.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 12.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -482.0,
+    -12.0,
+    -8.0
+   ]
+  },
+  {
+   "name": "TreeLine58",
+   "x": -486.0,
+   "y": 32.5,
+   "z": 14.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 12.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -482.0,
+    8.0,
+    12.0
+   ]
+  },
+  {
+   "name": "TreeLine59",
+   "x": -462.0,
+   "y": 45.5,
+   "z": -30.0,
+   "sx": 8.0,
+   "sy": 121.0,
+   "sz": 36.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -458.0,
+    -40.0,
+    -12.0
+   ]
+  },
+  {
+   "name": "TreeLine60",
+   "x": -440.0,
+   "y": 32.5,
+   "z": 126.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 76.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -436.0,
+    96.0,
+    156.0
+   ]
+  },
+  {
+   "name": "TreeLine61",
+   "x": -414.0,
+   "y": 32.5,
+   "z": -23.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 30.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -410.0,
+    -30.0,
+    -8.0
+   ]
+  },
+  {
+   "name": "TreeLine62",
+   "x": -414.0,
+   "y": 32.5,
+   "z": 52.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 88.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -410.0,
+    8.0,
+    96.0
+   ]
+  },
+  {
+   "name": "TreeLine63",
+   "x": -360.0,
+   "y": 32.5,
+   "z": -34.0,
+   "sx": 8.0,
+   "sy": 95.0,
+   "sz": 52.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -356.0,
+    -52.0,
+    -8.0
+   ]
+  },
+  {
+   "name": "TreeLine64",
+   "x": -269.0,
+   "y": 36.5,
+   "z": -59.75,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 15.5,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -265.0,
+    -59.5,
+    -52.0
+   ]
+  },
+  {
+   "name": "TreeLine65",
+   "x": -269.0,
+   "y": 36.5,
+   "z": -0.25,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 71.5,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -265.0,
+    -36.0,
+    27.5
+   ]
+  },
+  {
+   "name": "TreeLine66",
+   "x": -142.0,
+   "y": 36.5,
+   "z": -10.0,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 52.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -138.0,
+    -36.0,
+    8.0
+   ]
+  },
+  {
+   "name": "TreeLine67",
+   "x": -72.25,
+   "y": 36.5,
+   "z": -60.0,
+   "sx": 2.5,
+   "sy": 103.0,
+   "sz": 16.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -71.0,
+    -65.5,
+    -52.0
+   ]
+  },
+  {
+   "name": "TreeLine68",
+   "x": -75.0,
+   "y": 36.5,
+   "z": 20.75,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 113.5,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    -71.0,
+    -36.0,
+    69.5
+   ]
+  },
+  {
+   "name": "TreeLine69",
+   "x": 108.0,
+   "y": 36.5,
+   "z": -10.0,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 52.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    112.0,
+    -36.0,
+    8.0
+   ]
+  },
+  {
+   "name": "TreeLine70",
+   "x": 178.0,
+   "y": 36.5,
+   "z": -34.0,
+   "sx": 8.0,
+   "sy": 103.0,
+   "sz": 52.0,
+   "group": "ArenaBarrier",
+   "side": "west",
+   "edge": [
+    182.0,
+    -52.0,
+    -8.0
+   ]
+  }
+ ],
+ "hide": {
+  "blocks": [
+   "BendWall",
+   "CaveAlcove",
+   "CaveExit",
+   "CaveExitLeg",
+   "CaveMouth",
+   "CaveRoofAlcove",
+   "CaveRoofE",
+   "CaveRoofE2",
+   "CaveRoofExit",
+   "CaveRoofExitLeg",
+   "CaveRoofMouth",
+   "CaveRoofW",
+   "CaveTunnel",
+   "CaveWallAlcoveE",
+   "CaveWallAlcoveN",
+   "CaveWallAlcoveW",
+   "CaveWallExitE",
+   "CaveWallExitLegE",
+   "CaveWallExitLegW",
+   "CaveWallExitN",
+   "CaveWallExitS",
+   "CaveWallMouthE",
+   "CaveWallMouthW",
+   "CaveWallN1",
+   "CaveWallN2",
+   "CaveWallS1",
+   "CaveWallS2",
+   "CaveWallS3",
+   "GatehouseTurn",
+   "GatehouseWalk",
+   "GatehouseWallE",
+   "GatehouseWallN",
+   "GatehouseWallS",
+   "GatehouseWallW",
+   "LookoutLedge",
+   "MountainLedge1",
+   "MountainLedge2",
+   "MountainLedge3",
+   "MountainLedge4",
+   "MountainLedge5",
+   "MountainLedge6",
+   "MountainLedge7",
+   "MountainPath",
+   "MountainSummit",
+   "MountainTrail",
+   "MountainYard",
+   "Road1",
+   "Road2",
+   "Road3",
+   "Road4",
+   "Road5",
+   "RoadAB1",
+   "RoadAB2",
+   "RoadAB3",
+   "RoadAB4",
+   "RoadAB5",
+   "RoadBC1",
+   "RoadBC2",
+   "RoadBC3",
+   "RoadBC4",
+   "RoadBC5",
+   "RoadBC6",
+   "ShrineIsland",
+   "ShrineSignPad",
+   "TrailEnd",
+   "Trailhead"
+  ],
+  "camps": {
+   "A": [
+    "floor",
+    "fence",
+    "obstacle",
+    "fire",
+    "tent"
+   ],
+   "B": [
+    "floor",
+    "fence",
+    "obstacle",
+    "fire",
+    "tent"
+   ],
+   "C": [
+    "floor",
+    "fence",
+    "obstacle"
+   ]
+  },
+  "keep": [
+   "water",
+   "ice",
+   "bramble",
+   "secret chests",
+   "signs",
+   "checkpoints",
+   "gates (camp C, while shut)"
+  ]
+ },
+ "looks": {
+  "sign": {
+   "material": "Wood",
+   "color": [
+    124,
+    88,
+    56
+   ]
+  },
+  "bramble": {
+   "material": "LeafyGrass",
+   "color": [
+    62,
+    84,
+    34
+   ]
+  },
+  "water": {
+   "material": "SmoothPlastic",
+   "color": [
+    52,
+    80,
+    82
+   ],
+   "transparency": 0.3
+  },
+  "gate": {
+   "material": "Wood",
+   "color": [
+    104,
+    74,
+    50
+   ]
+  }
+ },
+ "bakedPieces": {
+  "Banner": 13,
+  "Bedroll": 4,
+  "BonePile": 8,
+  "Bramble": 30,
+  "Broadleaf": 33,
+  "Bush": 68,
+  "BushLarge": 70,
+  "EdgeLogs": 36,
+  "EdgeRocks": 16,
+  "EdgeStakes": 33,
+  "EdgeThicket": 25,
+  "Fern": 59,
+  "FirHeroA": 75,
+  "FirHeroB": 62,
+  "FirMassA": 158,
+  "FirMassB": 186,
+  "Firewood": 12,
+  "GatePost": 8,
+  "HideRack": 15,
+  "HideTent": 10,
+  "LeanTo": 6,
+  "LogSeat": 24,
+  "Mushrooms": 14,
+  "Pebbles": 45,
+  "RockA": 37,
+  "RockB": 24,
+  "RockFlat": 25,
+  "RockSmall": 16,
+  "Sacks": 5,
+  "SkullPole": 20,
+  "SnagA": 51,
+  "SnagB": 5,
+  "StandingStone": 7,
+  "StoneBroad": 22,
+  "StoneLean": 17,
+  "StoneMonolith": 10,
+  "StoneSlim": 6,
+  "StoneTall": 10,
+  "Stump": 8,
+  "StumpMossy": 3,
+  "Thicket": 93,
+  "Watchtower": 1,
+  "WeaponRack": 7
+ },
+ "paletteSwatches": {
+  "cell": 16,
+  "columns": 8,
+  "rows": 7,
+  "width": 128,
+  "height": 112,
+  "swatches": [
+   {
+    "name": "ground.FLOOR_DARK",
+    "srgb": [
+     46,
+     52,
+     34
+    ],
+    "uv": [
+     0.0625,
+     0.071429
+    ]
+   },
+   {
+    "name": "ground.FLOOR",
+    "srgb": [
+     62,
+     70,
+     42
+    ],
+    "uv": [
+     0.1875,
+     0.071429
+    ]
+   },
+   {
+    "name": "ground.FLOOR_MOSS",
+    "srgb": [
+     80,
+     98,
+     48
+    ],
+    "uv": [
+     0.3125,
+     0.071429
+    ]
+   },
+   {
+    "name": "ground.NEEDLES",
+    "srgb": [
+     96,
+     74,
+     48
+    ],
+    "uv": [
+     0.4375,
+     0.071429
+    ]
+   },
+   {
+    "name": "ground.ROAD",
+    "srgb": [
+     142,
+     112,
+     80
+    ],
+    "uv": [
+     0.5625,
+     0.071429
+    ]
+   },
+   {
+    "name": "ground.ROAD_DARK",
+    "srgb": [
+     104,
+     82,
+     60
+    ],
+    "uv": [
+     0.6875,
+     0.071429
+    ]
+   },
+   {
+    "name": "ground.ROAD_LIGHT",
+    "srgb": [
+     160,
+     132,
+     96
+    ],
+    "uv": [
+     0.8125,
+     0.071429
+    ]
+   },
+   {
+    "name": "ground.CAMP",
+    "srgb": [
+     122,
+     100,
+     76
+    ],
+    "uv": [
+     0.9375,
+     0.071429
+    ]
+   },
+   {
+    "name": "ground.CAMP_DARK",
+    "srgb": [
+     92,
+     74,
+     56
+    ],
+    "uv": [
+     0.0625,
+     0.214286
+    ]
+   },
+   {
+    "name": "ground.STRAW",
+    "srgb": [
+     178,
+     152,
+     96
+    ],
+    "uv": [
+     0.1875,
+     0.214286
+    ]
+   },
+   {
+    "name": "ground.MUD",
+    "srgb": [
+     72,
+     60,
+     46
+    ],
+    "uv": [
+     0.3125,
+     0.214286
+    ]
+   },
+   {
+    "name": "ground.GULLY",
+    "srgb": [
+     40,
+     38,
+     36
+    ],
+    "uv": [
+     0.4375,
+     0.214286
+    ]
+   },
+   {
+    "name": "foliage.FIR_DARK",
+    "srgb": [
+     26,
+     54,
+     44
+    ],
+    "uv": [
+     0.5625,
+     0.214286
+    ]
+   },
+   {
+    "name": "foliage.FIR",
+    "srgb": [
+     36,
+     74,
+     56
+    ],
+    "uv": [
+     0.6875,
+     0.214286
+    ]
+   },
+   {
+    "name": "foliage.FIR_TIP",
+    "srgb": [
+     54,
+     96,
+     66
+    ],
+    "uv": [
+     0.8125,
+     0.214286
+    ]
+   },
+   {
+    "name": "foliage.LEAF_DARK",
+    "srgb": [
+     48,
+     66,
+     36
+    ],
+    "uv": [
+     0.9375,
+     0.214286
+    ]
+   },
+   {
+    "name": "foliage.LEAF",
+    "srgb": [
+     68,
+     90,
+     44
+    ],
+    "uv": [
+     0.0625,
+     0.357143
+    ]
+   },
+   {
+    "name": "foliage.BUSH_DARK",
+    "srgb": [
+     38,
+     62,
+     38
+    ],
+    "uv": [
+     0.1875,
+     0.357143
+    ]
+   },
+   {
+    "name": "foliage.BUSH",
+    "srgb": [
+     56,
+     86,
+     46
+    ],
+    "uv": [
+     0.3125,
+     0.357143
+    ]
+   },
+   {
+    "name": "foliage.BRAMBLE",
+    "srgb": [
+     82,
+     56,
+     50
+    ],
+    "uv": [
+     0.4375,
+     0.357143
+    ]
+   },
+   {
+    "name": "foliage.BERRY",
+    "srgb": [
+     148,
+     36,
+     52
+    ],
+    "uv": [
+     0.5625,
+     0.357143
+    ]
+   },
+   {
+    "name": "foliage.FERN",
+    "srgb": [
+     70,
+     112,
+     52
+    ],
+    "uv": [
+     0.6875,
+     0.357143
+    ]
+   },
+   {
+    "name": "foliage.MOSS",
+    "srgb": [
+     96,
+     120,
+     54
+    ],
+    "uv": [
+     0.8125,
+     0.357143
+    ]
+   },
+   {
+    "name": "bark.BARK_DARK",
+    "srgb": [
+     52,
+     40,
+     34
+    ],
+    "uv": [
+     0.9375,
+     0.357143
+    ]
+   },
+   {
+    "name": "bark.BARK",
+    "srgb": [
+     78,
+     60,
+     46
+    ],
+    "uv": [
+     0.0625,
+     0.5
+    ]
+   },
+   {
+    "name": "bark.LOG_END",
+    "srgb": [
+     150,
+     118,
+     82
+    ],
+    "uv": [
+     0.1875,
+     0.5
+    ]
+   },
+   {
+    "name": "bark.DEADWOOD",
+    "srgb": [
+     128,
+     118,
+     104
+    ],
+    "uv": [
+     0.3125,
+     0.5
+    ]
+   },
+   {
+    "name": "bark.DEADWOOD_DARK",
+    "srgb": [
+     92,
+     84,
+     74
+    ],
+    "uv": [
+     0.4375,
+     0.5
+    ]
+   },
+   {
+    "name": "rock.ROCK_LIGHT",
+    "srgb": [
+     168,
+     160,
+     144
+    ],
+    "uv": [
+     0.5625,
+     0.5
+    ]
+   },
+   {
+    "name": "rock.ROCK",
+    "srgb": [
+     130,
+     124,
+     113
+    ],
+    "uv": [
+     0.6875,
+     0.5
+    ]
+   },
+   {
+    "name": "rock.ROCK_DARK",
+    "srgb": [
+     95,
+     91,
+     85
+    ],
+    "uv": [
+     0.8125,
+     0.5
+    ]
+   },
+   {
+    "name": "rock.ROCK_SHADE",
+    "srgb": [
+     62,
+     60,
+     56
+    ],
+    "uv": [
+     0.9375,
+     0.5
+    ]
+   },
+   {
+    "name": "rock.LICHEN",
+    "srgb": [
+     118,
+     124,
+     80
+    ],
+    "uv": [
+     0.0625,
+     0.642857
+    ]
+   },
+   {
+    "name": "hide.HIDE_PALE",
+    "srgb": [
+     206,
+     182,
+     140
+    ],
+    "uv": [
+     0.1875,
+     0.642857
+    ]
+   },
+   {
+    "name": "hide.HIDE",
+    "srgb": [
+     170,
+     134,
+     94
+    ],
+    "uv": [
+     0.3125,
+     0.642857
+    ]
+   },
+   {
+    "name": "hide.HIDE_DARK",
+    "srgb": [
+     126,
+     94,
+     66
+    ],
+    "uv": [
+     0.4375,
+     0.642857
+    ]
+   },
+   {
+    "name": "hide.FUR",
+    "srgb": [
+     98,
+     80,
+     64
+    ],
+    "uv": [
+     0.5625,
+     0.642857
+    ]
+   },
+   {
+    "name": "hide.FUR_DARK",
+    "srgb": [
+     66,
+     54,
+     46
+    ],
+    "uv": [
+     0.6875,
+     0.642857
+    ]
+   },
+   {
+    "name": "hide.DYED_RED",
+    "srgb": [
+     140,
+     50,
+     40
+    ],
+    "uv": [
+     0.8125,
+     0.642857
+    ]
+   },
+   {
+    "name": "camp.WOOD_LIGHT",
+    "srgb": [
+     205,
+     150,
+     96
+    ],
+    "uv": [
+     0.9375,
+     0.642857
+    ]
+   },
+   {
+    "name": "camp.WOOD",
+    "srgb": [
+     164,
+     108,
+     64
+    ],
+    "uv": [
+     0.0625,
+     0.785714
+    ]
+   },
+   {
+    "name": "camp.WOOD_DARK",
+    "srgb": [
+     116,
+     74,
+     46
+    ],
+    "uv": [
+     0.1875,
+     0.785714
+    ]
+   },
+   {
+    "name": "camp.BONE",
+    "srgb": [
+     238,
+     228,
+     204
+    ],
+    "uv": [
+     0.3125,
+     0.785714
+    ]
+   },
+   {
+    "name": "camp.BONE_SHADE",
+    "srgb": [
+     204,
+     188,
+     158
+    ],
+    "uv": [
+     0.4375,
+     0.785714
+    ]
+   },
+   {
+    "name": "camp.ROPE",
+    "srgb": [
+     216,
+     184,
+     124
+    ],
+    "uv": [
+     0.5625,
+     0.785714
+    ]
+   },
+   {
+    "name": "camp.ROPE_DARK",
+    "srgb": [
+     168,
+     134,
+     86
+    ],
+    "uv": [
+     0.6875,
+     0.785714
+    ]
+   },
+   {
+    "name": "camp.LEATHER",
+    "srgb": [
+     156,
+     96,
+     60
+    ],
+    "uv": [
+     0.8125,
+     0.785714
+    ]
+   },
+   {
+    "name": "camp.LEATHER_DARK",
+    "srgb": [
+     112,
+     68,
+     46
+    ],
+    "uv": [
+     0.9375,
+     0.785714
+    ]
+   },
+   {
+    "name": "camp.FLINT",
+    "srgb": [
+     150,
+     144,
+     136
+    ],
+    "uv": [
+     0.0625,
+     0.928571
+    ]
+   },
+   {
+    "name": "camp.FLINT_DARK",
+    "srgb": [
+     102,
+     98,
+     96
+    ],
+    "uv": [
+     0.1875,
+     0.928571
+    ]
+   },
+   {
+    "name": "camp.OCHRE",
+    "srgb": [
+     186,
+     72,
+     50
+    ],
+    "uv": [
+     0.3125,
+     0.928571
+    ]
+   },
+   {
+    "name": "camp.FEATHER",
+    "srgb": [
+     242,
+     238,
+     228
+    ],
+    "uv": [
+     0.4375,
+     0.928571
+    ]
+   },
+   {
+    "name": "flame.YELLOW",
+    "srgb": [
+     255,
+     216,
+     92
+    ],
+    "uv": [
+     0.5625,
+     0.928571
+    ]
+   },
+   {
+    "name": "flame.ORANGE",
+    "srgb": [
+     255,
+     142,
+     40
+    ],
+    "uv": [
+     0.6875,
+     0.928571
+    ]
+   },
+   {
+    "name": "flame.RED",
+    "srgb": [
+     228,
+     72,
+     36
+    ],
+    "uv": [
+     0.8125,
+     0.928571
+    ]
+   },
+   {
+    "name": "flame.SOOT",
+    "srgb": [
+     58,
+     50,
+     50
+    ],
+    "uv": [
+     0.9375,
+     0.928571
+    ]
+   }
+  ]
+ }
+}

@@ -580,3 +580,114 @@ Armory screen in both places, the 15 weapon models in hand and on the stage) is 
 read as "about right" for the checklists' click questions (T2 a step, three runs a weapon, the screen, the turning
 weapon, the weapons in hand and on the back, the icons). Next: L4 (the real forest, the Camp Chief, the map in the hub,
 rewards balanced; the first version that may be published), only on his word.
+
+## 26. L4 "the real forest": decisions (2026-10-21)
+
+Ben: *"lets start L4"*. A groundwork study in three parts (`docs/prompts/l4-study.md`; reports
+`l4-study-report-forest.md`, `-chief.md`, `-publish.md`), then eight click questions with sketches; he took the lead's
+recommendation on all eight. **[Ben]**
+
+1. **The lookout moves to the trailhead** (the study's V3: ledge 26 up over Road1, the chest on it). The chain is
+   unchanged (buy Double Jump, reach the ledge, the Flamethrower, burn the brambles); the ledge is 132 studs from the
+   nearest camp ground, so `SNIPER_KNOWN_LIMIT_L4` empties with data alone.
+2. **Natural camp edges on today's outlines:** logs, rocks and thicket, at most 4 studs, gaps at the gates; the enemies
+   behave as now. Organic camp outlines (several floor cells per camp) are not in L4.
+3. **Real models for all seven looks in L4:** fodder, slinger, marksman, lobber, brute, plated elite and the Camp
+   Chief, generated, drawn on today's bodies; each kind keeps its colour so the warnings still read.
+4. **The Camp Chief's own move is a war-club sweep** (a wedge that fills after a warning: jump it or step out), beside
+   the Colossus's charge, slam and call.
+5. **The map in the city departs straight into the level:** one loading screen, the lobby camp counts down and starts
+   the level once the party is there; any refusal falls back to the lobby with the level picked.
+6. **The Raider Arena is hidden for the publish**; it may come back later as a real level.
+7. **The end screen:** a row per source counting up (raiders, camp bonuses, the Chief, chests), then coins flying into
+   the wallet and Timber piling up; the same card in both places.
+8. **Run cash grows with the city's era:** still a fixed amount per kill, multiplied by the era, set so a clear is worth
+   a few minutes of that era's income; checked against the city's pacing in the simulator.
+
+**Lead's rulings (told to Ben):** the ground and the tall walls get baked planar-UV skins (the city's and the Valley's
+route), so the layout is frozen before anything is baked; scenery is walk-through except the layout's own blocks; the
+forest floor beside the road is closed to players by an invisible wall at the tree line, except at designed drops; the
+raiders keep today's colour per kind on their cloth; the next ability is shown locked "with the Castle" so Valor has a
+purpose on screen, and the Brutal card says "Castle gear"; the publish is solo-first (L5 brings parties into levels).
+Still for Ben, later: the forest's mood (from the pictures), the Camp Chief's look (from a sheet), and how to publish
+(a private staging experience first, recommended).
+
+**Order of work:** W1 the forest on paper (the lookout moved and every gate green; a forest generator and level renders;
+raider and Chief prototypes), then Ben's look at the pictures; W1b removal of the old mission code (in parallel);
+W2 the forest and the models in the game with one upload and one harvest paste; W3 the city map, the end screen and the
+rewards; W4 publish readiness (the Theme round, phones, the checklist, the publish).
+
+## 27. L4 W1 pictures: Ben's verdict (2026-10-21)
+
+Shown: `assets/testfit/out/Levels/ForestRoad/_L4_forest_overview.png` (the plan and ten views, raiders as boxes),
+`_L4_moods.png`, `assets/testfit/out/Raiders/_lineup.png` and the Chief's two front views. Five click questions, the
+lead's recommendation on all five: **[Ben]**
+
+1. **The forest is built as shown** (baked ground and cliffs, generated firs, broadleaf and snags, camp edges of stakes,
+   logs, rocks and thicket under 4 studs, hide tents, the Chief's hall, invisible walls along every walkable edge).
+2. **Mood B:** darker with haze, in the dungeon place only, tuned after his first Studio look.
+3. **The Camp Chief is look A:** fur cloak, skull mask, the Warhammer that beating him on Hard gives.
+4. **The raiders' style is approved:** the other four looks (slinger, marksman, lobber, plated elite) are built the same
+   way; the Chief's chest core gets smaller.
+5. **R8 is judged fairly:** a spot is compared over a whole run (shoot what you can from it, then fight the rest) against
+   fighting it all with the same gear, over 30 seeds; a spot fails only if that run pays more per minute. His rule
+   stands: no spot may out-earn fighting. (The failing row was Road3, Hard, sword T1 / bow T4: a one-off burst from the
+   low road under the plateau, red before L4 on 12 of 30 seeds.)
+
+**Rocks, after the gate (same day):** looking again, Ben said *"to be honest, the stones leave so much to offer, it would
+be great if we could make something more like the images attached"*, with two references
+(`assets/research/2026-10-21-l4/ref_rocks_standing.png`: bevelled standing stones and chunky low stones;
+`ref_rocks_cliffs.png`: cliffs of clustered, stacked bevelled blocks). Every rock of the forest is redone in that
+language before the upload (brief `docs/prompts/l4-w2-rocks.md`); the rest of the forest stays as approved. **[Ben]**
+
+## 28. The mountain climb and the Castle Key (2026-10-21)
+
+Ben: *"can we create a new parkour in the forest that uses the double jump in multiple times arround a mountain that gives
+you a key to unlock a secret room in the castle?"* Asked with sketches (three click questions, the lead's recommendation
+each time): **behind the trailhead** (north-west of the start past the creek, the secrets corner with the lookout and the
+shrine, far from every camp), **one lap of about 8 double jumps** (1-2 minutes, wide ledges, a miss drops you to the
+ledge below), **built now with the forest** (baked in the same upload: still one harvest paste). **[Ben]**
+
+Lead's rulings: the summit chest is a fourth Forest secret, `mountain`, needing Double Jump; it pays a little and gives
+**the Castle Key**, which is the opened secret itself (saved per player in `combat.secrets`; no profile change); the
+Castle's plan gets a locked room that only this key opens (what it holds is decided with the Castle); no enemies on the
+climb; no ledge or summit may be a sniper spot; a fall never leaves the level; every hop needs Double Jump and no lifting
+ability may replace it. Brief: `docs/prompts/l4-w2-mountain.md`.
+
+**All seven raiders approved for the upload (2026-10-21)** on `assets/testfit/out/Raiders/_overview.png` (the four new
+looks, the fodder's cape and knife, the Chief's smaller core): they upload with the forest, after Ben's look at the new
+rocks and the mountain, in the one harvest paste. The Chief keeps the Colossus's hit shapes (14 / 4 / 1.6), so tuning him
+in W2 never invalidates his model. **[Ben]**
+
+**The rocks, second look (2026-10-21):** on `_rocks_sheet.png` and `_L4_rocks_before_after.png` the stones and outcrops
+matched his references, but the tall walls a player walks beside read as walls of stone blocks (the skin may not stand
+out into walking space, so they have about 1.3 studs of relief). Asked, Ben chose **less regular walls**: the same depth,
+bigger uneven blocks, broken horizontal layers, fewer straight joints, boulder piles in corners and beside gates where
+nobody walks; no layout change (over "move the walls back for deep masses" and "good as they are"). Done in the same
+forest pass that dresses the mountain. **[Ben]**
+
+**The mountain and the walls approved (2026-10-22)** on `mountain_{far,yard,ledge,summit}_B.png`,
+`_L4_walls_before_after.png` and `plan_top_F2.png`: "yes, as it is". Offered climb markers on every ledge lip (the lead
+saw that the spiral cannot be read from the yard), Ben declined: **finding the way up is part of the challenge.** The
+upload runs now: 81 uploads (37 level meshes, 5 images, 4 forest props, 35 raider stages), one harvest paste. **[Ben]**
+
+**R8 judged fairly, as built (2026-10-22, lead's reading of §27.5):** the comparison is **against fighting it all with the
+same gear**, so at sword T1 / bow T4 the fighter uses both weapons (the simulator's pair player), not the sword alone. Under
+it every spot on every table earns x0.41-0.84 of the fighter's cash a minute over seeds 1-30. Against the sword-only
+fighter, Road3 and Road2 on Hard would read x1.014 and x1.003 (a gain of about 1%); that table stays printed, ungated.
+After sniping, the fight resumes on the road where the player left it (read literally, "from where he stands", four spots
+that shoot nothing failed on a route quirk). Told to Ben; his word overrides.
+
+**Correction, same day (the W2 review):** as first built, the sniper fought the rest with the sword alone while the fighter
+used both weapons, so the gate mostly measured the weapon gap (the x0.41-0.84 above). The faithful reading, now the gate:
+**both runs use the same gear and differ only by the spot**. It passes on every table; on the final config (the Chief's
+sweep at range 12.7) the tightest spots are x0.982 (Hard T1/T1, Road2), x0.982 (Hard bow T4, Road3), x0.966 (Normal T1/T1,
+the cave exit) and x0.942 (Normal bow T4, Road4): a margin of 1.8-5.8%, guarded by a mutant sized to it (+3%).
+
+**The Camp Chief's sweep, as it can be drawn (2026-10-22, the W2 reviews):** a hit must be where the model's hammer is
+drawn. The drafted sweep (range 17, 150°) reached places the hammer never visits, so it is now **range 12.7, 120°** (reach
+10.5): the hammer covers the whole wedge, never more than 5° behind the red tell. His fight is a few seconds shorter than
+the Colossus's 80 s (every band holds; re-measured at 120° in W2's fix round 2). If he feels short or easy in Studio, his
+health (4,700) is the lever. The fodder's lunge likewise now slides the body forward in the strike so the club reaches about
+3.9 studs, as the block body did. Lead's rulings, told to Ben. The plated elite's axe has the same gap (drawn to about 5 of
+its 7.5-stud wedge) and is left for Ben's look.

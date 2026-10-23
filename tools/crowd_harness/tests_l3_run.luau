@@ -148,16 +148,11 @@ function L3R.firstClearTests(): ()
 			and level.difficulties.hard.firstClear.family == "warhammer",
 		"a fresh table each time: writing the answer leaves the level file as it was"
 	)
-	local arena = L1.real.resolve("raiderArena")
-	if arena.level ~= nil then
-		local first = L1.real.map.difficulties[1]
-		check(
-			Flow.FirstClear(arena.level, first) == nil,
-			"the Raider Arena's one difficulty gives nothing (Resolve builds it without a firstClear)"
-		)
-	else
-		check(false, "the Raider Arena resolves (the case above needs it)")
-	end
+	local field = L1.field()
+	check(
+		field ~= nil and Flow.FirstClear(field, "normal") == nil,
+		"a difficulty that names no firstClear gives nothing (the hand-written field's one, L4B-6)"
+	)
 end
 L1.group("l3 firstClearTests", L3R.firstClearTests)
 

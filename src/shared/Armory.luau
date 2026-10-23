@@ -14,64 +14,13 @@
 -- window (`windows`); its tier scales its hits (Multiplier) and, for the two held families, the
 -- player's health (MaxHp). A tier is paid with what its band's level drops, and a band's top
 -- tier also needs that level's Hard star. Nothing here reads or writes cash.
--- The slot ladder (`slots`: TierDef, WeaponDamage, ClassDef, AbilityDef) stays for the C1 readers
--- and the Ascension forge for the hub, until L4.
+-- The Ascension forge stays for the hub (ArmoryService). The C1 slot ladder (`slots`, `classes`,
+-- `abilities`, `bands`, `partyEffects`) went in L4 W1b with its last readers.
 
 -- Structural copies of the shapes in Types.luau: requiring Types would need `script`, which
 -- purity forbids. Keep these in lockstep with Types.luau (and Combat.luau's copies) — the old
 -- solver compares nested tables invariantly, so every field must match exactly — and callers
 -- pass the Types.* tables.
-type BandDef = { band: number, eraName: string, material: string }
-type WeaponClassDef = {
-	kind: string,
-	range: number,
-	arcDegrees: number?,
-	chain: { number }?,
-	windows: { number }?,
-	comboReset: number?,
-	finisherKnockback: number?,
-	fire: string?,
-	cooldown: number?,
-	chargeSeconds: number?,
-	minDamageFraction: number?,
-	spreadDegrees: number?,
-	pierce: number?,
-}
-type AbilityDef = {
-	kind: string,
-	cooldown: number,
-	damageMult: number,
-	radius: number?,
-	shots: number?,
-	knockback: number?,
-	stunSeconds: number?,
-	dashStuds: number?,
-	dotSeconds: number?,
-	dotTicks: number?,
-	pierce: number?,
-}
-type WeaponStarterDef = {
-	name: string,
-	class: string,
-	damage: number,
-	hp: number,
-	ability: string,
-	model: string,
-}
-type WeaponTierDef = {
-	tier: number,
-	band: number,
-	cost: number,
-	unlockRate: number,
-	name: string,
-	class: string,
-	damage: number,
-	hp: number,
-	ability: string,
-	model: string,
-	partyEffect: string?,
-}
-type ArmorySlotDef = { starter: WeaponStarterDef, tiers: { WeaponTierDef } }
 type AscensionLevelDef = {
 	level: number,
 	materials: { [string]: number },
@@ -84,13 +33,6 @@ type AscensionConfig = {
 	requiresRebirth: number,
 	levelsPerRebirth: number,
 	levels: { AscensionLevelDef },
-}
-type PartyEffectDef = {
-	kind: "rally" | "warcry",
-	radius: number,
-	healFraction: number?,
-	damageMult: number?,
-	seconds: number?,
 }
 type ArmoryLadderBand = { levelId: string, material: string }
 type ArmoryLadder = {
@@ -110,12 +52,7 @@ type ArmoryConfig = {
 	version: number,
 	baseHp: number,
 	power: { hpWeight: number, tierWeight: number? },
-	bands: { BandDef },
-	classes: { [string]: WeaponClassDef },
-	abilities: { [string]: AbilityDef },
-	slots: { [string]: ArmorySlotDef },
 	ascension: AscensionConfig,
-	partyEffects: { [string]: PartyEffectDef },
 	ladder: ArmoryLadder?,
 	windows: { [string]: ArmoryWindow }?,
 	legacy: ArmoryLegacy?,
@@ -162,8 +99,6 @@ export type UpgradeRefusal =
 	| "insufficientFunds"
 
 local NEUTRAL_MULT = 1
--- Tier 0 is the starter weapon of a C1 slot ladder: owned from the first join, never bought.
-local STARTER_TIER = 0
 
 local Armory = {}
 
@@ -657,7 +592,7 @@ function Armory.BuiltBands(
 end
 
 -- L3-8: what the v7 -> v8 step gives back for the slot tiers a profile bought before tiers moved
--- to families, at the FROZEN prices in `legacy.gearCosts` (never `slots`, which L4 deletes): for
+-- to families, at the FROZEN prices in `legacy.gearCosts` (`slots` went in L4 W1b): for
 -- each slot, entries 1 .. min(gear[slot], #gearCosts). A fresh table, keyed by material. Empty
 -- without a legacy list; a slot tier that is not a whole number, an entry that names no material
 -- or an amount that is not a number of at least 0 adds nothing.
@@ -859,7 +794,7 @@ function Armory.Problems(cfg: ArmoryConfig, families: { string }): { string }
 end
 
 -- ---------------------------------------------------------------------------------------------
--- C0/C1: the slot ladder (kept for its old readers until L4) and the Ascension forge
+-- C0: the Ascension forge (the hub's ArmoryService)
 -- ---------------------------------------------------------------------------------------------
 
 -- Per-slot numbers live in a two-field record (the contract's profile shape), so a validated
@@ -871,39 +806,6 @@ local function slotValue(tiers: SlotTiers, slot: string): number?
 		return tiers.ranged
 	end
 	return nil
-end
-
--- tier 0 = the slot's starter weapon; any tier outside 0..#tiers is nil (no such weapon).
--- Optional return (the contract writes it non-optional): an unvalidated slot string and a tier
--- past the last one both have to be answerable without erroring inside a pure module.
-function Armory.TierDef(
-	cfg: ArmoryConfig,
-	slot: string,
-	tier: number
-): (WeaponTierDef | WeaponStarterDef)?
-	local slotDef = cfg.slots[slot]
-	if slotDef == nil then
-		return nil
-	end
-	if tier <= STARTER_TIER then
-		return slotDef.starter
-	end
-	return slotDef.tiers[tier]
-end
-
--- Ascension multiplies the equipped weapon rather than replacing it, so level 0 is a plain 1.
-function Armory.WeaponDamage(
-	cfg: ArmoryConfig,
-	slot: string,
-	tier: number,
-	ascLevel: number
-): number
-	local def = Armory.TierDef(cfg, slot, tier)
-	if def == nil then
-		return 0
-	end
-	local level = ascensionLevel(cfg, ascLevel)
-	return def.damage * (if level ~= nil then level.damageMult else NEUTRAL_MULT)
 end
 
 -- A fresh table per call: callers subtract from the profile with it and must never be able to
@@ -930,9 +832,10 @@ function Armory.AscensionCap(cfg: ArmoryConfig, rebirthCount: number): number
 	return math.min(#ascension.levels, laps * ascension.levelsPerRebirth)
 end
 
+-- "invalid" for any slot but "melee" and "ranged" (slotValue is nil for every other word).
 function Armory.CanAscend(cfg: ArmoryConfig, state: ArmoryOwner, slot: string): (boolean, Refusal?)
 	local current = slotValue(state.combat.ascension, slot)
-	if cfg.slots[slot] == nil or current == nil then
+	if current == nil then
 		return false, "invalid"
 	end
 	local level = current + 1
@@ -952,16 +855,6 @@ function Armory.CanAscend(cfg: ArmoryConfig, state: ArmoryOwner, slot: string): 
 		end
 	end
 	return true, nil
-end
-
--- nil for an unknown key so a missing class/ability degrades to "no weapon behaviour" instead
--- of erroring (spec: missing content is a placeholder, never an error).
-function Armory.ClassDef(cfg: ArmoryConfig, class: string): WeaponClassDef?
-	return cfg.classes[class]
-end
-
-function Armory.AbilityDef(cfg: ArmoryConfig, key: string): AbilityDef?
-	return cfg.abilities[key]
 end
 
 return Armory

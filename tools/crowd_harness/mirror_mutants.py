@@ -35,6 +35,19 @@ MUTANTS = [
     ("CrowdRay: top without the max", "HitShapes", "local top = math.max(height - 2 * headRadius, height / 2 + radius)",
      "local top = height - 2 * headRadius"),
     ("RayUpright: drops its top cap", "HitShapes", "firstIn(highEnter, highExit, reach)", "nil"),
+    # L4 W2 (contract 5): the seated hit shapes (check_stage_mirror's ray.seatDrop and ray.crowdRaySeated, D1's).
+    ("SeatDrop: not eased", "HitShapes", "\treturn height * restDrop * u * u * (3 - 2 * u)\n",
+     "\treturn height * restDrop * u\n"),
+    ("SeatDrop: not clamped", "HitShapes", "\tlocal u = math.min(math.max(seat, 0), 1)\n", "\tlocal u = seat\n"),
+    # The W2 review's m4: SeatStep held to sim_range.hs_seat_step (check_stage_mirror's ray.seatStep, D1's).
+    ("SeatStep: at twice the pace", "HitShapes", "\tlocal step = math.max(dt, 0) / blendSeconds\n",
+     "\tlocal step = 2 * math.max(dt, 0) / blendSeconds\n"),
+    ("SeatStep: with no pace never moves", "HitShapes", "\t\treturn target\n\tend\n\tlocal step",
+     "\t\treturn seat\n\tend\n\tlocal step"),
+    ("CrowdRay: ignores its drop", "HitShapes", "\tlocal lower = drop or 0\n", "\tlocal lower = 0\n"),
+    ("CrowdRay: the capsule's top not lowered", "HitShapes",
+     "local top = math.max(height - 2 * headRadius, height / 2 + radius) - lower",
+     "local top = math.max(height - 2 * headRadius, height / 2 + radius)"),
     ("FlatToRect: square corners", "HitShapes", "\treturn math.sqrt(dx * dx + dz * dz)\nend\n\n-- The cosmetic",
      "\treturn math.max(dx, dz)\nend\n\n-- The cosmetic"),
     ("SwingGate.IsAir with >=", "SwingGate", "return height > standOffset + SwingGate.AIR_MARGIN_STUDS",
@@ -290,6 +303,14 @@ MUTANTS = [
      "elseif false then"),
     ("Armory R6: Problems takes a negative HP entry", "Armory",
      "if not finite(value) or value < 0 then\n\t\t\t\t\tproblem(", "if not finite(value) then\n\t\t\t\t\tproblem("),
+    # The L4 W1b fix round's F6 (review 3-m3): Combat.MentorBonus against sim_combat.mentor_pay's calls
+    # and the edges of hostRate x mentorRatio. The first is the review's own mutant 3.
+    ("MentorBonus F6: a mentee exactly at the ratio carried", "Combat", "\t\tif rate < threshold then\n",
+     "\t\tif rate <= threshold then\n"),
+    ("MentorBonus F6: the ratio ignored", "Combat", "local threshold = hostRate * coop.mentorRatio",
+     "local threshold = hostRate"),
+    ("MentorBonus F6: one mentorValor whatever the head count", "Combat", "return mentored * coop.mentorValor",
+     "return if mentored > 0 then coop.mentorValor else 0"),
 ]
 
 

@@ -2400,14 +2400,10 @@ function L3.shippedTests(): ()
 			and entry ~= nil
 			and entry.material == pair[1]
 			and entry.amount == pair[2]
-		local slotTier = ARMORY.slots.melee.tiers[index]
-		legacySame = legacySame
-			and slotTier.cost == pair[2]
-			and ARMORY.bands[slotTier.band].material == pair[1]
 	end
 	check(
 		legacySame,
-		"legacy.gearCosts is frozen byte for byte: the twelve prices the slots charged before v8"
+		"legacy.gearCosts is frozen byte for byte: the twelve prices the slots charged before v8 (L3.LEGACY)"
 	)
 	local problems = A.Problems(ARMORY, L3.families())
 	check(

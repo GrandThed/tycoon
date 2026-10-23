@@ -4,7 +4,8 @@
 		"templates/_props",
 		"templates/_paths",
 		"templates/_enemies",
-		"templates/_world"
+		"templates/_world",
+		"templates/_levels"
 	],
 	"tree": {
 		"$className": "DataModel",

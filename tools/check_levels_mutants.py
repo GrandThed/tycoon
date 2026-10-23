@@ -22,8 +22,13 @@ held to levels.floorThickness; fd-s2: no inset where another ice block meets a s
 line and out of sim_range's mirror), and of L3 Wave 1 (L3-15: the gear presets T1 / T3 / T5; L3-17:
 Validate's firstClear lines; L3-25: every non-starter family's shelf hint, a firstClear family's
 found node, the owned families counting firstClear in the bend's known limit, R8's reach following
-the longest ownable ranged family; L3-28: the three lever attributes), shown red on a mutated copy of
-the shipped data, and green again on the data as it ships.
+the longest ownable ranged family; L3-28: the three lever attributes), and re-aimed by L4 W1 (the
+lookout at the trailhead: L2-18's cases on its new ledge, the ridge's line at 55, the d-M1 cases with
+L2's lookout put back, L3-26 as a tighter R8 band), and of L4 W1b (check_adapters_gone: a level file that names
+a mission, a layout that names an arena, a proving level with no map node or two), and of L4 W2 (the climb's
+check_parkour cases; L4W2-14: the dress walls only remove moves, every wall unclimbable, the route, the sneak and the
+lookout's owner proved again with the walls up; camp C's drawn bodies from Config/RaiderModels.json's posed reach),
+shown red on a mutated copy of the shipped data, and green again on the data as it ships.
 
 Each case loads the files afresh, changes a copy in memory (a layout block, a level file's units,
 a Combat.json number) or turns one of check_levels' switches (SIGHT_ZONES, EXEMPT_CAMERAS,
@@ -37,9 +42,11 @@ m2 (the "residents under the boss room's maxAlive" rule out of both), the second
 fenced-rectangle test out of the Python mirror alone); and for the simulator's cases (SIM_CASES),
 which run tools/sim_range.py from a copy with one line broken and expect its check red: the L2 W1
 fix round's d3 (an air jump back on in the planner turns the one-jump gate red), and L3 W1's L3-29
-(Hard's clock) and L3-26 (R8 with only the bow upgraded), its fix round's R2 and its second's F6
-(the fire sniper's cast judged per spot: an unlisted spot that never casts, a listed one that does);
-about fifteen minutes each since L3.
+(Hard's clock), its fix round's R2 and its second's F6 (the fire sniper's cast judged per spot: an
+unlisted spot that never casts, a listed one that does), and L4 W2's L4W2-13 (R8 over whole runs against
+the pair player, --r8: a run rated over the sniper's own minutes, the fight half dropped from the clock;
+L3-26's case went with the old R8 gate), and its fix round's K6 (the faithful R8 gate's margin: the sniper's
+whole-run cash raised 3%); about fifteen minutes each since L3, about six or seven each for the R8 cases.
 
 Usage:
   py tools/check_levels_mutants.py                       # every case; exit 1 when one is not as expected
@@ -64,6 +71,7 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 import check_levels as cl  # noqa: E402
+import check_parkour  # noqa: E402
 
 REPO = TOOLS.parent
 
@@ -150,8 +158,17 @@ SHEET = "with the ice frozen, every frozen sheet is thicker than"
 HINT = "map: every weapons family that is not a starter has a shelf hint"
 FIRST_NODE = "map: every firstClear family with a `found` entry"
 PRESETS = "Combat.json debug.gearPresets are"
+# L4 W1b (§3): the tripwires for ruling 27's adapters, gone with the Raider Arena.
+PROVING = "Combat.json debug.provingLevel"
+ADAPTERS = "no level file names a mission and no layout an arena"
 # The L3 W1 fix round (docs/prompts/l3-w1-fix-round.md R1).
 TROPHY = "Armory.json ladder (R1)"
+# L4 W2 (docs/prompts/l4-w2-contract.md section 7, L4W2-14): the dress walls only remove moves.
+WALL_TOPS = "ForestRoad: every dress wall is unclimbable"
+WALL_ROUTE = "ForestRoad: with the dress walls up the route"
+WALL_SNEAK = "ForestRoad: with the dress walls up the sneak path"
+WALL_OWNER = "ForestRoad: with the dress walls up the lookout's owner still reaches its ledge"
+WALL_GROUND = "ForestRoad: no dress wall reaches into ground"
 
 
 def layout(data):
@@ -330,7 +347,7 @@ def straight_exit(data):
 
 
 def ridge_ends(data, x):
-    """The 84-high ridge by the lookout (CaveWallS2, CaveRoofE) ends at `x`; the 64-high pieces
+    """The 84-high ridge by L2's lookout (CaveWallS2, CaveRoofE) ends at `x`; the 64-high pieces
     east of it (CaveWallS3, CaveRoofE2) start there."""
     for west, east, x1 in (("CaveWallS2", "CaveWallS3", -118.0), ("CaveRoofE", "CaveRoofE2", -102.0)):
         block(data, west).update({"x": (-221.0 + x) / 2, "sx": x + 221.0})
@@ -340,9 +357,36 @@ def ridge_ends(data, x):
 RIDGE_84 = ("CaveWallS2", "CaveRoofE", "CaveWallAlcoveW", "CaveWallAlcoveE", "CaveWallAlcoveN", "CaveRoofAlcove")
 
 
+def l2_lookout(data):
+    """The lookout back where L2 to L3 had it, over Road5 by the ridge (ledge top 34, its chest's top
+    38): the take-off the d-M1 cases were measured from. L4 W1 moved it to the trailhead, 132 studs
+    off the region, where nothing lifts a player onto the ridge."""
+    block(data, "LookoutLedge").update({"x": -283, "y": 15, "z": -59, "sy": 38})
+    secret(data, "lookout").update({"x": -283, "y": 36, "z": -59})
+
+
+def walls(data):
+    """Forest Road's dress walls (ctx's copy of Config/LevelDress/ForestRoad.json `barriers`)."""
+    return data["ctx"]["dress"]["ForestRoad"]
+
+
+def add_wall(data, name, x0, x1, z0, z1, top, foot=-15.0):
+    """A dress wall over x0..x1, z0..z1 from `foot` (the generator's killY - 2) to `top`."""
+    walls(data).append({"name": name, "x": (x0 + x1) / 2, "y": (foot + top) / 2, "z": (z0 + z1) / 2,
+                        "sx": x1 - x0, "sy": top - foot, "sz": z1 - z0})
+
+
+def wall_top(data, name, top):
+    """A dress wall's top moved to `top`, its foot kept."""
+    w = next(w for w in walls(data) if w["name"] == name)
+    foot = w["y"] - w["sy"] / 2
+    w["sy"] = top - foot
+    w["y"] = foot + w["sy"] / 2
+
+
 def cliff(data, name, x0, x1, top):
-    """A wall block over the lookout ledge's whole depth (z -66..-52), foot -4: the notch's sides."""
-    add_block(data, name, "wall", x0, x1, -66, -52, top, -4)
+    """A wall block over the lookout ledge's whole depth (z -40..-26), foot -4: the notch's sides."""
+    add_block(data, name, "wall", x0, x1, -40, -26, top, -4)
 
 
 # (label, change(data), {switch: value}, the rule, red?). Controls (red False) show a rule's reach:
@@ -387,14 +431,15 @@ CASES = (
     # m1: the exact extremes and the drawn body.
     ("m1: ambushE's inner fodder 2.4 off the north wall, on L1c's 1-stud wall",
      lambda d: (l1c_wall(d), shift_east(d, 2.4)), {}, SIGHT, True),
-    ("m1 control: the same on the 2-stud grid, radius only (the build's gate), on L1c's 1-stud wall",
+    ("m1 control: the same on the 2-stud grid, radius only (the build's gate, no models), on L1c's 1-stud wall",
      lambda d: (l1c_wall(d), shift_east(d, 2.4),
-                d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0})),
+                d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0}), d["ctx"].__setitem__("raiders", {})),
      {"SIGHT_ZONES": False}, SIGHT, False),
     ("m1: ambushE's inner fodder 4.5 off the north wall, on the shipped 2.5-stud wall", lambda d: shift_east(d, 4.5),
      {}, SIGHT, True),
-    ("m1 control: the same on the 2-stud grid, radius only (the build's gate), on the shipped wall",
-     lambda d: (shift_east(d, 4.5), d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0})),
+    ("m1 control: the same on the 2-stud grid, radius only (the build's gate, no models), on the shipped wall",
+     lambda d: (shift_east(d, 4.5), d["ctx"].__setitem__("renderer", {"TORSO_WIDTH": 2, "TORSO_DEPTH": 0}),
+                d["ctx"].__setitem__("raiders", {})),
      {"SIGHT_ZONES": False}, SIGHT, False),
     ("m1: CrowdRenderer's torso keys missing", lambda d: d["ctx"].__setitem__("renderer", {}), {}, READS, True),
     # The margin ruling: every margin at least the camp's sightMargin.
@@ -406,10 +451,10 @@ CASES = (
      {}, MARGIN, True),
     ("margin: sightMargin 2, on L1c's 1-stud wall (+1.57)",
      lambda d: (l1c_wall(d), camp(d).__setitem__("sightMargin", 2)), {}, MARGIN, True),
-    ("margin: ambushE's inner fodder 3.5 off the north wall (+0.75, seen from nowhere), on the shipped wall",
+    ("margin: ambushE's inner fodder 3.5 off the north wall (eye -1.61 since the fodder model reaches 3.86; +0.75 before it), on the shipped wall",
      lambda d: shift_east(d, 3.5), {}, MARGIN, True),
-    ("margin: sightMargin 4.5, over the shipped wall's +4.09", lambda d: camp(d).__setitem__("sightMargin", 4.5), {},
-     MARGIN, True),
+    ("margin: sightMargin 4.5, over the shipped wall's +1.73 (+2.93 with the first fodder model, +4.09 before L4 W2's models)",
+     lambda d: camp(d).__setitem__("sightMargin", 4.5), {}, MARGIN, True),
     ("margin: sightMargin missing", lambda d: camp(d).pop("sightMargin"), {}, MARGIN, True),
     ("margin control: sightMargin 1.5 with ambushE's inner fodder 0.05 off the wall",
      lambda d: shift_east(d, 0.05), {}, MARGIN, False),
@@ -463,30 +508,35 @@ CASES = (
      {"LIFT_MODEL": "floor"}, REACH_C, True),
     ("L2-18c control: Leap Smash height 18 under the floor model", lambda d: lift_height(d, 18),
      {"LIFT_MODEL": "floor"}, REACH_C, False),
-    # At 20 a target on camp A's fence (top 12) lifts the arc to 12 + 20 = 32, over the 31 a step up
-    # needs: the floor model's margin is the fence, not the jump.
-    ("L2-18c: Leap Smash height 20 under the floor model (a target on A's fence)", lambda d: lift_height(d, 20),
-     {"LIFT_MODEL": "floor"}, REACH_C, True),
+    # L4 W1: at the trailhead every take-off and target round the ledge is ground at 0 (no fence near
+    # it), so at 23 an arc from the Trailhead puts the feet at 23, the ledge's 26 less a step up, and
+    # at 22 nothing does: the margin over the shipped height 10 is 13 studs (it was camp A's fence).
+    ("L2-18c: Leap Smash height 23 under the floor model (feet at the ledge's 26 less a step up)",
+     lambda d: lift_height(d, 23), {"LIFT_MODEL": "floor"}, REACH_C, True),
+    ("L2-18c control: Leap Smash height 22 under the floor model", lambda d: lift_height(d, 22),
+     {"LIFT_MODEL": "floor"}, REACH_C, False),
     # L2-18 (b): one jump, a step up and a dash, unclimbable walls left out.
-    ("L2-18b: a ledge (top 14) west of the sign pad", lambda d: add_block(d, "MutantStep", "ground", -310, -306, -62, -56,
-                                                                           14, 8), {}, REACH_B, True),
+    # L4 W1: the lookout at the trailhead (ledge x -458..-434, z -40..-26, top 26 over Road1, its
+    # front face 18 studs off Road1's north edge across the void; the chest at z -36..-30).
+    ("L2-18b: a ledge (top 14) in the void between Road1 and the ledge",
+     lambda d: add_block(d, "MutantStep", "ground", -450, -446, -22, -16, 14, 8), {}, REACH_B, True),
     ("L2-18b control: an unclimbable wall (top 84) on the ledge's east side",
-     lambda d: cliff(d, "LookoutCliffE", -275, -271, 84), {}, REACH_B, False),
-    ("L2-18b: the same wall 60 high (climbable)", lambda d: cliff(d, "LookoutCliffE", -275, -271, 60), {}, REACH_B, True),
+     lambda d: cliff(d, "LookoutCliffE", -438, -434, 84), {}, REACH_B, False),
+    ("L2-18b: the same wall 60 high (climbable)", lambda d: cliff(d, "LookoutCliffE", -438, -434, 60), {}, REACH_B, True),
     # L2-18 (a): the owner's band.
     ("L2-18a: the ledge 6 higher (over jump + double jump less 4)",
-     lambda d: (top_at(d, "LookoutLedge", 40), secret(d, "lookout").__setitem__("y", 42)), {}, REACH_A, True),
+     lambda d: (top_at(d, "LookoutLedge", 32), secret(d, "lookout").__setitem__("y", 34)), {}, REACH_A, True),
     # L2-18 (d): the trigger met only on the ledge.
-    ("L2-18d: the chest at the ledge's front edge (z -54)", lambda d: secret(d, "lookout").__setitem__("z", -54), {},
+    ("L2-18d: the chest at the ledge's front edge (z -28)", lambda d: secret(d, "lookout").__setitem__("z", -28), {},
      REACH_D, True),
-    ("L2-18d: secretBelow 25 and secretReach 8 (a root on Road5)",
-     lambda d: (levels(d).__setitem__("secretBelow", 25), levels(d).__setitem__("secretReach", 8)), {}, REACH_D, True),
+    ("L2-18d: secretBelow 25 and secretReach 26 (a root on Road1, 22 off the chest's footprint)",
+     lambda d: (levels(d).__setitem__("secretBelow", 25), levels(d).__setitem__("secretReach", 26)), {}, REACH_D, True),
     # Measured from the footprint (the fix round's s1), the ground within secretReach 2.5 of the
-    # chest's back face reaches the ledge's back edge (z -66) at z -60.5 and passes it at -61.
-    ("L2-18d control: the chest 1.5 further back (z -60.5)", lambda d: secret(d, "lookout").__setitem__("z", -60.5),
+    # chest's back face reaches the ledge's back edge (z -40) at z -34.5 and passes it at -35.
+    ("L2-18d control: the chest 1.5 further back (z -34.5)", lambda d: secret(d, "lookout").__setitem__("z", -34.5),
      {}, REACH_D, False),
-    ("L2-18d: the chest 2 further back (z -61), the trigger over the void behind",
-     lambda d: secret(d, "lookout").__setitem__("z", -61), {}, REACH_D, True),
+    ("L2-18d: the chest 2 further back (z -35), the trigger over the void behind",
+     lambda d: secret(d, "lookout").__setitem__("z", -35), {}, REACH_D, True),
     # The fix round's s1 + d2: (a)'s standable point runs for every secret, its key sold or not.
     # L2 W2: the cache is a 6 x 6 chest in the alcove, and its top has room for a body, so the
     # general (a) always holds through the top; these cases judge the cave's own (a), which asks
@@ -534,9 +584,14 @@ CASES = (
      lambda d: block(d, "CaveBrambleE").update({"y": 15.1, "sy": 13.8}), {}, SEALED, True),
     ("L2-37f: the long leg's roof 3 studs short of the alcove wall (x -342..-224)",
      lambda d: block(d, "CaveRoofW").update({"x": -283, "sx": 118}), {}, SEALED, True),
-    ("L2-37f: the ridge 60 high by the ledge (CaveWallS1)", lambda d: top_at(d, "CaveWallS1", 60), {}, RIDGE, True),
-    ("L2-37f control: CaveWallS1 81 high (43 over the lookout chest's top, 38)", lambda d: top_at(d, "CaveWallS1", 81),
-     {}, RIDGE, False),
+    # L4 W1: with the lookout gone from the ridge the highest surface within reach of CaveWallS1 is
+    # 12 (camp A's fence, the cache's chest), so the line is 12 + 43 = 55 (it was 38 + 43 = 81).
+    ("L2-37f: the ridge 54 high (CaveWallS1, 42 over camp A's fence and the cache's chest)",
+     lambda d: top_at(d, "CaveWallS1", 54), {}, RIDGE, True),
+    ("L2-37f control: CaveWallS1 55 high (43 over camp A's fence top and the cache chest's, 12)",
+     lambda d: top_at(d, "CaveWallS1", 55), {}, RIDGE, False),
+    ("L2-37f: CaveWallS1 80 high with L2's lookout back by it (42 over its chest's top, 38)",
+     lambda d: (l2_lookout(d), top_at(d, "CaveWallS1", 80)), {}, RIDGE, True),
     # L2-37 (a): the cache's trigger, met from the alcove only; a roof with no room over it.
     ("L2-37a: the alcove's roof down to 13 (5 over its floor: no room for a body)",
      lambda d: block(d, "CaveRoofAlcove").update({"y": 38.5, "sy": 51}), {}, CACHE_A, True),
@@ -582,16 +637,18 @@ CASES = (
      lambda d: d["combat"]["debug"].__setitem__("grantFamilyAttribute", "DebugGrantAbility"), {}, LEVERS, True),
     ("L2-34: the bramble look grey", lambda d: d["expeditions"]["looks"]["bramble"].__setitem__("color", [110, 112, 104]),
      {}, LOOKS, True),
-    # The fix round's d-M1: no lift or air dash of a Double Jump owner ends on the ridge.
-    ("d-M1: the ridge by the ledge back at 64 (W2's data: CaveWallS2, CaveRoofE and the alcove)",
-     lambda d: [top_at(d, n, 64) for n in RIDGE_84], {}, RIDGE_LIFT, True),
-    ("d-M1: the 84 ridge ends at x -205 (the Spear's air dash onto CaveWallS3)", lambda d: ridge_ends(d, -205), {},
-     RIDGE_LIFT, True),
-    ("d-M1 control: the 84 ridge ends at x -195", lambda d: ridge_ends(d, -195), {}, RIDGE_LIFT, False),
-    ("d-M1: no air dash, the 84 ridge ends at x -210 (Leap Smash onto CaveWallS3)",
-     lambda d: (d["ctx"].__setitem__("dashes", []), ridge_ends(d, -210)), {}, RIDGE_LIFT, True),
-    ("d-M1 control: no air dash, the 84 ridge ends at x -205",
-     lambda d: (d["ctx"].__setitem__("dashes", []), ridge_ends(d, -205)), {}, RIDGE_LIFT, False),
+    # The fix round's d-M1: no lift or air dash of a Double Jump owner ends on the ridge. Measured
+    # from L2's lookout (its ledge and chest by the ridge); L4 W1 moved it, so each case puts it back.
+    ("d-M1: the ridge back at 64 (W2's data: CaveWallS2, CaveRoofE and the alcove), L2's lookout by it",
+     lambda d: (l2_lookout(d), [top_at(d, n, 64) for n in RIDGE_84]), {}, RIDGE_LIFT, True),
+    ("d-M1: the 84 ridge ends at x -205 (the Spear's air dash onto CaveWallS3), L2's lookout by it",
+     lambda d: (l2_lookout(d), ridge_ends(d, -205)), {}, RIDGE_LIFT, True),
+    ("d-M1 control: the 84 ridge ends at x -195, L2's lookout by it", lambda d: (l2_lookout(d), ridge_ends(d, -195)),
+     {}, RIDGE_LIFT, False),
+    ("d-M1: no air dash, the 84 ridge ends at x -210 (Leap Smash onto CaveWallS3), L2's lookout by it",
+     lambda d: (l2_lookout(d), d["ctx"].__setitem__("dashes", []), ridge_ends(d, -210)), {}, RIDGE_LIFT, True),
+    ("d-M1 control: no air dash, the 84 ridge ends at x -205, L2's lookout by it",
+     lambda d: (l2_lookout(d), d["ctx"].__setitem__("dashes", []), ridge_ends(d, -205)), {}, RIDGE_LIFT, False),
     # The fix round's d-m1: the ridge's reach includes the walk-off grace (46.6 -> 49.3).
     ("d-m1: a perch at 34, 48 studs off CaveWallS3 (inside the grace's 49.3, outside 46.6)",
      lambda d: add_block(d, "MutantPerch", "ground", -180, -176, -34, -30, 34, 30), {}, RIDGE, True),
@@ -699,10 +756,10 @@ CASES = (
      lambda d: (block(d, "ShrineIsland").__setitem__("z", 230), secret(d, "shrine").__setitem__("z", 230)), {}, ICE_FROZEN,
      True),
     # The W2 lessons on the frozen layout: no new ledge route, wall or sniper spot.
-    ("W3 frozen: a pond 17 high beside the lookout ledge (one jump onto it once frozen)",
-     lambda d: ice_block(d, "MutantIce", -295, -271, -80, -68, 17), {}, FROZEN_LEDGE, True),
-    ("W3 frozen control: the same pond 6 high", lambda d: ice_block(d, "MutantIce", -295, -271, -80, -68, 6), {},
-     FROZEN_LEDGE, False),
+    ("W3 frozen: a pond 17 high behind the lookout ledge (one jump onto it once frozen)",
+     lambda d: ice_block(d, "MutantIce", -458, -434, -54, -42, 17), {}, FROZEN_LEDGE, True),
+    ("W3 frozen control: the same pond at the creek's height (top -1)",
+     lambda d: ice_block(d, "MutantIce", -458, -434, -54, -42, -1), {}, FROZEN_LEDGE, False),
     ("W3 frozen: a pond 42 high 4 off CaveWallS1 (the ridge climbable once frozen)",
      lambda d: ice_block(d, "MutantIce", -255, -245, -78, -70, 42), {}, ICE_WALLS, True),
     ("W3 frozen: a pond south of Road4 (a new sniper spot once frozen)",
@@ -832,11 +889,12 @@ CASES = (
      lambda d: block(d, "ShrineIsland").__setitem__("x", -436 + 4 * 72 / 11 + 8), {}, COPLANAR, True),
     ("W3 fix3 fd-m1 control: the island at z 128.05 (its south face the inset off the row line)",
      lambda d: block(d, "ShrineIsland").__setitem__("z", 128.05), {}, COPLANAR, False),
-    # fd-m2: a sheet thicker than the fastest fall's step (0.685 here: a fall from the jumps' apex over
-    # the lookout at 240 Hz) and thinner than a root (2).
-    ("W3 fix3 fd-m2: ice.thickness 0.6 (the fastest fall moves 0.685 a physics step)",
-     lambda d: ice(d).__setitem__("thickness", 0.6), {}, SHEET, True),
-    ("W3 fix3 fd-m2 control: ice.thickness 0.7", lambda d: ice(d).__setitem__("thickness", 0.7), {}, SHEET, False),
+    # fd-m2: a sheet thicker than the fastest fall's step and thinner than a root (2). Re-aimed by L4 W2: the
+    # rule falls from the jumps' apex over the highest top reached anywhere, now the mountain's summit, 234.8
+    # down to the lowest sheet: 1.265 a physics step at 240 Hz (it was 0.644 over the lookout).
+    ("W3 fix3 fd-m2: ice.thickness 1.2 (the fastest fall moves 1.265 a physics step)",
+     lambda d: ice(d).__setitem__("thickness", 1.2), {}, SHEET, True),
+    ("W3 fix3 fd-m2 control: ice.thickness 1.3", lambda d: ice(d).__setitem__("thickness", 1.3), {}, SHEET, False),
     ("W3 fix3 fd-m2: ice.thickness 2 (a root fits wholly inside)", lambda d: ice(d).__setitem__("thickness", 2), {},
      SHEET, True),
     ("W3 fix3 fd-m2: ice.thickness 4 (d-m6's floor: a root fits wholly inside)",
@@ -911,6 +969,60 @@ CASES = (
     ("R1 control: that difficulty listed in starAlso",
      lambda d: (d["expeditions"]["difficulties"].append("overdrive"),
                 d["ctx"]["armory"]["ladder"].__setitem__("starAlso", ["brutal", "overdrive"])), {}, TROPHY, False),
+    # L4 W1b (docs/prompts/l4-w1b-contract.md §3): check_adapters_gone. A level file that still names a
+    # mission, a layout that still names an arena, a proving level no map node names or two nodes name.
+    ("L4 W1b: Forest Road's file names a mission", lambda d: level(d).__setitem__("mission", "village"), {}, ADAPTERS,
+     True),
+    ("L4 W1b: Forest Road's layout names an arena", lambda d: layout(d).__setitem__("arena", "Village"), {}, ADAPTERS,
+     True),
+    ("L4 W1b: debug.provingLevel names a level with no node and no file",
+     lambda d: d["combat"]["debug"].__setitem__("provingLevel", "outpost"), {}, PROVING, True),
+    ("L4 W1b: a second map node names Forest Road's level",
+     lambda d: d["expeditions"]["nodes"].append(dict(d["expeditions"]["nodes"][0], id="outpost", x=0.5, y=0.1)), {},
+     PROVING, True),
+    ("L4 W1b control: the shipped proving level, its one node", lambda d: None, {}, PROVING, False),
+)
+# L4 W2 (MISSIONS_DESIGN 28): tools/check_parkour.py's mutants, each through every gate, and a control.
+CASES += tuple((f"L4 W2: {label}", (lambda m: lambda d: m(layout(d)))(mutate), {}, rule, True)
+               for label, mutate, rule in check_parkour.MUTANTS)
+CASES += (("L4 W2 control: the shipped climb", None, {}, "the mountain climb: no fall leaves the yard", False),)
+# L4 W2 (contract 7, L4W2-14): the dress walls. Each "can" claim proved again with the walls up, every
+# wall top unclimbable (is_tall takes `barrier`), each shown red, and the unclimbable rule's reach.
+CASES += (
+    # L4 W2 (contract 7): camp C's sight gate reads each model kind's posed reach (Config/RaiderModels.json).
+    ("L4 W2: the fodder model's posed reach 5.5 studs out (the shipped +1.73 falls under sightMargin)",
+     lambda d: d["ctx"]["raiders"]["fodder"]["posedReach"].__setitem__("out", 5.5), {}, MARGIN, True),
+    ("L4 W2 control: the same reach on a fodder model built for another height (it does not count: the placeholder)",
+     lambda d: (d["ctx"]["raiders"]["fodder"]["posedReach"].__setitem__("out", 5.5),
+                d["ctx"]["raiders"]["fodder"].__setitem__("height", 5.5)), {}, MARGIN, False),
+    # The fix round's K10 (the review's slice 4 m3): a post shared by two kinds keeps the one drawn widest. A
+    # slinger on Hard at ambushE's first post, a fodder's on Normal: its orb draws it 4.51 out against the
+    # fodder's 3.86, the tightest eye falls to about +1.08; the pre-fix rule kept the fodder (radius 1.3 over
+    # the slinger's 1.2) and passed it.
+    ("K10: a slinger on Hard at ambushE's first post (a fodder's on Normal)",
+     lambda d: residents(d, "ambushE")["units"].insert(0, {"kind": "slinger", "count": 1, "minDifficulty": "hard"}),
+     {}, MARGIN, True),
+    ("K10 control: the same slinger under the pre-fix rule (the widest radius's kind kept: green)",
+     lambda d: residents(d, "ambushE")["units"].insert(0, {"kind": "slinger", "count": 1, "minDifficulty": "hard"}),
+     {"DRAWN_POSTS": False}, MARGIN, False),
+    ("L4W2-14: a wall across the lookout's double-jump gap (x -458..-434, z -26..-8)",
+     lambda d: add_wall(d, "TreeLineGap", -458, -434, -26, -8, 80), {}, WALL_OWNER, True),
+    ("L4W2-14 control: the shipped walls, the gap open", None, {}, WALL_OWNER, False),
+    ("L4W2-14: TreeLine2's top 20 over the trailhead (climbable)", lambda d: wall_top(d, "TreeLine2", 20), {},
+     WALL_TOPS, True),
+    ("L4W2-14 control: TreeLine2's top 73, 43 over the lookout's chest (climb_max)",
+     lambda d: wall_top(d, "TreeLine2", 73), {}, WALL_TOPS, False),
+    ("L4W2-14: a wall across Road2 (x -401..-399)", lambda d: add_wall(d, "TreeLineRoad2", -401, -399, -9, 9, 80), {},
+     WALL_ROUTE, True),
+    ("L4W2-14: a wall across the sneak by camp A's north edge (x -221..-219, z -57..-52), off the route",
+     lambda d: add_wall(d, "TreeLineSneak", -221, -219, -57, -52, 80), {}, WALL_SNEAK, True),
+    ("L4W2-14 control: that wall moved north off the sneak (z -61..-58.6)",
+     lambda d: add_wall(d, "TreeLineSneak", -221, -219, -61, -58.6, 80), {}, WALL_SNEAK, False),
+    ("L4W2-14: a wall over Road2's north half (into walked ground)",
+     lambda d: add_wall(d, "TreeLineInto", -410, -380, -8, -2, 80), {}, WALL_GROUND, True),
+    ("L4W2-14: `barrier` taken out of is_tall",
+     None, {"is_tall": lambda solid: solid.kind == "fence" or (solid.kind == "block" and solid.look == "wall")},
+     WALL_TOPS, True),
 )
 
 
@@ -1056,17 +1168,43 @@ SIM_CASES = (
      ("can_jump = self.jump is None and (self.lift is None or t >= self.lift[1])", "can_jump = True"),
      ("--check", "--levels-only", "--level", "forest"), ONE_JUMP),
     # L3-29: Hard at T3 keeps the clock it had at 4/4. With the old clock pinned 10% higher the
-    # measured mean (about 313 s) lies outside the 5% band and the gate goes red.
+    # measured mean (about 308 s since the Chief's sweep is 12.7, L4 W2 fix round K2) lies outside the 5%
+    # band and the gate goes red.
     ("L3-29: Hard's old clock pinned at 345 s (the measured mean 10% under it)",
      ('L3_CLOCK_SECONDS = {"hard": 312.8, "brutal": 311.5}', 'L3_CLOCK_SECONDS = {"hard": 345.0, "brutal": 311.5}'),
      ("--check", "--levels-only", "--level", "forest"), "the reacting player's mean clear is within"),
-    # L3-26: R8 with only the bow upgraded is gated like R8: the LookoutLedge out of Normal's known
-    # limit turns its sword-T1 / bow-T4 row red (it out-earns the mission player there).
-    ("L3-26: the LookoutLedge out of Normal's known limit (its only-the-bow-upgraded row)",
-     ('    "normal": ("LookoutLedge", "Secret_lookout"),  # L2 W2: the cache moved into the cave',
-      '    "normal": ("Secret_lookout",),  # L2 W2: the cache moved into the cave'),
-     ("--check", "--levels-only", "--level", "forest"),
-     "Normal at gear 1/4 (only the bow upgraded, L3-26): the sniper from LookoutLedge earns less"),
+    # L3-26's case ("R8's band at half the mission's pay") is retired with the old r8_gate it swapped a line
+    # of: L4 W2 (L4W2-13) judges R8 over whole runs (--r8), and the two cases below hold that gate.
+    # L4 W2 (L4W2-13): R8 judged over whole runs against the pair player (--r8). Each runs one table and one
+    # spot; under this harness the runs stay in order (sim_range.r8_poolable). Since the fix round (K6) the gate
+    # is the faithful one, and --r8-gate-only skips the printed sword runs: about 6 minutes each (D1's cases,
+    # fix-reports/d1.md "To D2").
+    ("L4W2-13: R8 rates a whole run over the sniper's own minutes only",
+     ('    minutes = run["at"] / 60 if run["at"] else math.inf\n',
+      '    minutes = run["ownMinutes"] or math.inf\n'),
+     ("--r8", "--check", "--r8-table", "normal", "--r8-spot", "Road3", "--r8-gate-only"),
+     "Normal at gear 1/1 (the proving gear): the sniper from Road3 earns no more cash"),
+    # "Drops the fight half" taken literally cannot go red (the run would end where today's course ends, and
+    # on every row that pays less than the mission): the fight half's minutes are dropped from the clock,
+    # its pay kept.
+    ("L4W2-13: R8 drops the fight half from the clock (its pay kept)",
+     ('    minutes = run["at"] / 60 if run["at"] else math.inf\n',
+      '    minutes = (run["fightFrom"] or run["at"]) / 60\n'),
+     ("--r8", "--check", "--r8-table", "normal", "--r8-spot", "Road2", "--r8-gate-only"),
+     "Normal at gear 1/1 (the proving gear): the sniper from Road2 earns no more cash"),
+    # The W2 fix round's K6: the gate is the faithful reading (the sniper fights with sword and bow before and
+    # after the spot, as the pair player he is held to), whose tightest rows pass by 1.4-2.3% (Road3 on Hard).
+    # A spot whose whole run pays a few percent more must turn red: the sniper's whole-run cash raised 3% on
+    # the tightest row (Hard, sword T1 / bow T1, Road3: x0.986 to about x1.016). Fix round 2 (L1, the Chief's
+    # sweep at 120 degrees) left the row Ben's ruling named (Hard, bow T4, Road3: x0.977) red by only 0.6%,
+    # so the case moved here (the lead's ruling). Sized to the margin: should a later change widen that row's
+    # margin past 3%, this case goes NOT; re-size it to the new margin, never drop it. Only the gate's runs
+    # (--r8-gate-only), in order: 60 Hard runs, about 7 minutes.
+    ("K6: R8's sniper paid 3% more over a whole run (the faithful gate's margin is 1-6%)",
+     ('    return run["wallet"]["cash"] / minutes, run["wallet"]["materials"] / minutes\n',
+      '    return run["wallet"]["cash"] * 1.03 / minutes, run["wallet"]["materials"] / minutes\n'),
+     ("--r8", "--check", "--r8-table", "hard", "--r8-spot", "Road3", "--r8-gate-only"),
+     "Hard at gear 1/1 (the proving gear): the sniper from Road3 earns no more cash"),
     # The L3 W1 fix round, R2: every strike at the striking family's own tier, the bar from the held
     # pair, the Flamethrower's pair rated like with like. About fifteen minutes each.
     ("R2: every family's scale from its slot's gear again (the pre-fix rule)",

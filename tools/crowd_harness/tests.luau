@@ -568,6 +568,10 @@ Vitals.Start({
 		end
 		iframes.untilClock = math.max(iframes.untilClock, fakeNow + seconds)
 	end,
+	-- L4 W1b F1: no dash claim in this fixture (tests_l4b.luau runs its own VitalsService with one).
+	dashClaim = function()
+		return 0, 0, 0
+	end,
 })
 check(threatHooks.flush == nil, "ruling 23: the crowd step no longer flushes the effects")
 local regenScript: any = {
@@ -611,7 +615,7 @@ local player: any = {
 		return 0.05
 	end,
 }
-vitalsBeat = beats[#beats]
+vitalsBeat = Vitals.Step
 table.insert(players, player)
 table.insert(players, { UserId = 8, Parent = {} })
 Vitals.AddPlayer(player)

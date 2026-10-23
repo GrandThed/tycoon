@@ -1000,4 +1000,400 @@ function W2L3.sourceTests(): ()
 end
 L1.group("l3w2 sourceTests", W2L3.sourceTests)
 
+-- L4 W1b (docs/prompts/l4-w1b-contract.md §4, §5): the service lines that apply L4B-7 and L4B-8, read as
+-- text (FIXTURES.source.l4b, run_harness.py's L4B_LINES and L4B_ORDER; none of the three services
+-- loads here). The rules themselves are tests_l4b.luau's (DashProof) and tests_l4b_run.luau's (RunFloors).
+local L4BP: any = {
+	LINES = {
+		dashGrantsNothing = { 0, "WeaponService.OnDash grants nothing: no GrantIframes, DashProof, showIframes or window write (L4B-7)" },
+		dashClaim = { 1, "OnDash records the claim at the request (dashClaimAt = now)" },
+		dashStamp = { 1, "and stamps the cooldown (lastDashAt = now)" },
+		dashDown = { 1, "and refuses a downed player" },
+		trackRecordThenProve = { 1, "trackAir proves a pending claim right after this frame's ring sample" },
+		trackNoRootClears = { 1, "and a frame with no living root drops the claim" },
+		trackEach = { 1, "trackAir runs each shooter under its own xpcall, the loop holding nothing else (H2)" },
+		trackOneDefined = { 1, "one shooter's air tracking (trackOne) lives inside trackAir (H2)" },
+		trackOneNames = { 2, "trackOne is named twice: its definition and the xpcall (H2)" },
+		proveStep = { 1, "proveDash runs DashProof.Step on the ring, now, the root, the rule and dashIframes" },
+		proveShows = { 1, "and shows the attribute only for a proof" },
+		proveWritesNothing = { 0, "proveDash itself writes no claim and no window (Step does)" },
+		ruleRead = { 1, "the rule is read from movement and shooting (dashRule)" },
+		ruleCalls = { 1, "DashProof.Rule( is spelled once" },
+		pendingNoClaim = { 1, "pendingDash answers 0, 0, 0 before building a rule when there is no claim (s2)" },
+		pendingClaim = { 1, "pendingDash answers DashProof.Pending on the shooter's claim (F1)" },
+		hookClaim = { 1, "VitalsService is handed pendingDash as its dashClaim hook (F1)" },
+		stepHead = { 1, "step opens with the clock, then the proofs, then VitalsService, nothing between (G3)" },
+		stepVitals = { 1, "WeaponService's step runs VitalsService.Step under xpcall (F1: one handler; G2)" },
+		stepRest = { 1, "and the rest under xpcall (G2)" },
+		startConnects = { 1, "Start connects step itself to the Heartbeat (G3)" },
+		stepFailedBody = { 1, "stepFailed as one block: each message warned once, with its traceback, never silent (G2; m2)" },
+		vitalsStepCalls = { 1, "VitalsService.Step is named once" },
+		heartbeats = { 1, "WeaponService connects one Heartbeat" },
+		grantOpens = { 1, "GrantIframes opens from now, or the earlier `from` (G1), through DashProof.Open, then shows it" },
+		openCalls = { 1, "DashProof.Open( is spelled once in WeaponService (GrantIframes)" },
+		stepCalls = { 1, "DashProof.Step( is spelled once (proveDash)" },
+		claimWrites = { 3, "shooter.dashClaimAt is written three times: OnDash, trackAir's no-root clear, resetAir" },
+		resetDropsClaim = { 1, "resetAir drops a pending claim" },
+		runStateSpelled = { 1, "ArenaService spells \"RunState\" once: sendRunState's FireClient (L4B-8)" },
+		sendRunStateCalls = { 3, "sendRunState( three times: its definition, sendSummaryTo, Broadcast" },
+		attachCalls = { 2, "RunFloors.Attach( twice: sendRunState and BuildRunState" },
+		sendSkip = { 1, "sendRunState reaches Attach only for a member not noted for this set (slice 2 s1)" },
+		sendAttach = { 1, "and asks Attach with the member's note" },
+		sendCellsWent = { 1, "and swaps the cells in only when Attach says they went (F3)" },
+		sendClone = { 1, "on a copy of the RunState, never the one Broadcast shares (F3)" },
+		sendFloors = { 1, "and sends the floors Attach answered" },
+		sendFloorsWrites = { 1, "sent.floors is written only there" },
+		sendNote = { 1, "and records the set it sent" },
+		sendFires = { 1, "and fires what it built (sent), not the bare RunState" },
+		buildAttach = { 1, "BuildRunState builds its floors with no cells (sentSeq = the set)" },
+		buildFloors = { 1, "BuildRunState's payload carries those floors" },
+		buildSeq = { 1, "and the set's number" },
+		admitClears = { 1, "Admit clears the member's note: a rejoin gets the cells" },
+		removeClears = { 1, "Remove clears it too" },
+		noteWrites = { 3, "play.cellsSent[...] is written three times (the send, Admit, Remove)" },
+		floorsAssigned = { 1, "WaveService assigns run.floors once (in setFloors)" },
+		seqRaised = { 1, "setFloors raises boot.floorsSeq" },
+		seqWrites = { 1, "and nothing else writes it" },
+		setFloorsCalls = { 4, "setFloors( four times: its definition, the start, the lobby, Reset" },
+		startSets = { 1, "a start's floors are a new set" },
+		lobbySets = { 2, "the lobby's and a session reset's empty list are new sets too" },
+		pushSeq = { 1, "pushRunFields hands the set's number to ArenaService" },
+		uiHeld = { 1, "applyFloors merges against what it holds (F3)" },
+		uiMerge = { 1, "and through RunFloors.Merge with the held set's number" },
+		uiSeq = { 1, "then keeps the incoming set's number" },
+		uiKeep = { 1, "and keeps the merged floors" },
+		uiCall = { 1, "onRunState hands over the floors with the RunState's floorsSeq (0 when missing)" },
+		uiApplyCalls = { 2, "applyFloors( twice: its definition and onRunState" },
+		uiMergeCalls = { 1, "RunFloors.Merge( once in CombatUIController" },
+		uiSeqWrites = { 1, "st.floorsSeq is written only there" },
+		uiConnect = { 1, "onRunState is the RunState listener" },
+		mentorTotal = { 1, "payMentors weighs every share against the sum of the boss's damage (s1)" },
+		mentorNone = { 1, "payMentors pays nobody when nobody hurt the boss (F6)" },
+		mentorFloor = { 1, "a mentor waiting in the lobby camp or under the damage floor is not paid" },
+		menteeOther = { 1, "a mentee is another member" },
+		menteeFloor = { 1, "whose share of the boss reached the floor" },
+		menteeRate = { 1, "and the mentee's own income rate is what is weighed" },
+		mentorBonusCall = { 1, "against the mentor's rate, through Combat.MentorBonus (check_stage_mirror compares it)" },
+		mentorValor = { 1, "the bonus goes to the mentor's Valor" },
+		mentorCard = { 1, "and onto the mentor's card" },
+		mentorNoBonus = { 1, "a mentor whose bonus is nothing gets no Valor, card or toast (s1)" },
+		mentorBonusCalls = { 1, "Combat.MentorBonus( once in WaveService" },
+		bossPaysMentors = { 1, "the boss's kill pays the mentors" },
+		h1Body = { 1, "fieldHeld as one block: a waiting blow holds a clear field, the down keeps the tick's finding, the cap (H1)" },
+		h1Asks = { 1, "fieldHeld asks HasWaiting of every fighter" },
+		h1DownKeeps = { 1, "the down's advance keeps the last tick's finding (its list is already empty)" },
+		h1Notes = { 1, "the tick notes what it found" },
+		h1ClearOnly = { 1, "only a field that would read clear is held" },
+		h1Resets = { 1, "the deferral starts over when nothing waits" },
+		h1Starts = { 1, "the deferral's start is noted" },
+		h1Rule = { 1, "the lapse is the rule WeaponService proves claims by" },
+		h1Lapse = { 1, "no rule, no lapse (nothing can wait)" },
+		h1Cap = { 1, "never held longer than a lapse and the frame" },
+		h1Writes = { 3, "blowWaits and heldSince are written only in fieldHeld" },
+		h1Defs = { 1, "fieldHeld is defined once" },
+		h1Calls = { 2, "fieldHeld( twice: its definition and advance" },
+		h1AdvanceDelta = { 1, "advance takes the frame (nil from OnDown)" },
+		h1AdvanceHolds = { 1, "advance asks fieldHeld with the frame" },
+		h1AdvanceHoldWrites = { 1, "a held field does not read clear" },
+		h1SpawningWrites = { 1, "input.spawningDone is written only there" },
+		h1AdvanceCalls = { 2, "advance is called by the tick and by OnDown" },
+		h1TickDelta = { 1, "tick takes the Heartbeat's frame" },
+		h1TickAdvance = { 1, "the tick passes its frame to advance" },
+		h1DownAdvance = { 1, "OnDown passes none: the down keeps the tick's finding" },
+		h1BootTick = { 1, "Boot's Heartbeat passes its frame to the tick" },
+		h1FreshBlowWaits = { 1, "a run starts with no blow found" },
+		h1FreshHeldSince = { 1, "and no deferral" },
+		h1DashProof = { 1, "WaveService requires DashProof for the lapse" },
+	},
+	ORDER = {
+		trackOrder = "trackAir: the ring sample comes before the claim is judged",
+		frameOrder = "step: the proofs (trackAir) come before VitalsService decides (F1)",
+		restLast = "step: the rest after VitalsService (G2)",
+		sendOrder = "sendRunState: Attach comes before the note",
+		uiMergeThenSeq = "applyFloors: the merge reads the held number before it is replaced",
+		uiMergeThenSame = "and the comparison sees the merged floors",
+		uiGuardThenFloors = "onRunState: the floors after the guard",
+		uiFloorsFirst = "and before the new-level branch (F4)",
+		mentorFloorThenPay = "payMentors: the mentor's floor is tested before the pay",
+		bonusGuardThenPay = "payMentors: a bonus of nothing is turned back before the pay (s1)",
+		h1InputThenHold = "advance: the hold reads the input it has built (H1)",
+		h1HoldThenAdvance = "advance: the hold before StageFlow decides (H1)",
+	},
+}
+
+function L4BP.sourceTests(): ()
+	print(" L4 W1b: the lines that apply the dash proof and the floor sets (source.l4b)")
+	local reading = FIXTURES.source.l4b
+	check(
+		#reading.missing == 0,
+		`every function the lines live in is there ({table.concat(reading.missing, ", ")})`
+	)
+	local keys = {}
+	for key in L4BP.LINES do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local expected = L4BP.LINES[key]
+		local count = reading.counts[key]
+		check(count == expected[1], `{expected[2]} ({key}: {tostring(count)}, expected {expected[1]})`)
+	end
+	local unknown = {}
+	for key in reading.counts do
+		if L4BP.LINES[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	for key, text in L4BP.ORDER do
+		check(reading.order[key] == true, `{text} ({key})`)
+	end
+	for key in reading.order do
+		if L4BP.ORDER[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	table.sort(unknown)
+	check(#unknown == 0, `every line read has an expected count here ({table.concat(unknown, ", ")})`)
+end
+L1.group("l4b sourceTests", L4BP.sourceTests)
+
+-- L4 W2 (docs/prompts/l4-w2-contract.md 2.2, 3.2, 5, 8, section 0) and its fix round (K3, K7, K8, K9):
+-- the service lines that lay LevelDress's answer, lower a seated head in every hit, send the pools'
+-- counts, carry the chest's key and pull the Z lever, and the client lines that act on ScenePlan's
+-- answers and read the seat, read as text (FIXTURES.source.l4w2, run_harness.py's L4W2_LINES and
+-- L4W2_ORDER). The rules themselves are tests_l4w2.luau's and tests_l4w2_scenery.luau's. On L4BP (the
+-- bundle's 200-local limit).
+L4BP.W2 = {
+	LINES = {
+		constructLooks = { 1, "construct builds in the laid looks (the dress's over Expeditions.json's)" },
+		constructHidden = { 1, "construct reads the hidden names from the laid answer" },
+		constructPieces = { 1, "and builds the laid pieces (the walls among them)" },
+		constructSkips = { 2, "leaving one out only when the groups were refused (one continue; one return, at the end)" },
+		constructWallRole = { 1, "construct knows a dress wall by LevelDress.WALL_ROLE" },
+		constructNoGroupNoWall = { 1, "and builds no wall, a camp's or the dress's, when the groups were refused" },
+		constructWallBranch = { 1, "a dress wall has a branch of its own" },
+		constructGroups = { 2, "the camp's wall and the dress wall are each put in BarrierGroups.BARRIER" },
+		constructArmed = { 1, "the dress wall collides from the build (no camp opens it)" },
+		constructWallLook = { 1, "the dress wall is unseen, untouched, shadowless and armed, in that branch" },
+		constructCollides = { 3, "construct writes CanCollide three times: a piece that does not collide, the camp's wall off, the dress wall on" },
+		constructSkinnedIf = { 1, "a hidden piece is known by its name in the laid set" },
+		constructSkinned = { 1, "and marked Skinned" },
+		constructSkinnedWrites = { 1, "made invisible and shadowless, collision and query untouched, before it is parented" },
+		placeConstruct = { 1, "place builds the laid answer under its pcall" },
+		raiseBase = { 1, "the lobby's base looks are Expeditions.json's" },
+		raiseLaid = { 1, "and the lobby is laid grey in them" },
+		templatesIds = { 1, "templatesOf lists each Model's MeshIds" },
+		templatesMeshPart = { 1, "from its MeshParts" },
+		templatesMeshId = { 1, "each one's own MeshId (LevelDress.Present judges it)" },
+		templatesFound = { 1, "under the Model's name" },
+		dressFailRead = { 1, "dressOf reads the Z lever" },
+		dressFailSpent = { 1, "and spends it, taken or not" },
+		dressFailWrites = { 1, "the lever is written once in dressOf" },
+		dressAccept = { 1, "Decide is asked with the dress, the uploaded hash, the lever, the templates, the layout, the pieces, the found shortcuts, the groups, maxParts and the layout's name" },
+		dressRefused = { 1, "a refused dress is known by a nil answer" },
+		dressGreyWarns = { 1, "and warns once that the level is grey" },
+		dressAnswers = { 1, "dressOf answers Decide's answer as it is" },
+		buildNilDress = { 1, "Build clears Dress first" },
+		buildNilHash = { 1, "and DressHash" },
+		buildAcceptedNil = { 1, "Build starts with no dress" },
+		buildNamed = { 1, "and asks for one only of a level with a name" },
+		buildDressOf = { 1, "Build asks dressOf with the pieces and the shortcut set" },
+		buildAcceptedWrites = { 1, "the answer is written once" },
+		buildLay = { 1, "LevelDress.Lay lays the answer over Expeditions.json's looks" },
+		buildPlace = { 1, "and the laid answer is placed" },
+		buildLooks = { 1, "SetCamp's looks are the laid ones" },
+		buildWord = { 1, "the word comes from the laid answer" },
+		buildWorded = { 1, "and is written only when there is one" },
+		buildDressHash = { 1, "Build sets DressHash to the word's plan hash" },
+		buildDress = { 1, "and Dress to the word's layout" },
+		buildDressWrites = { 4, "Build writes the two attributes four times: nil first, the word last" },
+		clearNilDress = { 1, "Clear clears Dress" },
+		clearNilHash = { 1, "and DressHash" },
+		gatherRestDrop = { 1, "gather reads crowd.restDrop" },
+		gatherDrop = { 1, "gather drops each candidate's head by its seat (HitShapes.SeatDrop, crowd.restDrop)" },
+		gatherHead = { 1, "the head at height - headRadius - drop" },
+		gatherTest = { 1, "and the drop handed to the test" },
+		gatherSeatDrops = { 1, "SeatDrop is asked once in gather" },
+		rayDrop = { 1, "rayCandidates hands CrowdRay the drop" },
+		startPrewarm = { 1, "startLevel keeps the plan's kinds as the run's prewarm" },
+		startBuild = { 1, "and builds the level with the level file's layout (the dress's name)" },
+		pushPrewarm = { 1, "pushRunFields hands the lobby's kinds in the lobby, the run's prewarm otherwise" },
+		lobbyOnce = { 1, "refreshLobbyKinds runs until it has an answer, once per floor set" },
+		lobbySeq = { 1, "and notes the floor set it tried" },
+		lobbyLevels = { 1, "it plans every built level" },
+		lobbyDifficulties = { 1, "at every difficulty" },
+		lobbyResolve = { 1, "resolved as startLevel resolves it" },
+		lobbyPlan = { 1, "and planned as startLevel plans it" },
+		lobbyBounds = { 1, "in the layout's bounds" },
+		lobbyKindsTuned = { 1, "with the tuned crowd kinds" },
+		lobbyKeeps = { 1, "each plan's kinds kept" },
+		lobbyMerged = { 1, "and merged by StageFlow.MostKinds" },
+		bootLobbyKinds = { 1, "Boot makes the lobby's kinds before the loop starts" },
+		tickLobbyKinds = { 1, "and tries again before each broadcast" },
+		bootLobbyCalls = { 2, "Boot calls refreshLobbyKinds twice" },
+		announceKey = { 1, "the chest's found event carries its key" },
+		sendPrewarm = { 1, "sendRunState sends the prewarm" },
+		sendPrewarmWrites = { 1, "and writes it once" },
+		leverDressFail = { 1, "the lever dressFail fails the next dress" },
+		sealAnchored = { 1, "the scenery's parts are anchored" },
+		sealCollide = { 1, "collide with nothing" },
+		sealQuery = { 1, "stop no ray" },
+		sealTouch = { 1, "and touch nothing" },
+		failPath = { 1, "a failed client warns, tears down, marks itself failed and shows the grey view, in that order" },
+		showSkinned = { 1, "the failed view shows the Skinned parts" },
+		showSkinnedPaint = { 1, "fully opaque" },
+		showWalls = { 1, "and draws every wall" },
+		showWallColor = { 1, "in the grey look (red only in Studio's walls view)" },
+		showWallPaint = { 1, "at the drawn wall's transparency" },
+		viewShow = { 1, "applyView asks ScenePlan.Show with the failed flag" },
+		viewFolder = { 1, "parents the scenery by its answer" },
+		viewChild = { 1, "and shows every child of the level" },
+		addedShow = { 1, "a later child is judged by the same Show" },
+		addedChild = { 1, "and shown the same way" },
+		buildPcall = { 1, "the build's whole thread runs under one pcall" },
+		buildFails = { 1, "a throw in the current build" },
+		buildFailCall = { 1, "fails the scenery" },
+		startFails = { 1, "a throw before the thread fails it too" },
+		startSpawns = { 1, "the thread is the pcalled build" },
+		sceneryBareSteps = { 0, "and buildSteps never runs bare in a thread" },
+		evalKey = { 1, "evaluate keys the word by name and hash" },
+		evalSame = { 1, "and skips a word already acted on" },
+		evalDressed = { 1, "tells the camera whether the server dressed the level" },
+		evalDecide = { 1, "asks ScenePlan.Decide with whether the place has loaded" },
+		evalKeep = { 1, "keeps the key only when the answer is kept" },
+		evalBuild = { 1, "builds on a build answer with a dress" },
+		evalFail = { 1, "fails on a fail answer" },
+		evalFailCall = { 1, "with its reason" },
+		evalWait = { 1, "and waits for the place on a wait answer" },
+		awaitIf = { 1, "awaitLoaded waits for game.Loaded unless loaded" },
+		awaitEval = { 1, "then reads the word again" },
+		stepsJobs = { 1, "the build's jobs drop the fires on a low-end device" },
+		stepsGeneration = { 1, "and a build a newer word outlived stops at its next frame" },
+		moodRule = { 1, "mood B needs the body out of the lobby camp" },
+		placedLobby = { 1, "a placement says whether the body is in the lobby camp" },
+		lobbyBox = { 1, "judged on the lobby's box grown by levels.boxMargin" },
+		startPlaced = { 1, "LevelScenery listens to the camera's placements" },
+		detachDressed = { 1, "a detached level tells the camera it is not dressed" },
+		cameraEnds = { 1, "in a dressed level the summary and ended phases keep the shoulder camera" },
+		cameraDressed = { 1, "SetDressed writes the flag" },
+		cameraDressedWrites = { 2, "the flag is written only where it is declared and in SetDressed" },
+		sightsRayDrop = { 1, "the assist's CrowdRay is handed the drop" },
+		sightsRefusedBody = { 1, "a refused body's sphere is lowered by its seat, never under its foot" },
+		sightsRefusedHead = { 1, "and its head lowered" },
+		sightsBody = { 1, "a taken body's sphere is lowered by its seat, never under its foot" },
+		sightsHead = { 1, "and its head lowered" },
+		reachBody = { 1, "the melee reach's body sphere is lowered the same way" },
+		reachHead = { 1, "and its head" },
+		forEachDrop = { 1, "ForEach hands the server's seat drop" },
+		figuresHead = { 1, "Figures reads the model's head point" },
+		figuresScored = { 1, "against the server's crit head (height - headRadius)" },
+		figuresHeadTest = { 1, "refusing a head point off it on any axis" },
+		figuresEpsilon = { 1, "by 0.01" },
+		figuresAnchor = { 1, "the anchor is laid by RaiderPose.Rig's anchor" },
+		figuresLean = { 1, "the lean is split by RaiderPose.Lean" },
+		-- Fix round 2 (docs/prompts/l4-w2-fix2.md L4, the fix-diff review's m1; L1, L2, L3).
+		takeTakes = { 1, "Take answers a pooled figure or nil" },
+		takeBuilds = { 0, "and never builds one (a spawn batch would build them all in one frame)" },
+		prewarmRoom = { 1, "Prewarm's room is the cap" },
+		prewarmShare = { 1, "over it every kind gets its share" },
+		prewarmExact = { 1, "each kind's count is scaled by the share" },
+		buildBudget = { 1, "Build keeps to COMBAT_RAIDER_PREWARM_PER_FRAME a frame, at least one" },
+		buildWaitBudget = { 1, "the waiting bodies' figures within the budget" },
+		buildRoundBudget = { 1, "the goals' rounds within it" },
+		buildGoalBudget = { 1, "and each goal's figure within it" },
+		dressTakes = { 1, "dressFigure takes a pooled figure" },
+		dressWants = { 1, "and a body that met an empty pool waits for its model" },
+		wearReady = { 1, "wear puts the model on only once its pool has one" },
+		wearWaits = { 1, "else the body counts as waiting this frame" },
+		wearDresses = { 1, "and the ready body is dressed again (applyKind)" },
+		stepBuilds = { 1, "the pools fill on every step" },
+		stepWants = { 1, "a living body's wish is read" },
+		stepWears = { 1, "and a waiting body wears its model" },
+		uiPrewarmCounts = { 1, "every RunState's prewarm is read into counts (the lobby's too)" },
+		uiPrewarmHands = { 1, "and handed to the renderer" },
+		isSkinnedRule = { 1, "a Skinned part is a BasePart marked Skinned" },
+		isWallRule = { 1, "a wall is a BasePart out of the Default group" },
+		teardownState = { 1, "teardown drops the dress, the built flag and the failure, in that order" },
+		teardownFailedWrites = { 1, "teardown writes the failure once" },
+		lobbyKnown = { 1, "bodyInLobby answers the server's last word when there is one" },
+		lobbyRoot = { 1, "else reads the body's root, no root: not in the lobby" },
+		lobbyJudged = { 1, "and judges the root where it stands" },
+		lobbyAnswers = { 3, "bodyInLobby answers in three places only" },
+		cameraScenePlan = { 1, "CameraController requires ScenePlan" },
+		cameraRunOver = { 1, "the camera's run-over phases are ScenePlan.RUN_OVER" },
+		cameraCrosshair = { 1, "ShowsCrosshair is ScenePlan.Crosshair on the camera, the phase and the bench" },
+		feedbackCrosshair = { 1, "the crosshair is drawn by ShowsCrosshair" },
+		feedbackNoActive = { 0, "not by IsActive" },
+		campHead = { 1, "a camp mark reads its body's head part each frame" },
+		campEnds = { 1, "and ends only when it is old or the body is gone" },
+		campRehangs = { 1, "a new head part takes the mark" },
+		hangHead = { 1, "hang keeps the part" },
+		hangAdornee = { 1, "adorns it" },
+		hangOffset = { 1, "and lifts the mark over its top" },
+		alertHangs = { 1, "Alert hangs a new mark the same way" },
+		sweepSectors = { 1, "raiderpose's sweep gate bins at 5 degrees" },
+		sweepKinds = { 1, "for the Camp Chief" },
+		sweepTell = { 1, "the tell's leading edge runs from his right to his left" },
+		sweepLeading = { 1, "the hammer's leading end is its leftmost angle at range" },
+		sweepBehind = { 1, "the lag is that end behind the tell's leading edge" },
+		sweepGate = { 1, "every sector, the span's ends and the lag decide the row" },
+	},
+	ORDER = {
+		wallThenArmed = "construct: the dress wall's branch arms it",
+		hiddenThenSkinned = "construct: a hidden piece is marked inside its test",
+		failReadThenSpent = "dressOf: the lever read before it is spent",
+		failSpentThenDecide = "dressOf: spent before Decide is asked",
+		nilThenPieces = "Build: the words cleared before the pieces",
+		piecesThenDress = "Build: the dress asked after the pieces",
+		layThenPlace = "Build: laid before it is placed",
+		placeThenBuilt = "Build: placed before it is built",
+		builtThenWord = "Build: the word written after the level stands",
+		hashThenDress = "Build: DressHash, then Dress (K7)",
+		clearNilThenParts = "Clear: the words gone before any Part",
+		gatherRestThenDrop = "gather: crowd.restDrop read before the drop",
+		gatherDropThenHead = "gather: the drop before the head",
+		cellsWentThenPrewarm = "sendRunState: the prewarm only with the cells",
+		lobbyKindsThenBroadcast = "Boot: the lobby's kinds before a broadcast",
+		evalDressedThenDecide = "evaluate: the camera told before the decision",
+		evalKeepThenTeardown = "evaluate: the key kept or dropped before the teardown",
+	},
+}
+
+function L4BP.w2SourceTests(): ()
+	print(" L4 W2: the lines that lay the dress, seat the hits, send the pools and draw the scenery (source.l4w2)")
+	local reading = FIXTURES.source.l4w2
+	local W2 = L4BP.W2
+	check(
+		#reading.missing == 0,
+		`every function the lines live in is there ({table.concat(reading.missing, ", ")})`
+	)
+	local keys = {}
+	for key in W2.LINES do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local expected = W2.LINES[key]
+		local count = reading.counts[key]
+		check(count == expected[1], `{expected[2]} ({key}: {tostring(count)}, expected {expected[1]})`)
+	end
+	local unknown = {}
+	for key in reading.counts do
+		if W2.LINES[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	for key, text in W2.ORDER do
+		check(reading.order[key] == true, `{text} ({key})`)
+	end
+	for key in reading.order do
+		if W2.ORDER[key] == nil then
+			table.insert(unknown, key)
+		end
+	end
+	table.sort(unknown)
+	check(#unknown == 0, `every L4 W2 line read has an expected count here ({table.concat(unknown, ", ")})`)
+end
+L1.group("l4w2 sourceTests", L4BP.w2SourceTests)
+
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)
