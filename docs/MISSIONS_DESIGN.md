@@ -683,3 +683,11 @@ used both weapons, so the gate mostly measured the weapon gap (the x0.41-0.84 ab
 **both runs use the same gear and differ only by the spot**. It passes on every table; on the final config (the Chief's
 sweep at range 12.7) the tightest spots are x0.982 (Hard T1/T1, Road2), x0.982 (Hard bow T4, Road3), x0.966 (Normal T1/T1,
 the cave exit) and x0.942 (Normal bow T4, Road4): a margin of 1.8-5.8%, guarded by a mutant sized to it (+3%).
+
+**The Camp Chief's sweep, as it can be drawn (2026-10-22, the W2 reviews):** a hit must be where the model's hammer is
+drawn. The drafted sweep (range 17, 150°) reached places the hammer never visits, so it is now **range 12.7, 120°** (reach
+10.5): the hammer covers the whole wedge, never more than 5° behind the red tell. His fight is a few seconds shorter than
+the Colossus's 80 s (every band holds; re-measured at 120° in W2's fix round 2). If he feels short or easy in Studio, his
+health (4,700) is the lever. The fodder's lunge likewise now slides the body forward in the strike so the club reaches about
+3.9 studs, as the block body did. Lead's rulings, told to Ben. The plated elite's axe has the same gap (drawn to about 5 of
+its 7.5-stud wedge) and is left for Ben's look.
