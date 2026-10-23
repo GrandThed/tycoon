@@ -2166,14 +2166,14 @@ city (hub) and the Expeditions place.
       - [x] `l3-armory` merged to `main` (`448987e`); the six place files rebuilt (`0fb03be`).
       - [x] Ben told. He answered "lets do wave 2, i will test later": steps 1–6 now run inside
             "L3 W2 — the look".
-- [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
-- [ ] 2. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save).
-- [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
+- [x] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [x] 2. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save).
+- [x] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
       lobby.
-- [ ] 4. Run `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen", steps 1–8.
-- [ ] 5. Close `proving.rbxl` without saving. Open
+- [x] 4. Run `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen", steps 1–8.
+- [x] 5. Close `proving.rbxl` without saving. Open
       `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (the city) for step 9.
-- [ ] 6. Close Studio without saving. Tell Claude when you are done (four click questions follow).
+- [x] 6. Close Studio without saving. Tell Claude when you are done (four click questions follow).
 
 **Notes:**
 - **Every Play starts a fresh save** (Studio's mock store): T1 / T1, no Timber, no stars. Use
@@ -2184,7 +2184,8 @@ city (hub) and the Expeditions place.
 
 ### The L4 publish order (later, not now)
 
-Done once, at L4, in one sitting. Same dialogs as "C2 → 4. Republish BOTH places".
+Done once, at L4 W4 (publish readiness), in one sitting. Same dialogs as "C2 → 4. Republish BOTH
+places".
 - [ ] L4-0. **Before publishing: both places are R15 only** (L3 W2 review 3-s5). The combat code
       assumes R15 (since P1); weapons hang from R15 attachments.
       - Creator Hub → **Creations** → *Era Tycoon: Village to Space (BETA)* → **Places** → the
@@ -2204,6 +2205,8 @@ Done once, at L4, in one sitting. Same dialogs as "C2 → 4. Republish BOTH plac
 - Never publish only one of the two.
 
 ## L3 W2 — the asset run
+
+**DONE 2026-10-21** (paste `9524edf`). Kept as the record and the routine.
 
 **Ben: your one step here is step 7, the harvest paste.** About 2 minutes, any time before your
 look.
@@ -2310,7 +2313,7 @@ and all 15 icons are there, uploaded and not yet harvested.
       - A repeat (step 12) emits only the records still missing, so fewer than 30 is right then:
         one per name in the last merge's `still missing harvest data:` line. Any other count:
         stop and tell the lead.
-- [ ] 7. **Ben: the one harvest paste.** Open the **local** file
+- [x] 7. **Ben: the one harvest paste.** Open the **local** file
       `C:\Users\benja\Desktop\tycoon\build\test.rbxl` in Studio, with File (*Archivo*) → Open
       (*Abrir*). **Not the published game. Do not press Play.**
       1. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
@@ -2320,7 +2323,7 @@ and all 15 icons are there, uploaded and not yet harvested.
          not copy anything else** before Claude answers: your clipboard holds the result.
       - If the number is not the one Claude gave you (30 the first time) or "failed" is not 0:
         tell Claude the line as it reads.
-- [ ] 8. **Lead: save the clipboard to a file first, count, then merge from the file.**
+- [x] 8. **Lead: save the clipboard to a file first, count, then merge from the file.**
       ```
       powershell -NoProfile -Command "[IO.File]::WriteAllText('<a scratch file>', (Get-Clipboard -Raw), (New-Object Text.UTF8Encoding $false))"
       grep -c '\[HARVEST\] {' <that scratch file>
@@ -2337,7 +2340,7 @@ and all 15 icons are there, uploaded and not yet harvested.
       - An icon still in moderation prints `no Decal Texture ... (still in moderation?); skipped`:
         its card stays text. Repeat steps 6 to 8 later for it; never the uploaders.
       - **Commit `Assets.json` and `docs/ASSET_MANIFEST.md` together now.**
-- [ ] 9. **Lead: the turn proof on the real harvest, before any template** (L3-47):
+- [x] 9. **Lead: the turn proof on the real harvest, before any template** (L3-47):
       ```
       py tools/assets/weapon_frames.py --check --require-harvest
       ```
@@ -2349,7 +2352,7 @@ and all 15 icons are there, uploaded and not yet harvested.
           harvested stages, so `gen_templates.py --check` stays red until the lead resolves it;
         - send the lead the printed lines, which name the weapon and the point or the part;
         - never re-upload.
-- [ ] 10. **Lead: templates and manifest.**
+- [x] 10. **Lead: templates and manifest.**
       ```
       py tools/assets/gen_templates.py --props
       py tools/assets/gen_templates.py --check
@@ -2362,7 +2365,7 @@ and all 15 icons are there, uploaded and not yet harvested.
         one MeshPart `weapon-kit`, CanCollide and CanQuery false.
       - The manifest's Weapons summary reads 15/15 for blueprints, uploaded, harvested, templated,
         icons uploaded and icons harvested.
-- [ ] 11. **Lead: sourcemaps and the six place files** (Git Bash, in `tycoon-p5`):
+- [x] 11. **Lead: sourcemaps and the six place files** (Git Bash, in `tycoon-p5`):
       ```
       export PATH="$HOME/.rokit/bin:$PATH"
       rojo sourcemap default.project.json -o sourcemap.json
@@ -2387,8 +2390,8 @@ and all 15 icons are there, uploaded and not yet harvested.
 
 **Do NOT publish either place from `main` until L4.** The freeze from "L3 W1" holds.
 
-**Status 2026-10-21:** waiting on fix 2, QA, your paste ("L3 W2 — the asset run", step 7) and
-the merge.
+**Done 2026-10-21:** your paste (`9524edf`), the merge and your look. L3 closed on your word
+("everything feels good, lets close it").
 
 <!-- FILE TO OPEN: start. Lead: if L3 Wave 2 is not merged to `main`, change only this block. -->
 **Files to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`, then
@@ -2401,26 +2404,26 @@ the merge.
 
 **Steps:**
 
-- [ ] 1. (Lead) After the paste: merge, rebuild, tell Ben.
-      - [ ] Fix 2 (G1–G3) landed; QA line filled (PLAN "L3", Wave 2, Gates).
-      - [ ] "L3 W2 — the asset run" steps 8–11 done: 30 records merged, the turn proof holds on
+- [x] 1. (Lead) After the paste: merge, rebuild, tell Ben.
+      - [x] Fix 2 (G1–G3) landed; QA line filled (PLAN "L3", Wave 2, Gates).
+      - [x] "L3 W2 — the asset run" steps 8–11 done: 30 records merged, the turn proof holds on
             15, templates committed.
-      - [ ] `l3-w2` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L3 Wave 2 is merged, Build all."
-- [ ] 2. VS Code, **Ctrl+Shift+B** → **"Build all"**.
-- [ ] 3. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save). That
+      - [x] `l3-w2` merged to `main`; the six place files rebuilt.
+      - [x] Ben told: "L3 Wave 2 is merged, Build all."
+- [x] 2. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [x] 3. If a `proving.rbxl` or `test.rbxl` is open in Studio, close it (don't save). That
       includes the `test.rbxl` from your paste.
-- [ ] 4. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
+- [x] 4. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
       lobby, a sword in your hand.
-- [ ] 5. Run `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen", steps 1–8.
-- [ ] 6. Run `docs/PLAYTEST.md` "L3 Wave 2 — weapons in hand and on the stage", steps 1–8, in
+- [x] 5. Run `docs/PLAYTEST.md` "L3 Wave 1 — tiers per weapon and the Armory screen", steps 1–8.
+- [x] 6. Run `docs/PLAYTEST.md` "L3 Wave 2 — weapons in hand and on the stage", steps 1–8, in
       the same file.
-- [ ] 7. Optional: the "L3 Wave 2" two-player step (Test → Clients and Servers, *Clientes y
+- [x] 7. Optional: the "L3 Wave 2" two-player step (Test → Clients and Servers, *Clientes y
       servidores*, 2 players), inside a level.
-- [ ] 8. Close `proving.rbxl` without saving. Open
+- [x] 8. Close `proving.rbxl` without saving. Open
       `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (the city): "L3 Wave 1" step 9, then
       "L3 Wave 2" step 9.
-- [ ] 9. Close Studio without saving. Tell Claude when you are done. Seven click questions
+- [x] 9. Close Studio without saving. Tell Claude when you are done. Seven click questions
       follow (four for Wave 1, three for Wave 2). Send your screenshots of the weapons in hand
       and on the back.
 
@@ -2431,6 +2434,97 @@ the merge.
   Theme number and one more "Build all": no upload, no paste.
 - Weapons in hand show only in `proving.rbxl` (the dungeon). The city shows them only on the
   Armory screen.
+
+## L4 W2
+
+**Studio only. Your one chore, the harvest paste, is done (2026-10-22).**
+- L4 W1 and W1b needed nothing in Studio or Creator Hub (W1 was pictures; W1b removed code).
+- No game pass, developer product or audio step. Still silent.
+- No profile step: the Castle Key is an opened secret, not a new save field.
+
+**Do NOT publish either place from `main` until L4 W4.** The freeze from "L3 W1" holds.
+- The publish steps stay in "L3 W1" → "The L4 publish order" (L4-0 to L4-4). They run at W4.
+
+**Status 2026-10-23:** built, reviewed, two fix rounds done. The 81 uploads and your paste are
+done. **Waiting on QA and the lead's merge.**
+
+<!-- FILE TO OPEN: start. Lead: if L4 W2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Wait for the lead's word that L4 W2 is merged** (step 1).
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A file that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the key hint ends **"Y scenery · O light · X models · Z grey
+  level"**.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 1. (Lead) Merge, rebuild, tell Ben.
+      - [ ] QA green (contract `docs/prompts/l4-w2-contract.md` §11); PLAN "L4" QA line filled.
+      - [ ] `l4-w2` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L4 W2 is merged, Build all."
+- [ ] 2. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 3. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [ ] 4. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
+      lobby.
+- [ ] 5. Run `docs/PLAYTEST.md` "L4 W2 — the real forest in the game", steps 1–24.
+- [ ] 6. Close Studio without saving. Tell Claude when you are done. Five click questions follow.
+      Send the screenshots (mood B, default light, Frame / Draw).
+
+**Notes:**
+- **Every Play starts a fresh save:** T1 / T1, no Double Jump, no secrets. **J** turns Double
+  Jump on for the climb.
+- The mood (light, haze) is a first guess. A fix is a number in `Expeditions.json`: no upload,
+  no paste.
+
+### L4 W2 — the asset run (**DONE 2026-10-22**; kept as the record)
+
+Runbook: `docs/prompts/l4-w2-asset-run.md` (steps 1–13). Report:
+`docs/prompts/l4-w2-reports/asset-run.md`.
+
+**One run, one paste:** 81 uploads, all first try.
+- The forest: 37 baked meshes, its palette and 4 ground textures (`upload_level.py`), plus 4
+  props (Bramble, Campfire, ChiefTent, SpawnTent).
+- The raiders: 7 kinds × 5 stages = 35 (`upload_models.py --props --era Raiders`).
+
+- [x] 1–3. Forest build; raider and forest-prop merges from fresh palettes (lead, 2026-10-22).
+- [x] 4. Level uploads: a 2-mesh trial (`Dress_5`, `Hills_2`), then 40 / 40.
+- [x] 5. Prop uploads: 4 / 4 Forest, 35 / 35 Raiders. `Assets.json` v6 (`levels.ForestRoad`) and
+      the manifest committed together (`9ad3cb5`).
+- [x] 6. `harvest.luau`: 81 records (39 `prop`, 5 `levelTexture`, 37 `levelMesh`).
+- [x] 7. **Ben's one harvest paste** in `C:\Users\benja\Desktop\tycoon\build\test.rbxl` (Edit
+      mode): `[HARVEST-DONE] 81 loaded, 0 failed` (2026-10-22 00:43).
+- [x] 8. Lead: clipboard saved to a file first, 81 records counted, merged with no `SIZE CHECK:`,
+      `FRAME:` or `ROTATED:` line (`95fc5c2`).
+- [x] 9. `raider_frames.py --check --require-harvest`: 7 of 7 (W2's tool, run in the code wave);
+      `weapon_frames.py`: 15 of 15.
+- [x] 10–12. 48 new templates (37 level meshes, 4 Forest props, 7 raiders; 617 in all),
+      manifest, sourcemaps, the six place files (`148dacd`).
+- 13. **If a record goes missing later:** repeat runbook steps 6 to 10 only. Never the uploaders.
+
+**The plan hash moved twice since the upload. Nothing re-uploaded.**
+- Uploaded under `23851a6f417491c1`.
+- The fix round made it the same under both Pythons (`fedec49c14f3eafd`); fix round 2 snapped tiny
+  corners to 0 (L5).
+- **Now `5792c659ca2e772e`**, in `src/shared/Config/LevelDress/ForestRoad.json` and
+  `Assets.json levels.ForestRoad.planHash` (written by `forest.py build` and
+  `assets_config.save_assets`, never by hand).
+- The 37 meshes and the palette are byte-identical. `upload_level.py --level ForestRoad --dry-run`
+  reads **0 pending**. `docs/ASSET_MANIFEST.md` is regenerated.
+
+**Rules for the lead (any later forest re-bake):**
+- **Bake the forest under plain `py` (3.14 32-bit).** The hash is the same under both Pythons,
+  but `py -3.12` writes `Cover`, `Hills_1` and `Dress_11` with different normal bytes: three
+  re-uploads and one more paste, for the same look.
+- Geometry is frozen: a layout, fence-thickness, stage `kind` / `zone` / boss `at`, art-number or
+  forest-kit change moves the hash. Then runbook steps 1 and 4 (only changed GLBs go up), then a
+  paste for what went up.
+- **Never run an asset tool in a checkout without `l4-w2`'s `assets_config.py`** (`main` until
+  W2 merges, `tycoon-c2`, `tycoon-m11`): an older one erases the v6 `levels` block on its next
+  save.
+- Never re-merge the raiders between their upload and a paste: the harvest then refuses those
+  stages.
+- If a tool or Blender hangs, stop only your own process, by its id. Never by name.
 
 ## M10 — Icon, store icons, thumbnails
 
