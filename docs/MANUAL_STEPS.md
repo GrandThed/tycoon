@@ -1308,8 +1308,9 @@ boot** of the other place, and ignored + deleted once it is older than 15 minute
 if the combat place keeps booting into a mission you did not ask for.
 
 - Store name: **`StudioHandoff`** · key: **`p_<your userId>`** · value:
-  `{ kind = "depart" | "join" | "return", missionId, overdrive, hostUserId, accessCode, stamp }`
-  (a `return` record carries `summary` instead of the mission fields).
+  `{ kind = "depart" | "join" | "return", levelId, difficulty, hostUserId, accessCode, stamp }`
+  (a `return` record carries `summary` instead of the level fields). *L4 W3 replaced `missionId` /
+  `overdrive` with `levelId` / `difficulty`.*
 
 - [ ] 6. **Option A — DataStore editor plugin.** Install any "DataStore Editor" plugin from the
       Creator Store, open store `StudioHandoff`, find key `p_<userId>`, read or delete it.
@@ -2445,8 +2446,8 @@ and all 15 icons are there, uploaded and not yet harvested.
 **Do NOT publish either place from `main` until L4 W4.** The freeze from "L3 W1" holds.
 - The publish steps stay in "L3 W1" → "The L4 publish order" (L4-0 to L4-4). They run at W4.
 
-**Status 2026-10-23:** built, reviewed, two fix rounds done. The 81 uploads and your paste are
-done. **Waiting on QA and the lead's merge.**
+**Done 2026-10-23:** QA green, merged (`33315f2`, place files `106165a`), your look. Signed off:
+*"everything feels right"* (MISSIONS_DESIGN §29).
 
 <!-- FILE TO OPEN: start. Lead: if L4 W2 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
@@ -2459,17 +2460,19 @@ done. **Waiting on QA and the lead's merge.**
 
 **Steps:**
 
-- [ ] 1. (Lead) Merge, rebuild, tell Ben.
-      - [ ] QA green (contract `docs/prompts/l4-w2-contract.md` §11); PLAN "L4" QA line filled.
-      - [ ] `l4-w2` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L4 W2 is merged, Build all."
-- [ ] 2. VS Code, **Ctrl+Shift+B** → **"Build all"**.
-- [ ] 3. If a `proving.rbxl` is open in Studio, close it (don't save).
-- [ ] 4. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
+- [x] 1. (Lead) Merge, rebuild, tell Ben.
+      - [x] QA green (contract `docs/prompts/l4-w2-contract.md` §11); PLAN "L4" QA line filled.
+      - [x] `l4-w2` merged to `main`; the six place files rebuilt.
+      - [x] Ben told: "L4 W2 is merged, Build all."
+- [x] 2. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [x] 3. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [x] 4. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. **Play** opens the dungeon
       lobby.
-- [ ] 5. Run `docs/PLAYTEST.md` "L4 W2 — the real forest in the game", steps 1–24.
-- [ ] 6. Close Studio without saving. Tell Claude when you are done. Five click questions follow.
-      Send the screenshots (mood B, default light, Frame / Draw).
+- [x] 5. Run `docs/PLAYTEST.md` "L4 W2 — the real forest in the game", steps 1–24 (your look;
+      boxes not ticked one by one).
+- [x] 6. Close Studio without saving. Tell Claude when you are done. Five click questions follow.
+      Send the screenshots (mood B, default light, Frame / Draw). *Two click questions answered;
+      the five read as "about right"; no screenshots or Frame / Draw numbers on record.*
 
 **Notes:**
 - **Every Play starts a fresh save:** T1 / T1, no Double Jump, no secrets. **J** turns Double
@@ -2525,6 +2528,66 @@ Runbook: `docs/prompts/l4-w2-asset-run.md` (steps 1–13). Report:
 - Never re-merge the raiders between their upload and a paste: the harvest then refuses those
   stages.
 - If a tool or Blender hangs, stop only your own process, by its id. Never by name.
+
+## L4 W3
+
+**Studio only.**
+- **No uploads and no harvest paste this wave.** `docs/ASSET_MANIFEST.md` is unchanged (its
+  check passes).
+- No Creator Hub step. No game pass, developer product or audio step. Still silent.
+- No profile step: no save-format change.
+
+**Do NOT publish either place from `main` until L4 W4.** The trip's ticket changed shape on both
+sides, so both places publish together. The publish steps stay in "L3 W1" → "The L4 publish
+order" (L4-0 to L4-4).
+
+**Status 2026-10-23:** built, reviewed, two fix rounds done. **Waiting on the full mutation run,
+QA and the lead's merge.**
+
+<!-- FILE TO OPEN: start. Lead: if L4 W3 is not merged to `main`, change only this block. -->
+**Files to open:** part A `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`; part B (optional)
+`C:\Users\benja\Desktop\tycoon\build\test.rbxl`, then `...\build\combat.rbxl`, then `test.rbxl`
+again (all in the main checkout)
+- **Wait for the lead's word that L4 W3 is merged** (step 1).
+- **Build them:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A file that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the dungeon's key hint ends **"Z grey level · R depart · P pay
+  era"**.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 1. (Lead) Merge, rebuild, tell Ben.
+      - [ ] Full `mutate_shards` and QA green (contract `docs/prompts/l4-w3-contract.md` §12);
+            PLAN "L4" W3 gates line filled.
+      - [ ] `l4-w3` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L4 W3 is merged, Build all."
+- [ ] 2. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 3. Close any `proving.rbxl`, `test.rbxl` or `combat.rbxl` open in Studio (don't save).
+- [ ] 4. **Part A.** Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. No API access
+      needed. **Play** shows a countdown, then Forest Road.
+      - **P** (pay era) works only while API access is **off** in this file. With it on, P
+        answers "P needs Studio API access off" and pays nothing: the safety rule.
+- [ ] 5. Run `docs/PLAYTEST.md` "L4 W3 — the city map, the end card, run cash by era", steps
+      1–11. Close `proving.rbxl` without saving.
+- [ ] 6. **Part B (optional).** In `test.rbxl` **and** in `combat.rbxl`: Home (*Inicio*) → Game
+      Settings (*Configuración del juego*) → Security (*Seguridad*) → **Enable Studio Access to
+      API Services** = **ON**. Check each file.
+      - It plays on your **real save** (as every bridge test since C1). **P is refused there.**
+      - With it off, Depart answers "unavailable" and nothing is released (C1).
+- [ ] 7. Run the same PLAYTEST section, steps 12–19: `test.rbxl` → `combat.rbxl` →
+      `test.rbxl`. Stop after each kick before opening the next file.
+- [ ] 8. Close Studio without saving. Tell Claude when you are done. Four click questions follow.
+      Send the two card screenshots.
+
+**Notes:**
+- **Every Play of `proving.rbxl` starts a fresh save:** Village era (pay ×1), T1 / T1, no
+  Double Jump.
+- The countdown (5 s) is one number in `Combat.json` (`levels.departCountdownSeconds`). A fix is
+  one "Build all": no upload, no paste.
+- A stuck handoff record: "C1" → "If a handoff record gets stuck" (store `StudioHandoff`).
+- What Studio cannot show (a failed trip home's rejoin; a member leaving before the host lands)
+  is listed in the PLAYTEST section. It is first seen at the W4 staging publish.
 
 ## M10 — Icon, store icons, thumbnails
 
