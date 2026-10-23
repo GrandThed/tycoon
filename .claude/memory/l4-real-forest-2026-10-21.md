@@ -107,3 +107,6 @@ plainly what is running when a wait is long.
 (~25 s each, single core; ~9 h left, on code the fix round had changed). Shown the numbers, **he chose "stop it; split the
 end run across cores"**: the run was stopped (572 caught), and the final full run on W2's last commit is to be sharded.
 This supersedes his earlier "leave it as it is". Lesson: give a computed ETA from the run's own progress, never a guess.
+**Sharded run measured (2026-10-23 00:11):** `tools/crowd_harness/mutate_shards.py` (on `l4-w2` 88eeae5), 10 shards on the
+12-core machine: **2,068 run, 0 not caught in 2 h 15 min** (single core was ~13 h). Each shard sets `MUTATE_ROOT` and
+`HARNESS_BUNDLE`; logs in `tools/crowd_harness/mutant_logs/`. Use it for every full run from now on.
