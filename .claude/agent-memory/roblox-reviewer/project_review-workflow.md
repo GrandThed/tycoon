@@ -625,6 +625,23 @@ gate) all green. Client: `UnlockCard` owns a polled-blocker queue with a 2.5 s j
   `stats.expeditions` is stamped before release and undone after a failed teleport, but the rejoin
   runs the join sequence (Evaluate) first, so Armory unlocks permanently on a failed departure.
 
+**M11 port (2026-10-23, worktree `tycoon-m11` branch `m11-port`, two-slice review; slice C client 0C/0M/5m).**
+Brief `docs/prompts/m11-port-review.md`, findings into `docs/prompts/m11-port-review/<S|C>.md` (write with the Write
+tool, then `sed -i 's/\r$//'`; a long Bash heredoc failed to parse in this tool). Renames: Unlocks→Features,
+UnlockService→FeatureService, UnlockCard→FeatureCard (byte-identical apart from names), schema v9, levers R/0
+(Studio). Merge in UIController: K and the bar key share `keysShown.armory`, which is L3's `keyConfigured` AND the
+unlock. Minors found:
+- **A reversing tween ends at its START value.** If the start is set to a flash colour just before playing, the
+  element rests on the flash colour. The FeatureCard touch branch ends green, not gold.
+- **A config read once at boot via `FindFirstChild` (nil = off) turns the feature off for the session** when
+  replication lags. The repo already re-reads `provingConfig` for that reason (3-s1).
+- **"Later" that never fires the seen intent makes the Shop intro modal return every session.** That is a spec §6
+  "never a blocking modal / one offer per session" tension, and a ruling for the lead or Ben.
+- **Hiding K behind an unlock makes K silent on a save with 0 hub departures.** `proving.rbxl` runs do not count,
+  so Ben's own save may lock the hub Armory.
+- **plotIndex 0** (a player with no plot) reaches client code that assumes a plot.
+- The hub's gamepad support is Armory-only: no other hub modal sets `GuiService.SelectedObject`.
+
 **P1 Proving Grounds (2026-09-24, main 07f8908..69eab8f, SHIP AFTER FIXES: 0 Critical, 2 Majors).** Studio-only
 range behind Workspace `DebugProving` (server `wantsProving` + `RangeService.Configure`; client
 `CameraController.detectRange`, both IsStudio + Tuning.IsAvailable). Crowd = Luau records in `CrowdService`
