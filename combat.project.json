@@ -70,6 +70,8 @@
 						"LoadScreen": { "$path": "src/client/UI/LoadScreen.luau" },
 						"Theme": { "$path": "src/client/UI/Theme.luau" },
 						"MapScreen": { "$path": "src/client/UI/MapScreen.luau" },
+						"RunTally": { "$path": "src/client/UI/RunTally.luau" },
+						"TallyRules": { "$path": "src/client/UI/TallyRules.luau" },
 						"ArmoryScreen": { "$path": "src/client/UI/ArmoryScreen.luau" },
 						"ArmoryStage": { "$path": "src/client/UI/ArmoryStage.luau" },
 						"ArmoryTrack": { "$path": "src/client/UI/ArmoryTrack.luau" },

@@ -2849,7 +2849,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 | L1 | Forest Road in grey: lobby camp, map, three camp parts, stand-in boss, difficulties | Merged 2026-10-14; L1b and L1c after it; closed 2026-10-16 on Ben's word |
 | L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | W1–W3 merged (2026-10-17 → 19); closed 2026-10-20 on Ben's word, with L1c |
 | L3 | The Armory: per-weapon tiers, the profile shape, weapon models | **Closed 2026-10-21 on Ben's word ("everything feels good, lets close it"). W1 merged 448987e, W2 merged a454932, harvest 9524edf.** See "L3" below |
-| L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | **In progress.** W1 and W1b done; W2 done 2026-10-23, merging to `main` after QA; W3, W4 not started. See "L4" below |
+| L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | **In progress.** W1 and W1b done; W2 merged and signed off 2026-10-23; W3 built, reviewed, QA green, merging to `main` 2026-10-24; W4 not started. See "L4" below |
 | L5 | Friends: parties and revive in a level | Not started |
 
 **Where it is (2026-10-13):**
@@ -4639,12 +4639,12 @@ screen and rewards set against the city; then the first publish of both places.
 **Documents:**
 - Ben's decisions: `docs/MISSIONS_DESIGN.md` §26 (eight decisions, 2026-10-21), §27 (the picture gate; the rocks
   redone), §28 (the mountain and the Castle Key; the approvals; R8 as built; the Chief's sweep and the fodder's lunge as
-  drawn).
+  drawn), §29 (W2 played), §30 (run cash by era, and its correction).
 - Study: `docs/prompts/l4-study.md` → `l4-study-report-forest.md`, `l4-study-report-chief.md`,
   `l4-study-report-publish.md`.
-- Values: `docs/BALANCE.md` "L4 W2" and "L4 W2 fix round" sections.
-- Worktrees: `C:\Users\benja\Desktop\tycoon-p5` (branch `l4-real-forest`, then `l4-w2`); `tycoon-p5b` (W1b, then
-  `l4-verify` for the long gates); `tycoon-p5c` (W1b fix 2; removable).
+- Values: `docs/BALANCE.md` "L4 W2", "L4 W2 fix round", "L4 W3" and "L4 W3 fix round" sections.
+- Worktrees: `C:\Users\benja\Desktop\tycoon-p5` (branch `l4-real-forest`, then `l4-w2`, then `l4-w3`); `tycoon-p5b`
+  (W1b, then `l4-verify` for the long gates); `tycoon-p5c` (W1b fix 2; removable).
 
 **Ben's rulings (MISSIONS_DESIGN §26–§28; the lead's recommendation every time):**
 1. The lookout moves to the trailhead (a ledge 26 up over Road1). The chain is unchanged.
@@ -4655,7 +4655,8 @@ screen and rewards set against the city; then the first publish of both places.
 5. The city map departs straight into the level (W3).
 6. The Raider Arena is hidden for the publish.
 7. The end screen: rows counting up, coins flying in, Timber piling up (W3).
-8. Run cash grows with the city's era (W3).
+8. Run cash grows with the city's era (W3). **Ben's pick (§30): option C**, ×1 / ×670 / ×34,000 / ×1,400,000 per kill
+   by the player's own city era.
 9. **Mood B:** darker, hazed, in the dungeon place only; tuned after his first Studio look.
 10. **R8 judged fairly:** no spot may out-earn fighting it all with the same gear, over 30 seeds.
 11. Every rock redone after his two references; the tall walls less regular (same depth).
@@ -4677,8 +4678,8 @@ screen and rewards set against the city; then the first publish of both places.
 |---|---|---|
 | W1 | The forest on paper: the lookout moved, the forest generator and renders, raider and Chief prototypes | **Done 2026-10-21.** Ben's picture gate passed the same day (§27) |
 | W1b | The old mission code out; a dash proven by the server's ring (the dash hold); RunState cells once | **Done 2026-10-22.** Three fix rounds; merged into `l4-real-forest` (`37ccfe4`) |
-| W2 | The forest, the raiders, the Camp Chief and the Castle Key in the game; one upload, one harvest paste | **Done 2026-10-23** (`3205405`): reviewed, two fix rounds, harvest pasted 2026-10-22. **Merging to `main` after QA**, then Ben's look |
-| W3 | The city map departs into the level; the end screen; rewards by era | Not started |
+| W2 | The forest, the raiders, the Camp Chief and the Castle Key in the game; one upload, one harvest paste | **Done 2026-10-23.** Merged (`33315f2`, place files `106165a`); signed off the same day (§29) |
+| W3 | The city map departs into the level; the end screen; rewards by era | **Built and reviewed 2026-10-23** on `l4-w3` (`b38f7b8`): two fix rounds; QA green 2026-10-24, then the merge and Ben's look |
 | W4 | Publish readiness: the Theme round, phones, the checklist, both places published together | Not started |
 
 ### Wave 1 — the forest on paper and the lookout (2026-10-21)
@@ -4862,7 +4863,7 @@ pose, data and gates). All fixed or ruled (K1–K10):
   - `forest.py check` PASS under both Pythons, mutants 33 / 33; `upload_level.py --dry-run` 0 pending; manifest
     regenerated;
   - at 120°: sim_range PASS (495), R8 PASS (46), sim_combat PASS.
-- **QA: pending** (contract §11's list, from `tycoon-p5`).
+- **QA on `3205405`: every gate green** (harness 4,713; sharded `mutate.py` 2,129 / 0; `check_levels_mutants` 283 ok).
 
 **Commits:**
 - Briefs `03f063f`; contract `94c3749`, §0 `a2d5d7e`. Tracks: P `646e24c` (+ project files `156a7db`), R2 `c6f55a2`,
@@ -4873,20 +4874,136 @@ pose, data and gates). All fixed or ruled (K1–K10):
   sharded runner `88eeae5`.
 - Fix-diff and L rulings `4402ea1`; MISSIONS_DESIGN `4d392f3`; fix round 2 `3205405`. Plus this docs change.
 
-### W3 and W4 (not started)
+### Wave 3 — the city map, the end card, run cash by era (2026-10-23)
 
-- **W3:** the city map departs straight into the level (one loading screen; the lobby camp counts down; a refusal falls
-  back to the lobby with the level picked); the end screen (a row per source counting up, coins flying in, Timber
-  piling up; the same card in both places; the per-camp clear bonus and the Castle Key row on it); run cash by the
-  city's era. The hub stub `Config/Missions/1_Village.json`, `Combat.json overdrive`, the Overdrive toggle and the
-  ticket's `missionId` / `overdrive` go then (L4B-1, L4B-2).
+**Documents:**
+- Brief `docs/prompts/l4-w3-brief.md`. Era-cash study `l4-w3-cash-study.md`. Contract `l4-w3-contract.md` (L4W3-1 to
+  L4W3-18; §9 = Ben's Studio test, §13 = the risks, §14 = the lead's rulings, L4W3-17/18 = the M11 merge items).
+- Review brief `l4-w3-review.md`; findings `l4-w3-review/` (1 hub, 2 combat, 3 clients, 4 data, 5 fix-diff).
+- Fix rounds `l4-w3-fix-round.md` (F1–F19), `l4-w3-fix2.md` (G1–G5). Reports `l4-w3-reports/`, `l4-w3-fix-reports/`.
+- INTERFACES pointer `# L4 W3 contracts`.
+
+**Ben's pick (MISSIONS_DESIGN §30, one click question before the contract):**
+- **Option C:** a clear is worth a few minutes of income right after each Advance, capped so back-to-back runs on Normal
+  or Hard never finish an era sooner than building.
+- Multiplier per kill, by the player's own city era: **Village ×1, Boomtown ×670, Metropolis ×34,000, Orbital Colony
+  ×1,400,000.** The first clear after an Advance is worth 4.3 / 3.0 / 2.3 / 1.7 minutes of income. Cash only; Legacy
+  and Founder's still apply on top. A brand-new save keeps today's pay.
+- **Correction (the review, told to Ben; his pick stands):** the preview said "No way of running beats building". What
+  holds and is gated: **back-to-back runs on Normal or Hard never finish an era sooner than building.** A few runs right
+  after an Advance, then building, does finish slightly sooner (Boomtown 1 run 2.4%, Metropolis 8 runs 1.4%, Orbital 12
+  runs 0.5%; Village 6.8% at today's pay), with any multiplier of at least 1.
+
+**What shipped (`93eb8e9` plus two fix rounds):**
+- **The map in the city:**
+  - pure shared `MapRules` (the map rules moved out of StageFlow and SecretFlow): `Startable`, `Built`, `SecretRows`,
+    `FirstPick`, `Note`, the caps. The hub's Depart and the dungeon's start ask the same `Startable`;
+  - new `HubMap` mounts the shared `MapScreen` in the city (Expedition key). The hub pulls its state
+    (`RequestMapState` → `MapState`); `PartyService` untouched;
+  - the footer reads **"Party & runs"** (the slimmed `ExpeditionPanel`: party strip, "Open to public", run list);
+  - Brutal's button reads **"Castle gear"** (`difficulties.brutal.note`); the Armory's Abilities tab shows **Glide**
+    locked "With the Castle" (`abilities.upcoming`; never sold);
+  - F11 `TouchHold`: touch controls step aside while the city map or the city card is open;
+  - ticket, teleport data, Studio record, registry and run list carry `levelId` + `difficulty`.
+- **The auto-start (combat server):**
+  - a verified departure waits for its party, counts down `levels.departCountdownSeconds` (5) and starts the level once;
+    a refusal or a member missing at the 30 s cap falls back to the lobby with the level picked;
+  - **nothing auto-starts after a run**; F1: a server opens its auto-start once (a failed trip home that rejoins gets
+    nothing); G1: a Reset before the start keeps the party's pick as `picked`;
+  - F2: a member who was not expected and has no body enters at the next boundary; the start goes ahead;
+  - F5 / G5: the start runs under `xpcall` with a traceback; a throw refuses only while still in the lobby;
+  - the rule is pure in `StageFlow` (`DepartOpen`, `DepartStep`, `DepartAdmit`, `DepartForget`, `DepartLate`, …);
+  - `proving.rbxl` (Studio only, `debug.provingAutoStart`): Play alone reaches the countdown (L4W3-12).
+- **The end card, one in both places:** new shared `RunTally` (with pure `TallyRules`):
+  - a row per source counting up, coins flying into the card's wallet line, Timber logs piling, Valor with the next
+    ability ("next: Double Jump · 10 Valor", then "Glide · with the Castle"). A tap skips; no sound;
+  - phones: shortened motion under `reducedMotion`; fewer flying icons only on `lowEndDevice`; two columns on a short
+    landscape screen, rows scroll, totals never;
+  - `RunSummary.lines` (pure `RunLines`: `Add`, `Read`, `ReadSummary`), merged by source; F3 raider and boss rows count
+    kills; the run's last wallet goes out after its last credit and before the card;
+  - hosts: the combat `TallyHost` ("RUN REPORT", star, Back to camp / Return) and the city's ("EXPEDITION REPORT",
+    titled "Expeditions", one Dismiss, **no star** by F12).
+- **Run cash by era:** `Combat.EraCashMult` at the one cash choke point (`CombatCashMult`); `RunMember.cashEra` frozen at
+  the admit; `Combat.json rewards.eraCashMult`. Timber and Valor unchanged.
+- **Studio levers (combat, mission lobby):** **R** = depart again on the map's selection (`fakeDepart`); **P** = pay era
+  1 → 4 → 1 for the session (`cashEra`, toast "Pay as Metropolis (×34K)"). F4: P is refused with API access on ("P
+  needs Studio API access off"), so it never pays into a real save.
+- **Deleted:** `Config/Missions/1_Village.json`, `MissionConfig`, `MissionUnlocked`, `RecommendedPower`, `Combat.json
+  overdrive`, the Overdrive toggle and era tiles, the Gear Power chip and the Snapshot's `gearPower` (with
+  `Armory.GearPower` / `SavedPower` / `HeldTiers`), `SummaryCard`, `ExpeditionSummaryCard`, `debug.provingStartDelay`,
+  the stale DebugBots comment. No profile change (a bump would be v10; M11 takes v9).
+- **Tools:** `sim_combat.py` assertions 4, 22, 24 ("never faster than building", Normal and Hard), 25 ("a few minutes at
+  the start"); F17's ungated "k runs then build" lines; the optional `simulate_era(pause=None)` hook
+  (`sim_economy.py` output byte-identical); `check_stage_mirror` `EraCashMult` cases and the F6 note family; new harness
+  files `tests_l4w3.luau`, `tests_l4w3_run.luau`, `tests_l4w3_tally.luau`, `tests_l4w3_hub.luau`, `tests_l4w3_pins.luau`.
+
+**Review: four Opus slices, 0 Critical, 1 Major, 12 Minor, 15 Suggestions** (hub, combat, clients, data) → F1–F19:
+- **2-M1:** a solo player whose trip home fails is re-admitted into a fresh session that re-arms the auto-start → F1.
+- F2 a non-expected arrival never refuses the start; F3 rows count kills; F4 P never pays a real save; F5 comments,
+  `pcall`, early return; F6 a bad `note` is dropped, never refuses the level; F7 one summary reader; F8 both halves of
+  every `Read` rule; F9 one copy of the secret rows; F10 stale comments; F11 touch controls; F12 no star on the city
+  card; F13 the client rules gated (`TallyRules`, `MapRules.FirstPick`); F14 no rotated badge in clipped rows; F15
+  `levelId` checked; F16 a toast without `Config/Expeditions`; F17 what assertion 24 proves; F18 the note's Python twin;
+  F19 leftovers.
+
+**Fix-diff review: 0 Critical, 0 Major, 4 Minor, 2 Suggestions** → G1 a Reset before the start keeps the pick; G2 five
+pins; G3 one note rule (`MapRules.Note`, cap 24); G4 the zero card always has a title; G5 `xpcall` and the in-lobby
+refusal. s2 no change. The lead read the G diff.
+
+**Gates:**
+- Fix round 2 (`b38f7b8`): harness **5,466 checks**; `mutate.py` **2,405 entries, 0 stale**, filtered 42 + 15 run, 0 not
+  caught; `check_stage_mirror` PASS (F6 family 8 compared); `check_levels.py` PASS; `check_compile` 188 files.
+- Fix round (`3503134`): `mirror_mutants` **151 / 151**; `sim_combat.py --check` PASS (13 assertions);
+  `sim_economy.py` byte-identical to the saved baseline; **R8 PASS** (tightest ×0.977).
+- Code wave (`93eb8e9`): `sim_range.py --check` byte-identical to `dce50da`; `check_levels.py` identical.
+- `gen_asset_manifest.py --check` PASS (no uploads in W3).
+- QA on `b38f7b8`: every gate green (harness 5,466; sharded `mutate_shards` 2,405 run / 0 not caught; `check_levels_mutants` 283 ok; mirror mutants 151 / 151; R8 PASS on `3503134`, tightest x0.977, fix round 2 changed only a `sim_range` message; `sim_economy` output byte-identical; selene's one warning is `LegacyPanel`'s, on `main` too, fixed on `m11-port` 4350216).
+
+**Commits:** brief `3692822`; study and Ben's pick `74f7159`; contract `9e47a0c`, INTERFACES `6891339`, L4W3-17
+`fba27fa`, L4W3-18 `d3bfb9d`; review brief `d989c99`; code `93eb8e9`; review, F rulings and the §30 correction `36b54c0`;
+fix round `3503134`; fix-diff and G rulings `d72cb2f`; fix round 2 `b38f7b8`. Plus this docs change.
+
+### W4 (not started)
+
 - **W4:** the Theme round, phones, the publish checklist; both places published together (a private staging experience
   first is recommended; Ben decides).
 
 **Carried (owners):**
+- **Whoever merges second (W3 or M11; the lead routes): the M11 merge** (contract §10, L4W3-17, L4W3-18; M11's overlap
+  table is `m11-port`'s `docs/prompts/m11-port-contract.md` §8):
+  - resolve the shared hub files, each edited locally by both: `UIController`, `TopBar`, `Theme`, `EconomyService`,
+    `ArmoryService`, `HubRemotes`, hub `Main.server.luau`, `Types`, `Catalog`;
+  - resolve the `simulate_era(pause=None)` hook in `tools/sim_economy.py` (M11 owns that file; default output
+    byte-identical on both sides);
+  - wire the bottom bar's **Expedition key to `HubMap`'s open**, under M11's unlock gate;
+  - **delete M11's `SetPower` line** (its `UIController` ~:1187, behind the Armory key): W3 removed the Gear Power chip;
+  - **keep M11's early return** in the hub join when `PlotService.ClaimPlot` finds no plot, in front of W3's join wiring;
+  - **keep `ExpeditionService.stampDeparture`** on every departure path (M11's Armory unlock reads
+    `combat.stats.expeditions`).
+- **economy-designer (the Castle, when T5 exists): Brutal under option C.** Back-to-back Brutal runs would beat building
+  by 1.8 / 2.9 / 1.3% (Boomtown / Metropolis / Orbital). The "never faster" assertion gates Normal and Hard only;
+  re-run it with Brutal once Castle gear exists.
+- **economy-designer: the "k runs then build" note** (F17, MISSIONS_DESIGN §30 correction). A few runs right after an
+  Advance, then building, finishes slightly sooner (2.4 / 1.4 / 0.5%; Village 6.8%), with any multiplier ≥ 1. Printed,
+  ungated; Ben told. Re-read it whenever `rewards.eraCashMult` changes.
+- **economy-designer (W4 contract, L4W3-11): the better simulated human** (slow on several threats, misreads tells, hit
+  by melee).
+- **ui-engineer A (W4 phones): portrait 375×667 crowds MapScreen's nodes** (map column 153 px; carried since P5; now
+  in both places).
+- **lead (W4 staging publish): what only the live pair proves.** The failed-trip-home rejoin (F1) and the party's pick
+  when a member leaves before the host lands (G1) are proven only by harness cases. Also `ReserveServer` + group
+  `TeleportAsync` with `levelId`, the real ticket, a party arriving seconds apart against the 5 s countdown and the 30 s
+  cap, `ReturnData` with lines, `TeleportInitFailed` (contract §13.1).
+- **Ben (his W3 look), then economy-designer: the countdown length** (5 s, `Combat.json levels.departCountdownSeconds`;
+  config only).
+- **Ben, then ui-engineer B: the card's pace and height.** About 4.7 s (2.3 s on touch). If scrolling rows read worse
+  than grouping, the fallback is one "Camp bonuses" row (contract §13.6). A 568×320 phone overflows the totals by about
+  12 px with a two-line note (fix: drop the subtitle on short screens).
+- **ui-engineer A (W4 phones, cosmetic): the city map at 640×360** runs 2.5 px into its card's padding; with a keyboard
+  the key line's bottom 4.5 px leave the screen.
 - **Ben, then ui-engineer B + economy-designer: the plated elite's axe** is drawn to about 3.9–5.0 studs of its
-  7.5-stud, 120° wedge; its left two sectors are never swept. Left for Ben's look (PLAYTEST click question 3). A fix
-  goes K1/K2's way: arm keys, or the wedge cut to what is drawn and the bands re-measured.
+  7.5-stud, 120° wedge; its left two sectors are never swept. His W2 answer was read as "looks fair" (§29); reopen only
+  on his word. A fix goes K1/K2's way: arm keys, or the wedge cut to what is drawn and the bands re-measured.
 - **lead + economy-designer: bake the forest under plain `py` (3.14).** The hash is the same under both Pythons, but a
   `py -3.12` bake writes `Cover`, `Hills_1` and `Dress_11` with different normal bytes: three re-uploads and a paste.
   The cure (snap normal components under 1e-9 in `levelmesh` and `forest_kit`) goes with the next re-bake that
@@ -4911,12 +5028,8 @@ pose, data and gates). All fixed or ruled (K1–K10):
   Draw numbers.
 - **ui-engineer A + economy-designer D1: mood B** from Ben's screenshots (`Expeditions.json moods.forestRoad`); config
   only, no upload.
-- **ui-engineer (W3): the end screen** (MISSIONS_DESIGN §17.5, §26.7), with the per-camp clear bonus on screen and the
-  Castle Key row.
-- **lead + economy-designer (W3): Valor has nothing to buy** after Double Jump (the next ability shown locked "with the
-  Castle"); **Ascension is unreachable** (it needs Steel, Circuits and Alloy, which no level pays).
-- **luau-engineer + ui-engineer (W3 hub pass):** the hub's stale DebugBots comment; the Missions stub and Overdrive go.
-- **economy-designer:** a better simulated human (slow on several threats, misreads tells, hit by melee).
+- **lead + economy-designer (W4 or the Castle): Ascension is unreachable** (it needs Steel, Circuits and Alloy, which
+  no level pays). Valor's purpose on screen was W3's (Glide locked "With the Castle").
 - **luau-engineer A, L4 or later:** sight through walls (no ray in the crowd's step).
 - **lead + economy-designer: the free rescue** gives the get-up i-frames. A level with enemies near an open edge needs a
   rescue cooldown.
@@ -4931,14 +5044,16 @@ pose, data and gates). All fixed or ruled (K1–K10):
 - **Closed by L4 so far:** the sniper perches on Normal and Hard (R8 fair, the set empty); `OnDash` before any publish
   (L4B-7, with F5's scope); dead code (W1b); the arena's clear time (the arena is hidden); RunState cells every send
   (L4B-8); the seated head scores a body hit (W2); the C1 `onSwing` path (L3-53) and `Armory.json slots` (L3-54);
-  scenery and the Camp Chief (W2).
+  scenery and the Camp Chief (W2); the end screen with the camp bonus and Castle Key rows, Valor's purpose on screen,
+  the hub's stale DebugBots comment, the Missions stub and Overdrive (W3).
 - Every L3, L2, L1c and L1b carried item above not named here stands.
 
 **Next:**
-1. QA (contract §11's full list), then the lead merges `l4-w2` to `main` and rebuilds the six place files.
-2. **Ben's look:** `docs/PLAYTEST.md` "L4 W2 — the real forest in the game"; setup `docs/MANUAL_STEPS.md` "L4 W2".
-3. Five click questions; the mood tuned from his screenshots.
-4. W3 only on his word.
+1. The lead merges `l4-w3` to `main` and rebuilds the six place files (QA green).
+2. **Ben's look:** `docs/PLAYTEST.md` "L4 W3 — the city map, the end card, run cash by era"; setup
+   `docs/MANUAL_STEPS.md` "L4 W3".
+3. Four click questions (the countdown, the card's pace, "Party & runs", anything wrong).
+4. W4 only on his word. The M11 merge items above go to whoever merges second.
 
 - [x] Ben's eight decisions (`f5c9da6`)
 - [x] W1 tracks D, F, R (`5744df9`, `54294ca`, `1d3b0d2`)
@@ -4958,7 +5073,16 @@ pose, data and gates). All fixed or ruled (K1–K10):
 - [x] Merged to `main` (`33315f2`), six place files rebuilt (`106165a`)
 - [x] L4 W2 playtest (Ben, 2026-10-23: *"everything feels right"*; textured, all fine; saw the forest, the raiders, the
   Chief and the climb; MISSIONS_DESIGN §29)
-- [ ] W3 (on Ben's word)
+- [x] W3 brief (`3692822`); Ben's era-cash pick, option C (`74f7159`)
+- [x] W3 contract (`9e47a0c`; L4W3-17 `fba27fa`, L4W3-18 `d3bfb9d`)
+- [x] W3 built (`93eb8e9`)
+- [x] Reviewed: four slices, 0 / 1 / 12 + 15; F rulings; §30 correction (`36b54c0`)
+- [x] Fix round F1–F19 (`3503134`)
+- [x] Fix-diff review 0 / 0 / 4 + 2 (`d72cb2f`)
+- [x] Fix round 2, G1–G5 (`b38f7b8`)
+- [x] QA on `b38f7b8`: every gate green (harness 5,466; sharded `mutate_shards` 2,405 run / 0 not caught; `check_levels_mutants` 283 ok; mirror mutants 151 / 151; R8 PASS on `3503134`, tightest x0.977, fix round 2 changed only a `sim_range` message; `sim_economy` output byte-identical; selene's one warning is `LegacyPanel`'s, on `main` too, fixed on `m11-port` 4350216)
+- [ ] Merged to `main`, six place files rebuilt
+- [ ] L4 W3 playtest (Ben)
 - [ ] W4 and the publish
 
 ## M12 — Growing city

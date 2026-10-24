@@ -703,3 +703,24 @@ Chief and the mountain climb**. His line is read as "about right" for the checkl
 length and sweep at 12.7 / 120°, the plated elite's axe against its wedge, the raiders in motion, the mountain's
 difficulty). **W2 is signed off.** **[Ben]** Next: W3 (the city map, the end screen, run cash by era) and W4 (publish
 readiness), on his word.
+
+## 30. L4 W3: run cash by era (2026-10-23)
+
+Ben: *"start L4 wave 3"*. Before the contract, one click question on §26.8. Study:
+`docs/prompts/l4-w3-cash-study.md` (economy-designer, `sim_economy.py` greedy lap and `sim_combat.py`). The city earns 100%
+during a run and its income grows x39 to x127 from an era's start to its middle, so one multiplier per era can make "a few
+minutes of income" true at one moment only; after that a clear's cash fades to seconds and Timber and Valor are the reason
+to run. Ben chose **C: a few minutes right after each Advance, capped so that back-to-back runs on Normal or Hard never
+finish an era sooner than building** (over A, 3 minutes at the start uncapped, where Hard runs beat building by ~1% in
+Metropolis and Orbital, and B, 3 minutes mid-era, where running is 39-56% faster than building). **[Ben]**
+
+Multipliers per kill by the player's own city era: **Village 1, Boomtown 670, Metropolis 34,000, Orbital Colony 1,400,000**
+(the first clear after an Advance is worth 4.3 / 3.0 / 2.3 / 1.7 minutes; a brand-new save keeps today's pay). Cash only;
+Legacy and Founder's still apply on top. Risk: back-to-back Brutal runs would beat building by 1-3%; re-checked when T5
+(Castle gear) exists.
+
+**Correction (2026-10-23, the W3 review):** the option C preview Ben chose on said "No way of running beats building". What
+holds, and what the simulator gates, is narrower: **back-to-back runs on Normal or Hard never finish an era sooner than
+building**. A player who runs a few times right after an Advance and then builds does finish slightly sooner (Boomtown 1 run
+2.4%, Metropolis 8 runs 1.4%, Orbital 12 runs 0.5%; Village 6.8% at today's pay), with any multiplier of at least 1, because
+the wallet is empty after an Advance; option A would read 2.5% / 2.1% and B far more. Told to Ben; his pick stands.

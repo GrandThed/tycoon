@@ -5941,10 +5941,9 @@ Also, if you have a view: anything wrong, by step number, PC or phone.
 - A mountain climb behind the trailhead gives the **Castle Key**.
 - **About 40 minutes. Play and keys only, no panel.** No sound.
 
-**Status 2026-10-23:** built and reviewed (W1b: three slices, 0 Critical, 0 Major, 9 Minor, then
-two checks of the fixes; W2: four slices, 0 / 2 / 14, then 0 / 0 / 3; all fixed or ruled). The 81
-models are uploaded and harvested (your paste, 2026-10-22). **Waiting on QA and the lead's merge
-word.**
+**Status 2026-10-23:** merged to `main` (`33315f2`, place files `106165a`). **Signed off the same
+day:** *"everything feels right"* (textured, all fine; you saw the forest, the raiders, the Chief and
+the climb; MISSIONS_DESIGN §29). The boxes below were not ticked one by one.
 
 Setup: `docs/MANUAL_STEPS.md` "L4 W2".
 
@@ -6128,6 +6127,164 @@ Asked afterwards, as click questions:
 - **The mountain climb:** too easy / about right / too hard / couldn't find the way.
 
 Also: the Frame / Draw numbers, and anything wrong, by step number, PC or phone.
+
+## L4 W3 — the city map, the end card, run cash by era
+
+<!-- FILE TO OPEN: start. Lead: if L4 W3 is not merged to `main`, change only this block. -->
+**File to open (part A):** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` (the main checkout)
+- **Only after the lead's word that L4 W3 is merged to `main`.** Then VS Code,
+  **Ctrl+Shift+B** → **"Build all"**.
+- Close any `proving.rbxl`, `test.rbxl` or `combat.rbxl` open in Studio (don't save), then open
+  the file again. **A copy that was open before "Build all" is the old one.**
+- **You have the new build if** the key hint ends **"Z grey level · R depart · P pay era"**.
+<!-- FILE TO OPEN: end -->
+
+**Goal:**
+- Play goes straight into Forest Road after a short countdown.
+- After a clear, a **tally card**: rows count up, coins fly into your wallet, Timber piles up.
+- Run cash grows with your city's era (×1 / ×670 / ×34,000 / ×1,400,000).
+- The city gets the same map (part B, optional).
+- **Part A about 20 minutes, phone 5, part B about 10. Keys only, no panel.** No sound.
+
+**Status 2026-10-23:** built and reviewed (four slices 0 Critical, 1 Major, 12 Minor; then a check
+of the fixes 0 / 0 / 4; all fixed); QA green 2026-10-24 (every mutation caught). **Waiting on the
+lead's merge word.**
+
+Setup: `docs/MANUAL_STEPS.md` "L4 W3".
+
+**Keys (part A):**
+- **M** = map (lobby). **Arrows** = level and difficulty. **Enter** = Depart, or Back to camp on
+  the card.
+- **N** three times = inside the Chief's gate. **Do not use B.**
+- **G** = gear T1 → T3 → T5. **Backspace** twice = Abandon.
+- Studio only, new:
+  - **R** = depart again on the map's choice (a countdown, then the level);
+  - **P** = pay as the next era: Village → Boomtown → Metropolis → Orbital → Village.
+- **Output** = View (*Vista*) → Output (*Salida*).
+
+**Studio resets your save every session in `proving.rbxl`:** Village era (pay ×1), T1 / T1, no
+Double Jump.
+
+### A. `proving.rbxl` (no API access needed)
+
+- [ ] 1. **Play.** Keep Output in sight. Do nothing.
+      - Under your wallet: **"Forest Road · Normal starts in 5"**, counting down. No map over it.
+      - At 0 the level starts at the trailhead.
+      - Bug: the map opens instead; nothing starts; Output shows **"auto-start … refused"**.
+- [ ] 2. **Clear it.** **N** three times (never **B**): inside the Chief's gate. The ambush, then
+      the Camp Chief. **G** if you need gear.
+- [ ] 3. **The card.** After the Chief: **"RUN REPORT"**, **"Forest Road · Normal"**.
+      - Rows slide in and count up, one at a time: **Raiders ×n**, a bonus row for each camp you
+        cleared (after **N** maybe none), **The Camp Chief**. No first-clear row on Normal: that
+        reward belongs to Hard (the Warhammer) and Brutal.
+      - Coins fly from the rows into the card's wallet line. Timber logs pile beside the Timber
+        count. Valor rolls, with **"next: Double Jump · 10 Valor"**.
+      - About 5 seconds in all. The card's wallet ends at the top bar's cash.
+      - **Screenshot the card.**
+      - Bug: a number jumps without counting; the wallet line ends off the top bar's cash.
+- [ ] 4. **Back to camp** (button or **Enter**, or wait for "Back to camp in …").
+      - The lobby, and the map opens. **Nothing starts by itself.** Wait 10 seconds to be sure.
+      - Bug: a countdown starts on its own.
+- [ ] 5. **P, twice.** Close the map (**M**) first.
+      - Toasts: **"Pay as Boomtown (×670)"**, then **"Pay as Metropolis (×34K)"**.
+      - If it reads **"P needs Studio API access off"**: this file has API access on. That
+        refusal is the safety rule. Skip the cash check in step 8 and tell Claude.
+- [ ] 6. **R.** The map closes if open. **"Forest Road · Normal starts in 5"**, then the level.
+- [ ] 7. **R in the level.** Toast **"Depart works in the lobby only"**. Nothing else happens.
+- [ ] 8. **Clear it again** (**N** three times, the Chief).
+      - The cash rows are about **34,000 times** step 3's (the Camp Chief row: tens of thousands
+        then, over a billion now).
+      - **Click the card while rows are still counting** (not on a button): it jumps to the end.
+      - **Screenshot the card.**
+      - Bug: the same cash as step 3; the click does nothing; a button does nothing until the
+        count ends.
+- [ ] 9. **Phone, landscape.** Stop. Test (*Prueba*) → Device (*Dispositivo*) → a **640×360**
+      phone, landscape (add a custom 640×360 device if the list has none). **Play.**
+      - The countdown line fits on screen, then the level.
+      - **N** once, kill two or three raiders, **Backspace** twice: the card.
+      - Two columns: rows left; totals and both buttons right, all on screen.
+      - Shorter motion: no grow, no flash, no pulse. Coins still fly. A tap skips.
+- [ ] 10. **The same at 667×375.**
+- [ ] 11. **Phone, portrait** (**375×667**). The card is one column, all of it on screen.
+      - **M**: the map's nodes are crowded. Known since P5 (not this wave).
+
+**Optional, not one of the 11:**
+- **Two players.** Test (*Prueba*) → **Local Server** (*Servidor local*), **2 players**
+  (*2 jugadores*) → **Start** (*Iniciar*).
+  - Both windows: one countdown, then both in Forest Road.
+  - A window that arrived after 0 may wait in the lobby camp a while before it joins.
+  - After a clear, each window's **Raiders ×n** counts that player's own kills.
+  - Bug: two countdowns; 0 with no start; "Waiting for your party" over 30 s with both standing.
+
+### B. The bridge (optional; your real save)
+
+**Needs "Enable Studio Access to API Services" ON in `test.rbxl` and in `combat.rbxl`:** Home
+(*Inicio*) → Game Settings (*Configuración del juego*) → Security (*Seguridad*). Check each file.
+- It plays on your **real save**, as every bridge test since C1.
+- **P is refused here** ("P needs Studio API access off"), so nothing pays at a fake era.
+
+- [ ] 12. Open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`. **Play.** Click the bottom bar's
+      **Expedition** key (🗺).
+      - The map opens over the city. Its footer reads **"Party & runs"**.
+      - Brutal's button reads **"Castle gear"**.
+      - Bug: the old mission tiles, an Overdrive toggle, or a Gear Power chip in the top bar.
+- [ ] 13. **The Armory** (**K**, or the bottom bar's Armory key) → **Abilities** tab. **Glide**,
+      darker, **"With the Castle"**, no Buy button. Close it, open the map again.
+- [ ] 14. Map: **Forest Road**, **Normal** → **Depart** (**Enter**).
+      - Toast **"Handoff saved — Stop Play, then open build/combat.rbxl"**, then you are kicked.
+        Expected (C1). **Stop.**
+- [ ] 15. Open `C:\Users\benja\Desktop\tycoon\build\combat.rbxl`. **Play.**
+      - The lobby: **"Forest Road · Normal starts in 5"**, then the level.
+      - Bug: the map opens on Forest Road · Normal and nothing counts down (the trip's ticket was
+        not accepted). Send Claude the Output, then press **Enter** to go on.
+- [ ] 16. **N** once, kill a few raiders. **Backspace** twice: the run card. Click **"Return to
+      your city"**. A card **"EXPEDITION REPORT"** with no buttons, then you are kicked. **Stop.**
+- [ ] 17. Open `test.rbxl` again. **Play.**
+      - Over the city: **"EXPEDITION REPORT"**, titled **"Expeditions"**: the same rows, coins into
+        your city wallet, one **Dismiss**.
+      - **No star.** On purpose: it reports the whole visit, not one clear.
+      - Tip: do this Play in the phone view (667×375). The thumbstick and jump button hide while
+        the card is up and come back after Dismiss. **K** does nothing while it is up.
+- [ ] 18. **Phone, the city map.** `test.rbxl` in the phone view (667×375), **Play**. Open the
+      Expedition key: the thumbstick and jump button vanish. Close it (X or Escape): they
+      return.
+- [ ] 19. Stop. Close Studio without saving. Tell Claude you are done: four click questions
+      follow. Send the two card screenshots.
+
+### What Studio cannot show (the harness proves these; seen first at the W4 staging publish)
+
+- **A failed trip home that rejoins the same server:** it must land in the lobby with nothing
+  starting and the map not forced open.
+- **A party member leaving before the host lands:** the host's lobby opens the map on the party's
+  level and difficulty, with no countdown.
+- A real party arriving seconds apart against the countdown and the 30 s wait.
+- There is no Studio step for these. Don't try to force them.
+
+### Not a bug (don't report these)
+
+- **After a run nothing starts by itself.** The map opens; R or Depart starts the next run.
+- **The city card has no star.**
+- A camp skipped with **N** pays no bonus row.
+- No **"First Normal clear"** row on the second clear: only the first pays it.
+- **"P needs Studio API access off"** whenever API access is on.
+- `proving.rbxl`'s run card has no "Return to your city" button.
+- The city's top bar has no Gear Power chip; the Overdrive toggle and the mission tiles are gone.
+  The map replaces them.
+- Glide cannot be bought yet. Brutal waits for Castle gear.
+- The Raider Arena is not on the map (hidden since W1b).
+- The bridge kicks you twice (Depart, Return). Expected since C1.
+- On a short phone the card's rows scroll; the totals never do.
+- No sound.
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- **The countdown (5 s):** right / too short / too long / solo should start at once.
+- **The card's pace (about 5 s, half on a phone):** about right / too slow / too fast / I'd skip
+  it every time.
+- **"Party & runs" in the city map's footer:** easy to find / hard to find / I'd put it
+  elsewhere.
+- **Anything that read wrong** (words, rows, toasts, phone): nothing / yes (say which step).
 
 ## M12 — Village growing city
 

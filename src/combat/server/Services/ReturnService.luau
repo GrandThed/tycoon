@@ -32,6 +32,7 @@ local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local StudioBridge = require(servicesFolder:WaitForChild("StudioBridge"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
+local RunCredit = require(script.Parent:WaitForChild("RunCredit"))
 
 -- Infrastructure retry policy, like DataService's: three attempts, 1 s / 2 s / 4 s backoff.
 local RETRY_ATTEMPTS = 3
@@ -63,27 +64,15 @@ local function sendUnavailable(player: Player): ()
 end
 
 -- The session's card: everything credited since the admit (L1). A player who was never admitted
--- (a refused arrival pressing Return) still goes home, with a zeroed card, and without creating
--- a summary entry for a non-member.
+-- (a refused arrival pressing Return) still goes home, with a zeroed card under the session card's
+-- own title (RunCredit.Empty, the card every summary starts as, titled by ArenaService.SessionName:
+-- the map's name, or its default without Config/Expeditions, so the hub never drops it; fix round
+-- 2's G4), and without creating a summary entry for a non-member.
 local function buildSummary(player: Player): Types.RunSummary
 	if ArenaService.IsAdmitted(player) then
 		return ArenaService.GetSessionSummary(player.UserId)
 	end
-	local expeditions = Catalog.GetExpeditionsConfig()
-	return {
-		missionId = if expeditions ~= nil then expeditions.name else "",
-		overdrive = false,
-		wavesCleared = 0,
-		bestWave = 0,
-		died = false,
-		cash = 0,
-		materials = {},
-		valor = 0,
-		kills = 0,
-		seconds = 0,
-		mentorValor = 0,
-		damageShare = 0,
-	}
+	return RunCredit.Empty(ArenaService.SessionName())
 end
 
 -- Only ARGUMENT errors throw; a runtime refusal arrives later on TeleportInitFailed.
@@ -168,7 +157,7 @@ local function trySendHome(player: Player, reason: string, kind: LeaveKind): boo
 	-- no countdown and no button.
 	local leaveResult: Types.RunResult = {
 		levelId = "",
-		levelName = summary.missionId,
+		levelName = summary.title,
 		difficulty = "",
 		reason = "leave",
 		campsCleared = 0,

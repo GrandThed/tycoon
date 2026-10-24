@@ -8,9 +8,9 @@
 -- The rules are tested on a fixture with the contract's own numbers (L3.fixture), so a data
 -- change cannot hide a rule change; the shipped data is pinned against the same numbers last.
 -- The fix round (docs/prompts/l3-w1-fix-round.md) adds the band top's trophy (StarHeld, R1), the
--- strike tier (StrikeTier, R3), the saved pair's Power and the hub's profile copy (SavedPower,
--- ProfileCopy, R7), the one migration runner (ProfileSchema.Run, R5), single-rule breaks of every
--- Problems rule (R6), and, read as text (FIXTURES.source.l3), the server lines that apply them.
+-- strike tier (StrikeTier, R3), the saved pair's slot rule and the hub's profile copy (HeldFamily,
+-- ProfileCopy, R7; L4 W3 took SavedPower with the Power readout), the one migration runner
+-- (ProfileSchema.Run, R5), single-rule breaks of every Problems rule (R6), and, read as text (FIXTURES.source.l3), the server lines that apply them.
 -- The fix round 2 (docs/prompts/l3-w1-fix2.md) adds the first-clear write both places make
 -- (Unlocks.ApplyFirstClear, F2) and, in the text reading, the lines that feed each pinned call,
 -- the exits of their bodies and the count-0 rules in any spelling (F1, F3, F5).
@@ -90,7 +90,6 @@ local L3: any = {
 function L3.fixture(): any
 	local cfg = L1.copy(ARMORY)
 	cfg.baseHp = 100
-	cfg.power = { hpWeight = 0.2, tierWeight = 11 }
 	local melee = L1.copy(L3.HP_MELEE)
 	local ranged = L1.copy(L3.HP_RANGED)
 	for t = 12, 20 do
@@ -256,11 +255,6 @@ function L3.ladderTests(): ()
 		A.TierOf(bare, L3.combat({ broadsword = 9 }), "broadsword") == 1,
 		"and so does every family without a ladder"
 	)
-	local held = A.HeldTiers(cfg, L3.combat({ broadsword = 3 }), "broadsword", "flamethrower")
-	check(
-		held.melee == 3 and held.ranged == 2,
-		`HeldTiers reads each held family's tier ({held.melee}, {held.ranged})`
-	)
 
 	-- NextTier.
 	check(A.NextTier(cfg, L3.combat({}), "broadsword") == 2, "NextTier from T1 is 2")
@@ -377,30 +371,6 @@ function L3.strengthTests(): ()
 	local noRange = L3.fixture()
 	noRange.ladder.rangeHp = 0
 	check(A.RangeHp(noRange) == 100, "and with a rangeHp that is not above 0")
-	check(
-		A.GearPower(cfg, { melee = 1, ranged = 1 }, { melee = 0, ranged = 0 }) == 64,
-		`GearPower at T1 / T1 reads 64, today's 2 / 2 ({A.GearPower(
-			cfg,
-			{ melee = 1, ranged = 1 },
-			{ melee = 0, ranged = 0 }
-		)})`
-	)
-	check(
-		A.GearPower(cfg, { melee = 3, ranged = 3 }, { melee = 0, ranged = 0 })
-			== math.round(4.0837 * 2 * 11 + 230 * 0.2),
-		"at T3 / T3: (4.0837 x 2) x tierWeight + 230 x hpWeight, rounded"
-	)
-	check(
-		A.GearPower(cfg, { melee = 1, ranged = 1 }, { melee = 1, ranged = 0 })
-			== math.round((1.5 * asc.damageMult + 1.5) * 11 + (100 + 35 * asc.hpMult + 20) * 0.2),
-		"the slots' Ascension damageMult and hpMult count"
-	)
-	local unweighted = L3.fixture()
-	unweighted.power.tierWeight = nil
-	check(
-		A.GearPower(unweighted, { melee = 1, ranged = 1 }, { melee = 0, ranged = 0 }) == 31,
-		"no tierWeight: the multipliers weigh 0 (155 x 0.2 = 31)"
-	)
 	local dmg, hp = A.Preview(cfg, "melee", 5, 24)
 	check(
 		dmg == math.round(24 * 11.118) and hp == 170,
@@ -953,67 +923,17 @@ function L3.strikeTests(): ()
 end
 L1.group("l3 strikeTests", L3.strikeTests)
 
-function L3.powerTests(): ()
-	print(" HeldFamily and SavedPower: the saved pair's Power, the one rule both places read (R7)")
+function L3.heldFamilyTests(): ()
+	-- L4 W3 took SavedPower, GearPower and HeldTiers with the Gear Power readout, their last reader;
+	-- HeldFamily stays, the slot rule Unlocks.LoadoutOf reads (R7).
+	print(" HeldFamily: the saved loadout's slot rule, the one LoadoutOf reads (R7)")
 	local A = L3.Armory
 	local U = L3.Unlocks
 	local weapons = FIXTURES.proving.weapons
 	local starters = FIXTURES.proving.loadout
 	local fresh = L1.copy(L3.Schema.PROFILE_TEMPLATE.combat)
-	check(
-		A.SavedPower(ARMORY, fresh, weapons, starters) == 64,
-		`a fresh profile reads 64 on the shipped files ({A.SavedPower(
-			ARMORY,
-			fresh,
-			weapons,
-			starters
-		)})`
-	)
-	local cfg = L3.fixture()
-	check(A.SavedPower(cfg, fresh, weapons, starters) == 64, "and on the contract's fixture")
-	check(A.SavedPower(cfg, nil, weapons, starters) == 64, "no profile: T1 / T1, 64")
-	check(
-		A.SavedPower(cfg, fresh, nil, { melee = "", ranged = "" }) == 64,
-		"no ProvingGrounds.json (no family known): T1 / T1, 64"
-	)
-	local veteran = L1.copy(fresh)
-	veteran.gear = { melee = 3, ranged = 3 }
-	check(
-		A.SavedPower(cfg, veteran, weapons, starters) == 64,
-		"the frozen slot gear is never read (3 / 3 there, no tiers saved: still 64)"
-	)
-	local none = { melee = 0, ranged = 0 }
-	local function power(tiers: any, loadout: any, families: any, ascension: any): number
-		local combat = L3.combat(tiers)
-		combat.loadout = loadout
-		combat.families = families
-		combat.ascension = ascension or none
-		return A.SavedPower(cfg, combat, weapons, starters)
-	end
-	check(
-		power({ broadsword = 3 }, nil, {}) == A.GearPower(cfg, { melee = 3, ranged = 1 }, none),
-		"an upgraded starter moves it (Broadsword T3)"
-	)
-	check(
-		power({}, { ranged = "flamethrower", variants = {} }, { flamethrower = true })
-			== A.GearPower(cfg, { melee = 1, ranged = 2 }, none),
-		"a held Flamethrower reads its window's start, T2"
-	)
-	check(
-		power({}, { ranged = "flamethrower", variants = {} }, {}) == 64,
-		"a saved family not owned reads the starter"
-	)
-	check(
-		power({ longbow = 4 }, { ranged = "flamethrower", variants = {} }, {})
-			== A.GearPower(cfg, { melee = 1, ranged = 4 }, none),
-		"and the starter's own tier"
-	)
-	check(
-		power({}, nil, {}, { melee = 1, ranged = 0 })
-			== A.GearPower(cfg, { melee = 1, ranged = 1 }, { melee = 1, ranged = 0 }),
-		"the slots' Ascension counts"
-	)
-	-- The two readings of a saved pair never disagree: the hub's old two lines, and SavedPower.
+	-- LoadoutOf calls HeldFamily for both slots, so the loop proves the hand-off, not the rule:
+	-- L3.loadoutTests' explicit pairs hold the rule itself.
 	local agree = true
 	local shapes = 0
 	local loadouts = {
@@ -1033,26 +953,20 @@ function L3.powerTests(): ()
 				combat.loadout = if loadout == false then nil else loadout
 				combat.families = families
 				local held = U.LoadoutOf(combat, weapons, starters)
-				local expected =
-					A.GearPower(cfg, A.HeldTiers(cfg, combat, held.melee, held.ranged), none)
-				agree = agree and A.SavedPower(cfg, combat, weapons, starters) == expected
 				agree = agree and A.HeldFamily(combat, weapons, starters, "melee") == held.melee
 				agree = agree and A.HeldFamily(combat, weapons, starters, "ranged") == held.ranged
 				shapes += 1
 			end
 		end
 	end
-	check(
-		agree and shapes == 36,
-		`SavedPower is GearPower at the tiers of LoadoutOf's pair, and HeldFamily is LoadoutOf's slot, over {shapes} saved shapes`
-	)
+	check(agree and shapes == 36, `LoadoutOf hands out HeldFamily's slots, over {shapes} saved shapes`)
 	check(
 		A.HeldFamily(fresh, weapons, starters, "nope") == ""
 			and A.HeldFamily(fresh, weapons, starters, "melee") == starters.melee,
 		"HeldFamily: empty for a slot that is not melee or ranged, the starter for a fresh profile"
 	)
 end
-L1.group("l3 powerTests", L3.powerTests)
+L1.group("l3 heldFamilyTests", L3.heldFamilyTests)
 
 -- Every table reached from `value`, by identity.
 function L3.tables(value: any, into: any): any
@@ -1526,13 +1440,6 @@ function L3.problemTests(): ()
 				c.legacy.gearCosts[4].material = ""
 			end,
 			"legacy.gearCosts[4] is not a material",
-		},
-		{
-			"a tierWeight that is a string",
-			function(c)
-				c.power.tierWeight = "11"
-			end,
-			"power.tierWeight is not a number",
 		},
 	}
 	for _, case in breaks do
@@ -2223,22 +2130,8 @@ L3.LINES = {
 	debugTargets = { 1, "its players are the caller, else everyone admitted (F1)" },
 	debugGrant = { 1, "and it awards and pays through WaveService.GrantStars (F1)" },
 	debugStarExits = { 2, "grantStar's ways out: no ladder, no such level (F1)" },
-	mainPower = { 1, "the dungeon Snapshot's Power is SavedPower on the profile (R7)" },
-	mainArmory = { 1, "the dungeon Snapshot reads Armory.json (F1)" },
-	mainProving = { 1, "and ProvingGrounds.json (F1)" },
-	mainWeapons = { 1, "and hands SavedPower its weapons (F1)" },
-	mainStarters = { 1, "and its starters (F1)" },
 	mainSnapshotExits = { 1, "sendSnapshot's one early way out is the load status (F1)" },
-	mainGearOf = { 0, "and no longer reads WeaponService.GearOf, in any spelling (F1)" },
-	hubPower = { 1, "the hub's Power is SavedPower on the profile (R7)" },
-	hubArmory = { 1, "the hub's Power is 0 only without Armory.json (F1)" },
-	hubProving = { 1, "the hub's Power reads ProvingGrounds.json (F1)" },
-	hubWeapons = { 1, "and hands SavedPower its weapons (F1)" },
-	hubStarters = { 1, "and its starters (F1)" },
-	hubPowerExits = { 2, "computeGearPower's ways out: no Armory.json, the Power (F1)" },
-	hubPowerSent = { 2, "and rides both the Delta and the Snapshot" },
 	hubCopy = { 1, "the hub's Delta carries ProfileCopy.Combat (R7)" },
-	hubFrozenGear = { 0, "EconomyService reads no frozen slot gear, in any spelling (F1)" },
 	runnerCall = {
 		1,
 		"DataService migrates through ProfileSchema.Run, the runner proved here (R5)",
@@ -2283,6 +2176,13 @@ L3.LINES = {
 		1,
 		"a push before the families asks for them and leaves the replay to that (F5)",
 	},
+	-- L4 W3, the M11 relay (luau-a.md 4): every departure still stamps, before the bridge branch.
+	stampThenBridge = { 1, "handOff stamps every member before the Studio bridge branch (the M11 relay)" },
+	stampOnce = { 1, "and stamps in that one place" },
+	okInHandOff = { 2, "handOff answers ok twice: the bridge and the live teleport" },
+	okInFile = { 2, "and no ok departure answer stands outside handOff" },
+	departHandsOff = { 1, "Depart goes through handOff" },
+	joinHandsOff = { 1, "and so does Join" },
 }
 
 function L3.sourceTests(): ()
@@ -2368,17 +2268,13 @@ function L3.shippedTests(): ()
 		L3.same(ladder.starAlso, { "brutal" }),
 		"and a Brutal star opens a band top too (the fix round's R1)"
 	)
-	check(ARMORY.power.tierWeight == 11 and ARMORY.baseHp == 100, "tierWeight 11 on baseHp 100")
+	check(ARMORY.power == nil and ARMORY.baseHp == 100, "baseHp 100, and no power block (Gear Power went in L4 W3)")
 	local none = { melee = 0, ranged = 0 }
 	check(
 		A.MaxHp(ARMORY, { melee = 1, ranged = 1 }, none) == 155
 			and A.MaxHp(ARMORY, { melee = 3, ranged = 3 }, none) == 230
 			and A.MaxHp(ARMORY, { melee = 5, ranged = 5 }, none) == 380,
 		"MaxHp (1, 1) 155, (3, 3) 230, (5, 5) 380"
-	)
-	check(
-		A.GearPower(ARMORY, { melee = 1, ranged = 1 }, none) == 64,
-		`GearPower at T1 / T1 is 64 ({A.GearPower(ARMORY, { melee = 1, ranged = 1 }, none)})`
 	)
 	local windowsSame = true
 	local count = 0

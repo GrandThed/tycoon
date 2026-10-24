@@ -1,14 +1,14 @@
 --!strict
 -- Pure Armory math (docs/INTERFACES.md "C0 contracts", docs/prompts/l3-w1-contract.md L3-1 to
 -- L3-8). No Roblox globals of any kind — tools/sim_combat.py mirrors this file function for
--- function, three aside — so every config value and every profile field arrives as an argument.
--- Those three have no Python mirror, deliberately (the L3 W1 fix round 2's F4), because the
+-- function, two aside — so every config value and every profile field arrives as an argument.
+-- Those two have no Python mirror, deliberately (the L3 W1 fix round 2's F4), because the
 -- simulators need only their parts: StrikeTier is TierOf (mirrored) under a Studio session
 -- override no simulator plays; HeldFamily is the saved loadout's slot rule, and every simulated
--- course names the pair it holds (sim_range.held_pair); SavedPower is the hub's and the dungeon's
--- Power readout, HeldFamily into HeldTiers and GearPower (both mirrored), which no simulator
--- shows. tools/crowd_harness tests all three (tests_l3.luau), and tools/check_stage_mirror.py
--- lists them as unmirrored (ARMORY_UNMIRRORED).
+-- course names the pair it holds (sim_range.held_pair). tools/crowd_harness tests both
+-- (tests_l3.luau), and tools/check_stage_mirror.py lists them as unmirrored (ARMORY_UNMIRRORED).
+-- L4 W3 deleted GearPower, SavedPower and HeldTiers with the Gear Power readout, their last
+-- reader (L4B-5).
 --
 -- L3: a tier belongs to a weapon FAMILY. Every family climbs one ladder (`ladder`) inside its own
 -- window (`windows`); its tier scales its hits (Multiplier) and, for the two held families, the
@@ -51,7 +51,6 @@ type ArmoryLegacy = { gearCosts: { ArmoryLegacyCost } }
 type ArmoryConfig = {
 	version: number,
 	baseHp: number,
-	power: { hpWeight: number, tierWeight: number? },
 	ascension: AscensionConfig,
 	ladder: ArmoryLadder?,
 	windows: { [string]: ArmoryWindow }?,
@@ -187,16 +186,6 @@ function Armory.TierOf(cfg: ArmoryConfig, combat: CombatProfile?, family: string
 	return math.min(math.max(saved, start), top)
 end
 
--- L3-6: the held families' tiers in the slot-shaped record GearOf, MaxHp and GearPower read.
-function Armory.HeldTiers(
-	cfg: ArmoryConfig,
-	combat: CombatProfile?,
-	melee: string,
-	ranged: string
-): SlotTiers
-	return { melee = Armory.TierOf(cfg, combat, melee), ranged = Armory.TierOf(cfg, combat, ranged) }
-end
-
 -- The fix round's R3: the tier a family strikes at, and the tier the bar reads for a held one. A
 -- Studio session override's tier for the family's slot is held inside the family's OWN window, so
 -- a T1 preset never fields a weapon below its window (2-s1); without an override, TierOf. An
@@ -221,11 +210,11 @@ function Armory.StrikeTier(
 	return math.min(math.max(overrideTier, first), last)
 end
 
--- L3-10's slot rule, in the one place both readings take it from (Unlocks.LoadoutOf and
--- SavedPower): the family the saved loadout holds in `slot` when it is a family of `weapons`, fills
--- that slot and is owned (a starter, or one the profile's `families` holds true for); otherwise
--- the slot's starter. `weapons` is ProvingGrounds.json `weapons`, of which only each entry's `slot`
--- is read, and `starters` its `loadout`. "" for a slot other than "melee" and "ranged".
+-- L3-10's slot rule, in the one place its readers take it from (Unlocks.LoadoutOf): the family
+-- the saved loadout holds in `slot` when it is a family of `weapons`, fills that slot and is owned
+-- (a starter, or one the profile's `families` holds true for); otherwise the slot's starter.
+-- `weapons` is ProvingGrounds.json `weapons`, of which only each entry's `slot` is read, and
+-- `starters` its `loadout`. "" for a slot other than "melee" and "ranged".
 function Armory.HeldFamily(
 	combat: CombatProfile?,
 	weapons: any,
@@ -321,40 +310,6 @@ function Armory.RangeHp(cfg: ArmoryConfig): number
 	local ladder = ladderOf(cfg)
 	local value: any = if ladder ~= nil then ladder.rangeHp else nil
 	return if finite(value) and value > 0 then value else cfg.baseHp
-end
-
--- L3-6: one number for the held pair, compared against a mission's recommendedPower: the two
--- multipliers (with their slots' Ascension damageMult) weighed by power.tierWeight, plus MaxHp
--- weighed by power.hpWeight. A tierWeight that is not a number weighs the multipliers at 0.
-function Armory.GearPower(cfg: ArmoryConfig, tiers: SlotTiers, ascension: SlotTiers): number
-	local weight: any = cfg.power.tierWeight
-	local tierWeight = if finite(weight) then weight else 0
-	local damage = Armory.DamageScale(cfg, tiers.melee, ascension.melee, false)
-		+ Armory.DamageScale(cfg, tiers.ranged, ascension.ranged, false)
-	return math.round(
-		damage * tierWeight + Armory.MaxHp(cfg, tiers, ascension) * cfg.power.hpWeight
-	)
-end
-
--- The fix round's R7: the Power of the pair a profile has SAVED, the one number the hub's readout
--- and the dungeon place's Snapshot both show: the families HeldFamily reads from the loadout, at
--- their tiers, with the slots' Ascension. A fresh profile is T1 / T1, so 64 on the shipped
--- Armory.json. `weapons` and `starters` are ProvingGrounds.json's `weapons` and `loadout`; with no
--- family known ("" starters) both slots read T1.
-function Armory.SavedPower(
-	cfg: ArmoryConfig,
-	combat: CombatProfile?,
-	weapons: any,
-	starters: StarterPair
-): number
-	local melee = Armory.HeldFamily(combat, weapons, starters, "melee")
-	local ranged = Armory.HeldFamily(combat, weapons, starters, "ranged")
-	local levels: any = if combat ~= nil then combat.ascension else nil
-	local ascension: SlotTiers = {
-		melee = if type(levels) == "table" and finite(levels.melee) then levels.melee else 0,
-		ranged = if type(levels) == "table" and finite(levels.ranged) then levels.ranged else 0,
-	}
-	return Armory.GearPower(cfg, Armory.HeldTiers(cfg, combat, melee, ranged), ascension)
 end
 
 -- L3-4: a tier's band (1 = the first level's) and its position inside the band (1..bandSize).
@@ -786,9 +741,6 @@ function Armory.Problems(cfg: ArmoryConfig, families: { string }): { string }
 				problem(`legacy.gearCosts[{index}] is not a material and an amount of at least 0`)
 			end
 		end
-	end
-	if not finite(cfg.power.tierWeight) then
-		problem("power.tierWeight is not a number: Gear Power weighs the tiers at 0")
 	end
 	return problems
 end

@@ -178,7 +178,9 @@ local function isUserId(value: any): boolean
 end
 
 -- Every field type-checked: the hash map is server-written, but a malformed entry (an older hub
--- build, a hand edit) must degrade to "no ticket", never to a runtime error mid-admission.
+-- build, a hand edit) must degrade to "no ticket", never to a runtime error mid-admission. L4 W3
+-- (L4W3-3): the ticket names a level and a difficulty; an old-shape ticket (a mission id, an
+-- Overdrive flag) reads as none.
 local function readTicket(value: any): Types.RunTicket?
 	if typeof(value) ~= "table" then
 		return nil
@@ -188,8 +190,8 @@ local function readTicket(value: any): Types.RunTicket?
 		typeof(entry.accessCode) ~= "string"
 		or entry.accessCode == ""
 		or typeof(entry.privateServerId) ~= "string"
-		or typeof(entry.missionId) ~= "string"
-		or typeof(entry.overdrive) ~= "boolean"
+		or typeof(entry.levelId) ~= "string"
+		or typeof(entry.difficulty) ~= "string"
 		or typeof(entry.public) ~= "boolean"
 		or typeof(entry.expected) ~= "table"
 	then
@@ -205,8 +207,8 @@ local function readTicket(value: any): Types.RunTicket?
 	return {
 		accessCode = entry.accessCode,
 		privateServerId = entry.privateServerId,
-		missionId = entry.missionId,
-		overdrive = entry.overdrive,
+		levelId = entry.levelId,
+		difficulty = entry.difficulty,
 		public = entry.public,
 		expected = expected,
 	}
@@ -222,20 +224,21 @@ local function expectedPrivateServerId(): string
 	return game.PrivateServerId
 end
 
--- Reads the ticket the hub wrote for this run. Verified, not trusted: it must describe the same
--- mission and Overdrive flag as the run actually starting (a stale entry from an earlier
--- expedition by the same host is never honoured) and name this server. nil = the run is private:
--- no expected list, nothing published, and every arrival is unlock-checked (C1 rules).
+-- Reads the ticket the hub wrote for this run. Verified, not trusted: it must name the same level
+-- and difficulty as the departure's hint (a stale entry from an earlier expedition by the same host
+-- is never honoured) and name this server. nil = the run is private: no expected list, nothing
+-- published, and no auto-start (L4 W3: the hint is only picked on the map).
 --
 -- Mock mode (Studio without API access) can never receive a hub-written ticket, because the
 -- handoff store is unreachable, so it stands one in: public per coop.publicByDefault, the host
--- as the only expected member. That keeps the ticket-driven paths (host gate, lobby start,
--- publish with sort keys into the mock map) exercisable from a solo or Local Server test. Only
--- reachable when StudioBridge.IsActive(), so a live server never synthesises a ticket.
+-- as the only expected member, naming the hint's level and difficulty. That keeps the
+-- ticket-driven paths (host gate, the auto-start, publish with sort keys into the mock map)
+-- exercisable from a solo or Local Server test. Only reachable when StudioBridge.IsActive(), so a
+-- live server never synthesises a ticket.
 function RunRegistry.ResolveTicket(
 	hostUserId: number,
-	missionId: string,
-	overdrive: boolean
+	levelId: string,
+	difficulty: string
 ): Types.RunTicket?
 	if closing then
 		return nil
@@ -245,8 +248,8 @@ function RunRegistry.ResolveTicket(
 		return {
 			accessCode = STUDIO_PRIVATE_SERVER_ID,
 			privateServerId = STUDIO_PRIVATE_SERVER_ID,
-			missionId = missionId,
-			overdrive = overdrive,
+			levelId = levelId,
+			difficulty = difficulty,
 			public = if combatConfig ~= nil then combatConfig.coop.publicByDefault else false,
 			expected = { hostUserId },
 		}
@@ -266,10 +269,10 @@ function RunRegistry.ResolveTicket(
 		warn(`[RunRegistry] malformed run ticket for host {hostUserId}; run stays private`)
 		return nil
 	end
-	if ticket.missionId ~= missionId or ticket.overdrive ~= overdrive then
+	if ticket.levelId ~= levelId or ticket.difficulty ~= difficulty then
 		warn(
 			`[RunRegistry] run ticket for host {hostUserId} does not match this run`
-				.. ` ({missionId}, overdrive={overdrive}); run stays private`
+				.. ` ({levelId}, {difficulty}); run stays private`
 		)
 		return nil
 	end
@@ -300,10 +303,9 @@ function RunRegistry.Publish(run: Types.ActiveRun): ()
 	local stored: Types.ActiveRun = {
 		hostUserId = run.hostUserId,
 		hostName = run.hostName,
-		missionId = run.missionId,
-		era = run.era,
+		levelId = run.levelId,
+		difficulty = run.difficulty,
 		wave = run.wave,
-		overdrive = run.overdrive,
 		partySize = run.partySize,
 		accessCode = run.accessCode,
 		public = run.public,

@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
 local RemoteService =
 	require(script.Parent.Parent:WaitForChild("Services"):WaitForChild("RemoteService"))
 
@@ -32,9 +33,10 @@ local MAX_COMMAND_ARG_LENGTH = 32
 -- that the player holds in that slot. One home, Unlocks (a secret's family is held to it too).
 local MAX_FAMILY_LENGTH = Unlocks.MAX_FAMILY_LENGTH
 -- L1 (docs/INTERFACES.md "L1 contracts" → "Remotes"): a level id and a difficulty key. Shape
--- only: WaveService.OnStartLevel resolves both against the level files and the map.
-local MAX_LEVEL_ID_LENGTH = 32
-local MAX_DIFFICULTY_LENGTH = 12
+-- only: WaveService.OnStartLevel resolves both against the level files and the map. One home for
+-- both places' validators since L4 W3, MapRules (the hub's RequestExpedition reads the same caps).
+local MAX_LEVEL_ID_LENGTH = MapRules.MAX_LEVEL_ID_LENGTH
+local MAX_DIFFICULTY_LENGTH = MapRules.MAX_DIFFICULTY_LENGTH
 -- L2-7: an ability id ("doubleJump"). Shape only: UnlockService resolves it against
 -- Expeditions.json `abilities` and prices it from there. One home, Unlocks (the Abilities panel
 -- and Unlocks.DefProblem read the same cap).

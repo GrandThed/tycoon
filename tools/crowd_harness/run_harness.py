@@ -40,7 +40,7 @@ first clear) and tests_l3_ui.luau (the Armory screen's pure ArmoryModel, bundled
 Its fix round adds the pure ProfileCopy (the hub's Delta copy) and reads as text (`source.l3`, the
 L2 pattern) the service lines that apply L3's rules: the strike tier in WeaponService's hits, bar and
 slam, the upgrade's gate, the first clear in EndRun and the U lever, the stars from the profile,
-readLevel's Validate inputs, DebugService's wildcard and presets, both places' Power, the hub's copy,
+readLevel's Validate inputs, DebugService's wildcard and presets, the hub's copy (L4 W3 took the Power),
 DataService's runner and the hub's upgrade (L3_LINES, counted in the function each belongs to).
 Its second fix round (docs/prompts/l3-w1-fix2.md F1, F2) also counts the lines that feed each
 pinned call and the exits of the functions they live in (an early return cannot hide), reads the
@@ -149,6 +149,17 @@ SOURCES = {
     # The L4 W2 fix round's K7 and K8: what the client's LevelScenery decides, pure
     # (tests_l4w2_scenery.luau).
     "ScenePlan": "src/combat/client/Controllers/ScenePlan.luau",
+    # L4 W3: the map's rules, moved out of StageFlow and SecretFlow so the hub's Depart and the
+    # dungeon's start ask one module, and a run summary's lines (tests_l4w3.luau, tests_l4w3_run.luau).
+    "MapRules": "src/shared/MapRules.luau",
+    "RunLines": "src/shared/RunLines.luau",
+    # L4 W3: what one credit writes on a member's card and the era its cash is paid at (luau-engineer
+    # B's pure half of ArenaService and WaveService; tests_l4w3_run.luau).
+    "RunCredit": "src/combat/server/Services/RunCredit.luau",
+    # The L4 W3 fix round: F11's touch hold in the city (ui-engineer A's; tests_l4w3_hub.luau) and F13's
+    # pure rules of the tally card and the lobby's map (ui-engineer B's; tests_l4w3_tally.luau).
+    "TouchHold": "src/client/UI/TouchHold.luau",
+    "TallyRules": "src/client/UI/TallyRules.luau",
 }
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
@@ -190,9 +201,19 @@ TESTS = [
     "tests_l4b_run.luau",
     # L4 W2: LevelDress, StageFlow.Plan's kinds, the seat, the Castle Key (luau-engineer A's).
     "tests_l4w2.luau",
-    # The L4 W2 fix round: the scenery's decisions on the client (ScenePlan; ui-engineer A's). Last:
-    # it ends with the verdict line.
+    # The L4 W2 fix round: the scenery's decisions on the client (ScenePlan; ui-engineer A's).
     "tests_l4w2_scenery.luau",
+    # L4 W3: MapRules, RunLines, EraCashMult and the upcoming ability never sold (luau-engineer A's);
+    # the depart rule, the lines at each credit site, the frozen pay era, the wallet before the card
+    # (luau-engineer B's).
+    "tests_l4w3.luau",
+    "tests_l4w3_run.luau",
+    # The L4 W3 fix round: the city's touch hold (ui-engineer A's), the tally card's and the lobby's
+    # rules (ui-engineer B's), then the conditions round the shared rules, read as text (the
+    # designer's). Last: it ends with the verdict line.
+    "tests_l4w3_hub.luau",
+    "tests_l4w3_tally.luau",
+    "tests_l4w3_pins.luau",
 ]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 NUMBERED = r"\d+_"
@@ -495,6 +516,9 @@ HUB_DATA = "src/server/Services/DataService.luau"
 HUB_ARMORY = "src/server/Services/ArmoryService.luau"
 # F5: the hub's client replays the Armory push once the weapon families come (UIController's boot).
 HUB_UI = "src/client/Controllers/UIController.luau"
+# L4 W3, the M11 relay (docs/prompts/l4-w3-reports/luau-a.md 4): every departure is stamped in handOff, before
+# the Studio bridge branch, and both departures (Depart, Join) go through handOff.
+HUB_EXPEDITION = "src/server/Services/ExpeditionService.luau"
 L3_BODIES = {
     "gearOf": (WEAPON_SERVICE, re.compile(r"(?ms)^local function gearOf\(.*?^end$")),
     "damageScale": (WEAPON_SERVICE, re.compile(r"(?ms)^local function damageScale\(.*?^end$")),
@@ -509,7 +533,6 @@ L3_BODIES = {
     "setGear": (DEBUG_SERVICE, re.compile(r"(?ms)^local function setGear\(.*?^end$")),
     "grantStar": (DEBUG_SERVICE, re.compile(r"(?ms)^local function grantStar\(.*?^end$")),
     "mainSnapshot": (MAIN_SERVER, re.compile(r"(?ms)^local function sendSnapshot\(.*?^end$")),
-    "hubPower": (HUB_ECONOMY, re.compile(r"(?ms)^local function computeGearPower\(.*?^end$")),
     "runMigrations": (HUB_DATA, re.compile(r"(?ms)^local function runMigrations\(.*?^end$")),
     "attemptLoad": (HUB_DATA, re.compile(r"(?ms)^local function attemptLoad\(.*?^end$")),
     "hubUpgrade": (HUB_ARMORY, re.compile(r"(?ms)^local function tryUpgradeWeapon\(.*?^end$")),
@@ -517,6 +540,9 @@ L3_BODIES = {
     "hubFileReward": (HUB_ARMORY, re.compile(r"(?ms)^local function fileFirstClear\(.*?^end$")),
     "uiKeys": (HUB_UI, re.compile(r"(?ms)^\tlocal function refreshCombatKeys\(.*?^\tend$")),
     "uiPush": (HUB_UI, re.compile(r"(?ms)^\tpushArmory = function\(.*?^\tend$")),
+    "hubHandOff": (HUB_EXPEDITION, re.compile(r"(?ms)^local function handOff\(.*?^end$")),
+    "hubDepart": (HUB_EXPEDITION, re.compile(r"(?ms)^function ExpeditionService\.Depart\(.*?^end$")),
+    "hubJoin": (HUB_EXPEDITION, re.compile(r"(?ms)^function ExpeditionService\.Join\(.*?^end$")),
 }
 # The ascension a hit and the bar read: the override's, else the profile's, else none (both bodies).
 ASCENSION_READ = ("local ascension = if override ~= nil\n\t\tthen override.ascension\n"
@@ -579,14 +605,14 @@ L3_LINES = {
     "grantFirstClearCalls": (WAVE_SERVICE, None, "UnlockService.GrantFirstClear("),
     "starsProfile": (WAVE_SERVICE, "starsOf", "if profile ~= nil then\n\t\treturn Unlocks.StarsOf(profile.combat)"),
     "readLevelInputs": (WAVE_SERVICE, "readLevel", "\t\ttuned.weapons,\n\t\tUnlocks.Starters(tuned.loadout)\n\t)"),
-    "leverAward": (WAVE_SERVICE, "grantStars", "if not StageFlow.Award(stars, levelId, difficulty) then"),
+    "leverAward": (WAVE_SERVICE, "grantStars", "if not MapRules.Award(stars, levelId, difficulty) then"),
     # F3: the level is resolved first, and one that does not resolve gets neither star nor reward.
     "leverInputs": (WAVE_SERVICE, "grantStars", "local combatConfig = config()\n"
                     "\tlocal map = Catalog.GetExpeditionsConfig()\n\tlocal stars = starsOf(player.UserId)\n"),
     "leverLevel": (WAVE_SERVICE, "grantStars", "local level = if combatConfig ~= nil and map ~= nil\n"
                    "\t\t\tthen resolveLevel(levelId, difficulty, combatConfig, map)\n\t\t\telse nil\n"
                    "\t\tif level == nil then\n\t\t\tcontinue\n\t\tend\n"
-                   "\t\tif not StageFlow.Award(stars, levelId, difficulty) then\n"),
+                   "\t\tif not MapRules.Award(stars, levelId, difficulty) then\n"),
     "leverReward": (WAVE_SERVICE, "grantStars", "local reward = StageFlow.FirstClear(level, difficulty)"),
     "leverGrant": (WAVE_SERVICE, "grantStars", "local grant = if reward ~= nil then UnlockService.GrantFirstClear(player, reward) else nil"),
     "leverGrants": (WAVE_SERVICE, "grantStars", "\t\tif grant ~= nil then\n\t\t\ttable.insert(grants, grant)\n\t\tend\n"),
@@ -605,22 +631,8 @@ L3_LINES = {
     "debugTargets": (DEBUG_SERVICE, "grantStar",
                      "local targets: { Player } = if player ~= nil then { player } else UnlockService.Admitted()"),
     "debugGrant": (DEBUG_SERVICE, "grantStar", "local _new, grants = WaveService.GrantStars(target, levelIds, difficulty)"),
-    # R7: both places show the saved pair's Power; the hub's Delta carries the pure copy. F1: and each
-    # place hands SavedPower its own profile and ProvingGrounds.json's weapons and starters.
-    "mainPower": (MAIN_SERVER, "mainSnapshot", "then Armory.SavedPower(\n\t\t\t\tarmoryConfig,\n\t\t\t\tstate.combat,\n"),
-    "mainArmory": (MAIN_SERVER, "mainSnapshot", "\tlocal armoryConfig = Catalog.GetArmoryConfig()\n"),
-    "mainProving": (MAIN_SERVER, "mainSnapshot", "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n"),
-    "mainWeapons": (MAIN_SERVER, "mainSnapshot", "\t\t\t\tif provingConfig ~= nil then provingConfig.weapons else nil,\n"),
-    "mainStarters": (MAIN_SERVER, "mainSnapshot",
-                     "\t\t\t\tif provingConfig ~= nil then provingConfig.loadout else { melee = \"\", ranged = \"\" }\n"),
-    "hubPower": (HUB_ECONOMY, "hubPower", "return Armory.SavedPower(\n\t\tarmoryConfig,\n\t\tstate.combat,\n"),
-    "hubArmory": (HUB_ECONOMY, "hubPower", "\tlocal armoryConfig = Catalog.GetArmoryConfig()\n"
-                  "\tif armoryConfig == nil then\n\t\treturn 0\n\tend\n"),
-    "hubProving": (HUB_ECONOMY, "hubPower", "\tlocal provingConfig = Catalog.GetProvingGroundsConfig()\n"),
-    "hubWeapons": (HUB_ECONOMY, "hubPower", "\t\tif provingConfig ~= nil then provingConfig.weapons else nil,\n"),
-    "hubStarters": (HUB_ECONOMY, "hubPower",
-                    "\t\tif provingConfig ~= nil then provingConfig.loadout else { melee = \"\", ranged = \"\" }\n"),
-    "hubPowerSent": (HUB_ECONOMY, None, "gearPower = computeGearPower(state)"),
+    # R7: the hub's Delta carries the pure copy. (L4 W3 took the saved pair's Power, its pins and the
+    # bodies they lived in with the Gear Power readout.)
     "hubCopy": (HUB_ECONOMY, None, "delta.combat = ProfileCopy.Combat(state.combat)"),
     # R5: DataService runs the one runner, and F1: a load reaches it (a statement of attemptLoad's own).
     "runnerCall": (HUB_DATA, "runMigrations", "local verdict = ProfileSchema.Run(state)"),
@@ -659,6 +671,18 @@ L3_LINES = {
                  "\t\t\tand isCombatProfile(current.state.combat)\n\t\tthen\n\t\t\tpushArmory(current.state.combat)\n"),
     "uiPushWaits": (HUB_UI, "uiPush", "\t\tlocal config = provingConfig\n\t\tif config == nil then\n"
                     "\t\t\trefreshCombatKeys()\n\t\t\treturn\n\t\tend\n"),
+    # L4 W3, the M11 relay: the stamp in handOff's member loop, held to the bridge branch that follows it (one
+    # block, so a stamp moved under either branch no longer counts); handOff's two ok answers are the file's
+    # only two; Depart and Join both hand off.
+    "stampThenBridge": (HUB_EXPEDITION, "hubHandOff",
+                        "\t\t\tstampDeparture(state)\n\t\t\tEconomyService.RefreshPersistedRate(member)\n\t\tend\n"
+                        "\tend\n\tlocal departedUntil = os.clock() + combatConfig.registry.ttlSeconds\n\n"
+                        "\tif StudioBridge.IsActive() then\n"),
+    "stampOnce": (HUB_EXPEDITION, "hubHandOff", "stampDeparture(state)"),
+    "okInHandOff": (HUB_EXPEDITION, "hubHandOff", "sendResult(member, departure.action, departure.slotId, true, nil)"),
+    "okInFile": (HUB_EXPEDITION, None, "sendResult(member, departure.action, departure.slotId, true, nil)"),
+    "departHandsOff": (HUB_EXPEDITION, "hubDepart", "\thandOff(keepPartyMembers(player, members), {\n"),
+    "joinHandsOff": (HUB_EXPEDITION, "hubJoin", "\thandOff({ player }, {\n"),
 }
 # F1: the rules read by pattern, on the code with its comments blanked (luau_code): what must not be
 # spelled at all, in any spelling, and every exit (`return`, `continue`, `break`) of a body that a
@@ -669,9 +693,7 @@ EXITS = re.compile(r"\b(?:return|continue|break)\b")
 L3_PATTERNS = {
     "debugLiteral": (DEBUG_SERVICE, None, LITERAL_STAR),
     "hubLiteral": (HUB_ARMORY, None, LITERAL_STAR),
-    "mainGearOf": (MAIN_SERVER, None, re.compile(r"\bGearOf\b")),
     # `.gear` or `["gear"]` (never `..` before a local named gear).
-    "hubFrozenGear": (HUB_ECONOMY, None, re.compile(r"(?<![.])\.\s*gear\b|\[\s*([\"'`])gear\1\s*\]")),
     "runnerSteps": (HUB_DATA, None, re.compile(r"\bMigrations\b")),
     "gearExits": (WEAPON_SERVICE, "gearOf", EXITS),
     "scaleExits": (WEAPON_SERVICE, "damageScale", EXITS),
@@ -679,7 +701,6 @@ L3_PATTERNS = {
     "leverExits": (WAVE_SERVICE, "grantStars", EXITS),
     "debugStarExits": (DEBUG_SERVICE, "grantStar", EXITS),
     "mainSnapshotExits": (MAIN_SERVER, "mainSnapshot", EXITS),
-    "hubPowerExits": (HUB_ECONOMY, "hubPower", EXITS),
     "loadExits": (HUB_DATA, "attemptLoad", EXITS),
     "hubStarExits": (HUB_ARMORY, "hubStar", EXITS),
     "hubFileExits": (HUB_ARMORY, "hubFileReward", EXITS),
@@ -1437,6 +1458,9 @@ def source_reading(repo: Path) -> dict:
         "l3w2": l3w2_reading(text, repo),
         "l4b": l4b_reading(text),
         "l4w2": l4w2_reading(text),
+        "l4w3b": l4w3b_reading(text),
+        "l4w3fix": l4w3fix_reading(text),
+        "l4w3fix2": l4w3fix2_reading(text),
     }
 
 
@@ -2242,6 +2266,559 @@ def w3_fix_reading(text, react_text: str, freeze_text: str) -> dict:
     }
 
 
+# L4 W3 (docs/prompts/l4-w3-contract.md §3, §4.1, §5; docs/prompts/l4-w3-reports/luau-b.md): the lines
+# that run the auto-start (WaveService.tickDepart, openDepart, OnStartLevel, Reset, the tick), name
+# each credit's source (onCrowdKilled, campCleared, EndRun, announceSecret), pay at the era frozen at
+# the admit (credit), put the run's last wallet between its last credit and the card (EndRun), and
+# freeze the era and write both cards (ArenaService), read as text: neither service loads here.
+# tests_l4w3_run.luau's copies (L4W3R.holders, endTail, credit, cardsCredit) are these lines, and its
+# "pins" group holds every count. Counted on the code (comments blanked), as L4B_LINES.
+L4W3B_LINES = {
+    # The auto-start's tick: its facts, its one start, a refusal's fallback, the broadcast.
+    "departClear": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\ttable.clear(holders)"),
+    "departHolderRule": (WAVE_SERVICE, body_of("tickDepart"), "lines",
+                         "\t\tif depart.standIn or ArenaService.IsExpected(member.userId) then"),
+    "departHolderAdd": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\ttable.insert(holders, member)"),
+    "departStep": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\tlocal action = StageFlow.DepartStep(depart, {"),
+    "departExpected": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\texpectedIn = ArenaService.ExpectedIn(),"),
+    "departHost": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\thostIn = ArenaService.HostIn(),"),
+    "departBodies": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\tbodies = VitalsService.AllHaveBodies(holders),"),
+    "departWait": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\twaitSeconds = combatConfig.coop.lobbyWaitSeconds,"),
+    "departCountdown": (WAVE_SERVICE, body_of("tickDepart"), "lines",
+                        "\t\tcountdownSeconds = combatConfig.levels.departCountdownSeconds,"),
+    "departStart": (WAVE_SERVICE, body_of("tickDepart"), "lines", '\tif action == "start" then'),
+    "departStartLevel": (WAVE_SERVICE, body_of("tickDepart"), "lines",
+                         "\t\t\tthen startLevel(player, depart.levelId, depart.difficulty)"),
+    "departRefused": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\tStageFlow.DepartRefused(depart)"),
+    "departToast": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\t\trefuseStart(player, depart.levelId, refusal)"),
+    "departBeat": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\tif beat ~= boot.departBeat then"),
+    "departTicked": (WAVE_SERVICE, body_of("tick"), "lines", "\t\ttickDepart(combatConfig)"),
+    "departTickCalls": (WAVE_SERVICE, None, "text", "tickDepart("),
+    # Who writes the auto-start: openDepart, FakeDepart and Reset only (never a run's end), and never
+    # its state (StageFlow's alone).
+    "departWrites": (WAVE_SERVICE, None, "regex", r"\bboot\.depart\s*=(?!=)"),
+    "departStateWrites": (WAVE_SERVICE, None, "regex", r"\bdepart\.state\s*=(?!=)"),
+    "lobbyLeavesDepart": (WAVE_SERVICE, body_of("backToLobby"), "regex", r"\bdepart"),
+    "openPick": (WAVE_SERVICE, body_of("openDepart"), "lines", "\tlocal levelId, difficulty, verified = ArenaService.Pick()"),
+    "openStudio": (WAVE_SERVICE, body_of("openDepart"), "lines", "\t\t\tand RunService:IsStudio()"),
+    "openDepart": (WAVE_SERVICE, body_of("openDepart"), "lines",
+                   "\tboot.depart = StageFlow.DepartOpen(levelId, difficulty, verified, proving, since)"),
+    "openOnAdmit": (WAVE_SERVICE, body_of("WaveService.OnAdmitted"), "lines", "\topenDepart()"),
+    "askedEnds": (WAVE_SERVICE, body_of("WaveService.OnStartLevel"), "lines",
+                  '\tif refusal ~= "notLeader" and StageFlow.DepartAsked(boot.depart) and run.phase == "lobby" then'),
+    "resetDepart": (WAVE_SERVICE, body_of("WaveService.Reset"), "lines", "\tboot.depart = nil"),
+    "resetOpened": (WAVE_SERVICE, body_of("WaveService.Reset"), "lines", "\tboot.departOpened = false"),
+    "resetCashEra": (WAVE_SERVICE, body_of("WaveService.Reset"), "lines", "\tboot.cashEra = nil"),
+    "fakeStudio": (WAVE_SERVICE, body_of("WaveService.FakeDepart"), "lines",
+                   '\tif not RunService:IsStudio() or not boot.mission or run.phase ~= "lobby" then'),
+    "eraStudio": (WAVE_SERVICE, body_of("WaveService.NextCashEra"), "lines",
+                  "\tif not RunService:IsStudio() or not boot.mission then"),
+    # The pay era at the one cash choke point (credit), and nothing else writes a member's era.
+    "creditRewards": (WAVE_SERVICE, body_of("credit"), "lines", "\tlocal rewards = combatConfig.rewards"),
+    "creditEra": (WAVE_SERVICE, body_of("credit"), "lines", "\t\t\tlocal era = RunCredit.PayEra(member.cashEra, boot.cashEra)"),
+    "creditMult": (WAVE_SERVICE, body_of("credit"), "lines",
+                   "\t\t\tmults[userId] = Combat.CombatCashMult(state, gameConfig, shopConfig, rewards, era)"),
+    "creditKey": (WAVE_SERVICE, body_of("credit"), "lines", "\t\t\tkey,"),
+    "creditKiller": (WAVE_SERVICE, body_of("credit"), "lines",
+                     "\t\t\tArenaService.CreditSummary(killer, key, 0, material, 0, 0, 1)"),
+    "cashMultCalls": (WAVE_SERVICE, None, "text", "Combat.CombatCashMult("),
+    "waveEraWrites": (WAVE_SERVICE, None, "regex", r"\.cashEra\s*=(?!=)"),
+    # Each credit site's key.
+    "killBoss": (WAVE_SERVICE, body_of("onCrowdKilled"), "lines", "\tlocal boss = info.boss and id == run.bossId"),
+    "killKey": (WAVE_SERVICE, body_of("onCrowdKilled"), "lines", "\tlocal key = RunCredit.KillKey(boss, info.kind, run.bossName)"),
+    "killCredit": (WAVE_SERVICE, body_of("onCrowdKilled"), "lines",
+                   "\tcredit({ cash = cash, materials = materials, valor = valor, kills = 1 }, tally, byUserId, key)"),
+    "campKey": (WAVE_SERVICE, body_of("campCleared"), "lines", "\t\tlocal key = RunCredit.CampKey(zone.id, zone.name)"),
+    "campCredit": (WAVE_SERVICE, body_of("campCleared"), "lines",
+                   "\t\tcredit({ cash = cash, materials = materials, valor = 0, kills = 0 }, evenTally(), 0, key)"),
+    "chestKey": (WAVE_SERVICE, body_of("announceSecret"), "lines", "\t\tRunCredit.ChestKey(site.id, site.name),"),
+    "keyKey": (WAVE_SERVICE, body_of("announceSecret"), "lines",
+               "\t\tlocal keyLine = RunCredit.KeyKey(key, if map ~= nil then map.keys else nil)"),
+    "keyCredit": (WAVE_SERVICE, body_of("announceSecret"), "lines", '\t\tArenaService.CreditSummary(userId, keyLine, 0, "", 0, 0, 0)'),
+    "creditSummaryCalls": (WAVE_SERVICE, None, "text", "ArenaService.CreditSummary("),
+    "creditCalls": (WAVE_SERVICE, None, "regex", r"(?m)^\s*credit\("),
+    # The run's end: the first clear's line and wallet, then the wallets, then the card.
+    "endFirstKey": (WAVE_SERVICE, body_of("WaveService.EndRun"), "lines",
+                    "\t\t\tlocal key = RunCredit.FirstClearKey(plan.levelId, plan.difficulty)"),
+    "endFirstCredit": (WAVE_SERVICE, body_of("WaveService.EndRun"), "lines",
+                       '\t\t\tArenaService.CreditSummary(member.userId, key, 0, "", 0, given.valor, 0)'),
+    "endFirstDirty": (WAVE_SERVICE, body_of("WaveService.EndRun"), "lines", "\t\t\trun.walletDirty[member.userId] = true"),
+    "endWallets": (WAVE_SERVICE, body_of("WaveService.EndRun"), "lines", "\tsendWallets(os.clock(), true)"),
+    "endWalletCalls": (WAVE_SERVICE, body_of("WaveService.EndRun"), "text", "sendWallets("),
+    "endCard": (WAVE_SERVICE, body_of("WaveService.EndRun"), "lines", "\tArenaService.BroadcastSummary()"),
+    "walletsAll": (WAVE_SERVICE, body_of("sendWallets"), "lines", "\t\tif not all and sentAt ~= nil and now - sentAt < every then"),
+    "walletsSend": (WAVE_SERVICE, body_of("sendWallets"), "lines", "\t\t\tArenaService.SendSnapshot(member.player)"),
+    # ArenaService: the era frozen at the admit, written once; both cards through RunCredit.
+    "admitEra": (ARENA_SERVICE, ADMIT_BODY, "lines", "\t\t\tcashEra = RunCredit.EraOf(state),"),
+    "arenaEraWrites": (ARENA_SERVICE, None, "regex", r"\bcashEra\s*=(?!=)"),
+    "cardsLoop": (ARENA_SERVICE, body_of("ArenaService.CreditSummary"), "lines",
+                  "\tfor _, summary in { runSummaryFor(userId), sessionSummaryFor(userId) } do"),
+    "cardsCredit": (ARENA_SERVICE, body_of("ArenaService.CreditSummary"), "lines",
+                    "\t\tRunCredit.Credit(summary, key, cash, material, materials, valor, kills)"),
+    "mentorLoop": (ARENA_SERVICE, body_of("ArenaService.CreditMentor"), "lines",
+                   "\tfor _, summary in { runSummaryFor(userId), sessionSummaryFor(userId) } do"),
+    "mentorCredit": (ARENA_SERVICE, body_of("ArenaService.CreditMentor"), "lines", "\t\tRunCredit.Mentor(summary, valor)"),
+    "pickVerified": (ARENA_SERVICE, body_of("ArenaService.Pick"), "lines",
+                     '\tlocal verified = session.ticket ~= nil and session.levelId ~= ""'),
+    "hostIn": (ARENA_SERVICE, body_of("ArenaService.HostIn"), "lines",
+               "\treturn session.hostUserId ~= 0 and party[session.hostUserId] ~= nil"),
+    "expectedLoop": (ARENA_SERVICE, body_of("ArenaService.ExpectedIn"), "lines", "\t\t\tif not session.everAdmitted[userId] then"),
+    "partyInExpected": (ARENA_SERVICE, body_of("ArenaService.PartyIn"), "lines", "\tif ArenaService.ExpectedIn() then"),
+}
+# (file, function body, the first text, the text that must come after it).
+L4W3B_ORDER = {
+    "endCreditThenWallets": (WAVE_SERVICE, body_of("WaveService.EndRun"),
+                             "ArenaService.CreditSummary(member.userId, key", "sendWallets(os.clock(), true)"),
+    "endWalletsThenCard": (WAVE_SERVICE, body_of("WaveService.EndRun"),
+                           "sendWallets(os.clock(), true)", "ArenaService.BroadcastSummary()"),
+    "killCreditThenMentor": (WAVE_SERVICE, body_of("onCrowdKilled"),
+                             "\tcredit({ cash = cash", "\t\tpayMentors(combatConfig, tally)"),
+    "departStepThenStart": (WAVE_SERVICE, body_of("tickDepart"),
+                            "StageFlow.DepartStep(depart, {", "then startLevel(player, depart.levelId, depart.difficulty)"),
+}
+
+
+# The L4 W3 fix round (luau-engineer B's lines, docs/prompts/l4-w3-fix-reports/luau-b-pins.py; the review's
+# slice 2 m2: the pins held the auto-start's call lines, not their conditions, and F1-F6): six keys re-aimed
+# (the start at zero inside its pcall with the late arrivals, DepartAdmit / DepartForget, F1's "Reset keeps
+# it": no line of Reset names departOpened) and the conditions round every call. The counts are
+# tests_l4w3_run.luau's (L4W3R.PINS, L4W3R.ORDER).
+RUN_REGISTRY = "src/combat/server/Services/RunRegistry.luau"
+
+L4W3B_LINES.update({
+    # --- Re-aimed (same keys, new text) -------------------------------------------------------------
+    # F2 + s2: the start at zero runs inside a pcall closure, with the late arrivals.
+    "departStartLevel": (WAVE_SERVICE, body_of("tickDepart"), "lines",
+                         "\t\t\t\trefusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())"),
+    # F1: WaveService writes `boot.depart` nowhere now; StageFlow's DepartAdmit / DepartForget /
+    # DepartLever do (expected 0).
+    "departWrites": (WAVE_SERVICE, None, "regex", r"\bboot\.depart\s*=(?!=)"),
+    "openDepart": (WAVE_SERVICE, body_of("openDepart"), "lines",
+                   "\tStageFlow.DepartAdmit(boot, levelId, difficulty, verified, proving, since)"),
+    "resetDepart": (WAVE_SERVICE, body_of("WaveService.Reset"), "lines", "\tStageFlow.DepartForget(boot)"),
+    # F1: "Reset keeps it" (expected 0): no line of Reset names departOpened.
+    "resetOpened": (WAVE_SERVICE, body_of("WaveService.Reset"), "regex", r"\bdepartOpened\b"),
+
+    # --- F1: once a server ---------------------------------------------------------------------------
+    "bootOpened": (WAVE_SERVICE, None, "lines", "\tdepartOpened = false,"),
+    "openedWrites": (WAVE_SERVICE, None, "regex", r"\bboot\.departOpened\s*=(?!=)"),
+    "leverBook": (WAVE_SERVICE, body_of("WaveService.FakeDepart"), "lines",
+                  "\treturn StageFlow.DepartLever(boot, levelId, difficulty, os.clock())"),
+    # probes 9-10: the wait counts from the first arrival, else now.
+    "openSince": (WAVE_SERVICE, body_of("openDepart"), "lines", "\tlocal since = ArenaService.FirstArrivalAt()"),
+    "openSinceGuard": (WAVE_SERVICE, body_of("openDepart"), "lines", "\tif since <= 0 then"),
+    "openSinceClock": (WAVE_SERVICE, body_of("openDepart"), "lines", "\t\tsince = os.clock()"),
+
+    # --- The tick (probes 3, 4, 5, 20; s2; s3) ---------------------------------------------------------
+    "departLive": (WAVE_SERVICE, body_of("tickDepart"), "lines",
+                   "\tif depart == nil or not StageFlow.DepartLive(depart) then"),
+    "departLeader": (WAVE_SERVICE, body_of("tickDepart"), "lines",
+                     "\t\tlocal leader = ArenaService.GetMember(ArenaService.LeaderUserId())"),
+    "departNotLeader": (WAVE_SERVICE, body_of("tickDepart"), "lines", '\t\tlocal refusal: StartRefusal? = "notLeader"'),
+    "departPlayerGuard": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\tif player ~= nil then"),
+    "departPcall": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\tlocal started, problem = pcall(function()"),
+    "departThrown": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\tif not started then"),
+    "departThrownRefusal": (WAVE_SERVICE, body_of("tickDepart"), "lines", '\t\t\t\trefusal = "unavailable"'),
+    "departRefusedIf": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\tif refusal ~= nil then"),
+    "departToastGuard": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\tif player ~= nil then"),
+    "departBeatLobby": (WAVE_SERVICE, body_of("tickDepart"), "lines", '\t\tif run.phase == "lobby" then'),
+    "departBeatBroadcast": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\tbroadcast()"),
+
+    # --- F2: the late arrivals at zero, and startLevel's lines for them --------------------------------
+    "lateExpected": (WAVE_SERVICE, body_of("lateAtZero"), "lines",
+                     "\t\t\texpected = ArenaService.IsExpected(member.userId),"),
+    "lateBody": (WAVE_SERVICE, body_of("lateAtZero"), "lines", "\t\t\tbody = VitalsService.AllHaveBodies({ member }),"),
+    "lateRule": (WAVE_SERVICE, body_of("lateAtZero"), "lines", "\treturn StageFlow.DepartLate(facts)"),
+    "lateCalls": (WAVE_SERVICE, None, "text", "lateAtZero("),
+    "startOwnNoLate": (WAVE_SERVICE, body_of("WaveService.OnStartLevel"), "lines",
+                       "\tlocal refusal = startLevel(player, levelId, difficulty)"),
+    "startStarting": (WAVE_SERVICE, body_of("startLevel"), "lines", "\tlocal starting = members"),
+    "startLateAny": (WAVE_SERVICE, body_of("startLevel"), "lines", "\tif late ~= nil and next(late) ~= nil then"),
+    "startStartingNew": (WAVE_SERVICE, body_of("startLevel"), "lines", "\t\tstarting = {}"),
+    "startNotLate": (WAVE_SERVICE, body_of("startLevel"), "lines", "\t\t\tif not late[other.userId] then"),
+    "startNotLateAdd": (WAVE_SERVICE, body_of("startLevel"), "lines", "\t\t\t\ttable.insert(starting, other)"),
+    "startBodies": (WAVE_SERVICE, body_of("startLevel"), "lines",
+                    "\tif not ArenaService.PartyIn() or not VitalsService.AllHaveBodies(starting) then"),
+    "startLateWaits": (WAVE_SERVICE, body_of("startLevel"), "lines", "\t\tif late ~= nil and late[other.userId] then"),
+    "startLateWaiting": (WAVE_SERVICE, body_of("startLevel"), "lines", "\t\t\tother.waiting = true"),
+
+    # --- probes 16, 17, 19 -----------------------------------------------------------------------------
+    "askedBroadcast": (WAVE_SERVICE, body_of("WaveService.OnStartLevel"), "lines", "\t\tbroadcast()"),
+    "pushDepart": (WAVE_SERVICE, body_of("pushRunFields"), "lines",
+                   '\t\tdepart = StageFlow.DepartView(boot.depart, now, phase == "lobby", lobbyWaitSeconds()),'),
+    "endGiven": (WAVE_SERVICE, body_of("WaveService.EndRun"), "lines", "\t\tif given ~= nil then"),
+
+    # --- F4: P never pays into a real save --------------------------------------------------------------
+    "eraRefusal": (WAVE_SERVICE, body_of("WaveService.NextCashEra"), "lines",
+                   "\tlocal refusal = RunCredit.PayLeverRefusal(DataService.IsMockMode(), leader ~= nil)"),
+    "eraRefused": (WAVE_SERVICE, body_of("WaveService.NextCashEra"), "lines", "\tif refusal ~= nil then"),
+    "pRealStore": (DEBUG_SERVICE, body_of("nextCashEra"), "lines", '\tif refusal == "realStore" then'),
+    "pRealStoreToast": (DEBUG_SERVICE, body_of("nextCashEra"), "lines",
+                        '\t\tRunFx.Push({ kind = "notice", text = "P needs Studio API access off" })'),
+    "pOtherRefusal": (DEBUG_SERVICE, body_of("nextCashEra"), "lines", "\telseif refusal ~= nil then"),
+    "pReturns": (DEBUG_SERVICE, body_of("nextCashEra"), "lines", "\t\treturn"),
+
+    # --- F6: a bad note is dropped with one warn, never a refusal ---------------------------------------
+    "noteRead": (WAVE_SERVICE, body_of("readLevel"), "lines", "\tlocal _, dropped = StageFlow.Notes(level)"),
+    "noteWarnOnce": (WAVE_SERVICE, body_of("readLevel"), "lines",
+                     "\tif #dropped > 0 and not boot.warnedNotes[levelId] then"),
+    "noteRefusal": (WAVE_SERVICE, body_of("readLevel"), "lines",
+                    "\tif #problems > 0 or level.difficulties[difficulty] == nil then"),
+
+    # --- F9: one copy of the secret rows -----------------------------------------------------------------
+    "secretRowsShared": (WAVE_SERVICE, body_of("secretRows"), "lines", "\treturn MapRules.SecretRows("),
+    "secretRowsOpened": (WAVE_SERVICE, body_of("secretRows"), "lines",
+                         "\t\tif profile ~= nil then profile.combat.secrets else nil"),
+    "secretRowCopies": (WAVE_SERVICE, None, "text", "MapRules.SecretRow("),
+
+    # --- ArenaService (probes 6, 7, 8, 9, 18) ------------------------------------------------------------
+    "expectedGuard": (ARENA_SERVICE, body_of("ArenaService.ExpectedIn"), "lines",
+                      "\tif not session.open or session.ticketPending then"),
+    "expectedMissing": (ARENA_SERVICE, body_of("ArenaService.ExpectedIn"), "lines", "\t\t\t\treturn false"),
+    "partyInFirst": (ARENA_SERVICE, body_of("ArenaService.PartyIn"), "lines", "\treturn session.firstArrivalAt > 0"),
+    "partyInCap": (ARENA_SERVICE, body_of("ArenaService.PartyIn"), "lines",
+                   "\t\tand os.clock() - session.firstArrivalAt >= config.coop.lobbyWaitSeconds"),
+    "firstArrival": (ARENA_SERVICE, body_of("ArenaService.FirstArrivalAt"), "lines", "\treturn session.firstArrivalAt"),
+    "buildDepart": (ARENA_SERVICE, body_of("ArenaService.BuildRunState"), "lines",
+                    '\t\tdepart = if phase == "lobby" then runFields.depart else nil,'),
+
+    # --- Main's hint (probes 11, 12) ---------------------------------------------------------------------
+    "hintLevelType": (MAIN_SERVER, body_of("hintPair"), "lines", '\t\ttypeof(levelId) ~= "string"'),
+    "hintEmpty": (MAIN_SERVER, body_of("hintPair"), "lines", '\t\tor levelId == ""'),
+    "hintLevelCap": (MAIN_SERVER, body_of("hintPair"), "lines", "\t\tor #levelId > MapRules.MAX_LEVEL_ID_LENGTH"),
+    "hintDifficultyType": (MAIN_SERVER, body_of("hintPair"), "lines", '\t\tor typeof(difficulty) ~= "string"'),
+    "hintDifficultyCap": (MAIN_SERVER, body_of("hintPair"), "lines",
+                          "\t\tor #difficulty > MapRules.MAX_DIFFICULTY_LENGTH"),
+
+    # --- RunRegistry's ticket (probes 13, 14, 15) --------------------------------------------------------
+    "ticketLevel": (RUN_REGISTRY, body_of("readTicket"), "lines", '\t\tor typeof(entry.levelId) ~= "string"'),
+    "ticketDifficulty": (RUN_REGISTRY, body_of("readTicket"), "lines", '\t\tor typeof(entry.difficulty) ~= "string"'),
+    "resolveMatch": (RUN_REGISTRY, body_of("RunRegistry.ResolveTicket"), "lines",
+                     "\tif ticket.levelId ~= levelId or ticket.difficulty ~= difficulty then"),
+    "resolveServer": (RUN_REGISTRY, body_of("RunRegistry.ResolveTicket"), "lines",
+                      "\tif ticket.privateServerId ~= expectedPrivateServerId() then"),
+    "mockLevel": (RUN_REGISTRY, body_of("RunRegistry.ResolveTicket"), "lines", "\t\t\tlevelId = levelId,"),
+    "mockDifficulty": (RUN_REGISTRY, body_of("RunRegistry.ResolveTicket"), "lines", "\t\t\tdifficulty = difficulty,"),
+})
+
+# Fix round 2's G5 (docs/prompts/l4-w3-fix2.md, the fix-diff review's s1): the start at zero runs under
+# xpcall with the traceback (departPcall re-aimed), and a throw is the unavailable refusal only while the
+# run is still in the lobby, one level deeper (departThrownRefusal re-aimed); the rest of the block is
+# run_harness.py's L4W3FIX2_LINES and the copy check `startCopy`.
+L4W3B_LINES.update({
+    "departPcall": (WAVE_SERVICE, body_of("tickDepart"), "lines", "\t\t\tlocal started, trace = xpcall(function()"),
+    "departThrownRefusal": (WAVE_SERVICE, body_of("tickDepart"), "lines", '\t\t\t\t\trefusal = "unavailable"'),
+})
+
+L4W3B_ORDER.update({
+    # Re-aimed: the rule decides before the start at zero (now inside the pcall closure).
+    "departStepThenStart": (WAVE_SERVICE, body_of("tickDepart"),
+                            "StageFlow.DepartStep(depart, {",
+                            "refusal = startLevel(player, depart.levelId, depart.difficulty, lateAtZero())"),
+    # s3: the early return comes before the tick's work.
+    "departLiveThenStep": (WAVE_SERVICE, body_of("tickDepart"),
+                           "StageFlow.DepartLive(depart)", "StageFlow.DepartStep(depart, {"),
+    # F4: the refusal is asked before the pay era steps.
+    "eraRefusalThenStep": (WAVE_SERVICE, body_of("WaveService.NextCashEra"),
+                           "RunCredit.PayLeverRefusal(", "boot.cashEra = era"),
+    # F6: the problems are warned, then the dropped notes, then the verdict.
+    "noteThenVerdict": (WAVE_SERVICE, body_of("readLevel"),
+                        "StageFlow.Notes(level)", "if #problems > 0 or level.difficulties[difficulty] == nil then"),
+})
+
+
+def l4w3b_reading(text) -> dict:
+    """L4W3B_LINES counted on the code (comments blanked) of the function each belongs to, and the
+    L4W3B_ORDER pairs, as l4b_reading reads L4B's."""
+    counts, found = {}, {}
+    for key, (rel, pattern, how, line) in L4W3B_LINES.items():
+        code = luau_code(text(rel))
+        if pattern is not None:
+            body = pattern.search(code)
+            found[pattern.pattern] = body is not None
+            code = body.group(0) if body else ""
+        if how == "lines":
+            counts[key] = whole_lines(code, line)
+        elif how == "regex":
+            counts[key] = len(re.findall(line, code))
+        else:
+            counts[key] = code.count(line)
+    order = {}
+    for key, (rel, pattern, first, then) in L4W3B_ORDER.items():
+        body = pattern.search(luau_code(text(rel)))
+        code = body.group(0) if body else ""
+        a, b = code.find(first), code.find(then)
+        order[key] = a >= 0 and b > a
+    return {"counts": counts, "order": order, "missing": sorted(p for p, ok in found.items() if not ok)}
+
+
+# The L4 W3 fix round ("Pins and mutants for everyone's lists"; the review's slice 1 m1, slice 2 m2 and
+# slice 3 m3): the conditions round the calls into the shared rules, in the hub server, the dungeon
+# server and both clients, read as text (none of these files loads here). A pin is the whole condition
+# with what it guards, or every argument of a call, at its indentation, so a flipped test, a dropped
+# branch or a swapped argument no longer counts; the exits of a body are counted where an early way
+# out could hide. Counted on the code with its comments blanked (luau_code), in the one function each
+# lives in (None: the whole file). tests_l4w3_pins.luau holds every count (the designer's).
+STUDIO_BRIDGE = "src/server/Services/StudioBridge.luau"
+HUB_REMOTES = "src/server/Services/HubRemotes.luau"
+RUN_TALLY = "src/client/UI/RunTally.luau"
+TALLY_HOST = "src/combat/client/UI/TallyHost.luau"
+HUB_MAP = "src/client/UI/HubMap.luau"
+L4W3FIX_BODIES = {
+    "hubDepart": (HUB_EXPEDITION, body_of("ExpeditionService.Depart")),
+    "hubSendMap": (HUB_EXPEDITION, body_of("ExpeditionService.SendMap")),
+    "bridgeArrival": (STUDIO_BRIDGE, body_of("StudioBridge.ReadArrival")),
+    "bridgeSummaries": (STUDIO_BRIDGE, body_of("readSummaries")),
+    "uiRunState": (UI_CONTROLLER, ON_RUN_STATE_BODY),
+    "uiSeedMap": (UI_CONTROLLER, re.compile(r"(?ms)^\tlocal function seedMap\(.*?^\tend$")),
+    "tallyPlan": (RUN_TALLY, re.compile(r"(?ms)^\tlocal function plan\(.*?^\tend$")),
+    "tallyDiamond": (RUN_TALLY, body_of("newDiamond")),
+    "hostShow": (TALLY_HOST, re.compile(r"(?ms)^\tlocal function show\(.*?^\tend$")),
+    "hostWallet": (TALLY_HOST, re.compile(r"(?ms)^\tlocal function wallet\(.*?^\tend$")),
+}
+# key: (file, body key or None, "lines" | "text" | "regex", the text or pattern).
+L4W3FIX_LINES = {
+    # Slice 1 m1, the hub (luau-engineer A's lines, fix report 5.4): Depart asks MapRules.Startable with the
+    # leader's own stars (Depart runs past PartyService.IsLeader only), the level file's difficulties, and
+    # refuses on every verdict but "ok"; SendMap opens nodes by the leader's stars, shows the player's own
+    # and F9's secret rows; the bridge reads every card through RunLines.ReadSummary and caps an arrival;
+    # RequestExpedition caps both names.
+    "departStars": (HUB_EXPEDITION, "hubDepart", "text",
+                    "\tlocal verdict = MapRules.Startable(\n\t\tmap,\n\t\tMapRules.Built(Catalog.GetLevelIds()),\n"
+                    "\t\tUnlocks.StarsOf(state.combat),\n\t\tlevelId,\n\t\tdifficulty,\n"),
+    "departVerdict": (HUB_EXPEDITION, "hubDepart", "text",
+                      "\t\tif file ~= nil then file.difficulties else nil\n\t)\n\tif verdict ~= \"ok\" then\n"),
+    "departReason": (HUB_EXPEDITION, "hubDepart", "lines",
+                     "\t\t\tif verdict == \"locked\" then \"locked\" else \"unavailable\""),
+    "departLeader": (HUB_EXPEDITION, "hubDepart", "text",
+                     "\tif not PartyService.IsLeader(player) then\n\t\tsendResult(player, \"expedition\", levelId, false, "
+                     "\"notLeader\")\n\t\treturn\n\tend\n"),
+    "sendMapLeader": (HUB_EXPEDITION, "hubSendMap", "lines", "\t\t\tleaderStars = Unlocks.StarsOf(leaderState.combat)"),
+    "sendMapSolo": (HUB_EXPEDITION, "hubSendMap", "text",
+                    "\tif leaderUserId == player.UserId then\n\t\tleaderStars = Unlocks.StarsOf(state.combat)\n"),
+    "sendMapArgs": (HUB_EXPEDITION, "hubSendMap", "text",
+                    "\t\tMapRules.MapState(\n\t\t\tmap,\n\t\t\tbuilt,\n\t\t\tleaderStars,\n\t\t\tUnlocks.StarsOf(state.combat),\n"
+                    "\t\t\tleaderUserId,\n\t\t\tMapRules.SecretRows(built, sitesOf, state.combat.secrets)\n\t\t)\n"),
+    "bridgeReads": (STUDIO_BRIDGE, "bridgeSummaries", "text",
+                    "\t\t\tlocal summary = RunLines.ReadSummary(entry)\n\t\t\tif summary ~= nil then\n"
+                    "\t\t\t\tsummaries[key] = summary\n"),
+    "bridgeCards": (STUDIO_BRIDGE, "bridgeSummaries", "regex", r"\bsummaries\[[^\]]*\]\s*=(?!=)"),
+    "bridgeNoOwnReader": (STUDIO_BRIDGE, None, "regex", r"\bfunction readSummary\b"),
+    "arrivalCaps": (STUDIO_BRIDGE, "bridgeArrival", "text",
+                    "\t\ttypeof(record.levelId) ~= \"string\"\n\t\tor record.levelId == \"\"\n"
+                    "\t\tor #record.levelId > MapRules.MAX_LEVEL_ID_LENGTH\n\t\tor typeof(record.difficulty) ~= \"string\"\n"
+                    "\t\tor #record.difficulty > MapRules.MAX_DIFFICULTY_LENGTH\n\t\tor not isUserId(record.hostUserId)\n"
+                    "\tthen\n"),
+    "expeditionArgs": (HUB_REMOTES, None, "text",
+                       "\t\t\t\treturn args.n == 3\n\t\t\t\t\tand isShortName(args[1], MapRules.MAX_LEVEL_ID_LENGTH)\n"
+                       "\t\t\t\t\tand isShortName(args[2], MapRules.MAX_DIFFICULTY_LENGTH)\n"
+                       "\t\t\t\t\tand typeof(args[3]) == \"boolean\"\n"),
+    "shortName": (HUB_REMOTES, None, "lines",
+                  "\treturn typeof(value) == \"string\" and #(value :: string) > 0 and #(value :: string) <= maxLength"),
+    # Slice 3 m3, the dungeon lobby and the tally card (ui-engineer B's lines, fix report "For the designer"):
+    # TallyRules.Depart decides each RunState and only its answer opens, closes, selects and keeps the
+    # memory; IsRunResult gates the card (F15); seedMap asks MapRules.FirstPick; the flying icons are gated
+    # on Theme.lowEndDevice; the Valor badge is a glyph, never a turned Frame (F14); the host reads one
+    # summary through RunLines.ReadSummary and builds the wallet through TallyRules.Wallet.
+    "uiDepartStep": (UI_CONTROLLER, "uiRunState", "lines",
+                     "\t\tlocal departStep = TallyRules.Depart(run.depart, phase, last, expeditions, st.depart)"),
+    "uiDepartKept": (UI_CONTROLLER, "uiRunState", "lines", "\t\tst.depart = departStep.memory"),
+    "uiDepartWrites": (UI_CONTROLLER, None, "regex", r"\bst\.depart\s*=(?!=)"),
+    "uiDepartCalls": (UI_CONTROLLER, None, "text", "TallyRules.Depart("),
+    "uiDepartLine": (UI_CONTROLLER, "uiRunState", "lines", "\t\thud.SetDepart(departStep.line)"),
+    "uiDepartClose": (UI_CONTROLLER, "uiRunState", "lines", "\t\t\tif departStep.close and screen.IsOpen() then"),
+    "uiDepartPick": (UI_CONTROLLER, "uiRunState", "lines", "\t\t\tlocal pick = departStep.select"),
+    "uiDepartSelect": (UI_CONTROLLER, "uiRunState", "lines", "\t\t\t\tscreen.Select(pick.node, pick.difficulty)"),
+    "uiDepartOpen": (UI_CONTROLLER, "uiRunState", "text", "\t\t\tif departStep.open then\n\t\t\t\tscreen.Open()\n\t\t\tend\n"),
+    "uiOneOpen": (UI_CONTROLLER, "uiRunState", "text", "screen.Open()"),
+    "uiResult": (UI_CONTROLLER, "uiRunState", "lines", "\t\t\tTallyRules.IsRunResult(result)"),
+    "uiNoLocalResult": (UI_CONTROLLER, None, "regex", r"\bisRunResult\b"),
+    "uiFirstPick": (UI_CONTROLLER, "uiSeedMap", "lines",
+                    "\t\tlocal nodeId, difficulty = MapRules.FirstPick(expeditions.difficulties, state)"),
+    "uiWallet": (UI_CONTROLLER, None, "lines", "\t\tsummaryCard.SetWallet(wallet.cash, st.combat)"),
+    "tallyFlights": (RUN_TALLY, "tallyPlan", "text", "TallyRules.Flights(Theme.lowEndDevice, view.totals, LOOK.flights)"),
+    "tallyLowEnd": (RUN_TALLY, None, "regex", r"\blowEndDevice\b"),
+    "tallyNoReduced": (RUN_TALLY, "tallyPlan", "regex", r"\breducedMotion\b"),
+    "tallyCoins": (RUN_TALLY, "tallyPlan", "lines", "\t\tlocal coinFirst, coinLast, coins = launch(true, coinCount, 0)"),
+    "tallyLogs": (RUN_TALLY, "tallyPlan", "lines",
+                  "\t\tlocal logFirst, logLast, made = launch(false, logCount, seconds(LOOK.logDelaySeconds))"),
+    "tallyPile": (RUN_TALLY, None, "lines", "\tfor index = 1, LOOK.flights.logs do"),
+    "tallyGlyph": (RUN_TALLY, "tallyDiamond", "text", "Create(\"TextLabel\", {"),
+    "tallyNoTurn": (RUN_TALLY, "tallyDiamond", "regex", r"\bRotation\b"),
+    "tallyOneTurn": (RUN_TALLY, None, "regex", r"\bRotation\s*="),
+    "hostSummary": (TALLY_HOST, "hostShow", "lines", "\t\tlocal summary = RunLines.ReadSummary(raw)"),
+    "hostNoReader": (TALLY_HOST, None, "regex", r"local function readSummary\b"),
+    "hostWallet": (TALLY_HOST, "hostWallet", "lines", "\t\treturn TallyRules.Wallet(state.cash, state.combat, state.material)"),
+    # Slice 3 m3 and F7, F11, F12, F13, F16, the city (ui-engineer A's lines, fix report "For the designer"):
+    # the map departs with Party & runs' toggle and seeds through MapRules.FirstPick; the touch hold is
+    # taken after the Armory closes and let go before it opens, on every close and on Destroy; the report
+    # reads one summary (RunLines.ReadSummary), claims no star, takes the city's own cash, and neither the
+    # map nor the Armory opens over it; a missing Config/Expeditions answers with an error toast.
+    "mapDepartArgs": (HUB_MAP, None, "lines", "\t\trequest:FireServer(levelId, difficulty, deps.isPublic())"),
+    "mapPublicReads": (HUB_MAP, None, "text", "deps.isPublic()"),
+    "mapFirstPick": (HUB_MAP, None, "lines", "\t\t\tlocal nodeId, difficulty = MapRules.FirstPick(map.difficulties, state)"),
+    "mapHoldAfterClose": (HUB_MAP, None, "text", "\t\tif open then\n\t\t\tdeps.onOpenChanged(true)\n\t\t\tTouchHold.Hold(TOUCH_HOLD)\n"),
+    "mapReleaseFirst": (HUB_MAP, None, "text", "\t\telse\n\t\t\tTouchHold.Release(TOUCH_HOLD)\n\t\t\tdeps.onOpenChanged(false)\n"),
+    "mapDestroyReleases": (HUB_MAP, None, "text", "\t\t\tTouchHold.Release(TOUCH_HOLD)\n\t\t\tfor _, connection in connections do\n"),
+    "mapHolds": (HUB_MAP, None, "text", "TouchHold.Hold("),
+    "mapReleases": (HUB_MAP, None, "text", "TouchHold.Release("),
+    "mapNoConfigToast": (HUB_MAP, None, "text", "\t\telse\n\t\t\tdeps.toast(UNAVAILABLE_TEXT)\n"),
+    "cityWallet": (HUB_UI, None, "lines", "\t\treturn RunTally.Wallet(current.state.cash, current.state.combat, tallyMaterial)"),
+    "citySummary": (HUB_UI, None, "lines", "\t\t\tlocal summary = RunLines.ReadSummary(payload)"),
+    "cityNoStar": (HUB_UI, None, "lines", "\t\t\tstar = false,"),
+    "cityReportShown": (HUB_UI, None, "lines", "\t\treturn card ~= nil and card.IsVisible()"),
+    "cityMapNotOverReport": (HUB_UI, None, "text",
+                             "\t\t\t\tif model ~= nil and combatRemotesReady and not reportShown() then\n\t\t\t\t\tmap.Toggle()\n"),
+    "cityArmoryNotOverReport": (HUB_UI, None, "text", "\t\t\t\tand combatRemotesReady\n\t\t\t\tand not reportShown()\n\t\t\tthen\n"),
+    "cityMapLetsGo": (HUB_UI, None, "text",
+                      "\t\t\t\tif map ~= nil and not screen.IsOpen() then\n\t\t\t\t\tmap.Close()\n\t\t\t\tend\n\t\t\t\tscreen.Toggle()\n"),
+    "cityMapClosesArmory": (HUB_UI, None, "text",
+                            "\t\t\t\tif open then\n\t\t\t\t\tclosePanels()\n\t\t\t\t\tlocal screen = armoryScreen\n"
+                            "\t\t\t\t\tif screen ~= nil then\n\t\t\t\t\t\tscreen.Close()\n\t\t\t\t\tend\n\t\t\t\tend\n"
+                            "\t\t\t\tbottomBar.SetActive(if open then \"expedition\" else openPanelKey)\n"),
+    "cityReportHolds": (HUB_UI, None, "text",
+                        "\t\tlocal armory = armoryScreen\n\t\tif armory ~= nil then\n\t\t\tarmory.Close()\n\t\tend\n"
+                        "\t\tlocal map = hubMap\n\t\tif map ~= nil then\n\t\t\tmap.Close()\n\t\tend\n"
+                        "\t\tTouchHold.Hold(REPORT.touchHold)\n\t\tcard.Show({\n"),
+    "cityDismissReleases": (HUB_UI, None, "text", "\t\t\t\t\tcard.Hide()\n\t\t\t\t\tTouchHold.Release(REPORT.touchHold)\n"),
+    "cityToast": (HUB_UI, None, "lines", "\t\t\t\ttoast.Show(text, Theme.TOAST_ERROR_SECONDS, true)"),
+    "cityHolds": (HUB_UI, None, "text", "TouchHold.Hold("),
+    "cityReleases": (HUB_UI, None, "text", "TouchHold.Release("),
+    "cityArmoryToggles": (HUB_UI, None, "text", "screen.Toggle()"),
+    "cityMapToggles": (HUB_UI, None, "text", "map.Toggle()"),
+    "cityCardHides": (HUB_UI, None, "text", "card.Hide()"),
+}
+# key: (file, body key, the texts that must stand in this order).
+L4W3FIX_ORDER = {
+    # The map's decision before the summary's (a leave card in the lobby wins), each step in its turn.
+    "uiDepartOrder": (UI_CONTROLLER, "uiRunState", (
+        "local departStep = TallyRules.Depart(", "st.depart = departStep.memory",
+        "if departStep.close and screen.IsOpen() then", "local pick = departStep.select", "if departStep.open then",
+        "TallyRules.IsRunResult(result)")),
+}
+
+
+def l4w3fix_reading(text) -> dict:
+    """L4W3FIX_LINES counted on the code (comments blanked) of the function each lives in, and the
+    L4W3FIX_ORDER chains (each text found after the one before it); `missing` names the bodies not
+    found."""
+    bodies = {}
+    for key, (rel, pattern) in L4W3FIX_BODIES.items():
+        found = pattern.search(luau_code(text(rel)))
+        bodies[key] = found.group(0) if found else None
+    counts = {}
+    for key, (rel, body, how, line) in L4W3FIX_LINES.items():
+        code = luau_code(text(rel)) if body is None else (bodies[body] or "")
+        if how == "lines":
+            counts[key] = whole_lines(code, line)
+        elif how == "regex":
+            counts[key] = len(re.findall(line, code))
+        else:
+            counts[key] = code.count(line)
+    order = {}
+    for key, (rel, body, texts) in L4W3FIX_ORDER.items():
+        code = bodies[body] or ""
+        at, ok = -1, True
+        for item in texts:
+            found_at = code.find(item, at + 1)
+            ok = ok and found_at > at
+            at = max(found_at, at)
+        order[key] = ok
+    return {"counts": counts, "order": order, "missing": sorted(k for k, v in bodies.items() if v is None)}
+
+
+# Fix round 2 of the L4 W3 fix round (docs/prompts/l4-w3-fix2.md, G2-G5; the fix-diff review's m2, m3, m4
+# and s1), read as text like L4W3FIX_LINES (comments blanked, in the one function each lives in; None =
+# the whole file): G2 the five lines the review's probes passed (the late set's members and ids, the
+# dungeon's secret rows' reader, the picked branch's seed and Armory close); G3 the one note rule
+# (StageFlow.Notes and MapScreen ask MapRules.Note, neither keeps a cap or a rule of its own); G4 the
+# refused arrival's card titled by ArenaService.SessionName, the session card's own fallback; G5 the
+# start at zero under xpcall with the traceback, refusing only in the lobby. `startCopy`: tickDepart's
+# start block, from its leader to its toast, stands verbatim in tests_l4w3_run.luau (L4W3R.startAtZero
+# runs that copy), so the copy cannot drift. `sessionDefault`: ArenaService's DEFAULT_SESSION_NAME
+# literal (None when not found), which tests_l4w3_pins.luau reads through RunLines.ReadSummary.
+# tests_l4w3_pins.luau holds every count (L4P.FIX2).
+RETURN_SERVICE = "src/combat/server/Services/ReturnService.luau"
+MAP_SCREEN = "src/client/UI/MapScreen.luau"
+STAGE_FLOW = "src/combat/server/Services/StageFlow.luau"
+L4W3FIX2_BODIES = {
+    "lateAtZero": (WAVE_SERVICE, body_of("lateAtZero")),
+    "secretRows": (WAVE_SERVICE, body_of("secretRows")),
+    "tickDepart": (WAVE_SERVICE, body_of("tickDepart")),
+    "uiRunState": (UI_CONTROLLER, ON_RUN_STATE_BODY),
+    "notes": (STAGE_FLOW, body_of("StageFlow.Notes")),
+    "difficultiesOf": (MAP_SCREEN, body_of("difficultiesOf")),
+    "buildSummary": (RETURN_SERVICE, body_of("buildSummary")),
+    "sessionName": (ARENA_SERVICE, body_of("ArenaService.SessionName")),
+}
+# key: (file, body key or None, "lines" | "text" | "regex", the text or pattern).
+L4W3FIX2_LINES = {
+    # G2 (m2 P1, P2, P4, Q1, Q2).
+    "lateMembers": (WAVE_SERVICE, "lateAtZero", "lines", "\tfor _, member in ArenaService.GetMembers() do"),
+    "lateUserId": (WAVE_SERVICE, "lateAtZero", "lines", "\t\t\tuserId = member.userId,"),
+    "secretRowsSites": (WAVE_SERVICE, "secretRows", "lines", "\t\tbuilt,\n\t\tsitesOf,"),
+    "uiPickSeeded": (UI_CONTROLLER, "uiRunState", "lines", "\t\t\t\tst.mapSeeded = true"),
+    "uiPickArmory": (UI_CONTROLLER, "uiRunState", "regex", r"(?m)^\t\t\t\tarmoryScreen\.Close\(\)[ \t]*$"),
+    "uiPickBranch": (UI_CONTROLLER, "uiRunState", "regex",
+                     r"(?m)^\t\t\tif pick ~= nil then\n\t\t\t\tst\.mapSeeded = true\n"
+                     r"\t\t\t\tscreen\.Select\(pick\.node, pick\.difficulty\)\n\t\t\t\tarmoryScreen\.Close\(\)[ \t]*\n\t\t\tend$"),
+    # G3 (m3).
+    "notesAsk": (STAGE_FLOW, "notes", "lines", "\t\tlocal shown = MapRules.Note(scales)"),
+    "notesKeep": (STAGE_FLOW, "notes", "lines", "\t\t\tkept[name] = shown"),
+    "notesOwnCap": (STAGE_FLOW, None, "regex", r"\bNOTE_MAX_LENGTH\b"),
+    "notesOwnRule": (STAGE_FLOW, None, "regex", r"#note\b"),
+    "mapNote": (MAP_SCREEN, "difficultiesOf", "lines", "\t\t\t\tnote = MapRules.Note(def),"),
+    "mapOwnNote": (MAP_SCREEN, None, "regex", r"\bdef\.note\b"),
+    # G4 (m4).
+    "returnTitle": (RETURN_SERVICE, "buildSummary", "lines", "\treturn RunCredit.Empty(ArenaService.SessionName())"),
+    "returnEmpties": (RETURN_SERVICE, None, "text", "RunCredit.Empty("),
+    "sessionFallback": (ARENA_SERVICE, "sessionName", "lines",
+                        "\treturn if expeditions ~= nil then expeditions.name else DEFAULT_SESSION_NAME"),
+    "sessionCards": (ARENA_SERVICE, None, "text", "emptySummary(ArenaService.SessionName())"),
+    "sessionDefaults": (ARENA_SERVICE, None, "regex", r"\bDEFAULT_SESSION_NAME\b"),
+    # G5 (s1).
+    "startTraceback": (WAVE_SERVICE, "tickDepart", "lines", "\t\t\tend, debug.traceback)"),
+    "startNoPcall": (WAVE_SERVICE, "tickDepart", "regex", r"\bpcall\("),
+    "startLobbyOnly": (WAVE_SERVICE, "tickDepart", "text",
+                       "\t\t\t\tif run.phase == \"lobby\" then\n\t\t\t\t\trefusal = \"unavailable\"\n\t\t\t\telse\n"
+                       "\t\t\t\t\trefusal = nil\n\t\t\t\t\twarn(\n"),
+}
+# tickDepart's start at zero, from its leader to its toast (G5): the text L4W3R.startAtZero copies.
+START_BLOCK = re.compile(
+    r"(?ms)^\t\tlocal leader = ArenaService\.GetMember\(ArenaService\.LeaderUserId\(\)\)\n.*?"
+    r"^\t\t\t\trefuseStart\(player, depart\.levelId, refusal\)\n\t\t\tend\n\t\tend\n"
+)
+SESSION_DEFAULT = re.compile(r'(?m)^local DEFAULT_SESSION_NAME = "([^"\n]*)"$')
+
+
+def l4w3fix2_reading(text) -> dict:
+    """L4W3FIX2_LINES counted as l4w3fix_reading counts its lines, plus `startCopy` (how many times
+    tickDepart's START_BLOCK stands in this harness's tests_l4w3_run.luau; 0 when tickDepart has no such
+    block) and `sessionDefault` (ArenaService's DEFAULT_SESSION_NAME, None when not found)."""
+    bodies = {}
+    for key, (rel, pattern) in L4W3FIX2_BODIES.items():
+        found = pattern.search(luau_code(text(rel)))
+        bodies[key] = found.group(0) if found else None
+    counts = {}
+    for key, (rel, body, how, line) in L4W3FIX2_LINES.items():
+        code = luau_code(text(rel)) if body is None else (bodies[body] or "")
+        if how == "lines":
+            counts[key] = whole_lines(code, line)
+        elif how == "regex":
+            counts[key] = len(re.findall(line, code))
+        else:
+            counts[key] = code.count(line)
+    block = START_BLOCK.search(bodies["tickDepart"] or "")
+    copies = luau_code((HERE / "tests_l4w3_run.luau").read_text(encoding="utf-8"))
+    counts["startCopy"] = copies.count(block.group(0)) if block else 0
+    default = SESSION_DEFAULT.search(text(ARENA_SERVICE))
+    return {
+        "counts": counts,
+        "missing": sorted(k for k, v in bodies.items() if v is None),
+        "sessionDefault": default.group(1) if default else None,
+    }
+
+
 def sources(repo: Path) -> dict:
     """SOURCES. (Until L4 W1b also every arena a level layout named, for ruling 27's adapter: no
     layout names one since the Raider Arena went.)"""
@@ -2260,12 +2837,11 @@ def fixtures(repo: Path) -> dict:
         # that read it then fail).
         "weaponModels": read_optional(repo, "src/shared/Config/WeaponModels.json"),
         "levels": [content for _, content in read_folder(repo, "src/shared/Config/Levels", True)],
-        # Files of those two folders that Catalog does not read (it takes <n>_<Name> only), while
-        # tools/check_levels.py reads every *.json there.
+        # Files of Config/Levels that Catalog does not read (it takes <n>_<Name> only), while
+        # tools/check_levels.py reads every *.json there. (Config/Missions went in L4 W3.)
         "unread": sorted(
-            f"{folder}/{path.name}"
-            for folder in ("Config/Levels", "Config/Missions")
-            for path in (repo / "src/shared" / folder).glob("*.json")
+            f"Config/Levels/{path.name}"
+            for path in (repo / "src/shared/Config/Levels").glob("*.json")
             if not re.match(NUMBERED, path.stem)
         ),
         "layouts": layouts,

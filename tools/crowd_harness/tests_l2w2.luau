@@ -406,7 +406,7 @@ function W2.realTests(): ()
 	check(fireStarters == 0, "no starter carries an element (every element is found)")
 
 	local byId = {}
-	for _, site in S.Sites(layout, file) do
+	for _, site in L1.Map.Sites(layout, file) do
 		byId[site.id] = site
 	end
 	local cache, shrine = byId.cache, byId.shrine

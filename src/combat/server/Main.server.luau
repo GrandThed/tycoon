@@ -16,11 +16,12 @@
 -- the crowd (WaveService). L4 W1b deleted C1's enemy and hit services and its five intents.
 --
 -- L1 (docs/INTERFACES.md "L1 contracts" → "Flow"): the place boots into a lobby camp. Any
--- admitted party lands there, whatever mission its hub departure named: that id and the Overdrive
--- flag are read as before and used for one thing, the key the hub's ticket is verified against.
--- The party's leader starts a level (RequestStartLevel); every run ends back in the lobby camp;
--- the only way to the city is the player's own Return. A proving build boots the same lobby
--- unless Combat.json debug.provingBoots says "range".
+-- admitted party lands there. The party's leader starts a level (RequestStartLevel); every run
+-- ends back in the lobby camp; the only way to the city is the player's own Return. A proving
+-- build boots the same lobby unless Combat.json debug.provingBoots says "range".
+-- L4 W3 (docs/prompts/l4-w3-contract.md §2.3, §3): the hub departure names a level and a
+-- difficulty. That pair is the key the hub's ticket is verified against, and only a verified pair
+-- arms the auto-start (WaveService); the hint alone chooses nothing.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,10 +29,10 @@ local RunService = game:GetService("RunService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
-local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
 local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
 
 local servicesFolder = script.Parent:WaitForChild("Services")
 local combatFolder = script.Parent:WaitForChild("Combat")
@@ -66,8 +67,8 @@ type Loader = (player: Player) -> Types.PlayerState?
 type JoinKind = "arrival" | "rejoin"
 
 -- The session key of an arrival that carries no hint at all (Studio, a standalone boot): no
--- mission, so the session is private.
-local NO_MISSION = ""
+-- level, so the session is private and nothing starts by itself.
+local NO_LEVEL = ""
 -- The away clock ticks once a second (the Studio levers moved to DebugService in C1).
 local TICK_INTERVAL_SECONDS = 1
 
@@ -82,7 +83,7 @@ local provingLobby = mode == "mission" and CombatMode.IsProving()
 
 -- The combat place sends the same Snapshot shape as the hub so the client model is identical,
 -- with the city fields zeroed: there is no plot and no income here. persistedIncomePerSecond is
--- the rate the hub last saved, which is what the Armory readout compares unlock rates against.
+-- the rate the hub last saved. L4 W3 (row 6): Gear Power is gone from the Snapshot in both places.
 local function sendSnapshot(player: Player): ()
 	local state = DataService.GetState(player)
 	if state == nil then
@@ -94,11 +95,6 @@ local function sendSnapshot(player: Player): ()
 		end
 		return
 	end
-	local armoryConfig = Catalog.GetArmoryConfig()
-	-- L3-6, R7: Power is the saved loadout's, by the one pure rule the hub's readout reads too
-	-- (Armory.SavedPower), so a player's Power is the same number in both places. The frozen slot
-	-- `gear` would never move; without ProvingGrounds.json no family is known and both slots read T1.
-	local provingConfig = Catalog.GetProvingGroundsConfig()
 	local snapshot: Types.Snapshot = {
 		kind = "snapshot",
 		plotIndex = 0,
@@ -107,14 +103,6 @@ local function sendSnapshot(player: Player): ()
 		state = state,
 		incomePerSecond = 0,
 		persistedIncomePerSecond = state.incomeAtSave,
-		gearPower = if armoryConfig ~= nil
-			then Armory.SavedPower(
-				armoryConfig,
-				state.combat,
-				if provingConfig ~= nil then provingConfig.weapons else nil,
-				if provingConfig ~= nil then provingConfig.loadout else { melee = "", ranged = "" }
-			)
-			else 0,
 		welcomeBack = nil,
 	}
 	RemoteService.FireClient(player, "StateChanged", snapshot)
@@ -129,53 +117,71 @@ local function isHostId(value: any): boolean
 	return value > 0 or RunService:IsStudio()
 end
 
--- The hub's teleport data: { missionId, overdrive, hostUserId }. It never carries the reserved
+-- L4 W3 (§2.3): a hint's level and difficulty, held to the shape the hub sends (MapRules' caps,
+-- both places' validators): a level id of 1 to MAX_LEVEL_ID_LENGTH bytes and a difficulty of at
+-- most MAX_DIFFICULTY_LENGTH. Anything else (an old-shape hint with a mission id) is no hint.
+local function hintPair(data: any): (string?, string)
+	local levelId = data.levelId
+	local difficulty = data.difficulty
+	if
+		typeof(levelId) ~= "string"
+		or levelId == ""
+		or #levelId > MapRules.MAX_LEVEL_ID_LENGTH
+		or typeof(difficulty) ~= "string"
+		or #difficulty > MapRules.MAX_DIFFICULTY_LENGTH
+	then
+		return nil, ""
+	end
+	return levelId, difficulty
+end
+
+-- The hub's teleport data: { levelId, difficulty, hostUserId }. It never carries the reserved
 -- access code (the teleporting client can read teleport data) — the code comes from the
 -- server-only MemoryStore hash map that RunRegistry verifies. Wrapped in pcall because
 -- GetJoinData throws for a player who has already left.
-local function readTeleportHint(player: Player): (string?, boolean, number?)
+local function readTeleportHint(player: Player): (string?, string, number?)
 	local ok, joinData = pcall(function(): any
 		return player:GetJoinData()
 	end)
 	if not ok or typeof(joinData) ~= "table" then
-		return nil, false, nil
+		return nil, "", nil
 	end
 	local data = (joinData :: any).TeleportData
 	if typeof(data) ~= "table" then
-		return nil, false, nil
+		return nil, "", nil
 	end
-	local missionId = if typeof(data.missionId) == "string" then data.missionId else nil
+	local levelId, difficulty = hintPair(data)
 	local hostUserId = if isHostId(data.hostUserId) then data.hostUserId else nil
-	return missionId, data.overdrive == true, hostUserId
+	return levelId, difficulty, hostUserId
 end
 
 -- C1: in Studio the hub cannot teleport, so it leaves a handoff record instead (docs/INTERFACES.md
 -- "Studio bridge"). The record is consumed once and validated EXACTLY like live teleport data —
 -- it is a hint from another session, not an entitlement.
-local function readArrival(player: Player): (string?, boolean, number?)
+local function readArrival(player: Player): (string?, string, number?)
 	local ok, hint = pcall(StudioBridge.ReadArrival, player)
 	if not ok or typeof(hint) ~= "table" then
-		return nil, false, nil
+		return nil, "", nil
 	end
 	local data = hint :: any
-	local missionId = if typeof(data.missionId) == "string" then data.missionId else nil
+	local levelId, difficulty = hintPair(data)
 	local hostUserId = if isHostId(data.hostUserId) then data.hostUserId else nil
-	return missionId, data.overdrive == true, hostUserId
+	return levelId, difficulty, hostUserId
 end
 
 -- The hub departure's hint: live teleport data, then the Studio handoff record. With neither
--- (Studio, build/combat.rbxl on its own) there is no mission, no Overdrive, and this player is the
--- host of the session they open. L1 ruling 4: the hint chooses nothing here; it is the key the
--- hub's ticket is verified against (ArenaService.OpenSession).
-local function readHint(player: Player): (string, boolean, number)
-	local missionId, overdrive, hostUserId = readTeleportHint(player)
-	if missionId == nil then
-		missionId, overdrive, hostUserId = readArrival(player)
+-- (Studio, build/combat.rbxl on its own) there is no level, and this player is the host of the
+-- session they open. L1 ruling 4: the hint chooses nothing here; it is the key the hub's ticket is
+-- verified against (ArenaService.OpenSession), and only a verified one arms the auto-start (§3).
+local function readHint(player: Player): (string, string, number)
+	local levelId, difficulty, hostUserId = readTeleportHint(player)
+	if levelId == nil then
+		levelId, difficulty, hostUserId = readArrival(player)
 	end
-	if missionId == nil then
-		return NO_MISSION, false, player.UserId
+	if levelId == nil then
+		return NO_LEVEL, "", player.UserId
 	end
-	return missionId, overdrive, hostUserId or player.UserId
+	return levelId, difficulty, hostUserId or player.UserId
 end
 
 -- Shared by the first join (LoadAsync), a safe-mode retry (RetryLoadAsync) and a rejoin after a
@@ -203,7 +209,7 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 	end
 	Combat.TouchHighestEra(state)
 
-	local missionId, overdrive, hostUserId = readHint(player)
+	local levelId, difficulty, hostUserId = readHint(player)
 	if Catalog.GetCombatConfig() == nil then
 		-- Without Combat.json there is no session to open.
 		ReturnService.Refuse(player, "locked")
@@ -211,7 +217,7 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 	end
 	-- The first arrival opens the session and reads the hub's ticket; everyone else joins the
 	-- session already here. Yields on that MemoryStore read.
-	ArenaService.OpenSession(missionId, overdrive, hostUserId, player.Name)
+	ArenaService.OpenSession(levelId, difficulty, hostUserId, player.Name)
 	if not player:IsDescendantOf(Players) then
 		-- Left during the ticket read: PlayerRemoving has already run, so undo what it could not.
 		ArenaService.ResetIfEmpty()

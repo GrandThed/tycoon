@@ -323,22 +323,22 @@ end
 function L2.secretTests(): ()
 	print(" SecretFlow: chests, their trigger, the verdict and the map row (L2-11, L2-15)")
 	local S = L2.Secret
-	local sites = S.Sites(L2.layout(), L2.file())
+	local sites = L1.Map.Sites(L2.layout(), L2.file())
 	local lookout, cache, shrine = sites[1], sites[2], sites[3]
 	check(#sites == 3 and lookout.id == "lookout" and cache.id == "cache" and shrine.id == "shrine", "Sites: every layout secret, in the layout's order")
 	check(lookout.x == 0 and lookout.z == 0 and lookout.floorY == 10 and lookout.needs == "doubleJump" and lookout.name == "The Lookout", `a site is the block's centre on the flat, its bottom and its key, named by the level file (floorY {lookout.floorY})`)
 	local reward = lookout.reward
 	check(reward ~= nil and reward.valor == 3 and reward.materials == 50 and reward.family == "flamethrower", "an entry with valor, materials or family is its reward")
 	check(cache.reward == nil and shrine.reward == nil and cache.name == "Raiders' Cache" and cache.floorY == 0 and shrine.floorY == -1, "an entry with a name alone has no reward")
-	local partial = S.Sites(L2.layout(), { secrets = { lookout = { name = "L", valor = 2 }, cache = { name = "C", family = "x" } } })
+	local partial = L1.Map.Sites(L2.layout(), { secrets = { lookout = { name = "L", valor = 2 }, cache = { name = "C", family = "x" } } })
 	check(partial[1].reward ~= nil and partial[1].reward.materials == 0 and partial[1].reward.family == nil and partial[2].reward ~= nil and partial[2].reward.valor == 0 and partial[2].reward.family == "x", "a reward entry fills what it leaves out with 0 and no family")
-	local nameless = S.Sites(L2.layout(), nil)
+	local nameless = L1.Map.Sites(L2.layout(), nil)
 	check(#nameless == 3 and nameless[1].name == "lookout" and nameless[1].reward == nil, "with no level file block: named by their ids, paying nothing")
 	local brokenLayout = L2.layout()
 	brokenLayout.secrets[2].x = L2.NAN
 	brokenLayout.secrets[3].needs = nil
-	check(#S.Sites(brokenLayout, L2.file()) == 1 and #S.Sites({ secrets = nil } :: any, L2.file()) == 0, "a secret whose numbers or key are missing is skipped; no secrets list = no sites")
-	local junk = S.Sites(L2.layout(), { secrets = { lookout = { name = "L", valor = 2.5, materials = -4, family = "" } } })
+	check(#L1.Map.Sites(brokenLayout, L2.file()) == 1 and #L1.Map.Sites({ secrets = nil } :: any, L2.file()) == 0, "a secret whose numbers or key are missing is skipped; no secrets list = no sites")
+	local junk = L1.Map.Sites(L2.layout(), { secrets = { lookout = { name = "L", valor = 2.5, materials = -4, family = "" } } })
 	check(junk[1].reward ~= nil and junk[1].reward.valor == 0 and junk[1].reward.materials == 0 and junk[1].reward.family == nil, "a malformed amount pays 0 and an empty family is none (Validate refuses such a file first)")
 
 	check(lookout.sx == 6 and lookout.sz == 6 and cache.sx == 12 and cache.sz == 12, "a site carries its block's footprint (sx, sz)")
@@ -346,7 +346,7 @@ function L2.secretTests(): ()
 	footless.secrets[1].sx = L2.NAN
 	footless.secrets[2].sz = -1
 	footless.secrets[3].sx = nil
-	check(#S.Sites(footless, L2.file()) == 0, "a secret whose footprint is missing, NaN or negative is skipped")
+	check(#L1.Map.Sites(footless, L2.file()) == 0, "a secret whose footprint is missing, NaN or negative is skipped")
 
 	-- Triggered: the band and the reach from the chest's 6 x 6 footprint (the fix round's s1),
 	-- closed at every edge.
@@ -371,13 +371,13 @@ function L2.secretTests(): ()
 	check(S.Decide(cache, true, false) == "nothing", "the key and no reward entry: nothing")
 	check(S.Decide(lookout, true, false) == "pay", "the key and a reward, not found yet: pay")
 
-	-- MapRow.
-	local row = S.MapRow(sites, { lookout = true, shrine = false } :: any)
+	-- SecretRow (MapRules since L4 W3; SecretFlow's MapRow until then).
+	local row = L1.Map.SecretRow(sites, { lookout = true, shrine = false } :: any)
 	check(#row == 3 and row[1].id == "lookout" and row[2].id == "cache" and row[3].id == "shrine", "the row is every chest, in order")
 	check(row[1].found and not row[2].found and not row[3].found, "found only where the player's map holds true")
 	check(row[1].name == "The Lookout" and row[1].needs == "doubleJump" and row[2].needs == "fire" and row[3].needs == "ice", "each with its name and its key")
-	local none = S.MapRow(sites, nil)
-	check(#none == 3 and not none[1].found and not none[2].found and not none[3].found and #S.MapRow({}, { lookout = true }) == 0, "no map: nothing found; no sites: no row")
+	local none = L1.Map.SecretRow(sites, nil)
+	check(#none == 3 and not none[1].found and not none[2].found and not none[3].found and #L1.Map.SecretRow({}, { lookout = true }) == 0, "no map: nothing found; no sites: no row")
 end
 L1.group("l2 secretTests", L2.secretTests)
 
@@ -386,7 +386,7 @@ L1.group("l2 secretTests", L2.secretTests)
 function L2.openTests(): ()
 	print(" SecretFlow.Open: what opening a chest writes into the profile (L2-12, the fix round's s3)")
 	local S = L2.Secret
-	local sites = S.Sites(L2.layout(), L2.file())
+	local sites = L1.Map.Sites(L2.layout(), L2.file())
 	local lookout, cache = sites[1], sites[2]
 	-- A v6 profile's combat (no secrets or families maps): 7 Valor, 12 Timber.
 	local combat = L2.v6().combat
@@ -630,7 +630,7 @@ function L2.flowTests(): ()
 	local map = L1.real.map
 	local built = L1.real.built()
 	local rows = { forestRoad = { { id = "lookout", name = "The Lookout", needs = "doubleJump", found = true } } }
-	local state = Flow.MapState(map, built, {}, {}, 1, rows)
+	local state = L1.Map.MapState(map, built, {}, {}, 1, rows)
 	local forest, other = nil, nil
 	for _, node in state.nodes do
 		local nodeDef = nil
@@ -647,7 +647,7 @@ function L2.flowTests(): ()
 	end
 	check(forest ~= nil and forest.secrets == rows.forestRoad, "MapState puts the receiver's row on the node of that level")
 	check(other == nil or other.secrets == nil, "a node whose level has no row carries none")
-	local plain = Flow.MapState(map, built, {}, {}, 1)
+	local plain = L1.Map.MapState(map, built, {}, {}, 1)
 	local carried = 0
 	for _, node in plain.nodes do
 		if node.secrets ~= nil then
@@ -664,7 +664,7 @@ function L2.flowTests(): ()
 	end
 	if locked ~= nil then
 		local lockedRows = { [locked.level] = { { id = "x", name = "X", needs = "ice", found = false } } }
-		local lockedState = Flow.NodeState(map, built, {}, {}, locked.id, lockedRows)
+		local lockedState = L1.Map.NodeState(map, built, {}, {}, locked.id, lockedRows)
 		check(lockedState ~= nil and not lockedState.open and lockedState.secrets == lockedRows[locked.level], "a closed node still shows its row")
 	end
 end
@@ -681,7 +681,7 @@ function L2.realTests(): ()
 		check(false, "Forest Road's file and layout are there")
 		return
 	end
-	local sites = S.Sites(layout, file)
+	local sites = L1.Map.Sites(layout, file)
 	local byId = {}
 	for _, site in sites do
 		byId[site.id] = site

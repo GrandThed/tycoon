@@ -114,8 +114,8 @@ went, and the only level whose scripted runs reach Advance's merge and the direc
     open camp clears the tick its floor is empty, whatever its tent has not sent), and `Skip` runs
     through both approaches. The Luau mutants are in tools/crowd_harness/mirror_mutants.py.
 
-  * L3 W1 ("L3 W1 contract", L3-27): the new pure `Armory` (LadderSize, Window, TierOf, HeldTiers,
-    Multiplier, DamageScale, WeaponHp, MaxHp, RangeHp, GearPower, BandOf, NextTier, TierCost,
+  * L3 W1 ("L3 W1 contract", L3-27): the new pure `Armory` (LadderSize, Window, TierOf,
+    Multiplier, DamageScale, WeaponHp, MaxHp, RangeHp, BandOf, NextTier, TierCost,
     Preview, UpgradeVerdict, LegacyRefund, the levers' SetTier (what it answers and writes) and
     BuiltBands, and whether Problems finds anything) against sim_combat's
     mirror of it, on the shipped Armory.json, one without a ladder and two edge copies (a window
@@ -130,8 +130,17 @@ went, and the only level whose scripted runs reach Advance's merge and the direc
     holding only a Brutal star, a config without `starAlso` and one whose `starAlso` is a word), and
     breaks that only one Problems rule can name (bandSize 4.5, a band removed, a negative ranged HP
     entry, a `starAlso` that is no list of names). Its second fix round (F4) names the Armory
-    functions left without a mirror on purpose, StrikeTier, HeldFamily and SavedPower, with why
-    (ARMORY_UNMIRRORED): listed in a note, and the run fails when one is no longer in the Luau.
+    functions left without a mirror on purpose, StrikeTier and HeldFamily, with why
+    (ARMORY_UNMIRRORED): listed in a note, and the run fails when one is no longer in the Luau. L4 W3
+    deleted GearPower, SavedPower and HeldTiers (the Gear Power readout, their last reader) and their rows.
+
+  * L4 W3 (L4W3-7): `Combat.EraCashMult` against `sim_combat.era_cash_mult` (the shipped rewards and
+    broken copies: no block, no list, an empty one, a string, an object, a short list, entries under 1,
+    a string entry, NaN and infinite entries, fractional ones; at every era, past the list, 0, below,
+    fractional and not finite), and the one cash choke point `Combat.CombatCashMult` against
+    `sim_combat.combat_cash_mult` (two laps' legacies and one past the softcap, Founder's Blessing off
+    and at its top tier, every era, the shipped rewards and none). The mutants are in
+    tools/crowd_harness/mirror_mutants.py.
 
   * L4 W1b fix round (F6, review 3-m3): `Combat.MentorBonus` against `sim_combat.mentor_bonus` on every
     call `sim_combat.mentor_pay` (WaveService.payMentors' mirror) makes on assertions 12 and 13's boss
@@ -180,9 +189,10 @@ import sim_range as sr  # noqa: E402
 HARNESS = ROOT / "tools" / "crowd_harness"
 DRIVER = HARNESS / "stage_mirror.luau"
 # Unlocks: StageFlow reads the family id cap from it (the L2 W1 fix round's s2). WorldReact (L2 W3):
-# LevelGeometry cuts deep water into ice cells with it, and it reads Unlocks.
+# LevelGeometry cuts deep water into ice cells with it, and it reads Unlocks. MapRules (the L4 W3 fix
+# round 2's G3): StageFlow.Notes keeps what MapRules.Note keeps.
 MODULES = ("Economy", "Armory", "HitShapes", "SwingGate", "Region", "Combat", "Unlocks", "WorldReact",
-           "LevelGeometry", "CampBrain", "StageFlow")  # in load order
+           "LevelGeometry", "CampBrain", "MapRules", "StageFlow")  # in load order
 # L4B-6: the hand-written field, a copy of tools/crowd_harness's L1.fieldLevel on L1W.field (the old
 # Raider Arena as it resolved, the C1 Village mission's crowd block on the Village arena's layout).
 # No shipped level merges or takes the director's breather since the arena went; this one does, so
@@ -241,7 +251,8 @@ FIELD_LAYOUT = {
 
 # The functions each comparison needs; one that is missing fails the run by name.
 NEEDED = {"Combat": ("CampWave", "KillReward", "SplitCarry", "BurstSeconds", "Tempo", "ShouldMerge",
-                     "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock", "MentorBonus"),
+                     "BreatherSeconds", "ClearBonus", "DeadFraction", "WaveStock", "MentorBonus", "EraCashMult",
+                     "CombatCashMult"),
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint", "Ceiling",
                         "GateNudge",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve",
@@ -255,21 +266,22 @@ NEEDED = {"Combat": ("CampWave", "KillReward", "SplitCarry", "BurstSeconds", "Te
           "SwingGate": ("New", "IsAir", "Allows", "Took", "Landed")}
 # L3 W1: each Armory function compared, and its sim_combat mirror. A mirror that is missing fails the
 # run by name, as a Luau function that is missing does.
-ARMORY_MIRRORS = {"LadderSize": "ladder_size", "Window": "window", "TierOf": "tier_of", "HeldTiers": "held_tiers",
+ARMORY_MIRRORS = {"LadderSize": "ladder_size", "Window": "window", "TierOf": "tier_of",
                   "Multiplier": "multiplier", "DamageScale": "damage_scale", "WeaponHp": "weapon_hp",
-                  "MaxHp": "max_hp", "RangeHp": "range_hp", "GearPower": "gear_power", "BandOf": "band_of",
+                  "MaxHp": "max_hp", "RangeHp": "range_hp", "BandOf": "band_of",
                   "NextTier": "next_tier", "TierCost": "tier_cost", "Preview": "preview",
                   "UpgradeVerdict": "upgrade_verdict", "LegacyRefund": "legacy_refund", "Problems": "problems",
                   "SetTier": "set_tier", "BuiltBands": "built_bands", "StarHeld": "star_held"}
 NEEDED["Armory"] = tuple(ARMORY_MIRRORS)
 NEEDED["StageFlow"] += ("FirstClear",)
+# The L4 W3 fix round's F6: the notes a level keeps and drops (Validate names none).
+NEEDED["StageFlow"] += ("Notes",)
 # The L3 W1 fix round 2's F4: the Armory functions deliberately left without a mirror, and why (the
 # simulators need only their parts; tools/crowd_harness tests_l3.luau tests each). Listed in a note,
 # never compared; one that is no longer in the Luau fails the run, so the list cannot go stale.
 ARMORY_UNMIRRORED = {
     "StrikeTier": "TierOf (compared) under a Studio session override no simulator plays",
     "HeldFamily": "the saved loadout's slot rule; every simulated course names the pair it holds (sim_range.held_pair)",
-    "SavedPower": "the Power readout, HeldFamily into HeldTiers and GearPower (both compared); no simulator shows it",
 }
 # The grids the Armory is asked on (L3 W1).
 ARMORY_TIERS = (-1, 0, *range(1, 22), 2.5)
@@ -315,7 +327,6 @@ ARMORY_BREAKS = (
     ("a window naming no family", lambda c: c["windows"].__setitem__("nope", {"start": 1, "top": 2})),
     ("no legacy list", lambda c: c.pop("legacy")),
     ("a legacy entry with no material", lambda c: c["legacy"]["gearCosts"][3].__setitem__("material", "")),
-    ("a tierWeight that is a string", lambda c: c["power"].__setitem__("tierWeight", "11")),
     ("no starDifficulty", lambda c: c["ladder"].__setitem__("starDifficulty", "")),
     ("no ladder", lambda c: c.pop("ladder")),
     # The fix round's R6: breaks only one rule can name (bandSize not whole skips the costs and cover
@@ -383,6 +394,67 @@ def mentor_cases(combat):
         if case not in unique:
             unique.append(case)
     return unique, fixtures
+
+
+# L4 W3 (L4W3-7): run cash x the member's city era. NaN and the infinities cannot travel in DATA's Luau
+# literal, so a case names them by these strings and stage_mirror.luau turns them back into numbers.
+SPECIAL_NUMBERS = {"__nan": math.nan, "__inf": math.inf, "__ninf": -math.inf}
+ERA_CASH_REWARDS = (
+    ("no rewards block", None), ("no list", {}), ("an empty list", {"eraCashMult": []}),
+    ("a list that is a string", {"eraCashMult": "670"}), ("a list that is an object", {"eraCashMult": {"a": 670}}),
+    ("two entries", {"eraCashMult": [1, 670]}),
+    ("entries under 1 and a string", {"eraCashMult": [1, 0.5, "34000", 0.999]}),
+    ("entries NaN and infinite", {"eraCashMult": ["__nan", "__inf", "__ninf", 1400000]}),
+    ("entries 0 and negative", {"eraCashMult": [0, -5, 1, 2]}),
+    ("fractional entries", {"eraCashMult": [1.5, 670.25, 34000, 1400000]}),
+)
+ERA_CASH_ERAS = (1, 2, 3, 4, 5, 9, 0, -1, 1.5, 3.99, "__nan", "__inf", "__ninf")
+ERA_CASH_LEGACY = (0, 78, 261, 529, 1680, 9000)
+
+
+def _special(value):
+    if isinstance(value, dict):
+        return {key: _special(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_special(item) for item in value]
+    return SPECIAL_NUMBERS.get(value, value) if isinstance(value, str) else value
+
+
+def era_cash_cases(data, expected, combat, game, shop):
+    """Combat.EraCashMult against sim_combat.era_cash_mult on the shipped rewards and on broken
+    copies, at every era of the game, past the list, under 1, fractional and not finite; then the
+    one cash choke point, Combat.CombatCashMult, against sim_combat.combat_cash_mult: the first two
+    laps' legacies and one past the softcap, with and without Founder's Blessing, at every era, on
+    the shipped rewards and with none."""
+    rewards = [("as shipped", combat.get("rewards"))] + list(ERA_CASH_REWARDS)
+    for label, block in rewards:
+        for era in ERA_CASH_ERAS:
+            case = f"eraCash.{len(data['eraCashCases']) + 1}"
+            entry = {"id": case, "era": era}
+            if block is not None:
+                entry["rewards"] = block
+            data["eraCashCases"].append(entry)
+            expected[case] = ("Combat.EraCashMult (L4W3-7)", f"{label}, era {era}",
+                              sc.era_cash_mult(_special(block), _special(era)))
+    founders = next((perk for perk in shop.get("perks") or [] if perk.get("id") == "founders"), None)
+    shops = [("no perk", sc.se.empty_shop_state())]
+    if founders is not None:
+        shops.append(("Founder's top tier", {"spent": 0, "perks": {"founders": len(founders["tiers"])}}))
+    for legacy in ERA_CASH_LEGACY:
+        for shop_label, shop_state in shops:
+            for label, block in (("as shipped", combat.get("rewards")), ("no rewards block", None)):
+                for era in (1, 2, 3, 4, 7):
+                    case = f"eraCash.{len(data['eraCashCases']) + 1}"
+                    state = {"legacy": legacy, "legacyShop": shop_state}
+                    entry = {"id": case, "era": era, "state": state}
+                    if block is not None:
+                        entry["rewards"] = block
+                    data["eraCashCases"].append(entry)
+                    expected[case] = ("Combat.CombatCashMult (L4W3-7: Legacy x Founder's x the era)",
+                                      f"legacy {legacy}, {shop_label}, {label}, era {era}",
+                                      sc.combat_cash_mult(state, game, shop, block, era))
+
+
 STATE_FIELDS = ("stage", "step", "wave", "firstWave", "gateAt", "breatherUntil", "cleared", "lastCleared", "settled",
                 "approached",
                 "reached", "done", "closedAt", "fought", "ended")
@@ -2275,6 +2347,25 @@ L3_REFUSALS = (
 )
 
 
+# The L4 W3 fix round's F6 and F18: a difficulty's `note` is display only. A bad one is dropped (one
+# warn) and the level stays playable: Validate accepts each copy on both sides, StageFlow.Notes keeps
+# exactly sim_range.kept_notes and drops as many as sim_range.note_problems names. (label, the notes
+# set on a copy of the shipped level file, the number the Python must drop: a case that drops none
+# where one is broken would prove nothing about a rule removed from both.)
+NOTE_CASES = (
+    ("as shipped", {}, 0),
+    ("a note of 24 bytes", {"brutal": "n" * 24}, 0),
+    ("a note of 25 bytes", {"brutal": "n" * 25}, 1),
+    ("an empty note", {"brutal": ""}, 1),
+    ("a note that is a number", {"brutal": 5}, 1),
+    ("a note that is true", {"brutal": True}, 1),
+    ("a note that is a table", {"brutal": {"text": "Castle gear"}}, 1),
+    ("a kept note beside a dropped one", {"normal": "Start here", "hard": "h" * 30}, 1),
+)
+NOTE_DIFFICULTIES = ("normal", "hard", "brutal")
+NOTE_KIND = "F6: a bad note is dropped, the level kept (StageFlow.Notes, Validate)"
+
+
 def armory_python(op, cfg, row, families):
     """sim_combat's answer to one row, in the shape the Luau driver prints ("none" for a nil)."""
     combats = ARMORY_COMBATS
@@ -2285,8 +2376,6 @@ def armory_python(op, cfg, row, families):
         return "none" if found is None else list(found)
     if op == "tierOf":
         return sc.tier_of(cfg, combats[row[0] - 1], row[1])
-    if op == "heldTiers":
-        return sc.held_tiers(cfg, combats[row[0] - 1], row[1], row[2])
     if op == "multiplier":
         return sc.multiplier(cfg, row[0])
     if op == "damageScale":
@@ -2297,8 +2386,6 @@ def armory_python(op, cfg, row, families):
         return sc.max_hp(cfg, {"melee": row[0], "ranged": row[1]}, {"melee": row[2], "ranged": row[3]})
     if op == "rangeHp":
         return sc.range_hp(cfg)
-    if op == "gearPower":
-        return sc.gear_power(cfg, {"melee": row[0], "ranged": row[1]}, {"melee": row[2], "ranged": row[3]})
     if op == "bandOf":
         return list(sc.band_of(cfg, row[0]))
     if op == "nextTier":
@@ -2367,9 +2454,6 @@ def armory_cases(data, expected, report, proving):
         "ladderSize": [[]],
         "window": [[family] for family in asked],
         "tierOf": [[c, family] for c in combats for family in asked],
-        "heldTiers": [[c, melee, ranged] for c in combats for melee, ranged in (("broadsword", "longbow"),
-                                                                                ("warhammer", "flamethrower"),
-                                                                                ("greataxe", "rifle"), ("nope", "smg"))],
         "multiplier": [[tier] for tier in ARMORY_TIERS],
         "damageScale": [[tier, asc, ability] for tier in ARMORY_TIERS for asc in ARMORY_ASCENSION
                         for ability in (False, True)],
@@ -2378,8 +2462,6 @@ def armory_cases(data, expected, report, proving):
         "maxHp": [[tm, tr, am, ar] for tm in (1, 3, 5, 12, 20) for tr in (1, 3, 5, 12, 20) for am in (0, 1)
                   for ar in (0, 2)],
         "rangeHp": [[]],
-        "gearPower": [[tm, tr, am, ar] for tm in (1, 3, 5, 12, 20) for tr in (1, 3, 5, 12, 20) for am in (0, 1)
-                      for ar in (0, 2)],
         "bandOf": [[tier] for tier in ARMORY_TIERS],
         "nextTier": [[c, family] for c in combats for family in asked],
         "tierCost": [[tier] for tier in ARMORY_TIERS],
@@ -2394,9 +2476,9 @@ def armory_cases(data, expected, report, proving):
         "builtBands": [[b] for b in built],
         "starHeld": [[c, level] for c in combats for level in ("forestRoad", "castle", "nope")],
     }
-    luau_names = {"ladderSize": "LadderSize", "window": "Window", "tierOf": "TierOf", "heldTiers": "HeldTiers",
+    luau_names = {"ladderSize": "LadderSize", "window": "Window", "tierOf": "TierOf",
                   "multiplier": "Multiplier", "damageScale": "DamageScale", "weaponHp": "WeaponHp", "maxHp": "MaxHp",
-                  "rangeHp": "RangeHp", "gearPower": "GearPower", "bandOf": "BandOf", "nextTier": "NextTier",
+                  "rangeHp": "RangeHp", "bandOf": "BandOf", "nextTier": "NextTier",
                   "tierCost": "TierCost", "preview": "Preview", "upgradeVerdict": "UpgradeVerdict",
                   "legacyRefund": "LegacyRefund", "problems": "Problems", "setTier": "SetTier",
                   "builtBands": "BuiltBands", "starHeld": "StarHeld"}
@@ -2485,12 +2567,16 @@ def main():
     rules, director = combat["levels"], combat["director"]
     crowd_kinds, crowd_max = cfg["crowd"]["kinds"], cfg["crowd"]["maxAlive"]
     files = sr.load_level_files() + [copy.deepcopy(FIELD_LEVEL)]
+    shipped_count = len(files) - 1  # every file but the field's test level
+    noted = set()  # the shipped levels NOTE_CASES ran on
     raw_layouts = {path.stem: sr.load_config(path) for path in sorted(sr.LEVEL_LAYOUT_DIR.glob("*.json"))}
     raw_layouts[FIELD_LEVEL["layout"]] = copy.deepcopy(FIELD_LAYOUT)
     plan_difficulties = list(expeditions["difficulties"]) + ["nope"]
     parties = range(1, combat["coop"]["maxParty"] + 1)
     # L3-17: the families a first clear may give, and the starters it may not (Unlocks.Starters).
-    vet = {"weapons": cfg["weapons"], "starters": starters_of(cfg)}
+    # notes=False (the L4 W3 fix round's F6): Validate drops a bad note and keeps the level, so its
+    # list and verdict are compared without sim_range's note lines; NOTE_CASES hold the drop itself.
+    vet = {"weapons": cfg["weapons"], "starters": starters_of(cfg), "notes": False}
 
     def resolved(file):
         return sr.resolve_level(file, director["runCapSeconds"])
@@ -2510,7 +2596,8 @@ def main():
             "combatCases": [], "reserveCases": [], "tentOwesCases": [], "regionCases": [], "fieldedCases": [],
             "ceilingCases": [], "fenceCases": [], "iceCases": [], "armoryConfigs": [], "armoryCases": [],
             "armoryCombats": [dict(combat_) for combat_ in ARMORY_COMBATS], "armoryBuilt": [list(b) for b in ARMORY_BUILT],
-            "firstClearCases": []}
+            "firstClearCases": [], "eraCashCases": [], "noteCases": [], "gameConfig": sc.se.load_game_config(),
+            "legacyShopConfig": sc.se.load_legacy_shop_config()}
     # The L1c second fix round's F1: StageFlow.Ceiling against sim_range.trigger_ceiling, on every
     # shipped camp and on the edges: a low fence, one at triggerHeight, an open camp's tall one,
     # none, a height that is a string or absent.
@@ -2748,6 +2835,28 @@ def main():
                         must_refuse.add(case)
                     else:
                         must_accept.add(case)
+        # The L4 W3 fix round's F6: each bad note dropped, the level kept (NOTE_CASES).
+        if number <= shipped_count and all(d in (file.get("difficulties") or {}) for d in NOTE_DIFFICULTIES):
+            for label, notes, drops in NOTE_CASES:
+                changed = copy.deepcopy(file)
+                for difficulty, note in notes.items():
+                    changed["difficulties"][difficulty]["note"] = copy.deepcopy(note)
+                case = f"note.{number}.{len(data['noteCases'])}"
+                data["noteCases"].append({"id": case, "file": changed})
+                level_changed = resolved(changed)
+                dropped = []
+                if level_changed is not None:
+                    sr.note_problems(level_changed, dropped.append)
+                if len(dropped) != drops:
+                    report.differ(NOTE_KIND, f"{name}, {label}: the Python drops {len(dropped)} notes, not {drops}")
+                expected[case] = (NOTE_KIND, f"{name}, {label}", None if level_changed is None else {
+                    "refused": bool(sr.level_problems(level_changed, layout, rules, crowd_kinds, ranks, crowd_max,
+                                                      **vet)),
+                    "kept": sorted([key, note] for key, note in sr.kept_notes(level_changed).items()),
+                    "dropped": len(dropped)})
+                noted.add(name)
+    if not noted:
+        report.differ(NOTE_KIND, f"no shipped level file has {', '.join(NOTE_DIFFICULTIES)} to break a note on")
     for target in sorted({key[0] for key in bursts}):
         for count in (0, -1):
             bursts[(target, count, 1.0)] = None
@@ -2780,6 +2889,7 @@ def main():
     data["rewardCases"] = [list(case) for case in REWARD_GRID]
     mentors, mentor_fixtures = mentor_cases(combat)
     data["mentorCases"] = [[host, rates] for host, rates in mentors]
+    era_cash_cases(data, expected, combat, data["gameConfig"], data["legacyShopConfig"])
 
     # The bundle: the data, the real sources, the driver. In a folder of its own.
     parts = [f"local DATA: any = {to_luau(data)}\n", "local SOURCES = {}\n"]

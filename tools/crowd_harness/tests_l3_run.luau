@@ -3,7 +3,7 @@
 -- with and without the weapons), and the shipped Forest Road's two rewards. Appended by
 -- run_harness.py after tests_l1.luau, so every local of the earlier files is in scope (check, load,
 -- L1, FIXTURES). Everything hangs off the L3R table (the 200-local limit) and every group runs
--- behind L1.group. WaveService (which asks FirstClear when StageFlow.Award says a star is new) and
+-- behind L1.group. WaveService (which asks FirstClear when MapRules.Award says a star is new) and
 -- UnlockService (which gives it) cannot be loaded here.
 
 print("L3 W1: the first clear (StageFlow.FirstClear, Validate's firstClear lines)")

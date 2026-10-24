@@ -1,34 +1,32 @@
 --!strict
--- Expedition panel (C0 contract, docs/INTERFACES.md "Hub client"): one tile per mission in
--- era order with the recommended Gear Power beside the player's own, an Overdrive toggle
--- once Rebirth has unlocked it, and the run list a run can be joined from. Depart fires
--- RequestExpedition(missionId, overdrive, public) and Join fires RequestJoinRun(hostUserId)
--- — intents with no entitlement in them: the server re-checks the mission against the
--- leader's profile, reserves the server and teleports.
+-- Party & runs (C0 contract, docs/INTERFACES.md "Hub client"; slimmed in L4 W3,
+-- docs/prompts/l4-w3-contract.md section 2.4): the hub party, "Open to public" and the run list
+-- a run can be joined from. Choosing and departing a level moved to the map (UI/HubMap, the
+-- shared UI/MapScreen); its footer button "Party & runs" opens this panel, and the map's Depart
+-- asks this panel whether the run is public (IsPublic). Join fires RequestJoinRun(hostUserId), an
+-- intent with no entitlement in it: the server re-checks the run and teleports.
 --
--- Everything degrades (C0 principle): with `Places.json combatPlaceId` still 0 every tile
--- is disabled and says so, a mission above `highestEra` is locked, and the runs list is
--- empty until the server answers a RequestRunList. The list is polled only while the panel
--- is open, so a closed panel costs the server nothing.
+-- Everything degrades (C0 principle): with `Places.json combatPlaceId` still 0 the panel says so
+-- and Join stays dark, and the runs list is empty until the server answers a RequestRunList. The
+-- list is polled only while the panel is open, so a closed panel costs the server nothing.
 --
--- C1: a tapped Depart (or Join) locks every tile and Join button until UIController calls
--- ClearDeparting from the matching ActionResult — a teleport takes seconds, and a second
--- tap in that window is either wasted rate limit or a second reserved server.
+-- C1: a tapped Join locks every Join button until UIController calls ClearDeparting from the
+-- matching ActionResult — a teleport takes seconds, and a second tap in that window is either
+-- wasted rate limit or a second reserved server.
 --
 -- C2 (co-op): a party strip at the top mirrors the server's PartyState (members, ★ leader,
 -- pending invites counting down, Invite → a picker of the other players in this server,
--- Leave, Kick for the leader). Only the leader departs, so a non-leader's tiles are
--- disabled with the reason; the "Open to public" toggle rides with the Depart intent. The
--- run list is grouped by the server's `relation` tag. Leadership shown here is display
--- only — the server answers `notLeader` whatever this panel believes.
+-- Leave, Kick for the leader). Only the leader departs, so only the leader sees "Open to
+-- public". The run list is grouped by the server's `relation` tag and names each run's level
+-- and difficulty from Config/Expeditions.json. Leadership shown here is display only — the
+-- server answers `notLeader` whatever this panel believes.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
-local Combat = require(sharedFolder:WaitForChild("Combat"))
-local Format = require(sharedFolder:WaitForChild("Format"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Panel = require(script.Parent:WaitForChild("Panel"))
@@ -38,10 +36,8 @@ local SoundController =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
 
 export type Deps = {
-	missions: { Types.MissionConfig },
 	placesConfig: Types.PlacesConfig,
 	combatConfig: Types.CombatConfig,
-	onDepart: (missionId: string, overdrive: boolean, public: boolean) -> (),
 	onJoin: (hostUserId: number) -> (),
 	onRefreshRuns: () -> (),
 	onPartyInvite: (userId: number) -> (),
@@ -52,7 +48,6 @@ export type Deps = {
 
 export type ExpeditionPanelHandle = {
 	DesignHeight: number,
-	Refresh: (state: Types.PlayerState, gearPower: number) -> (),
 	SetRuns: (runs: { Types.RunListEntry }) -> (),
 	-- The party the local player is a MEMBER of, or nil when solo (UIController filters out a
 	-- PartyState that only lists the player as a pending invitee).
@@ -60,22 +55,14 @@ export type ExpeditionPanelHandle = {
 	-- Drops the picker's "Sent" marks after a refused invite, so the row can be tapped again.
 	ClearInviteSent: () -> (),
 	ClearDeparting: () -> (),
-	-- True while this player's own Depart/Join tap is waiting for its ActionResult.
+	-- True while this player's own Join tap is waiting for its ActionResult.
 	IsDeparting: () -> boolean,
+	-- "Open to public" as it stands: the map's Depart sends it (RequestExpedition's third value).
+	IsPublic: () -> boolean,
 	SetOpen: (open: boolean) -> (),
 	IsOpen: () -> boolean,
 	SetLayout: (dock: PanelDock.Dock) -> (),
 	Destroy: () -> (),
-}
-
-type MissionTile = {
-	mission: Types.MissionConfig,
-	frame: Frame,
-	metaLabel: TextLabel,
-	powerLabel: TextLabel,
-	button: TextButton,
-	buttonTitle: TextLabel,
-	enabled: boolean,
 }
 
 type RunRow = {
@@ -97,12 +84,10 @@ type LineRow = {
 type RunGroup = { relation: Types.RunRelation, header: TextLabel }
 
 local NO_PLACE_MESSAGE = "Publish the Expeditions place first"
-local NOT_LEADER_MESSAGE = "Your party leader picks the mission"
-local DEPARTING_TITLE = "…"
--- C1: a Depart/Join tap is in flight until its ActionResult lands. The server always answers
--- one, except when the rate limiter drops the intent silently, so the lock also expires on
--- its own rather than stranding the panel.
-local DEPART_TIMEOUT_SECONDS = 8
+-- A run's state as the list shows it: the registry advertises a run as joinable only in its
+-- lobby (wave 0, L1 ruling 6) and past joining once its party is in a level.
+local IN_LOBBY_TEXT = "in the lobby"
+local IN_LEVEL_TEXT = "in a level"
 
 -- Display order and titles of the run-list groups (the server already sorts in this order).
 local RUN_GROUPS: { { relation: Types.RunRelation, title: string } } = {
@@ -115,22 +100,16 @@ local ExpeditionPanel = {}
 
 function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandle
 	local connections: { RBXScriptConnection } = {}
-	local tiles: { MissionTile } = {}
 	local runRows: { RunRow } = {}
-	local lastState: Types.PlayerState? = nil
-	local lastPower = 0
 	local lastActionTime = 0
-	local overdrive = false
 	local combatConfig = deps.combatConfig
 	-- Contract default; a Combat.json that predates the key reads as the shipped default.
 	local public = combatConfig.coop.publicByDefault ~= false
-	-- In-flight departure: which tile was tapped (nil for a Join), and a token so an expired
-	-- timeout never unlocks a newer tap.
-	local departingMissionId: string? = nil
+	-- In-flight Join, and a token so an expired timeout never unlocks a newer tap.
 	local departing = false
 	local departToken = 0
-	-- Forward declaration: the tile/row handlers are built before the repaint helpers.
-	local beginDeparting: (missionId: string?) -> ()
+	-- Forward declaration: the row handlers are built before the repaint helpers.
+	local beginDeparting: () -> ()
 	-- Generation token for the polling loop: closing the panel (or opening it again)
 	-- invalidates every pending task.delay so only one loop is ever alive.
 	local pollToken = 0
@@ -149,11 +128,6 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 	local tickToken = 0
 	local isOpen = false
 
-	local missionNames: { [string]: string } = {}
-	for _, mission in deps.missions do
-		missionNames[mission.id] = mission.name
-	end
-
 	local function isLeader(): boolean
 		local current = party
 		return current == nil or current.leaderUserId == localUserId
@@ -161,13 +135,13 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 
 	local panel = Panel.new(parent, {
 		name = "ExpeditionPanel",
-		title = "Expeditions",
+		title = "Party & runs",
 		designHeight = Theme.PANEL_HEIGHT,
 		onClose = deps.onClose,
 	})
 
 	local scroll = Create("ScrollingFrame", {
-		Name = "Missions",
+		Name = "PartyAndRuns",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -267,8 +241,8 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		action()
 	end
 
-	-- Pinned-at-the-top note, visible only while the second place has no id: the tiles
-	-- below it are all disabled, so the panel has to say why once, in words.
+	-- Pinned-at-the-top note, visible only while the second place has no id: Join is dark and
+	-- the map's Depart is refused, so the panel has to say why once, in words.
 	local noPlaceLabel =
 		makeLabel(scroll, "Notice", Theme.FONT, Theme.TEXT_SMALL, Theme.COLOR_HIGHLIGHT)
 	noPlaceLabel.Text = NO_PLACE_MESSAGE
@@ -572,131 +546,11 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		toggle.TextColor3 = if on then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
 	end
 
-	local overdriveRow, overdriveToggle =
-		makeToggleRow("Overdrive", "Overdrive", Theme.COLOR_HIGHLIGHT)
-	overdriveRow.Visible = false
-	-- Beside Overdrive because both ride on the same Depart intent; only the leader departs,
-	-- so a non-leader never sees it.
+	-- Only the leader departs, so a non-leader never sees it; it rides with the map's Depart.
 	local publicRow, publicToggle = makeToggleRow("Public", "Open to public", Theme.COLOR_TEXT)
 
 	local function paintToggles(): ()
-		paintToggleButton(overdriveToggle, overdrive, Theme.COLOR_HIGHLIGHT)
 		paintToggleButton(publicToggle, public, Theme.COLOR_ACCENT)
-	end
-
-	local function makeTile(mission: Types.MissionConfig): ()
-		local frame = Create("Frame", {
-			Name = mission.id,
-			LayoutOrder = nextOrder(),
-			Size = UDim2.new(1, -Theme.ROW_SPACING, 0, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = Theme.COLOR_ROW,
-			BorderSizePixel = 0,
-			Parent = scroll,
-		}) :: Frame
-		Create("UIPadding", {
-			PaddingBottom = UDim.new(0, Theme.EXPEDITION_TILE_PAD_BOTTOM),
-			Parent = frame,
-		})
-		Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = frame })
-
-		local textWidth = -Theme.ROW_TEXT_LEFT - Theme.ROW_BUTTON_WIDTH - Theme.ROW_TEXT_GAP
-		Create("TextLabel", {
-			Name = "Name",
-			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(Theme.ROW_TEXT_LEFT, Theme.ROW_NAME_Y),
-			Size = UDim2.new(1, textWidth, 0, Theme.ROW_NAME_HEIGHT),
-			Font = Theme.FONT_BOLD,
-			TextSize = Theme.TEXT_MEDIUM,
-			TextColor3 = Theme.COLOR_TEXT,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			Text = mission.name,
-			Parent = frame,
-		})
-		local metaLabel = Create("TextLabel", {
-			Name = "Meta",
-			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(Theme.ROW_TEXT_LEFT, Theme.EXPEDITION_META_Y),
-			Size = UDim2.new(1, textWidth, 0, Theme.ROW_LINE_HEIGHT),
-			Font = Theme.FONT,
-			TextSize = Theme.TEXT_SMALL,
-			TextColor3 = Theme.COLOR_TEXT_DIM,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			Text = "",
-			Parent = frame,
-		}) :: TextLabel
-		-- The readiness line wraps under the button: "Recommended ⚔ 40 — you ⚔ 52" plus a
-		-- lock or unavailable reason is longer than the text column at TEXT_SMALL.
-		local powerLabel = Create("TextLabel", {
-			Name = "Power",
-			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(Theme.ROW_TEXT_LEFT, Theme.EXPEDITION_POWER_Y),
-			Size = UDim2.new(1, -Theme.ROW_TEXT_LEFT * 2, 0, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
-			Font = Theme.FONT,
-			TextSize = Theme.TEXT_SMALL,
-			TextColor3 = Theme.COLOR_TEXT_DIM,
-			TextWrapped = true,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextYAlignment = Enum.TextYAlignment.Top,
-			Text = "",
-			Parent = frame,
-		}) :: TextLabel
-
-		local button = Create("TextButton", {
-			Name = "Depart",
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -Theme.ROW_SPACING, 0, Theme.ROW_NAME_Y),
-			Size = UDim2.fromOffset(Theme.ROW_BUTTON_WIDTH, Theme.ROW_BUTTON_HEIGHT),
-			BackgroundColor3 = Theme.COLOR_BG_LIGHT,
-			BorderSizePixel = 0,
-			Text = "",
-			Parent = frame,
-		}) :: TextButton
-		Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = button })
-		local buttonTitle = Create("TextLabel", {
-			Name = "Title",
-			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(Theme.BUTTON_TEXT_PAD, 0),
-			Size = UDim2.new(1, -Theme.BUTTON_TEXT_PAD * 2, 1, 0),
-			Font = Theme.FONT_BOLD,
-			TextSize = Theme.TEXT_SMALL,
-			TextColor3 = Theme.COLOR_TEXT,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			Text = "Depart",
-			Parent = button,
-		}) :: TextLabel
-
-		local tile: MissionTile = {
-			mission = mission,
-			frame = frame,
-			metaLabel = metaLabel,
-			powerLabel = powerLabel,
-			button = button,
-			buttonTitle = buttonTitle,
-			enabled = false,
-		}
-		table.insert(tiles, tile)
-
-		table.insert(
-			connections,
-			button.Activated:Connect(function()
-				if not tile.enabled or departing then
-					return
-				end
-				tryAction(function()
-					beginDeparting(mission.id)
-					deps.onDepart(mission.id, overdrive, public)
-				end)
-			end)
-		)
-	end
-
-	-- Built once: the mission list is static for the life of the server.
-	for _, mission in deps.missions do
-		makeTile(mission)
 	end
 
 	local runsHeader =
@@ -737,7 +591,7 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = frame })
 		local textWidth = -Theme.ROW_TEXT_LEFT - Theme.ROW_BUTTON_WIDTH - Theme.ROW_TEXT_GAP
 		local nameLabel = Create("TextLabel", {
-			Name = "Mission",
+			Name = "Level",
 			BackgroundTransparency = 1,
 			Position = UDim2.fromOffset(Theme.ROW_TEXT_LEFT, Theme.ROW_NAME_Y),
 			Size = UDim2.new(1, textWidth, 0, Theme.ROW_NAME_HEIGHT),
@@ -791,102 +645,12 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 					return
 				end
 				tryAction(function()
-					beginDeparting(nil)
+					beginDeparting()
 					deps.onJoin(row.hostUserId)
 				end)
 			end)
 		)
 		return row
-	end
-
-	local function paintTile(tile: MissionTile, state: Types.PlayerState, gearPower: number): ()
-		local mission = tile.mission
-		local minutes = math.max(math.round(mission.targetMinutes), 1)
-		tile.metaLabel.Text = "Era "
-			.. tostring(mission.era)
-			.. " · "
-			.. tostring(mission.waves)
-			.. " waves · ~"
-			.. tostring(minutes)
-			.. " min · "
-			.. mission.material
-		-- Both numbers come from the shared pure module the server uses; Overdrive changes
-		-- the recommendation, which is why the line repaints on every toggle.
-		local recommended = Combat.RecommendedPower(mission, overdrive, combatConfig)
-		local unlocked = Combat.MissionUnlocked(state, mission, overdrive, combatConfig)
-		local ratio = if recommended > 0 then gearPower / recommended else Theme.POWER_READY_RATIO
-		tile.powerLabel.Text = "Recommended ⚔ "
-			.. Format.Cash(recommended)
-			.. " — you ⚔ "
-			.. Format.Cash(gearPower)
-		tile.powerLabel.TextColor3 = if ratio >= Theme.POWER_READY_RATIO
-			then Theme.COLOR_ACCENT
-			elseif ratio >= Theme.POWER_RISKY_RATIO then Theme.COLOR_HIGHLIGHT
-			else Theme.COLOR_ERROR
-
-		local leader = isLeader()
-		local enabled = unlocked and placeReady and leader and not departing
-		local title = if departing and mission.id == departingMissionId
-			then DEPARTING_TITLE
-			else "Depart"
-		if not placeReady then
-			title = "Soon"
-			tile.powerLabel.Text ..= " · " .. NO_PLACE_MESSAGE
-			tile.powerLabel.TextColor3 = Theme.COLOR_TEXT_DIM
-		elseif not leader then
-			-- The gate is the leader's own unlocks (host-gated), so this player's lock state
-			-- would only mislead here.
-			tile.powerLabel.Text ..= " · " .. NOT_LEADER_MESSAGE
-			tile.powerLabel.TextColor3 = Theme.COLOR_TEXT_DIM
-		elseif not unlocked then
-			title = "Locked"
-			-- Overdrive is the other lock this tile can carry; say which one it is.
-			local reason = if mission.era > state.combat.highestEra
-				then "Reach era " .. tostring(mission.era) .. " in your city first"
-				else "Overdrive needs Rebirth " .. tostring(
-					combatConfig.overdrive.requiresRebirth
-				)
-			tile.powerLabel.Text ..= " · " .. reason
-			tile.powerLabel.TextColor3 = Theme.COLOR_HIGHLIGHT
-		end
-		tile.enabled = enabled
-		tile.buttonTitle.Text = title
-		tile.buttonTitle.TextColor3 = if enabled
-			then Theme.COLOR_TEXT_DARK
-			else Theme.COLOR_TEXT_DIM
-		tile.button.Active = enabled
-		tile.button.AutoButtonColor = enabled
-		tile.button.BackgroundColor3 = if enabled then Theme.COLOR_ACCENT else Theme.COLOR_BG_LIGHT
-		tile.button.BackgroundTransparency = if enabled then 0 else Theme.DIM_TRANSPARENCY
-		tile.frame.BackgroundColor3 = if unlocked or not leader
-			then Theme.COLOR_ROW
-			else Theme.COLOR_ROW_LOCKED
-	end
-
-	local function refresh(state: Types.PlayerState, gearPower: number): ()
-		lastState = state
-		lastPower = gearPower
-		local requiresRebirth = combatConfig.overdrive.requiresRebirth
-		local canOverdrive = state.rebirthCount >= requiresRebirth
-		overdriveRow.Visible = canOverdrive
-		if not canOverdrive and overdrive then
-			overdrive = false -- a Rebirth-gated choice must not survive a state that lost it
-			paintToggles()
-		end
-		if state.combat == nil then
-			-- A server that predates the combat profile: no mission can be judged, so show
-			-- the tiles locked rather than guess an era.
-			for _, tile in tiles do
-				tile.enabled = false
-				tile.buttonTitle.Text = "Soon"
-				tile.button.Active = false
-				tile.button.BackgroundTransparency = Theme.DIM_TRANSPARENCY
-			end
-			return
-		end
-		for _, tile in tiles do
-			paintTile(tile, state, gearPower)
-		end
 	end
 
 	local function paintJoinButtons(): ()
@@ -904,11 +668,29 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		return typeof(run) == "table"
 			and typeof(run.hostUserId) == "number"
 			and typeof(run.hostName) == "string"
-			and typeof(run.missionId) == "string"
+			and typeof(run.levelId) == "string"
+			and typeof(run.difficulty) == "string"
 			and typeof(run.wave) == "number"
 			and typeof(run.partySize) == "number"
-			and typeof(run.overdrive) == "boolean"
 			and (run.relation == "server" or run.relation == "friend" or run.relation == "public")
+	end
+
+	-- A run's level by the map node that names it, and its difficulty by the map's word for it;
+	-- either falls back to its id (a level this build's map does not name).
+	local function levelName(levelId: string): string
+		local map = Catalog.GetExpeditionsConfig()
+		if map ~= nil then
+			for _, node in map.nodes do
+				if node.level == levelId then
+					return node.name
+				end
+			end
+		end
+		return levelId
+	end
+	local function difficultyName(difficulty: string): string
+		local map = Catalog.GetExpeditionsConfig()
+		return if map ~= nil then map.difficultyNames[difficulty] or difficulty else difficulty
 	end
 
 	local function setRuns(runs: { Types.RunListEntry }): ()
@@ -932,18 +714,16 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 				end
 				row.frame.LayoutOrder = layoutOrder
 				row.hostUserId = run.hostUserId
-				row.nameLabel.Text = missionNames[run.missionId] or run.missionId
+				row.nameLabel.Text = levelName(run.levelId)
+					.. " · "
+					.. difficultyName(run.difficulty)
 				row.metaLabel.Text = run.hostName
-					.. " · Wave "
-					.. tostring(run.wave)
+					.. " · "
+					.. (if run.wave == 0 then IN_LOBBY_TEXT else IN_LEVEL_TEXT)
 					.. " · "
 					.. tostring(run.partySize)
 					.. "/"
 					.. tostring(combatConfig.coop.maxParty)
-					.. (if run.overdrive then " · Overdrive" else "")
-				row.metaLabel.TextColor3 = if run.overdrive
-					then Theme.COLOR_HIGHLIGHT
-					else Theme.COLOR_TEXT_DIM
 				row.frame.Visible = true
 			end
 			group.header.Visible = inGroup > 0
@@ -957,14 +737,10 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		paintJoinButtons()
 	end
 
-	-- Everything leadership touches: the strip, the public toggle and the tiles.
+	-- Everything leadership touches: the strip and the public toggle.
 	local function repaintParty(): ()
 		paintParty()
 		publicRow.Visible = isLeader()
-		local state = lastState
-		if state ~= nil then
-			refresh(state, lastPower)
-		end
 	end
 
 	local function setParty(nextParty: Types.HubParty?): ()
@@ -982,33 +758,24 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		startTicker()
 	end
 
-	-- Repaints everything the in-flight lock touches: the tiles through the usual paint
-	-- path, the Join rows directly (their text does not change).
-	local function paintDeparting(): ()
-		local state = lastState
-		if state ~= nil then
-			refresh(state, lastPower)
-		end
-		paintJoinButtons()
-	end
-
 	local function clearDeparting(): ()
 		if not departing then
 			return
 		end
 		departToken += 1
 		departing = false
-		departingMissionId = nil
-		paintDeparting()
+		paintJoinButtons()
 	end
 
-	beginDeparting = function(missionId: string?): ()
+	-- C1: a Join is in flight until its ActionResult lands. The server always answers one,
+	-- except when the rate limiter drops the intent silently, so the lock also expires on its
+	-- own rather than stranding the panel.
+	beginDeparting = function(): ()
 		departToken += 1
 		local token = departToken
 		departing = true
-		departingMissionId = missionId
-		paintDeparting()
-		task.delay(DEPART_TIMEOUT_SECONDS, function()
+		paintJoinButtons()
+		task.delay(Theme.EXPEDITION_DEPART_TIMEOUT_SECONDS, function()
 			if token == departToken then
 				clearDeparting()
 			end
@@ -1033,18 +800,6 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		schedule()
 	end
 
-	table.insert(
-		connections,
-		overdriveToggle.Activated:Connect(function()
-			overdrive = not overdrive
-			paintToggles()
-			SoundController.Play("uiClick")
-			local state = lastState
-			if state ~= nil then
-				refresh(state, lastPower) -- the recommendation moves with Overdrive
-			end
-		end)
-	)
 	table.insert(
 		connections,
 		publicToggle.Activated:Connect(function()
@@ -1101,7 +856,6 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 
 	local handle: ExpeditionPanelHandle = {
 		DesignHeight = panel.DesignHeight,
-		Refresh = refresh,
 		SetRuns = setRuns,
 		SetParty = setParty,
 		ClearInviteSent = function()
@@ -1111,6 +865,9 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		ClearDeparting = clearDeparting,
 		IsDeparting = function()
 			return departing
+		end,
+		IsPublic = function(): boolean
+			return public
 		end,
 		SetOpen = function(open: boolean)
 			panel.SetOpen(open)

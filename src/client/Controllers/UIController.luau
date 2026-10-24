@@ -14,15 +14,14 @@
 -- Legacy shop: RequestBuyPerk intents, the legacyShop delta merge, perkBought / buyPerk
 -- feedback, and one automatic (dismissable, non-modal) open of the panel after a
 -- ceremony when a tier has become affordable — earned currency, not Robux. C0 adds the
--- Expeditions surface: the Gear Power readout, the Armory panel (RequestBuyGear /
--- RequestAscend) and the Expedition panel (RequestExpedition / RequestJoinRun /
--- RequestRunList). Both are pure views of `state.combat` and the server's `gearPower`; with
--- Armory.json or Combat.json absent, or on a server that never created the remotes, the
--- buttons simply do not exist and the HUD is exactly the M9 HUD. C1 adds the run report
--- (the ExpeditionSummary event -> ExpeditionSummaryCard) and, in Studio only, the debug
--- strip that drives the hub's RequestDebug levers. C2 adds the hub party: PartyState feeds
--- the Expedition panel's party strip, PartyInvite raises the non-blocking PartyInviteToast,
--- and the four RequestParty* intents are the only way the client touches a party.
+-- Expeditions surface: the Armory and the Expedition key (RequestExpedition / RequestJoinRun /
+-- RequestRunList), pure views of `state.combat`; with Armory.json or Combat.json absent, or on
+-- a server that never created the remotes, the buttons simply do not exist and the HUD is
+-- exactly the M9 HUD. C1 adds the run report (the ExpeditionSummary event) and, in Studio
+-- only, the debug strip that drives the hub's RequestDebug levers. C2 adds the hub party:
+-- PartyState feeds the Expedition panel's party strip, PartyInvite raises the non-blocking
+-- PartyInviteToast, and the four RequestParty* intents are the only way the client touches a
+-- party.
 --
 -- L3 Wave 1 (docs/prompts/l3-w1-contract.md, L3-22, L3-24, L3-28): the C0 slot Armory panel is
 -- gone. The Armory is the shared UI/ArmoryScreen the dungeon's lobby mounts too, a full-screen
@@ -31,8 +30,20 @@
 -- variant); there is no fight here, so its gate is always open and it has no Abilities to sell
 -- (they are bought in the dungeon's lobby). The Snapshot's and every Delta's `combat` is its
 -- SetState, and the held pair is the saved loadout as the server reads it (Unlocks.LoadoutOf).
--- The Armory and Expedition keys and the Power readout now wait for RequestUpgradeWeapon, the
--- intent that replaced RequestBuyGear. In Studio the strip gains the Armory levers.
+-- The Armory and Expedition keys now wait for RequestUpgradeWeapon, the intent that replaced
+-- RequestBuyGear. In Studio the strip gains the Armory levers.
+--
+-- L4 W3 (docs/prompts/l4-w3-contract.md sections 2.4, 4.2 and 6): the Expedition key opens the
+-- expeditions map (UI/HubMap, which mounts the shared MapScreen) in place of the mission tiles,
+-- and the map's footer button opens Party & runs (the slimmed ExpeditionPanel: the party, "Open
+-- to public", the run list). The run report is the shared UI/RunTally card, still held behind
+-- the welcome-back card; its wallet is this HUD's model. The Gear Power readout is gone. One sheet
+-- at a time: the map, the Armory and a dock panel each close the others as they open.
+--
+-- The L4 W3 fix round: Roblox's touch controls step aside while the map or the report is up (F11,
+-- UI/TouchHold, kept apart from the Armory's own R9 toggle by the order of the closes: see that
+-- module); the report never opens over the Armory and nothing opens over the report; the city's
+-- report claims no star (F12); the Expedition key without Config/Expeditions says so (F16).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -46,6 +57,7 @@ local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Unlocks = require(sharedFolder:WaitForChild("Unlocks"))
+local RunLines = require(sharedFolder:WaitForChild("RunLines"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -58,7 +70,9 @@ local LegacyPanel = require(uiFolder:WaitForChild("LegacyPanel"))
 local ShopPanel = require(uiFolder:WaitForChild("ShopPanel"))
 local ArmoryScreen = require(uiFolder:WaitForChild("ArmoryScreen"))
 local ExpeditionPanel = require(uiFolder:WaitForChild("ExpeditionPanel"))
-local ExpeditionSummaryCard = require(uiFolder:WaitForChild("ExpeditionSummaryCard"))
+local HubMap = require(uiFolder:WaitForChild("HubMap"))
+local RunTally = require(uiFolder:WaitForChild("RunTally"))
+local TouchHold = require(uiFolder:WaitForChild("TouchHold"))
 local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
 local PartyInviteToast = require(uiFolder:WaitForChild("PartyInviteToast"))
 local SettingsPanel = require(uiFolder:WaitForChild("SettingsPanel"))
@@ -80,9 +94,6 @@ type Model = {
 	-- pinned to 1). Tracked like incomePerSecond and never derived here: only the Shop's
 	-- pack preview reads it, and only the server may compute it (wave-2 ruling 4).
 	persistedIncomePerSecond: number,
-	-- C0: Armory.GearPower as the SERVER computed it (Snapshot and Delta both carry it).
-	-- The client never derives it, so a stale weapon table can never flatter the readout.
-	gearPower: number,
 }
 
 type PrestigeKind = "advance" | "rebirth"
@@ -102,6 +113,16 @@ local FIRST_ERA = 1
 local ARMORY_PAD_HINT = "B closes · " .. ArmoryScreen.PAD_TAB_NAMES .. " tabs"
 -- L3-24: the answers the Armory screen reads (an upgrade's and an equip's, ok or refused).
 local ARMORY_ACTIONS: { [string]: boolean } = { upgradeWeapon = true, setFamily = true }
+-- L4 W3 (section 4.2): the run report's words in the city. It reports a whole visit, not one
+-- clear, so it shows no star (F12: a Normal first clear pays no firstClear line to read one from).
+local REPORT = {
+	kicker = "EXPEDITION REPORT",
+	dismissId = "dismiss",
+	dismissText = "Dismiss",
+	diedNote = "You fell — the rewards you earned are yours",
+	-- The report's reason in UI/TouchHold's count (F11).
+	touchHold = "runReport",
+}
 
 -- Spec section 6: an item whose id is still 0 does not exist for the player. The Shop
 -- button appears only once the human has created at least one item the Shop can list --
@@ -126,53 +147,6 @@ end
 local function readPersistedRate(payload: { [string]: any }): number
 	local rate = payload.persistedIncomePerSecond
 	return if typeof(rate) == "number" then rate else 0
-end
-
--- Same rule for Gear Power: absent means this server has no Armory, and 0 understates
--- rather than promising a player power they do not have.
-local function readGearPower(payload: { [string]: any }): number
-	local power = payload.gearPower
-	return if typeof(power) == "number" then power else 0
-end
-
--- C1: the run report the hub forwards after a return teleport (or a Studio handoff record).
--- It is presentation only — the rewards are already in the profile — so a malformed payload
--- is dropped rather than half-drawn. `bestWave` and `died` are optional: a combat place that
--- predates them omits them and the card falls back to wavesCleared / not died.
-local function readRunSummary(payload: any): Types.RunSummary?
-	if
-		typeof(payload) ~= "table"
-		or typeof(payload.missionId) ~= "string"
-		or typeof(payload.materials) ~= "table"
-		or typeof(payload.wavesCleared) ~= "number"
-		or typeof(payload.cash) ~= "number"
-		or typeof(payload.valor) ~= "number"
-		or typeof(payload.kills) ~= "number"
-		or typeof(payload.seconds) ~= "number"
-	then
-		return nil
-	end
-	local materials: { [string]: number } = {}
-	for name, amount in payload.materials do
-		if typeof(name) == "string" and typeof(amount) == "number" then
-			materials[name] = amount
-		end
-	end
-	local summary: any = {
-		missionId = payload.missionId,
-		overdrive = payload.overdrive == true,
-		wavesCleared = payload.wavesCleared,
-		cash = payload.cash,
-		materials = materials,
-		valor = payload.valor,
-		kills = payload.kills,
-		seconds = payload.seconds,
-		bestWave = if typeof(payload.bestWave) == "number"
-			then payload.bestWave
-			else payload.wavesCleared,
-		died = payload.died == true,
-	}
-	return summary :: Types.RunSummary
 end
 
 -- C2: PartyState payload. Entries with a bad shape are dropped rather than the whole party,
@@ -401,20 +375,10 @@ local function boot(): ()
 	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
 	local requestBuyPerk = remotesFolder:WaitForChild("RequestBuyPerk") :: RemoteEvent
 
-	-- C0: nil config hides the whole feature (the nil-is-the-signal pattern), and a mission
-	-- list is only read once, since Config/Missions is static for the life of the server.
+	-- C0: nil config hides the whole feature (the nil-is-the-signal pattern).
 	local armoryConfig = Catalog.GetArmoryConfig()
 	local combatConfig = Catalog.GetCombatConfig()
 	local placesConfig = Catalog.GetPlacesConfig()
-	local missions: { Types.MissionConfig } = {}
-	if combatConfig ~= nil then
-		for eraIndex = 1, Catalog.GetEraCount() do
-			local mission = Catalog.GetMissionConfig(eraIndex)
-			if mission ~= nil then
-				table.insert(missions, mission)
-			end
-		end
-	end
 	-- The combat remotes are created in one RemoteService.Init pass, which may not have run
 	-- when the HUD boots and never runs at all on a hub server that predates Expeditions.
 	-- Boot waits for neither case (review of 2026-09-17): the panels are built from config
@@ -422,7 +386,6 @@ local function boot(): ()
 	-- ChildAdded listener further down.
 	local requestUpgradeWeapon: RemoteEvent? = nil
 	local requestSetFamily: RemoteEvent? = nil
-	local requestExpedition: RemoteEvent? = nil
 	local requestJoinRun: RemoteEvent? = nil
 	local requestRunList: RemoteEvent? = nil
 	-- C1: the hub's Studio-only debug intent. Absent on a server that predates the Studio
@@ -437,7 +400,6 @@ local function boot(): ()
 	local function resolveCombatRemotes(): ()
 		requestUpgradeWeapon = remotesFolder:FindFirstChild("RequestUpgradeWeapon") :: RemoteEvent?
 		requestSetFamily = remotesFolder:FindFirstChild("RequestSetFamily") :: RemoteEvent?
-		requestExpedition = remotesFolder:FindFirstChild("RequestExpedition") :: RemoteEvent?
 		requestJoinRun = remotesFolder:FindFirstChild("RequestJoinRun") :: RemoteEvent?
 		requestRunList = remotesFolder:FindFirstChild("RequestRunList") :: RemoteEvent?
 		requestDebug = remotesFolder:FindFirstChild("RequestDebug") :: RemoteEvent?
@@ -451,14 +413,14 @@ local function boot(): ()
 	end
 	resolveCombatRemotes()
 	local hasArmory = armoryConfig ~= nil
-	-- L3: the screen shows the weapon families, so its key also waits for their config; the Power
-	-- readout is the server's number and needs only the Armory. Read again until it is there
-	-- (refreshCombatKeys): the Config folder may still be replicating at boot (3-s1).
+	-- L3: the screen shows the weapon families, so its key also waits for their config. Read again
+	-- until it is there (refreshCombatKeys): the Config folder may still be replicating at boot
+	-- (3-s1).
 	local provingConfig = Catalog.GetProvingGroundsConfig()
-	-- The place id being 0 does NOT hide the panel: the contract wants the tiles visible and
-	-- disabled with "Publish the Expeditions place first", so the feature is discoverable
-	-- before the second place exists.
-	local hasExpeditions = combatConfig ~= nil and #missions > 0
+	-- The place id being 0 does NOT hide the key: Party & runs says "Publish the Expeditions
+	-- place first" and the server refuses a Depart, so the feature is discoverable before the
+	-- second place exists. L4 W3: the map reads Config/Expeditions when it first opens (HubMap).
+	local hasExpeditions = combatConfig ~= nil
 
 	local gameConfig = Catalog.GetGameConfig()
 	-- Static for the life of the server, so the Shop button's visibility is decided once.
@@ -511,6 +473,8 @@ local function boot(): ()
 	-- is held here until that card is gone. Forward declaration: the welcome card is built
 	-- long before the report card exists.
 	local pendingSummary: Types.RunSummary? = nil
+	-- The material the report's wallet line counts (RunTally.Totals' main one).
+	local tallyMaterial = ""
 	local flushExpeditionSummary: () -> ()
 	local welcomeCard = WelcomeBackCard.new(screenGui, {
 		onVisibilityChanged = function(visible: boolean)
@@ -543,8 +507,17 @@ local function boot(): ()
 	local openPanel: (key: PanelKey) -> ()
 	-- L3-24: the Armory is a full-screen card, not a dock panel; built with the other panels below.
 	local armoryScreen: ArmoryScreen.Handle? = nil
-	-- C1's Studio strip, built further down (the Armory hides it while open).
+	-- C1's Studio strip, built further down (the Armory and the map hide it while open).
 	local debugPanel: DebugPanel.DebugPanelHandle? = nil
+	-- L4 W3: the expeditions map, built with the Expeditions surface below.
+	local hubMap: HubMap.Handle? = nil
+	-- L4 W3: the run report card, built with the Expeditions surface below.
+	local runTally: RunTally.Handle? = nil
+	-- F11: the report holds the screen while it is up; neither the Armory nor the map opens over it.
+	local function reportShown(): boolean
+		local card = runTally
+		return card ~= nil and card.IsVisible()
+	end
 
 	local ceremony = Ceremony.new(screenGui, {
 		onClosed = function()
@@ -562,6 +535,14 @@ local function boot(): ()
 	})
 	local bottomBar = BottomBar.new(screenGui, {
 		onTap = function(key: BottomBar.BarKey)
+			-- L4 W3: the Expedition key is the map's; Party & runs opens from the map's footer.
+			local map = hubMap
+			if key == "expedition" and map ~= nil then
+				if model ~= nil and combatRemotesReady and not reportShown() then
+					map.Toggle()
+				end
+				return
+			end
 			togglePanel(key)
 		end,
 	})
@@ -598,7 +579,19 @@ local function boot(): ()
 			-- Like the bar's other keys, only once a model exists (the bar is hidden before) and
 			-- the intents are there to be sent: K follows the key's own rule.
 			local screen = armoryScreen
-			if screen ~= nil and model ~= nil and provingConfig ~= nil and combatRemotesReady then
+			if
+				screen ~= nil
+				and model ~= nil
+				and provingConfig ~= nil
+				and combatRemotesReady
+				and not reportShown()
+			then
+				-- F11: the map gives the touch controls back before the Armory's R9 toggle puts
+				-- their value aside (its own onOpenChanged would close the map only after that).
+				local map = hubMap
+				if map ~= nil and not screen.IsOpen() then
+					map.Close()
+				end
 				screen.Toggle()
 			end
 			return
@@ -609,6 +602,10 @@ local function boot(): ()
 		local screen = armoryScreen
 		if screen ~= nil then
 			screen.Close() -- one sheet at a time
+		end
+		local map = hubMap
+		if map ~= nil then
+			map.Close()
 		end
 		local previous = openPanelKey
 		if previous ~= nil then
@@ -763,10 +760,14 @@ local function boot(): ()
 			-- Abilities are bought in the dungeon's lobby: the tab is read-only here.
 			onBuyAbility = nil,
 			onOpenChanged = function(open: boolean)
-				-- One sheet at a time: opening it closes the dock panel; the strip, which sits
-				-- over the bottom-left of the screen, is away while it is open.
+				-- One sheet at a time: opening it closes the dock panel and the map; the strip,
+				-- which sits over the bottom-left of the screen, is away while it is open.
 				if open then
 					closePanels()
+					local map = hubMap
+					if map ~= nil then
+						map.Close()
+					end
 				end
 				bottomBar.SetActive(if open then "armory" else openPanelKey)
 				local strip = debugPanel
@@ -792,15 +793,9 @@ local function boot(): ()
 	end
 	local expeditionPanel: ExpeditionPanel.ExpeditionPanelHandle? = nil
 	if hasExpeditions and combatConfig ~= nil then
-		expeditionPanel = ExpeditionPanel.new(screenGui, {
-			missions = missions,
+		local panel = ExpeditionPanel.new(screenGui, {
 			placesConfig = placesConfig,
 			combatConfig = combatConfig,
-			onDepart = function(missionId: string, overdrive: boolean, public: boolean)
-				if requestExpedition ~= nil then
-					requestExpedition:FireServer(missionId, overdrive, public)
-				end
-			end,
 			onJoin = function(hostUserId: number)
 				if requestJoinRun ~= nil then
 					requestJoinRun:FireServer(hostUserId)
@@ -828,32 +823,100 @@ local function boot(): ()
 			end,
 			onClose = closePanels,
 		})
-	end
-	-- C1: the report of the run the player just came back from. Built with the Expeditions
-	-- surface (a hub without Combat.json can never receive an ExpeditionSummary) and shown
-	-- only when that event fires; it holds no state of its own between runs.
-	local summaryCard: ExpeditionSummaryCard.ExpeditionSummaryCardHandle? = nil
-	if hasExpeditions then
-		summaryCard = ExpeditionSummaryCard.new(screenGui, {
-			onClose = function()
-				-- The card is sized from its own content, so the HUD re-lays out once it
-				-- is gone: a rotation while the modal was up otherwise leaves the scale
-				-- it was shown with.
-				applyLayout()
+		expeditionPanel = panel
+		-- L4 W3: the map. Its Depart sends Party & runs' "Open to public"; its footer opens that
+		-- panel. Opening it closes the dock panel and the Armory, and the strip is away meanwhile.
+		hubMap = HubMap.new(screenGui, {
+			remotes = remotesFolder,
+			isPublic = panel.IsPublic,
+			onPartyAndRuns = function()
+				openPanel("expedition")
+			end,
+			-- HubMap runs this before it takes its touch hold (F11): the Armory closes first.
+			onOpenChanged = function(open: boolean)
+				if open then
+					closePanels()
+					local screen = armoryScreen
+					if screen ~= nil then
+						screen.Close()
+					end
+				end
+				bottomBar.SetActive(if open then "expedition" else openPanelKey)
+				local strip = debugPanel
+				if strip ~= nil then
+					strip.SetVisible(not open)
+				end
+			end,
+			toast = function(text: string)
+				toast.Show(text, Theme.TOAST_ERROR_SECONDS, true)
 			end,
 		})
 	end
+	-- C1, L4 W3 (section 4.2): the report of the run the player just came back from, the shared
+	-- RunTally card (the dungeon shows the same one). Built with the Expeditions surface (a hub
+	-- without Combat.json can never receive an ExpeditionSummary) and shown only when that event
+	-- fires; it holds no state of its own between runs.
+	if hasExpeditions then
+		runTally = RunTally.new(screenGui, {
+			-- The dim behind the card takes every tap, as the old report's scrim did: a stray tap
+			-- behind it must not buy a building.
+			modal = true,
+			onButton = function(id: string)
+				local card = runTally
+				if id == REPORT.dismissId and card ~= nil then
+					card.Hide()
+					TouchHold.Release(REPORT.touchHold)
+				end
+			end,
+		})
+	end
+	-- The report's wallet: what the player holds now (the run's rewards are already in it). The
+	-- cash is the city's own state, never the summary's; RunTally.Wallet is the dungeon's builder too.
+	local function tallyWallet(current: Model): RunTally.Wallet
+		return RunTally.Wallet(current.state.cash, current.state.combat, tallyMaterial)
+	end
 	-- Shows a held report once nothing else owns the screen. Safe to call at any time: with
-	-- no report held, or with the welcome-back card still up, it does nothing.
+	-- no report held, no model yet, or with the welcome-back card still up, it does nothing.
 	flushExpeditionSummary = function(): ()
 		local summary = pendingSummary
-		local card = summaryCard
-		if summary == nil or card == nil or welcomeCard.IsVisible() then
+		local card = runTally
+		local current = model
+		if summary == nil or card == nil or current == nil or welcomeCard.IsVisible() then
 			return
 		end
 		pendingSummary = nil
-		card.Show(summary)
-		applyLayout() -- the card just sized itself to its rows; re-fit it
+		local totals = RunTally.Totals(summary)
+		tallyMaterial = totals.material
+		local combat = current.state.combat
+		-- F11: the card never opens over the Armory (both draw at ZINDEX_CARD) or the map (its keys
+		-- would act under the card). Both close here, giving back the touch controls, before the
+		-- report's own hold is taken.
+		local armory = armoryScreen
+		if armory ~= nil then
+			armory.Close()
+		end
+		local map = hubMap
+		if map ~= nil then
+			map.Close()
+		end
+		TouchHold.Hold(REPORT.touchHold)
+		card.Show({
+			kicker = REPORT.kicker,
+			title = summary.title,
+			subtitle = Format.Duration(summary.seconds)
+				.. " · "
+				.. Format.Cash(summary.kills)
+				.. " kills",
+			star = false,
+			lines = RunTally.Rows(summary.lines),
+			totals = totals,
+			wallet = tallyWallet(current),
+			note = if summary.died then REPORT.diedNote else nil,
+			nextAbility = RunTally.NextAbility(
+				if isCombatProfile(combat) then combat.abilities else nil
+			),
+			buttons = { { id = REPORT.dismissId, text = REPORT.dismissText, accent = true } },
+		})
 	end
 
 	-- The event can land before or after the first snapshot, and only that snapshot decides
@@ -950,11 +1013,10 @@ local function boot(): ()
 		-- Pack previews follow the persisted rate, which is what the server charges
 		-- against, and re-render on every push because that rate moves with the build.
 		shopPanel.Refresh(state, current.persistedIncomePerSecond, Catalog.GetEraConfig(state.era))
-		-- C0: nil hides the readout entirely on a hub without an Armory.
-		topBar.SetPower(if hasArmory and combatRemotesReady then current.gearPower else nil)
-		local expedition = expeditionPanel
-		if expedition ~= nil then
-			expedition.Refresh(state, current.gearPower)
+		-- L4 W3: an open report's wallet follows the model (a later Snapshot, the income tick).
+		local card = runTally
+		if card ~= nil and card.IsVisible() then
+			card.SetWallet(tallyWallet(current))
 		end
 		refreshBonuses()
 		refreshPreload(current)
@@ -1002,7 +1064,6 @@ local function boot(): ()
 			state = snapshot.state,
 			incomePerSecond = snapshot.incomePerSecond,
 			persistedIncomePerSecond = readPersistedRate(payload),
-			gearPower = readGearPower(payload),
 		}
 		if eraChanged then
 			-- Any open prestige screen described the era we just left; its numbers are stale.
@@ -1095,17 +1156,12 @@ local function boot(): ()
 		if isLegacyShopState(legacyShop) then
 			current.state.legacyShop = legacyShop :: Types.LegacyShopState
 		end
-		-- C0: the whole combat profile whenever the combat dirty flag flushes, with the new
-		-- Gear Power beside it. Replaced wholesale, never merged, like legacyShop.
+		-- C0: the whole combat profile whenever the combat dirty flag flushes. Replaced
+		-- wholesale, never merged, like legacyShop.
 		local combat = delta.combat
 		if isCombatProfile(combat) then
 			current.state.combat = combat :: Types.CombatProfile
 			pushArmory(current.state.combat)
-		end
-		-- The contract ships gearPower as its own optional field beside it, so it is read
-		-- independently: a flush that only re-prices the loadout still moves the readout.
-		if typeof(delta.gearPower) == "number" then
-			current.gearPower = delta.gearPower
 		end
 		refreshAll()
 	end
@@ -1154,13 +1210,18 @@ local function boot(): ()
 			else "Couldn't start the expedition — try again"
 	end
 
-	-- C1: a Depart/Join answer releases the panel's in-flight lock, and it also means the
-	-- server has read (and reset) the forced-teleport-failure attribute, so the strip's
-	-- toggle must not keep claiming the lever is armed.
-	local function onExpeditionAnswer(): ()
+	-- C1: a Depart/Join answer releases the in-flight lock (the map's Depart, Party & runs'
+	-- Join), and it also means the server has read (and reset) the forced-teleport-failure
+	-- attribute, so the strip's toggle must not keep claiming the lever is armed. L4 W3: a
+	-- refused Depart also asks for the map anew (HubMap.OnAnswer).
+	local function onExpeditionAnswer(action: any, ok: boolean): ()
 		local expedition = expeditionPanel
 		if expedition ~= nil then
 			expedition.ClearDeparting()
+		end
+		local map = hubMap
+		if map ~= nil and action == "expedition" then
+			map.OnAnswer(ok)
 		end
 		local strip = debugPanel
 		if strip ~= nil then
@@ -1188,13 +1249,15 @@ local function boot(): ()
 			)
 			return
 		end
-		-- expedition / joinRun: nothing to flash (the tile may be off-screen and the failure
-		-- is about the world, not the row), so the toast carries the whole message. Read the
-		-- in-flight lock before onExpeditionAnswer releases it: it says whether this player
-		-- tapped Depart or was left behind by the leader's.
+		-- expedition / joinRun: nothing to flash (the failure is about the world, not a row),
+		-- so the toast carries the whole message. Read the in-flight locks before
+		-- onExpeditionAnswer releases them: they say whether this player tapped Depart (or Join)
+		-- or was left behind by the leader's.
 		local panel = expeditionPanel
-		local tappedDepart = panel ~= nil and panel.IsDeparting()
-		onExpeditionAnswer()
+		local map = hubMap
+		local tappedDepart = (map ~= nil and map.IsDeparting())
+			or (panel ~= nil and panel.IsDeparting())
+		onExpeditionAnswer(action, false)
 		local joining = action == "joinRun"
 		local message: string
 		local coopMessage = coopReasonMessage(action, reason, tappedDepart)
@@ -1203,9 +1266,7 @@ local function boot(): ()
 		elseif reason == "unavailable" then
 			message = expeditionUnavailableMessage(joining)
 		elseif reason == "locked" then
-			message = if joining
-				then "That run is locked for you"
-				else "That expedition is locked — advance your city first"
+			message = if joining then "That run is locked for you" else "That level is locked"
 		else
 			message = if joining then "Couldn't join that run" else "Can't depart right now"
 		end
@@ -1236,7 +1297,7 @@ local function boot(): ()
 			-- C0 is the first action that succeeds loudly: the teleport takes a moment and
 			-- the player has to know their tap was heard.
 			if payload.action == "expedition" or payload.action == "joinRun" then
-				onExpeditionAnswer()
+				onExpeditionAnswer(payload.action, true)
 				-- C1 Studio bridge: there is no teleport in Studio, only a handoff record
 				-- and a kick a second later, so the toast has to say what to do next.
 				toast.Show(
@@ -1447,9 +1508,13 @@ local function boot(): ()
 			panel.SetLayout(PanelDock.Compute(scale, size, panel.DesignHeight))
 		end
 		eraScreen.SetLayout(scale, size)
-		local card = summaryCard
+		local card = runTally
 		if card ~= nil then
 			card.SetLayout(scale, size)
+		end
+		local map = hubMap
+		if map ~= nil then
+			map.SetLayout(scale, size)
 		end
 		local strip = debugPanel
 		if strip ~= nil then
@@ -1508,7 +1573,7 @@ local function boot(): ()
 	-- RunList: whenever the event turns up, never waited for.
 	local summaryConnected = false
 	local function connectExpeditionSummary(): ()
-		local card = summaryCard
+		local card = runTally
 		if summaryConnected or card == nil then
 			return
 		end
@@ -1518,8 +1583,11 @@ local function boot(): ()
 		end
 		summaryConnected = true
 		local remote = event :: RemoteEvent
+		-- The fix round's F7: the card is read by the one reader the hub server's bridge uses too
+		-- (RunLines.ReadSummary). It is presentation only (the rewards are already in the profile),
+		-- so a malformed, forged or oversized card is dropped whole, never half-drawn.
 		remote.OnClientEvent:Connect(function(payload: any)
-			local summary = readRunSummary(payload)
+			local summary = RunLines.ReadSummary(payload)
 			if summary ~= nil then
 				showExpeditionSummary(summary)
 			end
@@ -1550,6 +1618,10 @@ local function boot(): ()
 		local expedition = expeditionPanel
 		if expedition ~= nil then
 			expedition.SetParty(mine)
+		end
+		local map = hubMap
+		if map ~= nil then
+			map.SetParty(mine)
 		end
 		local card = inviteToast
 		if card ~= nil then
@@ -1602,7 +1674,7 @@ local function boot(): ()
 	local function combatWiringComplete(): boolean
 		return combatRemotesReady
 			and (expeditionPanel == nil or runListConnected)
-			and (summaryCard == nil or summaryConnected)
+			and (runTally == nil or summaryConnected)
 			and (not hasExpeditions or partyConnected)
 	end
 	if (hasArmory or hasExpeditions) and not combatWiringComplete() then
@@ -1613,7 +1685,6 @@ local function boot(): ()
 			connectExpeditionSummary()
 			connectParty()
 			refreshCombatKeys()
-			refreshAll() -- the Power readout follows the same gate as the keys
 			local connection = childAdded
 			if combatWiringComplete() and connection ~= nil then
 				connection:Disconnect()

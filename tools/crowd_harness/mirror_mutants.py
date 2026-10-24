@@ -24,7 +24,7 @@ PATHS = {"HitShapes": "src/shared/HitShapes.luau", "SwingGate": "src/shared/Swin
          "Combat": "src/shared/Combat.luau", "CampBrain": "src/combat/server/Services/CampBrain.luau",
          "StageFlow": "src/combat/server/Services/StageFlow.luau",
          "LevelGeometry": "src/combat/server/Services/LevelGeometry.luau",
-         "Armory": "src/shared/Armory.luau"}
+         "Armory": "src/shared/Armory.luau", "MapRules": "src/shared/MapRules.luau"}
 MUTANTS = [
     ("CrowdRay: the head term dropped", "HitShapes", "local entry = earlier(bodyEntry, headEntry)", "local entry = bodyEntry"),
     ("CrowdRay: the crit padded", "HitShapes",
@@ -311,6 +311,47 @@ MUTANTS = [
      "local threshold = hostRate"),
     ("MentorBonus F6: one mentorValor whatever the head count", "Combat", "return mentored * coop.mentorValor",
      "return if mentored > 0 then coop.mentorValor else 0"),
+    # L4 W3 (L4W3-7): Combat.EraCashMult and the cash choke point Combat.CombatCashMult against
+    # sim_combat.era_cash_mult and combat_cash_mult (check_stage_mirror's eraCash cases).
+    ("EraCashMult L4W3-7: an era past the list reads 1", "Combat",
+     "local entry: any = list[math.min(math.max(math.floor(era), 1), #list)]",
+     "local entry: any = list[math.max(math.floor(era), 1)]"),
+    ("EraCashMult L4W3-7: an era under 1 reads 1", "Combat",
+     "local entry: any = list[math.min(math.max(math.floor(era), 1), #list)]",
+     "local entry: any = list[math.min(math.floor(era), #list)]"),
+    ("EraCashMult L4W3-7: the era rounded, not floored", "Combat",
+     "local entry: any = list[math.min(math.max(math.floor(era), 1), #list)]",
+     "local entry: any = list[math.min(math.max(math.round(era), 1), #list)]"),
+    ("EraCashMult L4W3-7: an infinite era taken", "Combat",
+     "if type(era) ~= \"number\" or era ~= era or era == math.huge or era == -math.huge then",
+     "if type(era) ~= \"number\" or era ~= era then"),
+    ("EraCashMult L4W3-7: an entry under 1 kept", "Combat",
+     "or entry == math.huge or entry < 1 then", "or entry == math.huge or entry <= 0 then"),
+    ("EraCashMult L4W3-7: an infinite entry kept", "Combat",
+     "or entry == math.huge or entry < 1 then", "or entry < 1 then"),
+    # (Dropping a `#list == 0` test was an equivalent mutant: an empty list's entry is list[0], nil, and reads 1;
+    # luau-engineer A then dropped the test.)
+    ("CombatCashMult L4W3-7: the era factor dropped", "Combat",
+     "\t\t* Economy.PerkIncomeMult(shopConfig, state.legacyShop)\n\t\t* Combat.EraCashMult(rewards, era)\n",
+     "\t\t* Economy.PerkIncomeMult(shopConfig, state.legacyShop)\n"),
+    ("CombatCashMult L4W3-7: Founder's dropped", "Combat",
+     "\t\t* Economy.PerkIncomeMult(shopConfig, state.legacyShop)\n\t\t* Combat.EraCashMult(rewards, era)\n",
+     "\t\t* Combat.EraCashMult(rewards, era)\n"),
+    ("CombatCashMult L4W3-7: the era factor of era 1 for everyone", "Combat",
+     "\t\t* Combat.EraCashMult(rewards, era)\n", "\t\t* Combat.EraCashMult(rewards, 1)\n"),
+    # The L4 W3 fix round's F6 and F18: StageFlow.Notes against sim_range.kept_notes / note_problems, and
+    # Validate keeping a level whose note is bad (check_stage_mirror's "F6: a bad note is dropped" cases).
+    # Fix round 2's G3 moved the cap and the rule into MapRules.Note, which StageFlow.Notes asks.
+    ("Notes F6: a 25-byte note kept", "MapRules", "or #note > MapRules.MAX_NOTE_LENGTH then",
+     "or #note > MapRules.MAX_NOTE_LENGTH + 1 then"),
+    ("Notes F6: an empty note kept", "MapRules", "if type(note) ~= \"string\" or note == \"\" or #note",
+     "if type(note) ~= \"string\" or #note"),
+    ("Notes F6: a good note dropped too", "StageFlow", "\t\tif shown ~= nil then\n\t\t\tkept[name] = shown\n",
+     "\t\tif shown ~= nil and false then\n\t\t\tkept[name] = shown\n"),
+    ("Validate F6: a bad note refuses the level again", "StageFlow",
+     "\tfirstClearProblems(level, weapons, starters, problem)\n",
+     "\tfirstClearProblems(level, weapons, starters, problem)\n\tlocal _, droppedNotes = StageFlow.Notes(level)\n"
+     "\tfor _, line in droppedNotes do\n\t\tproblem(line)\n\tend\n"),
 ]
 
 

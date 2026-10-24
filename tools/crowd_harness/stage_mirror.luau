@@ -440,6 +440,38 @@ J.try("grid.mentorBonus", function()
 	end
 	return found
 end)
+-- L4 W3 (L4W3-7): Combat.EraCashMult, then the cash choke point Combat.CombatCashMult. The Python names
+-- NaN and the infinities by strings (DATA's literal cannot hold them); they become numbers here.
+local function special(value: any): any
+	if value == "__nan" then
+		return 0 / 0
+	elseif value == "__inf" then
+		return math.huge
+	elseif value == "__ninf" then
+		return -math.huge
+	elseif type(value) == "table" then
+		local copy = {}
+		for key, item in value do
+			copy[key] = special(item)
+		end
+		return copy
+	end
+	return value
+end
+for _, case in data.eraCashCases do
+	J.try(case.id, function()
+		if case.state ~= nil then
+			return Combat.CombatCashMult(
+				case.state,
+				data.gameConfig,
+				data.legacyShopConfig,
+				special(case.rewards),
+				special(case.era)
+			)
+		end
+		return Combat.EraCashMult(special(case.rewards), special(case.era))
+	end)
+end
 
 -- The L1c second fix round's F1: how far above its floor a root still triggers a camp --------------------
 for _, case in data.ceilingCases do
@@ -492,6 +524,36 @@ for _, case in data.refusalCases do
 			data.proving.weapons,
 			L3.starters
 		)
+	end)
+end
+
+-- The L4 W3 fix round's F6: a copy with a bad note is still playable (Validate), and StageFlow.Notes
+-- keeps the good notes and drops the rest. The kept notes as sorted { difficulty, note } pairs.
+for _, case in data.noteCases do
+	J.try(case.id, function()
+		local level = L.resolve(case.file)
+		if level == nil then
+			return nil
+		end
+		local problems = Flow.Validate(
+			level,
+			L.layout(case.file.layout),
+			data.proving.crowd.kinds,
+			data.ranks,
+			rules,
+			data.proving.crowd.maxAlive,
+			data.proving.weapons,
+			L3.starters
+		)
+		local kept, dropped = Flow.Notes(level)
+		local rows = {}
+		for name, note in kept do
+			table.insert(rows, { name, note })
+		end
+		table.sort(rows, function(a, b)
+			return a[1] < b[1]
+		end)
+		return { refused = #problems > 0, kept = rows, dropped = #dropped }
 	end)
 end
 
@@ -1116,8 +1178,6 @@ function L3.answer(cfg: any, op: string, row: any, families: any): any
 		return if start == nil then "none" else { start, top }
 	elseif op == "tierOf" then
 		return A.TierOf(cfg, combat, row[2])
-	elseif op == "heldTiers" then
-		return A.HeldTiers(cfg, combat, row[2], row[3])
 	elseif op == "multiplier" then
 		return A.Multiplier(cfg, row[1])
 	elseif op == "damageScale" then
@@ -1128,8 +1188,6 @@ function L3.answer(cfg: any, op: string, row: any, families: any): any
 		return A.MaxHp(cfg, { melee = row[1], ranged = row[2] }, { melee = row[3], ranged = row[4] })
 	elseif op == "rangeHp" then
 		return A.RangeHp(cfg)
-	elseif op == "gearPower" then
-		return A.GearPower(cfg, { melee = row[1], ranged = row[2] }, { melee = row[3], ranged = row[4] })
 	elseif op == "bandOf" then
 		return { A.BandOf(cfg, row[1]) }
 	elseif op == "nextTier" then

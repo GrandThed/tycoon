@@ -7294,3 +7294,198 @@ moved to the tightest row, Hard T1/T1 Road3 at 1.4%).
 
 Other gates at 120: `raiderpose.py --check` exit 0, every row PASS; `check_levels.py` PASS; `sim_combat.py --check`
 PASS.
+
+## L4 W3: run cash by era, and the tools after the map's move (2026-10-23)
+
+Contract `docs/prompts/l4-w3-contract.md` (§3, §5, §6, §7; rulings L4W3-7, -9, -14), study
+`docs/prompts/l4-w3-cash-study.md`, report `docs/prompts/l4-w3-reports/designer.md`. Ben picked the study's option
+**(c) at M = 3** (MISSIONS_DESIGN §30): a clear is worth a few minutes of the new era's income right after each
+Advance, and back-to-back runs on Normal or Hard never finish an era sooner than building (not "no way of running beats
+building": a few runs right after an Advance, then building, does; the fix round's F17 below). Run cash is multiplied by the member's own city era at the one cash
+choke point (`Combat.CombatCashMult`, L4W3-7); Timber and Valor are unchanged, chests and first clears pay no cash. No
+number a run plays moved: every level's base pay is as it was. Measured on Python 3.12.10 64-bit (the gates' shebang)
+unless said otherwise.
+
+### L4 W3: what changed, and why
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `Combat.json rewards.eraCashMult` | (none) | **[1, 670, 34000, 1400000]** | Ben's pick, (c) at M = 3: E_k = 3 minutes of era k's income when its first clear lands (4:54 in), held under the ceiling where back-to-back Normal or Hard runs would finish the era before the greedy city (Boomtown 1,021, Metropolis 34,320, Orbital 1,498,000), read to one run's step. Village stays exactly 1, so a new save keeps today's pay. An absent block reads x1 everywhere |
+| `Combat.json levels.departCountdownSeconds` | (none) | **5** | §3: the countdown after the party is in (proposed; Ben judges the length, solo included) |
+| `Combat.json debug.fakeDepartAttribute` / `cashEraAttribute` | (none) | **"DebugFakeDepart" / "DebugCashEra"** | §9: the R and P levers' twin attributes |
+| `Combat.json overdrive` | the C1 Overdrive block | **deleted** | §6 row 4: its last reader (`MissionUnlocked`, `RecommendedPower`) went |
+| `Combat.json debug.provingStartDelay` | 3 | **deleted** | §6 row 9: nothing auto-starts after a run; the proving boot's first start is the depart rule's `waiting` |
+| `Config/Missions/1_Village.json` | the hub's stub | **deleted** (the folder with it) | §6 row 1: the city map reads the level files |
+| `Armory.json power` | `{ hpWeight 0.2, tierWeight 11 }` | **deleted** | §6 row 6: Gear Power's readout went, and with it `Armory.GearPower`, `SavedPower`, `HeldTiers` and `ArmoryConfig.power` (luau-engineer A found no other reader) |
+| `Expeditions.json abilities.upcoming` | (none) | **[Glide, "Float down from any height.", with the Castle]** | §7: what Valor buys next; never sold (`Unlocks.Sellable` reads `list` only) |
+| `Levels/1_ForestRoad.json difficulties.brutal.note` | (none) | **"Castle gear"** | §7: Brutal waits for T5 (Ben's ruling) |
+
+### L4 W3: what a clear is worth (Normal, 131,300 cash before the multiplier; first lap, free player)
+
+| Era | LegacyMult in | x eraCashMult | CombatCashMult | Normal clear | First clear (4:54 in) | Middle of the era | Back to back, Normal / Hard |
+|---|---|---|---|---|---|---|---|
+| Village | x1.00 | 1 | x1.00 | 131.30K | 4.3 min of 508/s, 0.88% of 14.97M owed | 0.92% of 14.28M owed at 20:55 | +28.8% / +22.7% |
+| Boomtown | x1.78 | 670 | x1,192.60 | 156.59M | 3.0 min of 880.7K/s, 1.23% of 12.76B | 1.36% of 11.50B at 52:07 | +8.1% / +3.4% |
+| Metropolis | x3.61 | 34,000 | x122,740 | 16.12B | 2.3 min of 114.6M/s, 0.25% of 6.40T | 0.27% of 5.94T at 2:14:24 | +3.9% / +1.2% |
+| Orbital Colony | x6.29 | 1,400,000 | x8,806,000 | 1.16T | 1.7 min of 11.55B/s, 0.05% of 2,345T | 0.05% of 2,177T at 4:42:35 | +2.3% / +0.8% |
+
+Hard and Brutal pay x2.15 and x4.30 of Normal at every point. "Back to back" is the era's time with Forest Road run
+nonstop from its first second (buying only between runs, the city earning on at `offline.expeditionEfficiency` 1.0,
+runs as long as the mean measured clear: 294 s Normal, 308 s Hard) against the greedy city's (41:50, 1:44:15,
+4:28:49, 9:25:10): positive is slower, so back-to-back runs on Normal or Hard never finish an era sooner than building
+(assertion 24; the course that does finish sooner is in the fix round's F17 table). The honest cost Ben was shown: a quarter into
+each era a clear is worth seconds of income (15 / 12 / 6 / 2.5 s), as Village's always was.
+
+The largest first-lap clear is 4.97T (Orbital Brutal); lap 2's Orbital CombatCashMult is x22,663,113 (LegacyMult
+x16.19 at legacy 1,680). Every clear stays far below 2^53, so whole units are exact.
+
+### L4 W3: the simulators
+
+- `sim_combat.py` mirrors the factor in `combat_cash_mult(state, game, shop, rewards, era)` with `era_cash_mult` for
+  `Combat.EraCashMult` (line for line with luau-engineer A's: a missing block, a list that is not a non-empty table, an
+  era that is not finite or an entry that is not a finite number of at least 1 read 1; an era past the list takes the
+  last, one under 1 the first), **never in `level_pay`**, so assertions 1, 2, 5, 6, 12, 13, 20, 21, 23 and
+  `sim_range.py` read base pay as before (R8 compares two runs at one multiplier).
+- `sim_economy.simulate_era` gained one additive keyword, `pause=None` (called as `pause(t)` once a second before
+  buying; it answers whether to skip buying and the cash that lands). With the default the output is byte-identical
+  to the baseline saved before the edit (`cmp` on `econ_base.txt`, L4W3-14). It is the only `sim_economy.py` edit in W3;
+  M11 owns that file, so whoever merges second resolves it.
+- Assertions (thirteen now; "PASS -- all thirteen assertions hold"):
+  - **4 cash vs era cost** covers every era: a Normal clear x CombatCashMult is at most 25% of what the era still owes
+    at its middle (0.92 / 1.36 / 0.27 / 0.05%), and the first clear after an Advance at most 2% of what it owes when
+    the clear lands (0.88 / 1.23 / 0.25 / 0.05%).
+  - **24 back to back** (new; "24 never faster" until the fix round's F17): back-to-back runs on Normal or Hard,
+    through `pause`, never finish an era sooner than the greedy city (the table's last column). It gates that one
+    course, not every way of running (F17). It also refuses an `expeditionEfficiency` other than 1, which the hook models.
+    Brutal is left out until T5 exists (contract risk 3: back-to-back Brutal would beat the city by 1.8 / 2.9 / 1.3%
+    past Village; re-run it with Brutal when the Castle's gear ships).
+  - **25 a few minutes** (new): `eraCashMult` is one finite number of at least 1 per era of `Config/Eras`, Village's
+    exactly 1; with no block every era pays x1; the first clear is worth 1-6 minutes of its era's income (4.3 / 3.0 /
+    2.3 / 1.7).
+  - **22 split carry**: the fuzz's cash multipliers now include every CombatCashMult the first two laps meet (x1.00 ..
+    x22,663,113) beside the small ones. A double's last place at those sizes is worth more than the old 1e-6 allowance
+    (a correct split drifts 0.0156 from a plain float sum at x2.27e7), so the exact sum is `math.fsum` of the same
+    products and the allowance adds one unit in the last place of each credit's (product + 1).
+  - The spot check is "CombatCashMult at legacy 261, era 3 (the Metropolis entry) -> x3.61 x 34,000 = x122,740".
+  - Row 6: `gear_power`, `LADDER_POWER_T1` and the `power.tierWeight` Problems line went with their Luau; `held_tiers`
+    stays as a helper (`sim_range.py` reads it), no longer a mirror.
+
+Each new assertion was shown to bite on in-memory copies (scratch `bite.py`, the climb stubbed, the forest report
+measured once): option (b) M = 3 fails 4 (Boomtown 52.8% at the middle), 24 and 25; Boomtown at 1,500 fails 4 on the
+2% line alone (2.75%; middle 3.05%); option (a) M = 3 fails 24 only (Metropolis and Orbital Hard 1:53 and 5:38
+faster than the city); Village at 2, Boomtown at 200 (0.88 min), a three-entry list and no block each fail 25; a
+split that drops the cash carry and one that multiplies the carry too each fail 22. The shipped file passes all of
+them.
+
+### L4 W3: the tools after the map's move and the Gear Power deletion
+
+- `run_harness.py`: `SOURCES` gains `MapRules`, `RunLines` and `RunCredit` (B's pure half of a credit); `TESTS` gains
+  `tests_l4w3.luau` (A's) and `tests_l4w3_run.luau` (B's, last); the `unread` fixture reads `Config/Levels` only; B's
+  `L4W3B_LINES` / `L4W3B_ORDER` pins are pasted in (`source.l4w3b`); the U-lever pins read `MapRules.Award`; the
+  twelve Power pins, the `computeGearPower` body and the two count-0 rules that guarded the Power's source
+  (`mainGearOf`, `hubFrozenGear`) went with it. New: the M11 relay's stamp (A's 5.4), six pins on
+  `ExpeditionService.luau` read through the L3 machinery: `handOff` stamps every member in one block that ends at the
+  Studio bridge branch (so a stamp moved under either branch no longer counts), stamps nowhere else, answers ok twice
+  and the file nowhere else, and `Depart` and `Join` both hand off.
+- The harness's map calls follow the move: `L1.Map = load("MapRules")`; `NodeState`, `MapState`, `Award`, `Sites` and
+  `SecretRow` (SecretFlow's `MapRow`) are called on it in `tests_l1`, `tests_l2`, `tests_l2w2`, `tests_l2w3` and
+  `tests_l4w2`. `tests_l1` reads `levels.departCountdownSeconds` among the numbers a run needs and no longer
+  `debug.provingStartDelay`. `tests_l3` loses the GearPower, SavedPower and HeldTiers cases and the Power pins'
+  counts; HeldFamily against `Unlocks.LoadoutOf` over 36 saved shapes stays.
+- `check_stage_mirror.py`: `Combat.EraCashMult` (143 cases) and `Combat.CombatCashMult` (120) against their mirrors;
+  the GearPower and HeldTiers comparisons, SavedPower's unmirrored entry and the tierWeight Problems break went.
+- `mutate.py` (2,224 entries, was 2,129): MapRules and RunLines (and RunCredit, ExpeditionService) are in every mutant
+  root; 17 entries re-pointed to MapRules unchanged in text (their rules moved verbatim); 22 dropped with Gear Power
+  (L4B-6); the three `StageFlow.Award` texts read `MapRules.Award`; the snapshot-exit mutant no longer names the
+  deleted `gearPower` field. New: 9 EraCashMult / CombatCashMult breaks, B's 75 (the depart rule, the credit keys,
+  the pay era, the pinned lines), 30 of A's 36 (MapRules, RunLines, EraCashMult; six were the same breaks as mine) and
+  3 for the stamp. Two breaks are equivalent and not kept: dropping `#list == 0` (A then dropped the test) and dropping
+  `era ~= era` alone (a NaN era indexes `list[NaN]`, nil, which reads 1).
+- `mirror_mutants.py`: 9 L4W3-7 breaks (six EraCashMult, three CombatCashMult).
+
+### L4 W3: the gates
+
+| Gate (Python) | Result |
+|---|---|
+| `sim_combat.py --check` (3.12.10 64-bit) | **PASS, all thirteen assertions** (1, 2, 4, 5, 6, 12, 13, 20-25); 2, 5, 6, 12, 13, 20, 21, 23 read as before, 1 without its Gear Power line; the new 4 / 24 / 25 / 22 lines bite (10 of 10 variants) |
+| `sim_economy.py` (3.12.10 64-bit) | output **byte-identical** to the baseline saved before the hook (`cmp`); `--check` exit 0 |
+| `check_stage_mirror.py` (3.12.10 64-bit) | **PASS**, 99 comparison kinds; EraCashMult 143 and CombatCashMult 120 compared |
+| `mirror_mutants.py` (3.14.7 32-bit, which also runs the mirror) | **147 of 147 caught** (the 9 new ones included) |
+| `run_harness.py` (3.14.7 32-bit driver) | **PASS, 4,994 checks** with every owner's code in |
+| `mutate.py`, filtered (3.14.7 32-bit) | **0 stale of 2,224**; run here: the 17 MapRules entries, the 5 re-aimed ones, my 9, B's 75, A's 30 and the 3 stamp breaks: **139 run, 0 not caught** (after dropping the equivalent NaN break) |
+| `check_levels.py` (3.12.10 64-bit) | **PASS**, every line identical to the branch base `dce50da` run the same way |
+| `sim_range.py --check` (3.12.10 64-bit) | **PASS**, output **byte-identical** to `dce50da`'s (20 min each) |
+
+### L4 W3 fix round: what assertion 24 proves, the note rule's twin, pins on the conditions (2026-10-23)
+
+Rulings F17, F18, F19 and the pins and mutants of `docs/prompts/l4-w3-fix-round.md`; report
+`docs/prompts/l4-w3-fix-reports/designer.md`. No config number moved: every pay, cost and multiplier is as the W3 section
+above has it, and `sim_economy.py`'s output is still byte-identical to `econ_base.txt`.
+
+**F17: assertion 24 gates one course.** Its label is now "24 back to back" and its line reads "back-to-back runs on
+Normal or Hard never finish an era sooner than building". That is what it proves, and what MISSIONS_DESIGN §30 records;
+the click text's "no way of running beats building" is not. Beside it `sim_combat.py --check` now prints, ungated, the
+best "k runs right after an Advance, then build every second" per era (`run_pause(..., stop_after=k)`, the minimum over
+every k up to the back-to-back run's count; it adds about a minute and a half to the check):
+
+| Era (CombatCashMult) | The city | Normal: k runs, then build | Hard: k runs, then build |
+|---|---|---|---|
+| Village (x1.00) | 41:50 | 40:03, **-4.3%** (k = 1) | 39:00, **-6.8%** (k = 1) |
+| Boomtown (x1,192.60) | 1:44:15 | 1:43:23, **-0.8%** (k = 1) | 1:41:44, **-2.4%** (k = 1) |
+| Metropolis (x122,740) | 4:28:49 | 4:29:02, +0.1% (k = 1) | 4:24:59, **-1.4%** (k = 8) |
+| Orbital Colony (x8,806,000) | 9:25:10 | 9:26:58, +0.3% (k = 3) | 9:22:09, **-0.5%** (k = 12) |
+
+These equal the review's probe (`never_faster.py`) to the second. They cannot be gated away: after an Advance the
+wallet is empty, so a run then costs almost no purchases while the city earns on at 100%, and its cash lands as minutes
+of the new era's income; any `eraCashMult` entry of at least 1 keeps that, which is why Village does it at x1, today's
+pay. It is the "few minutes at the start" Ben asked for. Running a few times after an Advance and then building is
+0.5-2.4% faster past Village on Hard (Metropolis and Orbital stay +0.1 / +0.3% on Normal); the back-to-back course stays
+slower everywhere (+0.8% at the least, Orbital Hard). The ranking Ben chose on holds on this course too (the review:
+option (a) at M = 3 gives -2.5% / -2.1% on Metropolis / Orbital Hard against (c)'s -1.4% / -0.5%).
+
+**F18: the note rule has its Python twin.** Validate drops a bad difficulty `note` and keeps the level (F6, luau B's
+`StageFlow.Notes`, one warn a note). `sim_range.note_problems` names every note that rule drops (not a string, "", over
+24 bytes: `NOTE_MAX_BYTES`), and `level_problems` reports them by default, so `check_levels.py` (and `sim_range.py`'s
+and `sim_combat.py`'s own level checks) fail on shipped data that carries one: a scratch copy with the shipped Brutal
+note set to "Castle gear and a long note" (27 bytes) fails `check_levels.py` on exactly that line, naming the note and
+its size. `check_stage_mirror.py` passes `notes=False` wherever it compares Validate's list or verdict, and holds the
+drop itself in its own family, "F6: a bad note is dropped, the level kept": eight copies of the shipped level (as
+shipped, 24 bytes kept, 25 bytes, "", a number, `true`, a table, a kept note beside a dropped one), each accepted on both
+sides with `StageFlow.Notes`' kept notes equal to `sim_range.kept_notes` and as many dropped as `note_problems` names.
+
+**F19.** `tests_l3.luau`'s loop over 36 saved shapes is relabelled "LoadoutOf hands out HeldFamily's slots" (it proves
+the hand-off; `L3.loadoutTests`' explicit pairs hold the rule); the text the §6 deletions left in `sim_range.py`
+(`Config/Missions`, `Armory.HeldTiers`) and the blank line in `check_stage_mirror.py`'s `armory_cases` are gone; the
+`mutate.py` entry "l3fix2 F1: the dungeon's Snapshot returns before it is sent" now returns on `state.combat ~= nil`,
+which every loaded profile meets (the dungeon's `incomePerSecond` is always 0, so the old condition never returned).
+
+**Pins on the conditions, and their mutants.** The review found that the hub's half of the shared map rule, the
+auto-start's conditions and the clients' new logic sat under no gate: 7 of 7 hub probes, 19 of 20 combat probes and
+6 of 6 client probes passed the harness. Each now fails it.
+- `run_harness.py` reads a new family, `L4W3FIX_LINES` / `L4W3FIX_ORDER` (`source.l4w3fix`): each pin is a whole condition
+  with what it guards, or a call with every argument, counted on the code with its comments blanked inside the one
+  function it lives in, plus the counts that must stay 1 or 0 (one open path, no local reader left, no turned badge).
+  The expected counts are in the designer's new `tests_l4w3_pins.luau` (68 checks: the hub's Depart, SendMap, bridge and
+  remote; the city's map, touch hold and report; the dungeon lobby's map and the tally card). luau-engineer B's pins
+  (`luau-b-pins.py`, the auto-start's conditions, the ticket, the hint, P, the note, the secret rows) extend
+  `L4W3B_LINES`, its counts in B's `tests_l4w3_run.luau`; among them **`resetOpened` is re-aimed to "Reset keeps it"** (no
+  line of `WaveService.Reset` names `departOpened`, F1). `SOURCES` gains `TouchHold` and `TallyRules`, `TESTS` the hub and
+  tally files and the pins file (last).
+- `mutate.py`: 2,382 entries (was 2,224), **0 stale**. New: the hub's 10 (the seven probes re-aimed at the fixed text, F9's
+  rows, a guest let through Depart), luau-engineer A's 48 (ReadSummary, both halves of every Read rule, SecretRows,
+  FirstPick), ui-engineer B's 18, ui-engineer A's 23, luau-engineer B's 59 (F1 with the ruling's "Reset clears the
+  opening", F2-F4, F6, F9, s2, s3 and the review's probes 3-20) and B's 2 re-aimed; `FILES` gains every file a new pin
+  reads. Run filtered: every `l4w3` entry (275: W3's own 117 and the round's 158) and the re-aimed snapshot entry,
+  **276 run, 0 not caught** (one mutant re-run after an owner's test file changed under it mid-run).
+
+### L4 W3 fix round: the gates
+
+| Gate (Python) | Result |
+|---|---|
+| `sim_combat.py --check` (3.12.10 64-bit) | **PASS, all thirteen assertions**, F17's five ungated lines printed (7 min 06 s) |
+| `sim_economy.py` (3.12.10 64-bit) | output **byte-identical** to `econ_base.txt`; `--check` exit 0 |
+| `check_levels.py` (3.12.10 64-bit) | **PASS**; a scratch copy with a 27-byte Brutal note **FAILS** on that line |
+| `check_stage_mirror.py` (3.12.10 64-bit) | **PASS**; "F6: a bad note is dropped, the level kept" 8 compared |
+| `mirror_mutants.py` (3.14.7 32-bit) | **151 of 151 caught** (the 4 new F6 mutants included; full run) |
+| `run_harness.py` (3.14.7 32-bit driver) | **PASS, 5,402 checks** with every owner's code in |
+| `mutate.py`, filtered (3.14.7 32-bit) | **0 stale of 2,382**; **276 run, 0 not caught** |

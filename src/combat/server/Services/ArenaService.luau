@@ -7,8 +7,10 @@
 -- host, ticket, roster, admission, the summaries and the registry entry. It opens at the first
 -- arrival and ends when the last human leaves. What is PLAYED is a level, set by WaveService at
 -- each start (SetLevel) and cleared at each return to the lobby. Any admitted party lands in the
--- lobby camp, whatever mission its hub departure named: that id is kept for one thing, the key
--- the hub's ticket is verified against.
+-- lobby camp. L4 W3 (docs/prompts/l4-w3-contract.md §2.3): the hub departure's hint names a level
+-- and a difficulty, the key the hub's ticket is verified against; Pick tells WaveService which and
+-- whether the ticket verified them, and only a verified one arms the auto-start (§3). The cards
+-- carry their lines (RunCredit), and each member's pay era is frozen at the admit (§5).
 --
 -- This file builds nothing of a level and decides nowhere a body goes. LevelService owns the
 -- Instances; WaveService hands in the placer (StageFlow's rule for where a member belongs);
@@ -40,6 +42,7 @@ local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local RunRegistry = require(script.Parent:WaitForChild("RunRegistry"))
 local BarrierGroups = require(script.Parent:WaitForChild("BarrierGroups"))
+local RunCredit = require(script.Parent:WaitForChild("RunCredit"))
 
 -- The range's degrade arena: no Layouts/Arenas/<name> module means one pad and no walls.
 local FALLBACK_FLOOR_SIZE = 110
@@ -83,9 +86,10 @@ local combatConfig: Types.CombatConfig? = nil
 -- The session (ruling 3): open from the first arrival until the last human leaves.
 local session = {
 	open = false,
-	-- The hub departure's hint, kept only as the key its ticket is verified against (ruling 4).
-	missionId = "",
-	overdrive = false,
+	-- The hub departure's hint ("" with none): the key its ticket is verified against (ruling 4),
+	-- and what Pick hands the auto-start.
+	levelId = "",
+	difficulty = "",
 	hostUserId = 0,
 	hostName = "",
 	-- The verified hub ticket; nil = a private session (no code, no expected list, not published).
@@ -190,6 +194,8 @@ export type RunFields = {
 	-- L4 W2 (§3.2): the plan's bodies by kind; sent only with a member's first RunState of a
 	-- floor set, where the cells go (sendRunState). nil = none (the lobby).
 	prewarm: { [string]: number }?,
+	-- L4 W3 (§3): the auto-start as the wire shows it (StageFlow.DepartView); nil = none.
+	depart: Types.RunDepart?,
 }
 local runFields: RunFields = {
 	phase = "lobby",
@@ -465,26 +471,15 @@ end
 
 -- Members and their summaries ----------------------------------------------------------------
 
-local function emptySummary(missionId: string): Types.RunSummary
-	return {
-		missionId = missionId,
-		-- L1 ruling 24: Overdrive is inert; the field stays for the hub's card.
-		overdrive = false,
-		wavesCleared = 0,
-		bestWave = 0,
-		died = false,
-		cash = 0,
-		materials = {},
-		valor = 0,
-		kills = 0,
-		seconds = 0,
-		mentorValor = 0,
-		damageShare = 0,
-	}
+-- L4 W3 (§4.1): a card's title is the level's name for a run and the map's for the session.
+local function emptySummary(title: string): Types.RunSummary
+	return RunCredit.Empty(title)
 end
 
--- The session card's title: the map's name.
-local function sessionName(): string
+-- The session card's title: the map's name, or DEFAULT_SESSION_NAME without Config/Expeditions.
+-- Public for fix round 2's G4: ReturnService's zero card takes the same title, so RunLines.ReadSummary
+-- (1 to 48 bytes) never drops a card this place built.
+function ArenaService.SessionName(): string
 	local expeditions = Catalog.GetExpeditionsConfig()
 	return if expeditions ~= nil then expeditions.name else DEFAULT_SESSION_NAME
 end
@@ -493,7 +488,7 @@ local function runSummaryFor(userId: number): Types.RunSummary
 	local summary = play.runSummaries[userId]
 	if summary == nil then
 		local level = play.level
-		summary = emptySummary(if level ~= nil then level.id else "")
+		summary = emptySummary(if level ~= nil then level.name else "")
 		play.runSummaries[userId] = summary
 	end
 	return summary
@@ -502,7 +497,7 @@ end
 local function sessionSummaryFor(userId: number): Types.RunSummary
 	local summary = play.sessionSummaries[userId]
 	if summary == nil then
-		summary = emptySummary(sessionName())
+		summary = emptySummary(ArenaService.SessionName())
 		play.sessionSummaries[userId] = summary
 	end
 	return summary
@@ -613,6 +608,8 @@ function ArenaService.BuildRunState(
 		maxAlive = runFields.maxAlive,
 		leaderUserId = leader,
 		result = result,
+		-- L4 W3 (§3): only the lobby's (a leave card built in the lobby carries none).
+		depart = if phase == "lobby" then runFields.depart else nil,
 	}
 end
 
@@ -730,10 +727,10 @@ end
 -- A fresh run summary for every member, and no result: a run is starting.
 function ArenaService.ResetSummaries(): ()
 	local level = play.level
-	local id = if level ~= nil then level.id else ""
+	local title = if level ~= nil then level.name else ""
 	play.results = {}
 	for _, userId in partyOrder do
-		play.runSummaries[userId] = emptySummary(id)
+		play.runSummaries[userId] = emptySummary(title)
 	end
 end
 
@@ -842,14 +839,14 @@ local function publishNow(): ()
 		return
 	end
 	local ticket = session.ticket
-	if ticket == nil or session.missionId == "" then
+	if ticket == nil or session.levelId == "" then
 		-- No verified ticket (or no hub departure at all): the session is playable but nobody can
 		-- teleport into it, so it is deliberately not advertised. Said once per session, and said
 		-- as what it is: a session nobody departed for (Studio, a place opened on its own) is
 		-- private by design and no fault; a proving build is always one, so it says nothing.
 		if not session.warnedUnjoinable then
 			session.warnedUnjoinable = true
-			if session.missionId ~= "" then
+			if session.levelId ~= "" then
 				warn(
 					`[ArenaService] the session of host {session.hostUserId} has no verified ticket;`
 						.. ` it will not appear in any run list`
@@ -863,17 +860,15 @@ local function publishNow(): ()
 		end
 		return
 	end
-	local mission = Catalog.GetMissionById(session.missionId)
 	RunRegistry.Publish({
 		hostUserId = session.hostUserId,
 		hostName = session.hostName,
-		-- The hub lists runs by the mission its departure named; here it chooses nothing.
-		missionId = session.missionId,
-		era = if mission ~= nil then mission.era else 0,
+		-- The hub lists runs by the level its departure named; here it chooses nothing.
+		levelId = session.levelId,
+		difficulty = session.difficulty,
 		-- L1 ruling 6: joinable only in the lobby. Any other phase is advertised past
 		-- joinUntilWave, which closes the sort key and makes the hub's own Join answer `over`.
 		wave = if runFields.phase == "lobby" then 0 else config.coop.joinUntilWave + 1,
-		overdrive = session.overdrive,
 		partySize = seatsTaken(nil),
 		accessCode = ticket.accessCode,
 		public = ticket.public,
@@ -935,8 +930,8 @@ local function resetSession(): ()
 	clearRun(session.hostUserId)
 	memberCache = nil
 	session.open = false
-	session.missionId = ""
-	session.overdrive = false
+	session.levelId = ""
+	session.difficulty = ""
 	session.hostUserId = 0
 	session.hostName = ""
 	session.ticket = nil
@@ -1067,13 +1062,14 @@ end
 -- The session ---------------------------------------------------------------------------------
 
 -- Opens the session at the FIRST arrival; everyone after joins the session already here,
--- whatever their teleport data claimed. `missionId` and `overdrive` are the hub departure's
--- hint ("" and false with none) and choose nothing: they are the key the ticket is verified
--- against (ruling 4). Yields: the first call reads the hub's ticket from MemoryStore, and later
--- arrivals wait for that read so admission sees the real ticket.
+-- whatever their teleport data claimed. `levelId` and `difficulty` are the hub departure's hint
+-- ("" with none) and choose nothing by themselves: they are the key the ticket is verified
+-- against (ruling 4), and only a verified pair arms the auto-start (Pick). Yields: the first call
+-- reads the hub's ticket from MemoryStore, and later arrivals wait for that read so admission
+-- sees the real ticket.
 function ArenaService.OpenSession(
-	missionId: string,
-	overdrive: boolean,
+	levelId: string,
+	difficulty: string,
 	hostUserId: number,
 	arrivalName: string
 ): ()
@@ -1085,8 +1081,8 @@ function ArenaService.OpenSession(
 		return
 	end
 	session.open = true
-	session.missionId = missionId
-	session.overdrive = overdrive
+	session.levelId = levelId
+	session.difficulty = difficulty
 	session.hostUserId = hostUserId
 	-- Replaced by the host's own name when the host arrives; until then (or if the host never
 	-- does) the session is listed under whoever opened it.
@@ -1097,7 +1093,7 @@ function ArenaService.OpenSession(
 
 	session.ticketPending = true
 	-- Resolved once per session: the ticket is fixed for the life of the reserved server.
-	local ticket = RunRegistry.ResolveTicket(hostUserId, missionId, overdrive)
+	local ticket = RunRegistry.ResolveTicket(hostUserId, levelId, difficulty)
 	session.ticketPending = false
 	-- A reset cannot land during the read (ResetIfEmpty waits on ticketPending), so the session
 	-- this ticket belongs to is still the current one.
@@ -1163,6 +1159,9 @@ function ArenaService.Admit(player: Player): ()
 			waiting = false,
 			-- The hub refreshed incomeAtSave at departure, so this is the city's current rate.
 			incomeRate = if state ~= nil then state.incomeAtSave else 0,
+			-- L4W3-7: the city era this visit's run cash is paid at, frozen here (nothing in this
+			-- place changes a profile's era; Advance and Rebirth are the hub's).
+			cashEra = RunCredit.EraOf(state),
 		}
 		member = newMember
 		party[player.UserId] = newMember
@@ -1170,8 +1169,8 @@ function ArenaService.Admit(player: Player): ()
 		table.insert(partyOrder, player.UserId)
 		memberCache = nil
 		local level = play.level
-		play.runSummaries[player.UserId] = emptySummary(if level ~= nil then level.id else "")
-		play.sessionSummaries[player.UserId] = emptySummary(sessionName())
+		play.runSummaries[player.UserId] = emptySummary(if level ~= nil then level.name else "")
+		play.sessionSummaries[player.UserId] = emptySummary(ArenaService.SessionName())
 		play.admittedAt[player.UserId] = os.clock()
 		characterConnections[player] = {}
 		table.insert(
@@ -1207,24 +1206,54 @@ function ArenaService.Admit(player: Player): ()
 	announce(player)
 end
 
--- The departing party is in: every userId of the ticket's expected list has been admitted at
--- least once, or coop.lobbyWaitSeconds have passed since the first arrival. (C2's start rule,
--- without the ready flags.) False while the ticket is still being read.
-function ArenaService.PartyIn(): boolean
-	local config = combatConfig
-	if not session.open or config == nil or session.ticketPending then
+-- L4 W3 (§2.3): every userId of the ticket's expected list has been admitted at least once (true
+-- with no ticket: nobody else is expected). False before the session opens and while the ticket is
+-- still being read.
+function ArenaService.ExpectedIn(): boolean
+	if not session.open or session.ticketPending then
 		return false
 	end
 	local ticket = session.ticket
 	if ticket ~= nil then
 		for _, userId in ticket.expected do
 			if not session.everAdmitted[userId] then
-				return session.firstArrivalAt > 0
-					and os.clock() - session.firstArrivalAt >= config.coop.lobbyWaitSeconds
+				return false
 			end
 		end
 	end
 	return true
+end
+
+-- The departing party is in: every expected member has been admitted at least once, or
+-- coop.lobbyWaitSeconds have passed since the first arrival. (C2's start rule, without the ready
+-- flags.) False while the ticket is still being read.
+function ArenaService.PartyIn(): boolean
+	local config = combatConfig
+	if not session.open or config == nil or session.ticketPending then
+		return false
+	end
+	if ArenaService.ExpectedIn() then
+		return true
+	end
+	return session.firstArrivalAt > 0
+		and os.clock() - session.firstArrivalAt >= config.coop.lobbyWaitSeconds
+end
+
+-- L4 W3 (§2.3): the hub departure's level and difficulty ("" with no hint) and whether the hub's
+-- ticket verified them. Nothing is verified without a level.
+function ArenaService.Pick(): (string, string, boolean)
+	local verified = session.ticket ~= nil and session.levelId ~= ""
+	return session.levelId, session.difficulty, verified
+end
+
+-- L4 W3 (§3): the session's host is in the roster now.
+function ArenaService.HostIn(): boolean
+	return session.hostUserId ~= 0 and party[session.hostUserId] ~= nil
+end
+
+-- os.clock() of the session's first admit (0 = none yet): the auto-start's wait counts from it.
+function ArenaService.FirstArrivalAt(): number
+	return session.firstArrivalAt
 end
 
 function ArenaService.IsAdmitted(player: Player): boolean
@@ -1284,9 +1313,11 @@ end
 -- Credits -------------------------------------------------------------------------------------
 
 -- WaveService credits each member's share of every kill here (L1b-15), so both cards and the
--- profile agree.
+-- profile agree. L4 W3 (§4.1): `key` names the credit's source, and both cards' lines merge it
+-- (RunCredit.Credit).
 function ArenaService.CreditSummary(
 	userId: number,
+	key: Types.RunLineKey,
 	cash: number,
 	material: string,
 	materials: number,
@@ -1294,20 +1325,15 @@ function ArenaService.CreditSummary(
 	kills: number
 ): ()
 	for _, summary in { runSummaryFor(userId), sessionSummaryFor(userId) } do
-		summary.cash += cash
-		summary.valor += valor
-		summary.kills += kills
-		if materials > 0 and material ~= "" then
-			summary.materials[material] = (summary.materials[material] or 0) + materials
-		end
+		RunCredit.Credit(summary, key, cash, material, materials, valor, kills)
 	end
 end
 
--- Mentor Valor is part of `valor` AND shown on its own line, so both move together.
+-- Mentor Valor is part of `valor` AND shown on its own line, so the three move together
+-- (RunCredit.Mentor).
 function ArenaService.CreditMentor(userId: number, valor: number): ()
 	for _, summary in { runSummaryFor(userId), sessionSummaryFor(userId) } do
-		summary.valor += valor
-		summary.mentorValor += valor
+		RunCredit.Mentor(summary, valor)
 	end
 end
 

@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Catalog = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Catalog"))
+local MapRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapRules"))
 local Unlocks = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Unlocks"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
@@ -18,9 +19,6 @@ local isStudio = RunService:IsStudio()
 -- Used when Combat.json is absent: the Expeditions feature is hidden then, so RequestRunList is
 -- never sent, and its bucket only needs a legal rate.
 local DEFAULT_RUN_LIST_CALLS_PER_SECOND = 1
--- A mission id is a short config key ("village"); anything longer is a malformed payload, not a
--- lookup worth making.
-local MAX_MISSION_ID_LENGTH = 64
 -- RequestDebug (C1, Studio only): a lever name is a short identifier and its value is a number,
 -- a flag or a tiny string like "melee=3"; anything larger is a malformed payload. The handler
 -- ignores the whole intent outside Studio, so these bounds only keep the validator honest.
@@ -170,15 +168,23 @@ local HubRemotes: RemoteService.RemoteDefs = {
 			end,
 		},
 		-- Departing reserves a server and teleports, so it shares the prompt budget rather than
-		-- the gameplay one. C2 adds `public` (the "Open to public" toggle).
+		-- the gameplay one. C2 adds `public` (the "Open to public" toggle). L4 W3: a level id and
+		-- a difficulty from the map, capped where the dungeon's start caps them (MapRules).
 		RequestExpedition = {
 			bucket = "prompt",
 			validate = function(args: RemoteService.PackedArgs): boolean
 				return args.n == 3
-					and typeof(args[1]) == "string"
-					and #args[1] <= MAX_MISSION_ID_LENGTH
-					and typeof(args[2]) == "boolean"
+					and isShortName(args[1], MapRules.MAX_LEVEL_ID_LENGTH)
+					and isShortName(args[2], MapRules.MAX_DIFFICULTY_LENGTH)
 					and typeof(args[3]) == "boolean"
+			end,
+		},
+		-- L4 W3 (L4W3-2): the hub's map, answered on MapState to the asker only. No yield behind
+		-- it, so the gameplay bucket.
+		RequestMapState = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 0
 			end,
 		},
 		RequestJoinRun = {
@@ -231,8 +237,9 @@ local HubRemotes: RemoteService.RemoteDefs = {
 			end,
 		},
 	},
-	-- FxEvent (M3), RunList (C0), ExpeditionSummary (C1), PartyState and PartyInvite (C2) are
-	-- server → client only: presentation events and query answers, never on bulk restore.
+	-- FxEvent (M3), RunList (C0), ExpeditionSummary (C1), PartyState and PartyInvite (C2) and
+	-- MapState (L4 W3) are server → client only: presentation events and query answers, never on
+	-- bulk restore.
 	events = {
 		"StateChanged",
 		"ActionResult",
@@ -241,6 +248,7 @@ local HubRemotes: RemoteService.RemoteDefs = {
 		"ExpeditionSummary",
 		"PartyState",
 		"PartyInvite",
+		"MapState",
 	},
 	rates = {
 		calls = remotesConfig.callsPerSecond,

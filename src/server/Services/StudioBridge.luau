@@ -10,7 +10,7 @@
 -- The one exception is ParseReturnData, a pure validator the hub also runs on live teleport data.
 --
 -- The record is a HINT, never an entitlement, exactly like teleport data: the combat place
--- re-checks the mission against the loaded profile, and every field is type-checked on read.
+-- arms its start only from a verified ticket, and every field is type-checked on read.
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -20,6 +20,8 @@ local RunService = game:GetService("RunService")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local MapRules = require(sharedFolder:WaitForChild("MapRules"))
+local RunLines = require(sharedFolder:WaitForChild("RunLines"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 
 -- Infrastructure retry policy, like DataService's: three attempts, 1 s / 2 s / 4 s backoff.
@@ -32,9 +34,10 @@ local KEY_PREFIX = "p_"
 -- that the player does not wonder whether the button worked.
 local KICK_DELAY_SECONDS = 1
 
+-- L4 W3 (L4W3-3): the level and difficulty departed into, as teleport data carries them.
 export type TeleportHint = {
-	missionId: string,
-	overdrive: boolean,
+	levelId: string,
+	difficulty: string,
 	hostUserId: number,
 	accessCode: string?,
 }
@@ -174,56 +177,6 @@ local function readRecord(player: Player): any?
 	return record
 end
 
-local function numberOr(value: any, fallback: number): number
-	if typeof(value) == "number" and value == value then
-		return value
-	end
-	return fallback
-end
-
--- Validated exactly like a live TeleportData summary: the transport differs, the trust does not.
--- The fields a newer combat build adds (bestWave/died at C1, mentorValor/damageShare at C2) are
--- read leniently, so an older place build only costs the line it does not send.
-local function readSummary(value: any): Types.RunSummary?
-	if typeof(value) ~= "table" then
-		return nil
-	end
-	local raw = value :: any
-	if
-		typeof(raw.missionId) ~= "string"
-		or typeof(raw.overdrive) ~= "boolean"
-		or typeof(raw.wavesCleared) ~= "number"
-		or typeof(raw.cash) ~= "number"
-		or typeof(raw.valor) ~= "number"
-		or typeof(raw.kills) ~= "number"
-		or typeof(raw.seconds) ~= "number"
-		or typeof(raw.materials) ~= "table"
-	then
-		return nil
-	end
-	local materials: { [string]: number } = {}
-	for material, amount in raw.materials :: { [string]: any } do
-		if typeof(material) == "string" and typeof(amount) == "number" then
-			materials[material] = amount
-		end
-	end
-	local summary: Types.RunSummary = {
-		missionId = raw.missionId,
-		overdrive = raw.overdrive,
-		wavesCleared = raw.wavesCleared,
-		cash = raw.cash,
-		materials = materials,
-		valor = raw.valor,
-		kills = raw.kills,
-		seconds = raw.seconds,
-		bestWave = numberOr(raw.bestWave, 0),
-		died = raw.died == true,
-		mentorValor = numberOr(raw.mentorValor, 0),
-		damageShare = numberOr(raw.damageShare, 0),
-	}
-	return summary
-end
-
 local function maxParty(): number
 	local combatConfig = Catalog.GetCombatConfig()
 	return if combatConfig ~= nil then combatConfig.coop.maxParty else 1
@@ -248,7 +201,10 @@ local function readPartyHint(value: any): Types.PartyHint?
 end
 
 -- A summary for a player the ReturnData names is copied only when its key is a userId string;
--- anything past a full party's worth of keys is ignored rather than walked.
+-- anything past a full party's worth of keys is ignored rather than walked. Each card is read by
+-- RunLines.ReadSummary (the fix round's F7), the one rule the hub client reads it by too, so live
+-- TeleportData and the Studio record are trusted alike: a forged or oversized card is dropped
+-- whole, a bad line costs that row only, and a card without a `title` is an older shape (none).
 local function readSummaries(value: any): { [string]: Types.RunSummary }?
 	if typeof(value) ~= "table" then
 		return nil
@@ -260,7 +216,7 @@ local function readSummaries(value: any): { [string]: Types.RunSummary }?
 			break
 		end
 		if typeof(key) == "string" and isLiveUserId(tonumber(key)) then
-			local summary = readSummary(entry)
+			local summary = RunLines.ReadSummary(entry)
 			if summary ~= nil then
 				summaries[key] = summary
 				count += 1
@@ -311,8 +267,8 @@ function StudioBridge.WriteDeparture(player: Player, hint: TeleportHint, kind: H
 	end
 	return writeRecord(player, `departure SetAsync {player.UserId}`, {
 		kind = kind,
-		missionId = hint.missionId,
-		overdrive = hint.overdrive,
+		levelId = hint.levelId,
+		difficulty = hint.difficulty,
 		hostUserId = hint.hostUserId,
 		accessCode = hint.accessCode,
 		stamp = os.time(),
@@ -344,16 +300,19 @@ function StudioBridge.ReadArrival(player: Player): TeleportHint?
 	end
 	removeRecord(player)
 	if
-		typeof(record.missionId) ~= "string"
-		or record.missionId == ""
+		typeof(record.levelId) ~= "string"
+		or record.levelId == ""
+		or #record.levelId > MapRules.MAX_LEVEL_ID_LENGTH
+		or typeof(record.difficulty) ~= "string"
+		or #record.difficulty > MapRules.MAX_DIFFICULTY_LENGTH
 		or not isUserId(record.hostUserId)
 	then
 		warn(`[StudioBridge] malformed handoff for {player.Name}; falling back to the attributes`)
 		return nil
 	end
 	return {
-		missionId = record.missionId,
-		overdrive = record.overdrive == true,
+		levelId = record.levelId,
+		difficulty = record.difficulty,
 		hostUserId = record.hostUserId,
 		accessCode = if typeof(record.accessCode) == "string" then record.accessCode else nil,
 	}

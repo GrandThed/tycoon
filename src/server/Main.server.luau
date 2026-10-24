@@ -244,16 +244,21 @@ end)
 -- Main's own release/rejoin sequence; all three yield, so each gets its own thread.
 RemoteService.SetHandler(
 	"RequestExpedition",
-	function(player: Player, missionId: any, overdrive: any, public: any)
+	function(player: Player, levelId: any, difficulty: any, public: any)
 		task.spawn(
 			ExpeditionService.Depart,
 			player,
-			missionId :: string,
-			overdrive :: boolean,
+			levelId :: string,
+			difficulty :: string,
 			public :: boolean
 		)
 	end
 )
+
+-- L4 W3 (L4W3-2): the hub's map, pulled by its client.
+RemoteService.SetHandler("RequestMapState", function(player: Player)
+	task.spawn(ExpeditionService.SendMap, player)
+end)
 
 RemoteService.SetHandler("RequestJoinRun", function(player: Player, hostUserId: any)
 	task.spawn(ExpeditionService.Join, player, hostUserId :: number)
