@@ -6147,8 +6147,8 @@ Also: the Frame / Draw numbers, and anything wrong, by step number, PC or phone.
 - **Part A about 20 minutes, phone 5, part B about 10. Keys only, no panel.** No sound.
 
 **Status 2026-10-23:** built and reviewed (four slices 0 Critical, 1 Major, 12 Minor; then a check
-of the fixes 0 / 0 / 4; all fixed); QA green 2026-10-24 (every mutation caught). **Waiting on the
-lead's merge word.**
+of the fixes 0 / 0 / 4; all fixed); QA green 2026-10-24 (every mutation caught). **Merged to `main` 2026-10-24
+(`be009da`); run "Build all" and open the file below.**
 
 Setup: `docs/MANUAL_STEPS.md` "L4 W3".
 

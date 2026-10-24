@@ -2849,7 +2849,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 | L1 | Forest Road in grey: lobby camp, map, three camp parts, stand-in boss, difficulties | Merged 2026-10-14; L1b and L1c after it; closed 2026-10-16 on Ben's word |
 | L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | W1–W3 merged (2026-10-17 → 19); closed 2026-10-20 on Ben's word, with L1c |
 | L3 | The Armory: per-weapon tiers, the profile shape, weapon models | **Closed 2026-10-21 on Ben's word ("everything feels good, lets close it"). W1 merged 448987e, W2 merged a454932, harvest 9524edf.** See "L3" below |
-| L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | **In progress.** W1 and W1b done; W2 merged and signed off 2026-10-23; W3 built, reviewed, QA green, merging to `main` 2026-10-24; W4 not started. See "L4" below |
+| L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | **In progress.** W1 and W1b done; W2 merged and signed off 2026-10-23; W3 merged to `main` 2026-10-24 (`be009da`, place files `5637be7`), waiting on Ben's look; W4 not started. See "L4" below |
 | L5 | Friends: parties and revive in a level | Not started |
 
 **Where it is (2026-10-13):**
@@ -4679,7 +4679,7 @@ screen and rewards set against the city; then the first publish of both places.
 | W1 | The forest on paper: the lookout moved, the forest generator and renders, raider and Chief prototypes | **Done 2026-10-21.** Ben's picture gate passed the same day (§27) |
 | W1b | The old mission code out; a dash proven by the server's ring (the dash hold); RunState cells once | **Done 2026-10-22.** Three fix rounds; merged into `l4-real-forest` (`37ccfe4`) |
 | W2 | The forest, the raiders, the Camp Chief and the Castle Key in the game; one upload, one harvest paste | **Done 2026-10-23.** Merged (`33315f2`, place files `106165a`); signed off the same day (§29) |
-| W3 | The city map departs into the level; the end screen; rewards by era | **Built and reviewed 2026-10-23** on `l4-w3` (`b38f7b8`): two fix rounds; QA green 2026-10-24, then the merge and Ben's look |
+| W3 | The city map departs into the level; the end screen; rewards by era | **Built and reviewed 2026-10-23** on `l4-w3` (`b38f7b8`): two fix rounds; QA green; **merged to `main` 2026-10-24** (`be009da`, place files `5637be7`); waiting on Ben's look |
 | W4 | Publish readiness: the Theme round, phones, the checklist, both places published together | Not started |
 
 ### Wave 1 — the forest on paper and the lookout (2026-10-21)
@@ -5049,7 +5049,7 @@ fix round `3503134`; fix-diff and G rulings `d72cb2f`; fix round 2 `b38f7b8`. Pl
 - Every L3, L2, L1c and L1b carried item above not named here stands.
 
 **Next:**
-1. The lead merges `l4-w3` to `main` and rebuilds the six place files (QA green).
+1. Done: merged to `main` (`be009da`), six place files rebuilt (`5637be7`).
 2. **Ben's look:** `docs/PLAYTEST.md` "L4 W3 — the city map, the end card, run cash by era"; setup
    `docs/MANUAL_STEPS.md` "L4 W3".
 3. Four click questions (the countdown, the card's pace, "Party & runs", anything wrong).
@@ -5081,7 +5081,7 @@ fix round `3503134`; fix-diff and G rulings `d72cb2f`; fix round 2 `b38f7b8`. Pl
 - [x] Fix-diff review 0 / 0 / 4 + 2 (`d72cb2f`)
 - [x] Fix round 2, G1–G5 (`b38f7b8`)
 - [x] QA on `b38f7b8`: every gate green (harness 5,466; sharded `mutate_shards` 2,405 run / 0 not caught; `check_levels_mutants` 283 ok; mirror mutants 151 / 151; R8 PASS on `3503134`, tightest x0.977, fix round 2 changed only a `sim_range` message; `sim_economy` output byte-identical; selene's one warning is `LegacyPanel`'s, on `main` too, fixed on `m11-port` 4350216)
-- [ ] Merged to `main`, six place files rebuilt
+- [x] Merged to `main` (`be009da`), six place files rebuilt (`5637be7`)
 - [ ] L4 W3 playtest (Ben)
 - [ ] W4 and the publish
 
