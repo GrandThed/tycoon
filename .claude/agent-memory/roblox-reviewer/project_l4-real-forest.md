@@ -1,6 +1,6 @@
 ---
 name: l4-real-forest-review
-description: L4 reviews (the real forest; W2 fix diff 0C/0M/3m/4s: predicates under pinned calls and K3's client half ungated, a 15-degree sector gate hides a 10-degree hole, relative-ulp guard misses 0-vs-tiny; W2 slice 1 server 0C/0M/3m/3s: Transparency-hidden Parts let Roblox's default camera through in the 10 s summary, Accept's malformed guards untested and no pcall at dressOf, dress conditions unpinned = slice 4 m2; W2 slice 2 scenery client 0C/0M/4m/4s: undo wraps one step, client-fail keeps invisible walls, lookup before game.Loaded; W1b deletes the C1 mission code, proves dashes by the ring, sends RunState cells once per floor set) - W1b slice 2 run + client 2026-10-21 0C/0M/2m/3s (client half of a send-once protocol and the send branch unpinned, 7 probes survive; one-shot cells applied after the throw-prone new-level branch); CombatUIController has no harness pin at all; old CombatArena group really was registered; W1b slice 1 server + shared 0C/0M/4m/2s (dash proof's verdict condition unpinned; proof in WeaponService's Heartbeat vs decision in VitalsService's: order unspecified; test (a) green by phase luck; a 3.4-stud root flick proves a dash; timing-study recipe with real pure modules under luau.exe); W1b fix diff 2026-10-22 0C/1M/2m/3s (held hits released together skip the knock rules 6/18: an unproven wall dash takes 2 hits where no dash takes 1; folding Vitals' Heartbeat into WeaponService's loses the implicit connect pin and couples errors); W1b fix2 diff 2026-10-22 0C/0M/3m/2s (M1 fixed; sim G1 mirror's one gate line blind to 7 of 8 moment mutants though a 600-course Luau/sim cross-check agrees; boss-room clear drops held blows; stepFailed unpinned; walks not throw-safe)
+description: L4 reviews (the real forest; W3 slice 2 combat server 0C/1M/4m/4s: Reset re-opens the auto-start, so a failed trip home (rejoin re-reads GetJoinData, 2 h ticket) auto-starts a solo level after a run, and the resetOpened pin enforces it; run-list arrival cancels the start at zero; party raiders count != kills; P's era multiplies real saves; W3 slice 3 clients 0C/0M/3m/5s: hub modals under the TouchGui jump button at DisplayOrder 0, a star derived from firstClear lines misses Normal, client logic ungated; W2 fix diff 0C/0M/3m/4s: predicates under pinned calls and K3's client half ungated, a 15-degree sector gate hides a 10-degree hole, relative-ulp guard misses 0-vs-tiny; W2 slice 1 server 0C/0M/3m/3s: Transparency-hidden Parts let Roblox's default camera through in the 10 s summary, Accept's malformed guards untested and no pcall at dressOf, dress conditions unpinned = slice 4 m2; W2 slice 2 scenery client 0C/0M/4m/4s: undo wraps one step, client-fail keeps invisible walls, lookup before game.Loaded; W1b deletes the C1 mission code, proves dashes by the ring, sends RunState cells once per floor set) - W1b slice 2 run + client 2026-10-21 0C/0M/2m/3s (client half of a send-once protocol and the send branch unpinned, 7 probes survive; one-shot cells applied after the throw-prone new-level branch); CombatUIController has no harness pin at all; old CombatArena group really was registered; W1b slice 1 server + shared 0C/0M/4m/2s (dash proof's verdict condition unpinned; proof in WeaponService's Heartbeat vs decision in VitalsService's: order unspecified; test (a) green by phase luck; a 3.4-stud root flick proves a dash; timing-study recipe with real pure modules under luau.exe); W1b fix diff 2026-10-22 0C/1M/2m/3s (held hits released together skip the knock rules 6/18: an unproven wall dash takes 2 hits where no dash takes 1; folding Vitals' Heartbeat into WeaponService's loses the implicit connect pin and couples errors); W1b fix2 diff 2026-10-22 0C/0M/3m/2s (M1 fixed; sim G1 mirror's one gate line blind to 7 of 8 moment mutants though a 600-course Luau/sim cross-check agrees; boss-room clear drops held blows; stepFailed unpinned; walks not throw-safe)
 metadata:
   type: project
 ---
@@ -16,6 +16,182 @@ build on the send-once RunState floors and the dash proof.
 
 **How to apply:** for any "send once, keep on the client" change, run the probes below on both ends before trusting
 the pins.
+
+## W3 fix diff (2026-10-23, 36b54c0..3503134, rulings F1-F19): 0 Critical, 0 Major, 4 Minor, 2 Suggestions
+
+Findings: `docs/prompts/l4-w3-review/5-fix-diff.md`. Baseline `HARNESS: PASS (5,402 checks)` in 70 s on a `git archive`
+copy; `mutate.py` 2,382 entries, 0 stale.
+
+**Patterns (recheck these):**
+- **A "once per server" flag also fires on a session that ended before anything started.** F1 (`departOpened` kept
+  across Reset) closes M1. But a party whose first-admitted member drops while the depart is `waiting` resets the
+  session, and the departing host then lands with no auto-start AND no pick: the map opens on FirstPick, not the chosen
+  difficulty. At the base commit the host got `picked` after 30 s. For any "spent" flag, walk the Reset-while-waiting
+  case, not only Reset-after-done.
+- **New code written inside a "pin the conditions" round still arrives with unpinned inputs.** These all passed:
+  - F2's gather: `userId = member.userId` and the `GetMembers()` loop in `lateAtZero`;
+  - F9's dungeon call-site argument `sitesOf,` (the hub's twin call is pinned whole);
+  - two lines of the client's pick branch: `st.mapSeeded = true` and `armoryScreen.Close()`.
+
+  Probe every new helper's field lines and every argument line of a re-pointed call.
+- **A "drop" rule that exists only as a server warning while the client applies its own rule.** F6's note drop on the
+  server is a warn that says "the map shows no note". `MapScreen` reads the level file itself and keeps any non-empty
+  string at any length. Check the client reader whenever a server "drops" display data.
+- **A strict reader adopted by every host must pass every card the server builds, degraded fallbacks included.**
+  ReturnService's zero card takes `title = ""` when `Config/Expeditions` is missing, and `RunLines.ReadSummary` (1-48
+  bytes) drops it. ArenaService's session card has a `DEFAULT_SESSION_NAME` fallback; ReturnService does not.
+
+**Verified, safe to reuse:**
+- `TallyRules.Depart` matches the old CombatUIController branch for branch. `mapScreen` is built before the RunState
+  listener connects.
+- TouchHold and ArmoryScreen's R9 toggle are kept apart by close order (the map's open closes the Armory first; the
+  Armory's open goes only through `togglePanel`, which closes the map; the report closes both). The hub passes
+  `padToggle = false`.
+- **`Montserrat-Bold.ttf` (GothamBold's face) has U+25C6 ◆.** Recipe: scratch `l4-w3-rev5/py/cmap.py <fontsDir>`
+  parses cmap formats 4 and 12 with no fontTools.
+- ProfileStore 1.0.3 sets `ProfileStore.DataStoreState` together with its local (`:2101-2109`), so
+  `DataService.IsMockMode()` is exact once settled.
+- `Format.Cash` and `Format.Duration` terminate on any finite number (the suffix letters stay under byte 255 up to
+  1e308).
+
+**Recipes (scratch `l4-w3-rev5/py/`):**
+- `probe.py <tree> <luau> <probes.json>` runs the harness per source edit, about 70 s a probe at 5,402 checks.
+- `probe_print.py` takes the same JSON. It inserts a `L4W3R.group(...)` that prints `PROBE` lines into a tests file
+  before an anchor comment, which gives a behaviour probe on the real pure modules.
+- `stale.py <tree>`: the `mutate.py` stale check without a run.
+- The static gates go on a second archive (`tree2`): copy `rokit.toml` in for stylua and selene, and `luau-compile` and
+  `luau.exe` into `tools/bin`.
+
+## W3 slice 1, the hub server and shared code (2026-10-23, `l4-w3` 93eb8e9 in `tycoon-p5`): 0 Critical, 0 Major, 3 Minor, 2 Suggestions
+
+The findings are in `docs/prompts/l4-w3-review/1-hub.md`. The brief is `docs/prompts/l4-w3-review.md`, which defines four
+slices. The contract is `l4-w3-contract.md`, and its §14 (L4W3-12..18) is the lead's.
+
+**Patterns (recheck these):**
+- **A rule moved into one pure shared module is gated only on the module side.**
+  - L4W3-1 put `MapRules.Startable` behind both the hub's Depart and the dungeon's start.
+  - `tests_l4w3` and `mutate.py` cover the pure rule.
+  - The hub call site and its arguments are unpinned: the leader's stars, `file.difficulties`, and the
+    `verdict ~= "ok"` branch. So are SendMap's leader rule, StudioBridge `readSummary`'s `RunLines.Read`, the
+    `ReadArrival` caps and the HubRemotes validators.
+  - All 7 probes PASS 4,994.
+  - Ask for pins on the call's arguments at each call site, not only on the rule.
+- **"Every bad field drops its line" with one bad value per field proves half the rules.**
+  - Each field has two rules: finite and >= 0, or string and <= 48 bytes.
+  - One bad value tests only one of them, so 6 of 10 halves survive.
+- **Validate the whole teleport-data record, not only the new part.**
+  - `readSummary` routes `lines` through RunLines.Read.
+  - `title` has no length cap, and the totals are only typeof-number (NaN, inf and negative values pass). The client's
+    `readRunSummary` is the same.
+  - The effect is self-only display, so the finding is Minor.
+- **A "shared" map path is still half copied.** The hub's SendMap repeats WaveService's `sitesOf` / `secretRows` line
+  for line.
+
+**Verified, safe to reuse:**
+- MapRules matches the old code verbatim: StageFlow `:2863-2982` and SecretFlow `:62-145`, `:345-360` at dce50da. To
+  check, normalise the names and diff.
+- On the shipped data, hub ok ⇔ dungeon ok. The dungeon adds `resolveLevel` (Validate, `WeaponService.IsActive`) and
+  `busy` states, which are config or runtime faults that degrade to `picked`.
+- `Unlocks.StarsOf` creates `combat.stars = {}` when it is missing, also on a hub read of the leader's profile. This is
+  harmless.
+- `stampDeparture` runs inside `handOff` before the bridge branch, and Depart and Join both go through `handOff`. The
+  pins `stampThenBridge` / `stampOnce` / `okInHandOff` / `departHandsOff` cover it, with 3 mutants.
+- `Combat.EraCashMult`:
+  - an empty list indexes 0 and returns 1;
+  - an era under 1 takes the first entry, one past the list the last;
+  - a hole in the JSON list makes `#list` ambiguous, but the result still degrades and never errors.
+- Baseline at 93eb8e9: `HARNESS: PASS (4,994 checks)` in about 25 s on a `git archive` copy.
+  `check_compile` covers 187 files.
+
+**Recipe:**
+- `scratchpad/l4-w3-rev1/scripts/probe.py` works like W1b's.
+- `git archive` also brings in `Packages/` and `ServerPackages/` stubs. `rojo sourcemap` fails in that copy, so write the
+  sourcemaps from the worktree with `-o <scratch>` and run luau-lsp from the worktree.
+- For `check_compile` in a copy, copy `luau-compile.exe` from the main checkout's `tools/bin`.
+
+## W3 slice 2, the combat server (2026-10-23, 93eb8e9): 0 Critical, 1 Major, 4 Minor, 4 Suggestions
+
+Findings: `docs/prompts/l4-w3-review/2-combat.md`. The code under review: the auto-start (StageFlow.Depart*, WaveService
+tickDepart/openDepart, ArenaService Pick/ExpectedIn/HostIn), RunCredit (card lines, pay era), the R and P levers, and the
+MapRules re-pointing.
+
+**Patterns:**
+- **"Once per session" on a reserved server is not "once per departure".**
+  - Reset clears `departOpened`. The last member's Return then fails, and `abortReturn` → `rejoin` → `runJoinSequence`
+    re-reads `GetJoinData()`.
+  - The hub's `codes` ticket lives 2 h, and `RunRegistry.Clear` removes only `runs`. So the fresh session verifies again
+    and the solo level auto-starts after a run (M1).
+  - The pin `resetOpened` (count 1) enforces the bug.
+  - Studio cannot show it: the handoff record is consumed at the first arrival.
+  - For any per-session state, walk resetSession's "a rejoin after a failed trip home opens a fresh lobby".
+- **A rule that excludes someone from a hold must exclude them at the action too.** Deviation 3 left non-expected members
+  out of the countdown's body check, but `startLevel` still checks `AllHaveBodies(members)` at zero, so they cancel the
+  start instead.
+- **"One per credit" is not "kills" in a party.** The raiders count is the bodies a member damaged, while the city card's
+  subtitle prints `summary.kills`.
+- **A lever that "saves nothing" can multiply what later runs save.** P only sets `boot.cashEra`, but credit writes
+  `state.cash` at it, into the real save with API access on.
+- The pins-hold-calls family again: 19 of 20 condition probes pass 4,994. Among them are the `departOpened` guard,
+  ExpectedIn's `return false`, the refusal branch and `depart` in pushRunFields/BuildRunState.
+
+**Verified, safe to reuse:**
+- `ReturnService.SendHomeGroup` is uncalled. Only `SendHome` (Return) leaves, and it is personal.
+- `startLevel` never yields (LevelService Build/Clear never yield), so starting it from the Heartbeat is safe.
+- The combat place leaves `CharacterAutoLoads` on, so a body usually exists before the profile-load admit.
+- The client ignores a `picked` level with no map node (`DepartLine.NodeOf` nil guard).
+- The hub's `STUDIO_ACCESS_CODE` and RunRegistry's `STUDIO_PRIVATE_SERVER_ID` are both "studio".
+- `check_stage_mirror.py` PASSes on the archive with StageFlow's `NEEDED` unchanged.
+
+**Recipe:** scratch `l4-w3-rev2/py/probe.py` (each probe about 25 s; `mk1.py` and `mk2.py` write the JSON). As slice 1
+found, the archive's Packages are stubs, so run luau-lsp from the worktree with `rojo sourcemap ... -o <scratch>`.
+
+## W3 slice 4, data, sims and gates (2026-10-23, 93eb8e9): 0 Critical, 0 Major, 2 Minor, 4 Suggestions
+
+The findings are in `docs/prompts/l4-w3-review/4-data.md`. Era cash = Ben's (c) at M = 3, `[1, 670, 34000, 1400000]`,
+in `Combat.CombatCashMult`. The new sim_combat assertions are 24 "never faster" (back to back via `simulate_era(pause=)`)
+and 25 "a few minutes".
+
+**Patterns (recheck these):**
+- **A "never faster than X" gate plays one interleaving.**
+  - 24 runs from the era's first second to its end.
+  - "k runs, then build every second" (min over k) beats the greedy city in every era: Hard Boomtown -2.4%, Metropolis
+    -1.4% (k=8), Orbital -0.5% (k=12), Village -6.8% at today's pay.
+  - Cause: a free player's wallet is empty right after an Advance, so a run costs almost no purchases. No multiplier
+    of at least 1 avoids it.
+  - Ben's click text "No way of running beats building" and BALANCE.md were false. MISSIONS_DESIGN §30's
+    "back-to-back runs never finish sooner" is what passes.
+  - The (a)-vs-(c) ranking held on the mixed course: (a) -2.5 / -2.1%.
+  - For any pacing claim, probe the start-then-stop and the one-run families, not only the gate's course.
+- **A new Validate line with no Python twin.**
+  - StageFlow's `note` rule refuses the whole level, and `sim_range.level_problems` lacks it.
+  - So `check_levels.py` PASSes a 27-byte note that the game makes `unavailable`.
+  - check_stage_mirror DIFFs, but in 5 families and as a mirror fault.
+  - Every Validate line needs its twin and a broken-once case.
+- **A comparison where one side delegates to the other is a tautology.** "HeldFamily is LoadoutOf's slot" compares
+  HeldFamily with itself once SavedPower's half went.
+- **A shipped-data check that loops over `x or {}` passes when the data is deleted** (tests_l4w3 upcoming).
+
+**Verified, safe to reuse:**
+- `sim_economy.py`'s default output is byte-identical to `econ_base.txt` under 3.12 and 3.14.
+- The `pause` hook lands the cash first, then `skip` blocks that second's purchases.
+- Luau SplitCarry and Python split_carry use the same operand order, so the era-scale proof transfers.
+- The harness label diff base -> head (4,713 -> 4,994): 37 labels left, all Gear Power or reworded or dynamic.
+- `mutate.py`: 2,224 entries, 0 stale. 22 dropped (Gear Power), 21 changed, 117 new. B's 75 match `luau-b-mutants.py`
+  verbatim.
+- Timings:
+  - `sim_combat --check`: 5 min 12 s (3.12);
+  - `check_stage_mirror`: 9.5 s;
+  - `mirror_mutants --only L4W3-7`: 1 min 42 s, 9/9;
+  - `check_levels`: 29 s, identical to dce50da.
+
+**Recipes (scratch `l4-w3-rev4/probes/`):**
+- `never_faster.py <tree>` has three families: the gate's runner, stop-after-k and one-run.
+  - `never_faster2.py` takes the env vars `MULTS=a,b,c,d` and `ONLY=Era,...`.
+  - About 6 min on 3.12.
+- `labels.py base.txt head.txt [added]` diffs the harness's `ok`/`FAIL` label multisets.
+- `stale.py <tree>` execs mutate.py up to "# Before anything runs" and dumps `mutations_*.json`. `mdiff.py` compares two
+  dumps.
+- To bite: copy `src`+`tools`, sed the config, then run `py -B tools/sim_combat.py --check` in the copy.
 
 ## W1b slice 2, the run and the client (2026-10-21, 1ae8bfb): 0 Critical, 0 Major, 2 Minor, 3 Suggestions
 
@@ -460,5 +636,46 @@ Findings: `docs/prompts/l4-w2-review/5-fix-diff.md`.
   else touches the scratch tree.
 - **Shebang note:** `py -0p` lists `-V:3.14-32` and `-V:3.12`. `forest.py` has no shebang, so `py` gives 3.14 and
   `py -3.14-32` is explicit.
+
+## W3 slice 3, the clients (2026-10-23, 93eb8e9, `tycoon-p5` branch `l4-w3`): 0 Critical, 0 Major, 3 Minor, 5 Suggestions
+
+Findings: `docs/prompts/l4-w3-review/3-clients.md`. The slice covers:
+- HubMap, the shared MapScreen in the city;
+- RunTally, the shared tally card, with its hosts TallyHost (combat) and UIController (hub);
+- DepartLine and CombatHud's depart line;
+- the slimmed ExpeditionPanel ("Party & runs");
+- ArmoryAbilityPage's upcoming rows.
+
+**Patterns:**
+- **A modal moved from the combat place into the hub inherits the TouchGui tie.**
+  - The hub's `EraCityHUD` is DisplayOrder 0, the same as TouchGui. The combat place's `ExpeditionHUD` is 1.
+  - The classic jump button (70 px at w-95, h-90) covers the right 36% of the map's Depart and Party & runs, and the full
+    height of the two-column report's Dismiss, at 640×360 and at 667×375.
+  - Recheck every hub modal for the R9 pattern (`TouchControlsEnabled = false`).
+- **A "derived" flag can rest on a converse that is false.**
+  - The hub card's star is read from a firstClear line. Lines exist only when a difficulty has a firstClear reward, and
+    Normal has none.
+  - So the commonest new star shows on the dungeon card and not in the city.
+  - Check the config for every case the derivation assumes.
+- **The client half is still ungated** (W1b slice 2's pattern). Six review probes all passed `HARNESS 4,994`: the picked
+  rule, the holding rule, FirstPick, the forced public flag, `lowEndDevice` → `reducedMotion`, and the hub wallet.
+
+**Verified, safe to reuse:**
+- TouchGui uses `ScreenInsets = DeviceSafeInsets`, so the jump button's offsets are measured against the full viewport
+  (`ControlModule/init.lua:897-905`).
+- The old hub ExpeditionSummaryCard was DIALOG_WIDTH wide and centred. Its button sat at roughly x 183-457 at 640×360.
+- `Format.Cash(math.huge)` loops forever (`while value >= 1000`). `Format.Cash(NaN)` returns "nan`v" and does not throw.
+- ForestRoad's `firstClear` by difficulty: normal none, hard `{family = warhammer}`, brutal `{valor = 25}`.
+- MapScreen's card stack is 316 design px for an open node on touch, against a 313.5 card at 640×360. The difficulty
+  buttons are 66.7 wide. "Castle gear" measures 62.7 px at 11 px Montserrat Medium.
+
+**Recipes (scratch `l4-w3-rev3/`):**
+- `tally_layout.py` ports `RunTally.relayout`. It covers both hosts at six viewports, with two line-height guesses for the
+  note.
+- `themescan.py` / `themescan2.py`:
+  - all Theme keys against `src` + `tools`;
+  - a strict pass, with comments stripped, over the keys that the deleted or changed files read.
+- `measure.py <fontsDir>` measures text widths with Montserrat Bold or Medium (Pillow, `py` 3.14).
+- `probe.py <tree> <luau> <probes.json>` runs the harness under each mutation, about 26 s per probe.
 
 See [[l3-armory-review]], [[l1b-living-road-review]] and [[review-workflow]].
