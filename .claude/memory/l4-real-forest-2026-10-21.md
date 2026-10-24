@@ -142,3 +142,16 @@ Five owners built it (`93eb8e9`, harness 4,994; reports `l4-w3-reports/`); a 14:
 SendMessage with nothing lost. Four-slice Opus review running (`l4-w3-review.md` → `l4-w3-review/`). M11 (session
 `tycoon-b2`, `m11-port` in `tycoon-m11`) runs in parallel: whoever merges second resolves the shared hub files, the
 `simulate_era(pause=None)` hook and the Expedition key → HubMap.
+
+**W3 merged to `main` 2026-10-24 (merge be009da, place files 5637be7), waiting on Ben's look** (PLAYTEST "L4 W3", part A
+key-only in `proving.rbxl`: Play → countdown → level; part B the bridge, optional). Reviews: four slices 0/1/12/15 (the Major:
+a failed trip home's rejoin re-read the same ticket and auto-started; now a reserved server opens one departure, F1), fix-diff
+0/0/4/2 (G1: a Reset before the level started carries the pick), both fixed. QA green on b38f7b8: harness 5,466, sharded
+mutate 2,405 / 0, check_levels_mutants 283, mirror 151, R8 x0.977. M11 merges second (told; L4W3-17/18 list).
+Lessons:
+- **Never stack the long gates on one machine.** R8, check_levels_mutants, QA's sims and a 10-shard mutate at once made a
+  ~2 h job take ~5 h (mirror mutants 42 min instead of ~10). Ben: "the background tasks has been running for 5 hours".
+  Run mutate_shards alone, the rest before or after; quote an ETA from the run's own progress (shard logs: count `^== `).
+- **Correct an overclaim to Ben the moment a reviewer finds it:** the era-cash preview said "no way of running beats
+  building"; only back-to-back runs are gated (a few runs right after an Advance, then build, is 0.5-2.4% faster, inherent).
+- In this Bash tool a quoted heredoc still collapsed `\` to `\` inside a Python string: build backslashes with `chr(92)`.
