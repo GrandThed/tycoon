@@ -1,6 +1,6 @@
 ---
 name: l5-friends-review
-description: L5 "Friends" reviews (parties in a level, branch l5-friends in tycoon-p5) - W1 slice 2 server 0C/1M/2m/4s (rebuilt after an overwrite: failed trip home launders down/out; 9 unpinned executor holes); W1 slice 1 pure rules 2026-10-26 0C/1M/2m/2s (gatehouse hold band = triggerHeight while the walled camp uses zone.ceiling: a double-jump apex is "out" at the close, same as slice 2 M1; armed-start and B-reset hold rules unreached by any fixture; Mentor floor shared with the loot floor); W1 slice 4 data/sims/gates 0C/1M/2m/5s (same band Major seen as a gate gap: check_hold has no band-vs-highest-root rule; W1 step 3's 338-Timber reference is a full clear's while step 3 skips camp B, ~170; entry spread "on the floor" never tested); W1 slice 3 client 0C/0M/3m/4s (client half ungated, 11/11 probes pass incl. Return-on-a-tap; held Return in the thumbstick corner beats the hold with a still thumb; name list truncates the hold line's countdown); Forest Road gatehouse facts; bundle-prefix probe and review-mutant recipe; SHARED file: Edit only, never Write
+description: L5 "Friends" reviews (parties in a level, branch l5-friends in tycoon-p5) - W1 slice 2 server 0C/1M/2m/4s (rebuilt after an overwrite: failed trip home launders down/out; 9 unpinned executor holes); W1 slice 1 pure rules 2026-10-26 0C/1M/2m/2s (gatehouse hold band = triggerHeight while the walled camp uses zone.ceiling: a double-jump apex is "out" at the close, same as slice 2 M1; armed-start and B-reset hold rules unreached by any fixture; Mentor floor shared with the loot floor); W1 slice 4 data/sims/gates 0C/1M/2m/5s (same band Major seen as a gate gap: check_hold has no band-vs-highest-root rule; W1 step 3's 338-Timber reference is a full clear's while step 3 skips camp B, ~170; entry spread "on the floor" never tested); W1 slice 3 client 0C/0M/3m/4s (client half ungated, 11/11 probes pass incl. Return-on-a-tap; held Return in the thumbstick corner beats the hold with a still thumb; name list truncates the hold line's countdown); Forest Road gatehouse facts; bundle-prefix probe and review-mutant recipe; W1 fix diff 0C/0M/5m/5s (drop while down not kept out: releasePlayer drops the vitals record before Remove; portrait touch Return inside DynamicThumbstick's bottom-40% frame; client pins miss sibling lines; F10 floor half vacuous); SHARED file: Edit only, never Write
 metadata:
   type: project
 ---
@@ -179,5 +179,48 @@ host) and Theme.
   and restores with `write_bytes`. About 39 s a probe.
 - `measure.py <fontsDir>` measures widths in Montserrat Bold and Medium. Run it with `PYTHONIOENCODING=utf-8`, or ★
   crashes the cp1252 console.
+
+## W1 fix diff (6870502..5735f7d, 2026-10-26): 0 Critical, 0 Major, 5 Minor, 5 Suggestions
+
+Findings: `docs/prompts/l5-w1-review/5-fix-diff.md`. All 22 original probes are caught. The pasted pin and mutate
+blocks are byte-exact. mutate.py has 2,718 entries, 0 stale.
+
+**Patterns:**
+- **Teardown order hides state from Remove.**
+  - Combat `Main.releasePlayer` calls `WeaponService.RemovePlayer`, which runs `VitalsService.RemovePlayer`, before
+    `ArenaService.Remove`.
+  - So anything Remove reads through `IsDown` is false on a disconnect.
+  - F4's `keptOut` therefore works for a failed trip home (`trySendHome` calls Remove first), but not for a drop while
+    down. The owner's report claimed it did.
+  - Probe: for any state read at Remove, list every Remove caller and what ran before it.
+- **A fix moved a touch button into a different thumb zone.**
+  - DynamicThumbstick's portrait frame is the full width and the bottom 40% (PlayerModule `layoutThumbstickFrame`).
+  - TouchGui keeps the inset. The combat HUD has DisplayOrder 1, above TouchGui's 0.
+  - At 375×667 the frame's top is at viewport y 423, so the "bottom centre" Return sits 39 of its 44 px inside it.
+- **The client pins hold a probe's line, not its siblings.** All of these pass PASS 6,056:
+  - the slop branch's `stopReturn()` deleted;
+  - `moved = false`;
+  - `cutName` returning the name whole;
+  - `memberName` returning nil;
+  - the card Return's `size.X / 2` changed to `/ 8` (back to the thumb corner);
+  - the Gamepad1 entry in PAD_INPUTS set false;
+  - `downReturnPlace`'s `centreY` moved.
+- **A gate half can be redundant by construction.** `check_hold`'s F10 floor test can never see a hole, because the camp
+  floor solid spans the whole camp rect. Dropping it keeps every F10 case at its verdict.
+
+**Verified, safe to reuse:**
+- `StageFlow.Rescue(..., leftOut)` / `OutPoint` behave as the old executor did. The one difference: an out member who is
+  also waiting is now judged by the lobby box first, which is better.
+- `step ~= "over"` and `isLive(phase)` agree, because `EndRun` calls `Finish` before setting the phase to "summary".
+- F1's band of 64 over y 12 ends at y 76, which is the top of every gatehouse wall and of the door. Nothing stands over
+  the hold rects.
+- F13's pending melee blow carries `("w", id, started)`, so the misread is one roll per tell.
+
+**Recipe (scratch `rev-w1-fix/drv/`):**
+- `probe.py` and `probe2.py`: `(label, file, old, new)` probes, run on a `git archive` copy with `write_bytes` restore,
+  about 35 s each.
+- `stale.py`: execs mutate.py up to "# Run from one checkout against another" and counts each entry's text.
+- `blockcmp.py`: pasted-block equality.
+- Two archive copies let two probe batches run in parallel.
 
 See [[l1c-chief-clearing-review]], [[l4-real-forest]], [[m11-port]], [[review-workflow]].
