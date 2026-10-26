@@ -73,3 +73,4 @@ Learned facts that don't belong in the spec live in `.claude/memory/` so they tr
 @.claude/memory/l3-armory-2026-10-20.md
 @.claude/memory/l4-real-forest-2026-10-21.md
 @.claude/memory/m11-port-2026-10-23.md
+@.claude/memory/l5-friends-2026-10-25.md
