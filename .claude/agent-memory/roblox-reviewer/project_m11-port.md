@@ -1,6 +1,6 @@
 ---
 name: m11-port
-description: M11 port review (feature unlocks + 6-plot hub ported onto main as profile v9, 2026-10-23) - slice S 0C/0M/4m/3s; fix diff 0C/0M/2m/3s (kick on a bool that also means no-state; pinned read, unpinned write); blanket-rename into the other place's same-named module, order-vs-features silent hide, plotless overflow at 6 plots, FeatureService unharnessed; verified facts and the scratch harness recipe
+description: M11 port review (feature unlocks + 6-plot hub ported onto main as profile v9, 2026-10-23) - slice S 0C/0M/4m/3s; fix diff 0C/0M/2m/3s (kick on a bool that also means no-state; pinned read, unpinned write); W3 merge 2026-10-26 0C/0M/2m/4s (pump on a sheet's close in the gap of a close-then-open switch = a stray reveal sound; a reorder whose point lives in an unpinned reader); verified facts, scratch harness and review-mutant recipe
 metadata:
   type: project
 ---
@@ -59,4 +59,25 @@ The findings are in `docs/prompts/m11-port-review/S.md`. Slice C (the client) is
     `-o <scratch>`.
   - A filtered 40-entry mutate run takes about 15 min, and its log is empty until exit (buffered).
 
-See [[review-workflow]], [[l3-armory]], [[l2-secrets]].
+**W3 merge review (70377b0 merge of main 4da1a88 + b281fb6 M11P-7 wiring, 2026-10-26): 0C/0M/2m/4s** in
+`docs/prompts/m11-port-review/merge-w3.md`. The 16 conflict resolutions, server join order and stamp were clean; the
+hub builds rebuilt byte-identical; sim_economy default output identical to main.
+- **Pump-on-close inside a close-then-open switch.** The map's `onOpenChanged(false)` now pumps the FeatureCard;
+  `togglePanel("armory")` closes the map BEFORE opening the Armory (F11 TouchHold order), so in that gap nothing blocks
+  and `FeatureCard.show` plays `reveal`, then the Armory hides it the same frame. All in one input handler, so the
+  symptom is a SOUND, not a visible flash (no render between). Probe: for every new pump/refresh in a close handler,
+  list every caller that closes this sheet in order to open another, and check the blocker list in that gap.
+- **A reorder whose purpose lives in another line.** Moving `pendingSummary = nil` after `card.Show` only helps because
+  `isBlocked` reads `pendingSummary ~= nil`; the move was pinned, the reader was not (mutant deleting it: PASS 5,603).
+  Same for `uiMapAllowed` "(the unlock included)": the read is pinned, `local visible = keyConfigured(key) and unlocked`
+  and `keysShown[key] = visible` are not (M11's whole hub key gate is unpinned).
+- **Key reuse across places after a merge.** M11P-8 chose R as "free in both places"; W3 bound R in the dungeon
+  (`CombatUIController` `DEPART_KEY` fakeDepart). No code clash (UIController is hub-only), but the comment and docs lie.
+- **Recipe additions:** review-only mutant driver: build anchors with `chr(9)`/`chr(10)` in a Python file written by a
+  quoted heredoc (backslashes inside the heredoc collapsed again and broke the string). Run the COPY's own
+  `run_harness.py` against the copy (`py -I <copy>/tools/crowd_harness/run_harness.py <copy> <main>/tools/bin/luau.exe`;
+  about 33 s), or it refuses/reads the worktree. Whole-list stale check: exec mutate.py up to "# Run from one checkout
+  against another" with `sys.argv = [mutate.py, repo, luau.exe]` (it reads argv[2] at line 22). Builds: `rojo build
+  <project> -o <scratch>` then `cmp` with `build/*.rbxl` is byte-exact here, so "place files rebuilt" is checkable.
+
+See [[review-workflow]], [[l3-armory]], [[l2-secrets]], [[l4-real-forest]].
