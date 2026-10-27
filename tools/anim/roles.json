@@ -1,0 +1,104 @@
+{
+  "_doc": "Clip choice per enemy kind for tools/anim/animate.py. 'kind' names src/shared/Config/ProvingGrounds.json crowd.kinds; an attack slot's 'attack' is the index in that kind's attacks, and its windup is read from there at build time (never copied here). 'lead' is a clip stretched over the whole windup for clips that start at their release (throws, shots); 'contact' (seconds into the source clip) overrides the measured contact in ual_clips.json. 'gap' records where the Standard pack has no faithful clip and a stand-in is used.",
+  "library": "UAL1_Standard",
+  "common": {
+    "walk": {"clip": "Walk_Loop", "loop": true},
+    "run": {"clip": "Jog_Fwd_Loop", "loop": true},
+    "hurt": {"clip": "Hit_Chest"},
+    "hurtHead": {"clip": "Hit_Head"},
+    "death": {"clip": "Death01"}
+  },
+  "roles": {
+    "fodder": {
+      "kind": "fodder",
+      "placeholder": "hammer",
+      "slots": {
+        "idle": {"clip": "Sword_Idle", "loop": true},
+        "attack0_lunge": {"clip": "Sword_Attack", "attack": 0}
+      }
+    },
+    "armoured": {
+      "kind": "armoured",
+      "placeholder": "hammer",
+      "slots": {
+        "idle": {"clip": "Sword_Idle", "loop": true},
+        "attack0_arc": {"clip": "Sword_Attack", "attack": 0, "gap": "a 120 degree sweep; Sword_Attack is a diagonal overhead cut"}
+      }
+    },
+    "guard": {
+      "kind": "guard",
+      "placeholder": "hammer",
+      "slots": {
+        "idle": {"clip": "Sword_Idle", "loop": true},
+        "attack0_arc": {"clip": "Sword_Attack", "attack": 0, "gap": "a 120 degree sweep; Sword_Attack is a diagonal overhead cut"}
+      }
+    },
+    "brute": {
+      "kind": "brute",
+      "placeholder": "hammer",
+      "slots": {
+        "idle": {"clip": "Sword_Idle", "loop": true},
+        "attack0_lane": {"clip": "Sprint_Loop", "loop": true, "gap": "a charge: no crouch-and-burst wind-up in Standard, the sprint covers only the run"}
+      }
+    },
+    "slinger": {
+      "kind": "slinger",
+      "placeholder": "none",
+      "slots": {
+        "idle": {"clip": "Idle_Loop", "loop": true},
+        "attack0_shot": {"clip": "Spell_Simple_Shoot", "lead": "Spell_Simple_Enter", "attack": 0, "gap": "a sling throw; the spell cast is a forward one-arm release"}
+      }
+    },
+    "lobber": {
+      "kind": "lobber",
+      "placeholder": "none",
+      "slots": {
+        "idle": {"clip": "Idle_Loop", "loop": true},
+        "attack0_lob": {"clip": "Spell_Simple_Shoot", "lead": "Spell_Simple_Enter", "attack": 0, "gap": "an overhand lob; the spell cast releases forward, not up"}
+      }
+    },
+    "marksman": {
+      "kind": "marksman",
+      "placeholder": "none",
+      "slots": {
+        "idle": {"clip": "Pistol_Idle_Loop", "loop": true},
+        "aim": {"clip": "Pistol_Aim_Neutral", "loop": true},
+        "attack0_line": {"clip": "Pistol_Shoot", "lead": "Pistol_Aim_Neutral", "attack": 0}
+      }
+    },
+    "chief": {
+      "kind": "chief",
+      "placeholder": "hammer",
+      "slots": {
+        "idle": {"clip": "Sword_Idle", "loop": true},
+        "attack0_ring": {"clip": "Sword_Attack", "attack": 0, "gap": "a ground slam; Sword_Attack ends low and forward"},
+        "attack1_lane": {"clip": "Sprint_Loop", "loop": true, "gap": "a charge: the sprint covers only the run"},
+        "attack2_summon": {"clip": "Spell_Simple_Shoot", "lead": "Spell_Simple_Enter", "attack": 2, "gap": "a war cry; the spell cast is a stand-in"},
+        "attack3_arc": {"clip": "Sword_Attack", "attack": 3, "gap": "the war-club sweep (120 degrees); Sword_Attack is a diagonal overhead cut"}
+      }
+    },
+    "colossus": {
+      "kind": "colossus",
+      "placeholder": "hammer",
+      "slots": {
+        "idle": {"clip": "Sword_Idle", "loop": true},
+        "attack0_ring": {"clip": "Sword_Attack", "attack": 0, "gap": "a ground slam; Sword_Attack ends low and forward"},
+        "attack1_lane": {"clip": "Sprint_Loop", "loop": true, "gap": "a charge: the sprint covers only the run"},
+        "attack2_summon": {"clip": "Spell_Simple_Shoot", "lead": "Spell_Simple_Enter", "attack": 2, "gap": "a war cry; the spell cast is a stand-in"},
+        "attack3_lob": {"clip": "Spell_Simple_Shoot", "lead": "Spell_Simple_Enter", "attack": 3, "gap": "an overhand barrage throw"}
+      }
+    },
+    "warlord": {
+      "kind": "warlord",
+      "placeholder": "hammer",
+      "slots": {
+        "idle": {"clip": "Sword_Idle", "loop": true},
+        "attack0_summon": {"clip": "Spell_Simple_Shoot", "lead": "Spell_Simple_Enter", "attack": 0, "gap": "a call to the guard; the spell cast is a stand-in"},
+        "attack1_lob": {"clip": "Spell_Simple_Shoot", "lead": "Spell_Simple_Enter", "attack": 1, "gap": "an overhand barrage throw"},
+        "attack2_arc": {"clip": "Sword_Attack", "attack": 2, "gap": "a 180 degree sweep; Sword_Attack is a diagonal overhead cut"},
+        "attack3_lane": {"clip": "Sprint_Loop", "loop": true, "gap": "a charge: the sprint covers only the run"},
+        "attack4_lob": {"clip": "Spell_Simple_Shoot", "lead": "Spell_Simple_Enter", "attack": 4, "gap": "an overhand barrage throw"}
+      }
+    }
+  }
+}
