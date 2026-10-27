@@ -25,3 +25,10 @@ has none). Say which Python a number came from.
 **How to apply:** at session start, verify `py -V`, `Test-Path ~/.rokit/bin/rojo.exe`, and
 `git ls-files --eol | grep -c w/crlf` before delegating QA; put the PATH line and `py` in
 every subagent prompt. See [[qa-runner-silent-finish]].
+
+**codeCave plugin off for this folder (2026-10-27, Ben: "Turn the codeCave plugin off for this folder").** Ben's
+user-level plugin `codecave@codecave` (his agency's Nuxt workflow) ships a PreToolUse hook that refuses Edit unless the
+change goes through its Hub task and developer agent; it blocked a one-line fix here. Disabled in
+`.claude/settings.local.json` (`"enabledPlugins": {"codecave@codecave": false}`), listed in `.git/info/exclude` (not
+`.gitignore`). A worktree opened as its own session (`tycoon-p5`, `tycoon-m11`) reads its own settings, so the plugin is
+still on there. Never route this repo's work through that plugin's flow.
