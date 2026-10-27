@@ -86,11 +86,23 @@ Give full absolute paths to `sheet.png` and the attack GIFs, list the stand-ins,
 questions about **feel** (heavy or snappy, which stand-ins to replace first). His eye on the motion
 is the verdict; yours is the stills.
 
-## 6. Studio (Ben's step; not yet verified)
+## 6. See it in Roblox (no menus for Ben)
 
-Studio → Import 3D → `<name>_rig.glb` (comes in with bones), then Avatar → Animation Editor →
-⋯ → Import → From FBX Animation → `<name>_<slot>.fbx`. If he faces backwards or the rig is
-refused, record what he saw in the art-direction memory before changing the export.
+```
+py tools/anim/animate.py studio <name> --upload     # rig up as a Model (hash-checked), clip data out
+rojo build animtest.project.json -o build/animtest.rbxl
+```
+
+Ben opens `build/animtest.rbxl` and presses Play: the hub with the character in front of the spawn
+at its crowd kind's height, cycling every clip with a label (red HIT at the windup); `]` / `[` step,
+`P` holds one clip. The clips are Bone.Transform data played by a client script
+(`tools/anim/studio/`), so no Animation asset or Animation Editor step is needed. If Studio refuses
+`LoadAsset` from the running game, the Output prints a one-line command-bar paste that does it in
+Edit mode. The Output's `[AnimTest]` lines list what the upload holds (Bones, skinned MeshPart):
+read them back if it looks wrong. The test build is never published.
+
+The FBX files remain for Studio's own route (Avatar → Animation Editor → Import → From FBX
+Animation) once clips must become Animation assets.
 
 ## Facts
 

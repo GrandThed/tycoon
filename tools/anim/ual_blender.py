@@ -270,9 +270,17 @@ for pb in arm.pose.bones:
     pb.location = (0, 0, 0)
 select([arm, *meshes])
 bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, f"{stem}_rig.glb"), use_selection=True, export_animations=False)
-arm.animation_data.action = actions[report[0]["slot"]]
+# one NLA track per slot: ACTIONS mode would also export every library clip, sampled as the rest pose
+tracks = []
+for slot, act in actions.items():
+    track = arm.animation_data.nla_tracks.new()
+    track.name = slot
+    track.strips.new(slot, int(act.frame_range[0]), act)
+    tracks.append(track)
 bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, f"{stem}_all.glb"), use_selection=True,
-                          export_animation_mode="ACTIONS")
+                          export_animation_mode="NLA_TRACKS")
+for track in tracks:
+    arm.animation_data.nla_tracks.remove(track)
 for slot, act in actions.items():
     arm.animation_data.action = act
     scene.frame_start, scene.frame_end = 0, int(act.frame_range[1])

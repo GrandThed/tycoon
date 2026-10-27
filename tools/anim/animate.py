@@ -13,6 +13,10 @@
     py tools/anim/animate.py build <character.glb> --clips Sword_Attack,Roll [...]
         Ad-hoc clips with no role (no retiming).
 
+    py tools/anim/animate.py studio <name> [--upload] [--height STUDS]
+        Upload the built rig and write the data for the Studio test build (tools/anim/roblox.py):
+        `rojo build animtest.project.json -o build/animtest.rbxl` stands it in front of the hub spawn.
+
 The character must come from Tripo with the Mixamo skeleton preset, resting in a T-pose. Needs Blender
 5.2; the sheet and GIFs need Pillow (run without a shebang so `py` picks the Python that has it).
 """
@@ -235,8 +239,17 @@ def main():
     b.add_argument("--library")
     b.add_argument("--placeholder", choices=["hammer", "none"])
     b.add_argument("--no-render", action="store_true")
+    s = sub.add_parser("studio")
+    s.add_argument("name")
+    s.add_argument("--upload", action="store_true")
+    s.add_argument("--height", type=float)
     args = p.parse_args()
-    catalogue(args) if args.cmd == "catalogue" else build(args)
+    if args.cmd == "studio":
+        import roblox
+
+        roblox.studio(args)
+    else:
+        catalogue(args) if args.cmd == "catalogue" else build(args)
 
 
 if __name__ == "__main__":

@@ -25,7 +25,21 @@ items came out "fantastic"; the enemies lost body parts behind hair and held wea
 - **Gaps in Standard:** a horizontal sweep (the Chief's own move), a ground slam, a charge wind-up, an
   overhand throw, a bow, a block. Recorded as `gap` per slot.
 
-**Not done:** the Studio import of the rig and FBX clips is unverified; nothing in `src/` plays these clips
+- **Ben asked to redo every Expeditions asset with Tripo** (2026-10-26): the prompt list is
+  `docs/TRIPO_PROMPTS.md` (raiders in T-pose, their gear and the Chief's own hammer separate, 15
+  weapons by level family, forest props; the generated ground, hills and canopy stay generated). The
+  plated elite's planks are a separate item because the client hides them when the plate breaks.
+- **Studio test without menus:** `animate.py studio <name> --upload` uploads the rig (Open Cloud took
+  the skinned GLB; the Chief is asset 87002081908838) and writes Bone.Transform clip data;
+  `animtest.project.json` → `build/animtest.rbxl` stands him in front of the hub spawn, cycling clips.
+
+- **Verified in Studio 2026-10-27** (two Plays in `build/animtest.rbxl`, Ben: "wow, incredible!" after the
+  cross-fade): runtime `InsertService:LoadAsset` works from the running game (no paste needed), the Open
+  Cloud upload kept the skin (MeshPart skinned, 22 Bones, plus an AnimationController the importer adds),
+  scale x15.0 to 14 studs. Bone.Transform playback with a smoothstep cross-fade (0.12 s into an attack,
+  0.25 s otherwise, `F` toggles) is the approved feel.
+
+**Not done:** nothing in `src/` plays these clips
 (raiders are still rigid pieces posed by `RaiderPose`). Wiring animated enemies into the crowd renderer,
 with a cheap look for far bodies, is a future milestone, only on Ben's word. Whether the new style
 replaces the shipped Kenney look everywhere or only in the missions is undecided.
