@@ -9,6 +9,7 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local data = require(ReplicatedStorage:WaitForChild("AnimTestData")) :: any
+local AnimClips = require(ReplicatedStorage:WaitForChild("AnimTestLib"):WaitForChild("AnimClips"))
 
 -- A loop shows for this long; a one-shot plays once and holds its last frame for HOLD.
 local LOOP_SECONDS = 3
@@ -37,45 +38,7 @@ for _, d in model:GetDescendants() do
 	end
 end
 
-type Clip = {
-	slot: string,
-	clip: string,
-	fps: number,
-	frames: number,
-	loop: boolean,
-	windup: number?,
-	poses: { [Bone]: { CFrame } },
-}
-
-local clips: { Clip } = {}
-for _, c in data.clips do
-	local poses: { [Bone]: { CFrame } } = {}
-	for name, track in c.bones do
-		local bone = bones[name]
-		if bone then
-			local list = table.create(c.frames)
-			local r, t = track.r, track.t
-			for i = 0, c.frames - 1 do
-				local x, y, z = 0, 0, 0
-				if t then
-					x, y, z = t[i * 3 + 1] * scale, t[i * 3 + 2] * scale, t[i * 3 + 3] * scale
-				end
-				list[i + 1] =
-					CFrame.new(x, y, z, r[i * 4 + 1], r[i * 4 + 2], r[i * 4 + 3], r[i * 4 + 4])
-			end
-			poses[bone] = list
-		end
-	end
-	table.insert(clips, {
-		slot = c.slot,
-		clip = c.clip,
-		fps = c.fps,
-		frames = c.frames,
-		loop = c.loop,
-		windup = c.windup,
-		poses = poses,
-	})
-end
+local clips = AnimClips.Decode(data, scale)
 
 local label = Instance.new("TextLabel")
 label.Size = UDim2.fromScale(1, 1)
@@ -131,31 +94,22 @@ RunService.PreRender:Connect(function()
 	if not clip then
 		return
 	end
-	local length = (if clip.loop then clip.frames else clip.frames - 1) / clip.fps
-	local shown = if clip.loop then math.max(LOOP_SECONDS, length) else length + HOLD
+	local shown = if clip.loop then math.max(LOOP_SECONDS, clip.length) else clip.length + HOLD
 	local elapsed = os.clock() - started
 	if elapsed >= shown then
 		-- A paused cycle replays the same clip, and fades into it from its held last frame.
 		show(if cycling then index + 1 else index)
 		clip = clips[index]
-		length = (if clip.loop then clip.frames else clip.frames - 1) / clip.fps
 		elapsed = 0
 	end
-	local t = if clip.loop then elapsed % length else math.min(elapsed, length)
-	local f = t * clip.fps
-	local i = math.floor(f)
-	local a = f - i
+	local t = if clip.loop then elapsed % clip.length else math.min(elapsed, clip.length)
+	local i, a = AnimClips.At(clip, t)
 	-- Smoothstep weight, so the blend eases out of the old pose and into the new one.
 	local w = if fadeSeconds > 0 then math.min(elapsed / fadeSeconds, 1) else 1
 	w = w * w * (3 - 2 * w)
-	for _, bone in bones do
-		local list = clip.poses[bone]
-		local pose = CFrame.identity
-		if list then
-			local from = list[i + 1]
-			local to = list[(i + 1) % clip.frames + 1]
-			pose = if a > 0 and (clip.loop or i + 1 < clip.frames) then from:Lerp(to, a) else from
-		end
+	for name, bone in bones do
+		local list = clip.poses[name]
+		local pose = if list then AnimClips.Sample(clip, list, i, a) else CFrame.identity
 		bone.Transform = if w < 1 then (fadeFrom[bone] or CFrame.identity):Lerp(pose, w) else pose
 	end
 	local hit = clip.windup ~= nil and t >= clip.windup and t < clip.windup + HIT_SECONDS

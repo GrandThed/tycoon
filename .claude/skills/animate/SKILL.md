@@ -30,6 +30,13 @@ milestone of its own, with contracts, started only on Ben's word.
   hair and capes short enough not to hide the arms.
 - The tool refuses anything else with an `ANIM-FAIL` line. Say it to Ben in plain words ("regenerate
   it with the Mixamo preset", "it is not in a T-pose") rather than working around it.
+- **Not rigged, or rigged but facing +X?** Run `py tools/anim/animate.py rig <file.glb>` first. An
+  unrigged T-pose body gets the same 22-bone skeleton, joints measured from the mesh and weights from
+  a closed proxy; a Tripo-rigged one is only turned to face −Y. It writes
+  `assets/tripo/rigged/<name>.glb`, which `build` takes. Ben's 2026-10-27 batch came unrigged except
+  the Chief (Tripo charges credits to rig), and all six rigs passed `build` on this route. Check
+  the `RIG-REPORT` line (armpit, crotch, hip, ankle as shares of the height) and the sheet: gear
+  hanging beside the arms or a long kilt can move a joint.
 
 ## 2. Choosing clips (the reasoning part)
 

@@ -4,6 +4,12 @@
         Measure every library clip (length, contact moment, drift) into tools/anim/ual_clips.json and
         regenerate tools/anim/CLIPS.md. Run once per library version.
 
+    py tools/anim/animate.py rig <character.glb> [--name N] [--out FILE]
+        Give an unrigged Tripo T-pose character the 22-bone Mixamo skeleton, joints measured from the
+        mesh and weights from a closed proxy (tools/anim/autorig_blender.py). Writes
+        assets/tripo/rigged/<name>.glb, ready for `build`. Check the skeleton and a test pose before
+        building: the joints are measured, not seen.
+
     py tools/anim/animate.py build <character.glb> --role <role> [--name N] [--out DIR] [--no-render]
         Retarget the role's clips (tools/anim/roles.json) onto the character, retime every attack so
         its contact lands on the game's windup (src/shared/Config/ProvingGrounds.json), self-check,
@@ -15,7 +21,12 @@
 
     py tools/anim/animate.py studio <name> [--upload] [--height STUDS]
         Upload the built rig and write the data for the Studio test build (tools/anim/roblox.py):
-        `rojo build animtest.project.json -o build/animtest.rbxl` stands it in front of the hub spawn.
+        `rojo build animtest.project.json -o build/animtest.rbxl` stands it in front of the hub spawn;
+        `rojo build animbench.project.json -o build/animbench.rbxl` times a crowd of it (crowd.maxAlive).
+
+    py tools/anim/animate.py template <name>
+        Read the rig's [AnimRecord] lines from the newest Studio log (a bench Play that used LoadAsset)
+        and write assets/anim/_studio/AnimTemplate.rbxmx, which the next bench build uses instead.
 
 The character must come from Tripo with the Mixamo skeleton preset, resting in a T-pose. Needs Blender
 5.2; the sheet and GIFs need Pillow (run without a shebang so `py` picks the Python that has it).
@@ -96,20 +107,20 @@ def library_path(given):
     return hits[0]
 
 
-def run_blender(job):
+def run_blender(job, script="ual_blender.py", tag="ANIM"):
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
         json.dump(job, f)
         path = f.name
     try:
-        proc = subprocess.run([blender(), "-b", "--python", os.path.join(HERE, "ual_blender.py"), "--", path],
+        proc = subprocess.run([blender(), "-b", "--python", os.path.join(HERE, script), "--", path],
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
     finally:
         os.unlink(path)
     lines = proc.stdout.splitlines()
     for ln in lines:
-        if ln.startswith(("ANIM-", "Traceback")) or "Error" in ln:
+        if ln.startswith((f"{tag}-", "Traceback")) or "Error" in ln:
             print(ln)
-    if not any(ln.startswith("ANIM-DONE") for ln in lines):
+    if not any(ln.startswith(f"{tag}-DONE") for ln in lines):
         tail = "\n".join((proc.stdout + proc.stderr).splitlines()[-25:])
         sys.exit(f"Blender did not finish:\n{tail}")
 
@@ -225,9 +236,21 @@ def build(args):
     print(f"\noutput: {out}")
 
 
+def rig(args):
+    name = args.name or os.path.splitext(os.path.basename(args.character))[0]
+    out = os.path.abspath(args.out or os.path.join(ROOT, "assets", "tripo", "rigged", f"{name}.glb"))
+    run_blender({"character": os.path.abspath(args.character), "name": name, "out": out},
+                script="autorig_blender.py", tag="RIG")
+    print(f"\nrigged: {out}\nnext: py tools/anim/animate.py build {os.path.relpath(out, ROOT)} --role <role>")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("rig")
+    r.add_argument("character")
+    r.add_argument("--name")
+    r.add_argument("--out")
     c = sub.add_parser("catalogue")
     c.add_argument("--library")
     b = sub.add_parser("build")
@@ -243,11 +266,15 @@ def main():
     s.add_argument("name")
     s.add_argument("--upload", action="store_true")
     s.add_argument("--height", type=float)
+    t = sub.add_parser("template")
+    t.add_argument("name")
     args = p.parse_args()
-    if args.cmd == "studio":
+    if args.cmd in ("studio", "template"):
         import roblox
 
-        roblox.studio(args)
+        roblox.studio(args) if args.cmd == "studio" else roblox.template(args)
+    elif args.cmd == "rig":
+        rig(args)
     else:
         catalogue(args) if args.cmd == "catalogue" else build(args)
 

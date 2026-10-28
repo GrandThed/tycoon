@@ -44,6 +44,28 @@ items came out "fantastic"; the enemies lost body parts behind hair and held wea
 with a cheap look for far bodies, is a future milestone, only on Ben's word. Whether the new style
 replaces the shipped Kenney look everywhere or only in the missions is undecided.
 
+**First batch and self-rigging (2026-10-27/28).** Ben's credits ran out after one batch (23 models: all seven
+raiders, all their gear but the plate, 8 player weapons, one fir), sorted into `assets/tripo/{raiders,gear,weapons,
+props}/` (gitignored); the plate was shown as an image but never exported. Only the Chief came rigged. Ben chose
+"lets see what you are capable of in blender" over Mixamo's free auto-rigger: `animate.py rig`
+(`tools/anim/autorig_blender.py`) measures the joints from a surface sample and takes weights from a closed proxy
+(solidify + voxel remesh, heat weights, data transfer), because heat weighting fails on Tripo's hundreds of open
+shells. All six built clean (feet sink 4-5% on the slinger's run and the armoured's run/attack: leg proportions,
+not visible on the sheets). Ben on the hand-fitted fodder: "looks excellent". Tripo's rigged Chief arrives facing
++X; `rig` only turns it. Textures are 4096 px (Roblox caps at 1024: shrink before upload). The sphere seen on
+every import is Blender's glTF importer, not Tripo.
+- **MCP for Blender** (`mcp-for-blender` 2.2.4, user scope, `DISABLE_TELEMETRY=true`) drives Ben's live Blender;
+  register it at user scope (local scope keys the folder as `C:/` from a terminal and `c:/` from VS Code, so it
+  never shows), from Bash (PowerShell's `claude` shim eats `--` and `--%`). Blender Lab's own "MCP" extension
+  uses the same port 9876: keep it disabled. The add-on's server stops when Blender restarts (Start MCP Server).
+- **Crowd bench (2026-10-28, `build/animbench.rbxl`, Ben's PC, graphics Automatic):** 160 skinned Chiefs (crowd.maxAlive,
+  5,447 tris each) held 60 fps in every phase; client script cost 1.8 ms with every body posed every frame, 0.6 ms with
+  LOD (near every frame, past 35 studs every 3rd, past 70 every 10th, unblended), ~0.44 us per bone. A rig built into
+  the place file by Rojo (`animate.py template`, hand-written rbxmx with HasSkinnedMesh + Bones) skins and animates
+  ("they where moving", with a screenshot): no runtime LoadAsset needed. Phones unmeasured (assume 3-5x): LOD is the
+  plan. Studio caps at 60 fps and reports no GPU time. The 1,328 "Asset type does not match" lines come from the hub
+  content the bench place copies (same count with and without the template), not from the rig.
+
 **Why:** a fresh session would otherwise re-run the style and retarget experiments or wire clips into the
 game without a contract.
 

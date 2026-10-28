@@ -1,4 +1,5 @@
-"""The Studio test of one animated character: `py tools/anim/animate.py studio <name> [--upload]`.
+"""The Studio test of one animated character: `py tools/anim/animate.py studio <name> [--upload]`,
+and `animate.py template <name>` for the crowd bench (animbench.project.json).
 
 Reads assets/anim/<name>/ (a finished `build`), uploads <name>_rig.glb as a Model through Open Cloud
 when asked, and writes assets/anim/_studio/AnimTestData.luau: the asset id, the height to stand at
@@ -13,10 +14,12 @@ that joint's local transform: true whatever turn or offset the importer gives th
 Transform does not replicate, so a client script plays it.
 """
 
+import glob
 import hashlib
 import json
 import math
 import os
+import re
 import struct
 import sys
 
@@ -221,3 +224,92 @@ def studio(args):
         fh.write("return " + luau_value(data) + "\n")
     print(f"[studio] {len(clips)} clips, {height} studs tall, asset {asset_id} -> {out}")
     print("[studio] next: rojo build animtest.project.json -o build/animtest.rbxl")
+
+
+STUDIO_LOGS = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Roblox", "logs")
+RECORD = re.compile(r"\[AnimRecord\] (mesh|bone|end) (\S+)(?: (.*))?$")
+
+
+def read_record(name):
+    """The newest Studio log's complete `[AnimRecord]` block for `name` (AnimRig.Record): the mesh
+    line, one line per bone, an end line."""
+    logs = sorted(glob.glob(os.path.join(STUDIO_LOGS, "*_Studio_*.log")), key=os.path.getmtime, reverse=True)
+    for path in logs:
+        mesh, bones, found = None, [], None
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = RECORD.search(line.rstrip("\n"))
+                if not m or m.group(2) != name:
+                    continue
+                kind, rest = m.group(1), (m.group(3) or "").split()
+                if kind == "mesh":
+                    mesh, bones = rest, []
+                elif kind == "bone" and mesh is not None:
+                    bones.append((rest[0], rest[1], [float(v) for v in rest[2].split(",")]))
+                elif kind == "end" and mesh is not None:
+                    found = (mesh, list(bones))
+        if found:
+            return path, found
+    sys.exit(f"no complete [AnimRecord] block for {name} in {STUDIO_LOGS}: Play the bench "
+             "(it logs one when it loads the rig with LoadAsset) and run this again")
+
+
+def asset_number(content):
+    digits = re.search(r"(\d+)\s*$", content)
+    if not digits:
+        sys.exit(f"cannot read an asset id from {content!r}")
+    return int(digits.group(1))
+
+
+def template(args):
+    """Write assets/anim/_studio/AnimTemplate.rbxmx: the uploaded rig as a file Rojo builds into the
+    place, the way the game ships every model (templates/). The bench uses it over LoadAsset when it
+    exists, which answers whether a built-in file keeps the skin."""
+    sys.path.insert(0, os.path.join(ROOT, "tools", "assets"))
+    from xml.sax.saxutils import escape
+    from gen_templates import coordinate_frame, vector3
+
+    path, (mesh, bones) = read_record(args.name)
+    mesh_id, texture, size = asset_number(mesh[0]), mesh[1], [float(v) for v in mesh[2].split(",")]
+    children = {}
+    for bone_name, parent, components in bones:
+        children.setdefault(parent, []).append((bone_name, components))
+    if "@model" in children:
+        sys.exit("a bone hangs off the Model, not the MeshPart: the template shape below assumes the latter")
+
+    ref = iter(f"RBX{i}" for i in range(10_000))
+
+    def bone_xml(bone_name, components, indent):
+        rotation = (components[3:6], components[6:9], components[9:12])
+        lines = [f'{indent}<Item class="Bone" referent="{next(ref)}">', f"{indent}  <Properties>",
+                 f'{indent}    <string name="Name">{escape(bone_name)}</string>']
+        lines += coordinate_frame("CFrame", components[:3], indent + "    ", rotation)
+        lines.append(f"{indent}  </Properties>")
+        for child, child_components in children.get(bone_name, []):
+            lines += bone_xml(child, child_components, indent + "  ")
+        lines.append(f"{indent}</Item>")
+        return lines
+
+    p = "        "
+    lines = ['<roblox version="4">', f'  <Item class="Model" referent="{next(ref)}">', "    <Properties>",
+             f'      <string name="Name">{escape(args.name)}</string>', "    </Properties>",
+             f'    <Item class="MeshPart" referent="{next(ref)}">', "      <Properties>",
+             f'{p}<string name="Name">Body</string>', f'{p}<bool name="Anchored">true</bool>',
+             f'{p}<bool name="CanCollide">false</bool>', f'{p}<bool name="CanQuery">false</bool>',
+             f'{p}<bool name="CanTouch">false</bool>', f'{p}<bool name="HasSkinnedMesh">true</bool>']
+    lines += vector3("InitialSize", size, p)
+    lines += [f'{p}<Content name="MeshContent">', f"{p}  <uri>rbxassetid://{mesh_id}</uri>", f"{p}</Content>"]
+    lines += vector3("size", size, p)
+    if texture != "-":
+        lines += [f'{p}<Content name="TextureContent">', f"{p}  <uri>rbxassetid://{asset_number(texture)}</uri>",
+                  f"{p}</Content>"]
+    lines.append("      </Properties>")
+    for bone_name, components in children.get("@mesh", []):
+        lines += bone_xml(bone_name, components, "      ")
+    lines += ["    </Item>", "  </Item>", "</roblox>"]
+    os.makedirs(STUDIO_DATA, exist_ok=True)
+    out = os.path.join(STUDIO_DATA, "AnimTemplate.rbxmx")
+    with open(out, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n".join(lines) + "\n")
+    print(f"[template] {len(bones)} bones, mesh {mesh_id}, from {os.path.basename(path)} -> {out}")
+    print("[template] next: rojo build animbench.project.json -o build/animbench.rbxl")

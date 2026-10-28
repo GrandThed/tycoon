@@ -32,6 +32,9 @@
 					}
 				}
 			},
+			"AnimTestLib": {
+				"$path": "tools/anim/studio/lib"
+			},
 			"AnimTestData": {
 				"$path": "assets/anim/_studio/AnimTestData.luau"
 			}
