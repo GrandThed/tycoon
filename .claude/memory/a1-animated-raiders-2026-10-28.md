@@ -10,6 +10,16 @@ Work is on branch `a1-animated-raiders` in the worktree `C:\Users\benja\Desktop\
 fresh agents per round. L5 (`l5-friends`) and M11 (`m11-port`) do not touch the raider files, so A1 runs beside them;
 it merges to `main` only after its review, QA and Ben's look.
 
+**Decisions taken 2026-10-28** (record: `docs/prompts/a1-decisions.md` on the branch). Ben, by click questions: **D1 a
+bigger crit zone** over where the clips carry the head (against the lead's "server follows the clip"; more crits
+accepted, sims re-run and reported), Highlight glow plus small coloured pieces, ~1 s fall then fade, a flinch over the
+clip (full hurt only on a stagger), the pack's Sitting/Jump plus today's lean poses for the gaps, a generated plank plate
+until Tripo's, **the eight Tripo player weapons now** (two styles on the shelf until all 15 exist; against the lead),
+**no phone check before merging** (trust PC + LOD; against the lead). Lead rulings: 1024/512 textures, left hand for
+sling and firepot, neon orbs in flight, old rigid figures kept as fallback until sign-off, hips lift for foot sink, the
+Part B `rigs` route, upload only after M11 is on `main`, int16 clip data, attacks keyed to the server's windup.
+Both studies flagged that the clips move the head 1-3 head radii off today's fixed hit ball (Chief's idle ~1.9 studs low).
+
 **Why:** a fresh session would otherwise restart the bench or wire clips into `src/` without a contract.
 
 **How to apply:** check the branch's `docs/prompts/a1-*` files for what is done before delegating. See
